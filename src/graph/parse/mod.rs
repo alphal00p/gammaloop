@@ -45,7 +45,10 @@ use spenso::{
     structure::{HasStructure, OrderedStructure, representation::Euclidean},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
-use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
+use symbolica::{
+    atom::{Atom, AtomOrView},
+    graph::Graph as SymbolicaGraph,
+};
 use tracing::debug;
 use tracing::instrument;
 use typed_index_collections::TiVec;
@@ -577,6 +580,7 @@ impl ParseGraph {
 struct InitialGraphData {
     overall_factor: Atom,
     global_prefactor: GlobalPrefactor,
+    additional_params: Vec<Atom>,
     add_polarizations: bool,
     group_id: Option<GroupId>,
     is_group_master: bool,
@@ -732,6 +736,7 @@ impl Graph {
         let (global_prefactor, param_builder) = Self::setup_global_prefactor_and_params(
             initial_data.global_prefactor,
             initial_data.add_polarizations,
+            initial_data.additional_params,
             &initial_state_cut,
             &graph,
             model,
@@ -778,6 +783,7 @@ impl Graph {
         let global_data = &parse_graph.global_data;
 
         let initial_data = InitialGraphData {
+            additional_params: global_data.parameters.clone(),
             overall_factor: global_data.overall_factor.clone(),
             global_prefactor: GlobalPrefactor {
                 num: global_data.num.clone(),
@@ -886,9 +892,10 @@ impl Graph {
         }
     }
 
-    fn setup_global_prefactor_and_params(
+    fn setup_global_prefactor_and_params<'a, A: Into<AtomOrView<'a>>, P: IntoIterator<Item = A>>(
         mut global_prefactor: GlobalPrefactor,
         add_polarizations: bool,
+        params: P,
         initial_state_cut: &OrientedCut,
         graph: &NumGraph,
         model: &Model,
@@ -905,7 +912,7 @@ impl Graph {
         }
 
         let polarizations = global_prefactor.polarizations();
-        let param_builder = ParamBuilder::new(&(&polarizations, graph), model);
+        let param_builder = ParamBuilder::new(&(&polarizations, graph), model, params);
 
         Ok((global_prefactor, param_builder))
     }

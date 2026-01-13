@@ -10,7 +10,7 @@ use crate::{
     uv::approx::CFFapprox,
 };
 use spenso::{
-    network::store::TensorScalarStoreMapping,
+    network::{Network, store::TensorScalarStoreMapping},
     structure::abstract_index::AIND_SYMBOLS,
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
@@ -26,6 +26,7 @@ use linnet::half_edge::{
     subgraph::{SuBitGraph, SubGraphLike, SubSetLike},
 };
 use std::fmt::Write;
+use tracing::{debug, instrument};
 
 use typed_index_collections::TiVec;
 use vakint::Vakint;
@@ -147,19 +148,43 @@ impl Forest {
         }
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn orientation_parametric_expr(
         &self,
         cut_edges: Option<&SuBitGraph>,
         graph: &Graph,
+        add_sigma: bool,
     ) -> ParsingNet {
         let mut sum: Option<ParsingNet> = None;
 
-        for (_, n) in &self.dag.nodes {
-            let net = n.data.final_integrand.clone().unwrap();
+        for (e, n) in &self.dag.nodes {
+            let mut net = n.data.final_integrand.clone().unwrap();
+
+            if add_sigma {
+                debug!(
+                    "{}",
+                    n.data
+                        .simple_approx
+                        .as_ref()
+                        .unwrap()
+                        .expr(&graph.full_filter())
+                );
+                net = net
+                    * Network::from_scalar(function!(
+                        GS.if_sigma,
+                        n.data
+                            .simple_approx
+                            .as_ref()
+                            .unwrap()
+                            .expr(&graph.full_filter())
+                    ))
+            };
+
             let Some(s) = &mut sum else {
                 sum = Some(net);
                 continue;
             };
+
             *s += net;
         }
 

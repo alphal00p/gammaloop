@@ -440,7 +440,8 @@ impl Approximation {
             orientations,
             cut_edges,
             constraint_data,
-        )
+        );
+        self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()))
     }
 
     pub(crate) fn new<G, E, V, H>(
@@ -724,6 +725,12 @@ impl Approximation {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
         };
+
+        let Some(a) = &dependent.simple_approx else {
+            panic!("Should have computed the simple approx");
+        };
+
+        self.simple_approx = Some(a.dependent(self.subgraph.clone()));
 
         let (t4, _) = if let ApproxOp::Root = dependent.integrated_4d {
             (Atom::num(0), Sign::Positive)

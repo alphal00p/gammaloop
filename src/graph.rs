@@ -8,8 +8,8 @@ use linnet::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike,
-            SubSetOps, subset::SubSet,
+            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
+            subset::SubSet,
         },
     },
     parser::DotGraph,
@@ -24,9 +24,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     define_index,
-    feyngen::{
-        diagram_generator::evaluate_overall_factor,
-    },
+    feyngen::diagram_generator::evaluate_overall_factor,
     gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
     improve_ps::PhaseSpaceImprovementSettings,
     momentum::{Dep, ExternalMomenta, PolDef},

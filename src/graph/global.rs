@@ -16,6 +16,7 @@ pub struct ParseData {
     pub overall_factor: Atom,
     pub projectors: Option<Atom>,
     pub num: Atom,
+    pub parameters: Vec<Atom>,
     pub group_id: Option<GroupId>,
     pub is_group_master: bool,
 }
@@ -26,6 +27,7 @@ impl Default for ParseData {
             name: String::new(),
             overall_factor: Atom::one(),
             projectors: None,
+            parameters: Vec::new(),
             num: Atom::one(),
             group_id: None,
             is_group_master: false,
@@ -40,6 +42,7 @@ impl ParseData {
             overall_factor,
             projectors: self.projectors,
             num: self.num,
+            parameters: self.parameters,
             group_id: self.group_id,
             is_group_master: self.is_group_master,
         }
@@ -51,6 +54,7 @@ impl ParseData {
             overall_factor: self.overall_factor,
             projectors: Some(polarizations),
             num: self.num,
+            parameters: self.parameters,
             group_id: self.group_id,
             is_group_master: self.is_group_master,
         }
@@ -62,6 +66,7 @@ impl ParseData {
             overall_factor: self.overall_factor,
             projectors: self.projectors,
             num,
+            parameters: self.parameters,
             group_id: self.group_id,
             is_group_master: self.is_group_master,
         }
@@ -101,6 +106,21 @@ impl From<linnet::parser::GlobalData> for ParseData {
                 Some(GroupId(group_id.strip_parse().context("group_id").unwrap()));
         }
 
+        if let Some(params) = value.statements.get("params") {
+            let params: String = params.strip_parse().context("params").unwrap();
+            parse_data.parameters = params
+                .split(';')
+                .map(str::trim)
+                .filter(|param| !param.is_empty())
+                .map(|param| {
+                    param
+                        .strip_parse()
+                        .with_context(|| format!("params entry {param}"))
+                        .unwrap()
+                })
+                .collect();
+        }
+
         parse_data
     }
 }
@@ -133,6 +153,20 @@ impl Graph {
             evaluate_overall_factor(self.overall_factor.as_view()).to_quoted(),
         );
 
+        if !self.param_builder.pairs.additional_params.params.is_empty() {
+            let params = self
+                .param_builder
+                .pairs
+                .additional_params
+                .params
+                .iter()
+                .map(ToQuoted::to_quoted)
+                .collect::<Vec<_>>()
+                .join(";");
+            g.statements
+                .insert("params".to_string(), format!("{}", params));
+        }
+
         g
     }
 }
@@ -160,6 +194,65 @@ impl ParseGraph {
             self.global_data.overall_factor.to_quoted(),
         );
 
+        if !self.global_data.parameters.is_empty() {
+            let params = self
+                .global_data
+                .parameters
+                .iter()
+                .map(ToQuoted::to_quoted)
+                .collect::<Vec<_>>()
+                .join(";");
+            g.statements
+                .insert("params".to_string(), format!("{}", params));
+        }
+
         g
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use linnet::{
+        half_edge::nodestore::NodeStorageVec,
+        parser::{DotGraph, DotVertexData},
+    };
+
+    use crate::{dot, graph::Graph, graph::parse::IntoGraph, initialisation::test_initialise};
+
+    #[test]
+    fn params_roundtrip_in_global_data() {
+        test_initialise().unwrap();
+        match dot!(digraph params_roundtrip {
+            graph [
+                overall_factor = 1;
+                multiplicity_factor = 1;
+                params = "a;b;c";
+            ]
+            edge [pdg=1000]
+            ext [style=invis]
+            ext -> v4
+            ext -> v5
+            v6 -> ext
+            v5 -> v4 [lmb_index=0];
+            v6 -> v5;
+            v4 -> v6;
+        },"scalars")
+        {
+            Ok(g) => {
+                let g: Graph = g;
+                // g.to_dot_graph_with_settings().dot()
+                let serialized = g.dot_serialize();
+                let parsed: DotGraph<NodeStorageVec<DotVertexData>> =
+                    DotGraph::from_string(serialized).unwrap();
+
+                assert_eq!(
+                    parsed.global_data.statements.get("params"),
+                    Some(&"a;b;c".to_string())
+                );
+            }
+            Err(e) => {
+                eprintln!("Graph parsing failed: {:?}", e);
+            }
+        }
     }
 }

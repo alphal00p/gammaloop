@@ -3,6 +3,8 @@
 use slotmap::{Key, SecondaryMap, SlotMap, new_key_type};
 use std::collections::HashSet;
 use std::{cmp::Ordering, collections::VecDeque, hash::Hash};
+use symbolica::atom::Symbol;
+use symbolica::symbol;
 
 use ahash::AHashSet;
 use color_eyre::Result;
@@ -18,6 +20,11 @@ new_key_type! {
     pub struct CoverSetNode;
 }
 
+impl DagNode {
+    pub fn symbol(&self) -> Symbol {
+        symbol!(format!("node_{:?}", self.0))
+    }
+}
 /// Trait to define DOT attributes for node data.
 pub trait DotAttrs {
     fn dot_attrs(&self) -> String;

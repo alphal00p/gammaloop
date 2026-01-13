@@ -8,7 +8,7 @@ commands = [
 
 [cli_settings.global]
 logfile_directive = "off"#,gammalooprs[build_original_parametric_integrand]=debug"
-
+display_directive = "gammalooprs[orientation_parametric_expr]=debug"
 
 
 [default_runtime_settings.kinematics.externals]
@@ -36,7 +36,7 @@ check_on_norm = true
 
 [default_runtime_settings.general]
  m_uv = 5.0
-
+additional_param_values = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
 
@@ -49,13 +49,14 @@ mapping = "linear"
 [cli_settings.global.generation.uv]
 generate_integrated = false
 softct = false
+add_sigma = true
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
-compile = true
+compile = false
 
 [default_runtime_settings.integrator]
 seed = 42

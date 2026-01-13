@@ -8,7 +8,7 @@ use crate::{
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
     settings::runtime::HFunctionSettings,
-    utils::serde_utils::IsDefault,
+    utils::{F, FloatLike, serde_utils::IsDefault},
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
@@ -55,6 +55,16 @@ pub struct RuntimeSettings {
     pub subtraction: SubtractionSettings,
     #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
     pub lu_h_function: HFunctionSettings,
+}
+
+impl RuntimeSettings {
+    pub(crate) fn additional_params<T: FloatLike>(&self) -> Vec<F<T>> {
+        self.general
+            .additional_param_values
+            .iter()
+            .map(|a| F(T::from_f64(*a)))
+            .collect()
+    }
 }
 
 fn default_logfile_directive() -> String {

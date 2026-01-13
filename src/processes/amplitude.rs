@@ -615,7 +615,7 @@ impl AmplitudeGraph {
 
         let complex_params_vakint = if evaluate_numerically || pysec_dec_enabled_in_vakint.is_some()
         {
-            let mut param_builder = ParamBuilder::<f64>::new(&self.graph, model);
+            let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
             param_builder.m_uv_value(Complex::new_re(F(run_time_settings.general.m_uv)));
             param_builder.mu_r_sq_value(Complex::new_re(F(run_time_settings.general.mu_r_sq)));
 
@@ -937,10 +937,17 @@ impl AmplitudeGraph {
                 false,
             );
 
-            let circled_expr =
-                circled_forest.orientation_parametric_expr(Some(&edges_in_cut), &self.graph);
+            let circled_expr = circled_forest.orientation_parametric_expr(
+                Some(&edges_in_cut),
+                &self.graph,
+                settings.uv.add_sigma,
+            );
 
-            let complement_expr = complement_forest.orientation_parametric_expr(None, &self.graph);
+            let complement_expr = complement_forest.orientation_parametric_expr(
+                None,
+                &self.graph,
+                settings.uv.add_sigma,
+            );
 
             // println!("Circled Expression Network:");
             // println!("{}", circled_expr.dot_pretty());
@@ -1056,7 +1063,7 @@ impl AmplitudeGraph {
         );
 
         let global_num = self.graph.global_network();
-        let mut full = forest.orientation_parametric_expr(None, &self.graph);
+        let mut full = forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
 
         full *= global_num;
 
@@ -1375,12 +1382,12 @@ pub mod test {
         graph.generate_cff().unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
-        let param_builder = ParamBuilder::new(&graph.graph, &model);
+        let param_builder = &graph.graph.param_builder;
         println!("{param_builder}");
 
         GenericEvaluator::new_from_builder(
             [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
-            &param_builder,
+            param_builder,
             OptimizationSettings::default(),
         )
         .unwrap();

@@ -1,7 +1,21 @@
-digraph bubble{
+digraph sunrise{
     node [num = "1" ]
     e        [style=invis]
+    params = "if_sigma(S_47⊛0);if_sigma(S_47⊛y*Top(S_y⊛0));if_sigma(S_47⊛3s*Top(S_3s⊛0));if_sigma(S_47⊛3I*Top(S_3I⊛0));if_sigma(S_47⊛44*Top(S_44⊛0));if_sigma(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)));if_sigma(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)));if_sigma(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))"
+
+
+   //(S_47⊛0);
+   //(S_47⊛y*Top(S_y⊛0)); C * T(AB)
+   //(S_47⊛3s*Top(S_3s⊛0)); B * T(BC)
+   //(S_47⊛3I*Top(S_3I⊛0)); A * T(BC)
+   //(S_47⊛44*Top(S_44⊛0)); T(ABC)
+    //(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0))) T(A * T(BC)) ;
+    //(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0))); T(C * T(AB))
+    //(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0))) T(B * T(BC))"
+
     e -> A:0   [ id=3 particle=scalar_1]
+
+
     B:1 -> e   [ id=4 particle=scalar_1]
     A -> B    [ id=0 particle=scalar_1]
     A -> B    [ id=1 particle=scalar_1]

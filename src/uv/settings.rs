@@ -1,7 +1,7 @@
 use crate::utils::serde_utils::{
     IsDefault, is_default_form_path, is_default_pysecdec_relative_precision,
     is_default_python_path, is_default_vakint_evaluation_methods, is_default_vakint_normalization,
-    is_true, is_usize,
+    is_false, is_true, is_usize,
 };
 use bincode_trait_derive::{Decode, Encode};
 use schemars::JsonSchema;
@@ -134,6 +134,8 @@ pub struct UVgenerationSettings {
     pub softct: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub generate_integrated: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub add_sigma: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
 }
@@ -143,6 +145,7 @@ impl Default for UVgenerationSettings {
         UVgenerationSettings {
             softct: true,
             generate_integrated: true,
+            add_sigma: false,
             vakint: VakintSettings::default(),
         }
     }

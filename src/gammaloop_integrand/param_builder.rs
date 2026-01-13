@@ -139,11 +139,12 @@ pub struct GammaLoopPairs {
     uv_damp_minus_right: ParamValuePairs,
     radius_right: ParamValuePairs,
     radius_star_right: ParamValuePairs,
+    pub additional_params: ParamValuePairs,
 }
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 24>;
+    type IntoIter = std::array::IntoIter<Self::Item, 25>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -171,6 +172,7 @@ impl IntoIterator for GammaLoopPairs {
             self.radius_right,
             self.radius_star_right,
             self.orientations,
+            self.additional_params,
         ]
         .into_iter()
     }
@@ -178,7 +180,7 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 24>;
+    type IntoIter = std::array::IntoIter<Self::Item, 25>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -206,6 +208,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.radius_right,
             &self.radius_star_right,
             &self.orientations,
+            &self.additional_params,
         ]
         .into_iter()
     }
@@ -213,7 +216,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 24>;
+    type IntoIter = std::array::IntoIter<Self::Item, 25>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -241,6 +244,7 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.radius_right,
             &mut self.radius_star_right,
             &mut self.orientations,
+            &mut self.additional_params,
         ]
         .into_iter()
     }
@@ -294,9 +298,15 @@ impl GammaLoopPairs {
         self.radius_star_right.validate();
     }
 
-    pub(crate) fn new<G: ParamBuilderGraph + SplitPolarizations>(
+    pub(crate) fn new<
+        'a,
+        A: Into<AtomOrView<'a>>,
+        G: ParamBuilderGraph + SplitPolarizations,
+        T: IntoIterator<Item = A>,
+    >(
         model: &Model,
         graph: &G,
+        additional_params: T,
     ) -> (Self, usize) {
         let mut pairs = GammaLoopPairs {
             m_uv: ParamValuePairs::default_from_symbol(GS.m_uv),
@@ -316,6 +326,7 @@ impl GammaLoopPairs {
             uv_damp_plus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right),
             uv_damp_minus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left),
             uv_damp_minus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right),
+            additional_params: additional_params.into_iter().collect(),
             ..Default::default()
         };
 
@@ -414,6 +425,21 @@ impl GammaLoopPairs {
 
         debug_assert_eq!(e_start, self.external_energies.value_range.end);
         debug_assert_eq!(s_start, self.external_spatial.value_range.end);
+    }
+
+    pub(crate) fn add_additional_params<T: FloatLike>(
+        &self,
+        additional_params: &[F<T>],
+        values: &mut [Complex<F<T>>],
+    ) {
+        let mut start = self.additional_params.value_range.start;
+
+        for p in additional_params {
+            values[start] = Complex::new_re(p.clone());
+            start += 1;
+        }
+
+        debug_assert_eq!(start, self.additional_params.value_range.end);
     }
 
     pub(crate) fn polarizations_values<T: FloatLike>(
@@ -597,6 +623,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
         sample: &'a MomentumSample<T>,
         graph: &'a Graph,
         helicities: &[Helicity],
+        additional_params: &[F<T>],
         left_threshold_params: Option<&ThresholdParams<T>>,
         right_threshold_params: Option<&ThresholdParams<T>>,
         lu_params: Option<&LUParams<T>>,
@@ -611,6 +638,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         sample: &'a MomentumSample<f64>,
         graph: &'a Graph,
         helicities: &[Helicity],
+        additional_params: &[F<f64>],
         left_threshold_params: Option<&ThresholdParams<f64>>,
         right_threshold_params: Option<&ThresholdParams<f64>>,
         lu_params: Option<&LUParams<f64>>,
@@ -622,6 +650,9 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             sample.external_moms(),
             &graph.loop_momentum_basis,
         );
+
+        self.pairs
+            .add_additional_params(additional_params, &mut self.values);
 
         for (shift, value) in emr_vec_cahe.into_iter().enumerate() {
             self.values[emr_start + shift] = Complex::new_re(value);
@@ -656,6 +687,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         sample: &MomentumSample<f128>,
         graph: &Graph,
         helicities: &[Helicity],
+        additional_params: &[F<f128>],
         left_threshold_params: Option<&ThresholdParams<f128>>,
         right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
@@ -667,6 +699,9 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
             sample.external_moms(),
             &graph.loop_momentum_basis,
         );
+
+        self.pairs
+            .add_additional_params(additional_params, &mut values);
 
         for value in emr_vec_cahe {
             values[emr_start] = Complex::new_re(value);
@@ -775,8 +810,17 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
-    pub(crate) fn new<G: ParamBuilderGraph + SplitPolarizations>(graph: &G, model: &Model) -> Self {
-        let (pairs, len) = GammaLoopPairs::new(model, graph);
+    pub(crate) fn new<
+        'a,
+        A: Into<AtomOrView<'a>>,
+        P: IntoIterator<Item = A>,
+        G: ParamBuilderGraph + SplitPolarizations,
+    >(
+        graph: &G,
+        model: &Model,
+        additional_params: P,
+    ) -> Self {
+        let (pairs, len) = GammaLoopPairs::new(model, graph, additional_params);
 
         let mut new = Self {
             pairs,

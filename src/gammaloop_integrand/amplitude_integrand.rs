@@ -209,12 +209,14 @@ impl AmplitudeGraphTerm {
         self.threshold_counterterm
             .compile(&graph_path, override_existing, settings);
 
-        if let Some(e) = self.iterative_integrand_evaluator.as_mut() { e.compile(
+        if let Some(e) = self.iterative_integrand_evaluator.as_mut() {
+            e.compile(
                 graph_path.join("iterative").with_extension("cpp"),
                 format!("{}_iterative", &self.graph.name,),
                 graph_path.join("iterative").with_extension("so"),
                 settings.generation.compile.export_settings(),
-            ) }
+            )
+        }
 
         Ok(())
     }
@@ -263,6 +265,7 @@ impl AmplitudeGraphTerm {
                 &self.graph,
                 &momentum_sample,
                 hel,
+                &settings.additional_params(),
                 None,
                 None,
                 None,
@@ -284,6 +287,7 @@ impl AmplitudeGraphTerm {
                         &self.graph,
                         &momentum_sample,
                         hel,
+                        &settings.additional_params(),
                         None,
                         None,
                         None,
@@ -424,8 +428,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_tropical_sampler(&self) -> &SampleGenerator<3> {
-        self
-            .tropical_sampler
+        self.tropical_sampler
             .as_ref()
             .expect("Tropical sampler should be set.")
     }

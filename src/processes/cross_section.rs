@@ -213,6 +213,7 @@ impl CsAmplitudeCTDiagram {
                         .subtract(&lu_cut.left),
                 ),
                 graph,
+                settings.uv.add_sigma,
             );
 
             let cut_edges_for_right = if add_lu_cut_feynman_rules {
@@ -221,8 +222,11 @@ impl CsAmplitudeCTDiagram {
                 None
             };
 
-            let right_expr =
-                right_forest.orientation_parametric_expr(cut_edges_for_right.as_ref(), graph);
+            let right_expr = right_forest.orientation_parametric_expr(
+                cut_edges_for_right.as_ref(),
+                graph,
+                settings.uv.add_sigma,
+            );
 
             self.network = Some(left_expr * right_expr);
             self.network.clone().unwrap()
@@ -288,7 +292,7 @@ impl CrossSection {
         // println!("group structure: {:?}", cross_section.graph_group_structure);
 
         for mut cross_section_graph in graphs {
-            cross_section_graph.param_builder = ParamBuilder::new(&cross_section_graph, model);
+            // cross_section_graph.param_builder =  ParamBuilder::new(&cross_section_graph, model);
             cross_section.add_supergraph(cross_section_graph)?;
         }
         Ok(cross_section)
@@ -1216,9 +1220,11 @@ impl CrossSectionGraph {
             let left_expr = left_forest.orientation_parametric_expr(
                 Some(&esurface.bitvec(&self.graph.underlying)),
                 &self.graph,
+                settings.uv.add_sigma,
             );
 
-            let right_expr = right_forest.orientation_parametric_expr(None, &self.graph);
+            let right_expr =
+                right_forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
 
             if settings.threshold_subtraction.enable_thresholds {
                 // we can recycle these tensor networks for the single threshold counterterms
