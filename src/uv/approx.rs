@@ -5,7 +5,7 @@ use std::hash::Hash;
 use crate::{
     cff::{
         expression::{GraphOrientation, OrientationID},
-        generation::{ShiftRewrite, generate_uv_cff},
+        generation::{ConstraintData, ShiftRewrite, generate_uv_cff},
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
@@ -354,6 +354,7 @@ impl CFFapprox {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
+        constraint_data: Option<ConstraintData>,
     ) -> CFFapprox {
         let mut cff_sum = Atom::Zero;
 
@@ -374,6 +375,7 @@ impl CFFapprox {
                     &contract_edges,
                     o.orientation(),
                     cut_edges,
+                    constraint_data,
                 )
                 .unwrap()
         }
@@ -389,6 +391,7 @@ impl CFFapprox {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
+        constraint_data: Option<ConstraintData>,
     ) -> CFFapprox {
         Self::dependent(
             graph,
@@ -397,6 +400,7 @@ impl CFFapprox {
             canonize_esurface,
             orientations,
             cut_edges,
+            constraint_data,
         )
     }
 }
@@ -418,6 +422,7 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
+        constraint_data: Option<ConstraintData>,
     ) {
         self.local_3d = CFFapprox::root(
             graph.as_ref(),
@@ -425,10 +430,17 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
+            constraint_data,
         );
         self.integrated_4d = ApproxOp::Root;
-        self.final_integrand =
-            self.final_integrand(graph, amplitude, canonize_esurface, orientations, cut_edges)
+        self.final_integrand = self.final_integrand(
+            graph,
+            amplitude,
+            canonize_esurface,
+            orientations,
+            cut_edges,
+            constraint_data,
+        )
     }
 
     pub(crate) fn new<G, E, V, H>(
@@ -705,6 +717,7 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
+        constraint_data: Option<ConstraintData>,
         dependent: &Self,
         settings: &UVgenerationSettings,
     ) {
@@ -728,6 +741,7 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
+            constraint_data,
         ) else {
             unreachable!()
         };
@@ -761,8 +775,14 @@ impl Approximation {
             },
         };
 
-        self.final_integrand =
-            self.final_integrand(graph, amplitude, canonize_esurface, orientations, cut_edges);
+        self.final_integrand = self.final_integrand(
+            graph,
+            amplitude,
+            canonize_esurface,
+            orientations,
+            cut_edges,
+            constraint_data,
+        );
     }
 
     pub(crate) fn local_3d<E: UVE, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
@@ -955,6 +975,7 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
+        constraint_data: Option<ConstraintData>,
     ) -> Option<ParsingNet>
     where
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
@@ -975,6 +996,7 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
+            constraint_data,
         ) else {
             unreachable!()
         };

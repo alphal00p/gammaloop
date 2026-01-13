@@ -6,6 +6,7 @@ use std::{
     path::Path,
 };
 
+use ahash::HashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -26,7 +27,8 @@ use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID,
+        cut_expression::SuperGraphOrientationID,
+        expression::{AmplitudeOrientationID, SubgraphOrientationID},
         generation::get_orientations_from_subgraph,
     },
     define_index,
@@ -184,6 +186,7 @@ impl CsAmplitudeCTDiagram {
                 &left_orientations,
                 &None,
                 &all_cut_edges,
+                None,
                 &settings.uv,
                 conjugate,
             );
@@ -195,6 +198,7 @@ impl CsAmplitudeCTDiagram {
                 &right_orientations,
                 &None,
                 &all_cut_edges,
+                None,
                 &settings.uv,
                 conjugate,
             );
@@ -1024,16 +1028,16 @@ impl CrossSectionGraph {
         (initial_state_tree_expr, replacements)
     }
 
-    #[allow(dead_code)]
     fn build_parametric_integrand_raised_cuts(
         &mut self,
-        _settings: &GenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
-        let _global_num = self.graph.global_network();
+        let global_num = self.graph.global_network();
+        let vakint = self.new_vakint();
 
-        let (_tree_structure, _replacements) = self.get_initial_state_tree_data();
+        let (tree_structure, replacements) = self.get_initial_state_tree_data();
 
-        let _canonize_esurface = self
+        let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
@@ -1046,16 +1050,81 @@ impl CrossSectionGraph {
             .max()
             .unwrap();
 
-        let _derivative_structure_cache = (1..=max_order)
+        let derivative_structure_cache = (1..=max_order)
             .map(|order| build_derivative_structure(order as u8))
             .collect_vec();
 
-        for _raised_cut_id in self
+        for (raised_cut_id, cuts_in_group) in self
             .derived_data
             .raised_data
             .raised_cut_groups
             .iter_enumerated()
-        {}
+        {
+            for cross_free_subset in
+                self.derived_data.raised_data.cross_free_powersets[raised_cut_id].iter()
+            {
+                let complement = cuts_in_group
+                    .iter()
+                    .filter(|cut| !cross_free_subset.contains(cut))
+                    .collect_vec();
+
+                let mut reversed_dangling = HashSet::default();
+                let mut cut_edges = HashSet::default();
+
+                for cut_id in cross_free_subset.iter() {
+                    let cut = &self.cuts[*cut_id].cut;
+                    for (orientation, edge_data) in cut.iter_edges(&self.graph) {
+                        let edge_id = self.graph.edge_name_to_index(&edge_data.data.name).unwrap();
+                        cut_edges.insert(edge_id);
+                        if orientation == Orientation::Reversed {
+                            reversed_dangling.insert(edge_id);
+                        }
+                    }
+                }
+
+                let reversed_dangling = reversed_dangling.into_iter().sorted().collect_vec();
+                let cut_edges = cut_edges.into_iter().sorted().collect_vec();
+
+                let graphs = [self.cuts[*cuts_in_group.first().unwrap()].left.clone()]
+                    .into_iter()
+                    .chain(cross_free_subset.windows(2).map(|sequential_cuts| {
+                        let left_of_first_cut = &self.cuts[sequential_cuts[0]].left;
+                        let right_of_second_cut = &self.cuts[sequential_cuts[1]].right;
+
+                        self.graph
+                            .full_filter()
+                            .subtract(left_of_first_cut)
+                            .subtract(right_of_second_cut)
+                    }))
+                    .chain([self.cuts[*cuts_in_group.last().unwrap()].right.clone()]);
+
+                let networks = graphs.map(|sandwich_subgraph| {
+                    let orientations = get_orientations_from_subgraph(
+                        &self.graph,
+                        &sandwich_subgraph,
+                        &reversed_dangling,
+                    )
+                    .into_iter()
+                    .map(|cff_graph| cff_graph.global_orientation)
+                    .collect::<TiVec<SubgraphOrientationID, _>>();
+
+                    let wood = self.graph.wood(&sandwich_subgraph);
+                    let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+                    let constraint_data = todo!();
+                    forest.compute(
+                        &self.graph,
+                        &sandwich_subgraph,
+                        &vakint,
+                        &orientations,
+                        &canonize_esurface,
+                        &cut_edges,
+                        Some(constraint_data),
+                        &settings.uv,
+                        false,
+                    );
+                });
+            }
+        }
 
         Ok(())
     }
@@ -1113,6 +1182,7 @@ impl CrossSectionGraph {
                 &left_orientations,
                 &canonize_esurface,
                 &esurface.energies,
+                None,
                 &settings.uv,
                 false,
             );
@@ -1124,6 +1194,7 @@ impl CrossSectionGraph {
                 &right_orientations,
                 &canonize_esurface,
                 &esurface.energies,
+                None,
                 &settings.uv,
                 true,
             );
@@ -1792,20 +1863,16 @@ impl CrossSectionDerivedData {
 fn test_template() {
     println!("result: {}", build_derivative_structure(1));
     println!("result: {}", build_derivative_structure(2));
-    println!("result: {}", build_derivative_structure(3));
+    println!(
+        "result: {}",
+        (Atom::num(2) * parse!("der(1,η(t⃰))^5") * build_derivative_structure(3)).expand()
+    );
 }
 
 #[allow(dead_code)]
 fn build_derivative_structure(order: u8) -> Atom {
     let order = order as i32;
-    // let mut expansion = Atom::new();
     let f = symbol!("f");
-
-    //for k in 1..=order {
-    //    let k_factorial = (2..=k).product::<i32>();
-    //    expansion += function!(a, Atom::num(k)) * (GS.rescale - GS.rescale_star).npow(k)
-    //        / Atom::num(k_factorial);
-    //}
 
     let expansion = parse!("η(t)")
         .series(

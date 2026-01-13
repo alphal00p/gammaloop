@@ -360,6 +360,12 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     Ok(cff)
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct ConstraintData<'a> {
+    constraints: &'a [&'a Esurface],
+    illegal_esurfaces: &'a [&'a Esurface],
+}
+
 pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
@@ -367,6 +373,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     contract_edges: &[EdgeIndex],
     orientation: &EdgeVec<Orientation>,
     cut_edges: &[EdgeIndex],
+    constraint_data: Option<ConstraintData<'_>>,
 ) -> Result<Atom> {
     let mut generation_graph =
         CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), subgraph)?;
@@ -393,7 +400,12 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
         canonize_esurface,
     );
 
-    let tree: Tree<HybridSurfaceID> = generate_tree_for_orientation.map(forget_graphs);
+    let mut tree: Tree<HybridSurfaceID> = generate_tree_for_orientation.map(forget_graphs);
+
+    if let Some(constraint_data) = constraint_data {
+        tree.filter_mut(|surface_id| todo!());
+    }
+
     let atom_tree = tree.to_atom_inv();
     let atom_tree_substituted = surface_cache.substitute_energies(&atom_tree, cut_edges);
     let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph, contract_edges);

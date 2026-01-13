@@ -920,6 +920,7 @@ impl AmplitudeGraph {
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
+                None,
                 &settings.uv,
                 false,
             );
@@ -931,6 +932,7 @@ impl AmplitudeGraph {
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
+                None,
                 &settings.uv,
                 false,
             );
@@ -1048,6 +1050,7 @@ impl AmplitudeGraph {
             &orientations,
             &canonize_esurface,
             &[],
+            None,
             &settings.uv,
             false,
         );
