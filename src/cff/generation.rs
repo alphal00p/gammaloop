@@ -403,7 +403,30 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     let mut tree: Tree<HybridSurfaceID> = generate_tree_for_orientation.map(forget_graphs);
 
     if let Some(constraint_data) = constraint_data {
-        tree.filter_mut(|surface_id| todo!());
+        tree.filter_mut(|surface_id| match surface_id {
+            HybridSurfaceID::Esurface(esurface_id) => {
+                let esurface_to_compare = &surface_cache.esurface_cache[*esurface_id];
+                constraint_data
+                    .illegal_esurfaces
+                    .iter()
+                    .all(|illegal_esurface| esurface_to_compare != *illegal_esurface)
+            }
+            HybridSurfaceID::Hsurface(hsurface_id) => {
+                let hsurface_to_compare = &surface_cache.hsurface_cache[*hsurface_id];
+                constraint_data
+                    .illegal_esurfaces
+                    .iter()
+                    .all(|illegal_esurface| {
+                        !hsurface_to_compare
+                            .equality_under_energy_conservation(
+                                *illegal_esurface,
+                                constraint_data.constraints,
+                            )
+                            .unwrap_or(false)
+                    })
+            }
+            HybridSurfaceID::Unit => true,
+        });
     }
 
     let atom_tree = tree.to_atom_inv();
