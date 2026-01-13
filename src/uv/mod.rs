@@ -34,6 +34,7 @@ pub struct IntegrandExpr {
     // add_arg: Option<Atom>,
 }
 
+#[allow(dead_code)]
 pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
 }

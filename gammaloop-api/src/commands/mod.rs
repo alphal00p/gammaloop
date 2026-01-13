@@ -151,15 +151,15 @@ impl Commands {
                     &global_cli_settings.state_folder,
                     global_cli_settings.override_state,
                     &global_cli_settings.global,
-                    &default_runtime_settings,
+                    default_runtime_settings,
                 )?,
 
                 Commands::Integrate(g) => {
-                    g.run(state, &global_cli_settings)?;
+                    g.run(state, global_cli_settings)?;
                 }
 
                 Commands::Evaluate(g) => {
-                    _ = g.run(state, &global_cli_settings, &default_runtime_settings)?;
+                    _ = g.run(state, global_cli_settings, default_runtime_settings)?;
                 }
 
                 Commands::Display(l) => l.run(state)?,

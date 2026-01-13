@@ -189,8 +189,8 @@ let a = args.pos().map(v => $#v$).join($, $);
         )?;
 
         for (s, isfun) in &symbols {
-            if let Some(p) = s.get_print_function() {
-                if let Some(s) = p(
+            if let Some(p) = s.get_print_function()
+                && let Some(s) = p(
                     if *isfun {
                         Atom::var(GS.is_function)
                     } else {
@@ -205,7 +205,6 @@ let a = args.pos().map(v => $#v$).join($, $);
                     writeln!(fmt, "{}", s).unwrap();
                     continue;
                 }
-            }
 
             if *isfun {
                 writeln!(
@@ -287,40 +286,38 @@ let a = args.pos().map(v => $#v$).join($, $);
                                 write!(fmt, ")")?;
                             }
                         }
-                    } else {
-                        if n_im == 0 {
-                            if d_re == 1 {
-                                if print_state.without_minus && n_re.is_negative() {
-                                    write!(fmt, "{}", -n_re)?;
-                                } else {
-                                    write!(fmt, "{}", n_re)?;
-                                }
-                                return Ok(true);
-                            }
+                    } else if n_im == 0 {
+                        if d_re == 1 {
                             if print_state.without_minus && n_re.is_negative() {
-                                write!(fmt, "({})/({})", -n_re, d_re)?;
+                                write!(fmt, "{}", -n_re)?;
                             } else {
-                                write!(fmt, "({})/({})", n_re, d_re)?;
+                                write!(fmt, "{}", n_re)?;
                             }
                             return Ok(true);
+                        }
+                        if print_state.without_minus && n_re.is_negative() {
+                            write!(fmt, "({})/({})", -n_re, d_re)?;
                         } else {
-                            if de_im == 1 {
-                                if print_state.inproduct || print_state.in_power {
-                                    write!(fmt, "(")?;
-                                }
-                                write!(fmt, "({})/({}) + {} i", n_re, d_re, n_im)?;
-                                if print_state.inproduct || print_state.in_power {
-                                    write!(fmt, ")")?;
-                                }
-                                return Ok(true);
-                            }
+                            write!(fmt, "({})/({})", n_re, d_re)?;
+                        }
+                        return Ok(true);
+                    } else {
+                        if de_im == 1 {
                             if print_state.inproduct || print_state.in_power {
                                 write!(fmt, "(")?;
                             }
-                            write!(fmt, "({})/({})+ ({})/({})i", n_re, d_re, n_im, de_im)?;
+                            write!(fmt, "({})/({}) + {} i", n_re, d_re, n_im)?;
                             if print_state.inproduct || print_state.in_power {
                                 write!(fmt, ")")?;
                             }
+                            return Ok(true);
+                        }
+                        if print_state.inproduct || print_state.in_power {
+                            write!(fmt, "(")?;
+                        }
+                        write!(fmt, "({})/({})+ ({})/({})i", n_re, d_re, n_im, de_im)?;
+                        if print_state.inproduct || print_state.in_power {
+                            write!(fmt, ")")?;
                         }
                     }
                     Ok(true)

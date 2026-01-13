@@ -38,6 +38,9 @@ use std::fs;
 use symbolica::domains::float::Real;
 use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::{Fraction, Rational};
+
+type ExternalFunctionMap =
+    HashMap<String, Box<dyn Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> + Send + Sync>, RandomState>;
 use symbolica::evaluate::FunctionMap;
 use symbolica::id::Replacement;
 use tracing::info;
@@ -204,10 +207,11 @@ impl InputParamCard<F<f64>> {
     pub fn default_from_model(model: &Model) -> Self {
         let mut card = InputParamCard::new();
         for param in model.parameters.values() {
-            if param.nature == ParameterNature::External && !param.name.is_zero() {
-                if let Some(value) = param.value {
-                    card.insert(param.name, value);
-                }
+            if param.nature == ParameterNature::External
+                && !param.name.is_zero()
+                && let Some(value) = param.value
+            {
+                card.insert(param.name, value);
             }
         }
         card
@@ -490,7 +494,7 @@ impl PartialEq for VertexRule {
 
 impl PartialOrd for VertexRule {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.name.cmp(&other.name))
+        Some(self.cmp(other))
     }
 }
 
@@ -862,7 +866,7 @@ impl Ord for Particle {
 
 impl PartialOrd for Particle {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.pdg_code.cmp(&other.pdg_code))
+        Some(self.cmp(other))
     }
 }
 
@@ -1026,7 +1030,7 @@ impl Particle {
 
     pub(crate) fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
         PermutedStructure::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
-            1 | 0 | -1 => vec![],
+            -1..=1 => vec![],
             a => {
                 if a > 0 {
                     if a % 2 == 0 {
@@ -1322,7 +1326,7 @@ impl SerializableModel {
             parameters: model
                 .parameters
                 .values()
-                .map(|parameter| SerializableParameter::from_parameter(parameter))
+                .map(SerializableParameter::from_parameter)
                 .collect(),
             particles: model
                 .particles
@@ -1344,7 +1348,7 @@ impl SerializableModel {
             couplings: model
                 .couplings
                 .values()
-                .map(|coupling| SerializableCoupling::from_coupling(coupling))
+                .map(SerializableCoupling::from_coupling)
                 .collect(),
             vertex_rules: model
                 .vertex_rules
@@ -1494,37 +1498,34 @@ impl Model {
             .data
             .iter()
             .filter(|(_, v)| v.re != F::<f64>::from_f64(0.0) || v.im != F::<f64>::from_f64(0.0))
-            .map(|(k, v)| (k.clone(), *v))
+            .map(|(k, v)| (*k, *v))
             .collect::<HashMap<UFOSymbol, Complex<F<f64>>>>();
 
         // Set all external parameters with value 0 to constant internal parameters with expression zero.
         let mut removed_parameters = vec![];
         for (_p_name, param) in self.parameters.iter_mut() {
-            if param.nature == ParameterNature::External {
-                if let Some(value) = param.value {
-                    if value == Complex::new(F(0.0), F(0.0)) {
-                        param.value = Some(Complex::new(F(0.0), F(0.0)));
-                        param.expression = Some(parse!("UFO::ZERO"));
-                        param.nature = ParameterNature::Internal;
-                        removed_parameters.push(param.name);
-                    }
-                }
+            if param.nature == ParameterNature::External
+                && let Some(value) = param.value
+                && value == Complex::new(F(0.0), F(0.0))
+            {
+                param.value = Some(Complex::new(F(0.0), F(0.0)));
+                param.expression = Some(parse!("UFO::ZERO"));
+                param.nature = ParameterNature::Internal;
+                removed_parameters.push(param.name);
             }
         }
 
-        if removed_parameters.len() > 0 {
+        if !removed_parameters.is_empty() {
             status_info!(
                 "The following {} external parameters were forced to zero by the restriction card:\n{}",
                 format!("{}", removed_parameters.len()).green(),
-                format!(
-                    "{}",
-                    removed_parameters
-                        .iter()
-                        .map(|p| p.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-                .blue(),
+                removed_parameters
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    .to_string()
+                    .blue(),
             );
         }
 
@@ -1532,13 +1533,13 @@ impl Model {
         let mut retained_vertex_rules = vec![];
         let mut removed_vertex_rules = vec![];
         for v in self.vertex_rules.iter() {
-            let mut new_vr = (*v).0.as_ref().clone();
+            let mut new_vr = v.0.as_ref().clone();
             for row in new_vr.couplings.iter_mut() {
                 *row = row
                     .iter()
                     .map(|c_opt| {
                         if let Some(c) = c_opt {
-                            if let Some(cpl) = self.couplings.get(&c) {
+                            if let Some(cpl) = self.couplings.get(c) {
                                 if let Some(value) = cpl.value {
                                     if value == Complex::new(0.0, 0.0) {
                                         None
@@ -1573,27 +1574,25 @@ impl Model {
             .map(|vr| ArcVertexRule(Arc::new(vr)))
             .collect::<Vec<_>>();
 
-        if removed_vertex_rules.len() > 0 {
+        if !removed_vertex_rules.is_empty() {
             status_info!(
                 "The following {} vertex rules were removed by the restriction card:\n{}",
                 format!("{}", removed_vertex_rules.len()).green(),
-                format!(
-                    "{}",
-                    removed_vertex_rules
-                        .iter()
-                        .map(|v| format!(
-                            "{} -> ({})",
-                            v.name,
-                            v.particles
-                                .iter()
-                                .map(|p| p.name.to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        ))
-                        .collect::<Vec<_>>()
-                        .join(" | ")
-                )
-                .blue(),
+                removed_vertex_rules
+                    .iter()
+                    .map(|v| format!(
+                        "{} -> ({})",
+                        v.name,
+                        v.particles
+                            .iter()
+                            .map(|p| p.name.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+                    .to_string()
+                    .blue(),
             );
         }
 
@@ -1601,26 +1600,24 @@ impl Model {
             .couplings
             .iter()
             .filter(|(_, cpl)| cpl.value == Some(Complex::new(0.0, 0.0)))
-            .map(|(name, _)| name.clone())
+            .map(|(name, _)| *name)
             .collect::<Vec<_>>();
 
         // Now remove all couplings that are zero
         self.couplings
             .retain(|_, cpl| cpl.value != Some(Complex::new(0.0, 0.0)));
 
-        if removed_couplings.len() > 0 {
+        if !removed_couplings.is_empty() {
             status_info!(
                 "The following {} couplings were removed by the restriction card:\n{}",
                 format!("{}", removed_couplings.len()).green(),
-                format!(
-                    "{}",
-                    removed_couplings
-                        .iter()
-                        .map(|c| c.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-                .blue(),
+                removed_couplings
+                    .iter()
+                    .map(|c| c.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+                    .to_string()
+                    .blue(),
             );
         }
 
@@ -1634,30 +1631,30 @@ impl Model {
     }
 
     pub fn contains_symbol(&self, symbol: &UFOSymbol) -> bool {
-        self.couplings.contains_key(&CouplingName(symbol.clone()))
-            || self.parameters.contains_key(&ParameterName(symbol.clone()))
+        self.couplings.contains_key(&CouplingName(*symbol))
+            || self.parameters.contains_key(&ParameterName(*symbol))
     }
     pub fn get_symbol_value(&self, symbol: UFOSymbol) -> Option<Complex<F<f64>>> {
-        if let Some(cpl) = self.couplings.get(&CouplingName(symbol.clone())) {
-            return cpl.value.map(|a| a.map(|f| F(f)));
+        if let Some(cpl) = self.couplings.get(&CouplingName(symbol)) {
+            return cpl.value.map(|a| a.map(F));
         }
-        if let Some(param) = self.parameters.get(&ParameterName(symbol.clone())) {
-            if let Some(value) = param.value {
-                return Some(value);
-            }
+        if let Some(param) = self.parameters.get(&ParameterName(symbol))
+            && let Some(value) = param.value
+        {
+            return Some(value);
         }
         None
     }
 
     fn parameters_to_empty_fns(&self) -> Vec<Replacement> {
         let mut reps = vec![];
-        for (n, _) in &self.couplings {
+        for n in self.couplings.keys() {
             reps.push(Replacement::new(
                 Atom::from(n.0).to_pattern(),
                 function!(n.0.0),
             ))
         }
-        for (n, _) in &self.parameters {
+        for n in self.parameters.keys() {
             reps.push(Replacement::new(
                 Atom::from(n.0).to_pattern(),
                 function!(n.0.0),
@@ -1748,11 +1745,7 @@ impl Model {
             .unwrap()
             .linearize(Some(1), false);
 
-        let mut ext: HashMap<
-            String,
-            Box<dyn Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> + Send + Sync>,
-            ahash::RandomState,
-        > = HashMap::default();
+        let mut ext: ExternalFunctionMap = HashMap::default();
         ext.insert(
             "complexconjugate".to_string(),
             Box::new(|a| {
@@ -1868,7 +1861,7 @@ impl Model {
                     set.insert(p.clone());
                 }
             }
-            for (k, _) in v.0.coupling_orders(&self) {
+            for (k, _) in v.0.coupling_orders(self) {
                 let current_set = map.entry(k).or_insert(HashSet::<ArcParticle>::default());
 
                 set.iter().for_each(|d| {
@@ -2164,7 +2157,7 @@ impl Model {
             .parameters
             .get(&ParameterName(UFOSymbol::from(name.as_ref())))
         {
-            Some(&position)
+            Some(position)
         } else {
             None
         }
@@ -2176,7 +2169,7 @@ impl Model {
             .parameters
             .get(&ParameterName(UFOSymbol::from(name.as_ref())))
         {
-            &position
+            position
         } else {
             panic!(
                 "Parameter '{}' not found in model '{}'.",

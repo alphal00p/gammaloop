@@ -319,37 +319,34 @@ impl Graph {
             .underlying
             .iter_edges_of(&full_graph_without_initial_state_cut)
         {
-            match pair {
-                HedgePair::Paired { source, sink } => {
-                    let loop_signature = &self.loop_momentum_basis.edge_signatures[edge_id];
-                    let is_tree_like = loop_signature.internal.iter().all(|sign| sign.is_zero());
-                    if is_tree_like {
-                        tree_like_edges.push(edge_id);
-                        let source_node = self.underlying.node_id(source);
-                        let sink_node = self.underlying.node_id(sink);
+            if let HedgePair::Paired { source, sink } = pair {
+                let loop_signature = &self.loop_momentum_basis.edge_signatures[edge_id];
+                let is_tree_like = loop_signature.internal.iter().all(|sign| sign.is_zero());
+                if is_tree_like {
+                    tree_like_edges.push(edge_id);
+                    let source_node = self.underlying.node_id(source);
+                    let sink_node = self.underlying.node_id(sink);
 
-                        let source_connects_initial_state =
-                            self.underlying.iter_crown(source_node).any(|hedge| {
-                                let mut single_hedge_subgraph: SubSet<Hedge> =
-                                    self.underlying.empty_subgraph();
+                    let source_connects_initial_state =
+                        self.underlying.iter_crown(source_node).any(|hedge| {
+                            let mut single_hedge_subgraph: SubSet<Hedge> =
+                                self.underlying.empty_subgraph();
 
-                                single_hedge_subgraph.add(hedge);
+                            single_hedge_subgraph.add(hedge);
 
-                                single_hedge_subgraph.intersects(&full_is_cut)
-                            });
+                            single_hedge_subgraph.intersects(&full_is_cut)
+                        });
 
-                        if source_connects_initial_state {
-                            for hedge in self.underlying.iter_crown(source_node) {
-                                result.add(hedge);
-                            }
-                        } else {
-                            for hedge in self.underlying.iter_crown(sink_node) {
-                                result.add(hedge);
-                            }
+                    if source_connects_initial_state {
+                        for hedge in self.underlying.iter_crown(source_node) {
+                            result.add(hedge);
+                        }
+                    } else {
+                        for hedge in self.underlying.iter_crown(sink_node) {
+                            result.add(hedge);
                         }
                     }
                 }
-                _ => {}
             }
         }
 

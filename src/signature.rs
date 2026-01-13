@@ -57,7 +57,7 @@ pub struct LoopExtSignature {
 impl LoopExtSignature {
     pub(crate) fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
         // println!("i{i},j{j}");÷
-        if self.internal.len() > 0 {
+        if !self.internal.is_empty() {
             self.internal.0.swap(i, j);
         }
     }

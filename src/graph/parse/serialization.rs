@@ -63,10 +63,10 @@ impl Graph {
                             let mut dot: DotEdgeData = e.into();
                             match flow {
                                 Flow::Sink => {
-                                    dot.add_statement("pin", format!("x:@+right"));
+                                    dot.add_statement("pin", "x:@+right".to_string());
                                 }
                                 Flow::Source => {
-                                    dot.add_statement("pin", format!("x:@-left"));
+                                    dot.add_statement("pin", "x:@-left".to_string());
                                 }
                             }
                             dot
@@ -194,6 +194,7 @@ impl From<&ParseGraph> for DotGraph {
 }
 
 impl ParseGraph {
+    #[allow(dead_code)]
     fn to_simple_dot(&self) -> DotGraph {
         let global_data = self.global_data();
         let graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> = self.graph.map_data_ref(

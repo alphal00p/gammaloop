@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
@@ -20,21 +17,12 @@ use serde::{Deserialize, Serialize};
 use crate::model::Model;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema, Default)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub iterative_orientation_optimization: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compile: bool,
-}
-
-impl Default for EvaluatorSettings {
-    fn default() -> Self {
-        Self {
-            iterative_orientation_optimization: false,
-            compile: false,
-        }
-    }
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -108,8 +96,7 @@ impl ProcessList {
                 };
                 let path = entry.path();
                 process_list.processes.push(
-                    Process::load_amplitude(path, context.clone())
-                        .context("Error loading amplitude")?,
+                    Process::load_amplitude(path, context).context("Error loading amplitude")?,
                 );
             }
         }
@@ -126,7 +113,7 @@ impl ProcessList {
                 let path = entry.path();
                 process_list
                     .processes
-                    .push(Process::load_cross_section(path, context.clone())?);
+                    .push(Process::load_cross_section(path, context)?);
             }
         }
         process_list
@@ -168,10 +155,10 @@ impl ProcessList {
         }
 
         for p in self.processes.iter_mut() {
-            if let Some(id) = process_id {
-                if p.definition.process_id != id {
-                    continue;
-                }
+            if let Some(id) = process_id
+                && p.definition.process_id != id
+            {
+                continue;
             }
             p.compile(
                 &path,
@@ -245,7 +232,7 @@ impl ProcessList {
     }
 
     pub fn find_process(&self, process_id: Option<usize>) -> Result<usize> {
-        let process_id = if let Some(id) = process_id {
+        if let Some(id) = process_id {
             if id >= self.processes.len() {
                 return Err(color_eyre::eyre::eyre!(
                     "Invalid process id {}. Number of processes: {}",
@@ -254,20 +241,16 @@ impl ProcessList {
                 ));
             }
             Ok(id)
+        } else if self.processes.is_empty() {
+            Err(color_eyre::eyre::eyre!("No processes generated yet."))
+        } else if self.processes.len() > 1 {
+            Err(color_eyre::eyre::eyre!(
+                "There are {} processes available. Please specify a process id.",
+                self.processes.len()
+            ))
         } else {
-            if self.processes.is_empty() {
-                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
-            } else if self.processes.len() > 1 {
-                return Err(color_eyre::eyre::eyre!(
-                    "There are {} processes available. Please specify a process id.",
-                    self.processes.len()
-                ));
-            } else {
-                Ok(0)
-            }
-        };
-
-        process_id
+            Ok(0)
+        }
     }
 
     pub fn find_integrand(

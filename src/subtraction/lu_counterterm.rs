@@ -3,9 +3,7 @@ use core::f64;
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-use spenso::{
-    algebra::complex::Complex,
-};
+use spenso::algebra::complex::Complex;
 use symbolica::{
     domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     evaluate::OptimizationSettings,
@@ -22,8 +20,7 @@ use crate::{
     },
     gammaloop_integrand::{
         GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
-        evaluators::SingleOrAllOrientations,
-        param_builder::LUParams,
+        evaluators::SingleOrAllOrientations, param_builder::LUParams,
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     momentum::Rotation,
@@ -32,11 +29,11 @@ use crate::{
         CutId, IteratedCtCollection, LUCounterTermData, LeftThresholdId, RightThresholdId,
     },
     settings::{GlobalSettings, RuntimeSettings},
+    subtraction::overlap_subspace,
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap_subspace::{OverlapGroup, OverlapInput, OverlapStructure},
     },
-    subtraction::overlap_subspace,
     utils::{
         F, FloatLike,
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
@@ -67,7 +64,7 @@ impl LUCounterTermEvaluators {
             .map(|atom| {
                 GenericEvaluator::new_from_builder(
                     [atom.clone()],
-                    &param_builder,
+                    param_builder,
                     OptimizationSettings::default(),
                 )
                 .unwrap()
@@ -80,7 +77,7 @@ impl LUCounterTermEvaluators {
             .map(|atom| {
                 GenericEvaluator::new_from_builder(
                     [atom.clone()],
-                    &param_builder,
+                    param_builder,
                     OptimizationSettings::default(),
                 )
                 .unwrap()
@@ -108,7 +105,7 @@ impl LUCounterTermEvaluators {
                     .map(|atom| {
                         GenericEvaluator::new_from_builder(
                             orientations.iter().map(|or| or.select(atom)),
-                            &param_builder,
+                            param_builder,
                             OptimizationSettings::default(),
                         )
                         .unwrap()
@@ -131,7 +128,7 @@ impl LUCounterTermEvaluators {
                     .map(|atom| {
                         GenericEvaluator::new_from_builder(
                             orientations.iter().map(|or| or.select(atom)),
-                            &param_builder,
+                            param_builder,
                             OptimizationSettings::default(),
                         )
                         .unwrap()
@@ -170,21 +167,21 @@ impl LUCounterTermEvaluators {
     }
 }
 
+type CutThresholds = (
+    TiVec<LeftThresholdId, Esurface>,
+    TiVec<RightThresholdId, Esurface>,
+);
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct LUCounterTerm {
     pub evaluators: TiVec<CutId, LUCounterTermEvaluators>,
-    pub thresholds: TiVec<
-        CutId,
-        (
-            TiVec<LeftThresholdId, Esurface>,
-            TiVec<RightThresholdId, Esurface>,
-        ),
-    >,
+    pub thresholds: TiVec<CutId, CutThresholds>,
     pub subspaces: TiVec<CutId, (SubspaceData, SubspaceData)>,
 }
 
 impl LUCounterTerm {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -249,7 +246,7 @@ impl LUCounterTerm {
                 ) {
                     Some(EsurfaceID::from(left_id.0))
                 } else {
-                    return None;
+                    None
                 }
             })
             .collect::<TiVec<ExistingEsurfaceId, _>>();
@@ -346,7 +343,7 @@ impl LUCounterTerm {
             graph,
             rotation,
             settings,
-            &left_overlap_input.thresholds,
+            left_overlap_input.thresholds,
             momentum_sample,
             &left_overlap,
             masses,
@@ -381,7 +378,7 @@ impl LUCounterTerm {
             graph,
             rotation,
             settings,
-            &right_overlap_input.thresholds,
+            right_overlap_input.thresholds,
             momentum_sample,
             &right_overlap,
             masses,
@@ -422,7 +419,7 @@ impl LUCounterTerm {
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
 
-                if let Some(mut iterative_evaluator) = self.evaluators[cut_id]
+                if let Some(iterative_evaluator) = self.evaluators[cut_id]
                     .iterative_left_thresholds_evaluator
                     .as_mut()
                     .map(|evaluators| &mut evaluators[left_threshold_id])
@@ -435,12 +432,11 @@ impl LUCounterTerm {
                         settings.kinematics.externals.get_helicities(),
                         Some(&left_threshold_params),
                         None,
-                        Some(&lu_cut_params),
+                        Some(lu_cut_params),
                     );
 
-                    let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
-                        &mut iterative_evaluator,
-                    )(&params);
+                    let iterative_result =
+                        <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
 
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
                     for (i, _e) in orientations.iter() {
@@ -465,7 +461,7 @@ impl LUCounterTerm {
                             settings.kinematics.externals.get_helicities(),
                             Some(&left_threshold_params),
                             None,
-                            Some(&lu_cut_params),
+                            Some(lu_cut_params),
                         );
 
                         let result = <T as GenericEvaluatorFloat>::get_evaluator(
@@ -491,7 +487,7 @@ impl LUCounterTerm {
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
 
-                if let Some(mut iterative_evaluator) = self.evaluators[cut_id]
+                if let Some(iterative_evaluator) = self.evaluators[cut_id]
                     .iterative_right_threshold_evaluator
                     .as_mut()
                     .map(|evaluators| &mut evaluators[right_threshold_id])
@@ -504,12 +500,11 @@ impl LUCounterTerm {
                         settings.kinematics.externals.get_helicities(),
                         None,
                         Some(&right_threshold_params),
-                        Some(&lu_cut_params),
+                        Some(lu_cut_params),
                     );
 
-                    let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
-                        &mut iterative_evaluator,
-                    )(&params);
+                    let iterative_result =
+                        <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
 
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
                     for (i, _e) in orientations.iter() {
@@ -540,7 +535,7 @@ impl LUCounterTerm {
                             settings.kinematics.externals.get_helicities(),
                             None,
                             Some(&right_threshold_params),
-                            Some(&lu_cut_params),
+                            Some(lu_cut_params),
                         );
 
                         let result = <T as GenericEvaluatorFloat>::get_evaluator(
@@ -583,7 +578,7 @@ impl LUCounterTerm {
             let inverse_transformed_momentum_sample =
                 merge_and_inverse_transform(sample_left, sample_right);
 
-            if let Some(mut iterative_evaluator) = self.evaluators[cut_id]
+            if let Some(iterative_evaluator) = self.evaluators[cut_id]
                 .iterative_iterated_evaluator
                 .as_mut()
                 .map(|evaluators| &mut evaluators[iterated_index])
@@ -596,11 +591,11 @@ impl LUCounterTerm {
                     settings.kinematics.externals.get_helicities(),
                     Some(&left_threshold_params),
                     Some(&right_threshold_params),
-                    Some(&lu_cut_params),
+                    Some(lu_cut_params),
                 );
 
                 let iterative_result =
-                    <T as GenericEvaluatorFloat>::get_evaluator(&mut iterative_evaluator)(&params);
+                    <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
 
                 let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
 
@@ -632,7 +627,7 @@ impl LUCounterTerm {
                         settings.kinematics.externals.get_helicities(),
                         Some(&left_threshold_params),
                         Some(&right_threshold_params),
-                        Some(&lu_cut_params),
+                        Some(lu_cut_params),
                     );
 
                     let result =
@@ -677,6 +672,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         graph: &'a Graph,
         rotation_for_overlap: &'a Rotation,
@@ -782,8 +778,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         let (radius_guess, _) = self.esurface.get_radius_guess_subspace(
             &self.overlap_builder.unit_shifted_momenta,
-            &self
-                .overlap_builder
+            self.overlap_builder
                 .counterterm_builder
                 .transformed_sample
                 .external_moms(),
@@ -802,7 +797,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     .counterterm_builder
                     .transformed_sample
                     .external_moms(),
-                &self.overlap_builder.counterterm_builder.real_mass_vector,
+                self.overlap_builder.counterterm_builder.real_mass_vector,
                 subspace,
                 lmbs,
                 graph,
@@ -991,9 +986,9 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         let radius_star = &self.rstar_solution.solution.solution;
         let esurface_derivative = &self.rstar_solution.solution.derivative_at_solution;
-        let uv_damp_plus = evaluate_uv_damper(radius, radius_star, e_cm, &uv_localisation_settings);
+        let uv_damp_plus = evaluate_uv_damper(radius, radius_star, e_cm, uv_localisation_settings);
         let uv_damp_minus =
-            evaluate_uv_damper(&-radius, radius_star, e_cm, &uv_localisation_settings);
+            evaluate_uv_damper(&-radius, radius_star, e_cm, uv_localisation_settings);
 
         let h_function = evaluate_integrated_ct_normalisation(
             radius,

@@ -1,7 +1,7 @@
 use crate::{
     cff::{
         cut_expression::CFFCutsExpression,
-        esurface::{ add_external_shifts},
+        esurface::add_external_shifts,
         expression::OrientationData,
         hsurface::HsurfaceID,
         surface::{HybridSurface, HybridSurfaceID},
@@ -68,6 +68,7 @@ impl GenerationData {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[allow(dead_code)]
 struct CFFTreeNodePointer {
     term_id: usize,
     node_id: usize,
@@ -262,6 +263,7 @@ fn get_orientations_with_cut<E, V, H>(
     orientations_consistent_with_cut.collect_vec()
 }
 
+#[allow(dead_code)]
 fn get_possible_orientations_for_cut_list<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     cuts: &TiVec<CutId, CrossSectionCut>,
@@ -299,7 +301,8 @@ fn get_possible_orientations_for_cut_list<E, V, H>(
 
     // find the cuts that are consistent with the orientation
     // remove orientations with no consistent cuts
-    let orientations = filter_non_dag
+
+    filter_non_dag
         .filter_map(|global_orientation| {
             let cuts_consistent_with_orientation = cuts
                 .iter_enumerated()
@@ -323,9 +326,7 @@ fn get_possible_orientations_for_cut_list<E, V, H>(
                 })
             }
         })
-        .collect();
-
-    orientations
+        .collect()
 }
 
 pub(crate) fn generate_cff_expression<E, V, H>(
@@ -400,6 +401,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     Ok(atom_tree_substituted * &inverse_energies)
 }
 
+#[allow(dead_code)]
 fn generate_cff_for_orientation<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -509,7 +511,7 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
             cartesian_product
         {
             let merged_orientation =
-                amplitude_orientations_to_sg_orientaion(&left_orientation, &right_orientation)
+                amplitude_orientations_to_sg_orientaion(left_orientation, right_orientation)
                     .unwrap();
 
             if let Some((sg_id, _)) = super_graph_orientations
@@ -632,7 +634,8 @@ impl SurfaceCache {
             .collect()
     }
 
-    pub(crate) fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef {
+    #[allow(dead_code)]
+    pub(crate) fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef<'_> {
         match surface_id {
             HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
             HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
@@ -640,6 +643,7 @@ impl SurfaceCache {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn new() -> Self {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),

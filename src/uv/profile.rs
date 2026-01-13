@@ -130,7 +130,7 @@ pub fn run_uv_profile<I: HasIntegrand>(
 
                 let point_result = ScalingPointResult {
                     scaling,
-                    evaluation: evaluation.clone(),
+                    evaluation,
                     real_part: evaluation.re.into(),
                     imaginary_part: evaluation.im.into(),
                     magnitude: magnitude(&evaluation),
@@ -234,6 +234,7 @@ fn evaluate_at_scaling<I: HasIntegrand>(
 
 /// Scale momentum configuration by applying scaling factor
 /// This modifies the momenta to probe UV behavior at different energy scales
+#[allow(dead_code)]
 fn apply_momentum_scaling(
     scaling: f64,
     base_momenta: &[F<f64>],
@@ -248,6 +249,7 @@ fn apply_momentum_scaling(
 }
 
 /// Transform momentum configuration to different LMB basis
+#[allow(dead_code)]
 fn transform_to_lmb_basis(
     momenta: &[FourMomentum<F<f64>>],
     target_lmb: &str,

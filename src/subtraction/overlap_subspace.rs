@@ -350,7 +350,7 @@ pub(crate) fn find_center(
     if solver.solution.status == SolverStatus::Solved {
         let center = extract_center(
             global_loop_number,
-            &overlap_input.subspace,
+            overlap_input.subspace,
             &solver.solution.x,
         );
         Some(center)
@@ -360,7 +360,7 @@ pub(crate) fn find_center(
         // if the solver did not converge, we check if the solution is still valid
         let center = extract_center(
             global_loop_number,
-            &overlap_input.subspace,
+            overlap_input.subspace,
             &solver.solution.x,
         );
 
@@ -371,7 +371,7 @@ pub(crate) fn find_center(
             let edge_masses = &overlap_input.edge_masses;
             let esurface = &overlap_input.thresholds[esurface_id];
 
-            esurface.compute_from_momenta(lmb, &edge_masses, &center, external_momenta)
+            esurface.compute_from_momenta(lmb, edge_masses, &center, external_momenta)
                 < F::from_f64(0.0)
         });
 
@@ -407,7 +407,7 @@ pub(crate) fn check_global_center(
         let edge_masses = &overlap_input.edge_masses;
 
         let esurface_val =
-            esurface.compute_from_momenta(lmb, &edge_masses, &center, external_momenta);
+            esurface.compute_from_momenta(lmb, edge_masses, center, external_momenta);
 
         esurface_val < F(0.0)
     })

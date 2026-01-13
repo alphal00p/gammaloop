@@ -73,7 +73,7 @@ pub struct StatisticsCounter {
 impl StatisticsCounter {
     /// Turn a slice of evaluation results into a statistics counter
     pub(crate) fn from_evaluation_results(data: &[EvaluationResult]) -> Self {
-        let statistics_counter = data.iter().fold(
+        data.iter().fold(
             StatisticsCounter::new_empty(),
             |mut accumulator, data_entry| {
                 accumulator.sum_rep3d_evaluation_time +=
@@ -100,9 +100,7 @@ impl StatisticsCounter {
 
                 accumulator
             },
-        );
-
-        statistics_counter
+        )
     }
 
     /// Merge two statistics counters into a single one, but keeping the original ones unchanged
@@ -141,6 +139,7 @@ impl StatisticsCounter {
     }
 
     /// Merge a list of statistics counters into a single one.
+    #[allow(dead_code)]
     pub(crate) fn merge_list(list: Vec<Self>) -> Self {
         if let Some(merged) = list.into_iter().reduce(|acc, x| acc.merged(&x)) {
             merged
@@ -170,6 +169,7 @@ impl StatisticsCounter {
     }
 
     /// Get the average relative error computed during instability checks
+    #[allow(dead_code)]
     pub(crate) fn get_avg_instabillity_error(&self) -> (F<f64>, F<f64>) {
         (
             self.sum_relative_instability_error.0 / F::<f64>::new_from_usize(self.num_evals),

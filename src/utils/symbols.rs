@@ -14,7 +14,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    domains::{integer::Integer, rational::Rational},
+    domains::rational::Rational,
     function,
     id::Replacement,
     symbol,
@@ -194,7 +194,7 @@ impl GammaloopSymbols {
         function!(self.theta, arg.as_view())
     }
 
-    pub(crate) fn sign<'a>(&self, edge: EdgeIndex) -> Atom {
+    pub(crate) fn sign(&self, edge: EdgeIndex) -> Atom {
         function!(self.sign, Atom::num(edge.0 as i64))
     }
     pub(crate) fn sign_symbol(&self, edge: EdgeIndex) -> Symbol {
@@ -374,20 +374,20 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     emr_vec: symbol!(
         "Q3",
         norm = |f, out| {
-            if let AtomView::Fun(ff) = f {
-                if ff.get_nargs() == 2 {
-                    let mut iter = ff.iter();
-                    let eid = iter.next().unwrap();
-                    if let AtomView::Fun(cind) = iter.next().unwrap()
-                        && cind.get_symbol() == AIND_SYMBOLS.cind
-                        && let Some(i) = cind.iter().next()
-                        && let Ok(i) = i64::try_from(i)
-                    {
-                        if i == 0 {
-                            **out = Atom::Zero;
-                        } else {
-                            **out = symbol!("Q").f(&[eid, cind.as_view()])
-                        }
+            if let AtomView::Fun(ff) = f
+                && ff.get_nargs() == 2
+            {
+                let mut iter = ff.iter();
+                let eid = iter.next().unwrap();
+                if let AtomView::Fun(cind) = iter.next().unwrap()
+                    && cind.get_symbol() == AIND_SYMBOLS.cind
+                    && let Some(i) = cind.iter().next()
+                    && let Ok(i) = i64::try_from(i)
+                {
+                    if i == 0 {
+                        **out = Atom::Zero;
+                    } else {
+                        **out = symbol!("Q").f(&[eid, cind.as_view()])
                     }
                 }
             }
@@ -501,7 +501,7 @@ impl GammaloopSymbols {
                     return;
                 };
 
-                if exp.denominator() == Integer::from(2) {
+                if exp.denominator() == 2 {
                     **out = self
                         .broadcasting_sqrt
                         .f(&[a])
@@ -524,7 +524,7 @@ impl GammaloopSymbols {
         function!(GS.emr_vec, usize::from(e) as i64, index.into().as_view())
     }
 
-    pub(crate) fn cind<'a>(&self, e: usize) -> Atom {
+    pub(crate) fn cind(&self, e: usize) -> Atom {
         AIND_SYMBOLS.cind.f([e as i64])
     }
     pub(crate) fn delta_vec<'a>(&self, e: usize, index: impl Into<AtomOrView<'a>>) -> Atom {
@@ -557,7 +557,7 @@ impl GammaloopSymbols {
         }
     }
 
-    pub(crate) fn split_mom_pattern<'a>(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
+    pub(crate) fn split_mom_pattern(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
         let id = Minkowski {}.to_symbolic([W_.a__]);
         Replacement::new(
             self.emr_mom(e, &id).to_pattern(),
@@ -565,7 +565,7 @@ impl GammaloopSymbols {
         )
     }
 
-    pub(crate) fn split_mom_pattern_simple<'a>(&self, e: EdgeIndex) -> Replacement {
+    pub(crate) fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
         Replacement::new(
             self.emr_mom(e, Minkowski {}.to_symbolic([W_.a__]))
@@ -575,7 +575,7 @@ impl GammaloopSymbols {
         )
     }
 
-    pub(crate) fn add_parametric_sign<'a>(&self, e: EdgeIndex) -> Replacement {
+    pub(crate) fn add_parametric_sign(&self, e: EdgeIndex) -> Replacement {
         Replacement::new(
             self.emr_mom(e, AIND_SYMBOLS.cind.f(&[Atom::Zero]))
                 .to_pattern(),

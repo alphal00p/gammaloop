@@ -256,13 +256,11 @@ fn stability_check_on_norm(
     let mut errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
 
-        let error = if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
+        if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
             F(0.)
         } else {
             ((res - average) / average).abs()
-        };
-
-        error
+        }
     });
 
     let unstable_sample =
@@ -356,6 +354,7 @@ impl LmbMultiChannelingSetup {
     }
 
     /// Note this increments the loop_mom_cache_id of all of the returned BareMomentumSample
+    #[allow(dead_code)]
     pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
@@ -622,7 +621,7 @@ pub trait GammaloopIntegrand {
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
     fn get_group(&self, group_id: GroupId) -> &GraphGroup;
     fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup>;
-    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor;
+    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor<'_>;
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
 }
@@ -859,7 +858,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         channel_id,
                         sample,
                     } => integrand.get_graph_mut(graph_id).evaluate(
-                        &sample,
+                        sample,
                         model,
                         &settings,
                         rotation,
@@ -871,7 +870,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                             .map(ChannelIndex::from)
                             .map(|channel_index| {
                                 integrand.get_graph_mut(graph_id).evaluate(
-                                    &sample,
+                                    sample,
                                     model,
                                     &settings,
                                     rotation,
@@ -885,8 +884,8 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
 
                         let energy_cache = master_graph.get_energy_cache(
                             model,
-                            &sample.loop_moms(),
-                            &sample.external_moms(),
+                            sample.loop_moms(),
+                            sample.external_moms(),
                             &master_graph.loop_momentum_basis,
                         );
 

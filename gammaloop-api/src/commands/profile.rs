@@ -1,6 +1,6 @@
 use crate::{state::State, CLISettings};
 use clap::Subcommand;
-use color_eyre::{Report, Result};
+use color_eyre::Result;
 use gammalooprs::{
     settings::RuntimeSettings,
     uv::{display_results_summary, run_uv_profile, write_results, UVProfileConfig},

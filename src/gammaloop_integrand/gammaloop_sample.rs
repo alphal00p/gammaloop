@@ -91,6 +91,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn zero(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.zero(),
@@ -199,6 +200,7 @@ pub enum DiscreteGraphSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> DiscreteGraphSample<T> {
+    #[allow(dead_code)]
     pub(crate) fn zero(&self) -> F<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample.zero(),

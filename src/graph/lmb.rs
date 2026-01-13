@@ -85,7 +85,7 @@ impl LoopMomentumBasis {
         self.ext_edges
             .iter()
             .position(|&e| e == eid)
-            .map(|i| ExternalIndex(i))
+            .map(ExternalIndex)
     }
     pub(crate) fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
         self.loop_edges.swap(i, j);
@@ -184,7 +184,7 @@ pub trait LMBext {
                         .with(
                             FunctionBuilder::new(GS.emr_vec)
                                 .add_arg(W_.x_)
-                                .add_args(&rep_args)
+                                .add_args(rep_args)
                                 .finish(),
                         )
                         + b)
@@ -257,6 +257,8 @@ pub trait LMBext {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)]
     fn replacement_impl<'a, S: SubSetLike, I>(
         &self,
         rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
@@ -362,10 +364,10 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             let external = self.full_crown(subgraph);
             // println!("lmb");
             // println!("{}", tree.dot(self));
-            return self.lmb_impl(subgraph.included(), &tree.tree_subgraph, external);
+            self.lmb_impl(subgraph.included(), &tree.tree_subgraph, external)
         } else {
             panic!("ata")
-        };
+        }
     }
 
     fn compatible_sub_lmb<S: SubGraphLike>(
@@ -443,7 +445,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         let root_node = self.node_id(dep_ext.unwrap_or(h));
 
-        let cotree = subgraph.subtract(&tree);
+        let cotree = subgraph.subtract(tree);
         let tree = SimpleTraversalTree::depth_first_traverse(self, tree, &root_node, None).ok();
 
         if let Some(t) = &tree {
@@ -454,13 +456,12 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         // create all the cycles. The lmb order is in the order of the hedges not in the tree (and their relative order is ultimately due to the relative order of the hedges)
         for (p, e, _) in self.iter_edges_of(&cotree) {
-            if let HedgePair::Paired { source, .. } = p {
-                if let Some(c) = tree.as_ref().map(|t| t.get_cycle(source, self)).flatten() {
-                    if let Some(signed) = SignedCycle::from_cycle(c, source, self) {
-                        cycles.push(signed);
-                        loop_edges.push(e);
-                    }
-                }
+            if let HedgePair::Paired { source, .. } = p
+                && let Some(c) = tree.as_ref().and_then(|t| t.get_cycle(source, self))
+                && let Some(signed) = SignedCycle::from_cycle(c, source, self)
+            {
+                cycles.push(signed);
+                loop_edges.push(e);
             }
         }
 
@@ -515,13 +516,11 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         path_to_dep.add(dep_ext.unwrap());
 
                         if self.node_id(hedge) == root_node {
-                        } else {
-                            if let Some(tree) = &tree {
-                                let ext = tree.hedge_parent(hedge, self.as_ref()).unwrap();
+                        } else if let Some(tree) = &tree {
+                            let ext = tree.hedge_parent(hedge, self.as_ref()).unwrap();
 
-                                for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
-                                    path_to_dep.add(h);
-                                }
+                            for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
+                                path_to_dep.add(h);
                             }
                         }
                     }
@@ -570,14 +569,12 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         for (i, (s, e)) in external_flows.iter_enumerated().skip(1) {
                             if ext_edges[i] == eid {
                                 external.push(SignOrZero::Plus);
+                            } else if e.includes(source) {
+                                external.push(*s * SignOrZero::Minus);
+                            } else if e.includes(sink) {
+                                external.push(*s * SignOrZero::Plus);
                             } else {
-                                if e.includes(source) {
-                                    external.push(*s * SignOrZero::Minus);
-                                } else if e.includes(sink) {
-                                    external.push(*s * SignOrZero::Plus);
-                                } else {
-                                    external.push(*s * SignOrZero::Zero);
-                                }
+                                external.push(*s * SignOrZero::Zero);
                             }
                         }
                     } else {
@@ -589,24 +586,22 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         for (i, (s, e)) in external_flows.iter_enumerated().skip(1) {
                             if ext_edges[i] == eid {
                                 external.push(SignOrZero::Plus);
-                            } else {
-                                if e.includes(hedge) {
-                                    match flow {
-                                        Flow::Source => external.push(*s * SignOrZero::Minus),
-                                        Flow::Sink => external.push(*s * SignOrZero::Plus),
-                                    }
-                                } else {
-                                    external.push(*s * SignOrZero::Zero);
+                            } else if e.includes(hedge) {
+                                match flow {
+                                    Flow::Source => external.push(*s * SignOrZero::Minus),
+                                    Flow::Sink => external.push(*s * SignOrZero::Plus),
                                 }
+                            } else {
+                                external.push(*s * SignOrZero::Zero);
                             }
                         }
                     } else {
                         external = empty_external;
-                        if externals.includes(hedge) {
-                            if let Some((e, _)) = ext_edges.iter().find_position(|a| *a == &eid) {
-                                external[e] = SignOrZero::Plus;
-                            };
-                        }
+                        if externals.includes(hedge)
+                            && let Some((e, _)) = ext_edges.iter().find_position(|a| *a == &eid)
+                        {
+                            external[e] = SignOrZero::Plus;
+                        };
                     }
                     internal = empty_internal;
                 }
@@ -654,6 +649,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         lmbs
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn replacement_impl<'a, S: SubSetLike, I>(
         &self,
         rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,

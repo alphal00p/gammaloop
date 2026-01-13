@@ -130,7 +130,7 @@ impl ParseVertex {
             let dod = v
                 .get::<_, String>("dod")
                 .transpose()
-                .with_context(|| format!("Error parsing vertex dod"))?
+                .with_context(|| "Error parsing vertex dod".to_string())?
                 .map(|a| a.strip_parse())
                 .transpose()?;
 

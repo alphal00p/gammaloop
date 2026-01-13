@@ -70,9 +70,10 @@ impl ParseData {
 
 impl From<linnet::parser::GlobalData> for ParseData {
     fn from(value: linnet::parser::GlobalData) -> Self {
-        let mut parse_data = ParseData::default();
-
-        parse_data.name = value.name;
+        let mut parse_data = ParseData {
+            name: value.name,
+            ..Default::default()
+        };
 
         if let Some(factor) = value.statements.get("overall_factor") {
             parse_data = parse_data

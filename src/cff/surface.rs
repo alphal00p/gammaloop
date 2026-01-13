@@ -20,6 +20,7 @@ pub enum HybridSurface {
 }
 
 impl HybridSurface {
+    #[allow(dead_code)]
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         match self {
             HybridSurface::Esurface(surface) => surface.to_atom(cut_edges),

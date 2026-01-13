@@ -238,7 +238,7 @@ impl<T, R: Key, D> DAG<T, R, D> {
     }
 
     /// Returns an iterator over all paths starting from the root node, traversed in BFS order.
-    pub(crate) fn bfs_paths(&self) -> BfsPaths<T, R>
+    pub(crate) fn bfs_paths(&self) -> BfsPaths<'_, T, R>
     where
         T: Eq,
     {
@@ -257,7 +257,7 @@ impl<T, R: Key, D> DAG<T, R, D> {
         });
     }
 
-    pub(crate) fn bfs_paths_inv(&self) -> BfsPaths<T, R> {
+    pub(crate) fn bfs_paths_inv(&self) -> BfsPaths<'_, T, R> {
         let mut queue = VecDeque::new();
         let mut maximal_elements = Vec::new();
         let mut has_incoming = HashSet::new();

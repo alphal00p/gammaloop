@@ -287,13 +287,7 @@ impl FeynGenFilters {
                             .progress_with(bar.clone())
                             .filter(|(g, _)| {
                                 let graph_coupling_orders = get_coupling_orders(g, model);
-                                let a = orders.iter().all(|(k, (v_min, v_max))| {
-                                    graph_coupling_orders
-                                        .get(&SmartString::from(k))
-                                        .map_or(0 == *v_min, |o| {
-                                            *o >= *v_min && (*v_max).is_none_or(|max| *o <= max)
-                                        })
-                                });
+                                
                                 // if a {
                                 //     info!(
                                 //         "Coupling orders constraints satisfied for graph {}",
@@ -301,7 +295,13 @@ impl FeynGenFilters {
                                 //     );
                                 //     info!("{:?}", graph_coupling_orders);
                                 // }
-                                a
+                                orders.iter().all(|(k, (v_min, v_max))| {
+                                    graph_coupling_orders
+                                        .get(&SmartString::from(k))
+                                        .map_or(0 == *v_min, |o| {
+                                            *o >= *v_min && (*v_max).is_none_or(|max| *o <= max)
+                                        })
+                                })
                             })
                             .map(|(g, sf)| (g.clone(), sf.clone()))
                             .collect::<Vec<_>>()

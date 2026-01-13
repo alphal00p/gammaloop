@@ -168,10 +168,7 @@ impl ParseGraph {
         for h in hedge_vec {
             let eid = self[&h];
 
-            let order = if self[eid].is_dummy {
-                other_order += 1;
-                (other_order - 1) as u8
-            } else if self[eid].particle.particle().is_none() {
+            let order = if self[eid].is_dummy || self[eid].particle.particle().is_none() {
                 other_order += 1;
                 (other_order - 1) as u8
             } else {
@@ -280,6 +277,7 @@ impl ParseGraph {
         /// Add dangling hedges based on external connections
         /// external connections is provided in  the process definition order
         /// it maps the external_tag s of the external degree 1 nodes together
+        #[allow(clippy::too_many_arguments)]
         fn process_single_connection_internal(
             edge_idx: usize,
             flow: Flow,
@@ -476,7 +474,7 @@ impl ParseGraph {
     fn fix_cp_vertex_rules(&mut self, model: &Model) -> Result<()> {
         let mut new_nodes = AHashMap::new();
         for (node_id, neighs, v) in self.graph.iter_nodes() {
-            let (particles, vertex_name) = Self::extract_vertex_particles(&v);
+            let (particles, vertex_name) = Self::extract_vertex_particles(v);
             let Some(vertex) = vertex_name.map(|a| model.get_vertex_rule(a)) else {
                 continue;
             };
@@ -648,6 +646,7 @@ impl Graph {
         g.write_io(writer)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn dot_split_serialize_io(
         &self,
         writer: &mut impl std::io::Write,
@@ -721,7 +720,7 @@ impl Graph {
             )
             .map_err(|e| eyre::eyre!("Graph sewing failed: {:?}", e))?;
 
-        let mut cut_result = Self::process_cut_edges(&mut graph)?;
+        let mut cut_result = Self::process_cut_edges(&graph)?;
 
         cut_result.permute(&mut graph)?;
 
@@ -794,7 +793,7 @@ impl Graph {
             |_, _, v| v.clone(),
             |_, _, _, e| e.map(|e| e.clone()),
             |h, hd| NumHedgeData {
-                num_indices: NumIndices::parse(&parse_graph)(h, hd),
+                num_indices: NumIndices::parse(parse_graph)(h, hd),
                 node_order: hedge_order[h.0],
             },
         );
@@ -911,6 +910,7 @@ impl Graph {
         Ok((global_prefactor, param_builder))
     }
 
+    #[allow(clippy::type_complexity)]
     fn generate_vertex_numerators(
         graph: &NumGraph,
     ) -> (
@@ -1104,12 +1104,12 @@ impl Graph {
             for i in 0..loop_momentum_basis.loop_edges.len() {
                 if let Some(&target_pos) =
                     inv_lmb_ids.get(&loop_momentum_basis.loop_edges[LoopIndex(i)])
+                    && target_pos.0 < loop_momentum_basis.loop_edges.len()
+                    && target_pos.0 != i
                 {
-                    if target_pos.0 < loop_momentum_basis.loop_edges.len() && target_pos.0 != i {
-                        loop_momentum_basis.swap_loops(LoopIndex(i), target_pos);
-                        swapped = true;
-                        break;
-                    }
+                    loop_momentum_basis.swap_loops(LoopIndex(i), target_pos);
+                    swapped = true;
+                    break;
                 }
             }
         }
@@ -1143,7 +1143,7 @@ impl Graph {
             for entry in entries {
                 let entry = entry?;
                 let file_path = entry.path();
-                if file_path.is_file() && file_path.extension().map_or(false, |ext| ext == "dot") {
+                if file_path.is_file() && file_path.extension().is_some_and(|ext| ext == "dot") {
                     dot_files.push(file_path);
                 }
             }
@@ -1261,9 +1261,7 @@ pub(crate) fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<Group
         .dedup()
         .collect_vec();
 
-    let expected_group_ids = (0..defined_group_ids.len())
-        .map(|id| GroupId(id))
-        .collect_vec();
+    let expected_group_ids = (0..defined_group_ids.len()).map(GroupId).collect_vec();
 
     if defined_group_ids != expected_group_ids {
         return Err(eyre!(

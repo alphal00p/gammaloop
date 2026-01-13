@@ -40,14 +40,11 @@ where
     fn to_quoted(&self) -> String {
         // let mut opts = PrintOptions::file();
         // opts.hide_namespace = Some("gammalooprs");
-        format!(
-            "{}",
-            self.to_canonically_ordered_string(CanonicalOrderingSettings {
+        self.to_canonically_ordered_string(CanonicalOrderingSettings {
                 include_namespace: true,
                 include_attributes: false,
                 hide_namespace: Some("gammalooprs")
-            })
-        )
+            }).to_string()
         //.printer(opts))
     }
 }
@@ -93,7 +90,7 @@ impl FromStripedStr for Atom {
             .unwrap_or(string)
             .strip_suffix('"')
             .unwrap_or(string);
-        Ok(try_parse!(a).map_err(|e| eyre!("Symbolica parsing error: {e}"))?)
+        try_parse!(a).map_err(|e| eyre!("Symbolica parsing error: {e}"))
     }
 }
 

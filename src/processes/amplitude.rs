@@ -195,7 +195,7 @@ impl Amplitude {
             fs::write(p.join("amp.bin"), binary)?;
         } else {
             let mut file = File::create_new(p.join("amp.bin"))?;
-            file.write(&binary)?;
+            file.write_all(&binary)?;
         }
 
         self.integrand = integrand;
@@ -318,6 +318,7 @@ impl Amplitude {
               amplitude.name = %self.name,
           )
       )]
+    #[allow(dead_code)]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -389,7 +390,8 @@ impl Amplitude {
             })
             .collect::<TiVec<GroupId, _>>();
 
-        Ok(self.group_derived_data = group_derived_data)
+        let _: () = self.group_derived_data = group_derived_data;
+        Ok(())
     }
 }
 
@@ -418,6 +420,7 @@ impl AmplitudeGraph {
 }
 
 impl AmplitudeGraph {
+    #[allow(dead_code)]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -550,9 +553,8 @@ impl AmplitudeGraph {
         // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
         let factors_of_pi = (Atom::var(GS.pi) * 2).npow(3 * self.graph.get_loop_number() as i64);
 
-        let result = cff_atom / factors_of_pi;
         // debug!("result: {}", result);
-        result
+        cff_atom / factors_of_pi
     }
 
     pub fn to_numerical(numerical_result: AtomView) -> Result<NumericalEvaluationResult> {
@@ -626,7 +628,7 @@ impl AmplitudeGraph {
                 for (p_name, p_value) in
                     ps.params
                         .iter()
-                        .zip(ps.value_range.into_iter())
+                        .zip(ps.value_range)
                         .map(|(a, value_index)| {
                             (a.to_canonical_string(), param_builder.values[value_index])
                         })
@@ -1066,9 +1068,8 @@ impl AmplitudeGraph {
         let mut scalar: Atom = full
             .result_scalar()
             .with_context(|| {
-                format!(
-                    "Failed to get scalar from network when building original paramteric integrand."
-                )
+                "Failed to get scalar from network when building original paramteric integrand."
+                    .to_string()
             })
             .with_note(|| {
                 format!(
@@ -1201,7 +1202,8 @@ impl AmplitudeGraph {
             .build_sampler(loop_part)
             .map_err(|e| eyre!(e))?;
 
-        Ok(self.derived_data.tropical_sampler = Some(sampler))
+        let _: () = self.derived_data.tropical_sampler = Some(sampler);
+        Ok(())
     }
 
     // Expects cff_expression, esurface_data,
@@ -1267,7 +1269,7 @@ impl Amplitude {
         Ok(amp)
     }
 
-    pub fn from_dot_file<'a, P>(p: P, name: String, model: &Model) -> Result<Self>
+    pub fn from_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
     where
         P: AsRef<Path>,
     {

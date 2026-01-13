@@ -195,6 +195,7 @@ impl SubspaceData {
     }
 
     /// this function chooses the lmb automatically based on the subgraph
+    #[allow(dead_code)]
     pub(crate) fn new(
         subgraph: SuBitGraph,
         graph: &Graph,
@@ -525,7 +526,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         if let Some(f) = self.loop_moms.first() {
             f.px.one()
         } else if let Some(f) = self.external_moms.first() {
-            return f.spatial.px.one();
+            f.spatial.px.one()
         } else {
             panic!("No momenta in sample")
         }
@@ -535,7 +536,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         if let Some(f) = self.loop_moms.first() {
             f.px.zero()
         } else if let Some(f) = self.external_moms.first() {
-            return f.spatial.px.zero();
+            f.spatial.px.zero()
         } else {
             panic!("No momenta in sample")
         }
@@ -619,6 +620,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
     }
 
     #[inline]
+    #[allow(dead_code)]
     pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {
             loop_moms: self.loop_moms.rescale(factor, subspace),
@@ -776,6 +778,7 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {

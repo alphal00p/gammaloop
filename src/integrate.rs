@@ -222,36 +222,35 @@ impl IntegrationState {
 
     // this thing is an unholy mess
     fn display_orientation_results(&self, settings: &RuntimeSettings) {
-        if settings.sampling.sample_orientations() {
-            if let Grid::Discrete(graph_grids) = &self.grid {
-                for (i_graph, graph_grid) in graph_grids.bins.iter().enumerate() {
-                    info!("results for graph #{}", i_graph);
-                    info!("-------------------------");
-                    if let Grid::Discrete(orientation_grids) = graph_grid.sub_grid.as_ref().unwrap()
+        if settings.sampling.sample_orientations()
+            && let Grid::Discrete(graph_grids) = &self.grid
+        {
+            for (i_graph, graph_grid) in graph_grids.bins.iter().enumerate() {
+                info!("results for graph #{}", i_graph);
+                info!("-------------------------");
+                if let Grid::Discrete(orientation_grids) = graph_grid.sub_grid.as_ref().unwrap() {
+                    let mut sum_all_positive = F(0.0);
+                    let mut sum_all_negative = F(0.0);
+                    for (i_orientation, orientation_grid) in
+                        orientation_grids.bins.iter().enumerate()
                     {
-                        let mut sum_all_positive = F(0.0);
-                        let mut sum_all_negative = F(0.0);
-                        for (i_orientation, orientation_grid) in
-                            orientation_grids.bins.iter().enumerate()
-                        {
-                            print_integral_result(
-                                &orientation_grid.accumulator,
-                                1,
-                                self.iter,
-                                &format!("orientation_{i_orientation}"),
-                                None,
-                            );
+                        print_integral_result(
+                            &orientation_grid.accumulator,
+                            1,
+                            self.iter,
+                            &format!("orientation_{i_orientation}"),
+                            None,
+                        );
 
-                            if orientation_grid.accumulator.avg.positive() {
-                                sum_all_positive += orientation_grid.accumulator.avg;
-                            } else {
-                                sum_all_negative += orientation_grid.accumulator.avg;
-                            }
+                        if orientation_grid.accumulator.avg.positive() {
+                            sum_all_positive += orientation_grid.accumulator.avg;
+                        } else {
+                            sum_all_negative += orientation_grid.accumulator.avg;
                         }
-
-                        info!("sum_all_positive: {}", sum_all_positive);
-                        info!("sum_all_negative: {}", sum_all_negative);
                     }
+
+                    info!("sum_all_positive: {}", sum_all_positive);
+                    info!("sum_all_negative: {}", sum_all_negative);
                 }
             }
         }
@@ -652,7 +651,10 @@ fn generate_integrand_output(
                 }
             }
 
-            BatchIntegrateOutput::Accumulator((real_accumulator, imag_accumulator), grid)
+            BatchIntegrateOutput::Accumulator(
+                Box::new((real_accumulator, imag_accumulator)),
+                Box::new(grid),
+            )
         }
     }
 }
@@ -701,7 +703,7 @@ fn evaluate_sample_list(
     sample_chunks
         .zip(integrands)
         .map(|(chunk, mut integrand)| {
-            let cor_evals = chunk
+            chunk
                 .iter()
                 .map(|sample| {
                     integrand.evaluate_sample(
@@ -713,9 +715,7 @@ fn evaluate_sample_list(
                         max_eval,
                     )
                 })
-                .collect_vec();
-
-            cor_evals
+                .collect_vec()
         })
         .collect_into_vec(&mut evaluation_results_per_core);
 
@@ -738,20 +738,19 @@ pub enum SampleInput {
         samples: Vec<Sample<F<f64>>>,
     },
     Grid {
-        grid: Grid<F<f64>>,
+        grid: Box<Grid<F<f64>>>,
         num_points: usize,
         seed: u64,
         thread_id: usize,
     },
 }
 
+type AccumulatorPair = (StatisticsAccumulator<F<f64>>, StatisticsAccumulator<F<f64>>);
+
 #[derive(Serialize, Deserialize)]
 pub enum BatchIntegrateOutput {
     Default(Vec<Complex<F<f64>>>, Vec<Sample<F<f64>>>),
-    Accumulator(
-        (StatisticsAccumulator<F<f64>>, StatisticsAccumulator<F<f64>>),
-        Grid<F<f64>>,
-    ),
+    Accumulator(Box<AccumulatorPair>, Box<Grid<F<f64>>>),
 }
 
 /// Different ways of processing events, EventList is a list of events, Histogram does accumulation of events on the worker nodes, so the
@@ -947,7 +946,7 @@ impl MasterNode {
 
         let samples = if export_grid {
             SampleInput::Grid {
-                grid: self.grid.clone(),
+                grid: Box::new(self.grid.clone()),
                 num_points: num_samples,
                 seed: self.integrator_settings.seed,
                 thread_id: job_id,
@@ -996,7 +995,8 @@ impl MasterNode {
                 self.update_accumuators_with_samples(&samples, &results);
                 self.update_grid_with_samples(&samples, &results)?;
             }
-            BatchIntegrateOutput::Accumulator((real_accumulator, imag_accumulator), grid) => {
+            BatchIntegrateOutput::Accumulator(accumulators, grid) => {
+                let (real_accumulator, imag_accumulator) = *accumulators;
                 self.update_accumulators_with_accumulators(real_accumulator, imag_accumulator);
                 self.update_grid_with_grid(&grid)?;
             }

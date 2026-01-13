@@ -185,15 +185,15 @@ impl Esurface {
                     } else {
                         F::from_f64(1.0)
                     };
-                    let momentum = signature.compute_momentum(
+                    
+
+                    signature.compute_momentum(
                         loop_moms,
                         &external_moms
                             .iter()
                             .map(|mom| mom.spatial.clone())
                             .collect::<TiVec<ExternalIndex, _>>(),
-                    ) * sign;
-
-                    momentum
+                    ) * sign
                 })
                 .reduce(|acc, x| acc + x)
                 .unwrap_or_else(|| zero_vector.clone());
@@ -299,9 +299,9 @@ impl Esurface {
                 //panic!("signature: {:?}", signature);
                 let momentum = signature.compute_momentum(loop_moms, &spatial_externals);
                 let mass = &masses[index];
-                let energy = (momentum.norm_squared() + mass * mass).sqrt();
+                
 
-                energy
+                (momentum.norm_squared() + mass * mass).sqrt()
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| full_external_shift.zero());
@@ -491,19 +491,19 @@ impl Esurface {
         let external_3_momenta = external_moms.iter().map(|x| x.spatial.clone()).collect();
 
         //println!("got to energy loop");
-        for energy in subspace.contains(&self.energies, graph).into_iter() {
+        for energy in subspace.contains(&self.energies, graph) {
             //println!("computing contribution for energy {:?}", energy);
             let signature = &lmb.edge_signatures[energy];
             //println!("signature {:?}", signature);
 
             let unit_loop_part =
-                compute_loop_part_subspace(&signature.internal, loops_unit_in_subspace, &subspace);
+                compute_loop_part_subspace(&signature.internal, loops_unit_in_subspace, subspace);
             //println!("computed_loop_part {:?}", unit_loop_part);
 
             let three_shift = compute_shift_part_subspace(
                 &signature.internal,
                 &signature.external,
-                &loops_unit_in_subspace,
+                loops_unit_in_subspace,
                 &external_3_momenta,
                 subspace,
             );
@@ -630,18 +630,18 @@ impl Esurface {
                     .map(|i| function!(GS.emr_mom, usize::from(*index), i + 1))
                     .collect_vec();
 
-                let atom = (&emr_symbols[0] * &emr_symbols[0]
+                
+                (&emr_symbols[0] * &emr_symbols[0]
                     + &emr_symbols[1] * &emr_symbols[1]
                     + &emr_symbols[2] * &emr_symbols[2]
                     + &mass_symbol * &mass_symbol)
-                    .sqrt();
-                atom
+                    .sqrt()
             })
             .chain(self.external_shift.iter().map(|(index, sign)| {
                 function!(GS.emr_mom, usize::from(*index), 0) * Atom::num(*sign)
             }))
             .reduce(|sum, atom| sum + atom)
-            .unwrap_or_else(|| Atom::new())
+            .unwrap_or_else(Atom::new)
             .replace_multiple(lmb_reps)
             .replace(parse!("ZERO"))
             .with(Atom::new())
@@ -655,14 +655,14 @@ impl Esurface {
             .map(|index| {
                 let mass_symbol = graph.underlying[*index].mass_atom();
                 let emr_symbol = function!(GS.emr_mom, usize::from(*index));
-                let atom = (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt();
-                atom
+                
+                (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt()
             })
             .chain(self.external_shift.iter().map(|(index, sign)| {
                 function!(GS.emr_mom, usize::from(*index), 0) * Atom::num(*sign)
             }))
             .reduce(|sum, atom| sum + atom)
-            .unwrap_or_else(|| Atom::new())
+            .unwrap_or_else(Atom::new)
             .replace_multiple(lmb_reps)
             .replace(parse!("ZERO"))
             .with(Atom::new())

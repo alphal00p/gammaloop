@@ -61,13 +61,13 @@ impl FromMappings for Permutation {
                 ));
             }
 
-            if let Some(prev_from) = owner_of_target[to] {
-                if prev_from != from {
-                    return Err(format!(
-                        "Target {} is mapped from multiple sources ({} and {})",
-                        to, prev_from, from
-                    ));
-                }
+            if let Some(prev_from) = owner_of_target[to]
+                && prev_from != from
+            {
+                return Err(format!(
+                    "Target {} is mapped from multiple sources ({} and {})",
+                    to, prev_from, from
+                ));
             }
             if forced_sources[from] && map[from] != to {
                 return Err(format!(
@@ -102,8 +102,8 @@ impl FromMappings for Permutation {
 
         // 3) Gather remaining free targets (those without an owner)
         let mut free_targets: Vec<usize> = Vec::new();
-        for t in 0..size {
-            if owner_of_target[t].is_none() {
+        for (t, owner) in owner_of_target.iter().enumerate().take(size) {
+            if owner.is_none() {
                 free_targets.push(t);
             }
         }

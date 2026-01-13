@@ -95,7 +95,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .replace_multiple(&ose_reps)
             .replace_multiple(&mom_reps);
         // .replace_multiple(&q3_reps);
-        let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8).into_iter();
+        let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
 
         let mut limits = Vec::new();
 
@@ -267,7 +267,7 @@ impl UltravioletGraph for Graph {
             }
         }
 
-        den.into()
+        den
     }
     fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule> {
         let num = Numerator::default();

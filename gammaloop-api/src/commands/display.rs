@@ -26,14 +26,12 @@ impl Display {
                         ));
                     }
                     &state.process_list.processes[*proc_id]
+                } else if state.process_list.processes.len() == 1 {
+                    &state.process_list.processes[0]
                 } else {
-                    if state.process_list.processes.len() == 1 {
-                        &state.process_list.processes[0]
-                    } else {
-                        return Err(eyre!(
-                            "Multiple processes available, please specify the process."
-                        ));
-                    }
+                    return Err(eyre!(
+                        "Multiple processes available, please specify the process."
+                    ));
                 };
 
                 println!("Integrands for process {}:", process.definition.process_id);

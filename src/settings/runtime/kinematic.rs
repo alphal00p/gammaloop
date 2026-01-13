@@ -393,8 +393,8 @@ impl Externals {
         masses: &TiVec<ExternalIndex, F<f64>>,
         e_cm: &F<f64>,
     ) -> Result<()> {
-        let dep_momenta_f64 = self.get_dependent_externals::<f64>(constructor.clone())?;
-        let dep_momenta_f128 = self.get_dependent_externals::<f128>(constructor.clone())?;
+        let dep_momenta_f64 = self.get_dependent_externals::<f64>(constructor)?;
+        let dep_momenta_f128 = self.get_dependent_externals::<f128>(constructor)?;
 
         match constructor {
             DependentMomentaConstructor::Amplitude(signature) => match self {
@@ -409,7 +409,7 @@ impl Externals {
                         masses,
                         signature,
                         e_cm,
-                        &improvement_settings,
+                        improvement_settings,
                     )?;
 
                     let upcasted_masses = masses.iter().map(|m| F::<f128>::from_ff64(*m)).collect();
@@ -419,7 +419,7 @@ impl Externals {
                         &upcasted_masses,
                         signature,
                         &F::<f128>::from_ff64(*e_cm),
-                        &improvement_settings,
+                        improvement_settings,
                     )?;
                     *f_64_cache = Some(improved_f64);
                     *f_128_cache = Some(improved_f128);

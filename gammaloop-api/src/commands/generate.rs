@@ -311,8 +311,8 @@ impl Generate {
                 state.process_list = ProcessList::default();
             }
         }
-        let generation_info = if let Some((gen_mode, args)) = generation_mode.clone() {
-            let mut spec = parse_spec_with_model(&args, gen_mode, &state.model)?;
+        let generation_info = if let Some((gen_mode, args)) = generation_mode {
+            let mut spec = parse_spec_with_model(args, gen_mode, &state.model)?;
             spec.process_definition.process_id = state.process_list.processes.len();
 
             let mut existing_process = None;
@@ -345,12 +345,12 @@ impl Generate {
         };
         match &self.mode {
             Some(GenerateCmd::Amp(args)) | Some(GenerateCmd::Xs(args)) => {
-                let generation_type = generation_mode.as_ref().unwrap().clone().0;
+                let generation_type = (*generation_mode.as_ref().unwrap()).0;
                 let model: &Model = &state.model;
                 let (spec, existing_process) = generation_info.unwrap();
                 let this_process_id = spec.process_definition.process_id;
                 // TODO handle existing process and continue
-                let graphs = spec.process_definition.generate(model, &global_settings)?;
+                let graphs = spec.process_definition.generate(model, global_settings)?;
                 status_info!(
                     "Generated {} {} graphs.",
                     if matches!(self.mode, Some(GenerateCmd::Amp(_))) {
@@ -412,12 +412,12 @@ impl Generate {
                     integrand_base_name
                 };
                 if !args.only_diagrams {
-                    return state.generate_integrand(
+                    state.generate_integrand(
                         global_settings,
                         runtime_settings.into(),
                         this_process_id,
                         Some(generated_integrand_name),
-                    );
+                    )
                 } else {
                     status_info!(
                         "Only diagram generation was requested, skipping integrand generation. You can generate integrands later using the '{}' command.",
@@ -476,7 +476,7 @@ impl Generate {
                         None,
                     )?
                 }
-                return Ok(());
+                Ok(())
             }
         }
     }
@@ -874,7 +874,7 @@ pub fn parse_spec_with_model(
                 .particles
                 .iter()
                 .map(|p| p.pdg_code.abs() as i64)
-                .filter(|pdg| !only_pdgs.contains(&pdg))
+                .filter(|pdg| !only_pdgs.contains(pdg))
                 .collect::<Vec<_>>();
 
             veto_pdgs.extend(all_pdgs);
@@ -1306,7 +1306,7 @@ fn feyngen_from_spec_args(
         .number_of_factorized_loop_subtopologies
         .clone()
         .or(if is_vacuum {
-            Some(vec![1 as i32, 1 as i32])
+            Some(vec![1_i32, 1_i32])
         } else {
             None
         })
@@ -1325,23 +1325,20 @@ fn feyngen_from_spec_args(
 
     let number_of_fermion_loops = a
         .number_of_fermion_loops
-        .as_ref()
-        .and_then(|v| Some((v[0].max(0) as usize, v[1].max(0) as usize)));
+        .as_ref().map(|v| (v[0].max(0) as usize, v[1].max(0) as usize));
 
     // Cut ranges (XS)
     let blob_range: RangeInclusive<usize> = {
         let (lo, hi) = a
             .n_cut_blobs
-            .as_ref()
-            .and_then(|v| Some((v[0], v[1])))
+            .as_ref().map(|v| (v[0], v[1]))
             .unwrap_or((1, 1));
         lo..=hi
     };
     let spectator_range: RangeInclusive<usize> = {
         let (lo, hi) = a
             .n_cut_spectators
-            .as_ref()
-            .and_then(|v| Some((v[0], v[1])))
+            .as_ref().map(|v| (v[0], v[1]))
             .unwrap_or((0, 0));
         lo..=hi
     };

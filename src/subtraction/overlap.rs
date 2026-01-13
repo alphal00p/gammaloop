@@ -414,7 +414,7 @@ pub(crate) fn find_center(
             let lmb = overlap_input.graph_data[graph_group_pos].lmb;
             let edge_masses = &overlap_input.graph_data[graph_group_pos].edge_masses;
             let esurface = &overlap_input.graph_data[graph_group_pos].esurfaces[esurface_id];
-            esurface.compute_from_momenta(lmb, &edge_masses, &center, external_momenta)
+            esurface.compute_from_momenta(lmb, edge_masses, &center, external_momenta)
                 < F::from_f64(0.0)
         });
 
@@ -456,7 +456,7 @@ pub(crate) fn check_global_center(
         let edge_masses = &overlap_input.graph_data[graph_group_postition].edge_masses;
 
         let esurface_val =
-            esurface.compute_from_momenta(lmb, &edge_masses, &center, external_momenta);
+            esurface.compute_from_momenta(lmb, edge_masses, center, external_momenta);
 
         esurface_val < F(0.0)
     })

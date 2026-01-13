@@ -37,6 +37,7 @@ pub enum LogFormat {
     JsonSchema,
 )]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Default)]
 pub enum LogLevel {
     /// A level lower than all log levels.
     Off,
@@ -45,6 +46,7 @@ pub enum LogLevel {
     /// Corresponds to the `Warn` log level.
     Warn,
     /// Corresponds to the `Info` log level.
+    #[default]
     Info,
     /// Corresponds to the `Debug` log level.
     Debug,
@@ -52,11 +54,6 @@ pub enum LogLevel {
     Trace,
 }
 
-impl Default for LogLevel {
-    fn default() -> Self {
-        LogLevel::Info
-    }
-}
 
 impl From<LogLevel> for LevelFilter {
     fn from(value: LogLevel) -> Self {

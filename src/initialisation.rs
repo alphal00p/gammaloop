@@ -52,14 +52,12 @@ pub fn initialise_vakint(global_settings: &GlobalSettings) -> Result<()> {
                     susbstitute_masters: vakint_settings.matad.susbstitute_masters,
                     substitute_hpls: vakint_settings.matad.substitute_hpls,
                     direct_numerical_substition: vakint_settings.matad.direct_numerical_substition,
-                    ..MATADOptions::default()
                 })),
             "fmft" => vakint_evaluation_methods
                 .0
                 .push(EvaluationMethod::FMFT(FMFTOptions {
                     expand_masters: vakint_settings.fmft.expand_masters,
                     susbstitute_masters: vakint_settings.fmft.susbstitute_masters,
-                    ..FMFTOptions::default()
                 })),
             "pysecdec" => {
                 vakint_evaluation_methods

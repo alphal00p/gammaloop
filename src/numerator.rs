@@ -916,6 +916,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 }
 
 impl Numerator<AppliedFeynmanRule> {
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_d_dim<'a>(mut self, dim: impl Into<AtomOrView<'a>>) -> Self {
         self.state.expr = self.state.expr.map_mink_dim(dim);
         self
@@ -1046,9 +1047,9 @@ impl PolySplit {
                     if pow > 0 {
                         num_h.to_num((pow as i64).into());
                         pow_h.to_pow(var_h.as_view(), num_h.as_view());
-                        mul_h = mul_h * pow_h.as_view();
+                        mul_h *= pow_h.as_view();
                     } else {
-                        mul_h = mul_h * var_h.as_view();
+                        mul_h *= var_h.as_view();
                     }
                 }
             }
@@ -1058,8 +1059,8 @@ impl PolySplit {
                 .unwrap()
                 .push(monomial.coefficient.clone());
 
-            mul_h = mul_h * function!(coef, Atom::num((i + shift) as i64));
-            add = add + mul_h.as_view();
+            mul_h *= function!(coef, Atom::num((i + shift) as i64));
+            add += mul_h.as_view();
         }
 
         add
@@ -1141,6 +1142,7 @@ pub struct PolyContracted {
 }
 
 impl Numerator<PolyContracted> {
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn to_contracted(self) -> Numerator<Contracted> {
         let coefs: Vec<_> = (0..self.state.coef_map.len())
             .map(|i| function!(GS.coeff, Atom::num(i as i64)).to_pattern())

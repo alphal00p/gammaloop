@@ -1274,6 +1274,7 @@ impl<T: FloatLike> F<T> {
         F(T::from_f64(x))
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn into_ff64(&self) -> F<f64> {
         F(self.0.into_f64())
     }
@@ -1330,6 +1331,7 @@ impl<T: FloatLike> F<T> {
     pub(crate) fn FRAC_1_PI(&self) -> Self {
         F(self.0.FRAC_1_PI())
     }
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn into_f64(&self) -> f64 {
         self.0.into_f64()
     }
@@ -1973,7 +1975,7 @@ pub(crate) fn pinch_dampening_function<T: FloatLike>(
     multiplier: f64,
 ) -> F<T> {
     // Make sure the function is even in t-tstar
-    assert!(powers.1 % 2 == 0);
+    assert!(powers.1.is_multiple_of(2));
     let a = dampening_arg.pow(powers.0);
     &a / (&a + F::<T>::from_f64(multiplier) * delta_t.pow(powers.1))
 }
@@ -2696,7 +2698,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                 }
                 ParameterizationMode::HyperSphericalFlat => {
                     // As we will use Box Muller we expect an even number of random variables
-                    assert!(x[1..].len() % 2 == 0);
+                    assert!(x[1..].len().is_multiple_of(2));
                     let mut normal_distributed_xs = vec![];
                     for x_pair in x[1..].chunks(2) {
                         let (z1, z2) = box_muller(x_pair[0].clone(), x_pair[1].clone());
@@ -2934,9 +2936,9 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
     let k_r = k_r_sq.sqrt();
 
     let x2 = if y < &zero {
-        &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(&x)
+        &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
     } else {
-        F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(&x)
+        F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(x)
     };
 
     // cover the degenerate case
@@ -3328,13 +3330,14 @@ fn complex_compare() {
 pub mod symbols;
 pub use symbols::{GS, W_};
 
-pub static TENSORLIB: LazyLock<
-    RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>>,
-> = LazyLock::new(|| RwLock::new(hep_lib(F(1.), F(0.))));
+type TensorLibStore = RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>>;
+type FunLibStore =
+    SymbolLib<RealOrComplexTensor<F<f64>, ShadowedStructure<Aind>>, PanicMissingConcrete>;
 
-pub static FUN_LIB: LazyLock<
-    SymbolLib<RealOrComplexTensor<F<f64>, ShadowedStructure<Aind>>, PanicMissingConcrete>,
-> = LazyLock::new(|| {
+pub static TENSORLIB: LazyLock<TensorLibStore> =
+    LazyLock::new(|| RwLock::new(hep_lib(F(1.), F(0.))));
+
+pub static FUN_LIB: LazyLock<FunLibStore> = LazyLock::new(|| {
     let mut lib = PanicMissingConcrete::new_lib();
     lib.insert(INBUILTS.conj, |a| match a {
         RealOrComplexTensor::Complex(c) => RealOrComplexTensor::Complex(c.map_data(|x| x.conj())),

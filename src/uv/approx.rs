@@ -18,7 +18,6 @@ use ahash::AHashSet;
 use idenso::{gamma::GammaSimplifier, metric::MS};
 use log::debug;
 
-
 use spenso::structure::{
     representation::{Minkowski, RepName},
     slot::{DummyAind, IsAbstractSlot, Slot},
@@ -77,7 +76,7 @@ impl SimpleApprox {
         let reduced = Atom::var(Self::subgraph_shadow(bigger_graph, &self.graph));
         let mut mul = Atom::num(1);
         for i in &self.t_args {
-            mul = mul * i
+            mul *= i;
         }
         reduced * mul
     }
@@ -620,7 +619,7 @@ impl Approximation {
         }
 
         let integrand_vakint =
-            to_vakint_integrand(&a, &self.lmb, &graph, &reduced, &dependent.subgraph, true);
+            to_vakint_integrand(&a, &self.lmb, graph, &reduced, &dependent.subgraph, true);
 
         // let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
         // println!("\nVakint expression:\n{:#}", vakint_expr);
@@ -692,6 +691,7 @@ impl Approximation {
     }
 
     /// Computes the 3d approximation of the UV
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
@@ -993,7 +993,7 @@ impl Approximation {
             "Integrated 4d finite part: {:#}",
             finite.printer(LOGPRINTOPTS)
         );
-        let reduced = amplitude.included().subtract(&self.subgraph.included());
+        let reduced = amplitude.included().subtract(self.subgraph.included());
 
         // let concrete_red = graph.as_ref().concretize(&reduced).map(
         //     |_, _, v| v.clone(),
@@ -1091,7 +1091,7 @@ impl ApproxOp {
                 //Never gets hit now
                 let mut mul = Atom::num(1);
                 for t in t_args {
-                    mul = mul * &t.integrand;
+                    mul *= &t.integrand;
                 }
                 Some((mul, *sign))
             }
@@ -1128,9 +1128,6 @@ impl ApproxOp {
     }
 
     pub(crate) fn is_computed(&self) -> bool {
-        match self {
-            ApproxOp::NotComputed => false,
-            _ => true,
-        }
+        !matches!(self, ApproxOp::NotComputed)
     }
 }

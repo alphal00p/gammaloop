@@ -17,6 +17,7 @@ static MAXEDGECOUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl Numerator<UnInit> {
     #[instrument(skip_all, fields(graph=%graph.name,debug_dot=%graph.debug_dot(),subgraph_dot=%graph.dot(subgraph)))]
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn from_new_graph<S: SubGraphLike>(
         self,
         graph: &Graph,

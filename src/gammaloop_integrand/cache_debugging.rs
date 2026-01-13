@@ -101,7 +101,7 @@ pub fn monte_carlo_cache_monitor<I: GammaloopIntegrand>(
     iteration: usize,
     check_interval: usize,
 ) {
-    if !is_debug_cache_enabled() || iteration % check_interval != 0 {
+    if !is_debug_cache_enabled() || !iteration.is_multiple_of(check_interval) {
         return;
     }
 

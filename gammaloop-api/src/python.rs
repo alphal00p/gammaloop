@@ -1,35 +1,24 @@
 use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
-    feyngen::{
-        diagram_generator::evaluate_overall_factor, NumeratorAwareGraphGroupingOption,
-        SewedFilterOptions,
-    },
+    feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
     initialisation::initialise,
-    integrate::MasterNode,
-    model::{InputParamCard, Model},
-    numerator::GlobalPrefactor,
-    processes::{AmplitudeGraph, Process, ProcessCollection, ProcessDefinition, ProcessList},
-    settings::{global::OrientationPattern, GlobalSettings, RuntimeSettings},
-    utils::{serde_utils, symbolica_ext::StringSerializedAtom, tracing::LogLevel, FloatLike, F},
+    processes::ProcessCollection,
+    settings::{global::OrientationPattern, RuntimeSettings},
+    utils::tracing::LogLevel,
 };
 use linnet::half_edge::{
-    builder::HedgeNodeBuilder,
     involution::{EdgeIndex, Orientation},
-    subgraph::{HedgeNode, ModifySubSet, SuBitGraph},
+    subgraph::{ModifySubSet, SuBitGraph},
 };
-use numpy::{
-    Complex64, IntoPyArray, PyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArrayDyn,
-};
-use spenso::shadowing::symbolica_utils::SerializableAtom;
+use numpy::{Complex64, IntoPyArray, PyArray1, PyReadonlyArray2};
 use typed_index_collections::TiVec;
 
 use crate::{
     commands::{
         import::model::ImportModel,
         inspect::{BatchedInspect, Inspect},
-        integrate::Integrate,
-        Commands, Evaluate, Set,
+        Commands, Evaluate,
     },
     state::{RunHistory, State},
     CLISettings, OneShot,
@@ -49,13 +38,9 @@ use gammalooprs::feyngen::{
 use git_version::git_version;
 use itertools::{self, Itertools};
 use pyo3::types::PyFloat;
-use std::{convert::Infallible, default, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
-use symbolica::{
-    activate_oem_license,
-    atom::{Atom, AtomCore},
-    parse,
-};
+use symbolica::{activate_oem_license, atom::AtomCore, parse};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -389,10 +374,7 @@ impl GammaLoopAPI {
             activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
         };
         initialise().map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Could not initialize GammaLoop API: {}",
-                e.to_string()
-            ))
+            exceptions::PyException::new_err(format!("Could not initialize GammaLoop API: {}", e))
         })?;
         let mut one_shot = OneShot {
             // Path to the a run file to execute
@@ -419,7 +401,7 @@ impl GammaLoopAPI {
             one_shot.load().map_err(|e| {
                 exceptions::PyException::new_err(format!(
                     "Could not load or create GammaLoop state: {}",
-                    e.to_string()
+                    e
                 ))
             })?;
         Ok(GammaLoopAPI {
@@ -638,10 +620,7 @@ impl GammaLoopAPI {
             .process_list
             .find_integrand(process_id, integrand_name.as_ref())
             .map_err(|e| {
-                exceptions::PyException::new_err(format!(
-                    "Could not find integrand: {}",
-                    e.to_string()
-                ))
+                exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
             })?;
 
         let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
@@ -707,10 +686,7 @@ impl GammaLoopAPI {
     pub(crate) fn get_model(&self) -> PyResult<String> {
         let serializable_model = self.gammaloop_state.model.to_serializable();
         serde_json::to_string(&serializable_model).map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Could not serialize model: {}",
-                e.to_string()
-            ))
+            exceptions::PyException::new_err(format!("Could not serialize model: {}", e))
         })
     }
 
@@ -738,7 +714,7 @@ impl GammaLoopAPI {
         .map_err(|e| {
             exceptions::PyException::new_err(format!(
                 "Could not load or create GammaLoop state: {}",
-                e.to_string()
+                e
             ))
         })
         .map(|res| res.to_canonical_string())
@@ -755,9 +731,7 @@ impl GammaLoopAPI {
             simplify_model,
         }
         .run(&mut self.gammaloop_state)
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not import model: {}", e.to_string()))
-        })
+        .map_err(|e| exceptions::PyException::new_err(format!("Could not import model: {}", e)))
     }
 
     #[pyo3(name="get_integrand_settings", signature = (process_id=None, integrand_name=None))]
@@ -771,10 +745,7 @@ impl GammaLoopAPI {
             .process_list
             .find_integrand(process_id, integrand_name.as_ref())
             .map_err(|e| {
-                exceptions::PyException::new_err(format!(
-                    "Could not find integrand: {}",
-                    e.to_string()
-                ))
+                exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
             })?;
         match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
@@ -807,10 +778,7 @@ impl GammaLoopAPI {
             .process_list
             .find_integrand(process_id, integrand_name.as_ref())
             .map_err(|e| {
-                exceptions::PyException::new_err(format!(
-                    "Could not find integrand: {}",
-                    e.to_string()
-                ))
+                exceptions::PyException::new_err(format!("Could not find integrand: {}", e))
             })?;
         let mut dot_output = String::new();
         match &self.gammaloop_state.process_list.processes[pid].collection {
@@ -818,8 +786,7 @@ impl GammaLoopAPI {
                 Some(amplitude) => amplitude.write_dot_fmt(&mut dot_output).map_err(|e| {
                     exceptions::PyException::new_err(format!(
                         "Could not write DOT format for amplitude {}: {}",
-                        name,
-                        e.to_string()
+                        name, e
                     ))
                 }),
                 None => Err(exceptions::PyException::new_err(format!(
@@ -831,8 +798,7 @@ impl GammaLoopAPI {
                 Some(cross_section) => cross_section.write_dot_fmt(&mut dot_output).map_err(|e| {
                     exceptions::PyException::new_err(format!(
                         "Could not write DOT format for amplitude {}: {}",
-                        name,
-                        e.to_string()
+                        name, e
                     ))
                 }),
                 None => Err(exceptions::PyException::new_err(format!(
@@ -857,8 +823,7 @@ impl GammaLoopAPI {
         .map_err(|e| {
             exceptions::PyException::new_err(format!(
                 "Execution of command '{}' failed: {}",
-                command,
-                e.to_string()
+                command, e
             ))
         })
         .map(|_| ())
@@ -907,10 +872,7 @@ impl GammaLoopAPI {
             &mut surface_cache,
         )
         .map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Could not generate CFF expression: {}",
-                e.to_string()
-            ))
+            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
         })?;
 
         let or_pattern: OrientationPattern = match orientation_pattern {
@@ -945,7 +907,10 @@ impl GammaLoopAPI {
         Ok(result)
     }
 
-    #[pyo3(name = "generate_cff_as_json_string", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
+    #[pyo3(
+        name = "generate_cff_as_json_string",
+        signature = (dot_string, subgraph_nodes, reverse_dangling, orientation_pattern = None)
+    )]
     pub(crate) fn generate_cff_as_json_string(
         &self,
         dot_string: String,
@@ -953,6 +918,7 @@ impl GammaLoopAPI {
         reverse_dangling: Vec<usize>,
         orientation_pattern: Option<String>,
     ) -> PyResult<String> {
+        let _ = orientation_pattern;
         let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
             .unwrap()
             .pop()
@@ -988,17 +954,11 @@ impl GammaLoopAPI {
             &mut surface_cache,
         )
         .map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Could not generate CFF expression: {}",
-                e.to_string()
-            ))
+            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
         })?;
 
         let json_string = serde_json::to_string(&cff).map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Could not serialize cff to json: {}",
-                e.to_string()
-            ))
+            exceptions::PyException::new_err(format!("Could not serialize cff to json: {}", e))
         })?;
 
         Ok(json_string)

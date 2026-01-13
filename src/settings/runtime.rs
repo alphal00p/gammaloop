@@ -100,7 +100,7 @@ impl<'a> LockedRuntimeSettings<'a> {
         let dependent_momenta_constructor =
             DependentMomentaConstructor::Amplitude(external_signature);
 
-        let exists = esurface.exists(
+        esurface.exists(
             &self
                 .0
                 .kinematics
@@ -108,11 +108,9 @@ impl<'a> LockedRuntimeSettings<'a> {
                 .get_dependent_externals(dependent_momenta_constructor)
                 .unwrap(),
             lmb,
-            &masses,
+            masses,
             &F(self.0.kinematics.e_cm),
-        );
-
-        exists
+        )
     }
 }
 

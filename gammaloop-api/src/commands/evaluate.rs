@@ -118,28 +118,26 @@ impl Evaluate {
                 p,
                 toml::to_string_pretty(&full_evaluation.to_canonical_string())?,
             )?;
+        } else if self.numerical {
+            let numerical_evaluation_result =
+                AmplitudeGraph::to_numerical(full_evaluation.as_view())?;
+            info!(
+                "Numerical evaluation of the analytical result for process {}:\n{}",
+                state.process_list.processes[process_id]
+                    .definition
+                    .folder_name
+                    .green(),
+                numerical_evaluation_result
+            );
         } else {
-            if self.numerical {
-                let numerical_evaluation_result =
-                    AmplitudeGraph::to_numerical(full_evaluation.as_view())?;
-                info!(
-                    "Numerical evaluation of the analytical result for process {}:\n{}",
-                    state.process_list.processes[process_id]
-                        .definition
-                        .folder_name
-                        .green(),
-                    numerical_evaluation_result
-                );
-            } else {
-                info!(
-                    "Analytical result for process {}:\n{}",
-                    state.process_list.processes[process_id]
-                        .definition
-                        .folder_name
-                        .green(),
-                    full_evaluation
-                );
-            }
+            info!(
+                "Analytical result for process {}:\n{}",
+                state.process_list.processes[process_id]
+                    .definition
+                    .folder_name
+                    .green(),
+                full_evaluation
+            );
         }
 
         Ok(full_evaluation)

@@ -240,7 +240,7 @@ impl ParamBuilderGraph for Graph {
 
     fn get_ose_replacements(&self) -> Vec<Replacement> {
         if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            return self.underlying.get_ose_replacements();
+            self.underlying.get_ose_replacements()
         } else {
             let underlying_without_is_cut = self
                 .underlying

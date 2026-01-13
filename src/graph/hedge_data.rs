@@ -159,7 +159,7 @@ impl NumHedgeData {
             }
         }
 
-        return color;
+        color
     }
 }
 
@@ -174,8 +174,7 @@ impl ParseHedge {
             let hedge_id = h
                 .statement
                 .as_ref()
-                .map(|s| s.parse::<usize>().ok())
-                .flatten();
+                .and_then(|s| s.parse::<usize>().ok());
             Ok(ParseHedge { hedge_id })
         }
     }
@@ -183,14 +182,14 @@ impl ParseHedge {
 
 impl From<&NumHedgeData> for DotHedgeData {
     fn from(value: &NumHedgeData) -> Self {
-        let h = DotHedgeData::from(Some(value.node_order.to_string()));
-        h
+        
+        DotHedgeData::from(Some(value.node_order.to_string()))
     }
 }
 
 impl From<&ParseHedge> for DotHedgeData {
     fn from(value: &ParseHedge) -> Self {
-        let h = DotHedgeData::from(value.hedge_id.map(|i| i.to_string()));
-        h
+        
+        DotHedgeData::from(value.hedge_id.map(|i| i.to_string()))
     }
 }

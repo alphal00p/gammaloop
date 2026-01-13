@@ -25,7 +25,6 @@ use dirs::home_dir;
 use eyre::Context;
 use gammalooprs::{
     initialisation::initialise,
-    initialisation::initialise_with_settings,
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
@@ -219,7 +218,7 @@ impl OneShot {
 
         let input_string = OneShot::subcmd_input_string(&argv, &cmd, &matches).unwrap_or_default();
         Ok(Parsed {
-            input_string: input_string,
+            input_string,
             matches,
             cli,
         })
@@ -233,7 +232,7 @@ impl OneShot {
         ) {
             Ok(state) => {
                 let mut global = match CLISettings::from_file_typed(
-                    &self.state_folder.join("cli_settings.toml"),
+                    self.state_folder.join("cli_settings.toml"),
                 ) {
                     Ok(a) => a,
                     Err(SerdeFileError::FileError(_)) => {
@@ -250,7 +249,7 @@ impl OneShot {
                 global.override_with(self);
 
                 let default_runtime = match RuntimeSettings::from_file_typed(
-                    &self.state_folder.join("default_runtime_settings.toml"),
+                    self.state_folder.join("default_runtime_settings.toml"),
                 ) {
                     Ok(a) => a,
                     Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
@@ -258,7 +257,7 @@ impl OneShot {
                 };
                 let run_path = self.state_folder.join("run.toml");
                 let run_history = if run_path.exists() {
-                    RunHistory::load(&self.state_folder.join("run.toml"))?
+                    RunHistory::load(self.state_folder.join("run.toml"))?
                 } else {
                     RunHistory::default()
                 };

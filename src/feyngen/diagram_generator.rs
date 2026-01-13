@@ -35,9 +35,9 @@ use symbolica::coefficient::Coefficient;
 use symbolica::domains::algebraic_number::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
+use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
-use symbolica::function;
 use tracing::{event_enabled, instrument};
 
 use ahash::AHashMap;
@@ -56,8 +56,8 @@ use super::SelfEnergyFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use crate::graph::ext::HedgeGraphExt;
-use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::parse::ParseGraph;
+use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{FeynmanGraph, Graph, LMBext};
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
@@ -79,6 +79,17 @@ use crate::{
     model::Model,
 };
 use eyre::eyre;
+
+type NumeratorSample = (
+    Vec<Replacement>,
+    TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>,
+);
+type RationalPoly = symbolica::poly::polynomial::MultivariatePolynomial<
+    AlgebraicExtension<
+        symbolica::domains::rational::FractionField<symbolica::domains::integer::IntegerRing>,
+    >,
+>;
+type SampleEvaluationsAsPolynomial = (Vec<RationalPoly>, Vec<bool>);
 
 use crate::{status_debug, status_error, status_info};
 use color_eyre::Result;
@@ -211,6 +222,7 @@ fn polyrat_to_atom(
 #[derive(Clone)]
 pub(crate) struct CanonizedGraphInfo {
     pub canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
+    #[allow(dead_code)]
     pub graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     pub graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     pub gammaloop_graph: ParseGraph,
@@ -326,17 +338,16 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
             // info!("Coupling orders: {:?}", coupling_orders);
             // info!("Amplitude couplings: {:?}", amp_couplings);
 
-            let ans = amp_couplings.iter().all(|(k, (lower_bound, upper_bound))| {
+            // if ans {
+            //     info!("Passes amplitude filter");
+            // }
+            amp_couplings.iter().all(|(k, (lower_bound, upper_bound))| {
                 coupling_orders
                     .get(&SmartString::from(k))
                     .map_or(*lower_bound == 0, |o| {
                         lower_bound <= o && upper_bound.map(|a| *o <= a).unwrap_or(true)
                     })
-            });
-            // if ans {
-            //     info!("Passes amplitude filter");
-            // }
-            ans
+            })
         } else {
             true
         }
@@ -394,12 +405,11 @@ pub(crate) fn group_isomorphic_graphs<
         let canonized_g = g.canonize();
         *iso_buckets.entry(canonized_g.graph).or_insert_with(|| 1) += 1;
     }
-    let mapped_graph = iso_buckets
+
+    iso_buckets
         .iter()
         .map(|(g, count)| (g.clone(), *count))
-        .collect();
-
-    mapped_graph
+        .collect()
 }
 
 pub(crate) fn contains_particles(
@@ -458,7 +468,7 @@ pub(crate) fn follow_chain(
             if one_step_only {
                 Ok((Some(**next_edge), **next_node))
             } else {
-                return follow_chain(**next_node, vetos, adj_map, one_step_only);
+                follow_chain(**next_node, vetos, adj_map, one_step_only)
             }
         } else {
             Ok((None, *targets.first().unwrap().1))
@@ -849,11 +859,11 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
                 }
                 let moms = &external_momenta_routing[curr_chain_node];
                 if moms.len() == 1 {
-                    if let Some(se_leg) = self_energy_external_leg_id {
-                        if se_leg != moms[0] {
-                            is_valid_chain = false;
-                            break 'follow_chain;
-                        }
+                    if let Some(se_leg) = self_energy_external_leg_id
+                        && se_leg != moms[0]
+                    {
+                        is_valid_chain = false;
+                        break 'follow_chain;
                     }
                     self_energy_external_leg_id = Some(moms[0]);
                     for child in node_children[curr_chain_node].iter() {
@@ -925,16 +935,15 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
 
     if let Some((min_n_fact_loops, max_n_fact_loops)) =
         factorized_loop_topologies_count_range.as_ref()
+        && (n_factorizable_loops < *min_n_fact_loops || n_factorizable_loops > *max_n_fact_loops)
     {
-        if n_factorizable_loops < *min_n_fact_loops || n_factorizable_loops > *max_n_fact_loops {
-            if DEBUG_VETO {
-                debug!(
-                    "Vetoing graph due to having a number of factorizable loops ({}) outside the range [{}, {}]",
-                    n_factorizable_loops, min_n_fact_loops, max_n_fact_loops
-                );
-            }
-            return true;
+        if DEBUG_VETO {
+            debug!(
+                "Vetoing graph due to having a number of factorizable loops ({}) outside the range [{}, {}]",
+                n_factorizable_loops, min_n_fact_loops, max_n_fact_loops
+            );
         }
+        return true;
     }
 
     let mut tree_bridge_node_indices: HashSet<usize> = HashSet::default();
@@ -958,31 +967,31 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
     for (leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id) in
         self_energy_attachments.iter()
     {
-        if tree_bridge_node_indices.contains(back_edge_start_node_index) {
-            if let Some(veto_self_energy_options) = veto_self_energy {
-                if DEBUG_VETO {
-                    debug!(
-                        "Vetoing self-energy for leg_id={}, back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                        leg_id,
-                        back_edge_start_node_index,
-                        back_edge_position_in_list,
-                        _chain_id,
-                        veto_self_energy_options
-                    );
-                }
-                if veto_self_energy_options.veto_only_scaleless_self_energy {
-                    panic!("Option to only remove scaleless self-energies is not implemented yet");
+        if tree_bridge_node_indices.contains(back_edge_start_node_index)
+            && let Some(veto_self_energy_options) = veto_self_energy
+        {
+            if DEBUG_VETO {
+                debug!(
+                    "Vetoing self-energy for leg_id={}, back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
+                    leg_id,
+                    back_edge_start_node_index,
+                    back_edge_position_in_list,
+                    _chain_id,
+                    veto_self_energy_options
+                );
+            }
+            if veto_self_energy_options.veto_only_scaleless_self_energy {
+                panic!("Option to only remove scaleless self-energies is not implemented yet");
+            } else {
+                #[allow(clippy::unnecessary_unwrap)]
+                if external_particles[leg_id - 1].0.is_massive() {
+                    if veto_self_energy_options.veto_self_energy_of_massive_lines {
+                        return true;
+                    }
                 } else {
                     #[allow(clippy::unnecessary_unwrap)]
-                    if external_particles[leg_id - 1].0.is_massive() {
-                        if veto_self_energy_options.veto_self_energy_of_massive_lines {
-                            return true;
-                        }
-                    } else {
-                        #[allow(clippy::unnecessary_unwrap)]
-                        if veto_self_energy_options.veto_self_energy_of_massless_lines {
-                            return true;
-                        }
+                    if veto_self_energy_options.veto_self_energy_of_massless_lines {
+                        return true;
                     }
                 }
             }
@@ -1210,7 +1219,6 @@ impl ProcessDefinition {
             let key = ParamTensor::from_dense(
                 key.structure,
                 (0..4)
-                    .into_iter()
                     .map(|_| Atom::prime_generate_rat(sample_iterator))
                     .collect(),
             )
@@ -1233,7 +1241,6 @@ impl ProcessDefinition {
             let key = ParamTensor::from_dense(
                 key.structure,
                 (0..4)
-                    .into_iter()
                     .map(|_| Atom::prime_generate_rat(sample_iterator))
                     .collect(),
             )
@@ -1256,7 +1263,6 @@ impl ProcessDefinition {
 
             pol_vals.push(
                 (0..len)
-                    .into_iter()
                     .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
                     .collect::<Vec<_>>(),
             );
@@ -1281,7 +1287,6 @@ impl ProcessDefinition {
                     let key = ParamTensor::from_dense(
                         key.structure,
                         (0..4)
-                            .into_iter()
                             .map(|_| Atom::prime_generate_rat(sample_iterator))
                             .collect(),
                     )
@@ -1305,7 +1310,6 @@ impl ProcessDefinition {
                     let key = ParamTensor::from_dense(
                         key,
                         (0..len)
-                            .into_iter()
                             .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
                             .collect(),
                     )
@@ -2840,13 +2844,12 @@ impl ProcessDefinition {
                         p.0.name.clone(),
                     ));
                 }
-                if let Some(vetoed_particles) = filters.get_particle_vetos() {
-                    if vetoed_particles.contains(&(p.0.pdg_code as i64))
+                if let Some(vetoed_particles) = filters.get_particle_vetos()
+                    && (vetoed_particles.contains(&(p.0.pdg_code as i64))
                         || vetoed_particles
-                            .contains(&(p.0.get_anti_particle(model).0.pdg_code as i64))
-                    {
-                        continue 'add_vertex_rules;
-                    }
+                            .contains(&(p.0.get_anti_particle(model).0.pdg_code as i64)))
+                {
+                    continue 'add_vertex_rules;
                 }
             }
             vertex_signatures
@@ -3008,7 +3011,7 @@ impl ProcessDefinition {
             "Starting Feynman graph generation with Symbolica..."
         );
 
-        let graph_gen_bar = Arc::new(ProgressBar::new(0 as u64));
+        let graph_gen_bar = Arc::new(ProgressBar::new(0_u64));
         graph_gen_bar.set_style(progress_bar_style.clone());
         graph_gen_bar.set_message("Starting Feynman graphs generation with Symbolica...");
         graph_gen_bar.tick();
@@ -3021,11 +3024,7 @@ impl ProcessDefinition {
         .progress_fn(Box::new(move |_| {
             graph_gen_bar_arc_clone.inc_length(1);
             graph_gen_bar_arc_clone.inc(1);
-            if INTERRUPTED.swap(false, Ordering::SeqCst) {
-                false
-            } else {
-                true
-            }
+            !INTERRUPTED.swap(false, Ordering::SeqCst)
         }))
         .max_loops(self.loop_count_range.1)
         .allow_self_loops(!self.filter_self_loop)
@@ -3983,7 +3982,6 @@ impl ProcessDefinition {
             let mut sample_iterator = PrimeIteratorU64::new(1);
             sample_iterator.nth(opts.numerical_sample_seed as usize);
             (0..opts.number_of_numerical_samples)
-                .into_iter()
                 .map(|_| {
                     self.sample_lib(
                         &mut sample_iterator,
@@ -4013,16 +4011,14 @@ impl ProcessDefinition {
                     |(i_g, canonical_graph)| {
                         let was_interrupted = Arc::clone(&was_interrupted);
                         let graph_name: String = format!("{}{:0width$}", self.graph_prefix, i_g, width = padding_width);
-                        if let Some(selected_graphs) = &self.selected_graphs {
-                            if !selected_graphs.contains(&graph_name) {
+                        if let Some(selected_graphs) = &self.selected_graphs
+                            && !selected_graphs.contains(&graph_name) {
                                 return Ok(())
                             }
-                        }
-                        if let Some(vetoed_graphs) = &self.vetoed_graphs {
-                            if vetoed_graphs.contains(&graph_name) {
+                        if let Some(vetoed_graphs) = &self.vetoed_graphs
+                            && vetoed_graphs.contains(&graph_name) {
                                 return Ok(())
                             }
-                        }
                         let mut bare_graph = Graph::from_parsed(canonical_graph.gammaloop_graph,model)?;
                         bare_graph.name = graph_name.clone();
 
@@ -4155,8 +4151,8 @@ impl ProcessDefinition {
                                 );
 
                                 // Test if Lorentz evaluations are zero
-                                if !numerator_data.as_ref().unwrap().sample_evaluations.is_empty() {
-                                    if numerator_data.as_ref().unwrap().sample_evaluations_are_zero.iter().all(|&b| b) {
+                                if !numerator_data.as_ref().unwrap().sample_evaluations.is_empty()
+                                    && numerator_data.as_ref().unwrap().sample_evaluations_are_zero.iter().all(|&b| b) {
                                         {
                                             let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
                                             let mut n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
@@ -4171,8 +4167,6 @@ impl ProcessDefinition {
                                         }
                                         return Ok(())
                                     }
-
-                                }
 
                                 // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
                                 {
@@ -4267,13 +4261,12 @@ impl ProcessDefinition {
                         // And when forcing the reference diagram to be e.g. C, (so that we get a predictive ref graph in the multi-thread case), we need to pick C as the
                         // reference and have A and B be multiplied by the ratios A/C and B/C respectively. respectively.
                         // These will here be computed as A/C = r_1 / r_3 and B/C = r_2 / r_3. In general `r_i / r_ref` always yield the desired ratio.
-                        combined_overall_factor = combined_overall_factor
-                            + function!(
-                                symbol!("NumeratorDependentGrouping"),
-                                Atom::num(graph_to_combine.graph_id as i64),
-                                (&graph_to_combine.ratio / &new_reference_ratio).expand(),
-                                graph_to_combine.bare_graph.overall_factor.clone()
-                            );
+                        combined_overall_factor += function!(
+                            symbol!("NumeratorDependentGrouping"),
+                            Atom::num(graph_to_combine.graph_id as i64),
+                            (&graph_to_combine.ratio / &new_reference_ratio).expand(),
+                            graph_to_combine.bare_graph.overall_factor.clone()
+                        );
                     }
                 } else {
                     combined_overall_factor = bare_graph_representative.overall_factor.clone();
@@ -4335,7 +4328,7 @@ impl ProcessDefinition {
                     let mut loop_momentum_basis = if let Some(i) = cut_graph.included_iter().next()
                     {
                         let tree = SimpleTraversalTree::depth_first_traverse(
-                            &graph,
+                            graph,
                             &cut_graph,
                             &graph.node_id(i),
                             None,
@@ -4403,8 +4396,7 @@ impl ProcessDefinition {
         );
         let mut total_sym_factor = Atom::num(0);
         for (_i_g, g) in bare_graphs.iter() {
-            total_sym_factor =
-                total_sym_factor + evaluate_overall_factor(g.overall_factor.as_view());
+            total_sym_factor += evaluate_overall_factor(g.overall_factor.as_view());
         }
         status_debug!(
             "Graphs: [\n{}\n]",
@@ -4483,7 +4475,7 @@ impl ProcessDefinition {
         ];
         let mut res = expr.to_owned();
         for (src, trgt) in replacements {
-            res = res.replace(&src.to_pattern()).with(trgt.to_pattern());
+            res = res.replace(src.to_pattern()).with(trgt.to_pattern());
         }
         res
     }
@@ -4880,7 +4872,7 @@ impl ProcessedNumeratorForComparison {
                         };
                         debug!(
                             sample_idx = %idx,
-                            computed_ratio = %ratio.clone().map(|r| format!("{}",r.to_ordered_simple())).unwrap_or("None".into()),
+                            computed_ratio = %ratio.clone().map(|r| r.to_ordered_simple().to_string()).unwrap_or("None".into()),
                             "Computed ratio for sample"
                         );
                         ratio
@@ -4942,10 +4934,7 @@ impl ProcessedNumeratorForComparison {
         diagram_id: usize,
         graph: &Graph,
         mut numerator: Atom,
-        samples: &[(
-            Vec<Replacement>,
-            TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>,
-        )],
+        samples: &[NumeratorSample],
         settings: &GlobalSettings,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
     ) -> Result<Self, FeynGenError> {
@@ -5026,7 +5015,7 @@ impl ProcessedNumeratorForComparison {
 
                                 // debug!(net=?net.dot_pretty());
                                 net.execute::<Sequential, SmallestDegree, _, _,_>(lib,PARAM_FUN_LIB.deref())
-                                    .expect(&format!("failed to execute net:{}", net.dot_pretty()));
+                                    .unwrap_or_else(|_| panic!("failed to execute net:{}", net.dot_pretty()));
 
                                 // let c = ProcessDefinition::substitute_color_factors(c.as_view())
                                 //     .expand();
@@ -5039,11 +5028,9 @@ impl ProcessedNumeratorForComparison {
                                 }
 
                                 let scalar:Atom = scalar
-                                    .expect(&format!(
-                                        "Expected scalar for c:{c} l:{l} that yields net:{} for graph {}",
+                                    .unwrap_or_else(|_| panic!("Expected scalar for c:{c} l:{l} that yields net:{} for graph {}",
                                         net.dot_pretty()
-                                        ,graph.debug_dot()
-                                    ))
+                                        ,graph.debug_dot()))
                                     .into();
 
                                 // println!("Trying to canonize:{c}");
@@ -5102,39 +5089,30 @@ impl ProcessedNumeratorForComparison {
                         }
                     }
                 }
-                let samples_evals_as_polynomial: (
-                    Vec<
-                        symbolica::poly::polynomial::MultivariatePolynomial<
-                            AlgebraicExtension<
-                                symbolica::domains::rational::FractionField<
-                                    symbolica::domains::integer::IntegerRing,
-                                >,
-                            >,
-                        >,
-                    >,
-                    Vec<bool>,
-                ) = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL
-                    || !matches!(
+                let samples_evals_as_polynomial: SampleEvaluationsAsPolynomial =
+                    if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL
+                        || !matches!(
                         numerator_aware_isomorphism_grouping,
                         NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
                             _
                         )
                     ) {
-                    let se_as_poly = sample_evaluations
-                        .iter()
-                        .map(|a| a.to_polynomial(&Q_I.clone(), None))
-                        .collect::<Vec<_>>();
-                    let se_are_zero = se_as_poly.iter().map(|p| p.is_zero()).collect::<Vec<_>>();
-                    (se_as_poly, se_are_zero)
-                } else {
-                    (
-                        vec![],
-                        sample_evaluations
+                        let se_as_poly = sample_evaluations
                             .iter()
-                            .map(|a| a.expand().is_zero())
-                            .collect::<Vec<_>>(),
-                    )
-                };
+                            .map(|a| a.to_polynomial(&Q_I.clone(), None))
+                            .collect::<Vec<_>>();
+                        let se_are_zero =
+                            se_as_poly.iter().map(|p| p.is_zero()).collect::<Vec<_>>();
+                        (se_as_poly, se_are_zero)
+                    } else {
+                        (
+                            vec![],
+                            sample_evaluations
+                                .iter()
+                                .map(|a| a.expand().is_zero())
+                                .collect::<Vec<_>>(),
+                        )
+                    };
                 ProcessedNumeratorForComparison {
                     diagram_id,
                     canonized_numerator,

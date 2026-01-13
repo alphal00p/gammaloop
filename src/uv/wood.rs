@@ -76,6 +76,7 @@ impl Wood {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn unfold_bfs<E, V, H, G>(
         &self,
         graph: &G,

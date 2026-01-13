@@ -611,39 +611,39 @@ impl State {
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
         let _ = initialise();
-        let handle = super::tracing::init_tracing(&log_dir.as_ref().join("logs"), log_file_name);
+        let handle = super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
 
-        let a = Self {
+        
+        Self {
             log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
-        };
-        a
+        }
     }
 
     pub fn new_test() -> Self {
         let handle = init_test_tracing();
 
-        let a = Self {
+        
+        Self {
             log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
-        };
-        a
+        }
     }
 
     pub fn new_bench() -> Self {
         let handle = init_bench_tracing();
 
-        let a = Self {
+        
+        Self {
             log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
-        };
-        a
+        }
     }
 }
 

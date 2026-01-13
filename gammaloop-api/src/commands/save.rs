@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use clap::{arg, Args, Subcommand};
+use clap::{Args, Subcommand};
 use color_eyre::{eyre::eyre, owo_colors::OwoColorize, Result};
 use gammalooprs::{
     processes::DotExportSettings,
@@ -214,10 +214,10 @@ impl SaveState {
 
         SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
         default_runtime_settings.to_file(
-            &selected_root_folder.join("default_runtime_settings.toml"),
+            selected_root_folder.join("default_runtime_settings.toml"),
             true,
         )?;
-        global_settings.to_file(&selected_root_folder.join("cli_settings.toml"), true)?;
+        global_settings.to_file(selected_root_folder.join("cli_settings.toml"), true)?;
 
         SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
 

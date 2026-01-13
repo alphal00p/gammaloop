@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{arg, Subcommand};
+use clap::Subcommand;
 use gammalooprs::graph::Graph;
 use model::ImportModel;
 use schemars::JsonSchema;

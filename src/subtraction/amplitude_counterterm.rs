@@ -30,7 +30,10 @@ use crate::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap::{OverlapGroup, OverlapStructure},
     },
-    utils::{F, FloatLike, newton_solver::{NewtonIterationResult, newton_iteration_and_derivative}},
+    utils::{
+        F, FloatLike,
+        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
+    },
 };
 
 const MAX_ITERATIONS: usize = 40;
@@ -123,35 +126,32 @@ impl AmplitudeCountertermData {
     ) {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
             e.parametric.borrow_mut().compile(
-                &path
-                    .as_ref()
+                path.as_ref()
                     .join(format!("esurface_{}", i.0))
                     .with_extension("cpp"),
                 format!("esurface_{}", i.0),
-                &path
-                    .as_ref()
+                path.as_ref()
                     .join(format!("esurface_{}", i.0))
                     .with_extension("so"),
                 settings.generation.compile.export_settings(),
             );
 
-            e.iterative.as_mut().map(|iterative| {
+            if let Some(iterative) = e.iterative.as_mut() {
                 iterative.borrow_mut().compile(
-                    &path
-                        .as_ref()
+                    path.as_ref()
                         .join(format!("iterative_esurface_{}", i.0))
                         .with_extension("cpp"),
                     format!("iterative_esurface_{}", i.0),
-                    &path
-                        .as_ref()
+                    path.as_ref()
                         .join(format!("iterative_esurface_{}", i.0))
                         .with_extension("so"),
                     settings.generation.compile.export_settings(),
                 );
-            });
+            }
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -181,7 +181,7 @@ impl AmplitudeCountertermData {
             esurfaces,
             momentum_sample,
             &self.overlap,
-            &mut self.evaluators,
+            &self.evaluators,
             self.own_group_position,
             &self.esurface_map,
         );
@@ -235,6 +235,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         graph: &'a Graph,
         model: &'a Model,
@@ -330,8 +331,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(self) -> RstarSolution<'a, T> {
         let (radius_guess, _) = self.esurface.get_radius_guess(
             &self.overlap_builder.unit_shifted_momenta,
-            &self
-                .overlap_builder
+            self.overlap_builder
                 .counterterm_builder
                 .sample
                 .external_moms(),
@@ -446,20 +446,16 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         let integrated_settings = &ct_builder.settings.subtraction.integrated_ct_settings;
 
-        let uv_damp_plus = evaluate_uv_damper(&radius, &radius_star, &e_cm, &settings);
-        let uv_damp_minus = evaluate_uv_damper(&-&radius, &radius_star, &e_cm, &settings);
+        let uv_damp_plus = evaluate_uv_damper(&radius, &radius_star, e_cm, settings);
+        let uv_damp_minus = evaluate_uv_damper(&-&radius, &radius_star, e_cm, settings);
 
         debug!("uv_damp_plus: {:?}", uv_damp_plus);
         debug!("uv_damp_minus: {:?}", uv_damp_minus);
         debug!("radius: {:?}", radius);
         debug!("radius_star: {:?}", radius_star);
 
-        let h_function = evaluate_integrated_ct_normalisation(
-            &radius,
-            &radius_star,
-            &e_cm,
-            &integrated_settings,
-        );
+        let h_function =
+            evaluate_integrated_ct_normalisation(&radius, &radius_star, e_cm, integrated_settings);
 
         let threshold_params = ThresholdParams {
             radius,
@@ -562,7 +558,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     .iter()
                     .flat_map(|x| x.into_iter().cloned().map(Complex::new_re)),
             )
-            .chain(model_params.into_iter())
+            .chain(model_params)
             .collect::<Vec<_>>();
 
         let evaluator = overlap_builder

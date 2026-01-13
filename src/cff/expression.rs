@@ -112,28 +112,29 @@ pub trait GraphOrientation {
             .replace_multiple(&reps)
             .replace_multiple(&theta_reps)
             .replace_map(|term, _ctx, out| {
-                if let AtomView::Fun(f) = term {
-                    if f.get_symbol() == GS.orientation_delta {
-                        if f.iter().zip_longest(orientation.into_iter()).all(
-                            |either| match either {
-                                EitherOrBoth::Both(a, (_, o)) => {
-                                    if let Ok(a) = i64::try_from(a) {
-                                        match o {
-                                            Orientation::Default => a >= 0,
-                                            Orientation::Reversed => a <= 0,
-                                            Orientation::Undirected => true,
-                                        }
-                                    } else {
-                                        false
+                if let AtomView::Fun(f) = term
+                    && f.get_symbol() == GS.orientation_delta
+                {
+                    if f.iter()
+                        .zip_longest(orientation)
+                        .all(|either| match either {
+                            EitherOrBoth::Both(a, (_, o)) => {
+                                if let Ok(a) = i64::try_from(a) {
+                                    match o {
+                                        Orientation::Default => a >= 0,
+                                        Orientation::Reversed => a <= 0,
+                                        Orientation::Undirected => true,
                                     }
+                                } else {
+                                    false
                                 }
-                                EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
-                            },
-                        ) {
-                            **out = Atom::num(1);
-                        } else {
-                            **out = Atom::Zero;
-                        }
+                            }
+                            EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
+                        })
+                    {
+                        **out = Atom::num(1);
+                    } else {
+                        **out = Atom::Zero;
                     }
                 }
             })
@@ -192,9 +193,9 @@ impl OrientationData {
         let mut writer = String::new();
         writer.push_str("digraph {{");
 
-        writer.push_str(&format!(
+        writer.push_str(
             "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";",
-        ));
+        );
 
         for (hedge_pair, id, _) in graph.iter_edges() {
             let attr = GVEdgeAttrs {

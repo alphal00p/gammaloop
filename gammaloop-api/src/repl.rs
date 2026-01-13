@@ -255,7 +255,7 @@ fn should_complete_paths(cmd: &clap::Command, cmd_args: &[std::ffi::OsString]) -
 
                     long_matches || short_matches
                 })
-                .map(|arg| is_path_argument(arg))
+                .map(is_path_argument)
                 .unwrap_or(false);
             if flag_expects_path {
                 return true;
@@ -275,7 +275,7 @@ fn should_complete_paths(cmd: &clap::Command, cmd_args: &[std::ffi::OsString]) -
     // Get the positional argument definition for this position (0-based)
     let positional_args: Vec<_> = cmd
         .get_arguments()
-        .filter(|arg| !arg.get_long().is_some() && !arg.get_short().is_some())
+        .filter(|arg| arg.get_long().is_none() && arg.get_short().is_none())
         .collect();
 
     if let Some(positional_arg) = positional_args.get(positional_count.saturating_sub(1)) {

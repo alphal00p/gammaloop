@@ -220,7 +220,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         &self.data.graph_group_structure[group_id]
     }
 
-    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
+    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor<'_> {
         DependentMomentaConstructor::CrossSection
     }
 
@@ -251,6 +251,7 @@ pub struct CrossSectionGraphTerm {
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: SubSet<SuperGraphOrientationID>,
+    #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
 }
 
@@ -390,7 +391,7 @@ impl CrossSectionGraphTerm {
     ) -> Result<()> {
         let graph_path = path.as_ref().join(&self.graph.name);
 
-        let _ = fs::create_dir_all(&graph_path).with_context(|| {
+        fs::create_dir_all(&graph_path).with_context(|| {
             format!(
                 "Failed to create directory for cross section graph {} at {}",
                 self.graph.name,
@@ -401,39 +402,33 @@ impl CrossSectionGraphTerm {
         for (cut_id, integrand) in self.parametric_integrand.iter_mut_enumerated() {
             integrand.compile(
                 graph_path
-                    .join(&format!(
-                        "orientation_parametric_integrand_cut_{}",
-                        cut_id.0
-                    ))
+                    .join(format!("orientation_parametric_integrand_cut_{}", cut_id.0))
                     .with_extension("cpp"),
                 format!(
                     "{}_orientation_paramatric_integrand_cut_{}",
                     self.graph.name, cut_id.0
                 ),
                 graph_path
-                    .join(&format!(
-                        "orientation_parametric_integrand_cut_{}",
-                        cut_id.0
-                    ))
+                    .join(format!("orientation_parametric_integrand_cut_{}", cut_id.0))
                     .with_extension("so"),
                 settings.generation.compile.export_settings(),
             );
         }
 
-        self.iterative_integrand.as_mut().map(|iterative| {
+        if let Some(iterative) = self.iterative_integrand.as_mut() {
             for (cut_id, integrand) in iterative.iter_mut_enumerated() {
                 integrand.compile(
                     graph_path
-                        .join(&format!("iterative_cut_{}", cut_id.0))
+                        .join(format!("iterative_cut_{}", cut_id.0))
                         .with_extension("cpp"),
                     format!("{}_iterative_cut_{}", self.graph.name, cut_id.0),
                     graph_path
-                        .join(&format!("iterative_cut_{}", cut_id.0))
+                        .join(format!("iterative_cut_{}", cut_id.0))
                         .with_extension("so"),
                     settings.generation.compile.export_settings(),
                 );
             }
-        });
+        }
 
         Ok(())
     }
@@ -522,7 +517,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             };
             momentum_sample.loop_moms().len()
         ]);
-        let masses = self.graph.get_real_mass_vector(&model);
+        let masses = self.graph.get_real_mass_vector(model);
         let hel = settings.kinematics.externals.get_helicities();
         let mut cut_results = TiVec::<CutId, Complex<F<T>>>::new();
         let mut cut_threshold_counterterms = TiVec::<CutId, Complex<F<T>>>::new();
@@ -708,14 +703,12 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
 
-                let res = momentum_sample.one() / f
+                momentum_sample.one() / f
                     * if settings.general.use_picobarns {
                         F::from_ff64(PICOBARN_CONVERSION)
                     } else {
                         F::from_f64(1.0)
-                    };
-
-                res
+                    }
             }
             _ => unimplemented!(
                 "Flux factor for more than 3 or more incoming particles not implemented yet"

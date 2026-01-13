@@ -354,7 +354,7 @@ impl Process {
 
         let settings_history = File::open(path.as_ref().join("settings_history.yaml"))
             .ok()
-            .map(|a| serde_yaml::from_reader(a))
+            .map(serde_yaml::from_reader)
             .transpose()?;
 
         let (definition, _) =
@@ -375,7 +375,7 @@ impl Process {
             }
             let path = entry.path();
             debug!("loading amplitude at {}", path.display());
-            let amp = Amplitude::load(path, context.clone()).context("Error loading amplitude")?;
+            let amp = Amplitude::load(path, context).context("Error loading amplitude")?;
 
             collection.add_amplitude(amp);
         }
@@ -398,7 +398,7 @@ impl Process {
         let mut collection = ProcessCollection::new_cross_section();
         let settings_history = File::open(path.as_ref().join("settings_history.yaml"))
             .ok()
-            .map(|a| serde_yaml::from_reader(a))
+            .map(serde_yaml::from_reader)
             .transpose()?;
 
         for entry in fs::read_dir(path.as_ref())
@@ -413,8 +413,7 @@ impl Process {
             }
             let path = entry.path();
             debug!("loading cross section at {}", path.display());
-            let cs =
-                CrossSection::load(path, context.clone()).context("Error loading cross section")?;
+            let cs = CrossSection::load(path, context).context("Error loading cross section")?;
 
             collection.add_cross_section(cs);
         }
@@ -448,10 +447,10 @@ impl Process {
 
                 if let Some(a) = &self.settings_history {
                     File::create(path.as_ref().join("settings_history.toml"))?
-                        .write(&toml::to_string_pretty(a)?.into_bytes())?;
+                        .write_all(toml::to_string_pretty(a)?.as_bytes())?;
                 }
 
-                for (_, amp) in a {
+                for amp in a.values_mut() {
                     amp.save(&p, override_existing)?;
                 }
             }
@@ -476,10 +475,10 @@ impl Process {
 
                 if let Some(a) = &self.settings_history {
                     File::create(path.as_ref().join("settings_history.toml"))?
-                        .write(&toml::to_string_pretty(a)?.into_bytes())?;
+                        .write_all(toml::to_string_pretty(a)?.as_bytes())?;
                 }
 
-                for (_, cs) in cs {
+                for cs in cs.values_mut() {
                     cs.save(&p, override_existing)?;
                 }
             }
@@ -512,11 +511,11 @@ impl Process {
                     r?;
                 }
 
-                for (_, amp) in a {
-                    if let Some(int_name) = integrand_name.clone() {
-                        if amp.name != int_name {
-                            continue;
-                        }
+                for amp in a.values_mut() {
+                    if let Some(int_name) = integrand_name.clone()
+                        && amp.name != int_name
+                    {
+                        continue;
                     }
 
                     amp.compile(&p, override_existing, settings, thread_pool)?;
@@ -537,11 +536,11 @@ impl Process {
                     r?;
                 }
 
-                for (_, cs) in cs {
-                    if let Some(int_name) = integrand_name.clone() {
-                        if cs.name != int_name {
-                            continue;
-                        }
+                for cs in cs.values_mut() {
+                    if let Some(int_name) = integrand_name.clone()
+                        && cs.name != int_name
+                    {
+                        continue;
                     }
 
                     cs.compile(&p, override_existing, settings, thread_pool)?;
@@ -590,13 +589,13 @@ impl Process {
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
                         let mut dot = File::create_new(
-                            amp_path.join(&format!("{}_graphs.dot", amp_name.clone())),
+                            amp_path.join(format!("{}_graphs.dot", amp_name.clone())),
                         )
                         .with_context(|| {
                             format!(
                                 "Trying to create file to export amplitude graph {}",
                                 amp_path
-                                    .join(&format!("{}_graphs.dot", amp_name.clone()))
+                                    .join(format!("{}_graphs.dot", amp_name.clone()))
                                     .display()
                             )
                         })?;
@@ -607,14 +606,12 @@ impl Process {
                         // Save each graph in its own file
                         for graph in amp.graphs.iter() {
                             let mut dot = File::create_new(
-                                amp_path.join(&format!("{}.dot", graph.graph.name)),
+                                amp_path.join(format!("{}.dot", graph.graph.name)),
                             )
                             .with_context(|| {
                                 format!(
                                     "Trying to create file to export amplitude graph {}",
-                                    amp_path
-                                        .join(&format!("{}.dot", graph.graph.name))
-                                        .display()
+                                    amp_path.join(format!("{}.dot", graph.graph.name)).display()
                                 )
                             })?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
@@ -639,13 +636,13 @@ impl Process {
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
                         let mut dot = File::create_new(
-                            cs_path.join(&format!("{}_graphs.dot", xs_name.clone())),
+                            cs_path.join(format!("{}_graphs.dot", xs_name.clone())),
                         )
                         .with_context(|| {
                             format!(
                                 "Trying to create file to export amplitude graph {}",
                                 cs_path
-                                    .join(&format!("{}_graphs.dot", xs_name.clone()))
+                                    .join(format!("{}_graphs.dot", xs_name.clone()))
                                     .display()
                             )
                         })?;
@@ -656,12 +653,12 @@ impl Process {
                         // Save each supergraph in its own file
                         for graph in cs.supergraphs.iter() {
                             let mut dot = File::create_new(
-                                cs_path.join(&format!("{}.dot", graph.graph.name)),
+                                cs_path.join(format!("{}.dot", graph.graph.name)),
                             )
                             .with_context(|| {
                                 format!(
                                     "Trying to create file to export cross section graph {}",
-                                    cs_path.join(&format!("{}.dot", graph.graph.name)).display()
+                                    cs_path.join(format!("{}.dot", graph.graph.name)).display()
                                 )
                             })?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
@@ -914,12 +911,12 @@ impl ProcessCollection {
     ) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
-                for (_, amplitude) in amplitudes {
+                for amplitude in amplitudes.values_mut() {
                     amplitude.preprocess(model, settings, locked_runtime_settings, thread_pool)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
-                for (_, cross_section) in cross_sections {
+                for cross_section in cross_sections.values_mut() {
                     cross_section.preprocess(model, process_definition, settings, thread_pool)?;
                 }
             }
@@ -930,12 +927,12 @@ impl ProcessCollection {
     pub fn warm_up(&mut self, model: &Model) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
-                for (_, amplitude) in amplitudes {
+                for amplitude in amplitudes.values_mut() {
                     amplitude.warm_up(model)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
-                for (_, cross_section) in cross_sections {
+                for cross_section in cross_sections.values_mut() {
                     cross_section.warm_up(model)?;
                 }
             }
@@ -953,7 +950,7 @@ impl ProcessCollection {
         // let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
-                for (_, amplitude) in amplitudes {
+                for amplitude in amplitudes.values_mut() {
                     amplitude.build_integrand(
                         model,
                         global_settings,
@@ -963,7 +960,7 @@ impl ProcessCollection {
                 }
             }
             Self::CrossSections(cross_sections) => {
-                for (_, cross_section) in cross_sections {
+                for cross_section in cross_sections.values_mut() {
                     cross_section.build_integrand(
                         model,
                         global_settings,

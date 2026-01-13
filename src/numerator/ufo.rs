@@ -247,7 +247,7 @@ impl UFOSymbols {
 
         // debug!("Before dummies : {}", atom.to_ordered_simple());
 
-        for rep in [LibraryRep::from(mink), bis.into()] {
+        for rep in [mink, bis] {
             let mut max_dummy = 0;
 
             atom = atom.replace_map(|term, _, out| {
@@ -267,9 +267,9 @@ impl UFOSymbols {
                     let arg = f.iter().next().unwrap();
                     let a = if let Ok(a) = i64::try_from(arg) {
                         if a < 0 {
-                            let a = (-a) as usize;
+                            
 
-                            a
+                            (-a) as usize
                         } else {
                             return;
                         }
@@ -351,8 +351,8 @@ impl UFOSymbols {
         atom = atom.replace_multiple(&reps);
 
         atom = atom.replace_map(|term, _, out| {
-            if let AtomView::Fun(f) = term {
-                if f.get_symbol() == self.pslash {
+            if let AtomView::Fun(f) = term
+                && f.get_symbol() == self.pslash {
                     let mut gamma = FunctionBuilder::new(AGS.gamma);
 
                     let mut count = 0;
@@ -361,18 +361,16 @@ impl UFOSymbols {
                         count += 1;
                         if count <= 2 {
                             gamma = gamma.add_arg(a);
-                        } else {
-                            if let Ok(i) = i64::try_from(a) {
-                                max_dummy += 1;
+                        } else if let Ok(i) = i64::try_from(a) {
+                            max_dummy += 1;
 
-                                let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
+                            let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
 
-                                gamma = gamma.add_arg(minki.to_atom());
+                            gamma = gamma.add_arg(minki.to_atom());
 
-                                **out = gamma.finish()
-                                    * GS.emr_mom(momenta[i as usize].1, minki.to_atom());
-                                return;
-                            }
+                            **out = gamma.finish()
+                                * GS.emr_mom(momenta[i as usize].1, minki.to_atom());
+                            return;
                         }
                     }
 
@@ -386,7 +384,6 @@ impl UFOSymbols {
                         **out = gamma.finish() * GS.emr_mom(momenta[0].1, minki.to_atom());
                     }
                 }
-            }
         });
 
         for (i, (f, e)) in momenta.iter().enumerate() {
@@ -569,9 +566,9 @@ impl UFOSymbols {
                     let arg = f.iter().next().unwrap();
                     let a = if let Ok(a) = i64::try_from(arg) {
                         if a < 0 {
-                            let a = (-a) as usize;
+                            
 
-                            a
+                            (-a) as usize
                         } else {
                             return;
                         }
@@ -625,8 +622,8 @@ impl UFOSymbols {
         ]
         .into_iter()
         .map(|(pat, rep)| {
-            let a = Replacement::new(pat.to_pattern(), rep);
-            a
+            
+            Replacement::new(pat.to_pattern(), rep)
         })
         .collect();
 

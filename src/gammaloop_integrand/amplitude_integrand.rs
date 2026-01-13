@@ -188,7 +188,7 @@ impl AmplitudeGraphTerm {
     ) -> Result<()> {
         let graph_path = path.as_ref().join(&self.graph.name);
 
-        let _ = fs::create_dir_all(&graph_path).with_context(|| {
+        fs::create_dir_all(&graph_path).with_context(|| {
             format!(
                 "Trying to create directory to save amplitude {}",
                 graph_path.display()
@@ -209,14 +209,12 @@ impl AmplitudeGraphTerm {
         self.threshold_counterterm
             .compile(&graph_path, override_existing, settings);
 
-        self.iterative_integrand_evaluator.as_mut().map(|e| {
-            e.compile(
+        if let Some(e) = self.iterative_integrand_evaluator.as_mut() { e.compile(
                 graph_path.join("iterative").with_extension("cpp"),
                 format!("{}_iterative", &self.graph.name,),
                 graph_path.join("iterative").with_extension("so"),
                 settings.generation.compile.export_settings(),
-            )
-        });
+            ) }
 
         Ok(())
     }
@@ -426,7 +424,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_tropical_sampler(&self) -> &SampleGenerator<3> {
-        &self
+        self
             .tropical_sampler
             .as_ref()
             .expect("Tropical sampler should be set.")
@@ -639,7 +637,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         }
         let e_cm = F(self.settings.kinematics.e_cm);
         let constructor = DependentMomentaConstructor::Amplitude(&self.data.external_signature);
-        let masses = self.data.graph_terms[0].graph.get_external_masses(&model);
+        let masses = self.data.graph_terms[0].graph.get_external_masses(model);
 
         self.settings
             .kinematics
@@ -821,7 +819,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         &self.data.graph_group_structure[group_id]
     }
 
-    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
+    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor<'_> {
         DependentMomentaConstructor::Amplitude(&self.data.external_signature)
     }
 

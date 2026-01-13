@@ -94,8 +94,8 @@ pub(crate) fn improve_ps<T: FloatLike>(
 
     let deformation_size = dimensionless_metric(dependent_momenta, &result, e_cm);
 
-    if let Some(threshold) = settings.large_deformation_check {
-        if deformation_size > F::from_ff64(threshold) {
+    if let Some(threshold) = settings.large_deformation_check
+        && deformation_size > F::from_ff64(threshold) {
             if settings.only_warn_on_large_deformation {
                 warn!(
                     "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
@@ -109,7 +109,6 @@ pub(crate) fn improve_ps<T: FloatLike>(
                 ));
             }
         }
-    }
 
     Ok(result)
 }
@@ -199,7 +198,7 @@ pub(crate) fn generate_default_momenta(
                 pz: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0),
             };
             let signed_spatial = spatial * sign;
-            let ose = spatial.on_shell_energy(Some(external_masses[final_states[i]].clone()));
+            let ose = spatial.on_shell_energy(Some(external_masses[final_states[i]]));
             FourMomentum {
                 temporal: ose,
                 spatial: signed_spatial,
@@ -209,7 +208,7 @@ pub(crate) fn generate_default_momenta(
 
     let last_final_state = final_state_momenta
         .iter()
-        .fold(capital_p.clone(), |acc, mom| acc - mom.clone());
+        .fold(capital_p, |acc, mom| acc - *mom);
     final_state_momenta.push(last_final_state);
 
     let mut initial_state_momenta = (0..num_initial - 1)
@@ -233,7 +232,7 @@ pub(crate) fn generate_default_momenta(
                 pz: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0)
                     * sign_z,
             };
-            let ose = spatial.on_shell_energy(Some(external_masses[final_states[i]].clone()));
+            let ose = spatial.on_shell_energy(Some(external_masses[final_states[i]]));
             FourMomentum {
                 temporal: ose,
                 spatial,
@@ -243,7 +242,7 @@ pub(crate) fn generate_default_momenta(
 
     let last_initial_state = initial_state_momenta
         .iter()
-        .fold(capital_p.clone(), |acc, mom| acc - mom.clone());
+        .fold(capital_p, |acc, mom| acc - *mom);
     initial_state_momenta.push(last_initial_state);
 
     let mut initial_state_iter = initial_state_momenta.into_iter();
@@ -342,7 +341,7 @@ fn find_rescaling<T: FloatLike>(
         function,
         &F::<T>::from_f64(1.000),
         400,
-        &e_cm,
+        e_cm,
     );
 
     status_debug!("solution: {:?}", solution);
@@ -575,8 +574,7 @@ fn improve_ps_vh<T: FloatLike>(
     }
 
     let mut new_momenta = dependent_momenta
-        .iter()
-        .map(|m| m.clone())
+        .iter().cloned()
         .collect::<TiVec<ExternalIndex, _>>();
 
     let mut pt = dependent_momenta[ExternalIndex::from(0)].zero();

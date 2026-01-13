@@ -7,27 +7,23 @@ use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
 use eyre::Context;
 use gammalooprs::utils::tracing::{LogFormat, LOG_GUARD};
-use tracing::{info, level_filters::LevelFilter, Event, Subscriber};
+use tracing::{level_filters::LevelFilter, Event, Subscriber};
 use tracing_appender::{
     non_blocking::NonBlockingBuilder,
     rolling::{RollingFileAppender, Rotation},
-};
-use tracing_indicatif::{
-    filter::{hide_indicatif_span_fields, IndicatifFilter},
-    IndicatifLayer,
 };
 use tracing_subscriber::{
     filter::Filtered,
     fmt::{
         self,
-        format::{DefaultFields, Writer},
+        format::Writer,
         FmtContext, FormatEvent, FormatFields,
     },
     layer::SubscriberExt,
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter, Layer, Registry,
+    EnvFilter, Registry,
 };
 
 use color_eyre::Result;
@@ -74,10 +70,10 @@ fn display_filter_from(user_spec: &str) -> Result<EnvFilter> {
     Ok(f)
 }
 
-const ENV_FILE_LOG_FILTER: &'static str = "GL_LOGFILE_FILTER";
-const ENV_NO_GL_HARD_WARNINGS: &'static str = "GL_NO_HARD_WARNINGS";
-const ENV_DISPLAY_LOG_FILTER: &'static str = "GL_DISPLAY_FILTER";
-const ENV_ALL_LOG_FILTER: &'static str = "GL_ALL_LOG_FILTER";
+const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
+const ENV_NO_GL_HARD_WARNINGS: &str = "GL_NO_HARD_WARNINGS";
+const ENV_DISPLAY_LOG_FILTER: &str = "GL_DISPLAY_FILTER";
+const ENV_ALL_LOG_FILTER: &str = "GL_ALL_LOG_FILTER";
 
 // Statics to hold the current log specifications
 static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
@@ -127,7 +123,7 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     let Some(handles) = FILTER_HANDLES.get() else {
         return Ok(());
     };
-    let user_spec = if let Some(file) = std::env::var(ENV_FILE_LOG_FILTER).ok() {
+    let user_spec = if let Ok(file) = std::env::var(ENV_FILE_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
             println!(
                 "WARNING, file log filter is set to {file}, will override settings {}",
@@ -154,7 +150,7 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     let Some(handles) = FILTER_HANDLES.get() else {
         return Ok(());
     };
-    let user_spec = if let Some(display) = std::env::var(ENV_DISPLAY_LOG_FILTER).ok() {
+    let user_spec = if let Ok(display) = std::env::var(ENV_DISPLAY_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
             println!(
                 "WARNING, display log filter is set to {display}, will override settings {}",
@@ -207,8 +203,7 @@ pub(crate) fn init_tracing(
         // e.g. "2025-08-26T21-05-33.123"
         let ts = Local::now()
             .to_rfc3339_opts(SecondsFormat::Millis, true)
-            .replace(':', "-")
-            .replace('+', "-"); // keep it filename-friendly
+            .replace([':', '+'], "-"); // keep it filename-friendly
 
         let filename = if let Some(log_name) = log_file_name {
             format!("gammalog-{log_name}.jsonl")
@@ -234,7 +229,7 @@ pub(crate) fn init_tracing(
         // Pretty status layer for stderr - only show status events
         let status_layer = fmt::layer()
             .with_target(false)
-            .event_format(StatusFmt::default())
+            .event_format(StatusFmt)
             .with_writer(std::io::stderr);
 
         // let indicatif_layer = IndicatifLayer::new()

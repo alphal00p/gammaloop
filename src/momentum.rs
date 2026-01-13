@@ -642,7 +642,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
     pub(crate) fn get_cos_theta_with(&self, rhs: &ThreeMomentum<F<T>>) -> F<T> {
         let self_norm = self.norm();
         let rhs_norm = rhs.norm();
-        if &self_norm < &self_norm.epsilon() || &rhs_norm < &rhs_norm.epsilon() {
+        if self_norm < self_norm.epsilon() || rhs_norm < rhs_norm.epsilon() {
             return self_norm.one();
         }
 
@@ -1025,6 +1025,7 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn into_f64(&self) -> ThreeMomentum<f64>
     where
         T: FloatLike,
@@ -2825,7 +2826,7 @@ impl Rotation {
         let mud = mu.dual();
 
         let shadow: NamedStructure<String, ()> =
-            PermutedStructure::<OrderedStructure>::from_iter([mu.into()])
+            PermutedStructure::<OrderedStructure>::from_iter([mu])
                 .structure
                 .to_named("eps".to_string(), None);
         let shadow_t: MixedTensor<_, OrderedStructure> =

@@ -85,11 +85,7 @@ impl Integrate {
             ))
         };
 
-        let target = if let Some(t) = self.target.clone() {
-            Some(Complex::new(F(t[0]), F(t[1])))
-        } else {
-            None
-        };
+        let target = self.target.clone().map(|t| Complex::new(F(t[0]), F(t[1])));
 
         let (process_id, integrand_name) = state
             .process_list

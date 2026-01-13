@@ -191,13 +191,13 @@ impl SmartSerde for RuntimeSettings {
 
 pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
     let folder = match env::var("GAMMALOOP_SCHEMA_PATH") {
-        Ok(path) => PathBuf::try_from(path)?,
+        Ok(path) => PathBuf::from(path),
         Err(_) => {
             if online {
-                PathBuf::try_from(format!(
+                PathBuf::from(format!(
                     "https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/{}/assets/schemas",
                     BRANCH
-                ))?
+                ))
             } else {
                 match home_dir() {
                     Some(home) => home.join(".config").join("gammaloop").join("schemas"),
@@ -250,7 +250,7 @@ impl<T: Default + PartialEq> IsDefault for T {
 }
 
 pub fn is_default_pysecdec_relative_precision(val: &f64) -> bool {
-    show_defaults_helper(*val == 1.0e-7 as f64)
+    show_defaults_helper(*val == 1.0e-7_f64)
 }
 
 pub fn is_default_vakint_normalization(val: &String) -> bool {
@@ -273,11 +273,11 @@ pub fn is_u64<const D: u64>(val: &u64) -> bool {
 }
 
 pub fn is_false(val: &bool) -> bool {
-    show_defaults_helper(*val == false)
+    show_defaults_helper(!*val)
 }
 
 pub fn is_true(val: &bool) -> bool {
-    show_defaults_helper(*val == true)
+    show_defaults_helper(*val)
 }
 
 pub fn is_default_input_rescaling(input_rescaling: &Vec<Vec<(f64, f64)>>) -> bool {

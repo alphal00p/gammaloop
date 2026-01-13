@@ -188,10 +188,12 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<T>>]) -> Complex<F<T>>;
 
+    #[allow(clippy::type_complexity)]
     fn get_evaluator(
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<T>>]) -> Vec<Complex<F<T>>>;
 
+    #[allow(clippy::too_many_arguments)]
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
         cache: bool,
@@ -262,7 +264,7 @@ impl GenericEvaluatorFloat for f64 {
         right_threshold_params: Option<&ThresholdParams<f64>>,
         lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        let params = param_builder.update_emr_and_get_params(
+        param_builder.update_emr_and_get_params(
             cache,
             sample,
             graph,
@@ -270,9 +272,7 @@ impl GenericEvaluatorFloat for f64 {
             left_threshold_params,
             right_threshold_params,
             lu_params,
-        );
-
-        params
+        )
     }
 
     // fn get_debug_evaluator(

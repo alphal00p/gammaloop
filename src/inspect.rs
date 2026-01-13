@@ -15,6 +15,7 @@ use crate::utils;
 use crate::utils::F;
 use crate::utils::f128;
 
+#[allow(clippy::too_many_arguments)]
 pub fn inspect<I: HasIntegrand>(
     settings: &RuntimeSettings,
     integrand: &mut I,
@@ -83,7 +84,7 @@ pub fn inspect<I: HasIntegrand>(
                 .join(", ")
         )
         .blue(),
-        format!("{}", integrand.name()).green(),
+        integrand.name().to_string().green(),
         format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
     );
 

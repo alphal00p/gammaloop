@@ -33,7 +33,9 @@ use crate::{
     gammaloop_integrand::{
         LmbMultiChannelingSetup, ParamBuilder, cross_section_integrand::CrossSectionIntegrandData,
     },
-    graph::{GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing},
+    graph::{
+        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
+    },
     model::ArcParticle,
     momentum_sample::SubspaceData,
     numerator::{self, symbolica_ext::AtomCoreExt},
@@ -150,7 +152,7 @@ impl CsAmplitudeCTDiagram {
                 .collect_vec();
 
             let left_orientations = get_orientations_from_subgraph(
-                &graph,
+                graph,
                 &self.left_subgraph,
                 &self.reversed_dangling_edges,
             )
@@ -160,7 +162,7 @@ impl CsAmplitudeCTDiagram {
             .collect::<TiVec<SuperGraphOrientationID, _>>();
 
             let right_orientations = get_orientations_from_subgraph(
-                &graph,
+                graph,
                 &self.right_subgraph,
                 &self.reversed_dangling_edges,
             )
@@ -243,6 +245,7 @@ pub struct CrossSection {
 }
 
 impl CrossSection {
+    #[allow(dead_code)]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -301,7 +304,7 @@ impl CrossSection {
     fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
         if self.external_particles.is_empty() {
             let external_particles = supergraph.get_external_partcles();
-            if external_particles.len() % 2 != 0 {
+            if !external_particles.len().is_multiple_of(2) {
                 return Err(eyre!(
                     "expected even number of externals for forward scattering graph"
                 ));
@@ -432,7 +435,7 @@ impl CrossSection {
             fs::write(p.join("cs.bin"), &binary)?;
         } else {
             let mut file = File::create_new(p.join("cs.bin"))?;
-            file.write(&binary)?;
+            file.write_all(&binary)?;
         }
 
         self.integrand = integrand;
@@ -815,6 +818,7 @@ impl CrossSectionGraph {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -861,7 +865,8 @@ impl CrossSectionGraph {
         let cff_cut_expression =
             generate_cff_with_cuts(&self.graph.underlying, &shift_rewrite, &self.cuts)?;
 
-        Ok(self.derived_data.cff_expression = Some(cff_cut_expression))
+        let _: () = self.derived_data.cff_expression = Some(cff_cut_expression);
+        Ok(())
     }
 
     fn generate_cuts(
@@ -1019,6 +1024,7 @@ impl CrossSectionGraph {
         (initial_state_tree_expr, replacements)
     }
 
+    #[allow(dead_code)]
     fn build_parametric_integrand_raised_cuts(
         &mut self,
         _settings: &GenerationSettings,
@@ -1288,7 +1294,7 @@ impl CrossSectionGraph {
                 let (_, p) = &self.graph[i];
 
                 if self.graph.initial_state_cut.intersects(p) {
-                    exts.push(i.clone());
+                    exts.push(*i);
                 }
             }
 
@@ -1434,45 +1440,44 @@ impl CrossSectionGraph {
 
                         threshold_esurfaces_on_the_left.push(threshold_esurface);
                     }
-                } else if cut.right.includes(right_threshold_diagram) {
-                    if self.graph.underlying.cyclotomatic_number(&cut.right)
+                } else if cut.right.includes(right_threshold_diagram)
+                    && self.graph.underlying.cyclotomatic_number(&cut.right)
                         > self
                             .graph
                             .underlying
                             .cyclotomatic_number(right_threshold_diagram)
-                    {
-                        let left_subgraph = left_threshold_diagram.subtract(&cut.left);
+                {
+                    let left_subgraph = left_threshold_diagram.subtract(&cut.left);
 
-                        let ct_diagram = CsAmplitudeCTDiagram {
-                            left_subgraph,
-                            threshold_cut: threshold_cut.clone(),
-                            right_subgraph: right_threshold_diagram.clone(),
-                            reversed_dangling_edges,
-                            network: None,
-                        };
+                    let ct_diagram = CsAmplitudeCTDiagram {
+                        left_subgraph,
+                        threshold_cut: threshold_cut.clone(),
+                        right_subgraph: right_threshold_diagram.clone(),
+                        reversed_dangling_edges,
+                        network: None,
+                    };
 
-                        thresholds_on_the_right.push(ct_diagram);
+                    thresholds_on_the_right.push(ct_diagram);
 
-                        let cross_section_cut_for_threshold = CrossSectionCut {
-                            cut: threshold_cut.clone(),
-                            left: left_threshold_diagram.clone(),
-                            right: right_threshold_diagram.clone(),
-                        };
+                    let cross_section_cut_for_threshold = CrossSectionCut {
+                        cut: threshold_cut.clone(),
+                        left: left_threshold_diagram.clone(),
+                        right: right_threshold_diagram.clone(),
+                    };
 
-                        let threshold_esurface = Esurface::new_from_cut_left(
-                            &self.graph.underlying,
-                            &cross_section_cut_for_threshold,
-                            Some(&self.graph.initial_state_cut),
-                        );
+                    let threshold_esurface = Esurface::new_from_cut_left(
+                        &self.graph.underlying,
+                        &cross_section_cut_for_threshold,
+                        Some(&self.graph.initial_state_cut),
+                    );
 
-                        // threshold_esurface.subspace_graph =
-                        //     InternalSubGraph::cleaned_filter_pessimist(
-                        //         cut.right.clone(),
-                        //         &self.graph,
-                        //     );
+                    // threshold_esurface.subspace_graph =
+                    //     InternalSubGraph::cleaned_filter_pessimist(
+                    //         cut.right.clone(),
+                    //         &self.graph,
+                    //     );
 
-                        threshold_esurfaces_on_the_right.push(threshold_esurface);
-                    }
+                    threshold_esurfaces_on_the_right.push(threshold_esurface);
                 }
             }
 
@@ -1719,7 +1724,8 @@ impl CrossSectionGraph {
             })
             .collect::<Result<_>>()?;
 
-        Ok(self.derived_data.subspace_data = subspace_data)
+        let _: () = self.derived_data.subspace_data = subspace_data;
+        Ok(())
     }
 
     fn generate_term_for_graph(
@@ -1727,7 +1733,7 @@ impl CrossSectionGraph {
         _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<CrossSectionGraphTerm> {
-        CrossSectionGraphTerm::from_cross_section_graph(&self, settings)
+        CrossSectionGraphTerm::from_cross_section_graph(self, settings)
     }
 }
 
@@ -1749,6 +1755,12 @@ pub struct CrossSectionDerivedData {
 pub struct RaisedData {
     pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
     pub cross_free_powersets: TiVec<RaisedCutId, Vec<Vec<CutId>>>,
+}
+
+impl Default for RaisedData {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RaisedData {
@@ -1783,6 +1795,7 @@ fn test_template() {
     println!("result: {}", build_derivative_structure(3));
 }
 
+#[allow(dead_code)]
 fn build_derivative_structure(order: u8) -> Atom {
     let order = order as i32;
     // let mut expansion = Atom::new();

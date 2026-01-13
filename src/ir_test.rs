@@ -277,11 +277,15 @@ impl Display for IrLimit {
         for colinear_set in &self.colinear {
             write!(f, "C[")?;
 
-            for i in 0..(colinear_set.len() - 1) {
-                write!(f, "{},", colinear_set[i])?;
+            let mut iter = colinear_set.iter();
+            if let Some(last) = iter.next_back() {
+                for item in iter {
+                    write!(f, "{},", item)?;
+                }
+                write!(f, "{}]", last)?;
+            } else {
+                write!(f, "]")?;
             }
-
-            write!(f, "{}]", colinear_set.last().unwrap())?;
         }
 
         for soft in self.soft.iter() {
@@ -391,7 +395,7 @@ impl IrLimit {
                     let mut colinear_set_str = String::new();
 
                     let mut closing_bracket_found = false;
-                    while let Some((_next_char_position, next_char)) = char_iter.next() {
+                    for (_next_char_position, next_char) in char_iter.by_ref() {
                         if next_char == ']' {
                             closing_bracket_found = true;
                             break;
@@ -434,7 +438,7 @@ impl IrLimit {
                             let mut edge_str = String::new();
                             let mut closing_bracket_found = false;
 
-                            while let Some(next_char) = trimmed_edge_iter.next() {
+                            for next_char in trimmed_edge_iter {
                                 if next_char == ')' {
                                     closing_bracket_found = true;
                                     break;
@@ -478,7 +482,7 @@ impl IrLimit {
                     let mut edge_str = String::new();
                     let mut closing_bracket_found = false;
 
-                    while let Some((_next_char_position, next_char)) = char_iter.next() {
+                    for (_next_char_position, next_char) in char_iter.by_ref() {
                         if next_char == ')' {
                             closing_bracket_found = true;
                             break;
@@ -593,7 +597,7 @@ impl IrLimit {
             (0..=approach_settings.steps)
                 .map(|i| {
                     F::from_f64(10.0f64.powf(
-                        approach_settings.lambda_exp_start.0 - &lambda_exp_delta.0 * (i as f64),
+                        approach_settings.lambda_exp_start.0 - lambda_exp_delta.0 * (i as f64),
                     ))
                 })
                 .collect();

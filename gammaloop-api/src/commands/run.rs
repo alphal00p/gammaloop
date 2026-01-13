@@ -1,6 +1,6 @@
 use std::{ops::ControlFlow, path::PathBuf};
 
-use clap::{arg, Args};
+use clap::Args;
 use gammalooprs::settings::RuntimeSettings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ impl Run {
         if let Some(mut new_run_history) = self
             .path
             .as_ref()
-            .map(|p| RunHistory::load(p))
+            .map(RunHistory::load)
             .transpose()?
         {
             let res = new_run_history.run(state, global_settings, default_runtime_settings);
@@ -67,6 +67,6 @@ impl Run {
                 }
             }
         }
-        return Ok(a);
+        Ok(a)
     }
 }

@@ -39,6 +39,7 @@ pub trait AtomCoreExt {
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom;
 
+    #[allow(clippy::result_large_err)]
     fn parse_into_net(&self) -> Result<ParsingNet, ParsingNetError>;
 }
 

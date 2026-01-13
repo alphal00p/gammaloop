@@ -41,6 +41,7 @@ pub struct TreeNode<T> {
     pub parent: Option<NodeId>,
 }
 
+#[allow(dead_code)]
 fn determine_shifted_id(removed_ids_sorted: &[NodeId], original_id: NodeId) -> NodeId {
     let shift = removed_ids_sorted
         .iter()
@@ -50,20 +51,21 @@ fn determine_shifted_id(removed_ids_sorted: &[NodeId], original_id: NodeId) -> N
 }
 
 impl<T> TreeNode<T> {
+    #[allow(dead_code)]
     fn update_node_ids(&mut self, removed_ids: &[NodeId]) {
-        self.node_id = determine_shifted_id(&removed_ids, self.node_id);
+        self.node_id = determine_shifted_id(removed_ids, self.node_id);
 
         self.children
             .retain(|child_id| !removed_ids.contains(child_id));
         self.children.iter_mut().for_each(|child_id| {
-            *child_id = determine_shifted_id(&removed_ids, *child_id);
+            *child_id = determine_shifted_id(removed_ids, *child_id);
         });
 
         if let Some(parent_id) = self.parent {
             if removed_ids.contains(&parent_id) {
                 self.parent = None;
             } else {
-                let shifted_parent_id = determine_shifted_id(&removed_ids, parent_id);
+                let shifted_parent_id = determine_shifted_id(removed_ids, parent_id);
                 self.parent = Some(shifted_parent_id);
             }
         }
@@ -105,6 +107,7 @@ impl<T> Tree<T> {
         &self.nodes[node_id]
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_data_node_mut(&mut self, node_id: NodeId) -> &mut T {
         &mut self.nodes[node_id].data
     }
@@ -136,6 +139,7 @@ impl<T> Tree<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn get_num_nodes(&self) -> usize {
         self.nodes.len()
     }
@@ -144,6 +148,7 @@ impl<T> Tree<T> {
         self.nodes.iter()
     }
 
+    #[allow(dead_code)]
     fn obtain_subtree_node_ids_impl(&self, node_id: NodeId, collected_ids: &mut Vec<NodeId>) {
         for &child_id in &self.nodes[node_id].children {
             collected_ids.push(child_id);
@@ -151,12 +156,14 @@ impl<T> Tree<T> {
         }
     }
 
+    #[allow(dead_code)]
     fn obtain_subtree_node_ids(&self, node_id: NodeId) -> Vec<NodeId> {
         let mut collected_ids = vec![node_id];
         self.obtain_subtree_node_ids_impl(node_id, &mut collected_ids);
         collected_ids
     }
 
+    #[allow(dead_code)]
     pub(crate) fn remove_node(&mut self, node_id: NodeId) {
         let mut subtree = self.obtain_subtree_node_ids(node_id);
         subtree.sort();
@@ -172,6 +179,7 @@ impl<T> Tree<T> {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn filter_mut(&mut self, predicate: impl Fn(&T) -> bool) {
         let mut nodes_to_remove = HashSet::new();
 

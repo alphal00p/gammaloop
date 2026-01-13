@@ -51,6 +51,7 @@ fn is_debug_cache_enabled() -> bool {
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
+#[derive(Default)]
 pub struct ParamValuePairs {
     pub value_range: Range<usize>,
     pub params: Vec<Atom>,
@@ -97,15 +98,6 @@ impl<'a, A: Into<AtomOrView<'a>>> FromIterator<A> for ParamValuePairs {
     }
 }
 
-impl Default for ParamValuePairs {
-    fn default() -> Self {
-        Self {
-            value_range: Range::default(),
-            params: Vec::new(),
-        }
-    }
-}
-
 pub trait SplitPolarizations {
     fn polarizations(&self) -> Vec<Atom>;
 }
@@ -121,6 +113,7 @@ pub trait ParamBuilderGraph {
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
+#[derive(Default)]
 pub struct GammaLoopPairs {
     m_uv: ParamValuePairs,
     idenso_vars: ParamValuePairs,
@@ -305,26 +298,26 @@ impl GammaLoopPairs {
         model: &Model,
         graph: &G,
     ) -> (Self, usize) {
-        let mut pairs: GammaLoopPairs = Default::default();
-
-        pairs.m_uv = ParamValuePairs::default_from_symbol(GS.m_uv);
-
-        pairs.mu_r_sq = ParamValuePairs::default_from_symbol(GS.mu_r_sq);
-        pairs.tstar = ParamValuePairs::default_from_symbol(GS.rescale_star);
-        pairs.radius_left = ParamValuePairs::default_from_symbol(GS.radius_left);
-        pairs.radius_right = ParamValuePairs::default_from_symbol(GS.radius_right);
-        pairs.radius_star_left = ParamValuePairs::default_from_symbol(GS.radius_star_left);
-        pairs.radius_star_right = ParamValuePairs::default_from_symbol(GS.radius_star_right);
-        pairs.h_function_lu_cut = ParamValuePairs::default_from_symbol(GS.hfunction_lu_cut);
-        pairs.h_function_left_th = ParamValuePairs::default_from_symbol(GS.hfunction_left_th);
-        pairs.h_function_right_th = ParamValuePairs::default_from_symbol(GS.hfunction_right_th);
-        pairs.esurface_derivative_lu_cut = ParamValuePairs::default_from_symbol(GS.deta_lu_cut);
-        pairs.esurface_derivative_left_th = ParamValuePairs::default_from_symbol(GS.deta_left_th);
-        pairs.esurface_derivative_right_th = ParamValuePairs::default_from_symbol(GS.deta_right_th);
-        pairs.uv_damp_plus_left = ParamValuePairs::default_from_symbol(GS.uv_damp_plus_left);
-        pairs.uv_damp_plus_right = ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right);
-        pairs.uv_damp_minus_left = ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left);
-        pairs.uv_damp_minus_right = ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right);
+        let mut pairs = GammaLoopPairs {
+            m_uv: ParamValuePairs::default_from_symbol(GS.m_uv),
+            mu_r_sq: ParamValuePairs::default_from_symbol(GS.mu_r_sq),
+            tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
+            radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
+            radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
+            radius_star_left: ParamValuePairs::default_from_symbol(GS.radius_star_left),
+            radius_star_right: ParamValuePairs::default_from_symbol(GS.radius_star_right),
+            h_function_lu_cut: ParamValuePairs::default_from_symbol(GS.hfunction_lu_cut),
+            h_function_left_th: ParamValuePairs::default_from_symbol(GS.hfunction_left_th),
+            h_function_right_th: ParamValuePairs::default_from_symbol(GS.hfunction_right_th),
+            esurface_derivative_lu_cut: ParamValuePairs::default_from_symbol(GS.deta_lu_cut),
+            esurface_derivative_left_th: ParamValuePairs::default_from_symbol(GS.deta_left_th),
+            esurface_derivative_right_th: ParamValuePairs::default_from_symbol(GS.deta_right_th),
+            uv_damp_plus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_left),
+            uv_damp_plus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right),
+            uv_damp_minus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left),
+            uv_damp_minus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right),
+            ..Default::default()
+        };
 
         pairs.idenso_vars();
 
@@ -510,37 +503,6 @@ impl GammaLoopPairs {
     }
 }
 
-impl Default for GammaLoopPairs {
-    fn default() -> Self {
-        Self {
-            idenso_vars: ParamValuePairs::default(),
-            orientations: ParamValuePairs::default(),
-            m_uv: ParamValuePairs::default(),
-            mu_r_sq: ParamValuePairs::default(),
-            model_parameters: ParamValuePairs::default(),
-            external_energies: ParamValuePairs::default(),
-            polarizations: ParamValuePairs::default(),
-            external_spatial: ParamValuePairs::default(),
-            emr_spatial: ParamValuePairs::default(),
-            tstar: ParamValuePairs::default(),
-            h_function_lu_cut: ParamValuePairs::default(),
-            h_function_left_th: ParamValuePairs::default(),
-            h_function_right_th: ParamValuePairs::default(),
-            esurface_derivative_lu_cut: ParamValuePairs::default(),
-            esurface_derivative_left_th: ParamValuePairs::default(),
-            esurface_derivative_right_th: ParamValuePairs::default(),
-            uv_damp_plus_left: ParamValuePairs::default(),
-            uv_damp_plus_right: ParamValuePairs::default(),
-            uv_damp_minus_left: ParamValuePairs::default(),
-            uv_damp_minus_right: ParamValuePairs::default(),
-            radius_left: ParamValuePairs::default(),
-            radius_right: ParamValuePairs::default(),
-            radius_star_left: ParamValuePairs::default(),
-            radius_star_right: ParamValuePairs::default(),
-        }
-    }
-}
-
 #[derive(Clone)]
 pub struct ParamCache<T: FloatLike> {
     cache: ConstGenericRingBuffer<Vec<Complex<F<T>>>, 64>,
@@ -628,6 +590,7 @@ pub struct LUParams<T: FloatLike> {
 }
 
 pub trait UpdateAndGetParams<T: FloatLike> {
+    #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
         cache: bool,
@@ -641,6 +604,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
 }
 
 impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
+    #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
         cache: bool,
@@ -652,7 +616,6 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
         let emr_start = self.pairs.emr_spatial.value_range.start;
-        let mut shift = 0;
 
         let emr_vec_cahe = graph.get_emr_vec_cache(
             sample.loop_moms(),
@@ -660,9 +623,8 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             &graph.loop_momentum_basis,
         );
 
-        for value in emr_vec_cahe {
+        for (shift, value) in emr_vec_cahe.into_iter().enumerate() {
             self.values[emr_start + shift] = Complex::new_re(value);
-            shift += 1;
         }
 
         // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
@@ -687,6 +649,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
 }
 
 impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
+    #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params(
         &mut self,
         _cache: bool,
@@ -696,7 +659,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         left_threshold_params: Option<&ThresholdParams<f128>>,
         right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
-    ) -> Cow<Vec<Complex<F<f128>>>> {
+    ) -> Cow<'_, Vec<Complex<F<f128>>>> {
         let mut emr_start = self.pairs.emr_spatial.value_range.start;
         let mut values = self.higher();
         let emr_vec_cahe = graph.get_emr_vec_cache(
@@ -835,7 +798,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         new.add_function(
             GS.broadcasting_sqrt,
-            format!("sqrt"),
+            "sqrt".to_string(),
             vec![symbol!("x")],
             parse_lit!(sqrt(x)),
         )
@@ -988,15 +951,16 @@ impl<T: FloatLike> ParamBuilder<T> {
             );
 
             // DEBUG: Search entire cache for matching polarizations to detect missed hits
-            if is_debug_cache_enabled() && cache {
-                if let Some(ref expected) = expected_pols {
-                    self.debug_search_cache_for_matching_polarizations(
-                        expected,
-                        cache_id,
-                        base_cache_id,
-                        sample.external_moms(),
-                    );
-                }
+            if is_debug_cache_enabled()
+                && cache
+                && let Some(ref expected) = expected_pols
+            {
+                self.debug_search_cache_for_matching_polarizations(
+                    expected,
+                    cache_id,
+                    base_cache_id,
+                    sample.external_moms(),
+                );
             }
 
             if !cache {
@@ -1045,20 +1009,20 @@ impl<T: FloatLike> ParamBuilder<T> {
         let max_search_id = std::cmp::max(current_cache_id + 10, self.polarization_cache.len);
 
         for search_id in 0..max_search_id {
-            if let Some(cached_pols) = self.polarization_cache.get(search_id) {
-                if cached_pols.len() == expected_pols.len() {
-                    let matches =
-                        cached_pols
-                            .iter()
-                            .zip(expected_pols.iter())
-                            .all(|(cached, expected)| {
-                                (&cached.re - &expected.re).abs() < tolerance
-                                    && (&cached.im - &expected.im).abs() < tolerance
-                            });
+            if let Some(cached_pols) = self.polarization_cache.get(search_id)
+                && cached_pols.len() == expected_pols.len()
+            {
+                let matches =
+                    cached_pols
+                        .iter()
+                        .zip(expected_pols.iter())
+                        .all(|(cached, expected)| {
+                            (&cached.re - &expected.re).abs() < tolerance
+                                && (&cached.im - &expected.im).abs() < tolerance
+                        });
 
-                    if matches {
-                        found_matches.push(search_id);
-                    }
+                if matches {
+                    found_matches.push(search_id);
                 }
             }
         }
@@ -1210,7 +1174,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         for i in &self.pairs {
-            for (p, v) in i.params.iter().zip(i.value_range.clone().into_iter()) {
+            for (p, v) in i.params.iter().zip(i.value_range.clone()) {
                 table.push_record(vec![
                     p.printer(LOGPRINTOPTS).to_string().to_string(),
                     self.values[v].to_string(),
@@ -1232,11 +1196,7 @@ impl<T: FloatLike> StatusRenderable for ParamBuilder<T> {
         }
 
         for pairs in &self.pairs {
-            for (param, value) in pairs
-                .params
-                .iter()
-                .zip(pairs.value_range.clone().into_iter())
-            {
+            for (param, value) in pairs.params.iter().zip(pairs.value_range.clone()) {
                 map.insert(
                     param.to_canonical_string(),
                     serde_json::to_value(&self.values[value]).unwrap(),

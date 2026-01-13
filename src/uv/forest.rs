@@ -45,6 +45,7 @@ impl Forest {
         self.dag.nodes.len()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
@@ -165,11 +166,10 @@ impl Forest {
         if let Some(cut) = cut_edges {
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in graph.iter_edges_of(cut) {
-                s = s
-                    * (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
-                        .wrap_color(GS.color_wrap)
-                        .parse_into_net()
-                        .unwrap();
+                s *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
+                    .wrap_color(GS.color_wrap)
+                    .parse_into_net()
+                    .unwrap();
 
                 s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
@@ -214,7 +214,7 @@ impl Forest {
                 // yet in order to do 4d scaling tests
                 let temp_orientation = orientation.clone();
 
-                s = s * d
+                s *= d
                     .data
                     .num
                     .wrap_color(GS.color_wrap)
@@ -224,7 +224,7 @@ impl Forest {
                     Replacement::new(
                         function!(GS.emr_mom, edge_id, AIND_SYMBOLS.cind.f(&[Atom::Zero]))
                             .to_pattern(),
-                        SignOrZero::from((&temp_orientation.orientation[edge_index]).clone())
+                        SignOrZero::from(temp_orientation.orientation[edge_index])
                             * function!(GS.ose, edge_id),
                     ),
                     // Replacement::new(

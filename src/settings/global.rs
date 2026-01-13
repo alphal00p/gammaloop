@@ -25,6 +25,7 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
+#[derive(Default)]
 pub struct GenerationSettings {
     // Generation Time settings
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -72,35 +73,16 @@ impl Default for ThresholdSubtractionSettings {
     }
 }
 
-impl Default for GenerationSettings {
-    fn default() -> Self {
-        Self {
-            feyngen: FeyGenSettings::default(),
-            evaluator: EvaluatorSettings::default(),
-            orientation_pattern: OrientationPattern::default(),
-            compile: GammaloopCompileOptions::default(),
-            tropical_subgraph_table: TropicalSubgraphTableSettings::default(),
-            threshold_subtraction: ThresholdSubtractionSettings::default(),
-            force_cuts: vec![],
-            uv: UVgenerationSettings::default(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[serde(deny_unknown_fields)]
+#[derive(Default)]
 pub enum CompilationOptimizationLevel {
     O0,
     O1,
     O2,
+    #[default]
     O3,
-}
-
-impl Default for CompilationOptimizationLevel {
-    fn default() -> Self {
-        CompilationOptimizationLevel::O3
-    }
 }
 
 impl From<CompilationOptimizationLevel> for usize {
@@ -193,17 +175,10 @@ impl GammaloopCompileOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[serde(default, deny_unknown_fields)]
+#[derive(Default)]
 pub struct FeyGenSettings {
     #[serde(skip_serializing_if = "is_false")]
     pub gamma_simplification_closure_check: bool,
-}
-
-impl Default for FeyGenSettings {
-    fn default() -> Self {
-        FeyGenSettings {
-            gamma_simplification_closure_check: false,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -250,7 +225,7 @@ impl OrientationPattern {
         orientation.orientation_delta().into()
     }
 
-    pub fn select_pattern<'a>(&self, atom: impl AtomCore) -> Option<Atom> {
+    pub fn select_pattern(&self, atom: impl AtomCore) -> Option<Atom> {
         Some(
             atom.replace(self.pat.as_ref()?.as_view().to_pattern())
                 .with(function!(GS.selected, &self.pat.as_ref()?.0))
@@ -265,12 +240,11 @@ impl OrientationPattern {
             let a = orientation.orientation_delta();
 
             // println!("{a}vs{}", pat.0);
-            let a = a
-                .pattern_match(&pat.to_pattern(), None, None)
-                .next()
-                .is_some();
+
             // println!("{a}");
-            a
+            a.pattern_match(&pat.to_pattern(), None, None)
+                .next()
+                .is_some()
         } else {
             true
         }

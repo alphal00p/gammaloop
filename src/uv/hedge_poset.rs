@@ -14,11 +14,9 @@ use symbolica::{
     symbol,
 };
 
-use crate::{
-    numerator::ParsingNet,
-    uv::UltravioletGraph,
-};
+use crate::{numerator::ParsingNet, uv::UltravioletGraph};
 
+#[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Debug, Hash, Eq)]
 pub struct Spinney {
     pub subgraph: SuBitGraph,
@@ -98,6 +96,7 @@ impl TraceUnfold<SuBitGraph> for SpinneyWood {
 }
 
 impl SpinneyWood {
+    #[allow(dead_code)]
     pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: impl AsRef<HedgeGraph<E, V, H>>,
@@ -142,9 +141,9 @@ impl SpinneyWood {
 
                         // println!("//{nsink}:{}", reduced_subgraph.string_label());
                     }
-                    return e.map(|_| reduced_subgraph);
+                    e.map(|_| reduced_subgraph)
                 } else {
-                    return e.map(|_| sink_subgraph.clone());
+                    e.map(|_| sink_subgraph.clone())
                 }
             },
             |_, d| d,
@@ -202,7 +201,7 @@ impl SpinneyWood {
                 |_, _, _, _, e| e,
                 |_, h| h,
             ),
-            root: self.root.clone(),
+            root: self.root,
             compute_store: AHashMap::new(),
         }
     }
@@ -248,7 +247,7 @@ impl Display for OperationNode {
 
             self.key.write_foata_like(f, |op| {
                 if let Some(a) = &mut acc {
-                    a.union_with(&op);
+                    a.union_with(op);
                 } else {
                     acc = Some(op.clone());
                 }

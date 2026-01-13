@@ -11,6 +11,7 @@ use color_eyre::{Result, Section};
 use tracing::info;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
+#[derive(Default)]
 pub struct Inspect {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]
@@ -43,19 +44,6 @@ pub struct Inspect {
     pub discrete_dim: Vec<usize>,
 }
 
-impl Default for Inspect {
-    fn default() -> Self {
-        Self {
-            process_id: None,
-            integrand_name: None,
-            point: vec![],
-            use_f128: false,
-            force_radius: false,
-            momentum_space: false,
-            discrete_dim: vec![],
-        }
-    }
-}
 
 impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
@@ -92,8 +80,8 @@ impl Inspect {
                     "Jacobian is zero at this point, cannot divide by zero."
                 ));
             }
-            let r = inspect_res_eval.map(|a| a.0 / jac);
-            r
+            
+            inspect_res_eval.map(|a| a.0 / jac)
         } else {
             inspect_res_eval.map(|a| a.into())
         };

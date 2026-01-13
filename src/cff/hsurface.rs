@@ -11,8 +11,8 @@ use symbolica::parse;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
-use super::esurface::ExternalShift;
 use super::esurface::Esurface;
+use super::esurface::ExternalShift;
 
 #[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct HsurfaceID(usize);
@@ -72,6 +72,7 @@ impl Hsurface {
         symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift
     }
 
+    #[allow(dead_code)]
     pub(crate) fn equality_under_energy_conservation(
         &self,
         other: &Esurface,
@@ -84,11 +85,9 @@ impl Hsurface {
         constraints
             .iter()
             .find(|esurface| {
-                let res = self
-                    .negative_energies
+                self.negative_energies
                     .iter()
-                    .all(|index| esurface.energies.contains(index));
-                res
+                    .all(|index| esurface.energies.contains(index))
             })
             .map(|constraint| {
                 let energies_to_be_added = constraint

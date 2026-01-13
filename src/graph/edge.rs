@@ -173,20 +173,12 @@ impl PossibleParticle {
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
+#[derive(Default)]
 pub struct EdgeExtraData {
     /// This controls the power of the momentum in the momtrop sampler. This does *not* affect other aspects of the treatment of the graph by gammaloop.
     pub momtrop_edge_power: Option<Atom>,
     /// This controls the power of the momentum in the vakint evaluation of the graph. This does *not* affect other aspects of the treatment of the graph by gammaloop.
     pub vakint_edge_power: Option<isize>,
-}
-
-impl Default for EdgeExtraData {
-    fn default() -> Self {
-        EdgeExtraData {
-            momtrop_edge_power: None,
-            vakint_edge_power: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
@@ -361,15 +353,12 @@ impl From<&Edge> for DotEdgeData {
             e.add_statement("is_dummy", value.is_dummy);
         }
 
-        value
-            .extra_data
-            .momtrop_edge_power
-            .as_ref()
-            .map(|mep| e.add_statement("momtrop_edge_power", mep.to_canonical_string()));
-        value
-            .extra_data
-            .vakint_edge_power
-            .map(|vak| e.add_statement("vakint_edge_power", vak));
+        if let Some(mep) = value.extra_data.momtrop_edge_power.as_ref() {
+            e.add_statement("momtrop_edge_power", mep.to_canonical_string())
+        }
+        if let Some(vak) = value.extra_data.vakint_edge_power {
+            e.add_statement("vakint_edge_power", vak)
+        }
 
         e
     }
@@ -536,6 +525,7 @@ impl ParseEdge {
             },
         }
     }
+    #[allow(clippy::type_complexity)]
     pub(crate) fn parse<'a>(
         model: &'a Model,
     ) -> impl FnMut(
@@ -561,7 +551,7 @@ impl ParseEdge {
             let dod = e
                 .get::<_, String>("dod")
                 .transpose()
-                .with_context(|| format!("Error parsing dod"))?
+                .with_context(|| "Error parsing dod".to_string())?
                 .map(|a| a.strip_parse())
                 .transpose()?;
             let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
