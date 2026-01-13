@@ -1112,36 +1112,57 @@ impl CrossSectionGraph {
                     }))
                     .chain([self.cuts[*cuts_in_group.last().unwrap()].right.clone()]);
 
-                let networks = graphs.map(|sandwich_subgraph| {
-                    let orientations = get_orientations_from_subgraph(
-                        &self.graph,
-                        &sandwich_subgraph,
-                        &reversed_dangling,
-                    )
-                    .into_iter()
-                    .map(|cff_graph| cff_graph.global_orientation)
-                    .collect::<TiVec<SubgraphOrientationID, _>>();
+                // here it is very important that no edges are repeated
+                let mut disjoint_cut_subgraphs = Vec::<Option<SuBitGraph>>::new();
 
-                    let wood = self.graph.wood(&sandwich_subgraph);
-                    let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+                for cut_id in cuts_in_group.iter() {
+                    let oriented_cut = &self.cuts[*cut_id].cut;
+                    let mut disjoint_cut_subgraph = oriented_cut.left.union(&oriented_cut.right);
+                    for subgraph in disjoint_cut_subgraphs.iter() {
+                        if let Some(existing_subgraph) = subgraph {
+                            disjoint_cut_subgraph.subtract_with(existing_subgraph);
+                        }
+                    }
 
-                    let constraint_data = ConstraintData {
-                        illegal_esurfaces: &illegal_esurfaces,
-                        constraints: &active_constraints,
-                    };
+                    disjoint_cut_subgraphs.push(Some(disjoint_cut_subgraph));
+                }
 
-                    forest.compute(
-                        &self.graph,
-                        &sandwich_subgraph,
-                        &vakint,
-                        &orientations,
-                        &canonize_esurface,
-                        &cut_edges,
-                        Some(constraint_data),
-                        &settings.uv,
-                        false,
-                    );
-                });
+                disjoint_cut_subgraphs.push(None);
+
+                let networks = graphs.zip(disjoint_cut_subgraphs).map(
+                    |(sandwich_subgraph, cut_edges_for_expr)| {
+                        let orientations = get_orientations_from_subgraph(
+                            &self.graph,
+                            &sandwich_subgraph,
+                            &reversed_dangling,
+                        )
+                        .into_iter()
+                        .map(|cff_graph| cff_graph.global_orientation)
+                        .collect::<TiVec<SubgraphOrientationID, _>>();
+
+                        let wood = self.graph.wood(&sandwich_subgraph);
+                        let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+                        let constraint_data = ConstraintData {
+                            illegal_esurfaces: &illegal_esurfaces,
+                            constraints: &active_constraints,
+                        };
+
+                        forest.compute(
+                            &self.graph,
+                            &sandwich_subgraph,
+                            &vakint,
+                            &orientations,
+                            &canonize_esurface,
+                            &cut_edges,
+                            Some(constraint_data),
+                            &settings.uv,
+                            false,
+                        );
+
+                        forest.orientation_parametric_expr(todo!(), &self.graph);
+                    },
+                );
             }
         }
 
