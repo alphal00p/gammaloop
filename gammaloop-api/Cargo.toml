@@ -30,6 +30,7 @@ required-features = ["cli"]
 default = ["cli", "python_api"]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
 python_api = ["ufo_support", "gammalooprs/python_api", "dep:numpy", "dep:pyo3-build-config"]
+python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
 python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
 cli = []
 
@@ -102,9 +103,8 @@ rust-embed = { version = "8.4", features = ["interpolate-folder-path"] }
 [dependencies.pyo3]
 version = "0.25"
 optional = true
-# If you ALSO ship a stable-ABI extension, keep abi3 flags.
-# If you only embed, you may drop "abi3" and "abi3-py37".
-features = ["auto-initialize", "abi3", "abi3-py37", "eyre"]
+# Stable ABI features are now feature-gated via python_abi feature
+features = ["auto-initialize", "eyre"]
 
 [dev-dependencies]
 tempfile = "3.8"

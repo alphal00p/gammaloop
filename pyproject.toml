@@ -50,7 +50,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [tool.maturin]
-features = ["python_api"]
+features = ["python_abi"]
 python-source = "gammaloop-api/python"
 module-name = "gammaloop._gammaloop"
 sdist-include = ["LICENSE.md", "README.md"]

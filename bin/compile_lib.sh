@@ -1,10 +1,30 @@
 #!/usr/bin/env bash
 RETCODE=0;
-echo "Building pyo3 library... ["$@"]"
-cargo build "$@" --lib --features="python_api";
+
+# Check if --stable-abi flag is passed
+STABLE_ABI=false
+CARGO_ARGS=()
+for arg in "$@"; do
+    case $arg in
+        --stable-abi)
+            STABLE_ABI=true
+            ;;
+        *)
+            CARGO_ARGS+=("$arg")
+            ;;
+    esac
+done
+
+if [ "$STABLE_ABI" = true ]; then
+    echo "Building pyo3 library with stable ABI... [${CARGO_ARGS[@]}]"
+    cargo build "${CARGO_ARGS[@]}" --lib --features="python_abi";
+else
+    echo "Building pyo3 library... [${CARGO_ARGS[@]}]"
+    cargo build "${CARGO_ARGS[@]}" --lib --features="python_api";
+fi
 RETCODE=$RETCODE+$?;
 rm -f ./python/gammaloop/_gammaloop.so;
-if [[ $1 = "--release" ]]  || [[ $1 = "--profile=release" ]]
+if [[ " ${CARGO_ARGS[@]} " =~ " --release " ]] || [[ " ${CARGO_ARGS[@]} " =~ " --profile=release " ]]
 then
     COMPILE_PATH="release"
 else

@@ -17,9 +17,17 @@
   ```bash
   just build-cli
   ```
+- Build Rust CLI with stable Python ABI:
+  ```bash
+  just build-cli-abi
+  ```
 - Build Python API bindings:
   ```bash
   just build-api
+  ```
+- Build Python API bindings with stable ABI:
+  ```bash
+  just build-api-abi
   ```
 - Run an example workflow:
   ```bash
@@ -59,6 +67,13 @@
 - Update the current change description with `jj describe -m "<description>"` as the plan evolves.
 - Use `jj diff` to see changed files.
 - Reference: https://jj-vcs.github.io/jj/prerelease/cli-reference/
+
+## Python API Features
+- `python_api`: Basic Python API support (default for `gammaloop-api`)
+- `python_abi`: Enables stable Python ABI (abi3) for cross-version compatibility
+  - Use for distribution builds that need to work across Python versions
+  - Adds some performance overhead compared to version-specific builds
+  - Not enabled by default - opt in with `--features python_abi`
 
 ## Agent Instructions
 

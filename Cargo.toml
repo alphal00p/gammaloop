@@ -180,7 +180,7 @@ json5 = "0.4.1"
 rug = { version = "1.27.0", features = ["serde"] }
 vakint = "0.1.2"
 [dependencies.pyo3]
-features = ["abi3", "abi3-py37", "eyre", "auto-initialize"]
+features = ["eyre", "auto-initialize"]
 optional = true
 version = "0.25"
 
@@ -196,6 +196,7 @@ bench = false
 [features]
 default = []
 python_api = ["pyo3"]
+python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
 # insta.opt-level = 3
 python_stubgen = ["python_api", "pyo3-stub-gen"]
 fjcore = []
