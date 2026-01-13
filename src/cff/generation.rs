@@ -362,8 +362,8 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
 
 #[derive(Copy, Clone, Debug)]
 pub struct ConstraintData<'a> {
-    constraints: &'a [&'a Esurface],
-    illegal_esurfaces: &'a [&'a Esurface],
+    pub constraints: &'a [&'a Esurface],
+    pub illegal_esurfaces: &'a [&'a Esurface],
 }
 
 pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(

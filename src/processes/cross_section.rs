@@ -29,7 +29,7 @@ use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
         expression::{AmplitudeOrientationID, SubgraphOrientationID},
-        generation::get_orientations_from_subgraph,
+        generation::{ConstraintData, get_orientations_from_subgraph},
     },
     define_index,
     gammaloop_integrand::{
@@ -1068,6 +1068,16 @@ impl CrossSectionGraph {
                     .filter(|cut| !cross_free_subset.contains(cut))
                     .collect_vec();
 
+                let illegal_esurfaces = complement
+                    .iter()
+                    .map(|cut_id| &self.cut_esurface[**cut_id])
+                    .collect::<Vec<_>>();
+
+                let active_constraints = cuts_in_group
+                    .iter()
+                    .map(|cut_id| &self.cut_esurface[*cut_id])
+                    .collect::<Vec<_>>();
+
                 let mut reversed_dangling = HashSet::default();
                 let mut cut_edges = HashSet::default();
 
@@ -1110,7 +1120,12 @@ impl CrossSectionGraph {
 
                     let wood = self.graph.wood(&sandwich_subgraph);
                     let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-                    let constraint_data = todo!();
+
+                    let constraint_data = ConstraintData {
+                        illegal_esurfaces: &illegal_esurfaces,
+                        constraints: &active_constraints,
+                    };
+
                     forest.compute(
                         &self.graph,
                         &sandwich_subgraph,
