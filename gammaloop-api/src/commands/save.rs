@@ -149,10 +149,10 @@ impl SaveState {
             // status_info!("Skipping saving state as per user request");
             return Ok(());
         }
-        println!(
-            "Saving state to {}..",
-            global_settings.state_folder.display()
-        );
+        // println!(
+        //     "Saving state to {}..",
+        //     global_settings.state_folder.display()
+        // );
         // let root_folder = root_folder.join("gammaloop_state");
 
         // check if the export root exists, if not create it, if it does return error

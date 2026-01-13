@@ -18,10 +18,10 @@ pub enum Import {
         path: PathBuf,
 
         // TODO Add the ability to specify process name, and even perhaps remove that of specifying process id
-        #[arg(short = 'i')]
+        #[arg(short = 'p')]
         process_id: Option<usize>,
 
-        #[arg(short = 'n')]
+        #[arg(short = 'i')]
         integrand_name: Option<String>,
 
         #[arg(short = 'o', default_value_t = false, conflicts_with = "append")]

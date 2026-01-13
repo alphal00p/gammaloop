@@ -2,6 +2,9 @@ use vergen::Emitter;
 use vergen_gitcl::GitclBuilder;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // if cfg!(feature = "python_api") {
+    //    pyo3_build_config::add_extension_module_link_args();
+    // }
     // if cfg!(feature = "fjcore") {
     //     println!("cargo:rustc-link-search=./python/gammaloop/dependencies/fjcore");
     //     println!("cargo:rustc-link-lib=stdc++");

@@ -7,7 +7,7 @@ authors = [
     "Mathijs Fraaije <mathijsfraaije@gmail.com>",
     "Lucien Huber <mail@lcnbr.ch>",
 ]
-license =  "MIT OR Apache-2.0"
+license = "MIT OR Apache-2.0"
 categories = ["science"]
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
 keywords = ["loop", "cross-section", "perturbative", "physics"]
@@ -29,7 +29,12 @@ required-features = ["cli"]
 # Keep Python optional unless explicitly enabled.
 default = ["cli", "python_api"]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
-python_api = ["ufo_support", "gammalooprs/python_api", "dep:numpy", "dep:pyo3-build-config"]
+python_api = [
+    "ufo_support",
+    "gammalooprs/python_api",
+    "dep:numpy",
+    "dep:pyo3-build-config",
+]
 python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
 python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
 cli = []
@@ -56,7 +61,7 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 tracing = "0.1.41"
 #symbolica = { version = "0.18.0", default-features = false }
-symbolica = { version="1", default-features = false, features = [
+symbolica = { version = "1", default-features = false, features = [
     "serde",
     "bincode",
 
@@ -111,6 +116,6 @@ tempfile = "3.8"
 
 [build-dependencies]
 walkdir = "2.5"
-pyo3-build-config = {version="0.25",optional=true}
+pyo3-build-config = { version = "0.25", optional = true }
 vergen = { version = "9", default-features = false }
 vergen-gitcl = "1"

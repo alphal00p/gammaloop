@@ -1325,20 +1325,23 @@ fn feyngen_from_spec_args(
 
     let number_of_fermion_loops = a
         .number_of_fermion_loops
-        .as_ref().map(|v| (v[0].max(0) as usize, v[1].max(0) as usize));
+        .as_ref()
+        .map(|v| (v[0].max(0) as usize, v[1].max(0) as usize));
 
     // Cut ranges (XS)
     let blob_range: RangeInclusive<usize> = {
         let (lo, hi) = a
             .n_cut_blobs
-            .as_ref().map(|v| (v[0], v[1]))
+            .as_ref()
+            .map(|v| (v[0], v[1]))
             .unwrap_or((1, 1));
         lo..=hi
     };
     let spectator_range: RangeInclusive<usize> = {
         let (lo, hi) = a
             .n_cut_spectators
-            .as_ref().map(|v| (v[0], v[1]))
+            .as_ref()
+            .map(|v| (v[0], v[1]))
             .unwrap_or((0, 0));
         lo..=hi
     };

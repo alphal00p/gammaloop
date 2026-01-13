@@ -734,6 +734,35 @@ impl GammaLoopAPI {
         .map_err(|e| exceptions::PyException::new_err(format!("Could not import model: {}", e)))
     }
 
+    #[pyo3(name="list_outputs", signature = ())]
+    pub(crate) fn list_outputs(
+        &mut self,
+    ) -> PyResult<(HashMap<String, usize>, HashMap<String, usize>)> {
+        let mut all_amplitudes = HashMap::new();
+        let mut all_cross_sections = HashMap::new();
+        for (p_id, p) in self
+            .gammaloop_state
+            .process_list
+            .processes
+            .iter()
+            .enumerate()
+        {
+            match &p.collection {
+                ProcessCollection::Amplitudes(amplitudes) => {
+                    amplitudes.keys().cloned().for_each(|amp| {
+                        all_amplitudes.insert(amp, p_id);
+                    });
+                }
+                ProcessCollection::CrossSections(cross_sections) => {
+                    cross_sections.keys().cloned().for_each(|cs| {
+                        all_cross_sections.insert(cs, p_id);
+                    });
+                }
+            }
+        }
+        Ok((all_amplitudes, all_cross_sections))
+    }
+
     #[pyo3(name="get_integrand_settings", signature = (process_id=None, integrand_name=None))]
     pub(crate) fn get_integrand_settings(
         &mut self,
