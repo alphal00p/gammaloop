@@ -18,7 +18,7 @@ use crate::{
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
     utils::{
-        F,
+        F, format_uncertainty,
         serde_utils::{
             _default_rotation_axis, _default_stability_levels, IsDefault, is_default_rotation_axis,
             is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
@@ -251,6 +251,94 @@ pub struct IntegrationResult {
     pub error: Complex<F<f64>>,
     pub real_chisq: F<f64>,
     pub im_chisq: F<f64>,
+}
+
+impl Display for IntegrationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Format real and imaginary parts with proper uncertainty formatting
+        let real_formatted = if self.error.re.0.abs() > 0.0 && f.alternate() {
+            format_uncertainty(self.result.re, self.error.re)
+        } else {
+            // If no error, use formatter precision or default to scientific notation
+            match f.precision() {
+                Some(p) => format!("{:.prec$e}", self.result.re.0, prec = p),
+                None => format!("{:e}", self.result.re.0),
+            }
+        };
+
+        let im_formatted = if self.error.im.0.abs() > 0.0 && f.alternate() {
+            format_uncertainty(self.result.im, self.error.im)
+        } else {
+            // If no error, use formatter precision or default to scientific notation
+            match f.precision() {
+                Some(p) => format!("{:.prec$e}", self.result.im.0, prec = p),
+                None => format!("{:e}", self.result.im.0),
+            }
+        };
+
+        // Display the result in a readable format
+        if self.result.im.0.abs() > 0.0 {
+            if f.alternate() {
+                write!(
+                    f,
+                    "{} + {}i (neval: {}, real_chisq: {:.3}, im_chisq: {:.3})",
+                    real_formatted, im_formatted, self.neval, self.real_chisq.0, self.im_chisq.0
+                )
+            } else {
+                write!(f, "{} + {}i", real_formatted, im_formatted,)
+            }
+        } else {
+            if f.alternate() {
+                write!(
+                    f,
+                    "{} (neval: {}, real_chisq: {:.3})",
+                    real_formatted, self.neval, self.real_chisq.0
+                )
+            } else {
+                write!(f, "{}", real_formatted)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spenso::algebra::complex::Complex;
+
+    #[test]
+    fn test_integration_result_display() {
+        let result = IntegrationResult {
+            neval: 1000000,
+            real_zero: 0,
+            im_zero: 0,
+            result: Complex::new(F(1.23456789e-3), F(4.56789e-5)),
+            error: Complex::new(F(1.2e-5), F(3.4e-7)),
+            real_chisq: F(1.05),
+            im_chisq: F(0.98),
+        };
+
+        let display_str = format!("{}", result);
+        println!("Integration result display: {}", display_str);
+
+        // Test with only real part
+        let real_only_result = IntegrationResult {
+            neval: 500000,
+            real_zero: 0,
+            im_zero: 0,
+            result: Complex::new(F(2.345e-2), F(0.0)),
+            error: Complex::new(F(1.5e-4), F(0.0)),
+            real_chisq: F(1.12),
+            im_chisq: F(0.0),
+        };
+
+        let real_display_str = format!("{}", real_only_result);
+        println!("Real-only result display: {}", real_display_str);
+
+        // Test with custom precision
+        let precision_str = format!("{:.2}", result);
+        println!("With precision 2: {}", precision_str);
+    }
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]

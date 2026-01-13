@@ -502,6 +502,43 @@ mod tests {
     }
 
     #[test]
+    fn sunrise() -> Result<()> {
+        test_initialise().unwrap();
+
+        let sunrise: Graph = dot!( digraph sunrise{
+            node [num = "1" dod=-100 ]
+            edge [dod=-100]
+            e        [style=invis]
+            e -> A:0   [ id=3 particle=scalar_1]
+            B:1 -> e   [ id=4 particle=scalar_1]
+            A -> B    [ id=0 particle=scalar_1]
+            A -> B    [ id=1 particle=scalar_1]
+            A -> B    [ id=2 particle=scalar_1]
+        },"scalars")?;
+        // let spinneys = spectacles.spinneys(&spectacles.full_filter());
+        let f = SpinneyWood::from_spinneys(
+            sunrise
+                .spinneys(&sunrise.full_filter())
+                .into_iter()
+                .map(|a| Spinney::new(a.filter, &sunrise)),
+            &sunrise,
+        );
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"1",
+        );
+        let f = f.unfold();
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"1",
+         );
+
+        Ok(())
+    }
+
+    #[test]
     fn spectacles() -> Result<()> {
         test_initialise().unwrap();
 

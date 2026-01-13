@@ -171,19 +171,19 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
         .unwrap();
 
-        for s in &all_subcycles {
-            println!("Subcycle: {}", self.as_ref().dot(s));
-        }
+        // for s in &all_subcycles {
+        //     println!("Subcycle: {}", self.as_ref().dot(s));
+        // }
 
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &all_subcycles,
             &|a, b| a.union(b),
             &|union| {
-                println!("{}", self.as_ref().dot(&union));
+                // println!("{}", self.as_ref().dot(&union));
                 if self.dod(&union) >= 0 {
                     Some(union)
                 } else {
-                    println!("Negative dod:{}", self.dod(&union));
+                    // println!("Negative dod:{}", self.dod(&union));
                     None
                 }
             },

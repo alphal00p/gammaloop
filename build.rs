@@ -7,9 +7,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     println!("cargo:rustc-link-lib=stdc++");
     // }
 
-    let git = GitclBuilder::default().branch(true).build()?;
-
-    Emitter::default().add_instructions(&git)?.emit()?;
+    #[cfg(not(test))]
+    {
+        let git = GitclBuilder::default().branch(true).build()?;
+        Emitter::default().add_instructions(&git)?.emit()?;
+    }
 
     // Help Cargo know when to rerun
     println!("cargo:rerun-if-changed=.git/HEAD");
