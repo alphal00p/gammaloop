@@ -119,34 +119,14 @@ impl From<HsurfaceID> for Atom {
 #[cfg(test)]
 mod tests {
 
-    use linnet::half_edge::{
-        HedgeGraph, NodeIndex,
-        builder::HedgeGraphBuilder,
-        involution::{EdgeIndex, Orientation},
-        subgraph::InternalSubGraph,
-    };
+    use linnet::half_edge::involution::EdgeIndex;
     use symbolica::atom::{Atom, AtomCore};
 
     use symbolica::parse;
-    use tabled::assert;
 
-    use crate::{
-        cff::{cff_graph::VertexSet, esurface::Esurface},
-        utils::F,
-    };
+    use crate::cff::{cff_graph::VertexSet, esurface::Esurface};
 
     use super::Hsurface;
-
-    fn dummy_hedge_graph(num_edges: usize) -> HedgeGraph<(), ()> {
-        let mut graph = HedgeGraphBuilder::new();
-        graph.add_node(());
-
-        for _ in 0..num_edges {
-            graph.add_edge(NodeIndex(0), NodeIndex(0), (), Orientation::Default);
-        }
-
-        graph.build()
-    }
 
     #[test]
     fn test_to_atom() {

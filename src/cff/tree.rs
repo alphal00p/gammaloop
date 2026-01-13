@@ -228,7 +228,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use dot_parser::canonical::Node;
 
     use crate::cff::tree::{NodeId, Tree};
 

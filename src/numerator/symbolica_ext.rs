@@ -144,10 +144,7 @@ mod tests {
             slot::{DummyAind, IsAbstractSlot, Slot},
         },
     };
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        function, parse_lit, symbol,
-    };
+    use symbolica::{atom::Atom, function, parse_lit, symbol};
 
     use crate::{
         dot,

@@ -1051,7 +1051,7 @@ fn parse_lmbsetting_crossection() {
 fn lmb() {
     test_initialise().unwrap();
 
-    let g: Vec<Graph> = dot!(
+    let _g: Vec<Graph> = dot!(
         digraph G{
             edge [num="1"]
             ext    [style=invis]

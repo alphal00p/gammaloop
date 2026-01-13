@@ -408,7 +408,6 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
 #[cfg(test)]
 mod test {
 
-    use clarabel::solver::default;
     // use env_logger::WriteStyle;
     use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
 
@@ -994,6 +993,6 @@ mod test {
             .unwrap();
         println!("{}", net.dot_pretty());
 
-        expr.simplify_gamma();
+        let _ = expr.simplify_gamma();
     }
 }

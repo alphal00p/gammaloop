@@ -1254,7 +1254,7 @@ fn test_threading() {
             let n_evals = n_samples
                 .iter()
                 .map(|s| match s {
-                    Sample::Continuous(wgt, xs) => test_fn(xs[0]),
+                    Sample::Continuous(_, xs) => test_fn(xs[0]),
                     _ => unreachable!(),
                 })
                 .collect_vec();

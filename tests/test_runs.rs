@@ -34,7 +34,7 @@ use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
 
 #[test]
 fn oak() -> Result<()> {
-    let mut state = get_test_cli(
+    let state = get_test_cli(
         Some("generate_oak_diag.toml".into()),
         get_tests_workspace_path().join("generate_oak_diag"),
         None,
@@ -45,7 +45,7 @@ fn oak() -> Result<()> {
 
 #[test]
 fn addbar() -> Result<()> {
-    let mut state = get_test_cli(
+    let state = get_test_cli(
         Some("addbar_generate.toml".into()),
         get_tests_workspace_path().join("addbar_generate"),
         None,
@@ -85,7 +85,7 @@ fn test_z_decay() -> Result<()> {
 
 #[test]
 fn test_epem_dd_dt() -> Result<()> {
-    let mut state = get_test_cli(
+    let state = get_test_cli(
         Some("test_epem_dd_dt.toml".into()),
         get_tests_workspace_path().join("test_epem_dd_dt"),
         None,

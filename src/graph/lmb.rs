@@ -885,7 +885,7 @@ pub mod test {
 
     use insta::assert_snapshot;
     use linnet::{
-        half_edge::subgraph::{SuBitGraph, SubGraphOps, SubSetOps},
+        half_edge::subgraph::{SuBitGraph, SubSetOps},
         parser::DotGraph,
     };
 

@@ -18,8 +18,6 @@ use spenso::structure::PermutedStructure;
 use spenso::structure::representation::Minkowski;
 use spenso::structure::representation::RepName;
 use spenso::tensors::data::DataTensor;
-use spenso::tensors::parametric::MixedTensor;
-use spenso::tensors::parametric::ParamOrConcrete;
 use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::gamma_data_weyl;
 use spenso_hep_lib::gamma5_weyl_data;
@@ -39,10 +37,9 @@ use crate::graph::FeynmanGraph;
 use crate::initialisation::test_initialise;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
-use crate::numerator::symbolica_ext::AtomCoreExt;
 use crate::settings::GlobalSettings;
 use crate::settings::global::Parallelisation;
-use crate::utils::F;
+
 use crate::utils::GS;
 use crate::uv::UltravioletGraph;
 // use crate::graph::BareGraph;
@@ -173,7 +170,7 @@ fn manual_lib<C: Into<Coefficient>>(
 fn gl_11_vs_gl_12() {
     test_initialise().unwrap();
 
-    let gl_12:Graph = dot!(
+    let _gl_12:Graph = dot!(
         digraph GL12{
             num = "1";
         overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
@@ -189,7 +186,7 @@ fn gl_11_vs_gl_12() {
         }
     ).unwrap();
 
-    let gl_11:Graph = dot!(
+    let _gl_11:Graph = dot!(
         digraph GL11{
             num = "1";
         overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
@@ -250,7 +247,7 @@ fn gl_11_vs_gl_12() {
     let pol_out = vec![(22, vec![61, 67, 71, 73])];
     let model = load_generic_model("sm");
 
-    let reps = vec![
+    let _reps = vec![
         Replacement::new(parse_lit!(UFO::MZ).to_pattern(), Atom::num(13)),
         Replacement::new(parse_lit!(UFO::ee).to_pattern(), Atom::num(17)),
         Replacement::new(parse_lit!(UFO::cw).to_pattern(), Atom::num(19)),

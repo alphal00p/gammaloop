@@ -138,8 +138,6 @@ mod tests {
     use insta::assert_snapshot;
     use linnet::permutation::Permutation;
 
-    use crate::utils::linnet_ext::FromMappings;
-
     #[test]
     fn test_from_mappings_complex() {
         // Test more complex displacement

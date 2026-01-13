@@ -1,17 +1,16 @@
-use bincode::de;
 use color_eyre::Result;
 
 mod test_utils;
-use gammaloop_api::{commands::save, state::SyncSettings};
+use gammaloop_api::state::SyncSettings;
+use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
 use gammalooprs::processes::ProcessCollection;
-use gammalooprs::{feyngen::diagram_generator::evaluate_overall_factor, status_info};
-use log::info;
+
 use symbolica::{
     atom::{Atom, AtomCore},
     printer::CanonicalOrderingSettings,
 };
-use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
+use test_utils::{get_test_cli, get_tests_workspace_path};
 use tracing::debug;
 
 use crate::test_utils::CLIState;
@@ -116,7 +115,7 @@ fn simple_epem_ddx_generation() -> Result<()> {
 
 #[test]
 fn from_symbolica() -> Result<()> {
-    let mut cli = get_test_cli(
+    let cli = get_test_cli(
         Some("epem_ddx.toml".into()),
         get_tests_workspace_path().join("epem_ddx"),
         Some("epem_ddx".to_string()),
@@ -511,14 +510,14 @@ fn test_vacuum_amplitude_generation() -> Result<()> {
 
     // DIFFERENT THAN OLD MAIN TARGETS
     // REVIEW BELOW
-    
+
     // // Including all graphs
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 ",false)?,@"6 | -19/24 = -19/24");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"5 | 5/24+Group(0,1,-1/2)+Group(5,1,-1/2) = -19/24");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"36 | -83/48 = -83/48");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"27 | 7/16+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(11,1,1/2)+Group(16,1,-1/2)+Group(19,1,-1/2)+Group(2,1,-1/4)+Group(3,1,-1/3)+Group(30,1,-1/4)+Group(31,1,-1/4)+Group(32,1,-1/3)+Group(33,1,-1/4)+Group(34,1,1/4)+Group(35,1,-1/2)+Group(4,1,1/4)+Group(5,1,-1/2)+Group(6,1,1/2)+Group(7,1,1/2) = -83/48");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"264 | -143/24 = -143/24");
-    // Old target in main: 
+    // Old target in main:
     // ('{} > {} | g ghg t u d QED==0 [{4}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', snapshot(179), snapshot('-731/168')),
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"178 | -13/24+Group(0,1,-1/8)+Group(1,1,-1/2)+Group(10,1,-1/8)+Group(100,1,1)+Group(101,1,1)+Group(105,1,1)+Group(107,1,1/2)+Group(11,1,-1/3)+Group(111,1,1/2)+Group(115,1,-1/2)+Group(119,1,-1/2)+Group(12,1,-1/2)+Group(126,1,1/6)+Group(127,7/2,1/6)+Group(13,1,-1/2)+Group(134,1,-1/2)+Group(135,1,-1/2)+Group(136,1,-1)+Group(137,1,-1/2)+Group(138,1,-1/4)+Group(139,1,-1/2)+Group(14,1,-1/2)+Group(140,1,-1)+Group(141,1,1/2)+Group(15,1,-1/2)+Group(153,1,1)+Group(154,1,-1/2)+Group(155,1,-1/2)+Group(156,1,-1/2)+Group(157,1,-1/4)+Group(158,1,-1)+Group(159,1,-1)+Group(16,1,-1/2)+Group(160,1,-1/2)+Group(161,1,1/2)+Group(162,1,-1/3)+Group(163,1,-1/3)+Group(169,1,-1/3)+Group(17,1,-1/2)+Group(170,1,-1/3)+Group(172,1,-1)+Group(175,1,-1)+Group(18,1,-1/4)+Group(184,1,-1/2)+Group(187,1,-1/2)+Group(19,1,-1/4)+Group(2,1,-1/4)+Group(21,1,-1/4)+Group(22,1,-1)+Group(228,1,1)+Group(229,1,1/2)+Group(23,1,1/4)+Group(230,1,1)+Group(231,1,-1/8)+Group(232,1,-1/2)+Group(233,1,-1/4)+Group(234,1,-1/8)+Group(235,1,-1/4)+Group(236,1,-1/8)+Group(237,1,-1/4)+Group(238,1,-1/8)+Group(239,1,-1/12)+Group(24,1,1/4)+Group(240,1,-1/4)+Group(241,1,-1/8)+Group(242,1,-1/3)+Group(243,1,-1/2)+Group(244,1,-1/2)+Group(245,1,-1/2)+Group(246,1,-1/2)+Group(247,1,-1/2)+Group(248,1,-1/2)+Group(249,1,-1/4)+Group(25,1,1/4)+Group(250,1,-1/4)+Group(252,1,-1/4)+Group(253,1,-1)+Group(254,1,1/4)+Group(255,1,1/4)+Group(256,1,1/4)+Group(257,1,1/8)+Group(258,1,-1)+Group(259,1,-1/6)+Group(26,1,1/8)+Group(260,1,1)+Group(261,1,-1/2)+Group(262,1,-1)+Group(263,1,1/6)+Group(264,7/2,1/6)+Group(265,1,1/2)+Group(266,1,1)+Group(267,1,-1/3)+Group(268,1,-1/2)+Group(269,1,-1/6)+Group(27,1,-1)+Group(28,1,-1/6)+Group(29,1,1)+Group(3,1,-1/8)+Group(30,1,-1/2)+Group(31,1,-1/2)+Group(32,1,1/6)+Group(33,7/2,1/6)+Group(34,1,-1)+Group(35,1,1/2)+Group(36,1,1)+Group(37,1,-1/3)+Group(38,1,-1/2)+Group(39,1,-1/6)+Group(4,1,-1/4)+Group(40,1,1/2)+Group(41,1,1/2)+Group(42,1,1/2)+Group(43,1,1/4)+Group(44,1,1)+Group(45,1,-1/2)+Group(46,7/2,1/3)+Group(47,1,1/3)+Group(48,1,1/2)+Group(49,1,1)+Group(5,1,-1/8)+Group(50,1,1/2)+Group(51,1,1/2)+Group(52,1,1)+Group(53,1,1/2)+Group(54,1,1/4)+Group(55,1,1/2)+Group(56,1,1)+Group(57,1,-1/2)+Group(58,1,1)+Group(6,1,-1/4)+Group(61,1,1)+Group(7,1,-1/8)+Group(79,1,-1)+Group(8,1,-1/12)+Group(80,1,1/2)+Group(81,1,1/2)+Group(82,1,1/2)+Group(83,1,1/4)+Group(84,1,1)+Group(85,1,1)+Group(86,1,1/2)+Group(87,1,-1/2)+Group(88,1,1/3)+Group(89,2/7,1/3)+Group(9,1,-1/4)+Group(90,1,1)+Group(91,1,-1/3)+Group(92,1,-1/3)+Group(98,1,1/3)+Group(99,2/7,1/3) = -731/168");
 
@@ -740,8 +739,8 @@ fn test_vaccuum_amplitude_generation_full_sm() -> Result<()> {
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"92 | -67/3 = -67/3");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"69 | -83/6+Group(18,1,-1)+Group(19,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(21,1,1)+Group(22,1,-1)+Group(23,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(25,1,-1)+Group(26,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(28,1,-1)+Group(29,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(31,1,-1)+Group(32,1,1)+Group(33,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(35,1,-1/2)+Group(36,1,-1/2)+Group(37,1,-1/2)+Group(38,3*G^2*ee^(-2),-1/2)+Group(39,3*G^2*ee^(-2),-1/2)+Group(40,3*G^2*ee^(-2),-1/2)+Group(48,1,-1/2)+Group(49,1,-1/2)+Group(50,1,-1/2)+Group(51,1,1/2)+Group(52,1,1/2)+Group(53,1,1/2)+Group(54,1,1/2)+Group(55,1,1)+Group(56,1,1)+Group(57,1,1/2)+Group(58,1,1/2)+Group(59,1,1/2)+Group(60,1,1/2)+Group(61,1,1)+Group(62,1,1)+Group(77,1/4,-1/2)+Group(78,1/4,-1/2)+Group(79,1,-1/2)+Group(80,3*G^2*ee^(-2),-1/2)+Group(81,3*G^2*ee^(-2),-1/2)+Group(82,12*G^2*ee^(-2),-1/2)+Group(85,1,-1/2)+Group(87,1,-1/2) = (conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-163/12+-27/2*G^2*ee^(-2)");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"3150 | -24703/48 = -24703/48");
-    
-    // The crash can be reproduced faster simply with:   
+
+    // The crash can be reproduced faster simply with:
     // Here a first test to test that this graph evaluates to 0 (Lorentz zero)
 
     // digraph GL0061{

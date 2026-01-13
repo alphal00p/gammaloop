@@ -1,7 +1,7 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
 use crate::cff::expression::{AmplitudeOrientationID, GraphOrientation};
-use crate::gammaloop_integrand::{GLIntegrand, GraphTerm};
+
 use crate::graph::edge::ParseEdge;
 use crate::graph::global::ParseData;
 use crate::graph::hedge_data::ParseHedge;
@@ -9,7 +9,7 @@ use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
-use crate::inspect::{self, inspect};
+use crate::inspect::inspect;
 use crate::momentum_sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::global::OrientationPattern;
@@ -17,14 +17,12 @@ use crate::settings::runtime::DiscreteGraphSamplingSettings;
 use crate::settings::{GlobalSettings, SamplingSettings};
 use crate::utils::symbolica_ext::TypstFormat;
 use crate::utils::{F, W_};
-use crate::uv::settings::VakintSettings;
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 use rand::Rng;
-use rayon::ThreadPool;
-use spenso::shadowing::symbolica_utils::AtomCoreExt;
+
 use symbolica::atom::Symbol;
 use symbolica::domains::float::Real;
 use symbolica::numerical_integration::MonteCarloRng;
@@ -32,9 +30,8 @@ use symbolica::symbol;
 
 use crate::{
     dot,
-    feyngen::FeynGenFilters,
     graph::{Graph, parse::IntoGraph},
-    processes::{CrossSection, CutId, ProcessDefinition},
+    processes::{CrossSection, CutId},
     settings::RuntimeSettings,
     settings::global::GenerationSettings,
     signature::LoopExtSignature,
@@ -72,8 +69,7 @@ fn four_photon_one_loop_amp() {
         ),
         uv: UVgenerationSettings {
             generate_integrated: true,
-            softct: todo!(),
-            vakint: VakintSettings::default(),
+            softct: true,
             ..Default::default()
         },
         ..Default::default()
@@ -99,7 +95,7 @@ fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
 fn scalar_bubble() {
     test_initialise().unwrap();
 
-    let mut g: Vec<Graph> = dot!(
+    let g: Vec<Graph> = dot!(
         digraph G{
             e        [style=invis]
             e -> A:0   [ id=0 particle=scalar_0]
@@ -174,7 +170,7 @@ fn scalar_bubble() {
     // }
 
     let integrand = amp.integrand.as_mut().unwrap();
-    integrand.warm_up(&model);
+    let _ = integrand.warm_up(&model);
 
     let mut settings = integrand.get_settings().clone();
 
@@ -247,7 +243,7 @@ fn scalar_bubble() {
 fn tta_uv() {
     test_initialise().unwrap();
 
-    let mut g: Vec<Graph> = dot!(
+    let g: Vec<Graph> = dot!(
         digraph G{
             e        [style=invis]
             e -> A:0   [ id=0 particle=t]
@@ -476,7 +472,7 @@ fn tri_box_tri_LU() {
 
     let hpdg = hp.pdg_code as i64;
     let tpdg = tp.pdg_code as i64;
-    let mut cs: CrossSection = CrossSection::new("".into());
+    let cs: CrossSection = CrossSection::new("".into());
     //    cs.preprocess(
     //        &model,
     //        &ProcessDefinition {
@@ -602,7 +598,7 @@ fn double_triangle_LU() {
 
     let graph = Graph::from_parsed(underlying, &model).unwrap();
 
-    let mut cs: CrossSection = CrossSection::new("".into());
+    let cs: CrossSection = CrossSection::new("".into());
     //    cs.add_supergraph(graph).unwrap();
     //
     //    let hpdg = hp.pdg_code as i64;

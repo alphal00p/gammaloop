@@ -185,7 +185,6 @@ impl Esurface {
                     } else {
                         F::from_f64(1.0)
                     };
-                    
 
                     signature.compute_momentum(
                         loop_moms,
@@ -299,7 +298,6 @@ impl Esurface {
                 //panic!("signature: {:?}", signature);
                 let momentum = signature.compute_momentum(loop_moms, &spatial_externals);
                 let mass = &masses[index];
-                
 
                 (momentum.norm_squared() + mass * mass).sqrt()
             })
@@ -630,7 +628,6 @@ impl Esurface {
                     .map(|i| function!(GS.emr_mom, usize::from(*index), i + 1))
                     .collect_vec();
 
-                
                 (&emr_symbols[0] * &emr_symbols[0]
                     + &emr_symbols[1] * &emr_symbols[1]
                     + &emr_symbols[2] * &emr_symbols[2]
@@ -655,7 +652,7 @@ impl Esurface {
             .map(|index| {
                 let mass_symbol = graph.underlying[*index].mass_atom();
                 let emr_symbol = function!(GS.emr_mom, usize::from(*index));
-                
+
                 (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt()
             })
             .chain(self.external_shift.iter().map(|(index, sign)| {
@@ -777,7 +774,7 @@ mod tests {
     fn test_esurface() {
         let dummy_graph = dummy_hedge_graph(5);
 
-        let energies_cache = dummy_graph
+        let _energies_cache = dummy_graph
             .new_edgevec_from_iter([F(1.), F(2.), F(3.), F(4.), F(5.)])
             .unwrap();
 
@@ -812,7 +809,7 @@ mod tests {
 
         let external_shift = vec![(EdgeIndex::from(1), -1)];
 
-        let esurface = Esurface {
+        let _esurface = Esurface {
             energies,
             external_shift,
             vertex_set: VertexSet::dummy(),
