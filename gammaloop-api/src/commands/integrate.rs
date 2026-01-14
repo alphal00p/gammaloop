@@ -26,15 +26,15 @@ use crate::{state::State, CLISettings};
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Integrate {
     /// The process id to inspect
-    #[arg(short = 'i', long = "process-id", value_name = "ID")]
+    #[arg(short = 'p', long = "process-id", value_name = "ID")]
     pub process_id: Option<usize>,
 
     /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    #[arg(short = 'i', long = "name", value_name = "NAME")]
     pub integrand_name: Option<String>,
 
     /// The path to store results in
-    #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
+    #[arg(short = 's', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
 
     /// Number of cores to parallelize over
@@ -91,8 +91,6 @@ impl Integrate {
             .process_list
             .find_integrand(self.process_id, self.integrand_name.as_ref())?;
 
-        state.process_list.processes[process_id].warm_up(&state.model)?;
-
         if self.restart && workspace_path.exists() {
             fs::remove_dir_all(&workspace_path)?;
         }
@@ -100,6 +98,8 @@ impl Integrate {
         let gloop_integrand = state
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
+
+        gloop_integrand.warm_up(&state.model)?;
 
         status_info!("Gammaloop now integrates {}", integrand_name.green().bold());
 
@@ -120,7 +120,7 @@ impl Integrate {
                 .expect("Could not deserialize state")
                 .0;
 
-                let path_to_workspace_settings = workspace_path.join("settings.toml");
+                let path_to_workspace_settings = workspace_path.join("settings.yaml");
 
                 let workspace_settings: RuntimeSettings =
                     RuntimeSettings::from_file(path_to_workspace_settings, "workspace settings")?;
