@@ -301,7 +301,7 @@ impl AmplitudeGraphTerm {
                 "Original integrand value"
             );
         }
-        status_debug!("Parameters from previous evaluation"; data = self.param_builder.clone());
+        // status_debug!("Parameters from previous evaluation"; data = self.param_builder.clone());
         debug!("params: \n{}", self.param_builder);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(

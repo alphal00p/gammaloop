@@ -11,7 +11,7 @@ use gammalooprs::{
     model::UFOSymbol,
     numerator::aind::Aind,
     status_info,
-    utils::{F, FUN_LIB, GS, TENSORLIB, W_},
+    utils::{ApproxEq, F, FUN_LIB, GS, TENSORLIB, W_},
 };
 use insta::assert_snapshot;
 use itertools::Itertools;
@@ -424,24 +424,31 @@ fn scalar_sunrise() -> Result<()> {
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-3.043e-3");
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(-4.37688e-03)), 1) // .result
+                                                                                         // .approx_eq(&Complex::new_re(F(-4.37688e-03)), &F(0.01))
+    );
+
+    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-4.359e-3");
 
     cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-1.455e-3");
+    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-2.474e-3");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.48100e-03)), 1));
 
     // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     // assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-4.5184321377520566e-4+0e0i)");
 
-    println!("Hey");
     clean_test(&cli.cli_settings.state_folder);
-    println!("Hello");
 
     Ok(())
 }
 #[test]
 fn scalar_sunrise_inspect() -> Result<()> {
+    symbolica::GLOBAL_SETTINGS
+        .initialize_tracing
+        .store(false, std::sync::atomic::Ordering::Relaxed);
     let mut cli = get_test_cli(
         Some("scalar_sunrise.toml".into()),
         get_tests_workspace_path().join("scalar_sunrise"),
@@ -450,6 +457,8 @@ fn scalar_sunrise_inspect() -> Result<()> {
     )?;
 
     let point = vec![1., 1., 1., 2., 3., 4.];
+
+    let point = vec![1., 1., 1., -3., -4., -5.];
 
     let point = vec![2., 3., 4., 1., 1., 1.];
     let mut ins = Inspect {
@@ -543,22 +552,22 @@ fn scalar_sunrise_inspect() -> Result<()> {
     -4.41097e-5+i-0.00000e0
     -1.54032e-4+i-0.00000e0
     -1.57503e-4+i-0.00000e0
-    -1.02668e-4+i-0.00000e0
-    4.35904e-5+i-0.00000e0
-    1.48827e-4+i-0.00000e0
-    1.01445e-4+i-0.00000e0
-    5.41516e-5+i-0.00000e0
+    -7.17631e-5+i-0.00000e0
+    4.21936e-5+i-0.00000e0
+    1.40322e-4+i-0.00000e0
+    8.50437e-5+i-0.00000e0
+    5.87544e-5+i-0.00000e0
     ");
     insta::assert_snapshot!(string_with_prefactor(&[r1_10,r2_10,r3_10,r4_10,r5_10,r6_10,r7_10,r8_10,rall_10]),@"
     2.66555e-8+i-0.00000e0
     -1.11736e-8+i-0.00000e0
     -3.96106e-7+i-0.00000e0
     -4.55447e-8+i-0.00000e0
-    -2.66509e-8+i-0.00000e0
-    1.11736e-8+i-0.00000e0
-    3.96106e-7+i-0.00000e0
-    4.55388e-8+i-0.00000e0
-    -1.38560e-12+i-0.00000e0
+    -2.65802e-8+i-0.00000e0
+    1.11735e-8+i-0.00000e0
+    3.96096e-7+i-0.00000e0
+    4.54492e-8+i-0.00000e0
+    -3.03929e-11+i-0.00000e0
     ");
     insta::assert_snapshot!(string_with_prefactor(&[r1_100,r2_100,r3_100,r4_100,r5_100,r6_100,r7_100,r8_100,rall_100]),@"
     2.67150e-12+i-0.00000e0
@@ -569,7 +578,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
     1.13180e-12+i-0.00000e0
     4.46155e-11+i-0.00000e0
     4.62050e-12+i-0.00000e0
-    -1.80760e-22+i-0.00000e0
+    -3.63173e-19+i-0.00000e0
     ");
     // clean_test(&cli.cli_settings.state_folder);
 
@@ -889,6 +898,19 @@ fn test_qqx_aaa_ir_tree_user_numerator_inspect() -> Result<()> {
 
     let target = Complex::new(1.47276041641056e-4, -1.1503139369130214e-3);
     assert_eq!(inspect, target);
+    Ok(())
+}
+
+#[test]
+fn epemttb_generate() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("epemttbar.toml".into()),
+        get_tests_workspace_path().join("epemttbar"),
+        None,
+        true,
+    )
+    .unwrap();
+
     Ok(())
 }
 

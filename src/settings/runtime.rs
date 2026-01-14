@@ -5,7 +5,8 @@ use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spenso::algebra::complex::Complex;
+use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
+use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -18,13 +19,14 @@ use crate::{
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
     utils::{
-        F, format_uncertainty,
+        ApproxEq, F, format_uncertainty,
         serde_utils::{
             _default_rotation_axis, _default_stability_levels, IsDefault, is_default_rotation_axis,
             is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
         },
     },
 };
+use symbolica::domains::float::Real;
 
 use super::{RuntimeSettings, global::OrientationPattern};
 
@@ -301,6 +303,23 @@ impl Display for IntegrationResult {
                 write!(f, "{}", real_formatted)
             }
         }
+    }
+}
+
+impl IntegrationResult {
+    pub fn is_compatible_with_target(&self, target: Complex<F<f64>>, sigma: i8) -> bool {
+        let res_norm = self.result.norm().re;
+        let tolerance = if res_norm.is_zero() {
+            self.error.norm().re
+        } else {
+            (self.error).norm().re * F(sigma as f64) / res_norm
+        };
+
+        if tolerance.0 > 0.1 {
+            warn!("Tolerance larger than 10%! {}", tolerance)
+        }
+        // println!("Tol: {}", tolerance.0);
+        self.result.approx_eq(&target, &tolerance)
     }
 }
 

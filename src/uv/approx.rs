@@ -18,11 +18,11 @@ use crate::{
     uv::UVgenerationSettings,
 };
 use ahash::AHashSet;
-use idenso::{gamma::GammaSimplifier, metric::MS};
-use log::debug;
+use idenso::gamma::GammaSimplifier;
+use tracing::debug;
 
 use spenso::{
-    network::parsing::SPENSO_TAG,
+    network::library::TensorLibraryData,
     structure::{
         representation::{Minkowski, RepName},
         slot::{DummyAind, IsAbstractSlot, Slot},
@@ -30,7 +30,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    function, parse, symbol,
+    function, parse, parse_lit, symbol,
 };
 
 use linnet::half_edge::{
@@ -798,6 +798,7 @@ impl Approximation {
         );
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn local_3d<E: UVE, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
         &self,
         dependent: &Self,
@@ -818,7 +819,12 @@ impl Approximation {
                 cff = cff.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
                 let e_mass = e.data.mass_atom();
-                cff = cff.replace(GS.ose(ei)).with(GS.ose_full(ei, e_mass, None));
+                cff = cff.replace(GS.ose(ei)).with(GS.ose_full(
+                    ei,
+                    e_mass,
+                    None,
+                    settings.inner_products,
+                ));
             }
         }
 
@@ -834,7 +840,7 @@ impl Approximation {
         for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass));
+                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
             }
         }
 
@@ -860,6 +866,8 @@ impl Approximation {
         // }
 
         atomarg = atomarg.replace_multiple(&mom_reps);
+
+        // debug!("Before rescaling loop momenta {}",);
 
         // rescale the loop momenta in the whole subgraph, including previously expanded cycles
         for e in &self.lmb.loop_edges {
@@ -934,14 +942,60 @@ impl Approximation {
             * Atom::var(GS.rescale).npow(3 * uv_graph.n_loops(&self.subgraph) as i64))
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
+        // .replace(Atom::var(GS.rescale).npow(2).sqrt()) //.npow((1, 2)))
+        // .with(GS.rescale)
+        // .replace((Atom::var(GS.rescale).npow(-2) * W_.a___).npow((1, 2))) //.npow((1, 2)))
+        // .repeat()
+        // .with((Atom::var(W_.a___)).sqrt() / GS.rescale)
+        // .replace((Atom::var(GS.rescale).npow(2) * W_.a___).npow((-1, 2))) //.npow((1, 2)))
+        // .repeat()
+        // .with((Atom::var(W_.a___)).npow((-1, 2)) / GS.rescale)
+        // .replace((Atom::var(GS.rescale).npow(-2) * W_.a___).npow((-1, 2))) //.npow((1, 2)))
+        // .repeat()
+        // .with((Atom::var(W_.a___)).npow((-1, 2)) * GS.rescale)
+        // .replace((Atom::var(GS.rescale).npow(2) * W_.a___).npow((1, 2))) //.npow((1, 2)))
+        // .repeat()
+        // .with((Atom::var(W_.a___)).npow((1, 2)) * GS.rescale);
 
         // println!("atomarg:{:>}", atomarg.expand());
 
         // println!("Series expanding {atomarg}");
+        //
+        let t = Atom::var(GS.rescale);
+        debug!(
+            atom = %atomarg,
+            "Series expanding {} up to dod {}:{}",
+            self.simple_approx
+                .as_ref()
+                .unwrap()
+                .expr(&graph.full_filter()),
+            self.dod,
+            // orientations
+            //     .first()
+            //     .unwrap()
+            //     .select(&
+            atomarg.collect_multiple::<i8>(&[t], None, None)
+                .replace(function!(GS.theta, W_.a_))
+                .with(Atom::one())
+                // .replace(GS.m_uv)
+                // .with(Atom::Zero)
+                // .replace(parse_lit!(UFO::mass_scalar_1))
+                // .with(Atom::Zero)
+                .replace((Atom::var(GS.rescale).npow(-2) * W_.a_).npow((1, 2))) //.npow((1, 2)))
+                .repeat()
+                .with((Atom::var(W_.a_)).sqrt() / GS.rescale)
+                .collect_factors()
+                .collect_num()
+                .typst_string() // printer(LOGPRINTOPTS)
+        );
 
         let mut a = atomarg
-            .series(GS.rescale, Atom::Zero, self.dod.into(), true)
-            .unwrap()
+            .series(GS.rescale, Atom::Zero, 0.into(), true)
+            .unwrap();
+
+        // debug!("Series: {}", a);
+
+        let mut a = a
             .to_atom()
             .replace(parse!("der(0,0,0,1, OSE(y__))"))
             .with(Atom::num(1))
@@ -1069,15 +1123,29 @@ impl Approximation {
 
         resnum = resnum.replace_multiple(&reps);
         resnum *= cff;
-        resnum = GS.to_broadcasting_sqrt(resnum.wrap_color(GS.color_wrap));
+        resnum = resnum.wrap_color(GS.color_wrap);
 
         debug!(
-            "Integrand before parsing for {}:{}",
+            "Integrand before parsing for {} for dod{}:{}",
             self.simple_approx
                 .as_ref()
                 .unwrap()
                 .expr(amplitude.included()),
-            resnum.typst_string() // printer(LOGPRINTOPTS)
+            self.dod,
+            // orientations
+            //     .first()
+            //     .unwrap()
+            //     .select(&
+            resnum
+                .replace(function!(GS.theta, W_.a_))
+                .with(Atom::one())
+                .replace(GS.m_uv)
+                .with(Atom::Zero)
+                .replace(parse_lit!(UFO::mass_scalar_1))
+                .with(Atom::Zero)
+                .collect_factors()
+                .collect_num()
+                .typst_string() // printer(LOGPRINTOPTS)
         );
         let mut res = resnum.parse_into_net().unwrap();
         // debug!("Final Integrand Net:{}", res.dot_pretty());
