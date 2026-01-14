@@ -108,6 +108,22 @@ impl Hsurface {
                 other == &new_esurface
             })
     }
+
+    pub fn equality_by_try_convert(&self, other: &Esurface) -> bool {
+        let negative_as_external_shift = self
+            .negative_energies
+            .iter()
+            .map(|e| (*e, -1))
+            .collect_vec();
+
+        let self_as_esurface = Esurface {
+            energies: self.positive_energies.clone(),
+            external_shift: negative_as_external_shift,
+            vertex_set: VertexSet::dummy(),
+        };
+
+        self_as_esurface == *other
+    }
 }
 
 impl From<HsurfaceID> for Atom {

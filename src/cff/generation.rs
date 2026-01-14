@@ -409,7 +409,12 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
                 constraint_data
                     .illegal_esurfaces
                     .iter()
-                    .all(|illegal_esurface| esurface_to_compare != *illegal_esurface)
+                    .all(|illegal_esurface| {
+                        println!("illegal_esurface: {:#?}", illegal_esurface);
+                        println!("esurface_to_compare: {:#?}", esurface_to_compare);
+                        let res = esurface_to_compare != *illegal_esurface;
+                        res
+                    })
             }
             HybridSurfaceID::Hsurface(hsurface_id) => {
                 let hsurface_to_compare = &surface_cache.hsurface_cache[*hsurface_id];
@@ -422,7 +427,9 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
                                 *illegal_esurface,
                                 constraint_data.constraints,
                             )
-                            .unwrap_or(false)
+                            .unwrap_or(
+                                hsurface_to_compare.equality_by_try_convert(*illegal_esurface),
+                            )
                     })
             }
             HybridSurfaceID::Unit => true,

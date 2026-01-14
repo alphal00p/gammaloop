@@ -222,6 +222,9 @@ where
     }
 
     pub(crate) fn to_atom_inv(&self) -> Atom {
+        if self.nodes.is_empty() {
+            return Atom::num(0);
+        }
         self.to_atom_inv_impl(NodeId::root())
     }
 }

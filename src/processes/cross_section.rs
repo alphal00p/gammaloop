@@ -668,6 +668,7 @@ impl CrossSectionGraph {
         }
         debug!("building parametric integrand");
         self.build_parametric_integrand(settings)?;
+        //self.build_parametric_integrand_raised_cuts(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
@@ -1099,23 +1100,23 @@ impl CrossSectionGraph {
                 let reversed_dangling = reversed_dangling.into_iter().sorted().collect_vec();
                 let cut_edges = cut_edges.into_iter().sorted().collect_vec();
 
-                let graphs = [self.cuts[*cuts_in_group.first().unwrap()].left.clone()]
+                // build the graphs that are sandwiched between the cuts, this is done by taking the left side of the first cut, and intersect it with the right side of the second cut, etc.
+                // The cuts are non-crossing and sorted from left to right, so this is well defined.
+                let graphs = [self.cuts[*cross_free_subset.first().unwrap()].left.clone()]
                     .into_iter()
                     .chain(cross_free_subset.windows(2).map(|sequential_cuts| {
                         let left_of_first_cut = &self.cuts[sequential_cuts[0]].left;
                         let right_of_second_cut = &self.cuts[sequential_cuts[1]].right;
 
-                        self.graph
-                            .full_filter()
-                            .subtract(left_of_first_cut)
-                            .subtract(right_of_second_cut)
+                        left_of_first_cut.intersection(right_of_second_cut)
                     }))
-                    .chain([self.cuts[*cuts_in_group.last().unwrap()].right.clone()]);
+                    .chain([self.cuts[*cross_free_subset.last().unwrap()].right.clone()]);
 
-                // here it is very important that no edges are repeated
+                // These are used to add the feynman rules of the cuts, so it is important that each edge is only added once.
+                // We therefore delete the edges that have already been added in previous cuts.
                 let mut disjoint_cut_subgraphs = Vec::<Option<SuBitGraph>>::new();
 
-                for cut_id in cuts_in_group.iter() {
+                for cut_id in cross_free_subset.iter() {
                     let oriented_cut = &self.cuts[*cut_id].cut;
                     let mut disjoint_cut_subgraph = oriented_cut.left.union(&oriented_cut.right);
                     for subgraph in disjoint_cut_subgraphs.iter() {
@@ -1129,8 +1130,19 @@ impl CrossSectionGraph {
 
                 disjoint_cut_subgraphs.push(None);
 
-                let networks = graphs.zip(disjoint_cut_subgraphs).map(
-                    |(sandwich_subgraph, cut_edges_for_expr)| {
+                let mut product = graphs
+                    .zip(disjoint_cut_subgraphs)
+                    .map(|(sandwich_subgraph, disjoint_cut_edges)| {
+                        // println!(
+                        //     "subgraph: {}",
+                        //     self.graph
+                        //         .to_dot_graph_with_settings(&DotExportSettings {
+                        //             split_xs_by_initial_states: true,
+                        //             ..Default::default()
+                        //         })
+                        //         .dot(&sandwich_subgraph)
+                        // );
+
                         let orientations = get_orientations_from_subgraph(
                             &self.graph,
                             &sandwich_subgraph,
@@ -1148,6 +1160,8 @@ impl CrossSectionGraph {
                             constraints: &active_constraints,
                         };
 
+                        println!("constraint_data: {:?}", constraint_data);
+
                         forest.compute(
                             &self.graph,
                             &sandwich_subgraph,
@@ -1160,12 +1174,54 @@ impl CrossSectionGraph {
                             false,
                         );
 
-                        forest.orientation_parametric_expr(todo!(), &self.graph);
-                    },
+                        forest.orientation_parametric_expr(disjoint_cut_edges.as_ref(), &self.graph)
+                    })
+                    .reduce(|product, network| product * network)
+                    .unwrap()
+                    * tree_structure.clone()
+                    * global_num.clone();
+
+                product
+                    .execute::<Sequential, SmallestDegree, _, _, _>(
+                        TENSORLIB.read().unwrap().deref(),
+                        FUN_LIB.deref(),
+                    )
+                    .unwrap();
+
+                let scalar: Atom = product
+                    .result_scalar()
+                    .with_context(|| "in building LU integrand")?
+                    .into();
+
+                let mut integrand = scalar
+                    .unwrap_function(GS.color_wrap)
+                    .simplify_color()
+                    .replace(function!(GS.energy, W_.x_))
+                    .with(function!(GS.ose, W_.x_))
+                    .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
+                    .with(function!(GS.theta, W_.x_));
+
+                for (_, edge_index, _) in self
+                    .graph
+                    .underlying
+                    .iter_edges_of(&self.graph.initial_state_cut)
+                {
+                    integrand = integrand
+                        .replace(GS.ose(edge_index))
+                        .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
+                }
+
+                integrand = integrand.replace_multiple(&replacements);
+                let prefactor = self.lu_prefactor_helper_new();
+                let integrand_with_prefactor = prefactor * integrand;
+                println!(
+                    "integrand for raised cut group {}, cuts {:?}: {}",
+                    raised_cut_id.0, cross_free_subset, integrand_with_prefactor
                 );
             }
         }
 
+        todo!("organize integrands");
         Ok(())
     }
 
@@ -1309,6 +1365,19 @@ impl CrossSectionGraph {
         let tsrat_pow = tstar.npow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);
         tsrat_pow * hfunction / factors_of_pi / grad_eta
+    }
+
+    fn lu_prefactor_helper_new(&self) -> Atom {
+        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
+            - self.graph.initial_state_cut.nedges(&self.graph);
+
+        let loop_3 = loop_number as i64 * 3;
+        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3 - 1); // multiply with 2pi from energy conservation delta
+
+        let tstar = Atom::var(GS.rescale_star);
+        let tsrat_pow = tstar.npow(loop_3);
+        let hfunction = Atom::var(GS.hfunction_lu_cut);
+        tsrat_pow * hfunction / factors_of_pi
     }
 
     fn th_prefactor_helper(
@@ -1905,13 +1974,9 @@ impl CrossSectionDerivedData {
 fn test_template() {
     println!("result: {}", build_derivative_structure(1));
     println!("result: {}", build_derivative_structure(2));
-    println!(
-        "result: {}",
-        (Atom::num(2) * parse!("der(1,η(t⃰))^5") * build_derivative_structure(3)).expand()
-    );
+    println!("result: {}", build_derivative_structure(3));
 }
 
-#[allow(dead_code)]
 fn build_derivative_structure(order: u8) -> Atom {
     let order = order as i32;
     let f = symbol!("f");
@@ -1925,7 +1990,7 @@ fn build_derivative_structure(order: u8) -> Atom {
         )
         .unwrap()
         .to_atom()
-        .replace(function!(symbol!("η"), GS.rescale_star).to_pattern())
+        .replace(function!(symbol!("η"), GS.rescale_star))
         .level_range((0, Some(0)))
         .with(0);
 
