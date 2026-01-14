@@ -218,11 +218,12 @@ impl Profile {
                 };
 
                 // Follow inspect pattern for integrand access
-                state.process_list.processes[proc_id].warm_up(&state.model)?;
 
                 let integrand = state
                     .process_list
                     .get_integrand_mut(proc_id, integrand_name.clone())?;
+
+                integrand.warm_up(&state.model)?;
 
                 println!(
                     "Running UV profile analysis on integrand '{}'",

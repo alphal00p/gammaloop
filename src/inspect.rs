@@ -10,7 +10,6 @@ use crate::integrands::HasIntegrand;
 use crate::model::Model;
 use crate::momentum::ThreeMomentum;
 use crate::settings::RuntimeSettings;
-use crate::status_info;
 use crate::utils;
 use crate::utils::F;
 use crate::utils::f128;
@@ -44,7 +43,7 @@ pub fn inspect<I: HasIntegrand>(
             force_radius,
         );
 
-        status_info!(
+        info!(
             "f128 sampling jacobian for this point = {:+.32e}",
             FloatLike::inv(&inv_jac)
         );
@@ -73,7 +72,7 @@ pub fn inspect<I: HasIntegrand>(
         integrand.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero());
     let eval = eval_result.integrand_result;
 
-    status_info!(
+    info!(
         "\nInput point in unit hypercube xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
         format!(
             "( {} )",
