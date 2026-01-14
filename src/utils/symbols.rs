@@ -8,7 +8,7 @@ use spenso::{
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
-        representation::{Minkowski, RepName},
+        representation::{Minkowski, RepName, Representation},
         slot::{DummyAind, IsAbstractSlot, Slot},
     },
 };
@@ -300,7 +300,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
-    rescale: symbol!("t"),
+    rescale: symbol!("t";Scalar),
     _linear: symbol!("_linear";Linear),
     linearize: symbol!(
         "linearize",
@@ -543,13 +543,13 @@ impl GammaloopSymbols {
         let eidc = usize::from(e) as i64;
         let m2 = &e_mass * &e_mass;
 
-        let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+        let mink: Representation<Minkowski> = Minkowski {}.new_rep(4); //.slot(Aind::new_dummy());
         let ose = function!(
             self.ose,
             eidc,
             GS.emr_vec(e),
             m2,
-            (m2 - self.emr_vec_index(e, mink.to_atom()) * self.emr_vec_index(e, mink.to_atom()))
+            (m2 - mink.inner_product(self.emr_vec(e), self.emr_vec(e)))
         )
         .npow((1, 2));
 

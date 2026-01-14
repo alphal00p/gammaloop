@@ -11,16 +11,22 @@ use crate::{
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
     status_info,
-    utils::{GS, W_, symbolica_ext::LOGPRINTOPTS},
+    utils::{
+        GS, W_,
+        symbolica_ext::{CallSymbol, LOGPRINTOPTS, TypstFormat},
+    },
     uv::UVgenerationSettings,
 };
 use ahash::AHashSet;
 use idenso::{gamma::GammaSimplifier, metric::MS};
 use log::debug;
 
-use spenso::structure::{
-    representation::{Minkowski, RepName},
-    slot::{DummyAind, IsAbstractSlot, Slot},
+use spenso::{
+    network::parsing::SPENSO_TAG,
+    structure::{
+        representation::{Minkowski, RepName},
+        slot::{DummyAind, IsAbstractSlot, Slot},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
@@ -33,7 +39,7 @@ use linnet::half_edge::{
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 
-use tracing::info;
+use tracing::{info, instrument};
 use typed_index_collections::TiVec;
 use vakint::{Vakint, vakint_symbol};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
@@ -273,17 +279,17 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
     debug!("Integrand pre dot vakint: {:}", integrand_vakint);
     // rewrite numerator
     // linearize the numerator first
-    // integrand_vakint = integrand_vakint
-    //     .replace(function!(GS.emr_mom, W_.prop_, W_.a___))
-    //     .with(GS.linearize.f(&[function!(GS.emr_mom, W_.a___)]));
+    integrand_vakint = integrand_vakint
+        .replace(function!(GS.emr_mom, W_.prop_, W_.a___))
+        .with(GS.linearize.f(&[function!(GS.emr_mom, W_.a___)]));
 
     // // rewrite numerator
     // // linearize the numerator first
-    integrand_vakint = integrand_vakint
-        .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
-        .with(function!(MS.dot, W_.mom_, W_.x_))
-        .replace(function!(MS.dot, W_.mom_, W_.x_))
-        .with(function!(GS.emr_mom, W_.mom_, W_.x_));
+    // integrand_vakint = integrand_vakint
+    //     .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
+    //     .with(function!(SPENSO_TAG.dot, W_.mom_, W_.x_))
+    //     .replace(function!(SPENSO_TAG.dot, W_.mom_, W_.x_))
+    //     .with(function!(GS.emr_mom, W_.mom_, W_.x_));
 
     debug!("Integrand pre vakint: {:}", integrand_vakint);
     // panic!("FUFU");
@@ -433,6 +439,7 @@ impl Approximation {
             constraint_data,
         );
         self.integrated_4d = ApproxOp::Root;
+        self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
         self.final_integrand = self.final_integrand(
             graph,
             amplitude,
@@ -441,7 +448,6 @@ impl Approximation {
             cut_edges,
             constraint_data,
         );
-        self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()))
     }
 
     pub(crate) fn new<G, E, V, H>(
@@ -589,10 +595,10 @@ impl Approximation {
                 ));
         }
 
-        atomarg = atomarg
-            .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
-            .repeat()
-            .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
+        // atomarg = atomarg
+        //     .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
+        //     .repeat()
+        //     .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
 
         // println!("atomarg:{}", atomarg);
 
@@ -842,7 +848,13 @@ impl Approximation {
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
-        // println!("Reps:");
+        // println!(
+        //     "Mom Reps : for {}",
+        //     self.simple_approx
+        //         .as_ref()
+        //         .unwrap()
+        //         .expr(&graph.full_filter())
+        // );
         // for r in &mom_reps {
         //     println!("{r}");
         // }
@@ -913,10 +925,10 @@ impl Approximation {
             }
         }
 
-        atomarg = atomarg
-            .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
-            .repeat()
-            .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
+        // atomarg = atomarg
+        //     .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
+        //     .repeat()
+        //     .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
 
         atomarg = (atomarg
             * Atom::var(GS.rescale).npow(3 * uv_graph.n_loops(&self.subgraph) as i64))
@@ -925,7 +937,7 @@ impl Approximation {
 
         // println!("atomarg:{:>}", atomarg.expand());
 
-        // println!("Series expanding");
+        // println!("Series expanding {atomarg}");
 
         let mut a = atomarg
             .series(GS.rescale, Atom::Zero, self.dod.into(), true)
@@ -968,6 +980,7 @@ impl Approximation {
         a
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn final_integrand<
         G,
         H,
@@ -1058,9 +1071,16 @@ impl Approximation {
         resnum *= cff;
         resnum = GS.to_broadcasting_sqrt(resnum.wrap_color(GS.color_wrap));
 
-        debug!("Integrand before parsing:{}", resnum.printer(LOGPRINTOPTS));
+        debug!(
+            "Integrand before parsing for {}:{}",
+            self.simple_approx
+                .as_ref()
+                .unwrap()
+                .expr(amplitude.included()),
+            resnum.typst_string() // printer(LOGPRINTOPTS)
+        );
         let mut res = resnum.parse_into_net().unwrap();
-        debug!("Final Integrand Net:{}", res.dot_pretty());
+        // debug!("Final Integrand Net:{}", res.dot_pretty());
         res = res.replace_multiple(&reps);
 
         // .contract(())

@@ -42,7 +42,7 @@ cli = []
 [dependencies]
 include_dir = "0.7"
 pyo3-stub-gen = { version = "0.13", optional = true, default-features = false }
-spenso = { version = "0.5.4", features = ["shadowing"] }
+spenso = { version = "0.6", features = ["shadowing"] }
 clap = "4.5.47"
 # clap-repl = "0.3.2"
 color-eyre = "0.6.5"

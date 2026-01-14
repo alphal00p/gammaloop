@@ -10,7 +10,7 @@ use ahash::HashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use idenso::color::ColorSimplifier;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use rayon::{
     ThreadPool,
@@ -1335,7 +1335,8 @@ impl CrossSectionGraph {
                 .replace(function!(GS.energy, W_.x_))
                 .with(function!(GS.ose, W_.x_))
                 .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                .with(function!(GS.theta, W_.x_));
+                .with(function!(GS.theta, W_.x_))
+                .expand_dots();
 
             for (_, edge_index, _) in self
                 .graph
@@ -1702,7 +1703,8 @@ impl CrossSectionGraph {
                         .replace(function!(GS.energy, W_.x_))
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                        .with(function!(GS.theta, W_.x_));
+                        .with(function!(GS.theta, W_.x_))
+                        .expand_dots();
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1764,7 +1766,8 @@ impl CrossSectionGraph {
                         .replace(function!(GS.energy, W_.x_))
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                        .with(function!(GS.theta, W_.x_));
+                        .with(function!(GS.theta, W_.x_))
+                        .expand_dots();
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1819,7 +1822,8 @@ impl CrossSectionGraph {
                         .replace(function!(GS.energy, W_.x_))
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                        .with(function!(GS.theta, W_.x_));
+                        .with(function!(GS.theta, W_.x_))
+                        .expand_dots();
 
                     for (_, edge_index, _) in self
                         .graph

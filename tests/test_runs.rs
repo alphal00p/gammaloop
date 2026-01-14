@@ -569,9 +569,9 @@ fn scalar_sunrise_inspect() -> Result<()> {
     1.13180e-12+i-0.00000e0
     4.46155e-11+i-0.00000e0
     4.62050e-12+i-0.00000e0
-    -1.80746e-22+i-0.00000e0
+    -1.80760e-22+i-0.00000e0
     ");
-    clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }

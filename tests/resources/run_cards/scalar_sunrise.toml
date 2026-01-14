@@ -7,8 +7,8 @@ commands = [
 ]
 
 [cli_settings.global]
-logfile_directive = "off"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "gammalooprs[orientation_parametric_expr]=debug"
+logfile_directive = "off,gammalooprs[orientation_parametric_expr]=debug,gammalooprs[final_integrand]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "gammalooprs[orientation_parametric_expr]=debug"#,gammalooprs[final_integrand]=debug"
 
 
 [default_runtime_settings.kinematics.externals]

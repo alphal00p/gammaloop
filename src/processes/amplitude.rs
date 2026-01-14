@@ -14,7 +14,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -974,7 +974,8 @@ impl AmplitudeGraph {
                 .unwrap_function(GS.color_wrap)
                 .simplify_color()
                 .replace(function!(GS.energy, W_.x_))
-                .with(function!(GS.ose, W_.x_));
+                .with(function!(GS.ose, W_.x_))
+                .expand_dots();
 
             let loop_3 = self.graph.get_loop_number() as i64 * 3;
 
@@ -1094,7 +1095,10 @@ impl AmplitudeGraph {
             "All parametric before color atom:{}",
             scalar.printer(LOGPRINTOPTS)
         );
-        scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
+        scalar = scalar
+            .unwrap_function(GS.color_wrap)
+            .simplify_color()
+            .expand_dots();
 
         scalar = self.add_additional_factors_to_cff_atom(&scalar);
 
