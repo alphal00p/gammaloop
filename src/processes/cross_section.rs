@@ -1174,7 +1174,11 @@ impl CrossSectionGraph {
                             false,
                         );
 
-                        forest.orientation_parametric_expr(disjoint_cut_edges.as_ref(), &self.graph)
+                        forest.orientation_parametric_expr(
+                            disjoint_cut_edges.as_ref(),
+                            &self.graph,
+                            settings.uv.add_sigma,
+                        )
                     })
                     .reduce(|product, network| product * network)
                     .unwrap()
