@@ -410,8 +410,6 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
                     .illegal_esurfaces
                     .iter()
                     .all(|illegal_esurface| {
-                        println!("illegal_esurface: {:#?}", illegal_esurface);
-                        println!("esurface_to_compare: {:#?}", esurface_to_compare);
                         let res = esurface_to_compare != *illegal_esurface;
                         res
                     })
