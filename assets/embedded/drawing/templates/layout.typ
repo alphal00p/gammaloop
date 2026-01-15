@@ -67,8 +67,8 @@
       let data = e.remove("data")
 
       let o = e.remove("orientation")
-      let ev_sink = eval-dict(data, "eval_sink",scope+(orientation:o))
-      let ev_source = eval-dict(data, "eval_source",scope+(orientation:o))
+      let ev_sink = eval-dict(data, "eval_sink",scope+(orientation:o)+(eid:i))
+      let ev_source = eval-dict(data, "eval_source",scope+(orientation:o)+(eid:i))
 
       let bend-angle = data.remove("bend")
       let bend = bend-angle.remove("Ok", default: 0.)

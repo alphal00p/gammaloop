@@ -16,8 +16,8 @@
                   outset: -1pt,label:[#set text(size:3pt);{int_id}])",
                 ),
                 edge: (
-                  eval_source: "map.at(\"{particle}\").source+arrowmap(orientation)+(label:map.at(\"{particle}\").at(\"label\",default:[a]))",
-                  eval_sink: "map.at(\"{particle}\").sink",
+                  eval_source: "map.at(\"{particle}\").source+arrowmap(orientation)+(label:map.at(\"{particle}\").at(\"label\",default:[a])+[ ]+[$e_#eid$])",
+                  eval_sink: "map.at(\"{particle}\").sink+(label:map.at(\"{particle}\").at(\"label\",default:[a])+[ ]+[$e_#eid$],label-sep:0mm)",
                 ),
 
         length_scale: "0.2",
