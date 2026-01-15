@@ -667,8 +667,8 @@ impl CrossSectionGraph {
             self.build_multi_channeling_channels();
         }
         debug!("building parametric integrand");
-        self.build_parametric_integrand(settings)?;
-        //self.build_parametric_integrand_raised_cuts(settings)?;
+        //self.build_parametric_integrand(settings)?;
+        self.build_parametric_integrand_raised_cuts(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
@@ -965,7 +965,7 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
     ) -> Result<()> {
         self.derived_data.cut_paramatric_integrand =
-            self.build_original_parametric_integrand(settings)?;
+            self.build_parametric_integrand_raised_cuts(settings)?;
         Ok(())
     }
 
@@ -1036,7 +1036,7 @@ impl CrossSectionGraph {
     fn build_parametric_integrand_raised_cuts(
         &mut self,
         settings: &GenerationSettings,
-    ) -> Result<()> {
+    ) -> Result<TiVec<RaisedCutId, Vec<Atom>>> {
         let global_num = self.graph.global_network();
         let vakint = self.new_vakint();
 
@@ -1059,12 +1059,14 @@ impl CrossSectionGraph {
             .map(|order| build_derivative_structure(order as u8))
             .collect_vec();
 
+        let mut result = TiVec::new();
         for (raised_cut_id, cuts_in_group) in self
             .derived_data
             .raised_data
             .raised_cut_groups
             .iter_enumerated()
         {
+            let mut result_for_this_raised_cut = Vec::new();
             for cross_free_subset in
                 self.derived_data.raised_data.cross_free_powersets[raised_cut_id].iter()
             {
@@ -1222,11 +1224,13 @@ impl CrossSectionGraph {
                     "integrand for raised cut group {}, cuts {:?}: {}",
                     raised_cut_id.0, cross_free_subset, integrand_with_prefactor
                 );
+
+                result_for_this_raised_cut.push(integrand_with_prefactor);
             }
+            result.push(result_for_this_raised_cut);
         }
 
-        todo!("organize integrands");
-        Ok(())
+        Ok(result)
     }
 
     fn build_original_parametric_integrand(
@@ -1927,7 +1931,7 @@ impl CrossSectionGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
-    pub cut_paramatric_integrand: TiVec<CutId, Atom>,
+    pub cut_paramatric_integrand: TiVec<RaisedCutId, Vec<Atom>>,
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
