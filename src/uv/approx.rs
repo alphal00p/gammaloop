@@ -989,7 +989,7 @@ impl Approximation {
                 .typst_string() // printer(LOGPRINTOPTS)
         );
 
-        let mut a = atomarg
+        let a = atomarg
             .series(GS.rescale, Atom::Zero, 0.into(), true)
             .unwrap();
 

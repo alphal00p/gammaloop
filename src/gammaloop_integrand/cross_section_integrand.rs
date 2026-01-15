@@ -606,7 +606,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             let mut result = Complex::new_re(momentum_sample.zero());
             let params = T::get_parameters(
                 &mut self.param_builder,
-                settings.general.enable_cache,
+                (settings.general.enable_cache, settings.general.debug_cache),
                 &self.graph,
                 &rescaled_momenta,
                 hel,
@@ -628,7 +628,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     self.param_builder.orientation_value(e);
                     let a = T::get_parameters(
                         &mut self.param_builder,
-                        settings.general.enable_cache,
+                        (settings.general.enable_cache, settings.general.debug_cache),
                         &self.graph,
                         &rescaled_momenta,
                         hel,

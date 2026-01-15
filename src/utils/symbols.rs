@@ -9,7 +9,7 @@ use spenso::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
         representation::{Minkowski, RepName, Representation},
-        slot::{DummyAind, IsAbstractSlot, Slot},
+        slot::{DummyAind, IsAbstractSlot},
     },
 };
 use symbolica::{

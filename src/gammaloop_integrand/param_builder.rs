@@ -40,15 +40,6 @@ use crate::{
     },
 };
 
-/// Check if debug cache mode is enabled
-#[inline]
-fn is_debug_cache_enabled() -> bool {
-    std::env::var("GAMMALOOP_DEBUG_CACHE")
-        .map(|v| v == "1" || v.to_lowercase() == "true")
-        .unwrap_or(false)
-        || cfg!(debug_assertions)
-}
-
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 #[derive(Default)]
@@ -619,7 +610,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
-        cache: bool,
+        cache: (bool, bool),
         sample: &'a MomentumSample<T>,
         graph: &'a Graph,
         helicities: &[Helicity],
@@ -634,7 +625,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
-        cache: bool,
+        cache: (bool, bool),
         sample: &'a MomentumSample<f64>,
         graph: &'a Graph,
         helicities: &[Helicity],
@@ -683,7 +674,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params(
         &mut self,
-        _cache: bool,
+        _cache: (bool, bool),
         sample: &MomentumSample<f128>,
         graph: &Graph,
         helicities: &[Helicity],
@@ -938,7 +929,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn polarizations_values(
         &mut self,
-        cache: bool,
+        (cache, debug_cache): (bool, bool),
         graph: &Graph,
         sample: &MomentumSample<T>,
         helicities: &[Helicity],
@@ -956,7 +947,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         // Compute expected polarizations for debug search
-        let expected_pols = if is_debug_cache_enabled() {
+        let expected_pols = if debug_cache {
             Some(
                 self.pairs
                     .polarizations_values(graph, sample.external_moms(), helicities),
@@ -995,7 +986,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             );
 
             // DEBUG: Search entire cache for matching polarizations to detect missed hits
-            if is_debug_cache_enabled()
+            if debug_cache
                 && cache
                 && let Some(ref expected) = expected_pols
             {
@@ -1041,11 +1032,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         base_cache_id: usize,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) {
-        // Only run this expensive search if debug mode is enabled
-        if !is_debug_cache_enabled() {
-            return;
-        }
-
         let tolerance = F::<T>::from_f64(1e-12);
         let mut found_matches = Vec::new();
 
@@ -1133,34 +1119,6 @@ impl<T: FloatLike> ParamBuilder<T> {
                     max_search_id
                 );
             }
-        }
-    }
-
-    /// Public method to enable/disable debug cache mode at runtime
-    pub fn set_debug_cache_mode(enabled: bool) {
-        unsafe {
-            std::env::set_var("GAMMALOOP_DEBUG_CACHE", if enabled { "1" } else { "0" });
-        }
-        status_info!(
-            "Debug cache mode {}: Set GAMMALOOP_DEBUG_CACHE={}",
-            if enabled { "enabled" } else { "disabled" },
-            if enabled { "1" } else { "0" }
-        );
-    }
-
-    /// Check current debug cache mode status
-    pub fn get_debug_cache_status() -> DebugCacheStatus {
-        let env_enabled = std::env::var("GAMMALOOP_DEBUG_CACHE")
-            .map(|v| v == "1" || v.to_lowercase() == "true")
-            .unwrap_or(false);
-        let verbose_enabled = std::env::var("GAMMALOOP_DEBUG_CACHE_VERBOSE").is_ok();
-        let debug_assertions = cfg!(debug_assertions);
-
-        DebugCacheStatus {
-            environment_enabled: env_enabled,
-            debug_assertions,
-            verbose_enabled,
-            effective_enabled: env_enabled || debug_assertions,
         }
     }
 

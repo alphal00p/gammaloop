@@ -426,7 +426,7 @@ impl LUCounterTerm {
                 {
                     let params = T::get_parameters(
                         param_builder,
-                        false,
+                        (false, false),
                         graph,
                         &inverse_transformed_sample,
                         settings.kinematics.externals.get_helicities(),
@@ -456,7 +456,7 @@ impl LUCounterTerm {
 
                         let params = T::get_parameters(
                             param_builder,
-                            false,
+                            (false, false),
                             graph,
                             &inverse_transformed_sample,
                             settings.kinematics.externals.get_helicities(),
@@ -496,7 +496,7 @@ impl LUCounterTerm {
                 {
                     let params = T::get_parameters(
                         param_builder,
-                        false,
+                        (false, false),
                         graph,
                         &inverse_transformed_sample,
                         settings.kinematics.externals.get_helicities(),
@@ -532,7 +532,7 @@ impl LUCounterTerm {
 
                         let params = T::get_parameters(
                             param_builder,
-                            false,
+                            (false, false),
                             graph,
                             &inverse_transformed_sample,
                             settings.kinematics.externals.get_helicities(),
@@ -589,7 +589,7 @@ impl LUCounterTerm {
             {
                 let params = T::get_parameters(
                     param_builder,
-                    false,
+                    (false, false),
                     graph,
                     &inverse_transformed_momentum_sample,
                     settings.kinematics.externals.get_helicities(),
@@ -626,7 +626,7 @@ impl LUCounterTerm {
 
                     let params = T::get_parameters(
                         param_builder,
-                        false,
+                        (false, false),
                         graph,
                         &inverse_transformed_momentum_sample,
                         settings.kinematics.externals.get_helicities(),

@@ -157,7 +157,7 @@ impl Forest {
     ) -> ParsingNet {
         let mut sum: Option<ParsingNet> = None;
 
-        for (e, n) in &self.dag.nodes {
+        for (_, n) in &self.dag.nodes {
             let mut net = n.data.final_integrand.clone().unwrap();
 
             if add_sigma {

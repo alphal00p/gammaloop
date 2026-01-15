@@ -129,6 +129,8 @@ pub struct GeneralSettings {
     pub load_compiled_cff: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub enable_cache: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub debug_cache: bool,
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_uv: f64,
     #[serde(skip_serializing_if = "is_float::<1000_000>")]
@@ -145,6 +147,7 @@ impl Default for GeneralSettings {
             use_ltd: false,
             load_compiled_cff: false,
             enable_cache: false,
+            debug_cache: false,
             orientation_pat: OrientationPattern::default(),
             m_uv: 1000.0,
             mu_r_sq: 1000000.0,

@@ -196,7 +196,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
     #[allow(clippy::too_many_arguments)]
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
-        cache: bool,
+        cache: (bool, bool),
         graph: &'a Graph,
         sample: &'a MomentumSample<T>,
         helicities: &[Helicity],
@@ -257,7 +257,7 @@ impl GenericEvaluatorFloat for f64 {
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
-        cache: bool,
+        cache: (bool, bool),
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
@@ -342,7 +342,7 @@ impl GenericEvaluatorFloat for f128 {
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
-        cache: bool,
+        cache: (bool, bool),
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
