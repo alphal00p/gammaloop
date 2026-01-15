@@ -9,12 +9,10 @@ use gammalooprs::utils::F;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use gammalooprs::{
-    model::{InputParamCard, Model},
-    status_info,
-};
+use gammalooprs::model::{InputParamCard, Model};
 use include_dir::{include_dir, Dir, File};
 use std::{env, fs};
+use tracing::info;
 
 #[cfg(feature = "ufo_support")]
 use pyo3::prelude::*;
@@ -61,7 +59,7 @@ impl PyLogStream {
     }
     fn write(&self, s: &str) {
         for line in s.lines() {
-            status_info!("{}", line);
+            info!("{}", line);
         }
     }
     fn flush(&self) {}
@@ -182,14 +180,14 @@ impl ImportModel {
                     let json_path = PathBuf::from(base_path).join(model_name.clone());
                     let json_path = json_path.to_string_lossy();
                     if let Some(restriction_name) = &restriction_name {
-                        status_info!(
+                        info!(
                             "Loading {} model {} from {}",
                             "JSON".blue(),
                             format!("{model_name}-{restriction_name}").green(),
                             json_path.yellow()
                         );
                     } else {
-                        status_info!(
+                        info!(
                             "Loading {} model {} from {}",
                             "JSON".blue(),
                             format!("{model_name}-full").green(),
@@ -197,14 +195,14 @@ impl ImportModel {
                         );
                     }
                 } else if let Some(restriction_name) = &restriction_name {
-                    status_info!(
+                    info!(
                         "Loading {} {} model {}",
                         "built-in".yellow(),
                         "JSON".blue(),
                         format!("{model_name}-{restriction_name}").green(),
                     );
                 } else {
-                    status_info!(
+                    info!(
                         "Loading {} {} model {}",
                         "built-in".yellow(),
                         "JSON".blue(),
@@ -232,14 +230,14 @@ impl ImportModel {
                 let ufo_path = base_path.join(&model_name);
                 let ufo_path_string = ufo_path.to_string_lossy();
                 if let Some(restriction_name) = &restriction_name {
-                    status_info!(
+                    info!(
                         "Loading {} model {} from {}",
                         "UFO".blue(),
                         format!("{model_name}-{restriction_name}").green(),
                         ufo_path_string.yellow()
                     );
                 } else {
-                    status_info!(
+                    info!(
                         "Loading {} model {} from {}",
                         "UFO".blue(),
                         format!("{model_name}-full").green(),

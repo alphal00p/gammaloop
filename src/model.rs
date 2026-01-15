@@ -1,8 +1,8 @@
+use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
 use crate::utils::{self, F};
-use crate::{HasModel, status_info};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
 use color_eyre::Report;
@@ -1516,7 +1516,7 @@ impl Model {
         }
 
         if !removed_parameters.is_empty() {
-            status_info!(
+            info!(
                 "The following {} external parameters were forced to zero by the restriction card:\n{}",
                 format!("{}", removed_parameters.len()).green(),
                 removed_parameters
@@ -1575,7 +1575,7 @@ impl Model {
             .collect::<Vec<_>>();
 
         if !removed_vertex_rules.is_empty() {
-            status_info!(
+            info!(
                 "The following {} vertex rules were removed by the restriction card:\n{}",
                 format!("{}", removed_vertex_rules.len()).green(),
                 removed_vertex_rules
@@ -1608,7 +1608,7 @@ impl Model {
             .retain(|_, cpl| cpl.value != Some(Complex::new(0.0, 0.0)));
 
         if !removed_couplings.is_empty() {
-            status_info!(
+            info!(
                 "The following {} couplings were removed by the restriction card:\n{}",
                 format!("{}", removed_couplings.len()).green(),
                 removed_couplings

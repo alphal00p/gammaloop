@@ -21,7 +21,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument, warn};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -45,7 +45,7 @@ use crate::{
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
-    status_debug, status_info, status_warn,
+    status_debug,
     subtraction::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
@@ -654,7 +654,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
             .all(|term| !term.threshold_counterterm.evaluators.is_empty());
 
         if !thresholds_generated && !self.settings.subtraction.disable_threshold_subtraction {
-            status_warn!(
+            warn!(
                 "Not all graphs have threshold counterterms generated, but threshold subtraction is not disabled. disable runtime threshold subtraction to remove this warning"
             );
             self.settings.subtraction.disable_threshold_subtraction = true;
@@ -769,7 +769,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                         )
                     })?;
 
-                status_info!(
+                info!(
                     "overlap structure of group {}: {:?}",
                     group_id.0,
                     overlap
