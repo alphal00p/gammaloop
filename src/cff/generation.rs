@@ -31,7 +31,7 @@ use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
 
-use log::debug;
+use tracing::debug;
 
 use super::{
     cff_graph::CFFGenerationGraph,

@@ -16,7 +16,7 @@ use crate::{
 use bincode_trait_derive::{Decode, Encode};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
-use log::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;

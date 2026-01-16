@@ -1,6 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use eyre::eyre;
-use log::debug;
+use tracing::debug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;

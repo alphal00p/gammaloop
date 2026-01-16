@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::Context;
-use log::debug;
+use tracing::debug;
 use rayon::ThreadPool;
 use schemars::JsonSchema;
 

@@ -33,8 +33,6 @@ use crate::utils;
 use crate::utils::F;
 use crate::utils::format_sample;
 use crate::{is_interrupted, set_interrupted};
-#[allow(unused_imports)]
-use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
 use spenso::algebra::complex::Complex;
 use std::fs;
@@ -42,6 +40,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 use tabled::Tabled;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
 

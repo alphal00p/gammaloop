@@ -53,7 +53,6 @@ use linnet::half_edge::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
 };
-use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -61,6 +60,7 @@ use symbolica::{
     id::Replacement,
     parse, symbol,
 };
+use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 use crate::{

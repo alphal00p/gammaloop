@@ -14,7 +14,7 @@ use linnet::{
     },
     parser::DotGraph,
 };
-use log::debug;
+use tracing::debug;
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;

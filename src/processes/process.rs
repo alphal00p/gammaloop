@@ -15,7 +15,7 @@ use tracing::warn;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 use itertools::Itertools;
-use log::debug;
+use tracing::debug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;

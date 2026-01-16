@@ -34,7 +34,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
 };
-use log::debug;
+use tracing::debug;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},

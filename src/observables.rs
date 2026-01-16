@@ -6,7 +6,7 @@ use itertools::Itertools;
 #[allow(unused_imports)]
 use libc::{c_double, c_int, c_void};
 #[allow(unused_imports)]
-use log::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 // use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;

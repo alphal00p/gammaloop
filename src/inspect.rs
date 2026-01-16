@@ -1,10 +1,10 @@
 use colored::Colorize;
-#[allow(unused_imports)]
-use log::{debug, error, info, trace, warn};
 use momtrop::float::MomTropFloat;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::FloatLike;
 use symbolica::numerical_integration::Sample;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 use crate::integrands::HasIntegrand;
 use crate::model::Model;

@@ -8,7 +8,6 @@ use bincode::{Decode, Encode};
 use idenso::color::CS;
 
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use log::debug;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
@@ -24,6 +23,7 @@ use symbolica::{
     parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
+use tracing::debug;
 use tracing::warn;
 
 use crate::{

@@ -14,7 +14,7 @@ use crate::utils::F;
 use crate::utils::FloatLike;
 use crate::utils::f128;
 use bincode_trait_derive::{Decode, Encode};
-use log::info;
+use tracing::info;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
