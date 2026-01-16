@@ -1,10 +1,10 @@
 use bincode_trait_derive::{Decode, Encode};
 use eyre::eyre;
-use tracing::debug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use tabled::{builder::Builder, settings::Style};
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -254,7 +254,7 @@ impl Externals {
                             F::from_f64(0.0),
                         ]);
                         // .higher();
-                        let mut pos_dep = 0;
+                        let mut pos_dep = external_signature.len() - 1;
 
                         let mut dependent_sign = SignOrZero::Plus;
 
