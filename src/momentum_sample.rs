@@ -712,7 +712,7 @@ impl<T: FloatLike> MomentumSample<T> {
         dependent_momenta_constructor: DependentMomentaConstructor,
         orientation: Option<usize>,
     ) -> Result<Self> {
-        // status_info!("New with ext cache id:{external_mom_cache_id}");
+        // info!("New with ext cache id:{external_mom_cache_id}");
         Ok(Self {
             sample: BareMomentumSample::new(
                 loop_moms,

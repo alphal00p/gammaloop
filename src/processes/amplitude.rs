@@ -37,7 +37,7 @@ use crate::{
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     gammaloop_integrand::{
-        LmbMultiChannelingSetup, ParamBuilder,
+        LmbMultiChannelingSetup,
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
@@ -47,7 +47,6 @@ use crate::{
     processes::DotExportSettings,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
-    status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, FUN_LIB, GS, Length, TENSORLIB, VAKINT, W_, symbolica_ext::LOGPRINTOPTS},
     uv::{UltravioletGraph, approx::to_vakint_integrand},
@@ -458,26 +457,26 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<()> {
-        status_debug!("Generating Cff");
+        debug!("Generating Cff");
         self.generate_cff()?;
-        status_debug!("Building Parametric Integrand");
+        debug!("Building Parametric Integrand");
         self.build_parametric_integrand(settings)?;
 
         if self.graph.is_group_master {
-            status_debug!("Building Tropical Sampler");
+            debug!("Building Tropical Sampler");
             self.build_tropical_sampler(settings)?;
         }
 
-        status_debug!("Building Loop Momentum Bases");
+        debug!("Building Loop Momentum Bases");
         self.build_lmbs();
 
         if self.graph.is_group_master {
-            status_debug!("Building Multi-Channeling Channels");
+            debug!("Building Multi-Channeling Channels");
             self.build_multi_channeling_channels();
         }
 
         if settings.threshold_subtraction.enable_thresholds {
-            status_debug!("Building Threshold Counterterms");
+            debug!("Building Threshold Counterterms");
             self.derived_data.threshold_counterterms = self
                 .build_threshold_counterterm_parametric_integrand(
                     settings,

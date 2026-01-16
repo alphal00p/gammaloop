@@ -32,7 +32,6 @@ use gammalooprs::{
     model::{InputParamCard, Model},
     processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
-    status_debug,
     utils::{
         serde_utils::{get_schema_folder, SmartSerde},
         tracing::{init_bench_tracing, init_test_tracing},
@@ -275,7 +274,7 @@ impl RunHistory {
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
-        status_debug!("Loaded run history from file {}", path.as_ref().display());
+        debug!("Loaded run history from file {}", path.as_ref().display());
 
         let runhistory = Self::from_file(path.as_ref(), "run history")?;
         runhistory.cli_settings.sync_settings()?;
@@ -613,7 +612,6 @@ impl State {
         let _ = initialise();
         let handle = super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
 
-        
         Self {
             log_filter: handle,
             model: Model::default(),
@@ -625,7 +623,6 @@ impl State {
     pub fn new_test() -> Self {
         let handle = init_test_tracing();
 
-        
         Self {
             log_filter: handle,
             model: Model::default(),
@@ -637,7 +634,6 @@ impl State {
     pub fn new_bench() -> Self {
         let handle = init_bench_tracing();
 
-        
         Self {
             log_filter: handle,
             model: Model::default(),

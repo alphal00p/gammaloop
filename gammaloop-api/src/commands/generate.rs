@@ -3,7 +3,8 @@
 
 use ahash::HashMap;
 use color_eyre::owo_colors::OwoColorize;
-use gammalooprs::status_info;
+use tracing::info;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::ParseIntError;
 use std::ops::RangeInclusive;
@@ -304,7 +305,7 @@ impl Generate {
         };
         if let Some((_, args)) = generation_mode.as_ref() {
             if !state.process_list.processes.is_empty() && args.clear_existing_processes {
-                status_info!(
+                info!(
                     "Clearing all {} existing processes as requested.",
                     state.process_list.processes.len()
                 );
@@ -330,7 +331,7 @@ impl Generate {
                         ));
                     }
                 } else {
-                    status_info!(
+                    info!(
                         "Identical process definition, with name '{}', already exists. Gammaloop will recycle it.",
                         spec.process_definition.folder_name
                     );
@@ -351,7 +352,7 @@ impl Generate {
                 let this_process_id = spec.process_definition.process_id;
                 // TODO handle existing process and continue
                 let graphs = spec.process_definition.generate(model, global_settings)?;
-                status_info!(
+                info!(
                     "Generated {} {} graphs.",
                     if matches!(self.mode, Some(GenerateCmd::Amp(_))) {
                         "amplitude"
@@ -419,7 +420,7 @@ impl Generate {
                         Some(generated_integrand_name),
                     )
                 } else {
-                    status_info!(
+                    info!(
                         "Only diagram generation was requested, skipping integrand generation. You can generate integrands later using the '{}' command.",
                         "generate existing <options>".green()
                     );

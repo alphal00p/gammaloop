@@ -3,7 +3,9 @@
 //! This module provides simple debugging tools to verify cache behavior
 //! and detect performance issues with polarization caching.
 
-use crate::{gammaloop_integrand::GammaloopIntegrand, status_debug, status_info, status_warn};
+use tracing::{debug, info, warn};
+
+use crate::gammaloop_integrand::GammaloopIntegrand;
 
 /// Check if cache debug mode is enabled via environment variable
 pub fn is_debug_cache_enabled() -> bool {
@@ -18,16 +20,15 @@ pub fn quick_cache_check<I: GammaloopIntegrand>(integrand: &I, context: &str) ->
     let stats = integrand.get_cache_stats();
 
     if !validation.is_valid {
-        status_warn!(
+        warn!(
             "❌ Cache health check failed at {}: {}",
-            context,
-            validation.diagnostics
+            context, validation.diagnostics
         );
         return false;
     }
 
     if stats.efficiency_ratio < 0.3 {
-        status_warn!(
+        warn!(
             "⚠️ Very low cache efficiency at {}: {:.1}%",
             context,
             stats.efficiency_ratio * 100.0
@@ -36,7 +37,7 @@ pub fn quick_cache_check<I: GammaloopIntegrand>(integrand: &I, context: &str) ->
     }
 
     if is_debug_cache_enabled() {
-        status_info!(
+        info!(
             "✅ Cache health check passed at {}: {:.1}% efficiency",
             context,
             stats.efficiency_ratio * 100.0
@@ -70,25 +71,25 @@ pub fn debug_cache_state<I: GammaloopIntegrand>(integrand: &I, context: &str) {
     let validation = integrand.validate_cache_consistency();
     let stats = integrand.get_cache_stats();
 
-    status_debug!("🔍 CACHE STATE at {}: {}", context, validation);
-    status_debug!("   Stats: {}", stats);
+    debug!("🔍 CACHE STATE at {}: {}", context, validation);
+    debug!("   Stats: {}", stats);
 
     if !validation.is_valid {
-        status_warn!("   ❌ CACHE CORRUPTION DETECTED at {}", context);
+        warn!("   ❌ CACHE CORRUPTION DETECTED at {}", context);
     } else if validation.has_rotations {
-        status_debug!(
+        debug!(
             "   🔄 {} rotational variants",
             validation.current_external_cache_id - validation.base_external_cache_id
         );
     }
 
     if stats.efficiency_ratio < 0.3 {
-        status_warn!(
+        warn!(
             "   ⚠️ Very low efficiency: {:.1}%",
             stats.efficiency_ratio * 100.0
         );
     } else if stats.efficiency_ratio > 0.8 {
-        status_debug!(
+        debug!(
             "   ✅ Excellent efficiency: {:.1}%",
             stats.efficiency_ratio * 100.0
         );
@@ -106,7 +107,7 @@ pub fn monte_carlo_cache_monitor<I: GammaloopIntegrand>(
     }
 
     let stats = integrand.get_cache_stats();
-    status_info!(
+    info!(
         "Iteration {}: Cache efficiency {:.1}%, {} base configs, {} rotations",
         iteration,
         stats.efficiency_ratio * 100.0,
@@ -123,7 +124,7 @@ pub fn warn_cache_efficiency<I: GammaloopIntegrand>(
 ) {
     let stats = integrand.get_cache_stats();
     if stats.efficiency_ratio < min_efficiency {
-        status_warn!(
+        warn!(
             "⚠️ Cache efficiency {:.1}% below threshold {:.1}% at: {}",
             stats.efficiency_ratio * 100.0,
             min_efficiency * 100.0,
@@ -137,12 +138,10 @@ pub fn setup_debug_environment() {
     unsafe {
         std::env::set_var("GAMMALOOP_DEBUG_CACHE", "1");
     }
-    status_info!("🔧 Cache debug mode enabled");
-    status_info!("   Use debug_cache!(integrand, \"context\") for state checks");
-    status_info!("   Use monitor_cache!(integrand, condition, \"context\") for monitoring");
-    status_info!(
-        "   Use warn_cache_efficiency!(integrand, 0.5, \"context\") for efficiency warnings"
-    );
+    info!("🔧 Cache debug mode enabled");
+    info!("   Use debug_cache!(integrand, \"context\") for state checks");
+    info!("   Use monitor_cache!(integrand, condition, \"context\") for monitoring");
+    info!("   Use warn_cache_efficiency!(integrand, 0.5, \"context\") for efficiency warnings");
 }
 
 #[cfg(test)]

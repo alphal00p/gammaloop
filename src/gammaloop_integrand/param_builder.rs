@@ -24,6 +24,7 @@ use symbolica::{
     parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
+use tracing::warn;
 
 use crate::{
     GammaLoopContext,
@@ -33,7 +34,6 @@ use crate::{
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
-    status_debug, status_info, status_warn,
     utils::{
         F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128, symbolica_ext::LOGPRINTOPTS,
         tracing::StatusRenderable,
@@ -939,10 +939,9 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         // Validate cache consistency
         if cache_id < base_cache_id {
-            status_warn!(
+            warn!(
                 "WARNING: Cache ID inconsistency detected! current={}, base={}",
-                cache_id,
-                base_cache_id
+                cache_id, base_cache_id
             );
         }
 
@@ -958,10 +957,9 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         // Try to get from cache first
         let pols = if let Some(v) = self.polarization_cache.get(cache_id) {
-            status_debug!(
+            debug!(
                 "Cache HIT for external_cache_id={} (base={})",
-                cache_id,
-                base_cache_id
+                cache_id, base_cache_id
             );
 
             // Validate cached values in debug mode
@@ -979,10 +977,9 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
             v
         } else {
-            status_debug!(
+            debug!(
                 "Cache MISS for external_cache_id={} (base={})",
-                cache_id,
-                base_cache_id
+                cache_id, base_cache_id
             );
 
             // DEBUG: Search entire cache for matching polarizations to detect missed hits
@@ -1016,7 +1013,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
             self.polarization_cache
                 .checked_push(cache_id, computed_pols);
-            status_debug!("Cached new polarizations for cache_id={}", cache_id);
+            debug!("Cached new polarizations for cache_id={}", cache_id);
 
             self.polarization_cache.get(cache_id).unwrap()
         };
@@ -1058,24 +1055,23 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         if !found_matches.is_empty() {
-            status_warn!(
+            warn!(
                 "🔍 DEBUG CACHE SEARCH: Found {} matching polarization(s) in cache but using cache_id={}!",
                 found_matches.len(),
                 current_cache_id
             );
-            status_warn!(
+            warn!(
                 "   ⚠️  MISSED CACHE HITS: Found identical polarizations at cache_id(s): {:?}",
                 found_matches
             );
-            status_warn!(
+            warn!(
                 "   📊 Current: cache_id={}, base_cache_id={}",
-                current_cache_id,
-                base_cache_id
+                current_cache_id, base_cache_id
             );
 
             // Provide actionable debugging information
             if found_matches.contains(&base_cache_id) {
-                status_warn!(
+                warn!(
                     "   💡 HINT: Base cache_id {} has matching polarizations. You should call revert_to_base_external_cache_id()!",
                     base_cache_id
                 );
@@ -1088,15 +1084,14 @@ impl<T: FloatLike> ParamBuilder<T> {
                 .collect();
 
             if !related_ids.is_empty() {
-                status_warn!(
+                warn!(
                     "   🔗 RELATED IDs: Cache IDs {:?} are related to base_id {} and contain identical polarizations",
-                    related_ids,
-                    base_cache_id
+                    related_ids, base_cache_id
                 );
             }
 
             // Log external momentum info for debugging
-            status_debug!(
+            debug!(
                 "   🔍 External momenta: [{:.6}, {:.6}, {:.6}, {:.6}] (first external)",
                 external_moms
                     .first()
@@ -1114,7 +1109,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         } else {
             // Only log this in very verbose debug mode
             if std::env::var("GAMMALOOP_DEBUG_CACHE_VERBOSE").is_ok() {
-                status_debug!(
+                debug!(
                     "🔍 DEBUG CACHE SEARCH: No matching polarizations found in cache (searched {} entries). This is a genuine cache miss.",
                     max_search_id
                 );

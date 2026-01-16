@@ -1,6 +1,6 @@
 use std::{
     path::Path,
-    sync::{atomic::AtomicBool, LazyLock, Mutex, OnceLock},
+    sync::{LazyLock, Mutex, OnceLock},
 };
 
 use chrono::{Datelike, Local, SecondsFormat, Timelike};

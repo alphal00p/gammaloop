@@ -5,9 +5,9 @@ use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Constructible;
+use tracing::info;
 
 use crate::observables::Event;
-use crate::status_info;
 use crate::{
     settings::runtime::Precision,
     utils::{F, format_evaluation_time},
@@ -197,7 +197,7 @@ impl StatisticsCounter {
         let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());
         let total_time = format_evaluation_time(self.get_avg_total_timing());
 
-        status_info!(
+        info!(
             "|  {}  | {} {} | {} {} | {} {}",
             format!("{:-7}", "timing").blue().bold(),
             format!("{:-7}", "total:"),
@@ -208,7 +208,7 @@ impl StatisticsCounter {
             format!("{:-9}", time_ltd_formatted).green(),
         );
 
-        status_info!(
+        info!(
             "|  {}  | {} {} | {} {} | {} {}",
             format!("{:-7}", "evals").blue().bold(),
             format!("{:-7}", "f64:"),

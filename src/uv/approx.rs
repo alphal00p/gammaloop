@@ -10,7 +10,6 @@ use crate::{
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
-    status_info,
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LOGPRINTOPTS, TypstFormat},
@@ -889,7 +888,7 @@ impl Approximation {
         for (_, eid, _) in graph.iter_edges_of(&self.subgraph) {
             let eid = usize::from(eid) as i64;
             if soft_ct {
-                status_info!("DOing soft ct{}", graph.dot(&self.subgraph));
+                info!("DOing soft ct{}", graph.dot(&self.subgraph));
                 // TODO: rescale the masses in OSEs
                 // TODO: also scale masses in the numerator _only_ for the subgraph
                 // expand the OSEs around an OSE with a UV mass

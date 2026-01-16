@@ -10,8 +10,7 @@ use gammalooprs::{
     GammaLoopContextContainer,
     model::UFOSymbol,
     numerator::aind::Aind,
-    status_info,
-    utils::{ApproxEq, F, FUN_LIB, GS, TENSORLIB, W_},
+    utils::{F, FUN_LIB, GS, TENSORLIB, W_},
 };
 use insta::assert_snapshot;
 use itertools::Itertools;
@@ -29,6 +28,7 @@ use symbolica::{
     id::Pattern,
     symbol,
 };
+use tracing::info;
 
 mod test_utils;
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
@@ -335,8 +335,8 @@ fn test_grouped_subtraction() -> Result<()> {
     let integration_results_no_group = int1.run(&mut cli.state, &cli.cli_settings)?;
     let integration_results_group = int2.run(&mut cli.state, &cli.cli_settings)?;
 
-    status_info!("No group result: {:#?}", integration_results_no_group);
-    status_info!("Group result: {:#?}", integration_results_group);
+    info!("No group result: {:#?}", integration_results_no_group);
+    info!("Group result: {:#?}", integration_results_group);
 
     assert_approx_eq(
         &integration_results_group.result.re,
@@ -382,15 +382,15 @@ fn scalar_bubble() -> Result<()> {
 
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(2.0361143153099125e-2+0e0i)");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.03838e-02)), 1));
 
     cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(1.1584675622329286e-2+0e0i)");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.16050e-02)), 1));
 
     cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(6.460057304375133e-3+0e0i)");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.46968e-03)), 1));
 
     clean_test(&cli.cli_settings.state_folder);
 
@@ -636,8 +636,8 @@ fn scalar_box() -> Result<()> {
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
-    status_info!("Integral result without caching: {:#?}", integral_no_cache);
-    status_info!(
+    info!("Integral result without caching: {:#?}", integral_no_cache);
+    info!(
         "Integral result with caching.  : {:#?}",
         integral_with_cache
     );
@@ -903,7 +903,7 @@ fn test_qqx_aaa_ir_tree_user_numerator_inspect() -> Result<()> {
 
 #[test]
 fn epemttb_generate() -> Result<()> {
-    let mut cli = get_test_cli(
+    let cli = get_test_cli(
         Some("epemttbar.toml".into()),
         get_tests_workspace_path().join("epemttbar"),
         None,

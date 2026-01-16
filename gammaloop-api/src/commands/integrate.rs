@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use gammalooprs::{status_warn, utils::serde_utils::SmartSerde};
+use gammalooprs::utils::serde_utils::SmartSerde;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,10 +12,9 @@ use colored::Colorize;
 use gammalooprs::{
     integrate::{havana_integrate, print_integral_result, IntegrationState},
     settings::{runtime::IntegrationResult, RuntimeSettings},
-    status_info,
     utils::F,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{state::State, CLISettings};
 
@@ -101,13 +100,13 @@ impl Integrate {
 
         gloop_integrand.warm_up(&state.model)?;
 
-        status_info!("Gammaloop now integrates {}", integrand_name.green().bold());
+        info!("Gammaloop now integrates {}", integrand_name.green().bold());
 
         let path_to_state = workspace_path.join("integration_state");
 
         let integration_state = match fs::read(path_to_state) {
             Ok(state_bytes) => {
-                status_info!(
+                info!(
                     "{}",
                     "Found integration state, result of previous integration:".yellow()
                 );
@@ -142,15 +141,15 @@ impl Integrate {
                     "im",
                     target.map(|c| c.im),
                 );
-                status_info!("");
-                status_warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
-                status_info!("{}", "Resuming integration".yellow());
+                info!("");
+                warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                info!("{}", "Resuming integration".yellow());
 
                 Some(state)
             }
 
             Err(_) => {
-                status_info!("No integration state found, starting new integration");
+                info!("No integration state found, starting new integration");
                 None
             }
         };

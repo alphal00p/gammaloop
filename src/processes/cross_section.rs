@@ -33,7 +33,7 @@ use crate::{
     },
     define_index,
     gammaloop_integrand::{
-        LmbMultiChannelingSetup, ParamBuilder, cross_section_integrand::CrossSectionIntegrandData,
+        LmbMultiChannelingSetup, cross_section_integrand::CrossSectionIntegrandData,
     },
     graph::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
