@@ -38,7 +38,7 @@ digraph {
   2:12:s	-> 2:13:s	 [id=11  color="red:blue;0.5" label="Q(11)"];
   2:14:s	-> 3:15:s	 [id=12  color="red:blue;0.5" label="0"];
   3:16:s	-> 3:17:s	 [id=13  color="red:blue;0.5" label="Q(13)"];
-  4:18:s	-> 5:19:s	 [id=14  color="red:blue;0.5" label="Q(7)"];
+  4:18:s	-> 5:19:s	 [id=14  color="red:blue;0.5" label="Q(7)+Q(8)"];
   5:20:s	-> 6:21:s	 [id=15  color="red:blue;0.5" label="Q(15)"];
-  5:22:s	-> 6:23:s	 [id=16  color="red:blue;0.5" label="Q(7)-Q(15)"];
+  5:22:s	-> 6:23:s	 [id=16  color="red:blue;0.5" label="Q(7)+Q(8)-Q(15)"];
 }

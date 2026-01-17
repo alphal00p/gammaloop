@@ -471,6 +471,11 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         .unwrap();
 
                 let external_cover = tree.covers(&externals);
+                root = external_cover.included_iter().rev().next().unwrap();
+                let root_node = self.node_id(root);
+                let tree =
+                    SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
+                        .unwrap(); //select the last half edge in the external cover of this tree as the dependent one
 
                 println!(
                     "//External cover:\n{}//of \n{}",
@@ -642,7 +647,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         internal = empty_internal;
                     }
                     if subgraph.intersects(p) {
-                        for (i, (s, e)) in external_flows.iter_enumerated().skip(1) {
+                        for (i, (s, e)) in external_flows.iter_enumerated() {
                             if ext_edges[i] == eid {
                                 if e.includes(source) || e.includes(sink) {
                                     external.push(SignOrZero::Zero); //This is the dependent momentum
@@ -1126,7 +1131,9 @@ pub mod test {
         assert_snapshot!(g.dot_lmb(&g.full_filter(), &g.loop_momentum_basis));
         assert_snapshot!(&g.loop_momentum_basis.to_string());
         let g = g.generate_loop_momentum_bases(&g.full_filter());
-
+    }
+    #[test]
+    fn disconnected() {
         test_initialise().unwrap();
         let g: Graph = dot!(digraph{
             // layout=neato
@@ -1157,7 +1164,10 @@ pub mod test {
         .unwrap();
         assert_snapshot!(g.dot_lmb(&g.full_filter(), &g.loop_momentum_basis));
         assert_snapshot!(&g.loop_momentum_basis.to_string());
-
+    }
+    #[test]
+    fn subgraph_with_exts_in_loop() {
+        test_initialise().unwrap();
         let g: Graph = dot!(digraph{
             edge[num=1 mass=1]
             node[num=1]
