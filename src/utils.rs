@@ -1744,7 +1744,7 @@ pub(crate) fn parse_python_expression(expression: &str) -> Atom {
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
-pub(crate) fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
+pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
     let mean = mean.0;
     let sdev = sdev.0;
 
