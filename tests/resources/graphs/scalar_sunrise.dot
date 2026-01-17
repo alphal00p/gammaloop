@@ -1,7 +1,7 @@
 digraph sunrise{
     node [num = "1" ]
     e        [style=invis]
-    params = "if_sigma(S_47⊛0);if_sigma(S_47⊛y*Top(S_y⊛0));if_sigma(S_47⊛3s*Top(S_3s⊛0));if_sigma(S_47⊛3I*Top(S_3I⊛0));if_sigma(S_47⊛44*Top(S_44⊛0));if_sigma(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)));if_sigma(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)));if_sigma(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))"
+    // params = "if_sigma(S_47⊛0);if_sigma(S_47⊛y*Top(S_y⊛0));if_sigma(S_47⊛3s*Top(S_3s⊛0));if_sigma(S_47⊛3I*Top(S_3I⊛0));if_sigma(S_47⊛44*Top(S_44⊛0));if_sigma(S_47⊛44*Top(S_44⊛y*Top(S_y⊛0)));if_sigma(S_47⊛44*Top(S_44⊛3s*Top(S_3s⊛0)));if_sigma(S_47⊛44*Top(S_44⊛3I*Top(S_3I⊛0)))"
 
 
    //(S_47⊛0);

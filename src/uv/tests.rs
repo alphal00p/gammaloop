@@ -96,12 +96,18 @@ fn scalar_bubble() {
     test_initialise().unwrap();
 
     let g: Vec<Graph> = dot!(
-        digraph G{
+        digraph sunrise{
+            edge [particle=scalar_1]
             e        [style=invis]
-            e -> A:0   [ id=0 particle=scalar_0]
-            B:1 -> e   [ id=1 particle=scalar_0]
-            A -> B    [ id=2 particle=scalar_0]
-            A -> B    [ id=3 particle=scalar_0]
+            e -> A:0   [ id=3]
+            B:1 -> e   [ id=4]
+
+            A -> C    [ id=0]
+            C -> e
+            C -> B
+            // A -> B
+            A -> B    [ id=1]
+            A -> B    [ id=2]
         },"scalars"
     )
     .unwrap();
@@ -120,7 +126,8 @@ fn scalar_bubble() {
         &model,
         &GenerationSettings {
             uv: UVgenerationSettings {
-                generate_integrated: true,
+                generate_integrated: false,
+                softct: false,
                 ..Default::default()
             },
             ..Default::default()

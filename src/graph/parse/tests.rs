@@ -3,7 +3,6 @@ use linnet::half_edge::{
     NodeIndex,
     involution::{EdgeIndex, HedgePair},
 };
-use log::info;
 use spenso::{
     network::{
         Network,
@@ -15,6 +14,7 @@ use spenso::{
     tensors::symbolic::SymbolicTensor,
 };
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
+use tracing::info;
 use typed_index_collections::ti_vec;
 
 use super::Graph;

@@ -656,6 +656,164 @@ fn scalar_sunrise() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn scalar_mercedes() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_mercedes.toml".into()),
+        get_tests_workspace_path().join("scalar_mercedes"),
+        Some("scalar_mercedes".to_string()),
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_mercedes/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("scalar_mercedes/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    //5.89551e-06	3.35645e-06	1.87120e-06
+
+    // from Kaapo: m=1 muv=5 5.89551e-06 m=2 muv=5 	3.35645e-06	 m=3 muv=5 1.87120e-06
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(5.89551e-06)), 1),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(3.35645e-06)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.87120e-06)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
+
+#[test]
+fn scalar_basketball() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_basketball.toml".into()),
+        get_tests_workspace_path().join("scalar_basketball"),
+        Some("scalar_basketball".to_string()),
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_basketball/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("scalar_basketball/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    //1.47240e-03	7.15184e-04	2.27485e-04
+
+    // from Kaapo: m=1 muv=5 1.47240e-03 m=2 muv=5 	7.15184e-04	 m=3 muv=5 2.27485e-04
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.47240e-03)), 1),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(7.15184e-04)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.27485e-04)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
+#[test]
+fn scalar_mercedes_with_extra_loop() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_mercedes_with_extra_loop.toml".into()),
+        get_tests_workspace_path().join("scalar_mercedes_with_extra_loop"),
+        Some("scalar_mercedes_with_extra_loop".to_string()),
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(get_tests_workspace_path().join(
+            "scalar_mercedes_with_extra_loop/integration_workspace/integration_results.toml",
+        )),
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_mercedes_with_extra_loop/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    //2.90078e-06	1.59168e-06	6.86001e-07
+
+    // from Kaapo: m=1 muv=5 2.90078e-06 m=2 muv=5 	1.59168e-06	 m=3 muv=5 6.86001e-07
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.90078e-06)), 1),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.59168e-06)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.86001e-07)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
 #[test]
 fn scalar_sunrise_inspect() -> Result<()> {
     symbolica::GLOBAL_SETTINGS

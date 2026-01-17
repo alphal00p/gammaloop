@@ -1,1 +1,0 @@
-{"run_id":"1768550851-335090000","line":393,"new":{"module_name":"test_runs","snapshot_name":"scalar_bubble-3","metadata":{"source":"tests/test_runs.rs","assertion_line":393,"expression":"format!(\"{:.8e}\",integral_no_cache.result)"},"snapshot":"(6.460057304375131e-3+0e0i)"},"old":{"module_name":"test_runs","metadata":{},"snapshot":"(6.460057304375133e-3+0e0i)"}}
