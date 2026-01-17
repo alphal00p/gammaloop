@@ -407,7 +407,9 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 cut_subgraph.sub(*p);
             }
 
-            if self.count_connected_components(&cut_subgraph) == components
+            if (self.count_connected_components(&cut_subgraph) == components
+                && self.number_of_nodes_in_subgraph(&cut_subgraph)
+                    == self.number_of_nodes_in_subgraph(subgraph))
                 || cut_subgraph.is_empty()
             {
                 // let externals = self.full_crown(subgraph);
@@ -433,12 +435,12 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     where
         S::Base: ModifySubSet<Hedge> + SubGraphLike,
     {
-        println!(
-            "//Lmb of subgraph:\n{}\n//Forest_guide:\n{}//Externals:\n{}",
-            self.dot(subgraph),
-            self.dot(forest_guide),
-            self.dot(&externals),
-        );
+        // println!(
+        //     "//Lmb of subgraph:\n{}\n//Forest_guide:\n{}//Externals:\n{}",
+        //     self.dot(subgraph),
+        //     self.dot(forest_guide),
+        //     self.dot(&externals),
+        // );
 
         if subgraph.is_empty() {
             return self.empty_lmb();
@@ -466,22 +468,39 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             let (root_node, tree) = if let Some(external_root) = externals.included_iter().next() {
                 root = external_root;
                 let root_node = self.node_id(root);
-                let tree =
-                    SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
-                        .unwrap();
+                let subgraph_tree =
+                    SimpleTraversalTree::depth_first_traverse(self, subgraph, &root_node, None)
+                        .expect(&format!(
+                            "Externals \n{}\n contains non subgraph nodes:\n{}\n ",
+                            self.dot(&externals),
+                            self.dot(subgraph)
+                        ));
 
-                let external_cover = tree.covers(&externals);
+                let external_cover = subgraph_tree.covers(&externals);
+
                 root = external_cover.included_iter().rev().next().unwrap();
                 let root_node = self.node_id(root);
                 let tree =
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
-                        .unwrap(); //select the last half edge in the external cover of this tree as the dependent one
+                        .expect(&format!(
+                            "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
+                            self.dot(forest_guide),
+                            self.dot(subgraph)
+                        )); //select the last half edge in the external cover of this tree as the dependent one
 
-                println!(
-                    "//External cover:\n{}//of \n{}",
-                    self.dot(&external_cover),
-                    self.dot(&tree.tree_subgraph)
+                debug_assert_eq!(
+                    subgraph_tree.covers(subgraph),
+                    tree.covers(subgraph),
+                    "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
+                    self.dot(forest_guide),
+                    self.dot(subgraph)
                 );
+
+                // println!(
+                //     "//External cover:\n{}//of \n{}",
+                //     self.dot(&external_cover),
+                //     self.dot(&tree.tree_subgraph)
+                // );
 
                 for (p, e, _) in self.iter_edges_of(&external_cover) {
                     let mut path_to_dep: S = self.empty_subgraph();
@@ -553,7 +572,11 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 let root_node = self.node_id(root);
                 let tree =
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
-                        .unwrap();
+                        .expect(&format!(
+                            "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
+                            self.dot(forest_guide),
+                            self.dot(subgraph)
+                        ));
                 (root_node, tree)
             };
 
@@ -612,14 +635,14 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 }
             }
         }
-        for (i, e) in external_flows.iter().enumerate() {
-            println!(
-                "//Ext flow {} for {}: \n{}",
-                e.0,
-                ext_edges[ExternalIndex(i)],
-                self.dot(&e.1)
-            );
-        }
+        // for (i, e) in external_flows.iter().enumerate() {
+        //     println!(
+        //         "//Ext flow {} for {}: \n{}",
+        //         e.0,
+        //         ext_edges[ExternalIndex(i)],
+        //         self.dot(&e.1)
+        //     );
+        // }
 
         let signature = self.new_edgevec(|_, eid, p| {
             let mut internal = vec![];

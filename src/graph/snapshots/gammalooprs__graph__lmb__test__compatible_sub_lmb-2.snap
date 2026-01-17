@@ -1,25 +1,24 @@
 ---
 source: src/graph/lmb.rs
-expression: "g.dot_lmb(&non_dummy, &lmb)"
+expression: lmb.to_string()
 ---
-digraph {
-  node	 [shape=circle,height=0.1,label=""];
-  overlap = "scale";
-  layout = "neato";
-  start=2;
-  0	 [label=""];
-  1	 [label=""];
-  2	 [label=""];
-  ext0	 [style=invis];
-  ext0	-> 0:0	 [id=0 color="gray" label="Q(0)"];
-  ext1	 [style=invis];
-  ext1	-> 0:1:s	 [id=1 color="blue" label="Q(1)"];
-  ext2	 [style=invis];
-  ext2	-> 1:2:s	 [id=2 color="blue" label="Q(2)"];
-  ext3	 [style=invis];
-  ext3	-> 2:3:s	 [id=3 color="blue" label="Q(3)"];
-  0:4:s	-> 1:5:s	 [id=4  color="red:blue;0.5" label="Q(4)"];
-  0:6:s	-> 2:7:s	 [id=5  color="red:blue;0.5" label="Q(5)"];
-  1:8:s	-> 2:9:s	 [id=6  color="red:blue;0.5" label="Q(2)+Q(4)"];
-  2:10:s	-> 0:11:s	 [id=7  color="red:blue;0.5" label="Q(2)+Q(3)+Q(4)+Q(5)"];
-}
+╭─────────┬────╮
+│ Loop id │ 0  │
+├─────────┼────┤
+│ edge id │ e2 │
+╰─────────┴────╯
+╭─────────────┬────┬────┬────┬────╮
+│ External id │ 0  │ 1  │ 2  │ 3  │
+├─────────────┼────┼────┼────┼────┤
+│ edge id     │ e0 │ e1 │ e3 │ e4 │
+╰─────────────┴────┴────┴────┴────╯
+╭──────┬───────┬─────────┬─────────┬─────────┬─────────╮
+│ edge │ L0 e2 │ Ext0 e0 │ Ext1 e1 │ Ext2 e3 │ Ext3 e4 │
+├──────┼───────┼─────────┼─────────┼─────────┼─────────┤
+│ e0   │ .     │ .       │ .       │ .       │ .       │
+│ e1   │ .     │ .       │ .       │ .       │ .       │
+│ e2   │ +     │ .       │ .       │ .       │ .       │
+│ e3   │ .     │ .       │ .       │ .       │ .       │
+│ e4   │ .     │ .       │ .       │ .       │ .       │
+│ e5   │ +     │ +       │ +       │ .       │ .       │
+╰──────┴───────┴─────────┴─────────┴─────────┴─────────╯
