@@ -98,16 +98,17 @@ fn scalar_bubble() {
     let g: Vec<Graph> = dot!(
         digraph sunrise{
             edge [particle=scalar_1]
+            node [num=1]
             e        [style=invis]
-            e -> A:0   [ id=3]
-            B:1 -> e   [ id=4]
+            // e -> A:0   [ id=3]
+            // B:1 -> e   [ id=4]
 
-            A -> C    [ id=0]
-            C -> e
-            C -> B
+            // A -> C    [ id=0]
+            // // C -> e
+            // C -> B
             // A -> B
             A -> B    [ id=1]
-            A -> B    [ id=2]
+            A -> B    [ id=0]
         },"scalars"
     )
     .unwrap();
@@ -187,6 +188,8 @@ fn scalar_bubble() {
     let scales = logspace(2., 10., 10, 10.);
 
     for (i, g) in amp.graphs.iter().enumerate() {
+        let mut inspect_res = vec![];
+        let mut analytic_res = vec![];
         for lmb in g.derived_data.lmbs.as_ref().unwrap() {
             println!("{}", lmb);
             let mut pt = vec![];
@@ -222,9 +225,12 @@ fn scalar_bubble() {
                 res.push(inspect_res_eval * F(inspect_res_jac.unwrap()))
             }
 
-            for r in res.iter() {
-                println!("res: {}", r.norm_squared().sqrt());
-            }
+            inspect_res.push(res);
+
+            // for r in res.iter() {
+            //     println!("res: {}", r.norm_squared().sqrt());
+            // }
+            let mut lims_per_orient = vec![];
 
             for o in g
                 .derived_data
@@ -239,9 +245,12 @@ fn scalar_bubble() {
                     .orientation
                     .select(&g.derived_data.all_mighty_integrand);
 
-                g.graph
-                    .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+                let lims =
+                    g.graph
+                        .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+                lims_per_orient.push(lims);
             }
+            analytic_res.push(lims_per_orient);
         }
     }
 }

@@ -74,7 +74,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         expr: &Atom,
         expansion: Symbol,
         lmb: &LoopMomentumBasis,
-    ) -> Vec<Atom>
+    ) -> Vec<(SuBitGraph, Atom)>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
@@ -131,7 +131,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
                 println!("\t{}: {}", t, a);
             }
 
-            limits.push(expr);
+            limits.push((ls, expr));
         }
         limits
     }

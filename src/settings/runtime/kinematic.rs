@@ -247,6 +247,10 @@ impl Externals {
             Externals::Constant { momenta, .. } => {
                 match dependent_momenta_constructor {
                     DependentMomentaConstructor::Amplitude(external_signature) => {
+                        if external_signature.is_empty() {
+                            return Ok(vec![].into());
+                        }
+
                         let mut sum: FourMomentum<F<T>> = FourMomentum::from([
                             F::<T>::from_f64(0.0),
                             F::from_f64(0.0),
