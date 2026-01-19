@@ -469,8 +469,23 @@ fn photonic_amplitudes() -> Result<()> {
         sample_time: None,
     };
 
-    test_reports.push(run_photonic_test(one_loop_eu, &mut test_failed)?);
+    let one_loop_phys = BenchMarkData {
+        run_card: "photonic_amplitudes/1l_phys.toml".into(),
+        state_path: "./tests/photonic_amplitudes/1l_phys".into(),
+        amplitude: "1l_phys".into(),
+        inspect_point: vec![0.1, 0.2, 0.3],
+        inspect_target: Some(Complex::new(4.660217585099159e-10, -6.496141406152415e-10)),
+        integrated_target: Some(Complex::new(
+            F(-9.27759500687454717e-11),
+            F(-3.68394576249870544e-11),
+        )),
+        generation_time: None,
+        rsd_bench: None,
+        sample_time: None,
+    };
 
+    test_reports.push(run_photonic_test(one_loop_eu, &mut test_failed)?);
+    test_reports.push(run_photonic_test(one_loop_phys, &mut test_failed)?);
     test_reports.push(TestReportEntry::default_with_name("1l_phys".to_string()));
     test_reports.push(TestReportEntry::default_with_name("2l_eu".to_string()));
     test_reports.push(TestReportEntry::default_with_name("2l_phys".to_string()));
