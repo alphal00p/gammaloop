@@ -15,9 +15,7 @@ use gammalooprs::{
 };
 use insta::assert_snapshot;
 use itertools::Itertools;
-use libc::NF_IP_PRI_RAW_BEFORE_DEFRAG;
 use momtrop::assert_approx_eq;
-use serde_json::to_string;
 use spenso::{
     algebra::complex::Complex,
     network::{Network, Sequential, SmallestDegree, store::NetworkStore},
@@ -33,7 +31,6 @@ use symbolica::{
 };
 use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
-use tracing_subscriber::fmt::format;
 
 mod test_utils;
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
@@ -301,7 +298,6 @@ fn photons_2l_inspect() -> Result<()> {
 #[test]
 fn photonic_amplitudes() -> Result<()> {
     let mut test_failed = false;
-
     #[derive(Tabled)]
     struct ComparisonReport {
         gammaloop: ColoredString,
@@ -311,12 +307,14 @@ fn photonic_amplitudes() -> Result<()> {
     impl ComparisonReport {
         fn display_nested(&self) -> String {
             let mut table = Table::new([self]);
-            table.with(
-                Style::modern()
-                    .remove_horizontals()
-                    .remove_verticals()
-                    .remove_frame(),
-            );
+            table
+                .with(
+                    Style::modern()
+                        .remove_horizontals()
+                        .remove_verticals()
+                        .remove_frame(),
+                )
+                .with(tabled::settings::Rotate::Left);
             table.to_string()
         }
 
@@ -467,7 +465,7 @@ fn photonic_amplitudes() -> Result<()> {
                 ComparisonReport {
                     gammaloop: integrated_result_string,
                     reference: format!(
-                        "{:.16e} + {:.16e}i",
+                        "{:.8e} + {:.8e}i",
                         integrated_target.re.0, integrated_target.im.0
                     )
                     .blue(),
@@ -1378,56 +1376,4 @@ fn test_qqx_aaa_ir_subtracted_inspect() -> Result<()> {
     let target = Complex::new(2.3159767780905335e-1, -1.8547720156633686e-4);
     assert_eq!(inspect, target);
     Ok(())
-}
-
-#[test]
-fn quick_table_tryout() {
-    #[derive(Tabled)]
-    struct TopLevelThing {
-        name: String,
-        foo: String,
-        #[tabled(display = "Nested::display_nested")]
-        nested: Nested,
-    }
-
-    #[derive(Tabled)]
-    struct Nested {
-        nested_foo: String,
-        nested_bar: String,
-    }
-
-    impl Nested {
-        fn display_nested(&self) -> String {
-            let mut table = Table::new([self]);
-            table.with(
-                Style::modern()
-                    .remove_horizontals()
-                    .remove_verticals()
-                    .remove_frame(),
-            );
-            table.to_string()
-        }
-    }
-
-    let things = vec![
-        TopLevelThing {
-            name: "Thing 1".to_string(),
-            foo: "Foo 1".to_string(),
-            nested: Nested {
-                nested_foo: "Nested Foo 1".to_string(),
-                nested_bar: "Nested Bar 1".to_string(),
-            },
-        },
-        TopLevelThing {
-            name: "Thing 2".to_string(),
-            foo: "Foo 2".to_string(),
-            nested: Nested {
-                nested_foo: "Nested Foo 2".to_string(),
-                nested_bar: "Nested Bar 2".to_string(),
-            },
-        },
-    ];
-
-    let table = Table::new(things).to_string();
-    println!("{table}");
 }
