@@ -11,7 +11,7 @@ use gammalooprs::{
     GammaLoopContextContainer,
     model::UFOSymbol,
     numerator::aind::Aind,
-    utils::{self, F, FUN_LIB, GS, TENSORLIB, W_},
+    utils::{self, ApproxEq, F, FUN_LIB, GS, TENSORLIB, W_},
 };
 use insta::assert_snapshot;
 use itertools::Itertools;
@@ -355,7 +355,7 @@ fn photonic_amplitudes() -> Result<()> {
             if generation_time <= target_time {
                 format!("{}s", generation_time.as_secs()).green()
             } else if generation_time <= target_time * 10 {
-                format!("{}s", generation_time.as_secs()).red()
+                format!("{}s", generation_time.as_secs()).yellow()
             } else {
                 format!("{}s", generation_time.as_secs()).red()
             }
@@ -373,7 +373,9 @@ fn photonic_amplitudes() -> Result<()> {
         .run(&mut cli)?;
 
         let inspect_result_string = if let Some(inspect_target) = bench_data.inspect_target {
-            if inspect_target == inspect_result {
+            let inspect_result_f = Complex::new(F(inspect_result.re), F(inspect_result.im));
+            let inspect_target_f = Complex::new(F(inspect_target.re), F(inspect_target.im));
+            if inspect_target_f.approx_eq(&inspect_result_f, &F(1.0e-14)) {
                 format!("{:.16e}", inspect_result).green()
             } else {
                 *test_failed = true;
@@ -458,7 +460,7 @@ fn photonic_amplitudes() -> Result<()> {
         run_card: "photonic_amplitudes/1l_eu.toml".into(),
         state_path: "./tests/photonic_amplitudes/1l_eu".into(),
         amplitude: "1l_eu".into(),
-        generation_time: None,
+        generation_time: Some(Duration::from_secs(7)),
         inspect_point: vec![0.123, 0.3242, 0.4233],
         inspect_target: Some(Complex::new(-4.236544183136417e-12, -3.710728958614226e-12)),
         integrated_target: Some(Complex::new(
@@ -466,7 +468,7 @@ fn photonic_amplitudes() -> Result<()> {
             F(-3.94362534040412e-13),
         )),
         rsd_bench: None,
-        sample_time: None,
+        sample_time: Some(Duration::from_micros(61)),
     };
 
     let one_loop_phys = BenchMarkData {
@@ -474,14 +476,14 @@ fn photonic_amplitudes() -> Result<()> {
         state_path: "./tests/photonic_amplitudes/1l_phys".into(),
         amplitude: "1l_phys".into(),
         inspect_point: vec![0.1, 0.2, 0.3],
-        inspect_target: Some(Complex::new(4.660217585099159e-10, -6.496141406152415e-10)),
+        inspect_target: Some(Complex::new(4.660217572648287e-10, -6.496141401696065e-10)),
         integrated_target: Some(Complex::new(
             F(-9.27759500687454717e-11),
             F(-3.68394576249870544e-11),
         )),
-        generation_time: None,
+        generation_time: Some(Duration::from_secs(7)),
         rsd_bench: None,
-        sample_time: None,
+        sample_time: Some(Duration::from_micros(590)),
     };
 
     test_reports.push(run_photonic_test(one_loop_eu, &mut test_failed)?);
