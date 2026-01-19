@@ -1,6 +1,7 @@
 use clap::Subcommand;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::state::State;
 use color_eyre::Result;
@@ -8,9 +9,22 @@ use eyre::eyre;
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Display {
-    Model,
+    Model {
+        #[arg(short = 'c', long = "show-couplings", default_value_t = false)]
+        show_couplings: bool,
+        #[arg(short = 'v', long = "show-vertices", default_value_t = false)]
+        show_vertices: bool,
+        #[arg(short = 'r', long = "show-parameters", default_value_t = false)]
+        show_parameters: bool,
+        #[arg(short = 'p', long = "show-particles", default_value_t = false)]
+        show_particles: bool,
+        #[arg(short = 'a', long = "show-all", default_value_t = false)]
+        show_all: bool,
+    },
     Processes,
-    Integrands { process_id: Option<usize> },
+    Integrands {
+        process_id: Option<usize>,
+    },
 }
 
 impl Display {
@@ -34,22 +48,36 @@ impl Display {
                     ));
                 };
 
-                println!("Integrands for process {}:", process.definition.process_id);
+                info!("Integrands for process {}:", process.definition.process_id);
                 for integrand in process.get_integrand_names() {
-                    println!("  {}", integrand);
+                    info!("  {}", integrand);
                 }
             }
             Display::Processes => {
-                println!("Processes:");
+                info!("Processes:");
                 for process in state.process_list.processes.iter() {
-                    println!(
+                    info!(
                         "#{:-10}  {}",
                         process.definition.process_id, process.definition.folder_name
                     );
                 }
             }
-            Display::Model => {
-                println!("{}", state.model.name)
+            Display::Model {
+                show_couplings,
+                show_vertices,
+                show_parameters,
+                show_particles,
+                show_all,
+            } => {
+                info!(
+                    "\n{}",
+                    state.model.get_description(
+                        *show_particles || *show_all,
+                        *show_parameters || *show_all,
+                        *show_vertices || *show_all,
+                        *show_couplings || *show_all,
+                    )
+                )
             }
         }
         Ok(())

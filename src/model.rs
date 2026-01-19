@@ -7,6 +7,7 @@ use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::owo_colors::OwoColorize;
+use colored::Colorize;
 use eyre::eyre;
 use itertools::Itertools;
 // use linnet::half_edge::drawing::Decoration;
@@ -16,6 +17,12 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
 use spenso::structure::{IndexLess, PermutedStructure};
+use tabled::settings::Modify;
+use tabled::{
+    builder::Builder,
+    settings::{Span, object::Cell},
+    settings::{Style, style::VerticalLine},
+};
 
 // use log::{info, trace};
 use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet};
@@ -1424,6 +1431,218 @@ impl Model {
     ) -> Result<(), Report> {
         input_param_card.apply_to_model(self)?;
         Ok(())
+    }
+
+    pub fn get_description(
+        &self,
+        show_particles: bool,
+        show_parameters: bool,
+        show_vertices: bool,
+        show_couplings: bool,
+    ) -> String {
+        let name = self.name.clone().green().to_string();
+        let restriction = match &self.restriction {
+            Some(r) => r.clone().blue().to_string(),
+            None => "None".into(),
+        };
+        let coupling_orders_value = if self.orders.is_empty() {
+            "None".into()
+        } else {
+            self.orders
+                .iter()
+                .map(|order| {
+                    format!(
+                        "{} (expansion order: {}, hierarchy: {})",
+                        order.name.green(),
+                        order.expansion_order,
+                        order.hierarchy
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        let particle_list = if !show_particles {
+            "[ hiddem ]".blue().to_string()
+        } else {
+            let mut particle_table = Builder::new();
+
+            particle_table.push_record([
+                "Name".green().to_string(),
+                "PDG code".normal().to_string(),
+                "Mass name".blue().to_string(),
+                "Mass value".normal().to_string(),
+                "Width name".blue().to_string(),
+                "Width value".normal().to_string(),
+            ]);
+            for p in &self.particles {
+                let mass_value = if let Some(value) = self.get_parameter(p.mass.0.to_string()).value
+                {
+                    format!("{:.6}", value.re)
+                } else {
+                    "None".into()
+                };
+                let width_value =
+                    if let Some(value) = self.get_parameter(p.width.0.to_string()).value {
+                        format!("{:.6}", value.re)
+                    } else {
+                        "None".into()
+                    };
+
+                particle_table.push_record(&[
+                    p.name.to_string().green().to_string(),
+                    format!("{:+}", p.pdg_code).normal().to_string(),
+                    p.mass.0.to_string().blue().to_string(),
+                    mass_value.normal().to_string(),
+                    p.width.0.to_string().blue().to_string(),
+                    width_value.normal().to_string(),
+                ]);
+            }
+            let mut particle_table_built = particle_table.build();
+
+            format!(
+                "\n{}\n",
+                particle_table_built.with(Style::rounded()).to_string()
+            )
+        };
+
+        let parameter_list = if !show_parameters {
+            "[ hidden ]".blue().to_string()
+        } else {
+            let mut parameter_table = Builder::new();
+            parameter_table.push_record([
+                "Name".green().to_string(),
+                "Nature".normal().to_string(),
+                "Type".normal().to_string(),
+                "Value".normal().to_string(),
+                "Expression".to_string(),
+            ]);
+            for param in self.parameters.values() {
+                parameter_table.push_record(&[
+                    param.name.to_string().green().to_string(),
+                    if param.nature == ParameterNature::External {
+                        format!("{:?}", param.nature).green().to_string()
+                    } else {
+                        format!("{:?}", param.nature).yellow().to_string()
+                    },
+                    if param.parameter_type == ParameterType::Real {
+                        format!("{:?}", param.parameter_type).green().to_string()
+                    } else {
+                        format!("{:?}", param.parameter_type).yellow().to_string()
+                    },
+                    if let Some(value) = param.value {
+                        format!("{:.6}", value.re)
+                    } else {
+                        "".into()
+                    },
+                    if let Some(expr) = &param.expression {
+                        expr.to_string()
+                    } else {
+                        "".into()
+                    },
+                ]);
+            }
+            format!(
+                "\n{}\n",
+                parameter_table.build().with(Style::rounded()).to_string()
+            )
+        };
+
+        let vertex_list = if !show_vertices {
+            "[ hidden ]".blue().to_string()
+        } else {
+            let mut vertex_table = Builder::new();
+
+            let max_n_particles = self
+                .vertex_rules
+                .iter()
+                .map(|vr| vr.particles.len())
+                .max()
+                .unwrap_or(3);
+            let mut header = vec!["Name".green().to_string(), "Particles".blue().to_string()];
+            for _ in 0..max_n_particles - 1 {
+                header.push("".to_string());
+            }
+            vertex_table.push_record(header);
+            // for vr in &self.vertex_rules {
+            //     vertex_table.push_record(&[
+            //         vr.name.to_string().green().to_string(),
+            //         vr.particles
+            //             .iter()
+            //             .map(|p| format!("{:<6}", p.name.to_string()).blue().to_string())
+            //             .collect::<Vec<_>>()
+            //             .join(", "),
+            //     ]);
+            // }
+            for vr in &self.vertex_rules {
+                let mut record = vec![vr.name.to_string().green().to_string()];
+                for p in &vr.particles {
+                    record.push(p.name.to_string().blue().to_string());
+                }
+                // Pad the record with empty strings if necessary
+                while record.len() < max_n_particles + 1 {
+                    record.push("".to_string());
+                }
+                vertex_table.push_record(&record);
+            }
+            let mut vertex_table_built = vertex_table.build();
+
+            vertex_table_built
+                .with(
+                    Style::rounded()
+                        .remove_vertical()
+                        // keep only the split after column 0 (between col 0 and 1)
+                        .verticals([(1, VerticalLine::inherit(Style::rounded()))]),
+                )
+                .with(Modify::new(Cell::new(0, 1)).with(Span::column(max_n_particles as isize)));
+            format!("\n{}\n", vertex_table_built.to_string())
+        };
+
+        let coupling_list = if !show_couplings {
+            "[ hidden ]".blue().to_string()
+        } else {
+            let mut coupling_table = Builder::new();
+            coupling_table.push_record([
+                "Name".green().to_string(),
+                "Orders".blue().to_string(),
+                "Expression".normal().to_string(),
+            ]);
+            for c in self.couplings.values() {
+                coupling_table.push_record(&[
+                    c.name.to_string().green().to_string(),
+                    c.orders
+                        .iter()
+                        .map(|(k, v)| format!("{}={}", k.blue(), v))
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    c.expression.to_string(),
+                ]);
+            }
+            format!(
+                "\n{}\n",
+                coupling_table.build().with(Style::rounded()).to_string(),
+            )
+        };
+
+        #[rustfmt::skip]
+        return format!("
+{model_name_label:<30}: {name}
+{restriction_label:<30}: {restriction}
+{coupling_orders_label:<30}: {coupling_orders_value}
+
+{n_particles} particles : {particle_list}
+{n_parameters} parameters :{parameter_list}
+{n_vertices} vertices : {vertex_list}
+{n_couplings} couplings : {coupling_list}
+", 
+model_name_label = "Model name",
+restriction_label = "Restriction",
+coupling_orders_label = "Coupling orders",
+n_particles = format!("{}", self.particles.len()).green(),
+n_parameters = format!("{}", self.parameters.len()).green(),
+n_vertices = format!("{}", self.vertex_rules.len()).green(),
+n_couplings = format!("{}", self.couplings.len()).green(),
+);
     }
 
     /// Generate edge-style.typ template file with styles for all particles in the model

@@ -66,6 +66,7 @@ symbolica = { version = "1", default-features = false, features = [
     "bincode",
 
 ] }
+smartstring = { version = "*", features = ["serde"] }
 bincode-trait-derive = { version = "0.1.1" }
 bincode = { version = "2.0.0", features = ["serde"] }
 serde_json = "1"

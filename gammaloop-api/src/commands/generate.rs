@@ -168,6 +168,10 @@ pub struct SpecArgs {
     #[arg(long = "filter-tadpoles")]
     pub filter_tadpoles: Option<bool>,
 
+    /// Veto vertex interactions
+    #[arg(long = "veto-vertex-interactions", num_args = 0..)]
+    pub veto_vertex_interactions: Option<Vec<String>>,
+
     /// Cross-section tadpole filtering when sewing
     #[arg(long = "filter-cross-section-tadpoles")]
     pub filter_cross_section_tadpoles: Option<bool>,
@@ -1549,6 +1553,15 @@ fn feyngen_from_spec_args(
         }
     }
 
+    if let Some(vertex_interactions_vetoed) = a.veto_vertex_interactions.as_ref() {
+        let filt = FeynGenFilter::VertexVeto(vertex_interactions_vetoed.clone());
+        if fg.generation_type == GenerationType::Amplitude {
+            amp_filters.push(filt);
+        } else {
+            xs_filters.push(filt);
+        }
+    }
+
     fg.amplitude_filters = FeynGenFilters(amp_filters);
     fg.cross_section_filters = FeynGenFilters(xs_filters);
 
@@ -1784,6 +1797,7 @@ mod tests {
             append: false,
             integrand_name: None,
             only_diagrams: true,
+            veto_vertex_interactions: None,
         }
     }
 

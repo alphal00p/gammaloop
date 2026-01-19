@@ -287,7 +287,7 @@ impl FeynGenFilters {
                             .progress_with(bar.clone())
                             .filter(|(g, _)| {
                                 let graph_coupling_orders = get_coupling_orders(g, model);
-                                
+
                                 // if a {
                                 //     info!(
                                 //         "Coupling orders constraints satisfied for graph {}",
@@ -323,6 +323,7 @@ impl FeynGenFilters {
                 | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
                 | FeynGenFilter::BlobRange(_)
                 | FeynGenFilter::SpectatorRange(_)
+                | FeynGenFilter::VertexVeto(_)
                 | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
             }
         }
@@ -449,6 +450,7 @@ pub enum FeynGenFilter {
     SewedFilter(SewedFilterOptions),
     /// A list of vetoed pdgs
     ParticleVeto(Vec<i64>),
+    VertexVeto(Vec<String>),
     MaxNumberOfBridges(usize),
     /// A map between the coupling order name and a range of orders, inclusive, with an optional upper bound
     CouplingOrders(HashMap<String, (usize, Option<usize>)>),
@@ -472,6 +474,14 @@ impl fmt::Display for FeynGenFilter {
                 Self::ParticleVeto(pdgs) => format!(
                     "ParticleVeto({})",
                     pdgs.iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>()
+                        .join("|")
+                ),
+                Self::VertexVeto(vetos) => format!(
+                    "VertexVeto({})",
+                    vetos
+                        .iter()
                         .map(|x| x.to_string())
                         .collect::<Vec<String>>()
                         .join("|")

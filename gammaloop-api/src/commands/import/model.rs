@@ -8,6 +8,7 @@ use gammalooprs::utils::F;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 
 use gammalooprs::model::{InputParamCard, Model};
 use include_dir::{include_dir, Dir, File};
@@ -210,6 +211,9 @@ impl ImportModel {
                     );
                 }
                 state.model = Model::from_str(json_model, "json")?;
+                state.model.restriction = restriction_name
+                    .as_ref()
+                    .map(|s| SmartString::<LazyCompact>::from(s));
                 state.model_parameters = if let Some(json_restriction) = json_restriction {
                     let mut param_card = InputParamCard::from_str(json_restriction, "json")?;
                     if self.simplify_model {
@@ -245,7 +249,10 @@ impl ImportModel {
                     );
                 }
                 (state.model, state.model_parameters) =
-                    load_ufo_model(&ufo_path, restriction_name, self.simplify_model)?;
+                    load_ufo_model(&ufo_path, restriction_name.clone(), self.simplify_model)?;
+                state.model.restriction = restriction_name
+                    .as_ref()
+                    .map(|s| SmartString::<LazyCompact>::from(s));
             }
         }
 

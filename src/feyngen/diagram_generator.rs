@@ -2815,6 +2815,18 @@ impl ProcessDefinition {
             GenerationType::CrossSection => &self.cross_section_filters,
         };
 
+        let vertex_vetoes_filter = filters
+            .0
+            .iter()
+            .filter_map(|f| {
+                if let FeynGenFilter::VertexVeto(filter) = f {
+                    Some(filter)
+                } else {
+                    None
+                }
+            })
+            .next();
+
         const SB_INCOMING: bool = true;
         const SB_OUTGOING: bool = false;
         // const SB_INCOMING: bool = false;
@@ -2826,6 +2838,11 @@ impl ProcessDefinition {
             Vec<SmartString<LazyCompact>>,
         > = HashMap::default();
         'add_vertex_rules: for vertex_rule in model.vertex_rules.iter() {
+            if let Some(veto) = vertex_vetoes_filter {
+                if veto.contains(&vertex_rule.0.name.clone().into()) {
+                    continue 'add_vertex_rules;
+                }
+            }
             let mut oriented_particles = vec![];
             for p in vertex_rule.0.particles.iter() {
                 if p.0.is_self_antiparticle() {
