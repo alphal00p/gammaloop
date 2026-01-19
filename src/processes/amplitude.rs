@@ -684,7 +684,7 @@ impl AmplitudeGraph {
 
         let mom_reps = self.graph.uv_wrapped_replacement(
             &self.graph.full_filter(),
-            &self.graph.lmb(component),
+            &self.graph.lmb_of(component),
             &[W_.x___],
         );
 
@@ -712,7 +712,7 @@ impl AmplitudeGraph {
 
         let vakint_integrand = to_vakint_integrand(
             &four_dimensional_integrand,
-            &self.graph.lmb(component),
+            &self.graph.lmb_of(component),
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
@@ -1112,7 +1112,7 @@ impl AmplitudeGraph {
     fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
-            .generate_loop_momentum_bases(&self.graph.no_dummy());
+            .generate_loop_momentum_bases_of(&self.graph.no_dummy());
 
         self.derived_data.lmbs = Some(lmbs)
     }

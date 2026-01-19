@@ -437,7 +437,7 @@ mod tests {
                     println!(
                         "//Node {}: \n{}",
                         d.subgraph.string_label(),
-                        g.dot_lmb(&d.subgraph, &d.lmb)
+                        g.dot_lmb_of(&d.subgraph, &d.lmb)
                     );
                 }
                 let ff = Wood::from_spinneys(spinneys, &g); //.unfold(&g, &g.loop_momentum_basis);

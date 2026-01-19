@@ -34,7 +34,6 @@ use linnet::{
         nodestore::NodeStorageVec,
         subgraph::{Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps},
         swap::Swap,
-        tree::SimpleTraversalTree,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
     permutation::Permutation,

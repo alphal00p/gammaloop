@@ -221,14 +221,14 @@ fn test_load() {
 
     println!(
         "{}",
-        graph[0].dot_lmb(&graph[0].underlying.full(), &graph[0].loop_momentum_basis)
+        graph[0].dot_lmb_of(&graph[0].underlying.full(), &graph[0].loop_momentum_basis)
     );
 
     println!("{}", graph[0].loop_momentum_basis);
 
     println!(
         "{}",
-        graph[1].dot_lmb(&graph[1].underlying.full(), &graph[1].loop_momentum_basis)
+        graph[1].dot_lmb_of(&graph[1].underlying.full(), &graph[1].loop_momentum_basis)
     );
     println!("{}", graph[1].loop_momentum_basis);
 }
@@ -745,7 +745,7 @@ fn test_loop_momentum_basis() {
 
     println!(
         "{}",
-        g.dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
+        g.dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
     );
 }
 
@@ -833,7 +833,7 @@ fn parse() {
     println!(
         "{}",
         g.underlying
-            .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
+            .dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
     );
 
     println!("{}", g.dot_serialize());
@@ -933,7 +933,7 @@ fn parse_local() {
     println!(
         "{}",
         g.underlying
-            .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
+            .dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
     );
 
     let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
@@ -1146,7 +1146,7 @@ fn parse_lmbsetting() {
     println!(
         "{}",
         g.underlying
-            .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
+            .dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
     );
 
     let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());

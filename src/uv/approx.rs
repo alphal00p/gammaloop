@@ -411,7 +411,7 @@ impl CFFapprox {
 }
 impl Approximation {
     pub(crate) fn dot(&self, graph: &Graph) -> String {
-        graph.dot_lmb(&self.subgraph, &self.lmb)
+        graph.dot_lmb_of(&self.subgraph, &self.lmb)
     }
 
     pub(crate) fn root<

@@ -573,7 +573,7 @@ impl GammaLoopAPI {
 
         let lmbs = graphs
             .into_iter()
-            .map(|g| g.generate_loop_momentum_bases(&g.no_dummy()))
+            .map(|g| g.generate_loop_momentum_bases_of(&g.no_dummy()))
             .collect_vec();
 
         Ok(lmbs

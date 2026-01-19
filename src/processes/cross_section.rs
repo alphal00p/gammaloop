@@ -1473,7 +1473,7 @@ impl CrossSectionGraph {
         let full_filter = self.graph.full_filter();
         let cut_graph = full_filter.subtract(&self.graph.initial_state_cut.right);
 
-        for s in self.graph.all_spanning_trees(&cut_graph) {
+        for s in self.graph.all_spanning_forests_of(&cut_graph) {
             let mut lmb = self.graph.lmb_impl(&full_filter, &s, externals.clone());
             let mut exts = vec![];
 
