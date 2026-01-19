@@ -1,6 +1,7 @@
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
 use ahash::{AHashMap, AHashSet};
+use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
     algorithms::trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold},
@@ -252,24 +253,43 @@ impl Display for OperationNode {
         } else {
             let mut acc: Option<SuBitGraph> = None;
 
-            self.key.write_foata_like(f, |op| {
-                if let Some(a) = &mut acc {
-                    a.union_with(op);
-                } else {
-                    acc = Some(op.clone());
-                }
-                op.string_label()
-            })?;
-            if let Some(a) = acc {
-                write!(f, " => ")?;
-                write!(f, "{} = {}", &a.string_label(), self.to_atom())?;
+            if f.alternate() {
+                self.key.write_foata_like(f, |op| {
+                    if let Some(a) = &mut acc {
+                        a.union_with(op);
+                    } else {
+                        acc = Some(op.clone());
+                    }
+                    op.string_label()
+                })?;
             }
+            write!(f, "{}", self.to_atom())?;
+
             Ok(())
         }
     }
 }
 
 impl OperationNode {
+    pub fn covers(&self) -> Option<SuBitGraph> {
+        let mut acc: Option<SuBitGraph> = None;
+
+        if self.key.levels.is_empty() {
+            return acc;
+        }
+
+        for level in self.key.levels.iter() {
+            for op in level.iter() {
+                if let Some(a) = &mut acc {
+                    a.union_with(&op.order);
+                } else {
+                    acc = Some(op.order.clone());
+                }
+            }
+        }
+
+        acc
+    }
     pub fn to_atom(&self) -> Atom {
         let mut acc = Atom::one();
 
@@ -312,15 +332,49 @@ pub struct ComputeNode {
 
 impl SpinneyForest {
     pub fn walk(&self) {
+        let mut cover_groups: BTreeMap<SuBitGraph, Vec<NodeIndex>> = BTreeMap::new();
+
         self.graph
             .topo_sort_kahn()
             .unwrap()
             .iter()
             .for_each(|nidx| {
                 let trace_key = &self.graph[*nidx];
+                cover_groups
+                    .entry(trace_key.covers().unwrap_or(self.graph.empty_subgraph()))
+                    .and_modify(|e| e.push(*nidx))
+                    .or_insert_with(|| vec![*nidx]);
+
                 println!("Node {}: {}", nidx, trace_key);
             });
+
+        println!("edge [constraint=true style=invis];");
+        for (a, b) in cover_groups.values().tuple_windows() {
+            println!("{}->{}", a.first().unwrap(), b.first().unwrap())
+        }
+        println!("edge [style=solid];");
+
+        for (s, g) in cover_groups.iter() {
+            println!("subgraph group_{} {{rank=same; ", s.string_label());
+            for n in g {
+                println!("{};", n.0);
+            }
+            println!("}}");
+        }
+
+        // cover_groups.values().pairs
     }
+
+    // pub fn walk_(&self) {
+    //     self.graph
+    //         .topo_sort_kahn()
+    //         .unwrap()
+    //         .iter()
+    //         .for_each(|nidx| {
+    //             let trace_key = &self.graph[*nidx];
+    //             println!("Node {}: {}", nidx, trace_key);
+    //         });
+    // }
 }
 
 impl Display for SpinneyForest {
@@ -446,6 +500,7 @@ mod tests {
 
                 let f = f.unfold();
                 f.walk();
+                println!("{}", f);
                 assert_eq!(
                     152,
                     f.graph.n_nodes(),

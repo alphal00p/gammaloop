@@ -42,6 +42,7 @@ use crate::{
     settings::runtime::StabilitySettings,
 };
 use color_eyre::Result;
+use tracing::instrument;
 
 pub mod evaluators;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};

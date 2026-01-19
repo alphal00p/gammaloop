@@ -3,12 +3,13 @@ use std::{
     io::{self},
     ops::ControlFlow,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::atomic::AtomicBool,
     time::Instant,
 };
 
 use clap::Args;
-use color_eyre::Result;
+use color_eyre::{Result, Section};
 use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::{
@@ -45,6 +46,205 @@ use crate::{
     tracing::{set_file_log_filter, set_stderr_log_filter},
     CLISettings,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
+pub enum ProcessRef {
+    Id(usize),
+    Name(String),
+    Unqualified(String),
+}
+
+impl Serialize for ProcessRef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            ProcessRef::Id(id) => serializer.serialize_u64(*id as u64),
+            ProcessRef::Name(name) => serializer.serialize_str(&format!("name:{name}")),
+            ProcessRef::Unqualified(value) => serializer.serialize_str(value),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ProcessRef {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, Visitor};
+        use std::fmt;
+
+        struct ProcessRefVisitor;
+
+        impl<'de> Visitor<'de> for ProcessRefVisitor {
+            type Value = ProcessRef;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a process reference string or numeric id")
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                Ok(ProcessRef::Id(value as usize))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                ProcessRef::from_str(value).map_err(E::custom)
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                self.visit_str(&value)
+            }
+        }
+
+        deserializer.deserialize_any(ProcessRefVisitor)
+    }
+}
+
+impl FromStr for ProcessRef {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        if let Some(rest) = value.strip_prefix('#') {
+            let id = rest
+                .parse::<usize>()
+                .map_err(|_| format!("Invalid process id in '{value}'"))?;
+            return Ok(ProcessRef::Id(id));
+        }
+        if let Some(rest) = value.strip_prefix("name:") {
+            if rest.is_empty() {
+                return Err("Process name cannot be empty".to_string());
+            }
+            return Ok(ProcessRef::Name(rest.to_string()));
+        }
+        if value.is_empty() {
+            return Err("Process reference cannot be empty".to_string());
+        }
+        Ok(ProcessRef::Unqualified(value.to_string()))
+    }
+}
+
+impl ProcessRef {
+    pub fn resolve(&self, process_list: &ProcessList) -> Result<usize> {
+        let process_count = process_list.processes.len();
+        match self {
+            ProcessRef::Id(id) => {
+                if *id >= process_count {
+                    return Err(eyre!(
+                        "Process ID {} invalid, only {} processes available",
+                        id,
+                        process_count
+                    ));
+                }
+                Ok(*id)
+            }
+            ProcessRef::Name(name) => process_list
+                .processes
+                .iter()
+                .position(|p| p.definition.folder_name == *name)
+                .ok_or_else(|| {
+                    eyre!(
+                        "No process named '{}'. Use 'display processes' to list available processes.",
+                        name
+                    )
+                }),
+            ProcessRef::Unqualified(value) => {
+                let name_match = process_list
+                    .processes
+                    .iter()
+                    .position(|p| p.definition.folder_name == *value);
+                if let Ok(id) = value.parse::<usize>() {
+                    let id_valid = id < process_count;
+                    match (id_valid, name_match) {
+                        (true, Some(_)) => Err(eyre!(
+                            "Ambiguous process reference '{}'. Use '#{}' or 'name:{}' to disambiguate.",
+                            value,
+                            id,
+                            value
+                        )),
+                        (true, None) => Ok(id),
+                        (false, Some(index)) => Ok(index),
+                        (false, None) => Err(eyre!(
+                            "No process named '{}'. Use 'display processes' to list available processes.",
+                            value
+                        )),
+                    }
+                } else if let Some(index) = name_match {
+                    Ok(index)
+                } else {
+                    Err(eyre!(
+                        "No process named '{}'. Use 'display processes' to list available processes.",
+                        value
+                    ))
+                }
+            }
+        }
+    }
+}
+
+pub trait ProcessListExt {
+    fn find_integrand_ref(
+        &self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<(usize, String)>;
+    fn get_amplitude_mut_ref(
+        &mut self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<&mut Amplitude>;
+}
+
+impl ProcessListExt for ProcessList {
+    fn find_integrand_ref(
+        &self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<(usize, String)> {
+        let process_id = match process {
+            Some(process_ref) => process_ref.resolve(self)?,
+            None => self.find_process(None)?,
+        };
+        let integrand_name = self.processes[process_id]
+            .collection
+            .find_integrand(integrand_name.cloned())
+            .with_note(|| format!("in process id {process_id}"))?;
+        Ok((process_id, integrand_name))
+    }
+
+    fn get_amplitude_mut_ref(
+        &mut self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<&mut Amplitude> {
+        let (process_id, integrand_name) = self.find_integrand_ref(process, integrand_name)?;
+        let process = &mut self.processes[process_id];
+        match &mut process.collection {
+            ProcessCollection::Amplitudes(amplitudes) => {
+                amplitudes.get_mut(&integrand_name).ok_or_else(|| {
+                    eyre!(
+                        "No amplitude named '{}' in process '{}'",
+                        integrand_name,
+                        process.definition.folder_name
+                    )
+                })
+            }
+            ProcessCollection::CrossSections(_) => Err(eyre!(
+                "Process '{}' does not contain amplitudes",
+                process.definition.folder_name
+            )),
+        }
+    }
+}
 
 pub trait SyncSettings {
     fn sync_settings(&self) -> Result<()>;
@@ -324,6 +524,26 @@ impl State {
         Ok(())
     }
 
+    pub fn resolve_process_ref(&self, process: Option<&ProcessRef>) -> Result<usize> {
+        match process {
+            Some(process_ref) => process_ref.resolve(&self.process_list),
+            None => self.process_list.find_process(None),
+        }
+    }
+
+    pub fn find_integrand_ref(
+        &self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<(usize, String)> {
+        let process_id = self.resolve_process_ref(process)?;
+        let integrand_name = self.process_list.processes[process_id]
+            .collection
+            .find_integrand(integrand_name.cloned())
+            .with_note(|| format!("in process id {process_id}"))?;
+        Ok((process_id, integrand_name))
+    }
+
     pub fn generate_integrands(
         &mut self,
         global_settings: &GlobalSettings,
@@ -567,12 +787,12 @@ impl State {
         &mut self,
         samples: usize,
         process_id: usize,
-        process_name: String,
+        integrand_name: String,
         _n_cores: usize,
     ) -> Result<()> {
         let integrand = self
             .process_list
-            .get_integrand_mut(process_id, process_name)?;
+            .get_integrand_mut(process_id, integrand_name)?;
         let name = integrand.name();
 
         info!(

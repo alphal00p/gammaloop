@@ -149,6 +149,8 @@ pub struct GammaloopSymbols {
     ///for selecting orientations at generation
     pub selected: Symbol,
 
+    /// For analytic UV profiling
+    pub expansion: Symbol,
     ///For selecting a concete index.
     pub delta_vec: Symbol,
     pub emr_mom: Symbol,
@@ -325,6 +327,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             **out = Atom::num(1) / (Atom::num(2) * a);
         }
     ),
+    expansion: symbol!("expansion"),
     rescale_star: symbol!("t⃰"),
     hfunction_lu_cut: symbol!("h_lu_cut"),
     hfunction_left_th: symbol!("h_left_th"),

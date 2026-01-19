@@ -4,9 +4,9 @@ use std::{fs, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::Context;
-use tracing::debug;
 use rayon::ThreadPool;
 use schemars::JsonSchema;
+use tracing::debug;
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
@@ -245,7 +245,7 @@ impl ProcessList {
             Err(color_eyre::eyre::eyre!("No processes generated yet."))
         } else if self.processes.len() > 1 {
             Err(color_eyre::eyre::eyre!(
-                "There are {} processes available. Please specify a process id.",
+                "There are {} processes available. Please specify a process.",
                 self.processes.len()
             ))
         } else {

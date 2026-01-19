@@ -6,15 +6,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
-use crate::state::State;
-use color_eyre::{Result, Section};
+use crate::state::{ProcessRef, State};
+use color_eyre::Result;
 use tracing::info;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Inspect {
-    /// The process id to inspect
-    #[arg(short = 'i', long = "process-id", value_name = "ID")]
-    pub process_id: Option<usize>,
+    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    pub process: Option<ProcessRef>,
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
     pub integrand_name: Option<String>,
@@ -45,12 +45,8 @@ pub struct Inspect {
 
 impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
-        let process_id = state.process_list.find_process(self.process_id)?;
-
-        let integrand_name = state.process_list.processes[process_id]
-            .collection
-            .find_integrand(self.integrand_name.clone())
-            .with_note(|| format!("in process id {process_id}"))?;
+        let (process_id, integrand_name) =
+            state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
 
         let integrand = state
             .process_list
@@ -109,12 +105,9 @@ impl<'a> BatchedInspect<'a> {
         ArrayBase<OwnedRepr<Complex<f64>>, ndarray::Dim<[usize; 1]>>,
         Option<ArrayBase<OwnedRepr<f64>, ndarray::Dim<[usize; 1]>>>,
     )> {
-        let process_id = state.process_list.find_process(self.process_id)?;
-
-        let integrand_name = state.process_list.processes[process_id]
-            .collection
-            .find_integrand(self.integrand_name.clone())
-            .with_note(|| format!("in process id {process_id}"))?;
+        let process_ref = self.process_id.map(ProcessRef::Id);
+        let (process_id, integrand_name) =
+            state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
 
         let integrand = state
             .process_list

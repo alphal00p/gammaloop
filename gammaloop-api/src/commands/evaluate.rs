@@ -14,7 +14,10 @@ use gammalooprs::settings::RuntimeSettings;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
-use crate::{state::State, CLISettings};
+use crate::{
+    state::{ProcessRef, State},
+    CLISettings,
+};
 
 #[cfg_attr(
     feature = "python_api",
@@ -22,9 +25,9 @@ use crate::{state::State, CLISettings};
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Evaluate {
-    /// The process id to inspect
-    #[arg(short = 'i', long = "process-id", value_name = "ID")]
-    pub process_id: Option<usize>,
+    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    pub process: Option<ProcessRef>,
 
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
@@ -51,9 +54,8 @@ impl Evaluate {
         _global_cli_settings: &CLISettings,
         default_runtime_settings: &RuntimeSettings,
     ) -> Result<Atom> {
-        let (process_id, integrand_name) = state
-            .process_list
-            .find_integrand(self.process_id, self.graphs_group_name.as_ref())?;
+        let (process_id, integrand_name) =
+            state.find_integrand_ref(self.process.as_ref(), self.graphs_group_name.as_ref())?;
 
         let amplitude: &Amplitude = match &state.process_list.processes[process_id].collection {
             ProcessCollection::Amplitudes(amplitudes) => amplitudes.get(&integrand_name).unwrap(),

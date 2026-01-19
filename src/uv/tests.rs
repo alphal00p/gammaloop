@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
+use crate::DependentMomentaConstructor;
 use crate::cff::expression::{AmplitudeOrientationID, GraphOrientation};
 
 use crate::graph::edge::ParseEdge;
@@ -10,13 +11,15 @@ use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
 use crate::inspect::inspect;
-use crate::momentum_sample::LoopIndex;
+use crate::momentum::ThreeMomentum;
+use crate::momentum_sample::{ExternalIndex, LoopIndex};
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::global::OrientationPattern;
 use crate::settings::runtime::DiscreteGraphSamplingSettings;
 use crate::settings::{GlobalSettings, SamplingSettings};
 use crate::utils::symbolica_ext::TypstFormat;
 use crate::utils::{F, W_};
+use crate::uv::profile::{ProfileSettings, UVProfileable};
 use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::EdgeIndex;
 
@@ -30,6 +33,7 @@ use symbolica::atom::Symbol;
 use symbolica::domains::float::Real;
 use symbolica::numerical_integration::MonteCarloRng;
 use symbolica::symbol;
+use typed_index_collections::TiVec;
 
 use crate::{
     dot,
@@ -100,16 +104,18 @@ fn scalar_bubble() {
 
     let g: Vec<Graph> = dot!(
         digraph sunrise{
-            edge [particle=scalar_1]
-            node [num=1]
+            edge [particle=scalar_1]//  dod=-100]
+            node [num=1]// dod=-100]
             e        [style=invis]
-            // e -> A:0   [ id=3]
-            // B:1 -> e   [ id=4]
+            params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            // params="if_sigma(S_F⊛F*Top(S_F⊛0));if_sigma(S_F⊛0)"
+            e -> A:0   [ id=3]
+            B:1 -> e   [ id=4]
 
             // A -> C    [ id=0]
             // // C -> e
             // C -> B
-            A -> B
+            // A -> B
             A -> B
             A -> B    [ id=1]
             A -> B    [ id=0]
@@ -133,6 +139,7 @@ fn scalar_bubble() {
             uv: UVgenerationSettings {
                 generate_integrated: false,
                 softct: false,
+                add_sigma: true,
                 ..Default::default()
             },
             ..Default::default()
@@ -159,169 +166,28 @@ fn scalar_bubble() {
             .all_mighty_integrand
             .typst_string()
     );
-
     println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
-    // let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
-    //     &settings,
-    //     integrand,
-    //     &state.model,
-    //     pt,
-    //     &self.discrete_dim,
-    //     self.force_radius,
-    //     self.momentum_space,
-    //     self.use_f128,
-    // );
+    {
+        let integrand = amp.integrand.as_mut().unwrap();
 
-    // if let Some(GLIntegrand::Amplitude(a)) = &mut amp.integrand {
+        integrand.get_mut_settings().general.additional_param_values = vec![1.; 8];
+        integrand.warm_up(&model).unwrap();
+    };
 
-    //     inspect(settings, integrand, model, pt, discrete_dimensions, force_radius, is_momentum_space, use_f128)
+    let profile_settings = ProfileSettings::default();
+    let res = amp.profile(&model, &profile_settings).unwrap();
 
-    //     let res = a.data.graph_terms[0].evaluate(sample, model, settings, rotation, channel_id;)
-    // } else {
-    //     panic!("No integrand built");
-    // }
-
-    let integrand = amp.integrand.as_mut().unwrap();
-    let _ = integrand.warm_up(&model);
-
-    let mut settings = integrand.get_settings().clone();
-
-    settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings::default());
-    let mut rng = MonteCarloRng::new(1234567, 0);
-
-    let scales = logspace(2., 10., 10, 10.);
-
-    let mut results = vec![];
-
-    for (i, g) in amp.graphs.iter().enumerate() {
-        let mut inspect_res: Vec<Vec<Complex<F<f64>>>> = vec![];
-        let mut analytic_res: Vec<Vec<Vec<(SubSet<LoopIndex>, Atom)>>> = vec![];
-        for lmb in g.derived_data.lmbs.as_ref().unwrap() {
-            println!("{}", lmb);
-            let mut pt = vec![];
-
-            let mut res = vec![];
-            for l in lmb.loop_edges.iter() {
-                pt.push(F(rng.random_range(-1.0..1.0)));
-                pt.push(F(rng.random_range(-1.0..1.0)));
-                pt.push(F(rng.random_range(-1.0..1.0)));
-            }
-
-            let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
-            loops.next();
-
-            // for ls in loops {
-            //     let mut expr = expr.clone();
-            //     for l in ls.included_iter() {
-            //         let e = usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64;
-            //         expr = expr
-            //             .replace(function!(GS.emr_mom, e, W_.x___))
-            //             .with(function!(GS.emr_mom, e, W_.x___) / expansion);
-
-            //         expr /= Atom::var(expansion).npow(3);
-            //     }
-            // }
-
-            for s in &scales {
-                let mut ogpt = pt.clone();
-                for p in ogpt.iter_mut() {
-                    *p = *p * F(*s);
-                }
-
-                // println!("Scale :{s}");
-
-                let (inspect_res_jac, inspect_res_eval) = inspect(
-                    &settings,
-                    integrand,
-                    &model,
-                    ogpt,
-                    &vec![i],
-                    false,
-                    true,
-                    false,
-                );
-
-                // println!("Jac{:?}", inspect_res_jac);
-
-                res.push(inspect_res_eval / F(inspect_res_jac.unwrap()))
-            }
-
-            inspect_res.push(res);
-
-            // for r in res.iter() {
-            //     println!("res: {}", r.norm_squared().sqrt());
-            // }
-            let mut lims_per_orient = vec![];
-
-            for o in g
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .orientations
-                .iter()
-            {
-                let oatom = o
-                    .data
-                    .orientation
-                    .select(&g.derived_data.all_mighty_integrand);
-
-                let lims =
-                    g.graph
-                        .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
-                lims_per_orient.push(lims);
-            }
-            analytic_res.push(lims_per_orient);
-        }
-        results.push((inspect_res, analytic_res));
+    assert_eq!(res.pass_fail(-0.9, &profile_settings).failed, 0);
+    let analysis = res.analyse();
+    for t in analysis.tables_per_graph(-0.9) {
+        println!("{}", t);
     }
 
-    for (i, g) in amp.graphs.iter().enumerate() {
-        let (inspect_res, analytic_res) = &results[i];
-        for (i_lmb, lmb) in g.derived_data.lmbs.as_ref().unwrap().iter().enumerate() {
-            println!("{lmb} gives :");
-
-            for (i, inspect) in inspect_res[i_lmb].iter().enumerate() {
-                println!("{}", inspect.norm_squared().sqrt());
-            }
-
-            // for (i, o) in g
-            //     .derived_data
-            //     .cff_expression
-            //     .as_ref()
-            //     .unwrap()
-            //     .orientations
-            //     .iter()
-            //     .enumerate()
-            // {
-            //     let oatom = o
-            //         .data
-            //         .orientation
-            //         .select(&g.derived_data.all_mighty_integrand);
-
-            //     let expansion = symbol!("lambd");
-
-            //     let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
-            //     loops.next();
-
-            //     for (ls, res) in &analytic_res[i_lmb][i] {
-            //         let l = res.coefficient_list::<i8>(&[Atom::var(expansion)]);
-
-            //         println!(
-            //             "LIMIT {:?}:",
-            //             ls.included_iter()
-            //                 .map(|l| usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64)
-            //                 .collect::<Vec<_>>(),
-            //         );
-            //         if l.is_empty() {
-            //             println!("\tFull cancellation to order 1");
-            //         }
-            //         for (t, a) in l {
-            //             println!("\t{}: {}", t, a);
-            //         }
-            //     }
-            // }
-        }
+    for t in analysis.analytic_tables_per_graph() {
+        let Some(t) = t else {
+            continue;
+        };
+        println!("{}", t);
     }
 }
 

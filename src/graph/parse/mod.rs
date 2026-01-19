@@ -1063,7 +1063,7 @@ impl Graph {
     ) -> Result<LoopMomentumBasis> {
         debug!("{}", underlying.dot(full_cut));
 
-        let mut loop_momentum_basis = if let Some(i) = full_cut.included_iter().next() {
+        let mut loop_momentum_basis = if let Some(_) = full_cut.included_iter().next() {
             // let tree = SimpleTraversalTree::depth_first_traverse(
             //     underlying,
             //     full_cut,

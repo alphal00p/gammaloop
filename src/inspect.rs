@@ -90,7 +90,7 @@ pub fn inspect<I: HasIntegrand>(
     (jac, eval)
 }
 
-fn havana_sample(cont: Vec<F<f64>>, discrete_dimensions: &[usize]) -> Sample<F<f64>> {
+pub(crate) fn havana_sample(cont: Vec<F<f64>>, discrete_dimensions: &[usize]) -> Sample<F<f64>> {
     let mut sample = Sample::Continuous(F(1.), cont);
 
     for &d in discrete_dimensions.iter().rev() {

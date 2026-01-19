@@ -437,7 +437,10 @@ impl GammaLoopPairs {
             start += 1;
         }
 
-        debug_assert_eq!(start, self.additional_params.value_range.end);
+        debug_assert_eq!(
+            start, self.additional_params.value_range.end,
+            "Not filled up additional params"
+        );
     }
 
     pub(crate) fn polarizations_values<T: FloatLike>(

@@ -20,7 +20,7 @@ use crate::{
         inspect::{BatchedInspect, Inspect},
         Commands, Evaluate,
     },
-    state::{RunHistory, State},
+    state::{ProcessRef, RunHistory, State},
     CLISettings, OneShot,
 };
 use ahash::{HashMap, HashMapExt};
@@ -424,7 +424,7 @@ impl GammaLoopAPI {
         discrete_dim: Vec<usize>,
     ) -> Result<(Bound<'py, PyComplex>, Option<Bound<'py, PyFloat>>)> {
         let res = Inspect {
-            process_id,
+            process: process_id.map(ProcessRef::Id),
             integrand_name,
             point,
             use_f128,
@@ -700,7 +700,7 @@ impl GammaLoopAPI {
         number_of_terms_in_epsilon_expansion: Option<usize>,
     ) -> PyResult<String> {
         Evaluate {
-            process_id,
+            process: process_id.map(ProcessRef::Id),
             graphs_group_name,
             result_path,
             numerical,
@@ -1135,7 +1135,7 @@ impl GammaLoopAPI {
         restart: bool,
     ) -> Result<Vec<Bound<'py, PyComplex>>> {
         let a = Integrate {
-            process_id,
+            process: process_id.map(ProcessRef::Id),
             integrand_name,
             result_path,
             workspace_path: Some(workspace_path),

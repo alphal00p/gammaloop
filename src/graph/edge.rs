@@ -1,4 +1,7 @@
-use std::{cell::RefCell, fmt::Display};
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 
 use eyre::Context;
 use linnet::{
@@ -203,7 +206,7 @@ pub enum EdgeMass {
     Zero,
     Value(Complex<F<f64>>),
     ModelVar(Symbol),
-    Evaluator(RefCell<ExpressionEvaluator<Complex<F<f64>>>>),
+    Evaluator(Arc<Mutex<ExpressionEvaluator<Complex<F<f64>>>>>),
 }
 
 impl EdgeMass {
@@ -230,9 +233,9 @@ impl EdgeMass {
             .evaluator(&paramb.fn_map, &params, OptimizationSettings::default())
             .map_err(|a| eyre!(a))?;
 
-        Ok(EdgeMass::Evaluator(RefCell::new(a.map_coeff(&|r| {
-            Complex::new(F::from(&r.re), F::from(&r.im))
-        }))))
+        Ok(EdgeMass::Evaluator(Arc::new(Mutex::new(a.map_coeff(
+            &|r| Complex::new(F::from(&r.re), F::from(&r.im)),
+        )))))
     }
 
     pub fn value<T: FloatLike>(
@@ -244,7 +247,7 @@ impl EdgeMass {
             EdgeMass::Zero => None,
             EdgeMass::Value(v) => Some(*v),
             EdgeMass::ModelVar(s) => model.get_symbol_value(UFOSymbol(*s)),
-            EdgeMass::Evaluator(a) => Some(a.borrow_mut().evaluate_single(&paramb.values)),
+            EdgeMass::Evaluator(a) => Some(a.lock().unwrap().evaluate_single(&paramb.values)),
         }
         .map(|a| a.map_ref(|a| F::from_ff64(*a)))
     }

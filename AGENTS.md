@@ -29,15 +29,6 @@
   ```bash
   just build-api-abi
   ```
-- Run an example workflow:
-  ```bash
-  ./bin/gammaloop examples/command_cards/simple_workflow.toml
-  ```
-- Run tests:
-  ```bash
-  ./bin/run_tests.sh rust
-  ./bin/run_tests.sh python
-  ```
 - Format and lint:
   ```bash
   just fmt
