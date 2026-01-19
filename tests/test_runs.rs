@@ -17,6 +17,7 @@ use insta::assert_snapshot;
 use itertools::Itertools;
 use libc::NF_IP_PRI_RAW_BEFORE_DEFRAG;
 use momtrop::assert_approx_eq;
+use serde_json::to_string;
 use spenso::{
     algebra::complex::Complex,
     network::{Network, Sequential, SmallestDegree, store::NetworkStore},
@@ -302,24 +303,62 @@ fn photonic_amplitudes() -> Result<()> {
     let mut test_failed = false;
 
     #[derive(Tabled)]
+    struct ComparisonReport {
+        gammaloop: ColoredString,
+        reference: ColoredString,
+    }
+
+    impl ComparisonReport {
+        fn display_nested(&self) -> String {
+            let mut table = Table::new([self]);
+            table.with(
+                Style::modern()
+                    .remove_horizontals()
+                    .remove_verticals()
+                    .remove_frame(),
+            );
+            table.to_string()
+        }
+
+        fn empty() -> Self {
+            Self {
+                gammaloop: "N/A".red(),
+                reference: "N/A".red(),
+            }
+        }
+
+        fn only_gloop(gammaloop: ColoredString) -> Self {
+            Self {
+                gammaloop: gammaloop.blue(),
+                reference: "N/A".red(),
+            }
+        }
+    }
+
+    #[derive(Tabled)]
     struct TestReportEntry {
         amplitude: String,
-        generation_time: ColoredString,
-        inspect: ColoredString,
-        integrated: ColoredString,
-        rsd: ColoredString,
-        sample_time: ColoredString,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        generation_time: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        inspect: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        integrated: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        rsd: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        sample_time: ComparisonReport,
     }
 
     impl TestReportEntry {
         fn default_with_name(name: String) -> Self {
             Self {
                 amplitude: name,
-                generation_time: "N/A".red(),
-                inspect: "N/A".red(),
-                integrated: "N/A".red(),
-                rsd: "N/A".red(),
-                sample_time: "N/A".red(),
+                generation_time: ComparisonReport::empty(),
+                inspect: ComparisonReport::empty(),
+                integrated: ComparisonReport::empty(),
+                rsd: ComparisonReport::empty(),
+                sample_time: ComparisonReport::empty(),
             }
         }
     }
@@ -351,16 +390,21 @@ fn photonic_amplitudes() -> Result<()> {
         cli.run_command("generate")?;
         let generation_time = before_generation.elapsed();
 
-        let generation_time_string = if let Some(target_time) = bench_data.generation_time {
-            if generation_time <= target_time {
+        let generation_time_comparison = if let Some(target_time) = bench_data.generation_time {
+            let generation_time_string = if generation_time <= target_time {
                 format!("{}s", generation_time.as_secs()).green()
             } else if generation_time <= target_time * 10 {
                 format!("{}s", generation_time.as_secs()).yellow()
             } else {
                 format!("{}s", generation_time.as_secs()).red()
+            };
+
+            ComparisonReport {
+                gammaloop: generation_time_string,
+                reference: format!("{}s", target_time.as_secs()).blue(),
             }
         } else {
-            format!("{}s", generation_time.as_secs()).blue()
+            ComparisonReport::only_gloop(format!("{}s", generation_time.as_secs()).blue())
         };
 
         let (_, inspect_result) = Inspect {
@@ -372,17 +416,23 @@ fn photonic_amplitudes() -> Result<()> {
         }
         .run(&mut cli)?;
 
-        let inspect_result_string = if let Some(inspect_target) = bench_data.inspect_target {
+        let inspect_result_comparison = if let Some(inspect_target) = bench_data.inspect_target {
             let inspect_result_f = Complex::new(F(inspect_result.re), F(inspect_result.im));
             let inspect_target_f = Complex::new(F(inspect_target.re), F(inspect_target.im));
-            if inspect_target_f.approx_eq(&inspect_result_f, &F(1.0e-14)) {
-                format!("{:.16e}", inspect_result).green()
-            } else {
-                *test_failed = true;
-                format!("{:.16e}", inspect_result).red()
+            let inspect_result_string =
+                if inspect_target_f.approx_eq(&inspect_result_f, &F(1.0e-14)) {
+                    format!("{:.16e}", inspect_result).green()
+                } else {
+                    *test_failed = true;
+                    format!("{:.16e}", inspect_result).red()
+                };
+
+            ComparisonReport {
+                gammaloop: inspect_result_string,
+                reference: format!("{:.16e}", inspect_target).blue(),
             }
         } else {
-            format!("{:.16e}", inspect_result).blue()
+            ComparisonReport::only_gloop(format!("{:.16e}", inspect_result).blue())
         };
 
         let before_integration = std::time::Instant::now();
@@ -404,53 +454,73 @@ fn photonic_amplitudes() -> Result<()> {
         let imag_part_string =
             utils::format_uncertainty(integrated_result.result.im, integrated_result.error.im);
 
-        let integrated_result_string = if let Some(integrated_target) = bench_data.integrated_target
-        {
-            if integrated_result.is_compatible_with_target(integrated_target, 3) {
-                format!("{} + {}i", real_part_string, imag_part_string).green()
+        let integrated_result_comparison =
+            if let Some(integrated_target) = bench_data.integrated_target {
+                let integrated_result_string =
+                    if integrated_result.is_compatible_with_target(integrated_target, 3) {
+                        format!("{} + {}i", real_part_string, imag_part_string).green()
+                    } else {
+                        *test_failed = true;
+                        format!("{} + {}i", real_part_string, imag_part_string).red()
+                    };
+
+                ComparisonReport {
+                    gammaloop: integrated_result_string,
+                    reference: format!(
+                        "{:.16e} + {:.16e}i",
+                        integrated_target.re.0, integrated_target.im.0
+                    )
+                    .blue(),
+                }
             } else {
-                *test_failed = true;
-                format!("{} + {}i", real_part_string, imag_part_string).red()
-            }
-        } else {
-            format!("{} +  {}i", real_part_string, imag_part_string).blue()
-        };
+                ComparisonReport::only_gloop(
+                    format!("{} +  {}i", real_part_string, imag_part_string).blue(),
+                )
+            };
 
         let rsd_re = integrated_result.error.re.0 / integrated_result.result.re.0.abs();
         let rsd_im = integrated_result.error.im.0 / integrated_result.result.im.0.abs();
 
-        let rsd_string = if let Some(rsd_target) = bench_data.rsd_bench {
-            if rsd_re < rsd_target.re.0 * 2.0 && rsd_im < rsd_target.im.0 * 2.0 {
+        let rsd_comparison = if let Some(rsd_target) = bench_data.rsd_bench {
+            let rsd_string = if rsd_re < rsd_target.re.0 * 2.0 && rsd_im < rsd_target.im.0 * 2.0 {
                 format!("{:.2e} + {:.2e}", rsd_re, rsd_im).green()
             } else if rsd_re < rsd_target.re.0 * 4.0 && rsd_im < rsd_target.im.0 * 4.0 {
                 format!("{:.2e} + {:.2e}", rsd_re, rsd_im).yellow()
             } else {
                 *test_failed = true;
                 format!("{:.2e} + {:.2e}", rsd_re, rsd_im).red()
+            };
+            ComparisonReport {
+                gammaloop: rsd_string,
+                reference: format!("{:.2e} + {:.2e}", rsd_target.re.0, rsd_target.im.0).blue(),
             }
         } else {
-            format!("{:.2e} + {:.2e}", rsd_re, rsd_im).blue()
+            ComparisonReport::only_gloop(format!("{:.2e} + {:.2e}", rsd_re, rsd_im).blue())
         };
 
-        let sample_time_string = if let Some(sample_time_bench) = bench_data.sample_time {
-            if sample_time <= sample_time_bench {
+        let sample_time_comparison = if let Some(sample_time_bench) = bench_data.sample_time {
+            let sample_time_string = if sample_time <= sample_time_bench {
                 format!("{}μs", sample_time.as_micros()).green()
             } else if sample_time <= sample_time_bench * 10 {
                 format!("{}μs", sample_time.as_micros()).yellow()
             } else {
                 format!("{}μs", sample_time.as_micros()).red()
+            };
+            ComparisonReport {
+                gammaloop: sample_time_string,
+                reference: format!("{}μs", sample_time_bench.as_micros()).blue(),
             }
         } else {
-            format!("{}μs", sample_time.as_micros()).blue()
+            ComparisonReport::only_gloop(format!("{}μs", sample_time.as_micros()).blue())
         };
 
         Ok(TestReportEntry {
             amplitude: bench_data.amplitude,
-            generation_time: generation_time_string,
-            inspect: inspect_result_string,
-            integrated: integrated_result_string,
-            rsd: rsd_string,
-            sample_time: sample_time_string,
+            generation_time: generation_time_comparison,
+            inspect: inspect_result_comparison,
+            integrated: integrated_result_comparison,
+            rsd: rsd_comparison,
+            sample_time: sample_time_comparison,
         })
     }
 
@@ -1308,4 +1378,56 @@ fn test_qqx_aaa_ir_subtracted_inspect() -> Result<()> {
     let target = Complex::new(2.3159767780905335e-1, -1.8547720156633686e-4);
     assert_eq!(inspect, target);
     Ok(())
+}
+
+#[test]
+fn quick_table_tryout() {
+    #[derive(Tabled)]
+    struct TopLevelThing {
+        name: String,
+        foo: String,
+        #[tabled(display = "Nested::display_nested")]
+        nested: Nested,
+    }
+
+    #[derive(Tabled)]
+    struct Nested {
+        nested_foo: String,
+        nested_bar: String,
+    }
+
+    impl Nested {
+        fn display_nested(&self) -> String {
+            let mut table = Table::new([self]);
+            table.with(
+                Style::modern()
+                    .remove_horizontals()
+                    .remove_verticals()
+                    .remove_frame(),
+            );
+            table.to_string()
+        }
+    }
+
+    let things = vec![
+        TopLevelThing {
+            name: "Thing 1".to_string(),
+            foo: "Foo 1".to_string(),
+            nested: Nested {
+                nested_foo: "Nested Foo 1".to_string(),
+                nested_bar: "Nested Bar 1".to_string(),
+            },
+        },
+        TopLevelThing {
+            name: "Thing 2".to_string(),
+            foo: "Foo 2".to_string(),
+            nested: Nested {
+                nested_foo: "Nested Foo 2".to_string(),
+                nested_bar: "Nested Bar 2".to_string(),
+            },
+        },
+    ];
+
+    let table = Table::new(things).to_string();
+    println!("{table}");
 }
