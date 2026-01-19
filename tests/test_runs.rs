@@ -486,7 +486,6 @@ fn photonic_amplitudes() -> Result<()> {
 
     test_reports.push(run_photonic_test(one_loop_eu, &mut test_failed)?);
     test_reports.push(run_photonic_test(one_loop_phys, &mut test_failed)?);
-    test_reports.push(TestReportEntry::default_with_name("1l_phys".to_string()));
     test_reports.push(TestReportEntry::default_with_name("2l_eu".to_string()));
     test_reports.push(TestReportEntry::default_with_name("2l_phys".to_string()));
     test_reports.push(TestReportEntry::default_with_name("3l_eu".to_string()));
