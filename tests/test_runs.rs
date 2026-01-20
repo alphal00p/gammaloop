@@ -343,7 +343,7 @@ fn photonic_amplitudes() -> Result<()> {
         #[tabled(display = "ComparisonReport::display_nested")]
         integrated: ComparisonReport,
         #[tabled(display = "ComparisonReport::display_nested")]
-        rsd: ComparisonReport,
+        nvar: ComparisonReport,
         #[tabled(display = "ComparisonReport::display_nested")]
         sample_time: ComparisonReport,
     }
@@ -355,7 +355,7 @@ fn photonic_amplitudes() -> Result<()> {
                 generation_time: ComparisonReport::empty(),
                 inspect: ComparisonReport::empty(),
                 integrated: ComparisonReport::empty(),
-                rsd: ComparisonReport::empty(),
+                nvar: ComparisonReport::empty(),
                 sample_time: ComparisonReport::empty(),
             }
         }
@@ -369,7 +369,7 @@ fn photonic_amplitudes() -> Result<()> {
         inspect_point: Vec<f64>,
         inspect_target: Option<Complex<f64>>,
         integrated_target: Option<Complex<F<f64>>>,
-        rsd_bench: Option<Complex<F<f64>>>,
+        nvar_bench: Option<Complex<F<f64>>>,
         sample_time: Option<Duration>,
     }
 
@@ -476,24 +476,31 @@ fn photonic_amplitudes() -> Result<()> {
                 )
             };
 
-        let rsd_re = integrated_result.error.re.0 / integrated_result.result.re.0.abs();
-        let rsd_im = integrated_result.error.im.0 / integrated_result.result.im.0.abs();
+        let n_var_re = (integrated_result.error.re.0
+            * integrated_result.error.re.0
+            * integrated_result.neval as f64)
+            / (integrated_result.result.re.0 * integrated_result.result.re.0);
+        let n_var_im = (integrated_result.error.im.0
+            * integrated_result.error.im.0
+            * integrated_result.neval as f64)
+            / (integrated_result.result.im.0 * integrated_result.result.im.0);
 
-        let rsd_comparison = if let Some(rsd_target) = bench_data.rsd_bench {
-            let rsd_string = if rsd_re < rsd_target.re.0 * 2.0 && rsd_im < rsd_target.im.0 * 2.0 {
-                format!("{:.2e} + {:.2e}", rsd_re, rsd_im).green()
-            } else if rsd_re < rsd_target.re.0 * 4.0 && rsd_im < rsd_target.im.0 * 4.0 {
-                format!("{:.2e} + {:.2e}", rsd_re, rsd_im).yellow()
-            } else {
-                *test_failed = true;
-                format!("{:.2e} + {:.2e}", rsd_re, rsd_im).red()
-            };
+        let nvar_comparison = if let Some(nvar_target) = bench_data.nvar_bench {
+            let nvar_string =
+                if n_var_re < nvar_target.re.0 * 2.0 && n_var_im < nvar_target.im.0 * 2.0 {
+                    format!("{:.2e} + {:.2e}", n_var_re, n_var_im).green()
+                } else if n_var_re < nvar_target.re.0 * 4.0 && n_var_im < nvar_target.im.0 * 4.0 {
+                    format!("{:.2e} + {:.2e}", n_var_re, n_var_im).yellow()
+                } else {
+                    *test_failed = true;
+                    format!("{:.2e} + {:.2e}", n_var_re, n_var_im).red()
+                };
             ComparisonReport {
-                gammaloop: rsd_string,
-                reference: format!("{:.2e} + {:.2e}", rsd_target.re.0, rsd_target.im.0).blue(),
+                gammaloop: nvar_string,
+                reference: format!("{:.2e} + {:.2e}", nvar_target.re.0, nvar_target.im.0).blue(),
             }
         } else {
-            ComparisonReport::only_gloop(format!("{:.2e} + {:.2e}", rsd_re, rsd_im).blue())
+            ComparisonReport::only_gloop(format!("{:.2e} + {:.2e}", n_var_re, n_var_im).blue())
         };
 
         let sample_time_comparison = if let Some(sample_time_bench) = bench_data.sample_time {
@@ -517,7 +524,7 @@ fn photonic_amplitudes() -> Result<()> {
             generation_time: generation_time_comparison,
             inspect: inspect_result_comparison,
             integrated: integrated_result_comparison,
-            rsd: rsd_comparison,
+            nvar: nvar_comparison,
             sample_time: sample_time_comparison,
         })
     }
@@ -535,7 +542,7 @@ fn photonic_amplitudes() -> Result<()> {
             F(-1.22898408452706e-13),
             F(-3.94362534040412e-13),
         )),
-        rsd_bench: None,
+        nvar_bench: None,
         sample_time: Some(Duration::from_micros(61)),
     };
 
@@ -550,13 +557,25 @@ fn photonic_amplitudes() -> Result<()> {
             F(-3.68394576249870544e-11),
         )),
         generation_time: Some(Duration::from_secs(7)),
-        rsd_bench: None,
+        nvar_bench: None,
         sample_time: Some(Duration::from_micros(590)),
+    };
+
+    let two_loop_eu = BenchMarkData {
+        run_card: "photonic_amplitudes/2l_eu.toml".into(),
+        state_path: "./tests/photonic_amplitudes/2l_eu".into(),
+        amplitude: "2l_eu".into(),
+        inspect_point: vec![0.123, 0.3242, 0.4233, 0.523, 0.314, 0.125],
+        inspect_target: None,
+        integrated_target: Some(Complex::new(F(-1.8006e-15), F(-1.54335e-14))),
+        generation_time: Some(Duration::from_secs(60)),
+        nvar_bench: None,
+        sample_time: Some(Duration::from_micros(1160)),
     };
 
     test_reports.push(run_photonic_test(one_loop_eu, &mut test_failed)?);
     test_reports.push(run_photonic_test(one_loop_phys, &mut test_failed)?);
-    test_reports.push(TestReportEntry::default_with_name("2l_eu".to_string()));
+    test_reports.push(run_photonic_test(two_loop_eu, &mut test_failed)?);
     test_reports.push(TestReportEntry::default_with_name("2l_phys".to_string()));
     test_reports.push(TestReportEntry::default_with_name("3l_eu".to_string()));
     test_reports.push(TestReportEntry::default_with_name("3l_phys".to_string()));
