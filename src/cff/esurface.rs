@@ -11,6 +11,7 @@ use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 
 use symbolica::atom::{Atom, AtomCore};
+use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
@@ -27,6 +28,7 @@ use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
 use crate::processes::CrossSectionCut;
+use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
     F, FloatLike, GS, compute_loop_part, compute_loop_part_subspace, compute_shift_part,
     compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
@@ -82,6 +84,51 @@ impl Esurface {
             .fold(builder_atom, |acc, energy| acc + energy);
 
         energy_sum + &symbolic_shift
+    }
+
+    #[inline]
+    pub(crate) fn compute_from_dual_momenta<T: FloatLike>(
+        &self,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &EdgeVec<F<T>>,
+        dual_loop_moms: &LoopMomenta<HyperDual<F<T>>>,
+        dual_external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
+    ) -> HyperDual<F<T>> {
+        let spatial_part_of_externals = dual_external_moms
+            .iter()
+            .map(|mom| mom.spatial.clone())
+            .collect::<TiVec<ExternalIndex, _>>();
+
+        let energy_sum = self
+            .energies
+            .iter()
+            .map(|index| {
+                let signature = &lmb.edge_signatures[*index];
+                let momentum = signature
+                    .try_compute_momentum(&dual_loop_moms.0, &spatial_part_of_externals.raw)
+                    .unwrap_or_else(|| unreachable!());
+                let mass = &real_mass_vector[*index];
+
+                (momentum.norm_squared() + mass * mass).sqrt()
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| dual_loop_moms[LoopIndex(0)].px.zero());
+
+        let shift_part = self
+            .external_shift
+            .iter()
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].external;
+                new_constant(&energy_sum, &F::from_f64(*sign as f64))
+                    * external_signature
+                        .try_apply(&dual_external_moms.raw)
+                        .map(|mom| mom.temporal.value)
+                        .unwrap_or_else(|| energy_sum.zero())
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| energy_sum.zero());
+
+        energy_sum + shift_part
     }
 
     /// Compute the value of the esurface from the momenta, needed to check if an arbitrary point
