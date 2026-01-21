@@ -668,7 +668,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             Some(&lu_params),
                         );
                         result += <T as GenericEvaluatorFloat>::get_evaluator_single(
-                            &mut self.parametric_integrand[cut],
+                            &mut self.parametric_integrand[raised_cut][0],
                         )(&a);
                     }
                 }
