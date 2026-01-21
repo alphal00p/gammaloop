@@ -12,6 +12,7 @@ use crate::settings::runtime::SamplingSettings;
 use crate::settings::runtime::kinematic::Externals;
 use crate::settings::runtime::{ParameterizationMapping, ParameterizationMode};
 use crate::signature::{ExternalSignature, LoopSignature};
+use crate::utils::hyperdual_utils::new_constant;
 
 use bincode::{Decode, Encode};
 use colored::Colorize;
@@ -43,6 +44,7 @@ use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib;
 use symbolica::coefficient::Coefficient;
+use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::{Constructible, FloatLike as SymFloatLike, RealLike, SingleFloat};
 use symbolica::domains::integer::Integer;
 use symbolica::{function, parse};
@@ -73,6 +75,7 @@ use typed_index_collections::{TiSlice, TiVec};
 use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 pub const VERSION: &str = "0.0.1";
+pub mod hyperdual_utils;
 pub mod serde_utils;
 /// can be used instead of commenting out code
 #[macro_export]
@@ -1978,6 +1981,121 @@ pub(crate) fn pinch_dampening_function<T: FloatLike>(
     assert!(powers.1.is_multiple_of(2));
     let a = dampening_arg.pow(powers.0);
     &a / (&a + F::<T>::from_f64(multiplier) * delta_t.pow(powers.1))
+}
+
+pub(crate) fn h_dual<T: FloatLike>(
+    t: &HyperDual<F<T>>,
+    tstar: Option<HyperDual<F<T>>>,
+    sigma: Option<F<T>>,
+    h_function_settings: &crate::settings::runtime::HFunctionSettings,
+) -> HyperDual<F<T>> {
+    let sqrt_pi = new_constant(t, &t.values[0].PI().sqrt());
+    let sig = if let Some(s) = sigma {
+        new_constant(t, &s)
+    } else {
+        new_constant(t, &F::<T>::from_f64(h_function_settings.sigma))
+    };
+    let power = h_function_settings.power;
+    match h_function_settings.function {
+        crate::settings::runtime::HFunction::Exponential => {
+            (-(t.clone() * t) / (sig.clone() * sig.clone())).exp()
+                * new_constant(t, &F::<T>::from_f64(2_f64))
+                / (sqrt_pi * sig)
+        }
+        crate::settings::runtime::HFunction::PolyExponential => {
+            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
+            let normalisation = match power {
+                None | Some(0) => {
+                    sqrt_pi.clone() * &sig / new_constant(t, &F::<T>::from_f64(2_f64))
+                }
+                Some(1) => new_constant(t, &F::<T>::from_f64(0.841_568_215_070_771_4)) * &sig,
+                Some(3) => new_constant(t, &F::<T>::from_f64(1.033_476_847_068_688_6)) * &sig,
+                Some(4) => new_constant(t, &F::<T>::from_f64(1.329_340_388_179_137)) * &sig,
+                Some(6) => new_constant(t, &F::<T>::from_f64(2.880_237_507_721_463_7)) * &sig,
+                Some(7) => new_constant(t, &F::<T>::from_f64(4.783_566_971_347_609)) * &sig,
+                Some(9) => new_constant(t, &F::<T>::from_f64(16.225_745_976_182_285)) * &sig,
+                Some(10) => new_constant(t, &F::<T>::from_f64(32.735_007_058_911_25)) * &sig,
+                Some(12) => new_constant(t, &F::<T>::from_f64(155.837_465_922_583_42)) * &sig,
+                Some(13) => new_constant(t, &F::<T>::from_f64(364.658_500_356_566_04)) * &sig,
+                Some(15) => new_constant(t, &F::<T>::from_f64(2_257.637_553_015_473)) * &sig,
+                Some(16) => new_constant(t, &F::<T>::from_f64(5_939.804_418_537_864)) * &sig,
+                _ => panic!(
+                    "Value {} of power in poly exponential h function not supported",
+                    power.unwrap()
+                ),
+            };
+            let prefactor = match power {
+                None | Some(0) => normalisation.inv(),
+                Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
+            };
+            prefactor
+                * (new_constant(t, &F::<T>::from_f64(2_f64))
+                    - (t.clone() * t) / (sig.clone() * &sig)
+                    - (sig.clone() * sig) / (t.clone() * t))
+                    .exp()
+        }
+        crate::settings::runtime::HFunction::PolyLeftRightExponential => {
+            // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
+            let normalisation = match power {
+                None | Some(0) => new_constant(t, &F::<T>::from_f64(2.066_953_694_137_377)) * &sig,
+                Some(1) => new_constant(t, &F::<T>::from_f64(1.683_136_430_141_542_8)) * &sig,
+                Some(3) => new_constant(t, &F::<T>::from_f64(3.750_090_124_278_92)) * &sig,
+                Some(4) => new_constant(t, &F::<T>::from_f64(9.567_133_942_695_218)) * &sig,
+                Some(6) => new_constant(t, &F::<T>::from_f64(139.373_101_752_153_5)) * &sig,
+                Some(7) => new_constant(t, &F::<T>::from_f64(729.317_000_713_132_1)) * &sig,
+                Some(9) => new_constant(t, &F::<T>::from_f64(32_336.242_742_929_753)) * &sig,
+                Some(10) => new_constant(t, &F::<T>::from_f64(263_205.217_049_469)) * &sig,
+                Some(12) => new_constant(t, &F::<T>::from_f64(2.427_503_717_893_097_5e7)) * &sig,
+                Some(13) => new_constant(t, &F::<T>::from_f64(2.694_265_921_644_289e8)) * &sig,
+                Some(15) => new_constant(t, &F::<T>::from_f64(9.040_742_057_760_125e12)) * &sig,
+                Some(16) => new_constant(t, &F::<T>::from_f64(1.452_517_480_246_491_3e14)) * &sig,
+                _ => panic!(
+                    "Value {} of power in poly exponential h function not supported",
+                    power.unwrap()
+                ),
+            };
+
+            // println!("normalisation: {}", normalisation);
+            // println!("t: {}", t);
+            // println!("sig: {}", sig);
+            // println!("power: {:?}", power);
+
+            let prefactor = match power {
+                None | Some(0) => normalisation.inv(),
+                Some(p) => (t.clone() / &sig).inv().pow(p as u64) / normalisation,
+            };
+
+            // println!("prefactor: {}", prefactor);
+            prefactor
+                * (new_constant(t, &F::<T>::from_f64(2_f64))
+                    - ((t.clone() * t) / (sig.clone() * &sig) + t.one()) / (t.clone() / &sig))
+                    .exp()
+        }
+        crate::settings::runtime::HFunction::ExponentialCT => {
+            let delta_t_sq = (tstar.clone().unwrap() - t) * (tstar.clone().unwrap() - t);
+            let tstar_sq = tstar.clone().unwrap() * tstar.unwrap();
+            // info!("dampener: {}", dampener);
+            // info!("delta_t_sq: {}", delta_t_sq);
+            // info!("tstar_sq: {}", tstar_sq);
+            // info!(
+            //     "Exp arg: {}",
+            //     -sig.inv() * (delta_t_sq / tstar_sq + sig * sig * (dampener * dampener))
+            // );
+            // info!(
+            //     "result: {}",
+            //     (-sig.inv() * (delta_t_sq / tstar_sq + sig * sig * (dampener * dampener))).exp()
+            // );
+            if h_function_settings.enabled_dampening {
+                let dampener = delta_t_sq.clone() / (delta_t_sq.clone() - &tstar_sq);
+                (-sig.inv()
+                    * (delta_t_sq.clone() / tstar_sq
+                        + sig.clone() * sig * (dampener.clone() * dampener)))
+                    .exp()
+            } else {
+                (-sig.inv() * (delta_t_sq / tstar_sq)).exp()
+            }
+        }
+    }
 }
 
 pub(crate) fn h<T: FloatLike>(
