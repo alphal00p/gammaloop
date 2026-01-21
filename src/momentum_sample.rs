@@ -5,6 +5,7 @@ use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
 use crate::signature::LoopSignature;
+use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{F, FloatLike, Length};
 use crate::{DependentMomentaConstructor, define_index, settings::runtime::kinematic::Externals};
 use bincode_trait_derive::{Decode, Encode};
@@ -20,6 +21,7 @@ use linnet::half_edge::subgraph::{
 };
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
+use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::FloatLike as SymFloatLike;
 use tabled::settings::Style;
 
@@ -379,6 +381,37 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
                     k * factor
                 } else {
                     k.clone()
+                }
+            })),
+        }
+    }
+
+    pub(crate) fn rescale_with_hyper_dual(
+        &self,
+        factor: &HyperDual<F<T>>,
+        subspace: Subspace,
+    ) -> LoopMomenta<HyperDual<F<T>>> {
+        match subspace {
+            None => LoopMomenta::from_iter(self.iter().map(|k| {
+                ThreeMomentum::new(
+                    new_constant(factor, &k.px) * factor,
+                    new_constant(factor, &k.py) * factor,
+                    new_constant(factor, &k.pz) * factor,
+                )
+            })),
+            Some(subspace) => LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
+                if subspace.contains(&i) {
+                    ThreeMomentum::new(
+                        new_constant(factor, &k.px) * factor,
+                        new_constant(factor, &k.py) * factor,
+                        new_constant(factor, &k.pz) * factor,
+                    )
+                } else {
+                    ThreeMomentum::new(
+                        new_constant(factor, &k.px),
+                        new_constant(factor, &k.py),
+                        new_constant(factor, &k.pz),
+                    )
                 }
             })),
         }
