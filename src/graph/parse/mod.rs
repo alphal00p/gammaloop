@@ -34,7 +34,6 @@ use linnet::{
         nodestore::NodeStorageVec,
         subgraph::{Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps},
         swap::Swap,
-        tree::SimpleTraversalTree,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
     permutation::Permutation,
@@ -736,7 +735,7 @@ impl Graph {
         let (global_prefactor, param_builder) = Self::setup_global_prefactor_and_params(
             initial_data.global_prefactor,
             initial_data.add_polarizations,
-            initial_data.additional_params,
+            initial_data.additional_params.clone(),
             &initial_state_cut,
             &graph,
             model,
@@ -757,7 +756,7 @@ impl Graph {
             &cut_result.xs_ext_id,
         )?;
 
-        let g = Graph {
+        let mut g = Graph {
             overall_factor: initial_data.overall_factor,
             polarizations: global_prefactor.polarizations(),
             global_prefactor,
@@ -769,6 +768,15 @@ impl Graph {
             is_group_master: initial_data.is_group_master,
             param_builder,
         };
+
+        let updated_param_builder_with_lmb = ParamBuilder::new(
+            &g,
+            model,
+            &g.loop_momentum_basis,
+            initial_data.additional_params,
+        );
+
+        g.param_builder = updated_param_builder_with_lmb;
 
         debug!("{}", g.debug_dot());
 
@@ -912,7 +920,8 @@ impl Graph {
         }
 
         let polarizations = global_prefactor.polarizations();
-        let param_builder = ParamBuilder::new(&(&polarizations, graph), model, params);
+        let param_builder =
+            ParamBuilder::new(&(&polarizations, graph), model, &graph.lmb(), params);
 
         Ok((global_prefactor, param_builder))
     }
@@ -1055,13 +1064,13 @@ impl Graph {
         debug!("{}", underlying.dot(full_cut));
 
         let mut loop_momentum_basis = if let Some(i) = full_cut.included_iter().next() {
-            let tree = SimpleTraversalTree::depth_first_traverse(
-                underlying,
-                full_cut,
-                &underlying.node_id(i),
-                None,
-            )
-            .unwrap();
+            // let tree = SimpleTraversalTree::depth_first_traverse(
+            //     underlying,
+            //     full_cut,
+            //     &underlying.node_id(i),
+            //     None,
+            // )
+            // .unwrap();
 
             let mut full = underlying.full_filter();
 
@@ -1071,15 +1080,15 @@ impl Graph {
                 }
             }
 
-            let covers = tree.covers(&full);
-            assert_eq!(
-                full,
-                covers,
-                "Tree does not cover all: {}, lmb specification must be wrong",
-                underlying.dot(&covers)
-            );
+            // let covers = tree.covers(&full);
+            // assert_eq!(
+            //     full,
+            //     covers,
+            //     "Tree does not cover all: {}, lmb specification must be wrong",
+            //     underlying.dot(&covers)
+            // );
             let external = underlying.internal_crown(&full);
-            underlying.lmb_impl(&full, &tree.tree_subgraph, external)
+            underlying.lmb_impl(&full, &full_cut, external)
         } else {
             return Err(eyre!(
                 "No included edges found in full_cut for loop momentum basis setup"

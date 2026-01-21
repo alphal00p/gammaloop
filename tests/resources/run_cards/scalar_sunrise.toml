@@ -7,8 +7,9 @@ commands = [
 ]
 
 [cli_settings.global]
-logfile_directive = "off"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "gammalooprs[orientation_parametric_expr]=debug"
+
+logfile_directive = "off,gammalooprs[orientation_parametric_expr]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "off,info,gammalooprs[orientation_parametric_expr]=debug"#,gammalooprs[final_integrand]=debug"
 
 
 [default_runtime_settings.kinematics.externals]
@@ -30,7 +31,7 @@ momenta = [
 helicities = [1, 1]
 
 [default_runtime_settings.stability]
-rotation_axis = []
+# rotation_axis = []
 check_on_norm = true
 
 
@@ -50,6 +51,7 @@ mapping = "linear"
 generate_integrated = false
 softct = false
 add_sigma = true
+inner_products = true
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 
@@ -62,7 +64,7 @@ compile = false
 seed = 42
 n_increase = 0
 n_start = 10000
-n_max = 100000
+n_max = 1000000
 discrete_dim_learning_rate = 1.5
 continuous_dim_learning_rate = 1.5
 max_prob_ratio = 0.01

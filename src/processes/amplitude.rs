@@ -14,7 +14,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -37,7 +37,7 @@ use crate::{
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     gammaloop_integrand::{
-        LmbMultiChannelingSetup, ParamBuilder,
+        LmbMultiChannelingSetup,
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
@@ -47,7 +47,6 @@ use crate::{
     processes::DotExportSettings,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
-    status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, FUN_LIB, GS, Length, TENSORLIB, VAKINT, W_, symbolica_ext::LOGPRINTOPTS},
     uv::{UltravioletGraph, approx::to_vakint_integrand},
@@ -458,26 +457,26 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<()> {
-        status_debug!("Generating Cff");
+        debug!("Generating Cff");
         self.generate_cff()?;
-        status_debug!("Building Parametric Integrand");
+        debug!("Building Parametric Integrand");
         self.build_parametric_integrand(settings)?;
 
         if self.graph.is_group_master {
-            status_debug!("Building Tropical Sampler");
+            debug!("Building Tropical Sampler");
             self.build_tropical_sampler(settings)?;
         }
 
-        status_debug!("Building Loop Momentum Bases");
+        debug!("Building Loop Momentum Bases");
         self.build_lmbs();
 
         if self.graph.is_group_master {
-            status_debug!("Building Multi-Channeling Channels");
+            debug!("Building Multi-Channeling Channels");
             self.build_multi_channeling_channels();
         }
 
         if settings.threshold_subtraction.enable_thresholds {
-            status_debug!("Building Threshold Counterterms");
+            debug!("Building Threshold Counterterms");
             self.derived_data.threshold_counterterms = self
                 .build_threshold_counterterm_parametric_integrand(
                     settings,
@@ -685,7 +684,7 @@ impl AmplitudeGraph {
 
         let mom_reps = self.graph.uv_wrapped_replacement(
             &self.graph.full_filter(),
-            &self.graph.lmb(component),
+            &self.graph.lmb_of(component),
             &[W_.x___],
         );
 
@@ -713,7 +712,7 @@ impl AmplitudeGraph {
 
         let vakint_integrand = to_vakint_integrand(
             &four_dimensional_integrand,
-            &self.graph.lmb(component),
+            &self.graph.lmb_of(component),
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
@@ -974,7 +973,8 @@ impl AmplitudeGraph {
                 .unwrap_function(GS.color_wrap)
                 .simplify_color()
                 .replace(function!(GS.energy, W_.x_))
-                .with(function!(GS.ose, W_.x_));
+                .with(function!(GS.ose, W_.x_))
+                .expand_dots();
 
             let loop_3 = self.graph.get_loop_number() as i64 * 3;
 
@@ -1094,7 +1094,10 @@ impl AmplitudeGraph {
             "All parametric before color atom:{}",
             scalar.printer(LOGPRINTOPTS)
         );
-        scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
+        scalar = scalar
+            .unwrap_function(GS.color_wrap)
+            .simplify_color()
+            .expand_dots();
 
         scalar = self.add_additional_factors_to_cff_atom(&scalar);
 
@@ -1109,7 +1112,7 @@ impl AmplitudeGraph {
     fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
-            .generate_loop_momentum_bases(&self.graph.no_dummy());
+            .generate_loop_momentum_bases_of(&self.graph.no_dummy());
 
         self.derived_data.lmbs = Some(lmbs)
     }

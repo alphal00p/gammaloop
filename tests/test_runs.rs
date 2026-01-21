@@ -3,6 +3,7 @@
 
 use color_eyre::Result;
 
+use colored::{ColoredString, Colorize};
 use eyre::Ok;
 use gammaloop_api::commands::{inspect::Inspect, integrate::Integrate};
 
@@ -10,8 +11,7 @@ use gammalooprs::{
     GammaLoopContextContainer,
     model::UFOSymbol,
     numerator::aind::Aind,
-    status_info,
-    utils::{F, FUN_LIB, GS, TENSORLIB, W_},
+    utils::{self, ApproxEq, F, FUN_LIB, GS, TENSORLIB, W_},
 };
 use insta::assert_snapshot;
 use itertools::Itertools;
@@ -22,13 +22,15 @@ use spenso::{
     structure::{IndexlessNamedStructure, NamedStructure, representation::LibraryRep},
     tensors::{complex::RealOrComplexTensor, parametric::ParamOrConcrete},
 };
-use std::{env, fmt::Write, ops::Deref};
+use std::{env, fmt::Write, ops::Deref, time::Duration};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     function,
     id::Pattern,
     symbol,
 };
+use tabled::{Table, Tabled, settings::Style};
+use tracing::info;
 
 mod test_utils;
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
@@ -294,6 +296,304 @@ fn photons_2l_inspect() -> Result<()> {
 }
 
 #[test]
+fn photonic_amplitudes() -> Result<()> {
+    let mut test_failed = false;
+    #[derive(Tabled)]
+    struct ComparisonReport {
+        gammaloop: ColoredString,
+        reference: ColoredString,
+    }
+
+    impl ComparisonReport {
+        fn display_nested(&self) -> String {
+            let mut table = Table::new([self]);
+            table
+                .with(
+                    Style::modern()
+                        .remove_horizontals()
+                        .remove_verticals()
+                        .remove_frame(),
+                )
+                .with(tabled::settings::Rotate::Left);
+            table.to_string()
+        }
+
+        fn empty() -> Self {
+            Self {
+                gammaloop: "N/A".red(),
+                reference: "N/A".red(),
+            }
+        }
+
+        fn only_gloop(gammaloop: ColoredString) -> Self {
+            Self {
+                gammaloop: gammaloop.blue(),
+                reference: "N/A".red(),
+            }
+        }
+    }
+
+    #[derive(Tabled)]
+    struct TestReportEntry {
+        amplitude: String,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        generation_time: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        inspect: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        integrated: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        nvar: ComparisonReport,
+        #[tabled(display = "ComparisonReport::display_nested")]
+        sample_time: ComparisonReport,
+    }
+
+    impl TestReportEntry {
+        fn default_with_name(name: String) -> Self {
+            Self {
+                amplitude: name,
+                generation_time: ComparisonReport::empty(),
+                inspect: ComparisonReport::empty(),
+                integrated: ComparisonReport::empty(),
+                nvar: ComparisonReport::empty(),
+                sample_time: ComparisonReport::empty(),
+            }
+        }
+    }
+
+    struct BenchMarkData {
+        run_card: String,
+        state_path: String,
+        amplitude: String,
+        generation_time: Option<Duration>,
+        inspect_point: Vec<f64>,
+        inspect_target: Option<Complex<f64>>,
+        integrated_target: Option<Complex<F<f64>>>,
+        nvar_bench: Option<Complex<F<f64>>>,
+        sample_time: Option<Duration>,
+    }
+
+    fn run_photonic_test(
+        bench_data: BenchMarkData,
+        test_failed: &mut bool,
+    ) -> Result<TestReportEntry> {
+        let mut cli = get_test_cli(
+            Some(bench_data.run_card.clone().into()),
+            bench_data.state_path.clone(),
+            None,
+            true,
+        )?;
+
+        let before_generation = std::time::Instant::now();
+        cli.run_command("generate")?;
+        let generation_time = before_generation.elapsed();
+
+        let generation_time_comparison = if let Some(target_time) = bench_data.generation_time {
+            let generation_time_string = if generation_time <= target_time {
+                format!("{}s", generation_time.as_secs()).green()
+            } else if generation_time <= target_time * 10 {
+                format!("{}s", generation_time.as_secs()).yellow()
+            } else {
+                format!("{}s", generation_time.as_secs()).red()
+            };
+
+            ComparisonReport {
+                gammaloop: generation_time_string,
+                reference: format!("{}s", target_time.as_secs()).blue(),
+            }
+        } else {
+            ComparisonReport::only_gloop(format!("{}s", generation_time.as_secs()).blue())
+        };
+
+        let (_, inspect_result) = Inspect {
+            process_id: Some(0),
+            integrand_name: Some("default".to_string()),
+            point: bench_data.inspect_point,
+            momentum_space: false,
+            ..Default::default()
+        }
+        .run(&mut cli)?;
+
+        let inspect_result_comparison = if let Some(inspect_target) = bench_data.inspect_target {
+            let inspect_result_f = Complex::new(F(inspect_result.re), F(inspect_result.im));
+            let inspect_target_f = Complex::new(F(inspect_target.re), F(inspect_target.im));
+            let inspect_result_string =
+                if inspect_target_f.approx_eq(&inspect_result_f, &F(1.0e-13)) {
+                    format!("{:.16e}", inspect_result).green()
+                } else {
+                    *test_failed = true;
+                    format!("{:.16e}", inspect_result).red()
+                };
+
+            ComparisonReport {
+                gammaloop: inspect_result_string,
+                reference: format!("{:.16e}", inspect_target).blue(),
+            }
+        } else {
+            ComparisonReport::only_gloop(format!("{:.16e}", inspect_result).blue())
+        };
+
+        let before_integration = std::time::Instant::now();
+        let integrated_result = Integrate {
+            process_id: Some(0),
+            integrand_name: Some("default".to_string()),
+            result_path: None,
+            workspace_path: None,
+            n_cores: Some(1),
+            target: bench_data.integrated_target.map(|t| vec![t.re.0, t.im.0]),
+            restart: true,
+        }
+        .run(&mut cli.state, &cli.cli_settings)?;
+        let integration_time = before_integration.elapsed();
+        let sample_time = integration_time / (integrated_result.neval as u32);
+
+        let real_part_string =
+            utils::format_uncertainty(integrated_result.result.re, integrated_result.error.re);
+        let imag_part_string =
+            utils::format_uncertainty(integrated_result.result.im, integrated_result.error.im);
+
+        let integrated_result_comparison =
+            if let Some(integrated_target) = bench_data.integrated_target {
+                let integrated_result_string =
+                    if integrated_result.is_compatible_with_target(integrated_target, 3) {
+                        format!("{} + {}i", real_part_string, imag_part_string).green()
+                    } else {
+                        *test_failed = true;
+                        format!("{} + {}i", real_part_string, imag_part_string).red()
+                    };
+
+                ComparisonReport {
+                    gammaloop: integrated_result_string,
+                    reference: format!(
+                        "{:.8e} + {:.8e}i",
+                        integrated_target.re.0, integrated_target.im.0
+                    )
+                    .blue(),
+                }
+            } else {
+                ComparisonReport::only_gloop(
+                    format!("{} +  {}i", real_part_string, imag_part_string).blue(),
+                )
+            };
+
+        let n_var_re = (integrated_result.error.re.0
+            * integrated_result.error.re.0
+            * integrated_result.neval as f64)
+            / (integrated_result.result.re.0 * integrated_result.result.re.0);
+        let n_var_im = (integrated_result.error.im.0
+            * integrated_result.error.im.0
+            * integrated_result.neval as f64)
+            / (integrated_result.result.im.0 * integrated_result.result.im.0);
+
+        let nvar_comparison = if let Some(nvar_target) = bench_data.nvar_bench {
+            let nvar_string =
+                if n_var_re < nvar_target.re.0 * 2.0 && n_var_im < nvar_target.im.0 * 2.0 {
+                    format!("{:.2e} + {:.2e}", n_var_re, n_var_im).green()
+                } else if n_var_re < nvar_target.re.0 * 4.0 && n_var_im < nvar_target.im.0 * 4.0 {
+                    format!("{:.2e} + {:.2e}", n_var_re, n_var_im).yellow()
+                } else {
+                    *test_failed = true;
+                    format!("{:.2e} + {:.2e}", n_var_re, n_var_im).red()
+                };
+            ComparisonReport {
+                gammaloop: nvar_string,
+                reference: format!("{:.2e} + {:.2e}", nvar_target.re.0, nvar_target.im.0).blue(),
+            }
+        } else {
+            ComparisonReport::only_gloop(format!("{:.2e} + {:.2e}", n_var_re, n_var_im).blue())
+        };
+
+        let sample_time_comparison = if let Some(sample_time_bench) = bench_data.sample_time {
+            let sample_time_string = if sample_time <= sample_time_bench {
+                format!("{}μs", sample_time.as_micros()).green()
+            } else if sample_time <= sample_time_bench * 10 {
+                format!("{}μs", sample_time.as_micros()).yellow()
+            } else {
+                format!("{}μs", sample_time.as_micros()).red()
+            };
+            ComparisonReport {
+                gammaloop: sample_time_string,
+                reference: format!("{}μs", sample_time_bench.as_micros()).blue(),
+            }
+        } else {
+            ComparisonReport::only_gloop(format!("{}μs", sample_time.as_micros()).blue())
+        };
+
+        Ok(TestReportEntry {
+            amplitude: bench_data.amplitude,
+            generation_time: generation_time_comparison,
+            inspect: inspect_result_comparison,
+            integrated: integrated_result_comparison,
+            nvar: nvar_comparison,
+            sample_time: sample_time_comparison,
+        })
+    }
+
+    let mut test_reports: Vec<TestReportEntry> = Vec::new();
+
+    let one_loop_eu = BenchMarkData {
+        run_card: "photonic_amplitudes/1l_eu.toml".into(),
+        state_path: "./tests/photonic_amplitudes/1l_eu".into(),
+        amplitude: "1l_eu".into(),
+        generation_time: Some(Duration::from_secs(7)),
+        inspect_point: vec![0.123, 0.3242, 0.4233],
+        inspect_target: Some(Complex::new(-4.236544183136417e-12, -3.710728958614226e-12)),
+        integrated_target: Some(Complex::new(
+            F(-1.22898408452706e-13),
+            F(-3.94362534040412e-13),
+        )),
+        nvar_bench: None,
+        sample_time: Some(Duration::from_micros(61)),
+    };
+
+    let one_loop_phys = BenchMarkData {
+        run_card: "photonic_amplitudes/1l_phys.toml".into(),
+        state_path: "./tests/photonic_amplitudes/1l_phys".into(),
+        amplitude: "1l_phys".into(),
+        inspect_point: vec![0.1, 0.2, 0.3],
+        inspect_target: Some(Complex::new(4.660217572648287e-10, -6.496141401696065e-10)),
+        integrated_target: Some(Complex::new(
+            F(-9.27759500687454717e-11),
+            F(-3.68394576249870544e-11),
+        )),
+        generation_time: Some(Duration::from_secs(7)),
+        nvar_bench: None,
+        sample_time: Some(Duration::from_micros(590)),
+    };
+
+    let two_loop_eu = BenchMarkData {
+        run_card: "photonic_amplitudes/2l_eu.toml".into(),
+        state_path: "./tests/photonic_amplitudes/2l_eu".into(),
+        amplitude: "2l_eu".into(),
+        inspect_point: vec![0.123, 0.3242, 0.4233, 0.523, 0.314, 0.125],
+        inspect_target: None,
+        integrated_target: Some(Complex::new(F(-1.8006e-15), F(-1.54335e-14))),
+        generation_time: Some(Duration::from_secs(60)),
+        nvar_bench: None,
+        sample_time: Some(Duration::from_micros(1160)),
+    };
+
+    test_reports.push(run_photonic_test(one_loop_eu, &mut test_failed)?);
+    test_reports.push(run_photonic_test(one_loop_phys, &mut test_failed)?);
+    test_reports.push(run_photonic_test(two_loop_eu, &mut test_failed)?);
+    test_reports.push(TestReportEntry::default_with_name("2l_phys".to_string()));
+    test_reports.push(TestReportEntry::default_with_name("3l_eu".to_string()));
+    test_reports.push(TestReportEntry::default_with_name("3l_phys".to_string()));
+
+    let mut table = Table::new(test_reports);
+    table.with(Style::modern());
+    println!("test results: ");
+    println!("{}", table);
+
+    assert!(
+        !test_failed,
+        "Some photonic amplitude tests failed, see table for details",
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_grouped_subtraction() -> Result<()> {
     let mut cli = get_test_cli(
         Some("test_grouped_subtraction.toml".into()),
@@ -335,8 +635,8 @@ fn test_grouped_subtraction() -> Result<()> {
     let integration_results_no_group = int1.run(&mut cli.state, &cli.cli_settings)?;
     let integration_results_group = int2.run(&mut cli.state, &cli.cli_settings)?;
 
-    status_info!("No group result: {:#?}", integration_results_no_group);
-    status_info!("Group result: {:#?}", integration_results_group);
+    info!("No group result: {:#?}", integration_results_no_group);
+    info!("Group result: {:#?}", integration_results_group);
 
     assert_approx_eq(
         &integration_results_group.result.re,
@@ -382,15 +682,15 @@ fn scalar_bubble() -> Result<()> {
 
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(2.0361143153099125e-2+0e0i)");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.03838e-02)), 1));
 
     cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(1.1584675622329286e-2+0e0i)");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.16050e-02)), 1));
 
     cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(6.460057304375133e-3+0e0i)");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.46968e-03)), 1));
 
     clean_test(&cli.cli_settings.state_folder);
 
@@ -424,24 +724,189 @@ fn scalar_sunrise() -> Result<()> {
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-3.043e-3");
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(-4.37688e-03)), 1) // .result
+                                                                                         // .approx_eq(&Complex::new_re(F(-4.37688e-03)), &F(0.01))
+    );
+
+    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-4.359e-3");
 
     cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-1.455e-3");
+    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-2.474e-3");
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.48100e-03)), 1));
 
     // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     // assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-4.5184321377520566e-4+0e0i)");
 
-    println!("Hey");
     clean_test(&cli.cli_settings.state_folder);
-    println!("Hello");
+
+    Ok(())
+}
+
+#[test]
+fn scalar_mercedes() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_mercedes.toml".into()),
+        get_tests_workspace_path().join("scalar_mercedes"),
+        Some("scalar_mercedes".to_string()),
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_mercedes/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("scalar_mercedes/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    //5.89551e-06	3.35645e-06	1.87120e-06
+
+    // from Kaapo: m=1 muv=5 5.89551e-06 m=2 muv=5 	3.35645e-06	 m=3 muv=5 1.87120e-06
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(5.89551e-06)), 1),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(3.35645e-06)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.87120e-06)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
+
+#[test]
+fn scalar_basketball() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_basketball.toml".into()),
+        get_tests_workspace_path().join("scalar_basketball"),
+        Some("scalar_basketball".to_string()),
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_basketball/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("scalar_basketball/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    //1.47240e-03	7.15184e-04	2.27485e-04
+
+    // from Kaapo: m=1 muv=5 1.47240e-03 m=2 muv=5 	7.15184e-04	 m=3 muv=5 2.27485e-04
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.47240e-03)), 1),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(7.15184e-04)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.27485e-04)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
+#[test]
+fn scalar_mercedes_with_extra_loop() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_mercedes_with_extra_loop.toml".into()),
+        get_tests_workspace_path().join("scalar_mercedes_with_extra_loop"),
+        Some("scalar_mercedes_with_extra_loop".to_string()),
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(get_tests_workspace_path().join(
+            "scalar_mercedes_with_extra_loop/integration_workspace/integration_results.toml",
+        )),
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_mercedes_with_extra_loop/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    //2.90078e-06	1.59168e-06	6.86001e-07
+
+    // from Kaapo: m=1 muv=5 2.90078e-06 m=2 muv=5 	1.59168e-06	 m=3 muv=5 6.86001e-07
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.90078e-06)), 1),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.59168e-06)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.86001e-07)), 3),
+        "Not compatible: {integral_no_cache}",
+    );
+
+    clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }
 #[test]
 fn scalar_sunrise_inspect() -> Result<()> {
+    symbolica::GLOBAL_SETTINGS
+        .initialize_tracing
+        .store(false, std::sync::atomic::Ordering::Relaxed);
     let mut cli = get_test_cli(
         Some("scalar_sunrise.toml".into()),
         get_tests_workspace_path().join("scalar_sunrise"),
@@ -450,6 +915,8 @@ fn scalar_sunrise_inspect() -> Result<()> {
     )?;
 
     let point = vec![1., 1., 1., 2., 3., 4.];
+
+    let point = vec![1., 1., 1., -3., -4., -5.];
 
     let point = vec![2., 3., 4., 1., 1., 1.];
     let mut ins = Inspect {
@@ -543,22 +1010,22 @@ fn scalar_sunrise_inspect() -> Result<()> {
     -4.41097e-5+i-0.00000e0
     -1.54032e-4+i-0.00000e0
     -1.57503e-4+i-0.00000e0
-    -1.02668e-4+i-0.00000e0
-    4.35904e-5+i-0.00000e0
-    1.48827e-4+i-0.00000e0
-    1.01445e-4+i-0.00000e0
-    5.41516e-5+i-0.00000e0
+    -7.17631e-5+i-0.00000e0
+    4.21936e-5+i-0.00000e0
+    1.40322e-4+i-0.00000e0
+    8.50437e-5+i-0.00000e0
+    5.87544e-5+i-0.00000e0
     ");
     insta::assert_snapshot!(string_with_prefactor(&[r1_10,r2_10,r3_10,r4_10,r5_10,r6_10,r7_10,r8_10,rall_10]),@"
     2.66555e-8+i-0.00000e0
     -1.11736e-8+i-0.00000e0
     -3.96106e-7+i-0.00000e0
     -4.55447e-8+i-0.00000e0
-    -2.66509e-8+i-0.00000e0
-    1.11736e-8+i-0.00000e0
-    3.96106e-7+i-0.00000e0
-    4.55388e-8+i-0.00000e0
-    -1.38560e-12+i-0.00000e0
+    -2.65802e-8+i-0.00000e0
+    1.11735e-8+i-0.00000e0
+    3.96096e-7+i-0.00000e0
+    4.54492e-8+i-0.00000e0
+    -3.03929e-11+i-0.00000e0
     ");
     insta::assert_snapshot!(string_with_prefactor(&[r1_100,r2_100,r3_100,r4_100,r5_100,r6_100,r7_100,r8_100,rall_100]),@"
     2.67150e-12+i-0.00000e0
@@ -569,9 +1036,9 @@ fn scalar_sunrise_inspect() -> Result<()> {
     1.13180e-12+i-0.00000e0
     4.46155e-11+i-0.00000e0
     4.62050e-12+i-0.00000e0
-    -1.80746e-22+i-0.00000e0
+    -3.63173e-19+i-0.00000e0
     ");
-    clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }
@@ -627,8 +1094,8 @@ fn scalar_box() -> Result<()> {
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
-    status_info!("Integral result without caching: {:#?}", integral_no_cache);
-    status_info!(
+    info!("Integral result without caching: {:#?}", integral_no_cache);
+    info!(
         "Integral result with caching.  : {:#?}",
         integral_with_cache
     );
@@ -889,6 +1356,19 @@ fn test_qqx_aaa_ir_tree_user_numerator_inspect() -> Result<()> {
 
     let target = Complex::new(1.47276041641056e-4, -1.1503139369130214e-3);
     assert_eq!(inspect, target);
+    Ok(())
+}
+
+#[test]
+fn epemttb_generate() -> Result<()> {
+    let cli = get_test_cli(
+        Some("epemttbar.toml".into()),
+        get_tests_workspace_path().join("epemttbar"),
+        None,
+        true,
+    )
+    .unwrap();
+
     Ok(())
 }
 

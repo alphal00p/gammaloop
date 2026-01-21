@@ -5,7 +5,7 @@ use idenso::color::ColorSimplifier;
 use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
-use log::warn;
+use tracing::warn;
 use schemars::JsonSchema;
 
 use spenso::network::library::{DummyLibrary, TensorLibraryData};

@@ -17,12 +17,15 @@ use crate::settings::runtime::DiscreteGraphSamplingSettings;
 use crate::settings::{GlobalSettings, SamplingSettings};
 use crate::utils::symbolica_ext::TypstFormat;
 use crate::utils::{F, W_};
+use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::EdgeIndex;
 
+use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 use rand::Rng;
 
+use spenso::algebra::complex::Complex;
 use symbolica::atom::Symbol;
 use symbolica::domains::float::Real;
 use symbolica::numerical_integration::MonteCarloRng;
@@ -96,12 +99,20 @@ fn scalar_bubble() {
     test_initialise().unwrap();
 
     let g: Vec<Graph> = dot!(
-        digraph G{
+        digraph sunrise{
+            edge [particle=scalar_1]
+            node [num=1]
             e        [style=invis]
-            e -> A:0   [ id=0 particle=scalar_0]
-            B:1 -> e   [ id=1 particle=scalar_0]
-            A -> B    [ id=2 particle=scalar_0]
-            A -> B    [ id=3 particle=scalar_0]
+            // e -> A:0   [ id=3]
+            // B:1 -> e   [ id=4]
+
+            // A -> C    [ id=0]
+            // // C -> e
+            // C -> B
+            A -> B
+            A -> B
+            A -> B    [ id=1]
+            A -> B    [ id=0]
         },"scalars"
     )
     .unwrap();
@@ -120,7 +131,8 @@ fn scalar_bubble() {
         &model,
         &GenerationSettings {
             uv: UVgenerationSettings {
-                generate_integrated: true,
+                generate_integrated: false,
+                softct: false,
                 ..Default::default()
             },
             ..Default::default()
@@ -179,7 +191,11 @@ fn scalar_bubble() {
 
     let scales = logspace(2., 10., 10, 10.);
 
+    let mut results = vec![];
+
     for (i, g) in amp.graphs.iter().enumerate() {
+        let mut inspect_res: Vec<Vec<Complex<F<f64>>>> = vec![];
+        let mut analytic_res: Vec<Vec<Vec<(SubSet<LoopIndex>, Atom)>>> = vec![];
         for lmb in g.derived_data.lmbs.as_ref().unwrap() {
             println!("{}", lmb);
             let mut pt = vec![];
@@ -191,13 +207,28 @@ fn scalar_bubble() {
                 pt.push(F(rng.random_range(-1.0..1.0)));
             }
 
+            let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
+            loops.next();
+
+            // for ls in loops {
+            //     let mut expr = expr.clone();
+            //     for l in ls.included_iter() {
+            //         let e = usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64;
+            //         expr = expr
+            //             .replace(function!(GS.emr_mom, e, W_.x___))
+            //             .with(function!(GS.emr_mom, e, W_.x___) / expansion);
+
+            //         expr /= Atom::var(expansion).npow(3);
+            //     }
+            // }
+
             for s in &scales {
                 let mut ogpt = pt.clone();
                 for p in ogpt.iter_mut() {
                     *p = *p * F(*s);
                 }
 
-                println!("Scale :{s}");
+                // println!("Scale :{s}");
 
                 let (inspect_res_jac, inspect_res_eval) = inspect(
                     &settings,
@@ -210,14 +241,17 @@ fn scalar_bubble() {
                     false,
                 );
 
-                println!("Jac{:?}", inspect_res_jac);
+                // println!("Jac{:?}", inspect_res_jac);
 
-                res.push(inspect_res_eval * F(inspect_res_jac.unwrap()))
+                res.push(inspect_res_eval / F(inspect_res_jac.unwrap()))
             }
 
-            for r in res.iter() {
-                println!("res: {}", r.norm_squared().sqrt());
-            }
+            inspect_res.push(res);
+
+            // for r in res.iter() {
+            //     println!("res: {}", r.norm_squared().sqrt());
+            // }
+            let mut lims_per_orient = vec![];
 
             for o in g
                 .derived_data
@@ -232,9 +266,61 @@ fn scalar_bubble() {
                     .orientation
                     .select(&g.derived_data.all_mighty_integrand);
 
-                g.graph
-                    .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+                let lims =
+                    g.graph
+                        .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+                lims_per_orient.push(lims);
             }
+            analytic_res.push(lims_per_orient);
+        }
+        results.push((inspect_res, analytic_res));
+    }
+
+    for (i, g) in amp.graphs.iter().enumerate() {
+        let (inspect_res, analytic_res) = &results[i];
+        for (i_lmb, lmb) in g.derived_data.lmbs.as_ref().unwrap().iter().enumerate() {
+            println!("{lmb} gives :");
+
+            for (i, inspect) in inspect_res[i_lmb].iter().enumerate() {
+                println!("{}", inspect.norm_squared().sqrt());
+            }
+
+            // for (i, o) in g
+            //     .derived_data
+            //     .cff_expression
+            //     .as_ref()
+            //     .unwrap()
+            //     .orientations
+            //     .iter()
+            //     .enumerate()
+            // {
+            //     let oatom = o
+            //         .data
+            //         .orientation
+            //         .select(&g.derived_data.all_mighty_integrand);
+
+            //     let expansion = symbol!("lambd");
+
+            //     let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
+            //     loops.next();
+
+            //     for (ls, res) in &analytic_res[i_lmb][i] {
+            //         let l = res.coefficient_list::<i8>(&[Atom::var(expansion)]);
+
+            //         println!(
+            //             "LIMIT {:?}:",
+            //             ls.included_iter()
+            //                 .map(|l| usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64)
+            //                 .collect::<Vec<_>>(),
+            //         );
+            //         if l.is_empty() {
+            //             println!("\tFull cancellation to order 1");
+            //         }
+            //         for (t, a) in l {
+            //             println!("\t{}: {}", t, a);
+            //         }
+            //     }
+            // }
         }
     }
 }
@@ -467,7 +553,7 @@ fn tri_box_tri_LU() {
         "dot lmb:{}",
         graph
             .underlying
-            .dot_lmb(&graph.underlying.full_filter(), &graph.loop_momentum_basis)
+            .dot_lmb_of(&graph.underlying.full_filter(), &graph.loop_momentum_basis)
     );
 
     let hpdg = hp.pdg_code as i64;

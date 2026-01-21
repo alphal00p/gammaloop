@@ -56,6 +56,7 @@ use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
+
 use vakint::Vakint;
 // use symbolica_community::physics::tensors::library::{
 //     gamma5_weyl_data, gamma_data_weyl, proj_m_data_weyl, proj_p_data_weyl, SpensorLibrary,
@@ -63,9 +64,8 @@ use vakint::Vakint;
 // };
 // use symbolica_community::physics::tensors::structure::SpensoStucture;
 // use symbolica::domains::Field;
-use crate::{MAX_LOOP, status_debug};
-#[allow(unused_imports)]
-use log::{debug, info};
+use crate::MAX_LOOP;
+use ::tracing::debug;
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::numerical_integration::Sample;
 use typed_index_collections::{TiSlice, TiVec};
@@ -1744,7 +1744,7 @@ pub(crate) fn parse_python_expression(expression: &str) -> Atom {
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
-pub(crate) fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
+pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
     let mean = mean.0;
     let sdev = sdev.0;
 
@@ -2635,7 +2635,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
     e_cm: F<T>,
     settings: &ParameterizationSettings,
 ) -> (Vec<[F<T>; 3]>, F<T>) {
-    status_debug!("b: {}", settings.b);
+    debug!("b: {}", settings.b);
     let zero = e_cm.zero();
     let one = zero.one();
     match settings.mode {

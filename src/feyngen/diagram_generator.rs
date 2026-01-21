@@ -38,7 +38,7 @@ use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
-use tracing::{event_enabled, instrument};
+use tracing::{error, event_enabled, info, instrument};
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -91,7 +91,6 @@ type RationalPoly = symbolica::poly::polynomial::MultivariatePolynomial<
 >;
 type SampleEvaluationsAsPolynomial = (Vec<RationalPoly>, Vec<bool>);
 
-use crate::{status_debug, status_error, status_info};
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
@@ -1370,7 +1369,7 @@ impl ProcessDefinition {
             }
         }
         // for r in &reps {
-        //     status_info!("Model replacements: {}", r);
+        //     info!("Model replacements: {}", r);
         // }
         (reps, lib)
     }
@@ -2804,7 +2803,7 @@ impl ProcessDefinition {
                 .expect("Failed to build default Rayon ThreadPool"),
         };
 
-        status_debug!(
+        debug!(
             "Generating Feynman diagrams over {} cores for model {} and process:\n{}",
             pool.current_num_threads(),
             model.name,
@@ -2815,6 +2814,18 @@ impl ProcessDefinition {
             GenerationType::Amplitude => &self.amplitude_filters,
             GenerationType::CrossSection => &self.cross_section_filters,
         };
+
+        let vertex_vetoes_filter = filters
+            .0
+            .iter()
+            .filter_map(|f| {
+                if let FeynGenFilter::VertexVeto(filter) = f {
+                    Some(filter)
+                } else {
+                    None
+                }
+            })
+            .next();
 
         const SB_INCOMING: bool = true;
         const SB_OUTGOING: bool = false;
@@ -2827,6 +2838,11 @@ impl ProcessDefinition {
             Vec<SmartString<LazyCompact>>,
         > = HashMap::default();
         'add_vertex_rules: for vertex_rule in model.vertex_rules.iter() {
+            if let Some(veto) = vertex_vetoes_filter {
+                if veto.contains(&vertex_rule.0.name.clone().into()) {
+                    continue 'add_vertex_rules;
+                }
+            }
             let mut oriented_particles = vec![];
             for p in vertex_rule.0.particles.iter() {
                 if p.0.is_self_antiparticle() {
@@ -3004,7 +3020,7 @@ impl ProcessDefinition {
         let start = Instant::now();
         let mut last_step = start;
 
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}",
             format!("{:<6}", utils::format_wdhms(0)).blue().bold(),
             format!("{:<6}", utils::format_wdhms(0)).blue(),
@@ -3118,7 +3134,7 @@ impl ProcessDefinition {
         ) {
             Ok(gs) => {
                 if gs.is_empty() {
-                    status_error!(
+                    error!(
                         "\nSymbolica graph generation for this process did not yield any graph. This likely indicates a problem with the model or process specification. Please check the model and process and try again.\n"
                     );
                     return Err(FeynGenError::GenericError(
@@ -3129,14 +3145,14 @@ impl ProcessDefinition {
             }
             Err(gs_thus_far) => {
                 if gs_thus_far.is_empty() {
-                    status_error!(
+                    error!(
                         "\nSymbolica graph generation for this process did not yield any graph before being interrupted by the user.\n"
                     );
                     return Err(FeynGenError::GenericError(
                         "Symbolica graph generation failed to generate any graphs".to_string(),
                     ));
                 }
-                status_error!(
+                error!(
                     "\nSymbolica graph generation was aborted by the user after generating {} graphs. Generation will continue with these only, {}\n",
                     gs_thus_far.len(),
                     "BUT THE RESULT WILL BE INCOMPLETE".red().bold()
@@ -3149,7 +3165,7 @@ impl ProcessDefinition {
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.loop_count_range.0);
         let mut step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3219,7 +3235,7 @@ impl ProcessDefinition {
                 bar.finish_and_clear();
 
                 step = Instant::now();
-                status_info!(
+                info!(
                     "{} | Δ={} | {:<95}{}",
                     format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                         .blue()
@@ -3317,7 +3333,7 @@ impl ProcessDefinition {
             .collect::<HashMap<_, _>>();
 
         step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3387,7 +3403,7 @@ impl ProcessDefinition {
         processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3401,7 +3417,7 @@ impl ProcessDefinition {
         filters.apply_filters(&mut processed_graphs, model, &pool, &progress_bar_style)?;
 
         step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3450,7 +3466,7 @@ impl ProcessDefinition {
         })?;
         bar.finish_and_clear();
         step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3504,7 +3520,7 @@ impl ProcessDefinition {
             bar.finish_and_clear();
 
             step = Instant::now();
-            status_info!(
+            info!(
                 "{} | Δ={} | {:<95}{}",
                 format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                     .blue()
@@ -3550,7 +3566,7 @@ impl ProcessDefinition {
             bar.finish_and_clear();
 
             step = Instant::now();
-            status_info!(
+            info!(
                 "{} | Δ={} | {:<95}{}",
                 format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                     .blue()
@@ -3729,7 +3745,7 @@ impl ProcessDefinition {
         }
 
         step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3920,7 +3936,7 @@ impl ProcessDefinition {
         });
 
         step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -4293,7 +4309,7 @@ impl ProcessDefinition {
             )
         };
         step = Instant::now();
-        status_info!(
+        info!(
             "{} | Δ={} | {:<95}{} ({} isomorphically unique graph{}, {} color zero{}, {} lorentz zero{}, {} grouped and {} cancellation{})",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -4398,7 +4414,7 @@ impl ProcessDefinition {
         for (_i_g, g) in bare_graphs.iter() {
             total_sym_factor += evaluate_overall_factor(g.overall_factor.as_view());
         }
-        status_debug!(
+        debug!(
             "Graphs: [\n{}\n]",
             bare_graphs
                 .iter()
@@ -4422,7 +4438,7 @@ impl ProcessDefinition {
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
-        status_info!(
+        info!(
             "( Sum of the symmetry factors from each graph generated = {} ) ",
             format!("{}", total_sym_factor).green()
         );

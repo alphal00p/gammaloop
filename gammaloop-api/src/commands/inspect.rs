@@ -10,8 +10,7 @@ use crate::state::State;
 use color_eyre::{Result, Section};
 use tracing::info;
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Inspect {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]
@@ -44,11 +43,9 @@ pub struct Inspect {
     pub discrete_dim: Vec<usize>,
 }
 
-
 impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
         let process_id = state.process_list.find_process(self.process_id)?;
-        state.process_list.processes[process_id].warm_up(&state.model)?;
 
         let integrand_name = state.process_list.processes[process_id]
             .collection
@@ -59,6 +56,7 @@ impl Inspect {
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
 
+        integrand.warm_up(&state.model)?;
         let pt = self.point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
 
         let settings = integrand.get_settings().clone();
@@ -80,7 +78,7 @@ impl Inspect {
                     "Jacobian is zero at this point, cannot divide by zero."
                 ));
             }
-            
+
             inspect_res_eval.map(|a| a.0 / jac)
         } else {
             inspect_res_eval.map(|a| a.into())
@@ -112,7 +110,6 @@ impl<'a> BatchedInspect<'a> {
         Option<ArrayBase<OwnedRepr<f64>, ndarray::Dim<[usize; 1]>>>,
     )> {
         let process_id = state.process_list.find_process(self.process_id)?;
-        state.process_list.processes[process_id].warm_up(&state.model)?;
 
         let integrand_name = state.process_list.processes[process_id]
             .collection
@@ -122,6 +119,7 @@ impl<'a> BatchedInspect<'a> {
         let integrand = state
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
+        integrand.warm_up(&state.model)?;
 
         let settings = integrand.get_settings().clone();
 

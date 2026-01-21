@@ -10,7 +10,7 @@ use ahash::HashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use idenso::color::ColorSimplifier;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use rayon::{
     ThreadPool,
@@ -33,7 +33,7 @@ use crate::{
     },
     define_index,
     gammaloop_integrand::{
-        LmbMultiChannelingSetup, ParamBuilder, cross_section_integrand::CrossSectionIntegrandData,
+        LmbMultiChannelingSetup, cross_section_integrand::CrossSectionIntegrandData,
     },
     graph::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
@@ -53,7 +53,6 @@ use linnet::half_edge::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
 };
-use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -61,6 +60,7 @@ use symbolica::{
     id::Replacement,
     parse, symbol,
 };
+use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -1339,7 +1339,8 @@ impl CrossSectionGraph {
                 .replace(function!(GS.energy, W_.x_))
                 .with(function!(GS.ose, W_.x_))
                 .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                .with(function!(GS.theta, W_.x_));
+                .with(function!(GS.theta, W_.x_))
+                .expand_dots();
 
             for (_, edge_index, _) in self
                 .graph
@@ -1476,7 +1477,7 @@ impl CrossSectionGraph {
         let full_filter = self.graph.full_filter();
         let cut_graph = full_filter.subtract(&self.graph.initial_state_cut.right);
 
-        for s in self.graph.all_spanning_trees(&cut_graph) {
+        for s in self.graph.all_spanning_forests_of(&cut_graph) {
             let mut lmb = self.graph.lmb_impl(&full_filter, &s, externals.clone());
             let mut exts = vec![];
 
@@ -1706,7 +1707,8 @@ impl CrossSectionGraph {
                         .replace(function!(GS.energy, W_.x_))
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                        .with(function!(GS.theta, W_.x_));
+                        .with(function!(GS.theta, W_.x_))
+                        .expand_dots();
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1768,7 +1770,8 @@ impl CrossSectionGraph {
                         .replace(function!(GS.energy, W_.x_))
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                        .with(function!(GS.theta, W_.x_));
+                        .with(function!(GS.theta, W_.x_))
+                        .expand_dots();
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1823,7 +1826,8 @@ impl CrossSectionGraph {
                         .replace(function!(GS.energy, W_.x_))
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                        .with(function!(GS.theta, W_.x_));
+                        .with(function!(GS.theta, W_.x_))
+                        .expand_dots();
 
                     for (_, edge_index, _) in self
                         .graph

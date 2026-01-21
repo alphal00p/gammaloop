@@ -136,6 +136,8 @@ pub struct UVgenerationSettings {
     pub generate_integrated: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub add_sigma: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub inner_products: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
 }
@@ -145,6 +147,7 @@ impl Default for UVgenerationSettings {
         UVgenerationSettings {
             softct: true,
             generate_integrated: true,
+            inner_products: true,
             add_sigma: false,
             vakint: VakintSettings::default(),
         }

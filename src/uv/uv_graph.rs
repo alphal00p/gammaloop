@@ -4,7 +4,7 @@ use linnet::half_edge::{
     involution::{Hedge, HedgePair},
     subgraph::{
         Cycle, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike,
-        SubSetOps,
+        SubSetOps, subset::SubSet,
     },
 };
 use symbolica::{
@@ -74,20 +74,20 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         expr: &Atom,
         expansion: Symbol,
         lmb: &LoopMomentumBasis,
-    ) -> Vec<Atom>
+    ) -> Vec<(SubSet<LoopIndex>, Atom)>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let mom_reps = self.normal_emr_replacement(subgraph, lmb, &[W_.x___], |_s| true);
 
         let ose_reps = self.get_ose_replacements();
-        for x in &mom_reps {
-            println!("LMB replacement: {x}");
-        }
+        // for x in &mom_reps {
+        //     println!("LMB replacement: {x}");
+        // }
 
-        for r in &ose_reps {
-            println!("ose{r}");
-        }
+        // for r in &ose_reps {
+        //     println!("ose{r}");
+        // }
 
         let expr = expr
             .replace(function!(GS.broadcasting_sqrt, W_.a_))
@@ -95,7 +95,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .replace_multiple(&ose_reps)
             .replace_multiple(&mom_reps);
         // .replace_multiple(&q3_reps);
-        let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
+        let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
 
         let mut limits = Vec::new();
 
@@ -104,7 +104,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         for ls in loops {
             let mut expr = expr.clone();
             for l in ls.included_iter() {
-                let e = usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64;
+                let e = usize::from(lmb.loop_edges[l]) as i64;
                 expr = expr
                     .replace(function!(GS.emr_mom, e, W_.x___))
                     .with(function!(GS.emr_mom, e, W_.x___) / expansion);
@@ -116,22 +116,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
             expr = series.to_atom().expand();
 
-            let l = expr.coefficient_list::<i8>(&[Atom::var(expansion)]);
-
-            println!(
-                "LIMIT {:?}:",
-                ls.included_iter()
-                    .map(|l| usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64)
-                    .collect::<Vec<_>>(),
-            );
-            if l.is_empty() {
-                println!("\tFull cancellation to order 1");
-            }
-            for (t, a) in l {
-                println!("\t{}: {}", t, a);
-            }
-
-            limits.push(expr);
+            limits.push((ls, expr));
         }
         limits
     }

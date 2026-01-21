@@ -35,7 +35,6 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
 };
-use log::debug;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
@@ -50,6 +49,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{
@@ -637,7 +637,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let mut result = Complex::new_re(momentum_sample.zero());
                 let params = T::get_parameters(
                     &mut self.param_builder,
-                    settings.general.enable_cache,
+                    (settings.general.enable_cache, settings.general.debug_cache),
                     &self.graph,
                     &rescaled_momenta,
                     hel,
@@ -658,7 +658,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         self.param_builder.orientation_value(e);
                         let a = T::get_parameters(
                             &mut self.param_builder,
-                            settings.general.enable_cache,
+                            (settings.general.enable_cache, settings.general.debug_cache),
                             &self.graph,
                             &rescaled_momenta,
                             hel,
@@ -668,7 +668,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             Some(&lu_params),
                         );
                         result += <T as GenericEvaluatorFloat>::get_evaluator_single(
-                            &mut self.parametric_integrand[raised_cut][0],
+                            &mut self.parametric_integrand[cut],
                         )(&a);
                     }
                 }

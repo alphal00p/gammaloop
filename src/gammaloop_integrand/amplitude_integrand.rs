@@ -21,7 +21,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
-use tracing::{debug, instrument};
+use tracing::{debug, info, instrument, warn};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -45,7 +45,6 @@ use crate::{
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
-    status_debug, status_info, status_warn,
     subtraction::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
@@ -261,7 +260,7 @@ impl AmplitudeGraphTerm {
         {
             let a = T::get_parameters(
                 &mut self.param_builder,
-                settings.general.enable_cache,
+                (settings.general.enable_cache, settings.general.debug_cache),
                 &self.graph,
                 &momentum_sample,
                 hel,
@@ -283,7 +282,7 @@ impl AmplitudeGraphTerm {
                     self.param_builder.orientation_value(e);
                     let a = T::get_parameters(
                         &mut self.param_builder,
-                        settings.general.enable_cache,
+                        (settings.general.enable_cache, settings.general.debug_cache),
                         &self.graph,
                         &momentum_sample,
                         hel,
@@ -301,7 +300,7 @@ impl AmplitudeGraphTerm {
                 "Original integrand value"
             );
         }
-        status_debug!("Parameters from previous evaluation"; data = self.param_builder.clone());
+        // debug!("Parameters from previous evaluation"; data = self.param_builder.clone());
         debug!("params: \n{}", self.param_builder);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
@@ -571,12 +570,12 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
 
     fn external_cache_id(&self) -> usize {
-        // status_info!("Getting cache id {}", self.data.external_cache_id);
+        // info!("Getting cache id {}", self.data.external_cache_id);
         self.data.external_cache_id
     }
 
     fn increment_external_cache_id(&mut self, val: usize) {
-        // status_info!(
+        // info!(
         //     "Incrementing cache id {} by {val}",
         //     self.data.external_cache_id
         // );
@@ -595,7 +594,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 
     /// Revert to the base external cache ID for the current configuration
     fn revert_to_base_external_cache_id(&mut self) {
-        // status_info!(
+        // info!(
         //     "Reverting external cache id from {} to base {}",
         //     self.data.external_cache_id,
         //     self.data.base_external_cache_id
@@ -654,7 +653,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
             .all(|term| !term.threshold_counterterm.evaluators.is_empty());
 
         if !thresholds_generated && !self.settings.subtraction.disable_threshold_subtraction {
-            status_warn!(
+            warn!(
                 "Not all graphs have threshold counterterms generated, but threshold subtraction is not disabled. disable runtime threshold subtraction to remove this warning"
             );
             self.settings.subtraction.disable_threshold_subtraction = true;
@@ -663,10 +662,10 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         let is_tree_level = self.data.graph_terms[0].graph.get_loop_number() == 0;
 
         if !self.settings.subtraction.disable_threshold_subtraction && !is_tree_level {
-            status_debug!("esurface existence check");
+            debug!("esurface existence check");
             let existing_esurfaces = self.get_existing_esurfaces(model);
             for (group_id, existing_esurfaces) in existing_esurfaces.iter_enumerated() {
-                status_debug!(
+                debug!(
                     "solving overlap for group {}, number of thresholds: {}",
                     group_id.0,
                     existing_esurfaces.len()
@@ -769,7 +768,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                         )
                     })?;
 
-                status_info!(
+                info!(
                     "overlap structure of group {}: {:?}",
                     group_id.0,
                     overlap

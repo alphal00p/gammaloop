@@ -196,7 +196,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
     #[allow(clippy::too_many_arguments)]
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
-        cache: bool,
+        cache: (bool, bool),
         graph: &'a Graph,
         sample: &'a MomentumSample<T>,
         helicities: &[Helicity],
@@ -215,7 +215,7 @@ impl GenericEvaluatorFloat for f64 {
         #[inline(always)]
         |params: &[Complex<F<f64>>]| {
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
-                // status_info!("USING COMPILED F64 SINGLE");
+                // info!("USING COMPILED F64 SINGLE");
                 let mut out = [Complex::default()];
 
                 unsafe {
@@ -226,7 +226,7 @@ impl GenericEvaluatorFloat for f64 {
                 }
                 out[0]
             } else {
-                // status_info!("USING EAGER F64 SINGLE");
+                // info!("USING EAGER F64 SINGLE");
                 generic_evaluator.f64_eager.evaluate_single(params)
             }
         }
@@ -238,7 +238,7 @@ impl GenericEvaluatorFloat for f64 {
         |params: &[Complex<F<f64>>]| {
             let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
-                // status_info!("USING COMPILED COMPLEX SINGLE");
+                // info!("USING COMPILED COMPLEX SINGLE");
                 //
                 unsafe {
                     compiled.evaluate(
@@ -248,7 +248,7 @@ impl GenericEvaluatorFloat for f64 {
                 }
                 out
             } else {
-                // status_info!("USING EAGER COMPLEX SINGLE");
+                // info!("USING EAGER COMPLEX SINGLE");
                 generic_evaluator.f64_eager.evaluate(params, &mut out);
                 out
             }
@@ -257,7 +257,7 @@ impl GenericEvaluatorFloat for f64 {
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
-        cache: bool,
+        cache: (bool, bool),
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
@@ -324,7 +324,7 @@ impl GenericEvaluatorFloat for f128 {
     fn get_evaluator_single(
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<f128>>]) -> Complex<F<f128>> {
-        // status_info!("USING COMPLEX F128 SINGLE");
+        // info!("USING COMPLEX F128 SINGLE");
         #[inline(always)]
         |params: &[Complex<F<f128>>]| generic_evaluator.f128.evaluate_single(params)
     }
@@ -333,7 +333,7 @@ impl GenericEvaluatorFloat for f128 {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
         |params: &[Complex<F<f128>>]| {
-            // status_info!("USING COMPLEX F128 MULTIPLE");
+            // info!("USING COMPLEX F128 MULTIPLE");
             let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
             generic_evaluator.f128.evaluate(params, &mut out);
             out
@@ -342,7 +342,7 @@ impl GenericEvaluatorFloat for f128 {
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
-        cache: bool,
+        cache: (bool, bool),
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],

@@ -118,7 +118,10 @@ impl AtomCoreExt for AtomView<'_> {
         ParsingNet::try_from_view(
             *self,
             TENSORLIB.read().unwrap().deref(),
-            &ParseSettings::default(),
+            &ParseSettings {
+                parse_inner_products: false,
+                ..Default::default()
+            },
         )
     }
 

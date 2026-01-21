@@ -29,13 +29,10 @@ use crate::observables::Event;
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
-use crate::status_info;
 use crate::utils;
 use crate::utils::F;
 use crate::utils::format_sample;
 use crate::{is_interrupted, set_interrupted};
-#[allow(unused_imports)]
-use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
 use spenso::algebra::complex::Complex;
 use std::fs;
@@ -43,6 +40,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 use tabled::Tabled;
+#[allow(unused_imports)]
+use tracing::{debug, error, info, trace, warn};
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
 
@@ -314,7 +313,7 @@ where
 
     let t_start = Instant::now();
 
-    status_info!(
+    info!(
         "Integrating using {} ltd with {} {} over {} ...",
         if settings.general.use_ltd {
             "naive"
@@ -325,7 +324,7 @@ where
         if cores > 1 { "cores" } else { "core" },
         grid_str
     );
-    status_info!("");
+    info!("");
 
     let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
 
@@ -476,7 +475,7 @@ where
             &target,
             settings.integrator.show_max_wgt_info,
         );
-        status_info!("");
+        info!("");
 
         // now write the integration state to disk if a workspace has been provided.
         if let Some(ref workspace_path) = workspace {
@@ -1044,7 +1043,7 @@ pub(crate) fn show_integration_status(
     target: &Option<Complex<F<f64>>>,
     show_max_wgt_info: bool,
 ) {
-    status_info!(
+    info!(
         "/  [ {} ] {}: n_pts={:-6.0}K {} {}",
         format!(
             "{:^7}",
@@ -1112,23 +1111,21 @@ pub(crate) fn show_integration_status(
         );
     }
     if show_max_wgt_info {
-        status_info!(
+        info!(
             "|  -------------------------------------------------------------------------------------------"
         );
-        status_info!(
+        info!(
             "|  {:<16} | {:<23} | {}",
-            "Integrand",
-            "Max Eval",
-            "Max Eval xs",
+            "Integrand", "Max Eval", "Max Eval xs",
         );
 
         for (i_itg, integral) in integration_state.all_integrals.iter().enumerate() {
             for max_weight_str in integral.format_max_weights(i_itg) {
-                status_info!("{}", max_weight_str);
+                info!("{}", max_weight_str);
             }
         }
 
-        status_info!(
+        info!(
             "|  -------------------------------------------------------------------------------------------"
         );
     }
@@ -1143,7 +1140,7 @@ pub fn print_integral_result(
     tag: &str,
     trgt: Option<F<f64>>,
 ) {
-    status_info!(
+    info!(
         "|  itg #{:-3} {}: {} {} {} {} {}",
         format!("{:<3}", i_itg),
         format!("{:-2}", tag).blue().bold(),

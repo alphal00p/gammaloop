@@ -9,7 +9,7 @@ use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
 use crate::utils::F;
 use color_eyre::{Result, eyre::Context};
-use log::{debug, info, warn};
+use tracing::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;

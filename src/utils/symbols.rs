@@ -8,8 +8,8 @@ use spenso::{
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
-        representation::{Minkowski, RepName},
-        slot::{DummyAind, IsAbstractSlot, Slot},
+        representation::{Minkowski, RepName, Representation},
+        slot::{DummyAind, IsAbstractSlot},
     },
 };
 use symbolica::{
@@ -300,7 +300,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
-    rescale: symbol!("t"),
+    rescale: symbol!("t";Scalar,Real,Positive),
     _linear: symbol!("_linear";Linear),
     linearize: symbol!(
         "linearize",
@@ -539,19 +539,26 @@ impl GammaloopSymbols {
             .f(&[self.spensocind.f(&[0]), index.into().into_owned()])
     }
 
-    pub(crate) fn ose_full(&self, e: EdgeIndex, e_mass: Atom, index: Option<Atom>) -> Atom {
+    pub(crate) fn ose_full(
+        &self,
+        e: EdgeIndex,
+        e_mass: Atom,
+        index: Option<Atom>,
+        inner_product: bool,
+    ) -> Atom {
         let eidc = usize::from(e) as i64;
         let m2 = &e_mass * &e_mass;
 
-        let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
-        let ose = function!(
-            self.ose,
-            eidc,
-            GS.emr_vec(e),
-            m2,
-            (m2 - self.emr_vec_index(e, mink.to_atom()) * self.emr_vec_index(e, mink.to_atom()))
-        )
-        .npow((1, 2));
+        let mink: Representation<Minkowski> = Minkowski {}.new_rep(4); //.slot(Aind::new_dummy());
+        let q3q3 = if inner_product {
+            mink.inner_product(self.emr_vec(e), self.emr_vec(e))
+        } else {
+            let mink = mink.slot::<Aind, Aind>(Aind::new_dummy()).to_atom();
+
+            self.emr_vec_index(e, mink.as_view()) * self.emr_vec_index(e, mink.as_view())
+        };
+
+        let ose = function!(self.ose, eidc, GS.emr_vec(e), m2, (m2 - q3q3)).npow((1, 2));
 
         if let Some(index) = index {
             ose * self.energy_delta(index)
@@ -560,11 +567,17 @@ impl GammaloopSymbols {
         }
     }
 
-    pub(crate) fn split_mom_pattern(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
+    pub(crate) fn split_mom_pattern(
+        &self,
+        e: EdgeIndex,
+        e_mass: Atom,
+        inner_product: bool,
+    ) -> Replacement {
         let id = Minkowski {}.to_symbolic([W_.a__]);
         Replacement::new(
             self.emr_mom(e, &id).to_pattern(),
-            self.emr_vec_index(e, &id) + self.ose_full(e, e_mass, Some(id)) * sign_atom(e),
+            self.emr_vec_index(e, &id)
+                + self.ose_full(e, e_mass, Some(id), inner_product) * sign_atom(e),
         )
     }
 

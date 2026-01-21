@@ -201,10 +201,11 @@ let a = args.pos().map(v => $#v$).join($, $);
                         custom_print_mode: Some(("typst", 2)),
                         ..Default::default()
                     },
-                ) {
-                    writeln!(fmt, "{}", s).unwrap();
-                    continue;
-                }
+                )
+            {
+                writeln!(fmt, "{}", s).unwrap();
+                continue;
+            }
 
             if *isfun {
                 writeln!(
@@ -435,7 +436,9 @@ let a = args.pos().map(v => $#v$).join($, $);
             }
             AtomView::Pow(p) => {
                 let (base, exp) = p.get_base_exp();
-
+                if print_state.in_function {
+                    write!(fmt, "$")?;
+                }
                 if exp.is_negative() {
                     write!(fmt, "1/")?;
                     base.fmt_output(
@@ -491,6 +494,9 @@ let a = args.pos().map(v => $#v$).join($, $);
                     )?;
 
                     write!(fmt, ")")?;
+                }
+                if print_state.in_function {
+                    write!(fmt, "$")?;
                 }
                 Ok(true)
             }

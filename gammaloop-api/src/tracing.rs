@@ -14,11 +14,7 @@ use tracing_appender::{
 };
 use tracing_subscriber::{
     filter::Filtered,
-    fmt::{
-        self,
-        format::Writer,
-        FmtContext, FormatEvent, FormatFields,
-    },
+    fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
     layer::SubscriberExt,
     registry::LookupSpan,
     reload,
@@ -32,7 +28,7 @@ fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
     // Start from a strict global default…
     let mut filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::WARN.into()) // global floor
-        .parse_lossy("status=off"); // no user rules yet
+        .parse_lossy(""); // no user rules yet
 
     // for req in ["gammalooprs=debug", "_gammaloop=info", "symbolica=off"] {
     //     let Ok(d) = req.parse() else {
@@ -54,7 +50,7 @@ fn display_filter_from(user_spec: &str) -> Result<EnvFilter> {
     // Users can override/expand with their spec.
     let mut f = EnvFilter::builder()
         .with_default_directive(LevelFilter::OFF.into())
-        .parse_lossy("status=info");
+        .parse_lossy("");
 
     for a in user_spec.split(",") {
         if a.trim().is_empty() {
@@ -182,6 +178,9 @@ pub(crate) fn init_tracing(
     dir: impl AsRef<Path>,
     log_file_name: Option<String>,
 ) -> reload::Handle<EnvFilter, Registry> {
+    symbolica::GLOBAL_SETTINGS
+        .initialize_tracing
+        .store(false, std::sync::atomic::Ordering::Relaxed);
     // println!("Init tracing");
     let handles = FILTER_HANDLES.get_or_init(|| {
         let file_filter = EnvFilter::new(FILE_LOG_SPEC.lock().unwrap().as_str());

@@ -131,8 +131,17 @@ where
         self.1.explicit_ose_atom(edge)
     }
 
-    fn emr_spatial_params(&self) -> Vec<Atom> {
-        self.1.emr_spatial_params()
+    fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
+        lmb.loop_edges
+            .iter()
+            .flat_map(|edge_id| {
+                vec![
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                ]
+            })
+            .collect()
     }
 
     fn external_spatial_params(&self) -> Vec<Atom> {
@@ -173,18 +182,15 @@ where
         (dot + mass2).sqrt()
     }
 
-    fn emr_spatial_params(&self) -> Vec<Atom> {
-        self.iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Paired { .. } = pair {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                } else {
-                    vec![]
-                }
+    fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
+        lmb.loop_edges
+            .iter()
+            .flat_map(|edge_id| {
+                vec![
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                ]
             })
             .collect()
     }
@@ -263,28 +269,19 @@ impl ParamBuilderGraph for Graph {
         self.underlying.explicit_ose_atom(edge)
     }
 
-    fn emr_spatial_params(&self) -> Vec<Atom> {
-        if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            self.underlying.emr_spatial_params()
-        } else {
-            let underlying_without_is_cut = self
-                .underlying
-                .full_filter()
-                .subtract(&self.initial_state_cut.left)
-                .subtract(&self.initial_state_cut.right);
-
-            self.underlying
-                .iter_edges_of(&underlying_without_is_cut)
-                .sorted_by(|a, b| a.1.cmp(&b.1))
-                .flat_map(|(_, edge_id, _)| {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                })
-                .collect()
-        }
+    #[allow(unused_variables)]
+    fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
+        self.loop_momentum_basis
+            .loop_edges
+            .iter()
+            .flat_map(|edge_id| {
+                vec![
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                    GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                ]
+            })
+            .collect()
     }
 
     fn external_spatial_params(&self) -> Vec<Atom> {

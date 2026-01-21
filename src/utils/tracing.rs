@@ -54,7 +54,6 @@ pub enum LogLevel {
     Trace,
 }
 
-
 impl From<LogLevel> for LevelFilter {
     fn from(value: LogLevel) -> Self {
         match value {
@@ -200,64 +199,6 @@ where
         serde_json::to_value(self).unwrap_or(Value::Null)
     }
 }
-// io/macros.rs
-#[macro_export]
-macro_rules! status_event {
-    // With structured payload: message expr + data expr
-    ($level:ident, $fmt:expr ; data = $data:expr $(,)?) => {{
-        // Ask tracing whether these events would be recorded.
-        let __data_enabled =
-            ::tracing::event_enabled!(target: "status_data", ::tracing::Level::$level);
-        let __pretty_enabled =
-            $crate::utils::tracing::stderr_is_tty()
-            && ::tracing::event_enabled!(target: "status", ::tracing::Level::$level);
-
-        // Fast path: nothing to do.
-        if __data_enabled || __pretty_enabled {
-            // Evaluate `$data` exactly once if anything is enabled.
-            let __d_val = $data;
-
-            if __data_enabled {
-                // Build JSON only when the structured event is enabled.
-                let __json_s = serde_json::to_string(
-                    &$crate::utils::tracing::StatusRenderable::status_json(&__d_val)
-                ).unwrap_or_else(|e| format!(r#"{{"serde_error":"{e}"}}"#));
-
-                ::tracing::event!(
-                    target: "status_data",
-                    ::tracing::Level::$level,
-                    data = %__json_s,
-                    $fmt
-                );
-            }
-
-            if __pretty_enabled {
-                // Pretty render only when an interactive TTY AND the event is enabled.
-                let __pretty =
-                    $crate::utils::tracing::StatusRenderable::status_pretty(&__d_val);
-                ::tracing::event!(
-                    target: "status",
-                    ::tracing::Level::$level,
-                    "{}", __pretty
-                );
-            }
-        }
-    }};
-
-    ($level:ident, $($t:tt)*) => {{
-        ::tracing::event!(target:"status", ::tracing::Level::$level, $($t)*);
-    }};
-}
-#[macro_export]
-macro_rules! status_info  { ($($x:tt)*) => { $crate::status_event!(INFO,  $($x)*); }; }
-#[macro_export]
-macro_rules! status_warn  { ($($x:tt)*) => { $crate::status_event!(WARN,  $($x)*); }; }
-#[macro_export]
-macro_rules! status_error  { ($($x:tt)*) => { $crate::status_event!(ERROR,  $($x)*); }; }
-#[macro_export]
-macro_rules! status_debug { ($($x:tt)*) => { $crate::status_event!(DEBUG, $($x)*); }; }
-#[macro_export]
-macro_rules! status_trace { ($($x:tt)*) => { $crate::status_event!(TRACE, $($x)*); }; }
 
 use std::io::IsTerminal;
 pub fn stderr_is_tty() -> bool {

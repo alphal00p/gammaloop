@@ -61,12 +61,12 @@ symbolica = { version = "1", default-features = false, features = [
     "bincode",
 ] }
 
-idenso = { version = "0.2", features = ["bincode"] }
+idenso = { version = "0.3", features = ["bincode"] }
 spenso-macros = { version = "0.3" }
-spenso-hep-lib = { version = "0.1" }
-spenso = { version = "0.5", features = ["shadowing"] }
+spenso-hep-lib = { version = "0.1.7" }
+spenso = { version = "0.6", features = ["shadowing"] }
 linnet = { version = "0.16.1", features = [
-    "drawing",
+    # "drawing",
     "serde",
     "bincode",
     "symbolica",
@@ -83,8 +83,6 @@ clap = { version = "4.5.41", features = [
     "unicode",
     "wrap_help",
 ] }
-rustyline = "12"
-shell-words = "1.1"
 color-eyre = { version = "0.6", default-features = false }
 eyre = "^0.6"
 
@@ -103,7 +101,7 @@ statrs = "0.16.0"
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
 itertools = "0.14"
 smartstring = { version = "*", features = ["serde"] }
-log = { version = "*", features = ["release_max_level_debug"] }
+# log = { version = "*", features = ["release_max_level_debug"] }
 # env_logger = "*"
 # pyo3-log = { version = "0.12.0", optional = true }
 nalgebra = "0.32.3"
@@ -111,10 +109,9 @@ nalgebra = "0.32.3"
 clarabel = "0"
 # petgraph = "0.6.4"
 indexmap = "2.2.2"
-vectorize = "0.2.0"
 ahash = { version = "0.8.8", features = ["serde"] }
 # num = { version = "0.4.1", features = ["serde"] }
-pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
+# pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
 derive_more = "0.99.17"
 serde_json = "1.0.115"
 ctrlc = "3.4.4"
@@ -128,35 +125,28 @@ typed-index-collections = { version = "3.3.0", features = [
     "bincode",
 ] }
 
-gat-lending-iterator = "0.1.5"
 # gxhash = "3.4.1"
 thiserror = "1.0.63"
 serde_repr = "0.1.19"
-compensated-summation = "0.3.0"
-uuid = { version = "1.10.0", features = ["serde", "v4"] }
+# compensated-summation = "0.3.0"
 serde_with = "3.9.0"
 tabled = { version = "0.20.0", features = ["ansi"] }
-bitvec = { version = "1.0.1", features = ["serde"] }
 pathfinding = "4.11.0"
 insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
 which = "8.0.0"
 slotmap = { version = "1.0.7", features = ["serde"] }
 base62 = "2.0.2"
-trie-rs = { version = "0.4.2", features = ["serde"] }
 brotli = "7.0.0"
 # cgmath = "0.18.0"
 # argmin = "0.10.0"
 # by_address = "1.2.1"
 # pyo3-pylogger = { version = "0.3.0", optional = true }
 # humantime = "2.1.0"
-chrono = "0.4.39"
 linreg = "0.2.0"
 dot-parser = "0.5.1"
-console = "0.16.0"
 pyo3-stub-gen = { version = "0.13", optional = true, default-features = false }
 
 
-is-terminal = "0.4"
 tracing-subscriber = { version = "0.3.19", features = [
     "env-filter",
     "fmt",
@@ -164,21 +154,19 @@ tracing-subscriber = { version = "0.3.19", features = [
     "json",
 ] }
 
-tracing-log = "0.2.0"
 paste = "1.0.15"
 tracing = { version = "0.1.41", features = ["release_max_level_info"] }
 toml = "0.9.5"
 tracing-appender = "0.2.3"
 comemo = "0.5.0"
-figment = "0.10.19"
 schemars = "1.0.4"
 ringbuffer = "0.16.0"
 tracing-indicatif = "0.3.13"
-json5 = "0.4.1"
 
 # gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
 rug = { version = "1.27.0", features = ["serde"] }
 vakint = "0.1.2"
+vectorize = "0.2.0"
 [dependencies.pyo3]
 features = ["eyre", "auto-initialize"]
 optional = true
@@ -211,7 +199,7 @@ higher_loops = []
 # spenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
 # spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
 # spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
+# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
@@ -220,12 +208,12 @@ higher_loops = []
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
-# linnet = { path = "../linnet" }
-# linnet = { git = "https://github.com/alphal00p/linnet", rev = "aa7da353060b53f0af5a79810ed5383026871394" }
+# linnet = { path = "../../linnet" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "c2ce79b7ddb6ce923a0024aec7142931185c8610" }
 # spenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
-# spenso={path="../spenso/spenso"}
+# spenso={path="../../spenso/spenso"}
 # idenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
-# idenso={path="../spenso/idenso"}
+# idenso={path="../../spenso/idenso"}
 # spenso-hep-lib = {git = "https://github.com/alphal00p/spenso",rev="5e1c358e11b131ecd0d83da4453ad4cc28983165"}
 # {path="../spenso/spenso-hep-lib"}
 # symbolica-community={path="../symbolica-community"}

@@ -5,7 +5,6 @@ use crate::{
     momentum_sample::ExternalIndex,
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
-    status_debug,
     utils::{F, FloatLike, newton_solver::newton_iteration_and_derivative},
 };
 
@@ -95,20 +94,21 @@ pub(crate) fn improve_ps<T: FloatLike>(
     let deformation_size = dimensionless_metric(dependent_momenta, &result, e_cm);
 
     if let Some(threshold) = settings.large_deformation_check
-        && deformation_size > F::from_ff64(threshold) {
-            if settings.only_warn_on_large_deformation {
-                warn!(
-                    "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
-                    deformation_size, threshold
-                );
-            } else {
-                return Err(eyre::eyre!(
-                    "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
-                    deformation_size,
-                    threshold
-                ));
-            }
+        && deformation_size > F::from_ff64(threshold)
+    {
+        if settings.only_warn_on_large_deformation {
+            warn!(
+                "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
+                deformation_size, threshold
+            );
+        } else {
+            return Err(eyre::eyre!(
+                "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
+                deformation_size,
+                threshold
+            ));
         }
+    }
 
     Ok(result)
 }
@@ -344,7 +344,7 @@ fn find_rescaling<T: FloatLike>(
         e_cm,
     );
 
-    status_debug!("solution: {:?}", solution);
+    debug!("solution: {:?}", solution);
 
     momenta
         .iter()
@@ -574,7 +574,8 @@ fn improve_ps_vh<T: FloatLike>(
     }
 
     let mut new_momenta = dependent_momenta
-        .iter().cloned()
+        .iter()
+        .cloned()
         .collect::<TiVec<ExternalIndex, _>>();
 
     let mut pt = dependent_momenta[ExternalIndex::from(0)].zero();

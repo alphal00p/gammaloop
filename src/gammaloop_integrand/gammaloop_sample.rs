@@ -540,7 +540,7 @@ fn default_parametrize<T: FloatLike>(
     let loop_moms = loop_moms_vec.into_iter().map(ThreeMomentum::from).collect();
 
     let jacobian = param_jacobian;
-    // status_info!("Default parametrize with ext cache id:{external_mom_cache_id}");
+    // info!("Default parametrize with ext cache id:{external_mom_cache_id}");
     MomentumSample::new(
         loop_moms,
         loop_mom_cache_id,

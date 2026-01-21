@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use gammalooprs::{status_warn, utils::serde_utils::SmartSerde};
+use gammalooprs::utils::serde_utils::SmartSerde;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -12,10 +12,9 @@ use colored::Colorize;
 use gammalooprs::{
     integrate::{havana_integrate, print_integral_result, IntegrationState},
     settings::{runtime::IntegrationResult, RuntimeSettings},
-    status_info,
     utils::F,
 };
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{state::State, CLISettings};
 
@@ -26,15 +25,15 @@ use crate::{state::State, CLISettings};
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Integrate {
     /// The process id to inspect
-    #[arg(short = 'i', long = "process-id", value_name = "ID")]
+    #[arg(short = 'p', long = "process-id", value_name = "ID")]
     pub process_id: Option<usize>,
 
     /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    #[arg(short = 'i', long = "name", value_name = "NAME")]
     pub integrand_name: Option<String>,
 
     /// The path to store results in
-    #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
+    #[arg(short = 's', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
 
     /// Number of cores to parallelize over
@@ -91,8 +90,6 @@ impl Integrate {
             .process_list
             .find_integrand(self.process_id, self.integrand_name.as_ref())?;
 
-        state.process_list.processes[process_id].warm_up(&state.model)?;
-
         if self.restart && workspace_path.exists() {
             fs::remove_dir_all(&workspace_path)?;
         }
@@ -101,13 +98,15 @@ impl Integrate {
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
 
-        status_info!("Gammaloop now integrates {}", integrand_name.green().bold());
+        gloop_integrand.warm_up(&state.model)?;
+
+        info!("Gammaloop now integrates {}", integrand_name.green().bold());
 
         let path_to_state = workspace_path.join("integration_state");
 
         let integration_state = match fs::read(path_to_state) {
             Ok(state_bytes) => {
-                status_info!(
+                info!(
                     "{}",
                     "Found integration state, result of previous integration:".yellow()
                 );
@@ -120,7 +119,7 @@ impl Integrate {
                 .expect("Could not deserialize state")
                 .0;
 
-                let path_to_workspace_settings = workspace_path.join("settings.toml");
+                let path_to_workspace_settings = workspace_path.join("settings.yaml");
 
                 let workspace_settings: RuntimeSettings =
                     RuntimeSettings::from_file(path_to_workspace_settings, "workspace settings")?;
@@ -142,15 +141,15 @@ impl Integrate {
                     "im",
                     target.map(|c| c.im),
                 );
-                status_info!("");
-                status_warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
-                status_info!("{}", "Resuming integration".yellow());
+                info!("");
+                warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                info!("{}", "Resuming integration".yellow());
 
                 Some(state)
             }
 
             Err(_) => {
-                status_info!("No integration state found, starting new integration");
+                info!("No integration state found, starting new integration");
                 None
             }
         };

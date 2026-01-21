@@ -5,12 +5,11 @@ use color_eyre::{eyre::eyre, owo_colors::OwoColorize, Result};
 use gammalooprs::{
     processes::DotExportSettings,
     settings::RuntimeSettings,
-    status_info,
     utils::serde_utils::{SmartSerde, SHOWDEFAULTS},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::{
     state::{set_serialize_commands_as_strings, RunHistory, State},
@@ -62,7 +61,7 @@ impl Save {
             } => {
                 // Use original default location (state folder) or custom path if provided
                 let target_dir = path.unwrap_or(global_settings.state_folder.clone());
-                status_info!("Saving dot files to {}", target_dir.display());
+                info!("Saving dot files to {}", target_dir.display());
 
                 // Extract embedded templates to drawings/templates relative to target directory
                 if let Err(e) = Assets::extract_templates(&target_dir) {
@@ -146,7 +145,7 @@ impl SaveState {
         global_settings: &CLISettings,
     ) -> Result<()> {
         if self.no_save_state {
-            // status_info!("Skipping saving state as per user request");
+            // info!("Skipping saving state as per user request");
             return Ok(());
         }
         // println!(
@@ -188,7 +187,7 @@ impl SaveState {
                     //user_input = user_input.trim().into();
                     match user_input.trim() {
                         "o" => {
-                            status_info!(
+                            info!(
                                 "Overwriting existing gammaloop state at {}",
                                 selected_root_folder.display().to_string().green()
                             );

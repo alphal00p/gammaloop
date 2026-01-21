@@ -8,12 +8,12 @@ use bincode::{Decode, Encode};
 use idenso::color::CS;
 
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use log::debug;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
+    structure::concrete_index::ExpandedIndex,
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
@@ -24,30 +24,23 @@ use symbolica::{
     parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
+use tracing::debug;
+use tracing::warn;
 
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    graph::{FeynmanGraph, Graph},
+    graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     model::Model,
     momentum::{Helicity, PolType},
-    momentum_sample::{ExternalFourMomenta, MomentumSample},
+    momentum_sample::{self, ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
-    status_debug, status_info, status_warn,
+    signature,
     utils::{
         F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128, symbolica_ext::LOGPRINTOPTS,
         tracing::StatusRenderable,
     },
 };
-
-/// Check if debug cache mode is enabled
-#[inline]
-fn is_debug_cache_enabled() -> bool {
-    std::env::var("GAMMALOOP_DEBUG_CACHE")
-        .map(|v| v == "1" || v.to_lowercase() == "true")
-        .unwrap_or(false)
-        || cfg!(debug_assertions)
-}
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -106,7 +99,7 @@ pub trait ParamBuilderGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
     fn external_spatial_params(&self) -> Vec<Atom>;
-    fn emr_spatial_params(&self) -> Vec<Atom>;
+    fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
@@ -123,7 +116,7 @@ pub struct GammaLoopPairs {
     external_energies: ParamValuePairs,
     external_spatial: ParamValuePairs,
     pub polarizations: ParamValuePairs,
-    emr_spatial: ParamValuePairs,
+    loop_moms_spatial: ParamValuePairs,
     tstar: ParamValuePairs,
     h_function_lu_cut: ParamValuePairs,
     h_function_left_th: ParamValuePairs,
@@ -155,7 +148,7 @@ impl IntoIterator for GammaLoopPairs {
             self.external_energies,
             self.external_spatial,
             self.polarizations,
-            self.emr_spatial,
+            self.loop_moms_spatial,
             self.tstar,
             self.h_function_lu_cut,
             self.h_function_left_th,
@@ -191,7 +184,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.external_energies,
             &self.external_spatial,
             &self.polarizations,
-            &self.emr_spatial,
+            &self.loop_moms_spatial,
             &self.tstar,
             &self.h_function_lu_cut,
             &self.h_function_left_th,
@@ -227,7 +220,7 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.external_energies,
             &mut self.external_spatial,
             &mut self.polarizations,
-            &mut self.emr_spatial,
+            &mut self.loop_moms_spatial,
             &mut self.tstar,
             &mut self.h_function_lu_cut,
             &mut self.h_function_left_th,
@@ -273,7 +266,7 @@ impl GammaLoopPairs {
         debug!("Validating polarizations");
         self.polarizations.validate();
         debug!("Validating emr_spatial");
-        self.emr_spatial.validate();
+        self.loop_moms_spatial.validate();
         debug!("Validating tstar");
         self.tstar.validate();
         debug!("Validating h_function");
@@ -306,6 +299,7 @@ impl GammaLoopPairs {
     >(
         model: &Model,
         graph: &G,
+        lmb: &LoopMomentumBasis,
         additional_params: T,
     ) -> (Self, usize) {
         let mut pairs = GammaLoopPairs {
@@ -337,7 +331,7 @@ impl GammaLoopPairs {
         pairs.orientations(graph);
         pairs.polarizations(graph);
         pairs.external_spatial(graph);
-        pairs.emr_spatial(graph);
+        pairs.loop_moms_spatial(graph, lmb);
 
         let len = pairs.update_ranges();
         (pairs, len)
@@ -356,8 +350,12 @@ impl GammaLoopPairs {
         self.external_spatial.params = graph.external_spatial_params();
     }
 
-    pub(crate) fn emr_spatial<G: ParamBuilderGraph>(&mut self, graph: &G) {
-        self.emr_spatial.params = graph.emr_spatial_params();
+    pub(crate) fn loop_moms_spatial<G: ParamBuilderGraph>(
+        &mut self,
+        graph: &G,
+        lmb: &LoopMomentumBasis,
+    ) {
+        self.loop_moms_spatial.params = graph.loop_mom_params(lmb);
     }
 
     pub(crate) fn polarizations<G: ParamBuilderGraph + SplitPolarizations>(&mut self, graph: &G) {
@@ -619,7 +617,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
-        cache: bool,
+        cache: (bool, bool),
         sample: &'a MomentumSample<T>,
         graph: &'a Graph,
         helicities: &[Helicity],
@@ -634,7 +632,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params<'a>(
         &'a mut self,
-        cache: bool,
+        cache: (bool, bool),
         sample: &'a MomentumSample<f64>,
         graph: &'a Graph,
         helicities: &[Helicity],
@@ -643,19 +641,18 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         right_threshold_params: Option<&ThresholdParams<f64>>,
         lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
-        let emr_start = self.pairs.emr_spatial.value_range.start;
+        let loop_moms_start = self.pairs.loop_moms_spatial.value_range.start;
 
-        let emr_vec_cahe = graph.get_emr_vec_cache(
-            sample.loop_moms(),
-            sample.external_moms(),
-            &graph.loop_momentum_basis,
-        );
+        let flattened_loop_momenta = sample
+            .loop_moms()
+            .iter()
+            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
 
         self.pairs
             .add_additional_params(additional_params, &mut self.values);
 
-        for (shift, value) in emr_vec_cahe.into_iter().enumerate() {
-            self.values[emr_start + shift] = Complex::new_re(value);
+        for (shift, value) in flattened_loop_momenta.enumerate() {
+            self.values[loop_moms_start + shift] = Complex::new_re(value);
         }
 
         // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
@@ -683,7 +680,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     #[allow(clippy::too_many_arguments)]
     fn update_emr_and_get_params(
         &mut self,
-        _cache: bool,
+        _cache: (bool, bool),
         sample: &MomentumSample<f128>,
         graph: &Graph,
         helicities: &[Helicity],
@@ -692,20 +689,21 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
     ) -> Cow<'_, Vec<Complex<F<f128>>>> {
-        let mut emr_start = self.pairs.emr_spatial.value_range.start;
+        let mut loop_mom_start = self.pairs.loop_moms_spatial.value_range.start;
         let mut values = self.higher();
-        let emr_vec_cahe = graph.get_emr_vec_cache(
-            sample.loop_moms(),
-            sample.external_moms(),
-            &graph.loop_momentum_basis,
-        );
+
+        let flattened_loop_momenta = sample
+            .loop_moms()
+            .clone()
+            .into_iter()
+            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
 
         self.pairs
             .add_additional_params(additional_params, &mut values);
 
-        for value in emr_vec_cahe {
-            values[emr_start] = Complex::new_re(value);
-            emr_start += 1;
+        for value in flattened_loop_momenta {
+            values[loop_mom_start] = Complex::new_re(value);
+            loop_mom_start += 1;
         }
 
         self.pairs
@@ -818,9 +816,10 @@ impl<T: FloatLike> ParamBuilder<T> {
     >(
         graph: &G,
         model: &Model,
+        lmb: &LoopMomentumBasis,
         additional_params: P,
     ) -> Self {
-        let (pairs, len) = GammaLoopPairs::new(model, graph, additional_params);
+        let (pairs, len) = GammaLoopPairs::new(model, graph, lmb, additional_params);
 
         let mut new = Self {
             pairs,
@@ -840,6 +839,36 @@ impl<T: FloatLike> ParamBuilder<T> {
             .unwrap();
         }
 
+        for (edge_id, signature) in lmb.edge_signatures.iter() {
+            if !lmb.loop_edges.contains(&edge_id)
+                && signature.internal.iter().any(|sign| sign.is_sign())
+            {
+                for i in 0..4 {
+                    new.add_tagged_function(
+                        GS.emr_mom,
+                        vec![
+                            Atom::num(edge_id.0 as i64),
+                            Atom::from(ExpandedIndex::from_iter([i])),
+                        ],
+                        format!("Q({edge_id}, {i})"),
+                        vec![],
+                        lmb.loop_atom(
+                            edge_id,
+                            GS.emr_mom,
+                            &[Atom::from(ExpandedIndex::from_iter([i]))],
+                            true,
+                        ) + lmb.ext_atom(
+                            edge_id,
+                            GS.emr_mom,
+                            &[Atom::from(ExpandedIndex::from_iter([i]))],
+                            true,
+                        ),
+                    )
+                    .unwrap();
+                }
+            }
+        }
+
         new.add_function(
             GS.broadcasting_sqrt,
             "sqrt".to_string(),
@@ -853,6 +882,9 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.values = vec![Complex::new_re(F(T::from_f64(0.))); len];
         new.update_model_values(model);
         new.update_idenso_values();
+
+        //println!("self: {}", new);
+        //panic!();
         new
     }
 
@@ -938,7 +970,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn polarizations_values(
         &mut self,
-        cache: bool,
+        (cache, debug_cache): (bool, bool),
         graph: &Graph,
         sample: &MomentumSample<T>,
         helicities: &[Helicity],
@@ -948,15 +980,14 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         // Validate cache consistency
         if cache_id < base_cache_id {
-            status_warn!(
+            warn!(
                 "WARNING: Cache ID inconsistency detected! current={}, base={}",
-                cache_id,
-                base_cache_id
+                cache_id, base_cache_id
             );
         }
 
         // Compute expected polarizations for debug search
-        let expected_pols = if is_debug_cache_enabled() {
+        let expected_pols = if debug_cache {
             Some(
                 self.pairs
                     .polarizations_values(graph, sample.external_moms(), helicities),
@@ -967,10 +998,9 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         // Try to get from cache first
         let pols = if let Some(v) = self.polarization_cache.get(cache_id) {
-            status_debug!(
+            debug!(
                 "Cache HIT for external_cache_id={} (base={})",
-                cache_id,
-                base_cache_id
+                cache_id, base_cache_id
             );
 
             // Validate cached values in debug mode
@@ -988,14 +1018,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
             v
         } else {
-            status_debug!(
+            debug!(
                 "Cache MISS for external_cache_id={} (base={})",
-                cache_id,
-                base_cache_id
+                cache_id, base_cache_id
             );
 
             // DEBUG: Search entire cache for matching polarizations to detect missed hits
-            if is_debug_cache_enabled()
+            if debug_cache
                 && cache
                 && let Some(ref expected) = expected_pols
             {
@@ -1025,7 +1054,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
             self.polarization_cache
                 .checked_push(cache_id, computed_pols);
-            status_debug!("Cached new polarizations for cache_id={}", cache_id);
+            debug!("Cached new polarizations for cache_id={}", cache_id);
 
             self.polarization_cache.get(cache_id).unwrap()
         };
@@ -1041,11 +1070,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         base_cache_id: usize,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) {
-        // Only run this expensive search if debug mode is enabled
-        if !is_debug_cache_enabled() {
-            return;
-        }
-
         let tolerance = F::<T>::from_f64(1e-12);
         let mut found_matches = Vec::new();
 
@@ -1072,24 +1096,23 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         if !found_matches.is_empty() {
-            status_warn!(
+            warn!(
                 "🔍 DEBUG CACHE SEARCH: Found {} matching polarization(s) in cache but using cache_id={}!",
                 found_matches.len(),
                 current_cache_id
             );
-            status_warn!(
+            warn!(
                 "   ⚠️  MISSED CACHE HITS: Found identical polarizations at cache_id(s): {:?}",
                 found_matches
             );
-            status_warn!(
+            warn!(
                 "   📊 Current: cache_id={}, base_cache_id={}",
-                current_cache_id,
-                base_cache_id
+                current_cache_id, base_cache_id
             );
 
             // Provide actionable debugging information
             if found_matches.contains(&base_cache_id) {
-                status_warn!(
+                warn!(
                     "   💡 HINT: Base cache_id {} has matching polarizations. You should call revert_to_base_external_cache_id()!",
                     base_cache_id
                 );
@@ -1102,15 +1125,14 @@ impl<T: FloatLike> ParamBuilder<T> {
                 .collect();
 
             if !related_ids.is_empty() {
-                status_warn!(
+                warn!(
                     "   🔗 RELATED IDs: Cache IDs {:?} are related to base_id {} and contain identical polarizations",
-                    related_ids,
-                    base_cache_id
+                    related_ids, base_cache_id
                 );
             }
 
             // Log external momentum info for debugging
-            status_debug!(
+            debug!(
                 "   🔍 External momenta: [{:.6}, {:.6}, {:.6}, {:.6}] (first external)",
                 external_moms
                     .first()
@@ -1128,39 +1150,11 @@ impl<T: FloatLike> ParamBuilder<T> {
         } else {
             // Only log this in very verbose debug mode
             if std::env::var("GAMMALOOP_DEBUG_CACHE_VERBOSE").is_ok() {
-                status_debug!(
+                debug!(
                     "🔍 DEBUG CACHE SEARCH: No matching polarizations found in cache (searched {} entries). This is a genuine cache miss.",
                     max_search_id
                 );
             }
-        }
-    }
-
-    /// Public method to enable/disable debug cache mode at runtime
-    pub fn set_debug_cache_mode(enabled: bool) {
-        unsafe {
-            std::env::set_var("GAMMALOOP_DEBUG_CACHE", if enabled { "1" } else { "0" });
-        }
-        status_info!(
-            "Debug cache mode {}: Set GAMMALOOP_DEBUG_CACHE={}",
-            if enabled { "enabled" } else { "disabled" },
-            if enabled { "1" } else { "0" }
-        );
-    }
-
-    /// Check current debug cache mode status
-    pub fn get_debug_cache_status() -> DebugCacheStatus {
-        let env_enabled = std::env::var("GAMMALOOP_DEBUG_CACHE")
-            .map(|v| v == "1" || v.to_lowercase() == "true")
-            .unwrap_or(false);
-        let verbose_enabled = std::env::var("GAMMALOOP_DEBUG_CACHE_VERBOSE").is_ok();
-        let debug_assertions = cfg!(debug_assertions);
-
-        DebugCacheStatus {
-            environment_enabled: env_enabled,
-            debug_assertions,
-            verbose_enabled,
-            effective_enabled: env_enabled || debug_assertions,
         }
     }
 

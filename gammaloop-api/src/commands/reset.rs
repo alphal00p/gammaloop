@@ -1,7 +1,8 @@
 use clap::Subcommand;
-use gammalooprs::{processes::ProcessList, status_info};
+use gammalooprs::processes::ProcessList;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::state::State;
 use color_eyre::Result;
@@ -16,7 +17,7 @@ impl Reset {
             Self::Processes => {
                 let n_processes = state.process_list.processes.len();
                 state.process_list = ProcessList::default();
-                status_info!(
+                info!(
                     "All {} processes have been cleared from the current state.",
                     n_processes
                 );

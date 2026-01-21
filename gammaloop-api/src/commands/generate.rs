@@ -3,7 +3,8 @@
 
 use ahash::HashMap;
 use color_eyre::owo_colors::OwoColorize;
-use gammalooprs::status_info;
+use tracing::info;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::ParseIntError;
 use std::ops::RangeInclusive;
@@ -167,6 +168,10 @@ pub struct SpecArgs {
     #[arg(long = "filter-tadpoles")]
     pub filter_tadpoles: Option<bool>,
 
+    /// Veto vertex interactions
+    #[arg(long = "veto-vertex-interactions", num_args = 0..)]
+    pub veto_vertex_interactions: Option<Vec<String>>,
+
     /// Cross-section tadpole filtering when sewing
     #[arg(long = "filter-cross-section-tadpoles")]
     pub filter_cross_section_tadpoles: Option<bool>,
@@ -304,7 +309,7 @@ impl Generate {
         };
         if let Some((_, args)) = generation_mode.as_ref() {
             if !state.process_list.processes.is_empty() && args.clear_existing_processes {
-                status_info!(
+                info!(
                     "Clearing all {} existing processes as requested.",
                     state.process_list.processes.len()
                 );
@@ -330,7 +335,7 @@ impl Generate {
                         ));
                     }
                 } else {
-                    status_info!(
+                    info!(
                         "Identical process definition, with name '{}', already exists. Gammaloop will recycle it.",
                         spec.process_definition.folder_name
                     );
@@ -351,7 +356,7 @@ impl Generate {
                 let this_process_id = spec.process_definition.process_id;
                 // TODO handle existing process and continue
                 let graphs = spec.process_definition.generate(model, global_settings)?;
-                status_info!(
+                info!(
                     "Generated {} {} graphs.",
                     if matches!(self.mode, Some(GenerateCmd::Amp(_))) {
                         "amplitude"
@@ -419,7 +424,7 @@ impl Generate {
                         Some(generated_integrand_name),
                     )
                 } else {
-                    status_info!(
+                    info!(
                         "Only diagram generation was requested, skipping integrand generation. You can generate integrands later using the '{}' command.",
                         "generate existing <options>".green()
                     );
@@ -1548,6 +1553,15 @@ fn feyngen_from_spec_args(
         }
     }
 
+    if let Some(vertex_interactions_vetoed) = a.veto_vertex_interactions.as_ref() {
+        let filt = FeynGenFilter::VertexVeto(vertex_interactions_vetoed.clone());
+        if fg.generation_type == GenerationType::Amplitude {
+            amp_filters.push(filt);
+        } else {
+            xs_filters.push(filt);
+        }
+    }
+
     fg.amplitude_filters = FeynGenFilters(amp_filters);
     fg.cross_section_filters = FeynGenFilters(xs_filters);
 
@@ -1783,6 +1797,7 @@ mod tests {
             append: false,
             integrand_name: None,
             only_diagrams: true,
+            veto_vertex_interactions: None,
         }
     }
 

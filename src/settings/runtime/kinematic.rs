@@ -1,10 +1,10 @@
 use bincode_trait_derive::{Decode, Encode};
 use eyre::eyre;
-use log::debug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use tabled::{builder::Builder, settings::Style};
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -247,6 +247,10 @@ impl Externals {
             Externals::Constant { momenta, .. } => {
                 match dependent_momenta_constructor {
                     DependentMomentaConstructor::Amplitude(external_signature) => {
+                        if external_signature.is_empty() {
+                            return Ok(vec![].into());
+                        }
+
                         let mut sum: FourMomentum<F<T>> = FourMomentum::from([
                             F::<T>::from_f64(0.0),
                             F::from_f64(0.0),
@@ -254,7 +258,7 @@ impl Externals {
                             F::from_f64(0.0),
                         ]);
                         // .higher();
-                        let mut pos_dep = 0;
+                        let mut pos_dep = external_signature.len() - 1;
 
                         let mut dependent_sign = SignOrZero::Plus;
 

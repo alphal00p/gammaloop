@@ -14,7 +14,11 @@ use symbolica::{
     symbol,
 };
 
-use crate::{numerator::ParsingNet, uv::UltravioletGraph};
+use crate::{
+    graph::{LMBext, LoopMomentumBasis},
+    numerator::ParsingNet,
+    uv::UltravioletGraph,
+};
 
 #[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Debug, Hash, Eq)]
@@ -22,24 +26,27 @@ pub struct Spinney {
     pub subgraph: SuBitGraph,
     components: Vec<SuBitGraph>,
     pub dod: i32,
-    // pub lmb: LoopMomentumBasis,
+    pub lmb: LoopMomentumBasis,
 }
 
 impl Spinney {
-    pub fn empty<E, V, H>(g: impl AsRef<HedgeGraph<E, V, H>>) -> Self {
+    pub fn empty<E, V, H, G: AsRef<HedgeGraph<E, V, H>> + LMBext>(g: &G) -> Self {
         Spinney {
             components: vec![],
             dod: 0,
             subgraph: g.as_ref().empty_subgraph(),
+            lmb: g.empty_lmb(),
         }
     }
     pub fn new<E, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
         subgraph: SuBitGraph,
         g: &G,
+        lmb: &LoopMomentumBasis,
     ) -> Self {
         Spinney {
             components: g.as_ref().connected_components(&subgraph),
             dod: g.dod(&subgraph),
+            lmb: g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb),
             subgraph,
         }
     }
@@ -99,7 +106,7 @@ impl SpinneyWood {
     #[allow(dead_code)]
     pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = Spinney>>(
         s: I,
-        graph: impl AsRef<HedgeGraph<E, V, H>>,
+        graph: impl AsRef<HedgeGraph<E, V, H>> + LMBext,
     ) -> Self {
         let mut spinneyset: AHashSet<_> = s.into_iter().collect();
         spinneyset.insert(Spinney::empty(&graph));
@@ -358,7 +365,7 @@ mod tests {
             dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, &dumbell)),
+                .map(|a| Spinney::new(a.filter, &dumbell, &dumbell.loop_momentum_basis)),
             &dumbell,
         );
 
@@ -413,7 +420,7 @@ mod tests {
                 let f = SpinneyWood::from_spinneys(
                     g.spinneys(&g.full_filter())
                         .into_iter()
-                        .map(|a| Spinney::new(a.filter, &g)),
+                        .map(|a| Spinney::new(a.filter, &g, &g.loop_momentum_basis)),
                     &g,
                 );
 
@@ -430,7 +437,7 @@ mod tests {
                     println!(
                         "//Node {}: \n{}",
                         d.subgraph.string_label(),
-                        g.dot(&d.subgraph)
+                        g.dot_lmb_of(&d.subgraph, &d.lmb)
                     );
                 }
                 let ff = Wood::from_spinneys(spinneys, &g); //.unfold(&g, &g.loop_momentum_basis);
@@ -483,7 +490,7 @@ mod tests {
             mercedes
                 .spinneys(&mercedes.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, &mercedes)),
+                .map(|a| Spinney::new(a.filter, &mercedes, &mercedes.loop_momentum_basis)),
             &mercedes,
         );
         println!("{}", f);
@@ -506,33 +513,71 @@ mod tests {
         test_initialise().unwrap();
 
         let sunrise: Graph = dot!( digraph sunrise{
-            node [num = "1" dod=-100 ]
-            edge [dod=-100]
+            node [num = "1"]
+            edge [particle=scalar_1]
             e        [style=invis]
-            e -> A:0   [ id=3 particle=scalar_1]
-            B:1 -> e   [ id=4 particle=scalar_1]
-            A -> B    [ id=0 particle=scalar_1]
-            A -> B    [ id=1 particle=scalar_1]
-            A -> B    [ id=2 particle=scalar_1]
+            e -> A:0   [ id=3 ]
+            B:1 -> e   [ id=4 ]
+            A -> B    [ id=0 ]
+            A -> B    [ id=1 ]
+            A -> B    [ id=2 ]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
         let f = SpinneyWood::from_spinneys(
             sunrise
                 .spinneys(&sunrise.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, &sunrise)),
+                .map(|a| Spinney::new(a.filter, &sunrise, &sunrise.loop_momentum_basis)),
             &sunrise,
         );
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
-        @"1",
+        @"5",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
         f.graph.n_nodes(),
-        @"1",
+        @"8",
+         );
+
+        Ok(())
+    }
+    #[test]
+    fn dotted_sunrise() -> Result<()> {
+        test_initialise().unwrap();
+
+        let sunrise: Graph = dot!( digraph sunrise{
+            edge [particle=scalar_1]
+            e        [style=invis]
+            e -> A:0   [ id=3]
+            B:1 -> e   [ id=4]
+
+            A -> C    [ id=0]
+            C -> e
+            C -> B
+            A -> B    [ id=1]
+            A -> B    [ id=2]
+        },"scalars")?;
+        // let spinneys = spectacles.spinneys(&spectacles.full_filter());
+        let f = SpinneyWood::from_spinneys(
+            sunrise
+                .spinneys(&sunrise.full_filter())
+                .into_iter()
+                .map(|a| Spinney::new(a.filter, &sunrise, &sunrise.loop_momentum_basis)),
+            &sunrise,
+        );
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"3",
+        );
+        let f = f.unfold();
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"4",
          );
 
         Ok(())
@@ -561,7 +606,7 @@ mod tests {
             spectacles
                 .spinneys(&spectacles.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, &spectacles)),
+                .map(|a| Spinney::new(a.filter, &spectacles, &spectacles.loop_momentum_basis)),
             &spectacles,
         );
         println!("{}", f);
@@ -597,7 +642,7 @@ mod tests {
             basketball
                 .spinneys(&basketball.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, &basketball)),
+                .map(|a| Spinney::new(a.filter, &basketball, &basketball.loop_momentum_basis)),
             &basketball,
         );
         println!("{}", f);
@@ -637,7 +682,7 @@ mod tests {
             fourloop_b
                 .spinneys(&fourloop_b.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, &fourloop_b)),
+                .map(|a| Spinney::new(a.filter, &fourloop_b, &fourloop_b.loop_momentum_basis)),
             &fourloop_b,
         );
         println!("{}", f);
@@ -676,7 +721,7 @@ mod tests {
             four_loop_a
                 .spinneys(&four_loop_a.full_filter())
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, &four_loop_a)),
+                .map(|a| Spinney::new(a.filter, &four_loop_a, &four_loop_a.loop_momentum_basis)),
             &four_loop_a,
         );
         println!("{}", f);

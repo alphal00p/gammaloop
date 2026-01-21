@@ -411,7 +411,7 @@ mod test {
     // use env_logger::WriteStyle;
     use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
 
-    use spenso::network::parsing::{ParseSettings, SymbolicParse};
+    use spenso::network::parsing::{NetworkParse, ParseSettings};
     use symbolica::{
         atom::{Atom, AtomCore},
         parse_lit,

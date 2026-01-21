@@ -304,6 +304,7 @@
           cargo-insta
           cargo-udeps
           cargo-insta
+          cargo-machete
           openssl
           pyright
           gmp
