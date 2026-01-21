@@ -13,6 +13,7 @@ use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
+    structure::concrete_index::ExpandedIndex,
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
@@ -29,11 +30,12 @@ use tracing::warn;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    graph::{FeynmanGraph, Graph},
+    graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     model::Model,
     momentum::{Helicity, PolType},
-    momentum_sample::{ExternalFourMomenta, MomentumSample},
+    momentum_sample::{self, ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
+    signature,
     utils::{
         F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128, symbolica_ext::LOGPRINTOPTS,
         tracing::StatusRenderable,
@@ -97,7 +99,7 @@ pub trait ParamBuilderGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
     fn external_spatial_params(&self) -> Vec<Atom>;
-    fn emr_spatial_params(&self) -> Vec<Atom>;
+    fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
@@ -114,7 +116,7 @@ pub struct GammaLoopPairs {
     external_energies: ParamValuePairs,
     external_spatial: ParamValuePairs,
     pub polarizations: ParamValuePairs,
-    emr_spatial: ParamValuePairs,
+    loop_moms_spatial: ParamValuePairs,
     tstar: ParamValuePairs,
     h_function_lu_cut: ParamValuePairs,
     h_function_left_th: ParamValuePairs,
@@ -146,7 +148,7 @@ impl IntoIterator for GammaLoopPairs {
             self.external_energies,
             self.external_spatial,
             self.polarizations,
-            self.emr_spatial,
+            self.loop_moms_spatial,
             self.tstar,
             self.h_function_lu_cut,
             self.h_function_left_th,
@@ -182,7 +184,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.external_energies,
             &self.external_spatial,
             &self.polarizations,
-            &self.emr_spatial,
+            &self.loop_moms_spatial,
             &self.tstar,
             &self.h_function_lu_cut,
             &self.h_function_left_th,
@@ -218,7 +220,7 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.external_energies,
             &mut self.external_spatial,
             &mut self.polarizations,
-            &mut self.emr_spatial,
+            &mut self.loop_moms_spatial,
             &mut self.tstar,
             &mut self.h_function_lu_cut,
             &mut self.h_function_left_th,
@@ -264,7 +266,7 @@ impl GammaLoopPairs {
         debug!("Validating polarizations");
         self.polarizations.validate();
         debug!("Validating emr_spatial");
-        self.emr_spatial.validate();
+        self.loop_moms_spatial.validate();
         debug!("Validating tstar");
         self.tstar.validate();
         debug!("Validating h_function");
@@ -297,6 +299,7 @@ impl GammaLoopPairs {
     >(
         model: &Model,
         graph: &G,
+        lmb: &LoopMomentumBasis,
         additional_params: T,
     ) -> (Self, usize) {
         let mut pairs = GammaLoopPairs {
@@ -328,7 +331,7 @@ impl GammaLoopPairs {
         pairs.orientations(graph);
         pairs.polarizations(graph);
         pairs.external_spatial(graph);
-        pairs.emr_spatial(graph);
+        pairs.loop_moms_spatial(graph, lmb);
 
         let len = pairs.update_ranges();
         (pairs, len)
@@ -347,8 +350,12 @@ impl GammaLoopPairs {
         self.external_spatial.params = graph.external_spatial_params();
     }
 
-    pub(crate) fn emr_spatial<G: ParamBuilderGraph>(&mut self, graph: &G) {
-        self.emr_spatial.params = graph.emr_spatial_params();
+    pub(crate) fn loop_moms_spatial<G: ParamBuilderGraph>(
+        &mut self,
+        graph: &G,
+        lmb: &LoopMomentumBasis,
+    ) {
+        self.loop_moms_spatial.params = graph.loop_mom_params(lmb);
     }
 
     pub(crate) fn polarizations<G: ParamBuilderGraph + SplitPolarizations>(&mut self, graph: &G) {
@@ -634,19 +641,18 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         right_threshold_params: Option<&ThresholdParams<f64>>,
         lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
-        let emr_start = self.pairs.emr_spatial.value_range.start;
+        let loop_moms_start = self.pairs.loop_moms_spatial.value_range.start;
 
-        let emr_vec_cahe = graph.get_emr_vec_cache(
-            sample.loop_moms(),
-            sample.external_moms(),
-            &graph.loop_momentum_basis,
-        );
+        let flattened_loop_momenta = sample
+            .loop_moms()
+            .iter()
+            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
 
         self.pairs
             .add_additional_params(additional_params, &mut self.values);
 
-        for (shift, value) in emr_vec_cahe.into_iter().enumerate() {
-            self.values[emr_start + shift] = Complex::new_re(value);
+        for (shift, value) in flattened_loop_momenta.enumerate() {
+            self.values[loop_moms_start + shift] = Complex::new_re(value);
         }
 
         // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
@@ -683,20 +689,21 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
     ) -> Cow<'_, Vec<Complex<F<f128>>>> {
-        let mut emr_start = self.pairs.emr_spatial.value_range.start;
+        let mut loop_mom_start = self.pairs.loop_moms_spatial.value_range.start;
         let mut values = self.higher();
-        let emr_vec_cahe = graph.get_emr_vec_cache(
-            sample.loop_moms(),
-            sample.external_moms(),
-            &graph.loop_momentum_basis,
-        );
+
+        let flattened_loop_momenta = sample
+            .loop_moms()
+            .clone()
+            .into_iter()
+            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
 
         self.pairs
             .add_additional_params(additional_params, &mut values);
 
-        for value in emr_vec_cahe {
-            values[emr_start] = Complex::new_re(value);
-            emr_start += 1;
+        for value in flattened_loop_momenta {
+            values[loop_mom_start] = Complex::new_re(value);
+            loop_mom_start += 1;
         }
 
         self.pairs
@@ -809,9 +816,10 @@ impl<T: FloatLike> ParamBuilder<T> {
     >(
         graph: &G,
         model: &Model,
+        lmb: &LoopMomentumBasis,
         additional_params: P,
     ) -> Self {
-        let (pairs, len) = GammaLoopPairs::new(model, graph, additional_params);
+        let (pairs, len) = GammaLoopPairs::new(model, graph, lmb, additional_params);
 
         let mut new = Self {
             pairs,
@@ -831,6 +839,36 @@ impl<T: FloatLike> ParamBuilder<T> {
             .unwrap();
         }
 
+        for (edge_id, signature) in lmb.edge_signatures.iter() {
+            if !lmb.loop_edges.contains(&edge_id)
+                && signature.internal.iter().any(|sign| sign.is_sign())
+            {
+                for i in 0..4 {
+                    new.add_tagged_function(
+                        GS.emr_mom,
+                        vec![
+                            Atom::num(edge_id.0 as i64),
+                            Atom::from(ExpandedIndex::from_iter([i])),
+                        ],
+                        format!("Q({edge_id}, {i})"),
+                        vec![],
+                        lmb.loop_atom(
+                            edge_id,
+                            GS.emr_mom,
+                            &[Atom::from(ExpandedIndex::from_iter([i]))],
+                            true,
+                        ) + lmb.ext_atom(
+                            edge_id,
+                            GS.emr_mom,
+                            &[Atom::from(ExpandedIndex::from_iter([i]))],
+                            true,
+                        ),
+                    )
+                    .unwrap();
+                }
+            }
+        }
+
         new.add_function(
             GS.broadcasting_sqrt,
             "sqrt".to_string(),
@@ -844,6 +882,9 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.values = vec![Complex::new_re(F(T::from_f64(0.))); len];
         new.update_model_values(model);
         new.update_idenso_values();
+
+        //println!("self: {}", new);
+        //panic!();
         new
     }
 

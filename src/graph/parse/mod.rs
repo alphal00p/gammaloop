@@ -735,7 +735,7 @@ impl Graph {
         let (global_prefactor, param_builder) = Self::setup_global_prefactor_and_params(
             initial_data.global_prefactor,
             initial_data.add_polarizations,
-            initial_data.additional_params,
+            initial_data.additional_params.clone(),
             &initial_state_cut,
             &graph,
             model,
@@ -756,7 +756,7 @@ impl Graph {
             &cut_result.xs_ext_id,
         )?;
 
-        let g = Graph {
+        let mut g = Graph {
             overall_factor: initial_data.overall_factor,
             polarizations: global_prefactor.polarizations(),
             global_prefactor,
@@ -768,6 +768,15 @@ impl Graph {
             is_group_master: initial_data.is_group_master,
             param_builder,
         };
+
+        let updated_param_builder_with_lmb = ParamBuilder::new(
+            &g,
+            model,
+            &g.loop_momentum_basis,
+            initial_data.additional_params,
+        );
+
+        g.param_builder = updated_param_builder_with_lmb;
 
         debug!("{}", g.debug_dot());
 
@@ -911,7 +920,8 @@ impl Graph {
         }
 
         let polarizations = global_prefactor.polarizations();
-        let param_builder = ParamBuilder::new(&(&polarizations, graph), model, params);
+        let param_builder =
+            ParamBuilder::new(&(&polarizations, graph), model, &graph.lmb(), params);
 
         Ok((global_prefactor, param_builder))
     }

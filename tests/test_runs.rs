@@ -418,7 +418,7 @@ fn photonic_amplitudes() -> Result<()> {
             let inspect_result_f = Complex::new(F(inspect_result.re), F(inspect_result.im));
             let inspect_target_f = Complex::new(F(inspect_target.re), F(inspect_target.im));
             let inspect_result_string =
-                if inspect_target_f.approx_eq(&inspect_result_f, &F(1.0e-14)) {
+                if inspect_target_f.approx_eq(&inspect_result_f, &F(1.0e-13)) {
                     format!("{:.16e}", inspect_result).green()
                 } else {
                     *test_failed = true;

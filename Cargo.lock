@@ -1323,6 +1323,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "shlex",
+ "smartstring",
  "spenso",
  "symbolica",
  "tempfile",
