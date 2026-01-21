@@ -17,7 +17,7 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample},
-    processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId},
+    processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
@@ -254,6 +254,7 @@ pub struct CrossSectionGraphTerm {
     pub orientation_filter: SubSet<SuperGraphOrientationID>,
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
+    pub raised_data: RaisedData,
 }
 
 impl CrossSectionGraphTerm {
@@ -393,6 +394,7 @@ impl CrossSectionGraphTerm {
             orientations,
             counterterm,
             reversed_edges,
+            raised_data: graph.derived_data.raised_data.clone(),
         })
     }
 
@@ -557,10 +559,15 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         debug!("loop moms: {}", momentum_sample.loop_moms());
 
-        for (cut, esurface) in self.cut_esurface.iter_enumerated() {
-            debug!("\n =====START EVALUTAION FOR CUT {}=====", cut);
+        for (raised_cut, cross_free_subsets) in
+            self.raised_data.cross_free_powersets.iter_enumerated()
+        {
+            debug!("\n =====START EVALUTAION FOR CUT {}=====", raised_cut.0);
+            let representative_esurface =
+                &self.cut_esurface[self.raised_data.raised_cut_groups[raised_cut][0]];
+
             let function = |t: &F<T>| {
-                esurface.compute_self_and_r_derivative(
+                representative_esurface.compute_self_and_r_derivative(
                     t,
                     momentum_sample.loop_moms(),
                     &center,
@@ -570,7 +577,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 )
             };
 
-            let (guess, _) = esurface.get_radius_guess(
+            let (guess, _) = representative_esurface.get_radius_guess(
                 momentum_sample.loop_moms(),
                 momentum_sample.external_moms(),
                 &self.graph.loop_momentum_basis,
@@ -584,108 +591,99 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &F::from_f64(settings.kinematics.e_cm),
             );
 
-            let h_function = h(&solution.solution, None, None, &settings.lu_h_function);
-
-            let lu_params = LUParams {
-                h_function,
-                tstar: solution.solution.clone(),
-                esurface_derivative: solution.derivative_at_solution.clone(),
-            };
-
-            let rescaled_momenta = MomentumSample {
-                sample: momentum_sample
-                    .sample
-                    .rescaled_loop_momenta(&solution.solution, None),
-            };
-
-            debug!(
-                "edges in cut: {:?}",
-                self.cuts[cut]
-                    .cut
-                    .iter_edges(&self.graph)
-                    .map(|(_, e)| e.data.name.clone())
-                    .collect_vec()
-            );
-            debug!("tstar: {:+16e}", lu_params.tstar);
-            debug!(
-                "num iterations to find tstar: {}",
-                solution.num_iterations_used
-            );
-            debug!("rescaled loop moms:\n {}", rescaled_momenta.loop_moms());
-
-            let prefactor = if let Some((channel_index, alpha)) = &channel_id {
-                self.multi_channeling_setup.compute_prefactor_impl(
-                    *channel_index,
-                    &rescaled_momenta,
-                    model,
-                    alpha,
-                )
+            if self.raised_data.raised_cut_groups[raised_cut].len() > 1 {
+                todo!();
             } else {
-                rescaled_momenta.one()
-            };
+                let h_function = h(&solution.solution, None, None, &settings.lu_h_function);
 
-            let mut result = Complex::new_re(momentum_sample.zero());
-            let params = T::get_parameters(
-                &mut self.param_builder,
-                settings.general.enable_cache,
-                &self.graph,
-                &rescaled_momenta,
-                hel,
-                &settings.additional_params(),
-                None,
-                None,
-                Some(&lu_params),
-            );
+                let lu_params = LUParams {
+                    h_function,
+                    tstar: solution.solution.clone(),
+                    esurface_derivative: solution.derivative_at_solution.clone(),
+                };
 
-            let iterative = self
-                .iterative_integrand
-                .as_mut()
-                .map(|ev| <T as GenericEvaluatorFloat>::get_evaluator(&mut ev[cut])(&params));
+                let rescaled_momenta = MomentumSample {
+                    sample: momentum_sample
+                        .sample
+                        .rescaled_loop_momenta(&solution.solution, None),
+                };
 
-            for (i, e) in orientations.iter() {
-                if let Some(iterative) = &iterative {
-                    result += &iterative[i.0]
-                } else {
-                    self.param_builder.orientation_value(e);
-                    let a = T::get_parameters(
-                        &mut self.param_builder,
-                        settings.general.enable_cache,
-                        &self.graph,
+                //debug!(
+                //    "edges in cut: {:?}",
+                //    self.cuts[cut]
+                //        .cut
+                //        .iter_edges(&self.graph)
+                //        .map(|(_, e)| e.data.name.clone())
+                //        .collect_vec()
+                //);
+                //debug!("tstar: {:+16e}", lu_params.tstar);
+                //debug!(
+                //    "num iterations to find tstar: {}",
+                //    solution.num_iterations_used
+                //);
+                //debug!("rescaled loop moms:\n {}", rescaled_momenta.loop_moms());
+
+                let prefactor = if let Some((channel_index, alpha)) = &channel_id {
+                    self.multi_channeling_setup.compute_prefactor_impl(
+                        *channel_index,
                         &rescaled_momenta,
-                        hel,
-                        &settings.additional_params(),
-                        None,
-                        None,
-                        Some(&lu_params),
-                    );
-                    result += <T as GenericEvaluatorFloat>::get_evaluator_single(
-                        &mut self.parametric_integrand[cut],
-                    )(&a);
-                }
-            }
+                        model,
+                        alpha,
+                    )
+                } else {
+                    rescaled_momenta.one()
+                };
 
-            let ct_result = if settings.subtraction.disable_threshold_subtraction {
-                Complex::new_re(momentum_sample.zero())
-            } else {
-                self.counterterm.evaluate(
-                    &rescaled_momenta,
-                    &lu_params,
-                    cut,
-                    &self.reversed_edges[cut],
-                    &self.lmbs,
-                    &self.graph,
-                    &masses,
-                    rotation,
-                    settings,
+                let mut result = Complex::new_re(momentum_sample.zero());
+                let params = T::get_parameters(
                     &mut self.param_builder,
-                    orientations,
-                )
-            };
+                    settings.general.enable_cache,
+                    &self.graph,
+                    &rescaled_momenta,
+                    hel,
+                    &settings.additional_params(),
+                    None,
+                    None,
+                    Some(&lu_params),
+                );
 
-            cut_threshold_counterterms.push(ct_result);
-            //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
+                let iterative = self.iterative_integrand.as_mut().map(|ev| {
+                    <T as GenericEvaluatorFloat>::get_evaluator(&mut ev[raised_cut][0])(&params)
+                });
 
-            cut_results.push(result * prefactor);
+                for (i, e) in orientations.iter() {
+                    if let Some(iterative) = &iterative {
+                        result += &iterative[i.0]
+                    } else {
+                        self.param_builder.orientation_value(e);
+                        let a = T::get_parameters(
+                            &mut self.param_builder,
+                            settings.general.enable_cache,
+                            &self.graph,
+                            &rescaled_momenta,
+                            hel,
+                            &settings.additional_params(),
+                            None,
+                            None,
+                            Some(&lu_params),
+                        );
+                        result += <T as GenericEvaluatorFloat>::get_evaluator_single(
+                            &mut self.parametric_integrand[raised_cut][0],
+                        )(&a);
+                    }
+                }
+
+                let ct_result = if settings.subtraction.disable_threshold_subtraction {
+                    Complex::new_re(momentum_sample.zero())
+                } else {
+                    todo!();
+                };
+
+                cut_threshold_counterterms.push(ct_result);
+                //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
+
+                cut_results.push(result * prefactor);
+            }
         }
 
         let mut all_cut_result = Complex::new_re(momentum_sample.zero());
