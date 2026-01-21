@@ -1,6 +1,5 @@
 use std::{env, path::PathBuf};
-use vergen::Emitter;
-use vergen_gitcl::GitclBuilder;
+use vergen_gitcl::{Emitter, GitclBuilder};
 use walkdir::WalkDir;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

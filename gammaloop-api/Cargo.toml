@@ -36,6 +36,7 @@ python_api = [
     "dep:pyo3-build-config",
 ]
 python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
+pyo3-extension-module = ["dep:pyo3", "pyo3/extension-module", "gammalooprs/pyo3-extension-module"]
 python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
 cli = []
 
@@ -117,5 +118,4 @@ tempfile = "3.8"
 [build-dependencies]
 walkdir = "2.5"
 pyo3-build-config = { version = "0.25", optional = true }
-vergen = { version = "9", default-features = false }
-vergen-gitcl = "1"
+vergen-gitcl = { version = "9", default-features = false }

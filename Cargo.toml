@@ -174,8 +174,7 @@ version = "0.25"
 
 [build-dependencies]
 # pyo3-build-config = "*"
-vergen = { version = "9", default-features = false }
-vergen-gitcl = "1"
+vergen-gitcl = { version = "9", default-features = false }
 #pyo3-build-config = "*"
 
 [lib]
@@ -186,6 +185,7 @@ bench = false
 default = []
 python_api = ["pyo3"]
 python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
+pyo3-extension-module = ["pyo3/extension-module"]
 # insta.opt-level = 3
 python_stubgen = ["python_api", "pyo3-stub-gen"]
 fjcore = []

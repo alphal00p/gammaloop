@@ -1,5 +1,4 @@
-use vergen::Emitter;
-use vergen_gitcl::GitclBuilder;
+use vergen_gitcl::{Emitter, GitclBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // if cfg!(feature = "python_api") {
