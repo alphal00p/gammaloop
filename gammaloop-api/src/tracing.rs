@@ -232,7 +232,8 @@ pub(crate) fn init_tracing(
             .with_writer(nb);
 
         let indicatif_layer = IndicatifLayer::new()
-            .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()));
+            .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()))
+            .with_max_progress_bars(1024, None);
 
         // Pretty status layer for stderr - only show status events
         let status_layer = fmt::layer()

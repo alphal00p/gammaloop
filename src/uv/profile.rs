@@ -746,7 +746,6 @@ impl LMBResult {
         );
         subset_span.pb_set_length(subsets.len() as u64);
         subset_span.pb_set_message("Profiling subsets");
-        subset_span.pb_set_finish_message("all subsets profiled");
         let _subset_span_enter = subset_span.enter();
 
         let per_subsets_vec: Vec<(SubSet<LoopIndex>, SubSetResult)> = subsets
