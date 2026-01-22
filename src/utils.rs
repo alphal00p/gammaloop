@@ -605,7 +605,7 @@ impl<const N: u32> From<VarFloat<N>> for symbolica::domains::float::Float {
         symbolica::domains::float::Float::from(value.float)
     }
 }
-impl FloatLike for VarFloat<113> {
+impl FloatLike for f128 {
     fn E(&self) -> Self {
         Self::E()
     }
@@ -1665,7 +1665,7 @@ impl From<F<f64>> for Rational {
 }
 
 #[allow(non_camel_case_types)]
-pub type f128 = VarFloat<113>;
+pub type f128 = VarFloat<1113>;
 
 /// An iterator which iterates two other iterators simultaneously
 #[derive(Clone, Debug)]

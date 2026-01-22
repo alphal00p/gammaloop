@@ -12,7 +12,7 @@ use gammalooprs::uv::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, instrument};
 
 use clap::{Args, Subcommand};
 
@@ -66,8 +66,8 @@ impl Default for UltraVioletProfile {
             process: None,
             integrand_name: None,
             n_points: 20,
-            min_scale_exponent: 3.0,
-            max_scale_exponent: 5.0,
+            min_scale_exponent: 1.0,
+            max_scale_exponent: 2.0,
             use_f128: false,
             analyse_analytically: false,
             seed: None,
@@ -77,6 +77,7 @@ impl Default for UltraVioletProfile {
 }
 
 impl Profile {
+    #[instrument(skip_all)]
     pub fn run(
         &self,
         state: &mut State,

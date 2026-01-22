@@ -71,7 +71,7 @@ pub trait HasIntegrand {
         mut force_radius: bool,
         is_momentum_space: bool,
         use_f128: bool,
-    ) -> (Option<f64>, Complex<F<f64>>) {
+    ) -> (Option<f64>, EvaluationResult) {
         if self.get_n_dim() as isize == pt.len() as isize - 1 {
             force_radius = true;
         }
@@ -93,6 +93,7 @@ pub trait HasIntegrand {
             );
 
             info!(
+                target: "gammalooprs::integrands::inspect",
                 "f128 sampling jacobian for this point = {:+.32e}",
                 inv_jac.inv()
             );
@@ -119,9 +120,8 @@ pub trait HasIntegrand {
 
         let eval_result =
             self.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero());
-        let eval = eval_result.integrand_result;
-
         info!(
+            target: "gammalooprs::integrands::inspect",
             "\nInput point in unit hypercube xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
             format!(
                 "( {} )",
@@ -133,10 +133,14 @@ pub trait HasIntegrand {
             )
             .blue(),
             self.name().to_string().green(),
-            format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
+            format!(
+                "( {:+.16e}, {:+.16e} i)",
+                eval_result.integrand_result.re, eval_result.integrand_result.im
+            )
+            .blue(),
         );
 
-        (jac, eval)
+        (jac, eval_result)
     }
 
     fn create_grid(&self) -> Grid<F<f64>>;

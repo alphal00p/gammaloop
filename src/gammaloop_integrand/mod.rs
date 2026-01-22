@@ -204,6 +204,7 @@ fn stability_check(
     let unstable_sample = errors.position(|error| {
         error.re > F(stability_settings.required_precision_for_re)
             || error.im > F(stability_settings.required_precision_for_im)
+            || (error.re == F(0.) && error.im == F(0.))
     });
 
     if let Some(unstable_index) = unstable_sample {
@@ -258,14 +259,15 @@ fn stability_check_on_norm(
         let res = res.norm_squared().sqrt();
 
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            F(0.)
+            F(0.) //true zero is fishy->upgrade to next precision
         } else {
             ((res - average) / average).abs()
         }
     });
 
-    let unstable_sample =
-        errors.position(|error| error > F(stability_settings.required_precision_for_re));
+    let unstable_sample = errors.position(|error| {
+        error > F(stability_settings.required_precision_for_re) || error == F(0.)
+    });
 
     if let Some(unstable_index) = unstable_sample {
         let unstable_point = results[unstable_index];

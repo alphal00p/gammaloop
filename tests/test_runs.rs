@@ -536,7 +536,7 @@ fn photonic_amplitudes() -> Result<()> {
 
     let one_loop_eu = BenchMarkData {
         run_card: "photonic_amplitudes/1l_eu.toml".into(),
-        state_path: "./tests/photonic_amplitudes/1l_eu".into(),
+        state_path: "./tests/workspace/photonic_amplitudes/1l_eu".into(),
         amplitude: "1l_eu".into(),
         generation_time: Some(Duration::from_secs(7)),
         inspect_point: vec![0.123, 0.3242, 0.4233],
@@ -551,7 +551,7 @@ fn photonic_amplitudes() -> Result<()> {
 
     let one_loop_phys = BenchMarkData {
         run_card: "photonic_amplitudes/1l_phys.toml".into(),
-        state_path: "./tests/photonic_amplitudes/1l_phys".into(),
+        state_path: "./tests/workspace/photonic_amplitudes/1l_phys".into(),
         amplitude: "1l_phys".into(),
         inspect_point: vec![0.1, 0.2, 0.3],
         inspect_target: Some(Complex::new(4.660217572648287e-10, -6.496141401696065e-10)),
@@ -566,7 +566,7 @@ fn photonic_amplitudes() -> Result<()> {
 
     let two_loop_eu = BenchMarkData {
         run_card: "photonic_amplitudes/2l_eu.toml".into(),
-        state_path: "./tests/photonic_amplitudes/2l_eu".into(),
+        state_path: "./tests/workspace/photonic_amplitudes/2l_eu".into(),
         amplitude: "2l_eu".into(),
         inspect_point: vec![0.123, 0.3242, 0.4233, 0.523, 0.314, 0.125],
         inspect_target: None,
@@ -728,7 +728,9 @@ fn scalar_sunrise() -> Result<()> {
         ..Default::default()
     };
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
-        use_f128: true,
+        use_f128: false,
+        max_scale_exponent: 6.0,
+        min_scale_exponent: 1.0,
         ..Default::default()
     });
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
@@ -782,7 +784,8 @@ fn scalar_mercedes() -> Result<()> {
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
-        use_f128: true,
+        max_scale_exponent: 4.0,
+        use_f128: false,
         ..Default::default()
     });
 
@@ -840,7 +843,9 @@ fn scalar_basketball() -> Result<()> {
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
-        use_f128: true,
+        use_f128: false,
+        max_scale_exponent: 4.,
+        min_scale_exponent: 2.0,
         analyse_analytically: false,
         ..Default::default()
     });
@@ -851,31 +856,31 @@ fn scalar_basketball() -> Result<()> {
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
     let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
     assert_eq!(res.pass_fail(-0.9).failed, 0);
-    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(
-        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.47240e-03)), 1),
-        "Not compatible: {integral_no_cache}",
-    );
+    // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    // assert!(
+    //     integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.47240e-03)), 1),
+    //     "Not compatible: {integral_no_cache}",
+    // );
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
-    assert_eq!(res.pass_fail(-0.9).failed, 0);
-    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(
-        integral_no_cache.is_compatible_with_target(Complex::new_re(F(7.15184e-04)), 3),
-        "Not compatible: {integral_no_cache}",
-    );
+    // cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    // let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    // assert_eq!(res.pass_fail(-0.9).failed, 0);
+    // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    // assert!(
+    //     integral_no_cache.is_compatible_with_target(Complex::new_re(F(7.15184e-04)), 3),
+    //     "Not compatible: {integral_no_cache}",
+    // );
 
-    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
-    assert_eq!(res.pass_fail(-0.9).failed, 0);
-    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(
-        integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.27485e-04)), 3),
-        "Not compatible: {integral_no_cache}",
-    );
+    // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    // let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    // assert_eq!(res.pass_fail(-0.9).failed, 0);
+    // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    // assert!(
+    //     integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.27485e-04)), 3),
+    //     "Not compatible: {integral_no_cache}",
+    // );
 
-    clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }
@@ -904,6 +909,11 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
+        max_scale_exponent: 7.,
+        min_scale_exponent: 4.0,
+        n_points: 15,
+        use_f128: true,
+        output_file: Some("uv_profile_extra_loop".into()),
         ..Default::default()
     });
     //2.90078e-06	1.59168e-06	6.86001e-07

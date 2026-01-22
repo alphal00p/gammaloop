@@ -4,7 +4,7 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::FloatLike;
 use symbolica::numerical_integration::Sample;
 #[allow(unused_imports)]
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use crate::integrands::HasIntegrand;
 use crate::model::Model;
@@ -15,6 +15,7 @@ use crate::utils::F;
 use crate::utils::f128;
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 pub fn inspect<I: HasIntegrand>(
     settings: &RuntimeSettings,
     integrand: &mut I,

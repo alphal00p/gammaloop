@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::time::Duration;
 
 use bincode::{Decode, Encode};
@@ -42,6 +43,21 @@ pub struct EvaluationMetaData {
     pub relative_instability_error: Complex<F<f64>>,
     pub highest_precision: Precision,
     pub is_nan: bool,
+}
+
+impl Display for EvaluationMetaData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "EvaluationMetaData {{ total_timing: {:?},\t rep3d_evaluation_time: {:?},\t parameterization_time: {:?},\t relative_instability_error: {:?},\t highest_precision: {:?},\t is_nan: {} }}",
+            self.total_timing,
+            self.rep3d_evaluation_time,
+            self.parameterization_time,
+            self.relative_instability_error,
+            self.highest_precision,
+            self.is_nan
+        )
+    }
 }
 
 impl EvaluationMetaData {

@@ -8,23 +8,23 @@ commands = [
 
 [cli_settings.global]
 
-logfile_directive = "off,gammalooprs[orientation_parametric_expr]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "off,info,gammalooprs[orientation_parametric_expr]=debug"#,gammalooprs[final_integrand]=debug"
+logfile_directive = "off"#;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "info,gammalooprs::integrands::inspect=off"
 
 
 [default_runtime_settings.kinematics.externals]
 type = "constant"
 
-# [default_runtime_settings.kinematics]
-# e_cm = 0.2
+[default_runtime_settings.kinematics]
+e_cm = 1
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
     [
-        0.0,
-        0.0,
-        0.0,
-        0.0,
+        3.0,
+        1.0,
+        2.0,
+        4.0,
     ],
     "dependent",
 ]
@@ -36,7 +36,7 @@ check_on_norm = true
 
 
 [default_runtime_settings.general]
- m_uv = 5.0
+ m_uv = 1.0
 # additional_param_values = [1.0,1.0,1.0,1.0,1.0,1.0,1.0,1.0]
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false

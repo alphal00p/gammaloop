@@ -12,8 +12,13 @@ use tracing_appender::{
     non_blocking::NonBlockingBuilder,
     rolling::{RollingFileAppender, Rotation},
 };
+use tracing_indicatif::{
+    filter::{hide_indicatif_span_fields, IndicatifFilter},
+    IndicatifLayer,
+};
 use tracing_subscriber::{
     filter::Filtered,
+    fmt::format::DefaultFields,
     fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
     layer::SubscriberExt,
     registry::LookupSpan,
@@ -21,6 +26,7 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
     EnvFilter, Registry,
 };
+use tracing_subscriber::{fmt::format::FmtSpan, Layer};
 
 use color_eyre::Result;
 
@@ -225,30 +231,19 @@ pub(crate) fn init_tracing(
             .with_current_span(true)
             .with_writer(nb);
 
+        let indicatif_layer = IndicatifLayer::new()
+            .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()));
+
         // Pretty status layer for stderr - only show status events
         let status_layer = fmt::layer()
             .with_target(false)
             .event_format(StatusFmt)
-            .with_writer(std::io::stderr);
-
-        // let indicatif_layer = IndicatifLayer::new()
-        //     .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()));
+            .with_writer(indicatif_layer.get_stderr_writer());
 
         tracing_subscriber::registry()
             .with(Filtered::new(json, file_filter_layer))
             .with(Filtered::new(status_layer, stderr_filter_layer))
-            // .with(
-            //     tracing_subscriber::fmt::layer()
-            //         .with_writer(indicatif_layer.get_stderr_writer())
-            //         .with_filter(file_filter.clone())
-            //         .with_filter(stderr_filter.clone()),
-            // )
-            // .with(
-            //     indicatif_layer
-            //         .with_filter(file_filter)
-            //         .with_filter(stderr_filter)
-            //         .with_filter(IndicatifFilter::new(false)),
-            // )
+            .with(indicatif_layer.with_filter(IndicatifFilter::new(false)))
             .init();
 
         FilterHandles {

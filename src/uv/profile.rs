@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
 use crate::cff::expression::{GraphOrientation, OrientationData};
+use crate::evaluation_result::EvaluationResult;
 use crate::graph::Edge;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::model::Model;
@@ -42,6 +43,8 @@ use tabled::{
     builder::Builder,
     settings::{Modify, Span, Style},
 };
+use tracing::{info_span, instrument};
+use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use typed_index_collections::TiVec;
 
 pub struct ProfileSettings {
@@ -95,6 +98,7 @@ pub trait UVProfileable {
 }
 
 impl UVProfileable for Amplitude {
+    #[instrument(skip_all)]
     fn profile(
         &mut self,
         model: &Model,
@@ -128,12 +132,21 @@ impl UVProfileable for Amplitude {
         let base_seed = profile_settings.seed;
         let integrand = Arc::new(Mutex::new(self.integrand.take().unwrap()));
 
+        let profile_span = info_span!("Profiling graphs", indicatif.pb_show = true);
+        profile_span.pb_set_style(&ProgressStyle::with_template(
+            "{wide_bar} {pos}/{len} {msg}",
+        )?);
+        profile_span.pb_set_length(self.graphs.len() as u64);
+        profile_span.pb_set_message("Profiling graphs");
+        profile_span.pb_set_finish_message("all graphs profiled");
+        let _profile_span_enter = profile_span.enter();
+
         let per_graph = self
             .graphs
             .par_iter()
             .enumerate()
             .map(|(i, g)| {
-                UVSamplingResult::from_amplitude_graph(
+                let res = UVSamplingResult::from_amplitude_graph(
                     &integrand,
                     i,
                     g,
@@ -143,9 +156,14 @@ impl UVProfileable for Amplitude {
                     &settings,
                     profile_settings,
                     base_seed,
-                )
+                );
+                profile_span.pb_inc(1);
+                res
             })
             .collect();
+
+        drop(_profile_span_enter);
+        drop(profile_span);
 
         let integrand = Arc::try_unwrap(integrand)
             .map_err(|_| color_eyre::eyre::eyre!("integrand still shared"))?
@@ -526,7 +544,10 @@ impl UVProfileAnalysis {
                     total += 1;
                     let reason = match &subset.analysis.inspect_level {
                         None => Some("missing_fit"),
-                        Some(analysis) if analysis.result.slope > max_dod => {
+                        Some(analysis)
+                            if analysis.result.slope > max_dod
+                                || analysis.result.slope.is_nan() =>
+                        {
                             Some("dod_exceeds_threshold")
                         }
                         _ => None,
@@ -590,7 +611,7 @@ impl UVSamplingResult {
         base_seed: u64,
     ) -> Self
     where
-        I: HasIntegrand + Send,
+        I: HasIntegrand + Clone + Send,
     {
         let lmbs = g.derived_data.lmbs.as_ref().unwrap();
         let integrand_expr = &g.derived_data.all_mighty_integrand;
@@ -603,6 +624,21 @@ impl UVSamplingResult {
             .iter()
             .collect();
         let lmb_refs: Vec<_> = lmbs.iter().enumerate().collect();
+
+        let lmb_span = info_span!(
+            "Profiling loop momentum bases",
+            indicatif.pb_show = true,
+            graph_id = graph_id
+        );
+        lmb_span.pb_set_style(
+            &ProgressStyle::with_template("{wide_bar} {pos}/{len} {msg}")
+                .expect("invalid progress bar template"),
+        );
+        lmb_span.pb_set_length(lmb_refs.len() as u64);
+        lmb_span.pb_set_message("Profiling loop momentum bases");
+        lmb_span.pb_set_finish_message("all loop momentum bases profiled");
+        let _lmb_span_enter = lmb_span.enter();
+
         let per_lmb = lmb_refs
             .par_iter()
             .map(|(lmb_index, lmb)| {
@@ -650,9 +686,13 @@ impl UVSamplingResult {
                         analytic.per_orientations.insert(odata, v);
                     }
                 }
+                lmb_span.pb_inc(1);
                 res
             })
             .collect();
+
+        drop(_lmb_span_enter);
+        drop(lmb_span);
 
         Self { per_lmb }
     }
@@ -677,7 +717,7 @@ impl LMBResult {
         base_seed: u64,
     ) -> Self
     where
-        I: HasIntegrand + Send,
+        I: HasIntegrand + Clone + Send,
     {
         let mut rng = MonteCarloRng::new(lmb_seed(base_seed, graph_id, lmb_index), 0);
         let sample: TiVec<LoopIndex, _> = lmb
@@ -694,25 +734,47 @@ impl LMBResult {
         loops.next();
 
         let subsets: Vec<_> = loops.collect();
+        let subset_span = info_span!(
+            "Profiling subsets",
+            indicatif.pb_show = true,
+            graph_id = graph_id,
+            lmb_index = lmb_index
+        );
+        subset_span.pb_set_style(
+            &ProgressStyle::with_template("{wide_bar} {pos}/{len} {msg}")
+                .expect("invalid progress bar template"),
+        );
+        subset_span.pb_set_length(subsets.len() as u64);
+        subset_span.pb_set_message("Profiling subsets");
+        subset_span.pb_set_finish_message("all subsets profiled");
+        let _subset_span_enter = subset_span.enter();
+
         let per_subsets_vec: Vec<(SubSet<LoopIndex>, SubSetResult)> = subsets
             .into_par_iter()
-            .map(|ls| {
-                let res = SubSetResult::from_subset(
-                    integrand,
-                    graph_id,
-                    &ls,
-                    &lmb,
-                    scales,
-                    externals,
-                    &sample,
-                    model,
-                    settings,
-                    profile_settings,
-                );
-                (ls, res)
-            })
+            .map_init(
+                || integrand.lock().expect("integrand mutex poisoned").clone(),
+                |integrand, ls| {
+                    let res = SubSetResult::from_subset(
+                        integrand,
+                        graph_id,
+                        &ls,
+                        &lmb,
+                        scales,
+                        externals,
+                        &sample,
+                        model,
+                        settings,
+                        profile_settings,
+                    );
+                    subset_span.pb_inc(1);
+                    (ls, res)
+                },
+            )
             .collect();
         let per_subsets = per_subsets_vec.into_iter().collect();
+
+        drop(_subset_span_enter);
+        drop(subset_span);
 
         LMBResult { lmb, per_subsets }
     }
@@ -725,7 +787,7 @@ pub struct SubSetResult {
 
 impl SubSetResult {
     pub fn from_subset<I>(
-        integrand: &Arc<Mutex<I>>,
+        integrand: &mut I,
         graph_id: usize,
         subset: &SubSet<LoopIndex>,
         lmb: &LoopMomentumBasis,
@@ -737,11 +799,11 @@ impl SubSetResult {
         profile_settings: &ProfileSettings,
     ) -> Self
     where
-        I: HasIntegrand + Send,
+        I: HasIntegrand + Clone + Send,
     {
         let n_included = subset.n_included() as i32;
         let inspect_results: Vec<InspectResult> = scales
-            .par_iter()
+            .iter()
             .map(|s| {
                 let prefactor = s.powi(3 * n_included);
                 let mut scaled_sample = sample.clone();
@@ -758,18 +820,15 @@ impl SubSetResult {
                     })
                     .collect();
 
-                let (inspect_res_jac, inspect_res_eval) = {
-                    let mut integrand = integrand.lock().expect("integrand mutex poisoned");
-                    integrand.inspect(
-                        settings,
-                        model,
-                        pt,
-                        &[graph_id],
-                        false,
-                        true,
-                        profile_settings.use_f128,
-                    )
-                };
+                let (inspect_res_jac, inspect_res_eval) = integrand.inspect(
+                    settings,
+                    model,
+                    pt,
+                    &[graph_id],
+                    false,
+                    true,
+                    profile_settings.use_f128,
+                );
 
                 InspectResult {
                     result: inspect_res_eval,
@@ -862,6 +921,9 @@ impl SubSetResult {
         let mut points = vec![];
         for (x, s) in self.inspect.iter().zip(scales) {
             let norm = x.magnitude();
+            if norm <= 0.0 {
+                println!("{s}:\t{}", x.result.evaluation_metadata)
+            }
             points.push(norm);
             let y = (norm).log10();
             let x = s.log10();
@@ -906,14 +968,14 @@ impl SubSetResult {
     }
 }
 pub struct InspectResult {
-    pub(crate) result: Complex<F<f64>>,
+    pub(crate) result: EvaluationResult,
     pub(crate) prefactor: f64,
     pub(crate) jacobian: f64,
 }
 
 impl InspectResult {
     fn magnitude(&self) -> f64 {
-        self.result.norm_squared().sqrt().0 * self.prefactor / self.jacobian
+        self.result.integrand_result.norm_squared().sqrt().0 * self.prefactor / self.jacobian
     }
 }
 
