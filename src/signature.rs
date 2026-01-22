@@ -9,7 +9,7 @@ use bincode::{BorrowDecode, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::RefZero;
 use std::fmt::Display;
-use std::ops::{AddAssign, Index, IndexMut, Neg, SubAssign};
+use std::ops::{Add, AddAssign, Index, IndexMut, Neg, SubAssign};
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 use typed_index_collections::TiVec;
 
@@ -321,6 +321,7 @@ where
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
     pub(crate) fn apply<B>(&self, basis: &[B]) -> B
     where
         B: RefZero + Clone + Neg<Output = B> + AddAssign<B>,
@@ -331,6 +332,21 @@ where
             result += sign * t;
         }
         result
+    }
+
+    pub(crate) fn try_apply<B>(&self, basis: &[B]) -> Option<B>
+    where
+        B: Clone + Neg<Output = B> + Add<B, Output = B>,
+    {
+        self.0
+            .iter()
+            .zip(basis.iter().cloned())
+            .filter_map(|(sign, t)| match sign {
+                SignOrZero::Zero => None,
+                SignOrZero::Plus => Some(t),
+                SignOrZero::Minus => Some(-t),
+            })
+            .reduce(|sum, t| sum + t)
     }
 
     pub(crate) fn apply_typed<O, I, V>(&self, basis: &V) -> O
@@ -490,6 +506,25 @@ impl LoopExtSignature {
         let mut res = self.internal.apply(loop_moms);
         res += self.external.apply(external_moms);
         res
+    }
+
+    pub(crate) fn try_compute_momentum<'a, 'b: 'a, T>(
+        &self,
+        loop_moms: &'a [T],
+        external_moms: &'b [T],
+    ) -> Option<T>
+    where
+        T: Clone + Neg<Output = T> + Add<T, Output = T>,
+    {
+        let loop_part = self.internal.try_apply(loop_moms);
+        let external_part = self.external.try_apply(external_moms);
+
+        match (loop_part, external_part) {
+            (Some(l), Some(e)) => Some(l + e),
+            (Some(l), None) => Some(l),
+            (None, Some(e)) => Some(e),
+            (None, None) => None,
+        }
     }
 
     pub(crate) fn compute_momentum<L, E, M>(&self, loop_momenta: &L, external_momenta: &E) -> M

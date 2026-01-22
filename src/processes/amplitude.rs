@@ -1391,6 +1391,7 @@ pub mod test {
         GenericEvaluator::new_from_builder(
             [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
             param_builder,
+            None,
             OptimizationSettings::default(),
         )
         .unwrap();

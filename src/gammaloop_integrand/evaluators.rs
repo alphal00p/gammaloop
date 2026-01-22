@@ -9,7 +9,11 @@ use linnet::half_edge::{
 use spenso::algebra::complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso};
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::{float::Complex as SymComplex, rational::Rational},
+    domains::{
+        dual::{self, HyperDual},
+        float::Complex as SymComplex,
+        rational::Rational,
+    },
     evaluate::{
         CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
         OptimizationSettings,
@@ -112,6 +116,7 @@ pub struct GenericEvaluator {
     pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
+    pub dual_shape: Option<Vec<Vec<usize>>>,
 }
 
 impl GenericEvaluator {
@@ -137,6 +142,7 @@ impl GenericEvaluator {
     pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
         atoms: I,
         builder: &ParamBuilder<f64>,
+        dual_shape: Option<Vec<Vec<usize>>>,
         optimization_settings: OptimizationSettings,
     ) -> Option<Self> {
         let params: Vec<Atom> = (&builder.pairs)
@@ -144,7 +150,13 @@ impl GenericEvaluator {
             .flat_map(|p| p.params.clone())
             .collect();
 
-        Self::new_from_raw_params(atoms, &params, &builder.fn_map, optimization_settings)
+        Self::new_from_raw_params(
+            atoms,
+            &params,
+            &builder.fn_map,
+            optimization_settings,
+            dual_shape,
+        )
     }
 
     pub(crate) fn new_from_raw_params<I: IntoIterator<Item = Atom>>(
@@ -152,9 +164,10 @@ impl GenericEvaluator {
         params: &[Atom],
         fn_map: &FunctionMap,
         optimization_settings: OptimizationSettings,
+        dual_shape: Option<Vec<Vec<usize>>>,
     ) -> Option<Self> {
         let exprs: Vec<Atom> = atoms.into_iter().collect();
-        let tree = exprs
+        let mut tree = exprs
             .iter()
             .map(|n| {
                 n.evaluator(fn_map, params, optimization_settings.clone())
@@ -165,10 +178,16 @@ impl GenericEvaluator {
                 acc
             })?;
 
+        if let Some(dual_shape) = &dual_shape {
+            let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
+            tree = tree.vectorize(&dual);
+        }
+
         let rational = tree.clone();
         let f64_eager = tree
             .clone()
             .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+
         let f128 = tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
 
         let evaluator = GenericEvaluator {
@@ -177,6 +196,7 @@ impl GenericEvaluator {
             f64_compiled: None,
             f64_eager,
             f128,
+            dual_shape,
         };
 
         Some(evaluator)

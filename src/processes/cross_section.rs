@@ -43,7 +43,7 @@ use crate::{
     numerator::{self, symbolica_ext::AtomCoreExt},
     processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{FUN_LIB, GS, TENSORLIB, W_},
+    utils::{F, FUN_LIB, GS, TENSORLIB, W_},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use eyre::{Context, eyre};
@@ -56,6 +56,7 @@ use linnet::half_edge::{
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
+    domains::dual::HyperDual,
     function,
     id::Replacement,
     parse, symbol,
@@ -817,9 +818,26 @@ impl CrossSectionGraph {
         // now check all sandwiches and check for connectedness
         println!("cross free powersets: {:?}", cross_free_powersets);
 
+        let dual_shapes = cross_free_powersets
+            .iter()
+            .map(|powerset| {
+                powerset
+                    .iter()
+                    .map(|subset| {
+                        if subset.len() > 1 {
+                            Some(vec![vec![subset.len()]])
+                        } else {
+                            None
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+
         let result = RaisedData {
             raised_cut_groups: raised_groups,
             cross_free_powersets,
+            dual_shapes,
         };
 
         self.derived_data.raised_data = result;
@@ -1070,6 +1088,13 @@ impl CrossSectionGraph {
             for cross_free_subset in
                 self.derived_data.raised_data.cross_free_powersets[raised_cut_id].iter()
             {
+                let num_derivatives = cross_free_subset.len() - 1;
+                let dual_shape = if num_derivatives > 0 {
+                    Some(HyperDual::<F<f64>>::new(vec![vec![num_derivatives]]))
+                } else {
+                    None
+                };
+
                 let complement = cuts_in_group
                     .iter()
                     .filter(|cut| !cross_free_subset.contains(cut))
@@ -1949,6 +1974,7 @@ pub struct CrossSectionDerivedData {
 pub struct RaisedData {
     pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
     pub cross_free_powersets: TiVec<RaisedCutId, Vec<Vec<CutId>>>,
+    pub dual_shapes: TiVec<RaisedCutId, Vec<Option<Vec<Vec<usize>>>>>,
 }
 
 impl Default for RaisedData {
@@ -1962,6 +1988,7 @@ impl RaisedData {
         RaisedData {
             raised_cut_groups: TiVec::new(),
             cross_free_powersets: TiVec::new(),
+            dual_shapes: TiVec::new(),
         }
     }
 }

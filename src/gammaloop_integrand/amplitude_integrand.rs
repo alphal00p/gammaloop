@@ -98,6 +98,7 @@ impl AmplitudeGraphTerm {
         let orientation_parametric_integrand = GenericEvaluator::new_from_builder(
             [graph.derived_data.all_mighty_integrand.clone()],
             &graph.graph.param_builder,
+            None,
             OptimizationSettings::default(),
         )
         .unwrap();
@@ -114,6 +115,7 @@ impl AmplitudeGraphTerm {
                     selected
                 }),
                 &graph.graph.param_builder,
+                None,
                 OptimizationSettings::default(),
             )
         } else {

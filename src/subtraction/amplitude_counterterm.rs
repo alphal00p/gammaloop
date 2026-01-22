@@ -70,6 +70,7 @@ impl AmplitudeCountertermAtom {
                     self.parametric_integrated.clone(),
                 ],
                 param_builder,
+                None,
                 optimiation_settings.clone(),
             )
             .unwrap(),
@@ -86,6 +87,7 @@ impl AmplitudeCountertermAtom {
                         .iter()
                         .map(|or| or.select(&self.parametric_local + &self.parametric_integrated)),
                     param_builder,
+                    None,
                     optimiation_settings,
                 )
                 .unwrap(),

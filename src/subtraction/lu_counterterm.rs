@@ -65,6 +65,7 @@ impl LUCounterTermEvaluators {
                 GenericEvaluator::new_from_builder(
                     [atom.clone()],
                     param_builder,
+                    None,
                     OptimizationSettings::default(),
                 )
                 .unwrap()
@@ -78,6 +79,7 @@ impl LUCounterTermEvaluators {
                 GenericEvaluator::new_from_builder(
                     [atom.clone()],
                     param_builder,
+                    None,
                     OptimizationSettings::default(),
                 )
                 .unwrap()
@@ -88,6 +90,7 @@ impl LUCounterTermEvaluators {
             GenericEvaluator::new_from_builder(
                 [atom.clone()],
                 param_builder,
+                None,
                 OptimizationSettings::default(),
             )
             .unwrap()
@@ -106,6 +109,7 @@ impl LUCounterTermEvaluators {
                         GenericEvaluator::new_from_builder(
                             orientations.iter().map(|or| or.select(atom)),
                             param_builder,
+                            None,
                             OptimizationSettings::default(),
                         )
                         .unwrap()
@@ -129,6 +133,7 @@ impl LUCounterTermEvaluators {
                         GenericEvaluator::new_from_builder(
                             orientations.iter().map(|or| or.select(atom)),
                             param_builder,
+                            None,
                             OptimizationSettings::default(),
                         )
                         .unwrap()
@@ -148,6 +153,7 @@ impl LUCounterTermEvaluators {
                 GenericEvaluator::new_from_builder(
                     orientations.iter().map(|or| or.select(atom)),
                     param_builder,
+                    None,
                     OptimizationSettings::default(),
                 )
                 .unwrap()

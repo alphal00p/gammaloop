@@ -141,6 +141,7 @@ impl OverlapStructure {
                 &params,
                 &FunctionMap::new(),
                 optimization_settings.clone(),
+                None,
             )
             .ok_or_else(|| eyre!("Could not build evaluator for overlap prefactor"))?;
 

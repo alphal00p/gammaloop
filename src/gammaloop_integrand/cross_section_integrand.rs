@@ -276,13 +276,16 @@ impl CrossSectionGraphTerm {
             .derived_data
             .cut_paramatric_integrand
             .iter()
-            .map(|integrand_for_cut| {
+            .zip(&graph.derived_data.raised_data.dual_shapes)
+            .map(|(integrand_for_cut, dual_shapes)| {
                 integrand_for_cut
                     .iter()
-                    .map(|integrand_for_subset| {
+                    .zip(dual_shapes)
+                    .map(|(integrand_for_subset, dual_shape)| {
                         GenericEvaluator::new_from_builder(
                             [integrand_for_subset.clone()],
                             &graph.graph.param_builder,
+                            dual_shape.clone(),
                             OptimizationSettings::default(),
                         )
                         .unwrap()
@@ -301,15 +304,18 @@ impl CrossSectionGraphTerm {
                     .derived_data
                     .cut_paramatric_integrand
                     .iter()
-                    .map(|integrand_for_cut| {
+                    .zip(&graph.derived_data.raised_data.dual_shapes)
+                    .map(|(integrand_for_cut, dual_shapes)| {
                         integrand_for_cut
                             .iter()
-                            .map(|integrand_for_subset| {
+                            .zip(dual_shapes)
+                            .map(|(integrand_for_subset, dual_shape)| {
                                 GenericEvaluator::new_from_builder(
                                     orientations
                                         .iter()
                                         .map(|or| or.select(integrand_for_subset)),
                                     &graph.graph.param_builder,
+                                    dual_shape.clone(),
                                     OptimizationSettings::default(),
                                 )
                                 .unwrap()
