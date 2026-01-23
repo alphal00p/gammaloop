@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use crate::evaluation_result::EvaluationMetaData;
 use crate::evaluation_result::EvaluationResult;
+use crate::evaluation_result::{EvaluationMetaData, StabilityEvaluation};
 use crate::integrands::*;
 use crate::model::Model;
 use crate::settings::RuntimeSettings;
@@ -14,12 +14,12 @@ use crate::utils::F;
 use crate::utils::FloatLike;
 use crate::utils::f128;
 use bincode_trait_derive::{Decode, Encode};
-use tracing::info;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::FloatLike as SymFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
+use tracing::info;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -188,6 +188,17 @@ impl HasIntegrand for HFunctionTestIntegrand {
             relative_instability_error: Complex::new_zero(),
             highest_precision: precision,
             is_nan,
+            final_is_stable: !is_nan,
+            loop_momenta_escalation: None,
+            stability_evaluations: vec![StabilityEvaluation {
+                precision,
+                result: integration_result,
+                parameterization_time: parameterization_timing,
+                ltd_evaluation_time: evaluation_timing,
+                is_stable: !is_nan,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }],
         };
 
         EvaluationResult {

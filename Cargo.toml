@@ -167,6 +167,7 @@ tracing-indicatif = "0.3.13"
 rug = { version = "1.27.0", features = ["serde"] }
 vakint = "0.1.2"
 vectorize = "0.2.0"
+twofloat = "0.8.4"
 [dependencies.pyo3]
 features = ["eyre", "auto-initialize"]
 optional = true

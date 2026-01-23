@@ -1,4 +1,4 @@
-use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
+use crate::evaluation_result::{EvaluationMetaData, EvaluationResult, StabilityEvaluation};
 use colored::Colorize;
 // use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::gammaloop_integrand::GLIntegrand;
@@ -414,6 +414,17 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
+            final_is_stable: !is_nan,
+            loop_momenta_escalation: None,
+            stability_evaluations: vec![StabilityEvaluation {
+                precision: Precision::Double,
+                result: Complex::new(itg_wgt, F(0.)) * jac,
+                parameterization_time,
+                ltd_evaluation_time: evaluation_time,
+                is_stable: !is_nan,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }],
         };
 
         EvaluationResult {
@@ -564,6 +575,17 @@ impl HasIntegrand for UnitVolumeIntegrand {
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
+            final_is_stable: !is_nan,
+            loop_momenta_escalation: None,
+            stability_evaluations: vec![StabilityEvaluation {
+                precision: Precision::Double,
+                result: Complex::new(itg_wgt, F(0.)) * jac,
+                parameterization_time,
+                ltd_evaluation_time: evaluation_time,
+                is_stable: !is_nan,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }],
         };
 
         EvaluationResult {

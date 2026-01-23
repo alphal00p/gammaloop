@@ -1,7 +1,10 @@
 use std::fs;
 use std::path::Path;
 
-use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
+use crate::evaluation_result::{
+    EvaluationMetaData, EvaluationResult, LoopMomentaEscalationMetrics, RotatedEvaluation,
+    StabilityEvaluation, StabilityFailureReason,
+};
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
@@ -9,7 +12,9 @@ use crate::model::Model;
 use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::settings::GlobalSettings;
-use crate::utils::{F, FloatLike, format_for_compare_digits, get_n_dim_for_n_loop_momenta};
+use crate::utils::{
+    ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
+};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
 use colored::Colorize;
@@ -33,7 +38,6 @@ pub mod cache_debugging;
 pub mod cross_section_integrand;
 pub mod gammaloop_sample;
 use crate::observables::EventManager;
-use crate::utils::f128;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
@@ -166,53 +170,79 @@ fn create_stability_iterator(
 }
 
 #[inline]
-fn stability_check(
+fn complex_from_f64<T: FloatLike>(value: &Complex<F<f64>>) -> Complex<F<T>> {
+    Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im))
+}
+
+#[inline]
+fn complex_to_f64<T: FloatLike>(value: &Complex<F<T>>) -> Complex<F<f64>> {
+    Complex::new(value.re.into_ff64(), value.im.into_ff64())
+}
+
+#[inline]
+fn stability_check<T: FloatLike>(
     _settings: &RuntimeSettings,
-    results: &[Complex<F<f64>>],
+    results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
-    max_eval: Complex<F<f64>>,
-    wgt: F<f64>,
-) -> (Complex<F<f64>>, bool) {
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+) -> (Complex<F<T>>, bool, Option<StabilityFailureReason>) {
     if results.len() == 1 {
-        return (results[0], true);
+        return (results[0].clone(), true, None);
     }
 
     let average = results
         .iter()
-        .fold(Complex::<F<f64>>::new_zero(), |acc, x| acc + x)
-        / F(results.len() as f64);
+        .skip(1)
+        .fold(results[0].clone(), |acc, x| acc + x)
+        / F::<T>::from_f64(results.len() as f64);
 
     let mut errors = results.iter().map(|res| {
-        let res_arr = [res.re, res.im];
-        let avg_arr = [average.re, average.im];
-
-        let (error_re, error_im) = res_arr
-            .iter()
-            .zip(avg_arr)
-            .map(|(res_component, average_component)| {
-                if IsZero::is_zero(res_component) && IsZero::is_zero(&average_component) {
-                    F(0.)
-                } else {
-                    ((res_component - average_component) / average_component).abs()
-                }
-            })
-            .collect_tuple()
-            .unwrap();
+        let error_re = if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
+            F::<T>::from_f64(0.0)
+        } else {
+            ((&res.re - &average.re) / &average.re).abs()
+        };
+        let error_im = if IsZero::is_zero(&res.im) && IsZero::is_zero(&average.im) {
+            F::<T>::from_f64(0.0)
+        } else {
+            ((&res.im - &average.im) / &average.im).abs()
+        };
         Complex::new(error_re, error_im)
     });
 
-    let unstable_sample = errors.position(|error| {
-        error.re > F(stability_settings.required_precision_for_re)
-            || error.im > F(stability_settings.required_precision_for_im)
-            || (error.re == F(0.) && error.im == F(0.))
-    });
+    let mut unstable_reason = None;
+    let mut unstable_sample = None;
+    for (index, error) in errors.enumerate() {
+        if !is_final_level && error.re == F::<T>::from_f64(0.0) && error.im == F::<T>::from_f64(0.0)
+        {
+            unstable_reason = Some(StabilityFailureReason::ZeroError);
+            unstable_sample = Some(index);
+            break;
+        }
+
+        if error.re > F::<T>::from_f64(stability_settings.required_precision_for_re)
+            || error.im > F::<T>::from_f64(stability_settings.required_precision_for_im)
+        {
+            unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
+            unstable_sample = Some(index);
+            break;
+        }
+    }
 
     if let Some(unstable_index) = unstable_sample {
-        let unstable_point = results[unstable_index];
+        let unstable_point = &results[unstable_index];
 
         let ((real_formatted, rotated_real_formatted), (imag_formatted, rotated_imag_formatted)) = (
-            format_for_compare_digits(average.re, unstable_point.re),
-            format_for_compare_digits(average.im, unstable_point.im),
+            format_for_compare_digits(
+                average.re.clone().into_ff64(),
+                unstable_point.re.clone().into_ff64(),
+            ),
+            format_for_compare_digits(
+                average.im.clone().into_ff64(),
+                unstable_point.im.clone().into_ff64(),
+            ),
         );
 
         debug!("{}", "\nUnstable point detected:".red());
@@ -225,55 +255,81 @@ fn stability_check(
 
     let stable = unstable_sample.is_none();
 
-    let below_wgt_threshold =
-        if stability_settings.escalate_for_large_weight_threshold > 0. && max_eval.is_non_zero() {
-            average.re.abs() * wgt
-                < F(stability_settings.escalate_for_large_weight_threshold) * max_eval.re
-                || average.im.abs() * wgt
-                    < F(stability_settings.escalate_for_large_weight_threshold) * max_eval.im
-        } else {
-            true
-        };
+    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > 0.
+        && max_eval.is_non_zero()
+    {
+        average.re.abs() * wgt.clone()
+            < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold) * max_eval.re
+            || average.im.abs() * wgt
+                < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
+                    * max_eval.im
+    } else {
+        true
+    };
 
-    (average, stable && below_wgt_threshold)
+    let weight_reason = if stable && !below_wgt_threshold {
+        Some(StabilityFailureReason::WeightThreshold)
+    } else {
+        None
+    };
+
+    (
+        average,
+        stable && below_wgt_threshold,
+        unstable_reason.or(weight_reason),
+    )
 }
 
 #[inline]
-fn stability_check_on_norm(
+fn stability_check_on_norm<T: FloatLike>(
     _settings: &RuntimeSettings,
-    results: &[Complex<F<f64>>],
+    results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
-    max_eval: Complex<F<f64>>,
-    wgt: F<f64>,
-) -> (Complex<F<f64>>, bool) {
+    max_eval: Complex<F<T>>,
+    wgt: F<T>,
+    is_final_level: bool,
+) -> (Complex<F<T>>, bool, Option<StabilityFailureReason>) {
     if results.len() == 1 {
-        return (results[0], true);
+        return (results[0].clone(), true, None);
     }
 
-    let average = results
-        .iter()
-        .fold(F(0.0), |acc, x| acc + x.norm_squared().sqrt())
-        / F(results.len() as f64);
+    let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
+        acc + x.norm_squared().sqrt()
+    }) / F::<T>::from_f64(results.len() as f64);
 
     let mut errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
 
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            F(0.) //true zero is fishy->upgrade to next precision
+            F::<T>::from_f64(0.0) // true zero is fishy -> upgrade to next precision
         } else {
-            ((res - average) / average).abs()
+            ((res - average.clone()) / average.clone()).abs()
         }
     });
 
-    let unstable_sample = errors.position(|error| {
-        error > F(stability_settings.required_precision_for_re) || error == F(0.)
-    });
+    let mut unstable_reason = None;
+    let mut unstable_sample = None;
+    for (index, error) in errors.enumerate() {
+        if !is_final_level && error == F::<T>::from_f64(0.0) {
+            unstable_reason = Some(StabilityFailureReason::ZeroError);
+            unstable_sample = Some(index);
+            break;
+        }
+
+        if error > F::<T>::from_f64(stability_settings.required_precision_for_re) {
+            unstable_reason = Some(StabilityFailureReason::ErrorThreshold);
+            unstable_sample = Some(index);
+            break;
+        }
+    }
 
     if let Some(unstable_index) = unstable_sample {
-        let unstable_point = results[unstable_index];
+        let unstable_point = &results[unstable_index];
 
-        let (real_formatted, rotated_real_formatted) =
-            format_for_compare_digits(average, unstable_point.re);
+        let (real_formatted, rotated_real_formatted) = format_for_compare_digits(
+            average.clone().into_ff64(),
+            unstable_point.re.clone().into_ff64(),
+        );
 
         debug!("{}", "\nUnstable point detected:".red());
         debug!("\tnormed average result: {}", real_formatted,);
@@ -285,22 +341,34 @@ fn stability_check_on_norm(
     let below_wgt_threshold =
         if stability_settings.escalate_for_large_weight_threshold > 0. && max_eval.is_non_zero() {
             average.abs() * wgt
-                < F(stability_settings.escalate_for_large_weight_threshold)
+                < F::<T>::from_f64(stability_settings.escalate_for_large_weight_threshold)
                     * max_eval.norm_squared().sqrt()
         } else {
             true
         };
 
-    (results[0], stable && below_wgt_threshold)
+    let weight_reason = if stable && !below_wgt_threshold {
+        Some(StabilityFailureReason::WeightThreshold)
+    } else {
+        None
+    };
+
+    (
+        results[0].clone(),
+        stable && below_wgt_threshold,
+        unstable_reason.or(weight_reason),
+    )
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct StabilityLevelResult {
     pub result: Complex<F<f64>>,
     pub stability_level_used: Precision,
     pub parameterization_time: Duration,
     pub ltd_evaluation_time: Duration,
     pub is_stable: bool,
+    pub instability_reason: Option<StabilityFailureReason>,
+    pub rotated_results: Vec<RotatedEvaluation>,
 }
 
 #[derive(
@@ -673,7 +741,8 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     integrand: &mut I,
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
-) -> (Vec<Complex<F<f64>>>, Duration) {
+    record_rotated_results: bool,
+) -> (Vec<Complex<F<T>>>, Duration, Vec<RotatedEvaluation>) {
     let rotations = integrand.get_rotations().cloned().collect_vec();
 
     let cache = integrand.get_settings().general.enable_cache;
@@ -716,7 +785,79 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
 
     let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
 
-    (evaluation_results, duration)
+    let rotated_results = if record_rotated_results {
+        rotations
+            .iter()
+            .zip(evaluation_results.iter())
+            .map(|(rotation, result)| RotatedEvaluation {
+                rotation: rotation.method.to_string(),
+                result: complex_to_f64(result),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    (evaluation_results, duration, rotated_results)
+}
+
+fn evaluate_stability_level<T: FloatLike, I: GammaloopIntegrand>(
+    integrand: &mut I,
+    model: &Model,
+    sample: &Sample<F<f64>>,
+    stability_level: &StabilityLevelSetting,
+    max_eval: &Complex<F<f64>>,
+    wgt: F<f64>,
+    check_on_norm: bool,
+    is_final_level: bool,
+    record_rotated_results: bool,
+    precision_label: &str,
+) -> Option<StabilityLevelResult> {
+    let before_parameterization = std::time::Instant::now();
+
+    let gammaloop_sample = parameterize::<T, I>(sample, integrand).ok()?;
+    debug!("{precision_label} parameterization succeeded");
+    debug!(
+        "jacobian: {:+16e}",
+        gammaloop_sample.get_default_sample().jacobian()
+    );
+
+    let parameterization_time = before_parameterization.elapsed();
+    let (results, ltd_evaluation_time, rotated_results) =
+        evaluate_all_rotations(integrand, model, &gammaloop_sample, record_rotated_results);
+
+    let max_eval = complex_from_f64::<T>(max_eval);
+    let wgt = F::<T>::from_ff64(wgt);
+
+    let (average_result, is_stable, instability_reason) = if check_on_norm {
+        stability_check_on_norm(
+            integrand.get_settings(),
+            &results,
+            stability_level,
+            max_eval,
+            wgt,
+            is_final_level,
+        )
+    } else {
+        stability_check(
+            integrand.get_settings(),
+            &results,
+            stability_level,
+            max_eval,
+            wgt,
+            is_final_level,
+        )
+    };
+
+    Some(StabilityLevelResult {
+        result: complex_to_f64(&average_result),
+        stability_level_used: stability_level.precision,
+        parameterization_time,
+        ltd_evaluation_time,
+        is_stable,
+        instability_reason,
+        rotated_results,
+    })
 }
 
 /// Result of cache validation checks
@@ -830,7 +971,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
     rotation: &Rotation,
-) -> Complex<F<f64>> {
+) -> Complex<F<T>> {
     let settings = integrand.get_settings().clone();
     let zero = Complex::new_re(gammaloop_sample.get_default_sample().zero());
     let loop_cache_shift = 0;
@@ -925,8 +1066,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
         integrand.increment_loop_cache_id(loop_cache_shift);
     }
 
-    let f_t_result = result * gammaloop_sample.get_default_sample().jacobian();
-    Complex::new(f_t_result.re.into_ff64(), f_t_result.im.into_ff64())
+    result * gammaloop_sample.get_default_sample().jacobian()
 }
 
 fn create_grid_for_graph<G: GraphTerm>(
@@ -1067,79 +1207,99 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     max_eval: Complex<F<f64>>,
 ) -> EvaluationResult {
     let start_eval = std::time::Instant::now();
-    let stability_iterator =
+    let mut stability_iterator =
         create_stability_iterator(&integrand.get_settings().stability, use_f128);
+    let escalation_factor = integrand
+        .get_settings()
+        .stability
+        .loop_momenta_norm_escalation_factor;
+    let record_loop_momenta_escalation = integrand
+        .get_settings()
+        .stability
+        .recording
+        .map(|recording| recording.record_loop_momenta_escalation)
+        .unwrap_or(false);
+    let mut loop_momenta_escalation = None;
+    if escalation_factor > 0.0 && stability_iterator.len() > 1 {
+        if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+            let default_sample = gammaloop_sample.get_default_sample();
+            let mut sum_norm = F::<f64>::from_f64(0.0);
+            for mom in default_sample.loop_moms().0.iter() {
+                let norm = mom.norm();
+                sum_norm = &sum_norm + &norm;
+            }
+
+            let threshold =
+                F::<f64>::from_f64(escalation_factor * integrand.get_settings().kinematics.e_cm);
+            if record_loop_momenta_escalation {
+                loop_momenta_escalation = Some(LoopMomentaEscalationMetrics {
+                    sum_norm: sum_norm.0,
+                    threshold: threshold.0,
+                });
+            }
+            if sum_norm > threshold {
+                if let Some(last) = stability_iterator.last().copied() {
+                    stability_iterator = vec![last];
+                }
+            }
+        }
+    }
 
     let mut results_of_stability_levels = Vec::with_capacity(stability_iterator.len());
 
-    for stability_level in stability_iterator.into_iter() {
-        let before_parameterization = std::time::Instant::now();
-
-        let ((results, ltd_evaluation_time), parameterization_time) =
-            match stability_level.precision {
-                Precision::Double => {
-                    if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                        debug!("f64 parameterization succeeded");
-                        debug!(
-                            "jacobian: {:+16e}",
-                            gammaloop_sample.get_default_sample().jacobian()
-                        );
-                        let parameterization_time = before_parameterization.elapsed();
-                        (
-                            evaluate_all_rotations(integrand, model, &gammaloop_sample),
-                            parameterization_time,
-                        )
-                    } else {
-                        continue;
-                    }
-                }
-                Precision::Quad => {
-                    if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
-                        debug!("f128 parameterization succeeded");
-                        debug!(
-                            "jacobian: {:+16e}",
-                            gammaloop_sample.get_default_sample().jacobian()
-                        );
-                        let parameterization_time = before_parameterization.elapsed();
-                        (
-                            evaluate_all_rotations(integrand, model, &gammaloop_sample),
-                            parameterization_time,
-                        )
-                    } else {
-                        continue;
-                    }
-                }
-                Precision::Arb => {
-                    todo!()
-                }
-            };
-
-        let (average_result, is_stable) = if integrand.get_settings().stability.check_on_norm {
-            stability_check_on_norm(
-                integrand.get_settings(),
-                &results,
+    let total_levels = stability_iterator.len();
+    for (level_index, stability_level) in stability_iterator.into_iter().enumerate() {
+        let is_final_level = level_index + 1 == total_levels;
+        let record_rotated_results = integrand
+            .get_settings()
+            .stability
+            .recording
+            .map(|recording| recording.record_rotated_results)
+            .unwrap_or(false);
+        let result_of_level = match stability_level.precision {
+            Precision::Double => evaluate_stability_level::<f64, I>(
+                integrand,
+                model,
+                sample,
                 &stability_level,
-                max_eval,
+                &max_eval,
                 wgt,
-            )
-        } else {
-            stability_check(
-                integrand.get_settings(),
-                &results,
+                integrand.get_settings().stability.check_on_norm,
+                is_final_level,
+                record_rotated_results,
+                "f64",
+            ),
+            Precision::Quad => evaluate_stability_level::<f128, I>(
+                integrand,
+                model,
+                sample,
                 &stability_level,
-                max_eval,
+                &max_eval,
                 wgt,
-            )
+                integrand.get_settings().stability.check_on_norm,
+                is_final_level,
+                record_rotated_results,
+                "f128",
+            ),
+            Precision::Arb => evaluate_stability_level::<ArbPrec, I>(
+                integrand,
+                model,
+                sample,
+                &stability_level,
+                &max_eval,
+                wgt,
+                integrand.get_settings().stability.check_on_norm,
+                is_final_level,
+                record_rotated_results,
+                "ArbPrec",
+            ),
         };
 
-        let result_of_level = StabilityLevelResult {
-            result: average_result,
-            stability_level_used: stability_level.precision,
-            parameterization_time,
-            ltd_evaluation_time,
-            is_stable,
+        let Some(result_of_level) = result_of_level else {
+            continue;
         };
 
+        let is_stable = result_of_level.is_stable;
         results_of_stability_levels.push(result_of_level);
 
         if is_stable {
@@ -1166,7 +1326,13 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 integrand.increment_external_cache_id(shift);
                 integrand.increment_loop_cache_id(shift);
 
-                for (sample, result) in rotated_samples.iter().zip(&results) {
+                let level_result = results_of_stability_levels
+                    .last()
+                    .expect("stability level result missing");
+                for (sample, result) in rotated_samples
+                    .iter()
+                    .zip(level_result.rotated_results.iter())
+                {
                     let default_sample = sample.get_default_sample();
                     debug!(
                         "loop_moms: {}, external_moms: {}",
@@ -1176,7 +1342,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
 
                     debug!(
                         "result of current level: {}",
-                        format!("{:16e}", result).blue()
+                        format!("{:16e}", result.result).blue()
                     );
                 }
             } else {
@@ -1201,6 +1367,39 @@ fn evaluate_sample<I: GammaloopIntegrand>(
             || stability_level_result.result.im.is_infinite();
         let is_nan = re_is_nan || im_is_nan;
 
+        let recording = integrand.get_settings().stability.recording;
+        let stability_evaluations = if let Some(recording) = recording {
+            if recording.record_all_stability_levels {
+                results_of_stability_levels
+                    .iter()
+                    .map(|level| StabilityEvaluation {
+                        precision: level.stability_level_used,
+                        result: level.result,
+                        parameterization_time: level.parameterization_time,
+                        ltd_evaluation_time: level.ltd_evaluation_time,
+                        is_stable: level.is_stable,
+                        instability_reason: level.instability_reason,
+                        rotated_results: level.rotated_results.clone(),
+                    })
+                    .collect()
+            } else {
+                let level = results_of_stability_levels
+                    .last()
+                    .expect("stability level result missing");
+                vec![StabilityEvaluation {
+                    precision: level.stability_level_used,
+                    result: level.result,
+                    parameterization_time: level.parameterization_time,
+                    ltd_evaluation_time: level.ltd_evaluation_time,
+                    is_stable: level.is_stable,
+                    instability_reason: level.instability_reason,
+                    rotated_results: level.rotated_results.clone(),
+                }]
+            }
+        } else {
+            Vec::new()
+        };
+
         let meta_data = EvaluationMetaData {
             total_timing: start_eval.elapsed(),
             rep3d_evaluation_time: stability_level_result.ltd_evaluation_time,
@@ -1208,6 +1407,9 @@ fn evaluate_sample<I: GammaloopIntegrand>(
             parameterization_time: stability_level_result.parameterization_time,
             relative_instability_error: Complex::new_zero(),
             is_nan,
+            final_is_stable: stability_level_result.is_stable,
+            loop_momenta_escalation,
+            stability_evaluations,
         };
 
         let nanless_result = if re_is_nan && !im_is_nan {
@@ -1239,7 +1441,10 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 parameterization_time: Duration::ZERO,
                 relative_instability_error: Complex::new(F(0.0), F(0.0)),
                 is_nan: true,
+                final_is_stable: false,
+                loop_momenta_escalation: None,
                 highest_precision: Precision::Double,
+                stability_evaluations: Vec::new(),
             },
         }
     }

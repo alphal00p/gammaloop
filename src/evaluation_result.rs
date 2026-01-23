@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// The result of an evaluation of the integrand
-#[derive(Clone)]
+#[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResult {
     pub integrand_result: Complex<F<f64>>,
     pub integrator_weight: F<f64>,
@@ -34,8 +34,39 @@ impl EvaluationResult {
     }
 }
 
+/// Per-precision evaluation details produced during stability checks.
+#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+pub enum StabilityFailureReason {
+    ErrorThreshold,
+    ZeroError,
+    WeightThreshold,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct RotatedEvaluation {
+    pub rotation: String,
+    pub result: Complex<F<f64>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct StabilityEvaluation {
+    pub precision: Precision,
+    pub result: Complex<F<f64>>,
+    pub parameterization_time: Duration,
+    pub ltd_evaluation_time: Duration,
+    pub is_stable: bool,
+    pub instability_reason: Option<StabilityFailureReason>,
+    pub rotated_results: Vec<RotatedEvaluation>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct LoopMomentaEscalationMetrics {
+    pub sum_norm: f64,
+    pub threshold: f64,
+}
+
 /// Useful metadata generated during the evaluation, this may be expanded in the future to include more information
-#[derive(Copy, Clone)]
+#[derive(Clone, Serialize, Debug)]
 pub struct EvaluationMetaData {
     pub total_timing: Duration,
     pub rep3d_evaluation_time: Duration,
@@ -43,19 +74,44 @@ pub struct EvaluationMetaData {
     pub relative_instability_error: Complex<F<f64>>,
     pub highest_precision: Precision,
     pub is_nan: bool,
+    pub final_is_stable: bool,
+    pub loop_momenta_escalation: Option<LoopMomentaEscalationMetrics>,
+    pub stability_evaluations: Vec<StabilityEvaluation>,
 }
 
 impl Display for EvaluationMetaData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let stability_summary = if self.stability_evaluations.is_empty() {
+            "none".to_string()
+        } else {
+            self.stability_evaluations
+                .iter()
+                .map(|evaluation| {
+                    format!(
+                        "{}:{}",
+                        evaluation.precision,
+                        if evaluation.is_stable {
+                            "stable"
+                        } else {
+                            "unstable"
+                        }
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
         write!(
             f,
-            "EvaluationMetaData {{ total_timing: {:?},\t rep3d_evaluation_time: {:?},\t parameterization_time: {:?},\t relative_instability_error: {:?},\t highest_precision: {:?},\t is_nan: {} }}",
+            "EvaluationMetaData {{ total_timing: {:?},\t rep3d_evaluation_time: {:?},\t parameterization_time: {:?},\t relative_instability_error: {:?},\t highest_precision: {:?},\t is_nan: {},\t final_is_stable: {},\t loop_momenta_escalation: {:?},\t stability_evaluations: {} }}",
             self.total_timing,
             self.rep3d_evaluation_time,
             self.parameterization_time,
             self.relative_instability_error,
             self.highest_precision,
-            self.is_nan
+            self.is_nan,
+            self.final_is_stable,
+            self.loop_momenta_escalation,
+            stability_summary
         )
     }
 }
@@ -69,6 +125,9 @@ impl EvaluationMetaData {
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan: false,
+            final_is_stable: true,
+            loop_momenta_escalation: None,
+            stability_evaluations: Vec::new(),
         }
     }
 }
@@ -83,6 +142,7 @@ pub struct StatisticsCounter {
     sum_relative_instability_error: (F<f64>, F<f64>),
     num_double_precision_evals: usize,
     num_quadruple_precision_evals: usize,
+    num_arb_precision_evals: usize,
     num_nan_evals: usize,
 }
 
@@ -107,6 +167,7 @@ impl StatisticsCounter {
                 match data_entry.evaluation_metadata.highest_precision {
                     Precision::Double => accumulator.num_double_precision_evals += 1,
                     Precision::Quad => accumulator.num_quadruple_precision_evals += 1,
+                    Precision::Arb => accumulator.num_arb_precision_evals += 1,
                     _ => (),
                 }
 
@@ -135,6 +196,7 @@ impl StatisticsCounter {
                 + other.num_double_precision_evals),
             num_quadruple_precision_evals: (self.num_quadruple_precision_evals
                 + other.num_quadruple_precision_evals),
+            num_arb_precision_evals: self.num_arb_precision_evals + other.num_arb_precision_evals,
             sum_total_evaluation_time: self.sum_total_evaluation_time
                 + other.sum_total_evaluation_time,
             num_nan_evals: self.num_nan_evals + other.num_nan_evals,
@@ -150,6 +212,7 @@ impl StatisticsCounter {
             num_evals: 0,
             num_double_precision_evals: 0,
             num_quadruple_precision_evals: 0,
+            num_arb_precision_evals: 0,
             num_nan_evals: 0,
         }
     }
@@ -203,6 +266,10 @@ impl StatisticsCounter {
         self.num_quadruple_precision_evals as f64 / self.num_evals as f64 * 100.0
     }
 
+    pub(crate) fn get_percentage_arb(&self) -> f64 {
+        self.num_arb_precision_evals as f64 / self.num_evals as f64 * 100.0
+    }
+
     pub(crate) fn get_percentage_nan(&self) -> f64 {
         self.num_nan_evals as f64 / self.num_evals as f64 * 100.0
     }
@@ -225,12 +292,14 @@ impl StatisticsCounter {
         );
 
         info!(
-            "|  {}  | {} {} | {} {} | {} {}",
+            "|  {}  | {} {} | {} {} | {} {} | {} {}",
             format!("{:-7}", "evals").blue().bold(),
             format!("{:-7}", "f64:"),
             format!("{:-9}", format!("{:.2}%", self.get_percentage_f64())).green(),
             format!("{:-7}", "f128:"),
             format!("{:-9}", format!("{:.2}%", self.get_percentage_f128())).green(),
+            format!("{:-7}", "arb:"),
+            format!("{:-9}", format!("{:.2}%", self.get_percentage_arb())).green(),
             format!("{:-7}", "nan:"),
             format!("{:-9}", format!("{:.2}%", self.get_percentage_nan())).green(),
         );

@@ -1,0 +1,1 @@
+{"run_id":"1769501749-784978000","line":746,"new":{"module_name":"test_runs","snapshot_name":"scalar_sunrise","metadata":{"source":"tests/test_runs.rs","assertion_line":746,"expression":"format!(\"{integral_no_cache:.3}\")"},"snapshot":"-4.408e-3"},"old":{"module_name":"test_runs","metadata":{},"snapshot":"-4.359e-3"}}

@@ -327,6 +327,7 @@ pub fn _default_stability_levels() -> Vec<crate::settings::runtime::StabilityLev
     vec![
         crate::settings::runtime::StabilityLevelSetting::default_double(),
         crate::settings::runtime::StabilityLevelSetting::default_quad(),
+        crate::settings::runtime::StabilityLevelSetting::default_arb(),
     ]
 }
 

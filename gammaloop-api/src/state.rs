@@ -133,6 +133,14 @@ impl FromStr for ProcessRef {
     }
 }
 
+#[test]
+fn try_complicated() {
+    "GGHHH3loop_no_iterative_optimization_3L"
+        .parse::<ProcessRef>()
+        .unwrap();
+    // ProcessRef::
+}
+
 impl ProcessRef {
     pub fn resolve(&self, process_list: &ProcessList) -> Result<usize> {
         let process_count = process_list.processes.len();

@@ -378,6 +378,10 @@ pub struct StabilitySettings {
     pub levels: Vec<StabilityLevelSetting>,
     #[serde(skip_serializing_if = "is_false")]
     pub check_on_norm: bool,
+    #[serde(skip_serializing_if = "is_float::<10>")]
+    pub loop_momenta_norm_escalation_factor: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recording: Option<StabilityRecordingSettings>,
 }
 
 impl Default for StabilitySettings {
@@ -387,6 +391,30 @@ impl Default for StabilitySettings {
             levels: _default_stability_levels(),
             rotate_numerator: false,
             check_on_norm: false,
+            loop_momenta_norm_escalation_factor: 10.0,
+            recording: None,
+        }
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct StabilityRecordingSettings {
+    #[serde(skip_serializing_if = "is_false")]
+    pub record_rotated_results: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub record_all_stability_levels: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub record_loop_momenta_escalation: bool,
+}
+
+impl Default for StabilityRecordingSettings {
+    fn default() -> Self {
+        Self {
+            record_rotated_results: false,
+            record_all_stability_levels: false,
+            record_loop_momenta_escalation: false,
         }
     }
 }
@@ -414,6 +442,15 @@ impl StabilityLevelSetting {
     pub fn default_quad() -> Self {
         Self {
             precision: Precision::Quad,
+            required_precision_for_re: 1e-5,
+            required_precision_for_im: 1e-5,
+            escalate_for_large_weight_threshold: -1.0,
+        }
+    }
+
+    pub fn default_arb() -> Self {
+        Self {
+            precision: Precision::Arb,
             required_precision_for_re: 1e-5,
             required_precision_for_im: 1e-5,
             escalate_for_large_weight_threshold: -1.0,

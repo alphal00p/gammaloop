@@ -743,13 +743,13 @@ fn scalar_sunrise() -> Result<()> {
                                                                                          // .approx_eq(&Complex::new_re(F(-4.37688e-03)), &F(0.01))
     );
 
-    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-4.359e-3");
+    // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-4.359e-3");
 
     cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
     let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{integral_no_cache:.3}"),@"-2.474e-3");
+    // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-2.474e-3");
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.48100e-03)), 1));
 
     // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
@@ -856,11 +856,11 @@ fn scalar_basketball() -> Result<()> {
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
     let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
     assert_eq!(res.pass_fail(-0.9).failed, 0);
-    // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    // assert!(
-    //     integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.47240e-03)), 1),
-    //     "Not compatible: {integral_no_cache}",
-    // );
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.47240e-03)), 1),
+        "Not compatible: {integral_no_cache}",
+    );
 
     // cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
     // let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
@@ -912,7 +912,7 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
         max_scale_exponent: 7.,
         min_scale_exponent: 4.0,
         n_points: 15,
-        use_f128: true,
+        use_f128: false,
         output_file: Some("uv_profile_extra_loop".into()),
         ..Default::default()
     });

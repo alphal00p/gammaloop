@@ -31,9 +31,19 @@ momenta = [
 helicities = [1, 1]
 
 [default_runtime_settings.stability]
-# rotation_axis = []
+rotation_axis = [
+  { type = "x" },
+  { type = "euler_angles", alpha = 0.1, beta = 0.2, gamma = 0.3 },
+]
+# levels = [
+#   { precision = "Arb", required_precision_for_re = 1e-5, required_precision_for_im = 1e-5, escalate_for_large_weight_threshold = -1.0 },
+# ]
 check_on_norm = true
 
+[default_runtime_settings.stability.recording]
+record_all_stability_levels = true
+record_rotated_results = true
+record_loop_momenta_escalation = true
 
 [default_runtime_settings.general]
  m_uv = 1.0

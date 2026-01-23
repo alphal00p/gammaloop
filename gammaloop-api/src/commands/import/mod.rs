@@ -46,44 +46,29 @@ impl Import {
                 append,
             } => {
                 let default_process_name = path.file_stem().unwrap().to_string_lossy().into_owned();
-                let process_count = state.process_list.processes.len();
                 let (process_name, process_id) = match process {
-                    Some(process_ref) => match process_ref {
-                        ProcessRef::Id(id) => (None, Some(id)),
-                        ProcessRef::Name(name) => {
-                            let existing = state
-                                .process_list
-                                .processes
-                                .iter()
-                                .position(|p| p.definition.folder_name == name);
-                            match existing {
-                                Some(index) => (None, Some(index)),
-                                None => (Some(name), None),
+                    Some(ProcessRef::Id(id)) => (None, Some(id)),
+                    Some(ProcessRef::Name(name)) => (Some(name), None),
+                    Some(ProcessRef::Unqualified(value)) => {
+                        let name_match = state
+                            .process_list
+                            .processes
+                            .iter()
+                            .position(|p| p.definition.folder_name == value);
+                        if let Ok(id) = value.parse::<usize>() {
+                            if name_match.is_some() {
+                                return Err(eyre!(
+                                    "Ambiguous process reference '{}'. Use '#{}' or 'name:{}' to disambiguate.",
+                                    value,
+                                    id,
+                                    value
+                                ));
                             }
+                            (None, Some(id))
+                        } else {
+                            (Some(value), None)
                         }
-                        ProcessRef::Unqualified(value) => {
-                            if let Ok(id) = value.parse::<usize>() {
-                                if id >= process_count {
-                                    return Err(eyre!(
-                                        "Process ID {} invalid, only {} processes available",
-                                        id,
-                                        process_count
-                                    ));
-                                }
-                                (None, Some(id))
-                            } else {
-                                let existing = state
-                                    .process_list
-                                    .processes
-                                    .iter()
-                                    .position(|p| p.definition.folder_name == value);
-                                match existing {
-                                    Some(index) => (None, Some(index)),
-                                    None => (Some(value), None),
-                                }
-                            }
-                        }
-                    },
+                    }
                     None => (Some(default_process_name), None),
                 };
 

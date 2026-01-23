@@ -383,6 +383,7 @@ struct UVProfileSubsetRow {
 struct FitResult {
     slope: f64,
     points: Vec<f64>,
+    points_detail: Vec<EvaluationResult>,
     intercept: f64,
     r_squared: f64,
 }
@@ -918,11 +919,14 @@ impl SubSetResult {
         let mut sum_xy = 0.0;
         let mut sum_x2 = 0.0;
         let mut points = vec![];
+        let mut points_detail = vec![];
+
         for (x, s) in self.inspect.iter().zip(scales) {
             let norm = x.magnitude();
             if norm <= 0.0 {
                 println!("{s}:\t{}", x.result.evaluation_metadata)
             }
+            points_detail.push(x.result.clone());
             points.push(norm);
             let y = (norm).log10();
             let x = s.log10();
@@ -960,6 +964,7 @@ impl SubSetResult {
 
         Some(FitResult {
             points,
+            points_detail,
             slope,
             intercept,
             r_squared,
