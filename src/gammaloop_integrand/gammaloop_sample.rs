@@ -134,7 +134,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
     #[allow(unused)]
     fn higher_precision(&self) -> GammaLoopSample<T::Higher>
     where
-        T::Higher: FloatLike,
+        T::Lower: FloatLike + Default,
+        T::Higher: FloatLike + Default,
     {
         match self {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.higher_precision()),
@@ -154,7 +155,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
     #[allow(dead_code)]
     fn lower_precision(&self) -> GammaLoopSample<T::Lower>
     where
-        T::Lower: FloatLike,
+        T::Lower: FloatLike + Default,
+        T::Higher: FloatLike + Default,
     {
         match self {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.lower_precision()),
@@ -289,7 +291,8 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 
     fn higher_precision(&self) -> DiscreteGraphSample<T::Higher>
     where
-        T::Higher: FloatLike,
+        T::Higher: FloatLike + Default,
+        T::Lower: FloatLike + Default,
     {
         match self {
             DiscreteGraphSample::Default(sample) => {
@@ -318,7 +321,8 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 
     fn lower_precision(&self) -> DiscreteGraphSample<T::Lower>
     where
-        T::Lower: FloatLike,
+        T::Higher: FloatLike + Default,
+        T::Lower: FloatLike + Default,
     {
         match self {
             DiscreteGraphSample::Default(sample) => {

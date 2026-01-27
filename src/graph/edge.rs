@@ -244,7 +244,7 @@ impl EdgeMass {
             EdgeMass::Zero => None,
             EdgeMass::Value(v) => Some(*v),
             EdgeMass::ModelVar(s) => model.get_symbol_value(UFOSymbol(*s)),
-            EdgeMass::Evaluator(a) => Some(a.borrow_mut().evaluate_single(&paramb.values)),
+            EdgeMass::Evaluator(a) => Some(a.borrow_mut().evaluate_single(&paramb.values[0])),
         }
         .map(|a| a.map_ref(|a| F::from_ff64(*a)))
     }

@@ -629,7 +629,10 @@ impl AmplitudeGraph {
                         .iter()
                         .zip(ps.value_range)
                         .map(|(a, value_index)| {
-                            (a.to_canonical_string(), param_builder.values[value_index])
+                            (
+                                a.to_canonical_string(),
+                                param_builder.values[0][value_index],
+                            )
                         })
                 {
                     complex_params.insert(

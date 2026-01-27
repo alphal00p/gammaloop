@@ -40,6 +40,7 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     coefficient::Coefficient,
     domains::{
+        dual::HyperDual,
         float::{Complex as SymComplex, FloatLike as SymFloatLike, Real, RealLike, SingleFloat},
         integer::IntegerRing,
         rational::{Rational, RationalField},
@@ -54,7 +55,7 @@ use symbolica::{parse, symbol};
 use crate::{
     GammaLoopContext,
     settings::runtime::RotationSetting,
-    utils::{ApproxEq, F, FloatLike, RefDefault},
+    utils::{ApproxEq, F, FloatLike, RefDefault, hyperdual_utils::new_constant},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
@@ -3196,6 +3197,58 @@ impl<T: FloatLike> Rotatable for ThreeMomentum<F<T>> {
                 result
             }
         }
+    }
+}
+
+impl<T: FloatLike> Rotatable for ThreeMomentum<HyperDual<F<T>>> {
+    fn rotate(&self, rotation: &Rotation) -> Self {
+        match rotation.method {
+            RotationMethod::Identity => self.clone(),
+            RotationMethod::Pi2X => ThreeMomentum::perform_pi2_rotation_x(self),
+            RotationMethod::Pi2Y => ThreeMomentum::perform_pi2_rotation_y(self),
+            RotationMethod::Pi2Z => ThreeMomentum::perform_pi2_rotation_z(self),
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                let mut result = self.clone();
+                result.rotate_mut(
+                    &new_constant(&self.px, &F::from_f64(alpha)),
+                    &new_constant(&self.py, &F::from_f64(beta)),
+                    &new_constant(&self.pz, &F::from_f64(gamma)),
+                );
+                result
+            }
+        }
+    }
+}
+
+impl<T: FloatLike> ThreeMomentum<HyperDual<F<T>>> {
+    fn rotate_mut(
+        &mut self,
+        alpha: &HyperDual<F<T>>,
+        beta: &HyperDual<F<T>>,
+        gamma: &HyperDual<F<T>>,
+    ) {
+        let sin_alpha = alpha.sin();
+        let cos_alpha = alpha.cos();
+        let sin_beta = beta.sin();
+        let cos_beta = beta.cos();
+        let sin_gamma = gamma.sin();
+        let cos_gamma = gamma.cos();
+
+        let px = self.px.clone();
+        let py = self.py.clone();
+        let pz = self.pz.clone();
+
+        self.px = cos_gamma.clone() * &cos_beta * &px
+            + (-(cos_alpha.clone()) * &sin_gamma + sin_alpha.clone() * &sin_beta * &cos_gamma)
+                * &py
+            + (sin_alpha.clone() * &sin_gamma + cos_alpha.clone() * &sin_beta * &cos_gamma) * &pz;
+
+        self.py = sin_gamma.clone() * &cos_beta * &px
+            + (cos_alpha.clone() * &cos_gamma + sin_alpha.clone() * &sin_beta * &sin_gamma) * &py
+            + (-sin_alpha.clone() * &cos_gamma + cos_alpha.clone() * &sin_beta * &sin_gamma) * &pz;
+
+        self.pz =
+            -sin_beta * &px + cos_beta.clone() * &sin_alpha * &py + cos_alpha * &cos_beta * &pz;
     }
 }
 

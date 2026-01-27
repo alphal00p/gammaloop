@@ -43,7 +43,7 @@ use crate::{
     numerator::{self, symbolica_ext::AtomCoreExt},
     processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{F, FUN_LIB, GS, TENSORLIB, W_},
+    utils::{F, FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use eyre::{Context, eyre};
@@ -825,7 +825,7 @@ impl CrossSectionGraph {
                     .iter()
                     .map(|subset| {
                         if subset.len() > 1 {
-                            Some(vec![vec![subset.len()]])
+                            Some(shape_for_t_derivatives(subset.len() - 1))
                         } else {
                             None
                         }
@@ -1073,6 +1073,8 @@ impl CrossSectionGraph {
             .max()
             .unwrap();
 
+        self.graph.param_builder.initialize_t_derivatives(max_order);
+
         let derivative_structure_cache = (1..=max_order)
             .map(|order| build_derivative_structure(order as u8))
             .collect_vec();
@@ -1089,11 +1091,6 @@ impl CrossSectionGraph {
                 self.derived_data.raised_data.cross_free_powersets[raised_cut_id].iter()
             {
                 let num_derivatives = cross_free_subset.len() - 1;
-                let dual_shape = if num_derivatives > 0 {
-                    Some(HyperDual::<F<f64>>::new(vec![vec![num_derivatives]]))
-                } else {
-                    None
-                };
 
                 let complement = cuts_in_group
                     .iter()

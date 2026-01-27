@@ -458,7 +458,7 @@ impl LUCounterTerm {
                         .parametric_left_thresholds_evaluator[left_threshold_id];
 
                     for (_i, orientation) in orientations.iter() {
-                        param_builder.orientation_value(orientation);
+                        param_builder.orientation_value(orientation, 1);
 
                         let params = T::get_parameters(
                             param_builder,
@@ -534,7 +534,7 @@ impl LUCounterTerm {
                         .parametric_right_threshold_evaluator[right_threshold_id];
 
                     for (_i, orientation) in orientations.iter() {
-                        param_builder.orientation_value(orientation);
+                        param_builder.orientation_value(orientation, 1);
 
                         let params = T::get_parameters(
                             param_builder,
@@ -628,7 +628,7 @@ impl LUCounterTerm {
                     &mut self.evaluators[cut_id].parametric_iterated_evaluator[iterated_index];
 
                 for (_i, orientation) in orientations.iter() {
-                    param_builder.orientation_value(orientation);
+                    param_builder.orientation_value(orientation, 1);
 
                     let params = T::get_parameters(
                         param_builder,

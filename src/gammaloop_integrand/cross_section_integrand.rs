@@ -15,13 +15,15 @@ use crate::{
     },
     integrands::HasIntegrand,
     model::Model,
-    momentum::{Rotation, RotationMethod, ThreeMomentum},
+    momentum::{Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample},
     processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
-        F, FloatLike, Length, h, newton_solver::newton_iteration_and_derivative,
+        F, FloatLike, Length, h, h_dual,
+        hyperdual_utils::{DualOrNot, new_constant},
+        newton_solver::newton_iteration_and_derivative,
         serde_utils::SmartSerde,
     },
 };
@@ -43,9 +45,10 @@ use spenso::algebra::complex::Complex;
 use std::{
     fs::{self},
     path::Path,
+    vec,
 };
 use symbolica::{
-    domains::float::Real,
+    domains::{dual::HyperDual, float::Real},
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -496,23 +499,32 @@ impl GraphTerm for CrossSectionGraphTerm {
                     self.graph.name
                 )
             })?;
-        self.graph.param_builder.add_external_four_mom(&externals);
+        self.graph
+            .param_builder
+            .add_external_four_mom_all_derivatives(&externals);
 
-        self.graph.param_builder.add_external_four_mom(&externals);
         let pols = self.graph.param_builder.pairs.polarizations_values(
             &self.graph,
             &externals,
             settings.kinematics.externals.get_helicities(),
         );
 
-        self.graph.param_builder.values[self
-            .graph
-            .param_builder
-            .pairs
-            .polarizations
-            .value_range
-            .clone()]
-        .clone_from_slice(&pols);
+        for (value_index, values) in self.graph.param_builder.values.iter_mut().enumerate() {
+            let multiplicative_offset = value_index + 1;
+            let mut pol_start = self
+                .graph
+                .param_builder
+                .pairs
+                .polarizations
+                .value_range
+                .start
+                * multiplicative_offset;
+
+            for pol in &pols {
+                values[pol_start] = pol.clone();
+                pol_start += multiplicative_offset;
+            }
+        }
 
         self.graph
             .param_builder
@@ -526,6 +538,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         Ok(())
     }
+
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -598,14 +611,47 @@ impl GraphTerm for CrossSectionGraphTerm {
             );
 
             if self.raised_data.raised_cut_groups[raised_cut].len() > 1 {
-                todo!();
+                for (subset_id, subset) in cross_free_subsets.iter().enumerate() {
+                    let dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
+                        .clone()
+                        .map(HyperDual::<F<T>>::new);
+
+                    if let Some(dual_shape) = &dual_shape {
+                        let dual_t = dual_shape.variable(0, solution.solution.clone());
+                        let dual_h_function = h_dual(&dual_t, None, None, &settings.lu_h_function);
+                        let dual_momenta = momentum_sample
+                            .loop_moms()
+                            .rescale_with_hyper_dual(&dual_t, None);
+
+                        let dual_externals = momentum_sample
+                            .external_moms()
+                            .iter()
+                            .map(|mom| FourMomentum {
+                                temporal: Energy {
+                                    value: new_constant(&dual_t, &mom.temporal.value),
+                                },
+                                spatial: ThreeMomentum {
+                                    px: new_constant(&dual_t, &mom.spatial.px),
+                                    py: new_constant(&dual_t, &mom.spatial.py),
+                                    pz: new_constant(&dual_t, &mom.spatial.pz),
+                                },
+                            })
+                            .collect();
+
+                        let dual_e_surface = representative_esurface.compute_from_dual_momenta(
+                            &self.graph.loop_momentum_basis,
+                            &masses,
+                            &dual_momenta,
+                            &dual_externals,
+                        );
+                    }
+                }
             } else {
                 let h_function = h(&solution.solution, None, None, &settings.lu_h_function);
 
                 let lu_params = LUParams {
-                    h_function,
-                    tstar: solution.solution.clone(),
-                    esurface_derivative: solution.derivative_at_solution.clone(),
+                    h_function: DualOrNot::NonDual(h_function),
+                    tstar: DualOrNot::NonDual(solution.solution.clone()),
                 };
 
                 let rescaled_momenta = MomentumSample {
@@ -661,7 +707,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     if let Some(iterative) = &iterative {
                         result += &iterative[i.0]
                     } else {
-                        self.param_builder.orientation_value(e);
+                        self.param_builder.orientation_value(e, 1);
                         let a = T::get_parameters(
                             &mut self.param_builder,
                             (settings.general.enable_cache, settings.general.debug_cache),
@@ -811,3 +857,65 @@ impl HasIntegrand for CrossSectionIntegrand {
         self.data.graph_terms[0].graph.get_loop_number() * 3
     }
 }
+
+//#[test]
+//fn dual_screwaround() {
+//    let x = parse!("x");
+//    let y = parse!("y");
+//    let z = parse!("z");
+//    let expr = &x * &y + &x * &z + &y * &z * &z + &z * &z * &z;
+//
+//    let shape = vec![vec![0], vec![1], vec![2], vec![3]];
+//
+//    let hyperdual_vectorizer =
+//        HyperDual::<symbolica::domains::float::Complex<Rational>>::new(shape.clone());
+//
+//    let params = vec![x, y, z];
+//    let evaluator = expr
+//        .evaluator(
+//            &FunctionMap::default(),
+//            &params,
+//            OptimizationSettings::default(),
+//        )
+//        .unwrap();
+//
+//    let dual_evaluator = evaluator.clone().vectorize(&hyperdual_vectorizer);
+//    let mut real_dual_evaluator = dual_evaluator
+//        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
+//
+//    let mut real_evaluator = evaluator
+//        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
+//
+//    let param_values = vec![
+//        Complex::new_re(F(1.0)),
+//        Complex::new_re(F(2.0)),
+//        Complex::new_re(F(3.0)),
+//    ];
+//
+//    let hyperdual_builder = HyperDual::<Complex<F<f64>>>::new(shape.clone());
+//
+//    let mut out = [Complex::new_re(F(0.0))];
+//    real_evaluator.evaluate(&param_values, &mut out);
+//    println!("result: {}", out[0]);
+//
+//    let dual_z = hyperdual_builder.variable(0, Complex::new_re(F(3.0)));
+//
+//    let dual_param_values = vec![
+//        Complex::new_re(F(1.0)),
+//        Complex::new_zero(),
+//        Complex::new_zero(),
+//        Complex::new_zero(),
+//        Complex::new_re(F(2.0)),
+//        Complex::new_zero(),
+//        Complex::new_zero(),
+//        Complex::new_zero(),
+//        dual_z.values[0],
+//        dual_z.values[1],
+//        dual_z.values[2],
+//        dual_z.values[3],
+//    ];
+//
+//    let mut dual_out = [Complex::new_re(F(0.0)); 4];
+//    real_dual_evaluator.evaluate(&dual_param_values, &mut dual_out);
+//    println!("dual result: {:?}", dual_out);
+//}

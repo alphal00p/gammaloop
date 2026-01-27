@@ -769,6 +769,7 @@ pub trait PrecisionUpgradable {
 pub trait FloatLike:
     Real
     +R
+    +Default
     + Clone
     + PartialOrd
     + RealLike
