@@ -1909,6 +1909,7 @@ dependencies = [
 [[package]]
 name = "linnet"
 version = "0.16.1"
+source = "git+https://github.com/alphal00p/linnet?rev=36682766415e211829a02e62260b947987d28e0e#36682766415e211829a02e62260b947987d28e0e"
 dependencies = [
  "ahash",
  "bincode",

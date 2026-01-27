@@ -209,8 +209,8 @@ higher_loops = []
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
-linnet = { path = "../../linnet" }
-# linnet = { git = "https://github.com/alphal00p/linnet", rev = "c2ce79b7ddb6ce923a0024aec7142931185c8610" }
+# linnet = { path = "../../linnet" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "36682766415e211829a02e62260b947987d28e0e" }
 # spenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
 # spenso={path="../../spenso/spenso"}
 # idenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
