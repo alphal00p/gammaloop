@@ -35,7 +35,7 @@ pub static COMPLEXRATPOLYFIELD: LazyLock<
 > = LazyLock::new(|| FractionField::new(PolynomialRing::<_, u16>::new(Q_I.clone())));
 
 pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
-    hide_all_namespaces: false,
+    hide_all_namespaces: true,
     color_namespace: false,
     color_builtin_symbols: false,
     color_top_level_sum: false,

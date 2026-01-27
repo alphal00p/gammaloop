@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 use crate::DependentMomentaConstructor;
 use crate::cff::expression::{GraphOrientation, OrientationData};
 use crate::evaluation_result::EvaluationResult;
-use crate::graph::Edge;
+use crate::graph::Graph;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::model::Model;
 use crate::momentum::ThreeMomentum;
@@ -27,12 +27,11 @@ use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::{EdgeIndex, SignOrZero};
 use linnet::half_edge::subgraph::subset::SubSet;
-use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
+use linnet::half_edge::subgraph::{Cycle, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::tree::SimpleTraversalTree;
 use rand::Rng;
 use rayon::prelude::*;
 use serde::Serialize;
-use spenso::algebra::complex::Complex;
-use symbolica::atom::Atom;
 use symbolica::domains::atom::AtomField;
 use symbolica::domains::float::Real;
 use symbolica::numerical_integration::MonteCarloRng;
@@ -245,6 +244,7 @@ impl UVProfile {
                                     subset_index,
                                     fixed,
                                     free,
+                                    initial_dod: subset_result.initial_dod,
                                     analysis,
                                     analytic_entries,
                                 }
@@ -271,7 +271,7 @@ impl UVProfile {
 
     pub fn write_profile_data<P: AsRef<Path>>(
         &self,
-        settings: &ProfileSettings,
+        _settings: &ProfileSettings,
         out_dir: P,
     ) -> Result<()> {
         self.analyse().write_profile_data(out_dir)
@@ -285,7 +285,7 @@ impl UVProfile {
         self.write_profile_data(settings, out_dir)
     }
 
-    pub fn pass_fail(&self, max_dod: f64, settings: &ProfileSettings) -> UVProfilePassFail {
+    pub fn pass_fail(&self, max_dod: f64, _settings: &ProfileSettings) -> UVProfilePassFail {
         self.analyse().pass_fail(max_dod)
     }
 }
@@ -314,6 +314,7 @@ pub struct UVProfileSubsetAnalysis {
     pub subset_index: usize,
     pub fixed: Vec<EdgeIndex>,
     pub free: Vec<EdgeIndex>,
+    pub initial_dod: i32,
     // pub subset_label: String,
     pub analysis: Analysis,
     pub analytic_entries: Option<Vec<UVProfileAnalyticEntry>>,
@@ -375,8 +376,10 @@ struct UVProfileSubsetRow {
     slope: String,
     #[tabled(rename = "r2")]
     r_squared: String,
-    #[tabled(rename = "dod")]
+    #[tabled(rename = "DOD")]
     estimated_dod: String,
+    #[tabled(rename = "bare DOD")]
+    initial_dod: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -435,6 +438,11 @@ impl UVProfileAnalysis {
                                 slope,
                                 r_squared,
                                 estimated_dod,
+                                initial_dod: if subset.initial_dod >= 0 {
+                                    subset.initial_dod.to_string().red().to_string()
+                                } else {
+                                    subset.initial_dod.to_string().green().to_string()
+                                },
                             }
                         })
                     })
@@ -643,10 +651,12 @@ impl UVSamplingResult {
         let per_lmb = lmb_refs
             .par_iter()
             .map(|(lmb_index, lmb)| {
+                // let tree = lmb.tree;
                 let mut res = LMBResult::from_lmb(
                     (*lmb).clone(),
                     integrand,
                     graph_id,
+                    &g.graph,
                     *lmb_index,
                     scales,
                     externals,
@@ -709,6 +719,7 @@ impl LMBResult {
         lmb: LoopMomentumBasis,
         integrand: &Arc<Mutex<I>>,
         graph_id: usize,
+        graph: &Graph,
         lmb_index: usize,
         scales: &[f64],
         externals: &TiVec<ExternalIndex, ThreeMomentum<F<f64>>>,
@@ -757,6 +768,7 @@ impl LMBResult {
                     let res = SubSetResult::from_subset(
                         integrand,
                         graph_id,
+                        graph,
                         &ls,
                         &lmb,
                         scales,
@@ -781,6 +793,7 @@ impl LMBResult {
 }
 
 pub struct SubSetResult {
+    pub(crate) initial_dod: i32,
     pub(crate) inspect: Vec<InspectResult>,
     pub(crate) analytic: Option<AnalyticResult>,
 }
@@ -789,6 +802,7 @@ impl SubSetResult {
     pub fn from_subset<I>(
         integrand: &mut I,
         graph_id: usize,
+        graph: &Graph,
         subset: &SubSet<LoopIndex>,
         lmb: &LoopMomentumBasis,
         scales: &[f64],
@@ -801,6 +815,25 @@ impl SubSetResult {
     where
         I: HasIntegrand + Clone + Send,
     {
+        let mut subgraph: SuBitGraph = graph.empty_subgraph();
+        for l in subset.included_iter() {
+            let eid = lmb.loop_edges[l];
+            let cut = graph[&eid].1.any_hedge();
+            let root_node = graph.node_id(cut);
+
+            let tree =
+                SimpleTraversalTree::depth_first_traverse(&graph, &lmb.tree, &root_node, None)
+                    .unwrap();
+            subgraph.union_with(
+                &tree
+                    .get_cycle(cut, graph.underlying.as_ref())
+                    .unwrap()
+                    .filter,
+            );
+        }
+
+        let initial_dod = graph.dod(&subgraph);
+
         let n_included = subset.n_included() as i32;
         let inspect_results: Vec<InspectResult> = scales
             .iter()
@@ -841,6 +874,7 @@ impl SubSetResult {
 
         SubSetResult {
             inspect: inspect_results,
+            initial_dod,
             analytic,
         }
     }

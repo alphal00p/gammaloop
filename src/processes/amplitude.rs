@@ -49,7 +49,7 @@ use crate::{
     signature::SignatureLike,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, FUN_LIB, GS, Length, TENSORLIB, VAKINT, W_, symbolica_ext::LOGPRINTOPTS},
-    uv::{UltravioletGraph, approx::to_vakint_integrand},
+    uv::{UVgenerationSettings, UltravioletGraph, approx::to_vakint_integrand},
 };
 use eyre::{Context, eyre};
 use itertools::Itertools;
@@ -419,6 +419,46 @@ impl AmplitudeGraph {
 }
 
 impl AmplitudeGraph {
+    pub fn renormalization_part(&mut self, settings: &UVgenerationSettings) -> Result<Atom> {
+        let wood = self.graph.wood(&self.graph.no_dummy());
+        let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+        if self.derived_data.cff_expression.is_none() {
+            debug!("Generating Cff");
+            self.generate_cff()?;
+        }
+
+        let canonize_esurface = self
+            .graph
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        let orientations: TiVec<AmplitudeOrientationID, OrientationData> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .iter()
+            .map(|a| a.data.clone())
+            .collect();
+
+        let vakint = self.new_vakint();
+
+        forest.compute(
+            &self.graph,
+            &self.graph.no_dummy(),
+            &vakint,
+            &orientations,
+            &canonize_esurface,
+            &[],
+            None,
+            &settings,
+            false,
+        );
+
+        forest.pole_part_of_ends(&self.graph)
+    }
+
     #[allow(dead_code)]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,

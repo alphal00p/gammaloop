@@ -9,6 +9,8 @@ use crate::{
     utils::{GS, ose_atom_from_index, symbolica_ext::CallSymbol},
     uv::approx::CFFapprox,
 };
+use color_eyre::Result;
+use eyre::eyre;
 use spenso::{
     network::{Network, store::TensorScalarStoreMapping},
     structure::abstract_index::AIND_SYMBOLS,
@@ -29,7 +31,7 @@ use std::fmt::Write;
 use tracing::{debug, instrument};
 
 use typed_index_collections::TiVec;
-use vakint::Vakint;
+use vakint::{Vakint, vakint_symbol};
 
 use super::{
     UVgenerationSettings, UltravioletGraph,
@@ -80,13 +82,18 @@ impl Forest {
                     );
                 }
                 1 => {
+                    // debug!("")
                     let [current, parent] = &mut self
                         .dag
                         .nodes
                         .get_disjoint_mut([n, self.dag.nodes[n].parents[0]])
                         .unwrap();
 
-                    assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
+                    let Some(a) = &parent.data.simple_approx else {
+                        panic!("Should have computed the simple approx");
+                    };
+                    current.data.simple_approx = Some(a.dependent(current.data.subgraph.clone()));
+
                     if settings.generate_integrated {
                         current.data.compute_integrated(
                             graph,
@@ -96,6 +103,10 @@ impl Forest {
                             settings,
                         );
                     }
+                    if settings.only_integrated {
+                        continue;
+                    }
+                    assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
                     current.data.compute(
                         graph,
                         amplitude_subgraph,
@@ -148,6 +159,41 @@ impl Forest {
         }
     }
 
+    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<Atom> {
+        let mut sum = Atom::Zero;
+        for (_, n) in &self.dag.nodes {
+            if !n.children.is_empty() {
+                continue;
+            }
+
+            let (atom, sign) = n.data.integrated_pole_part.expr().ok_or(eyre!(
+                "Integrated pole part not computed for {} of graph {}",
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+                graph.name
+            ))?;
+            sum += sign * atom;
+        }
+
+        let ep = vakint_symbol!("ε");
+        let n_loops = graph.n_loops(&graph.full_filter());
+        let pole_stripped = sum
+            .series(ep, Atom::Zero, (n_loops as i64 + 1).into(), true)
+            .unwrap();
+
+        let mut sum = Atom::Zero;
+
+        for (power, p) in pole_stripped.terms() {
+            if power < 0 {
+                sum += p * Atom::var(ep).npow(power);
+            }
+        }
+        Ok(sum)
+    }
+
     #[instrument(skip_all)]
     pub(crate) fn orientation_parametric_expr(
         &self,
@@ -198,9 +244,10 @@ impl Forest {
                     .wrap_color(GS.color_wrap)
                     .parse_into_net()
                     .unwrap();
-
-                s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
+        }
+        for (_, edge_index, _) in graph.iter_edges() {
+            s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
         }
         s
     }

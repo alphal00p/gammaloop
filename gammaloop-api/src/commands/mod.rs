@@ -33,6 +33,8 @@ pub mod run;
 pub use run::Run;
 pub mod evaluate;
 pub use evaluate::Evaluate;
+pub mod renormalize;
+pub use renormalize::Renormalize;
 pub mod profile;
 pub use profile::Profile;
 
@@ -63,6 +65,8 @@ pub enum Commands {
     Inspect(Inspect),
 
     Evaluate(Evaluate),
+
+    Renormalize(Renormalize),
 
     /// Benchmark raw integrand evaluation speed
     Bench {
@@ -161,6 +165,10 @@ impl Commands {
 
                 Commands::Evaluate(g) => {
                     _ = g.run(state, global_cli_settings, default_runtime_settings)?;
+                }
+
+                Commands::Renormalize(r) => {
+                    _ = r.run(state)?;
                 }
 
                 Commands::Display(l) => l.run(state)?,

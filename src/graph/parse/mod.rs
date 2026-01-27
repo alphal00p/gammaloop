@@ -48,8 +48,8 @@ use symbolica::{
     atom::{Atom, AtomOrView},
     graph::Graph as SymbolicaGraph,
 };
-use tracing::debug;
 use tracing::instrument;
+use tracing::{debug, info};
 use typed_index_collections::TiVec;
 
 use super::{
@@ -774,6 +774,12 @@ impl Graph {
             model,
             &g.loop_momentum_basis,
             initial_data.additional_params,
+        );
+
+        debug!(
+            "Updated param builder with LMB: {}\n{}",
+            g.loop_momentum_basis,
+            updated_param_builder_with_lmb.table(),
         );
 
         g.param_builder = updated_param_builder_with_lmb;

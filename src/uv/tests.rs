@@ -14,26 +14,21 @@ use crate::inspect::inspect;
 use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::{ExternalIndex, LoopIndex};
 use crate::processes::{Amplitude, AmplitudeGraph};
+use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
 use crate::settings::runtime::DiscreteGraphSamplingSettings;
-use crate::settings::{GlobalSettings, SamplingSettings};
+use crate::utils::W_;
 use crate::utils::symbolica_ext::TypstFormat;
-use crate::utils::{F, W_};
 use crate::uv::profile::{ProfileSettings, UVProfileable};
-use linnet::half_edge::PowersetIterator;
+use idenso::color::ColorSimplifier;
 use linnet::half_edge::involution::EdgeIndex;
 
-use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
-use rand::Rng;
 
-use spenso::algebra::complex::Complex;
 use symbolica::atom::Symbol;
-use symbolica::domains::float::Real;
-use symbolica::numerical_integration::MonteCarloRng;
 use symbolica::symbol;
-use typed_index_collections::TiVec;
+use tabled::settings::Settings;
 
 use crate::{
     dot,
@@ -98,6 +93,85 @@ fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
         })
         .collect()
 }
+
+#[test]
+fn finit_part_ghostnnlo() {
+    test_initialise().unwrap();
+
+    let g: Vec<Graph> = dot!(digraph d1 {
+
+      in1 [style=invis];
+      in1 -> v1:1
+      [particle="ghG" pin="x:@-left"];
+
+      out1 [style=invis];
+      v2:2 -> out1
+      [particle="ghG" pin="x:@+right"];
+
+      v2 -> v1 [particle= "ghG~"];
+      v1 -> v3 [particle= "g"];
+      v2 -> v4 [particle= "g"];
+      v3 -> v4 [particle= "g"];
+      v3 -> v4 [particle= "g"];
+      v3 -> v4 [particle= "g"];
+    })
+    .unwrap();
+
+    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+
+    let model = load_generic_model("sm");
+
+    let a = amp.graphs[0]
+        .renormalization_part(&UVgenerationSettings {
+            softct: false,
+            only_integrated: true,
+            ..Default::default()
+        })
+        .unwrap();
+
+    println!("ren part: {}", a);
+}
+#[test]
+fn finit_part_ghostlo() {
+    test_initialise().unwrap();
+
+    let g: Vec<Graph> = dot!(digraph d1 {
+
+          in1 [style=invis];
+          in1 -> v1:0
+          [particle="ghG" pin="x:@-left"];
+
+          out1 [style=invis];
+          v2:1 -> out1
+          [particle="ghG" pin="x:@+right"];
+
+          v1:2 -> v2:3 [particle= "g"];
+          v2:4 -> v1:5 [particle= "ghG~"];
+        }
+    )
+    .unwrap();
+
+    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+
+    let model = load_generic_model("sm");
+
+    let a = amp.graphs[0]
+        .renormalization_part(&UVgenerationSettings {
+            softct: false,
+            only_integrated: true,
+            ..Default::default()
+        })
+        .unwrap();
+
+    println!("ren part: {:>}", a);
+    println!(
+        "ren part: {:>}",
+        model.apply_parameter_replacement_rules(
+            &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
+        )
+    );
+}
+
 #[test]
 fn scalar_bubble() {
     test_initialise().unwrap();

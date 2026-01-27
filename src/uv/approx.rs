@@ -29,7 +29,9 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    function, parse, parse_lit, symbol,
+    function, parse, parse_lit,
+    printer::PrintOptions,
+    symbol,
 };
 
 use linnet::half_edge::{
@@ -144,6 +146,10 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
 ) -> Atom {
     let mut integrand_vakint = integrand.clone();
 
+    debug!(
+        "Integrand vakint init: {:}",
+        integrand_vakint.printer(LOGPRINTOPTS)
+    );
     //Atom::Zero
 
     // strip the momentum wrapper from the denominator
@@ -275,7 +281,10 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
             W_.e_ + W_.f_
         ));
 
-    debug!("Integrand pre dot vakint: {:}", integrand_vakint);
+    debug!(
+        "Integrand pre dot vakint: {:}",
+        integrand_vakint.printer(LOGPRINTOPTS)
+    );
     // rewrite numerator
     // linearize the numerator first
     integrand_vakint = integrand_vakint
@@ -290,7 +299,10 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
     //     .replace(function!(SPENSO_TAG.dot, W_.mom_, W_.x_))
     //     .with(function!(GS.emr_mom, W_.mom_, W_.x_));
 
-    debug!("Integrand pre vakint: {:}", integrand_vakint);
+    debug!(
+        "Integrand pre vakint: {:}",
+        integrand_vakint.printer(LOGPRINTOPTS)
+    );
     // panic!("FUFU");
     for (i, l) in lmb.loop_edges.iter().enumerate() {
         integrand_vakint = integrand_vakint
@@ -312,7 +324,16 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
         .repeat()
         .with(function!(vk_topo, W_.x_ * W_.y_));
 
-    debug!("Integrand vakint: {:#}", integrand_vakint);
+    debug!(
+        "Integrand vakint: {:>}",
+        integrand_vakint.printer(PrintOptions {
+            terms_on_new_line: true,
+            color_builtin_symbols: false,
+            color_namespace: false,
+            color_top_level_sum: false,
+            ..Default::default()
+        })
+    );
 
     integrand_vakint
 }
@@ -438,6 +459,7 @@ impl Approximation {
             constraint_data,
         );
         self.integrated_4d = ApproxOp::Root;
+        self.integrated_pole_part = ApproxOp::Root;
         self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
         self.final_integrand = self.final_integrand(
             graph,
@@ -490,8 +512,22 @@ impl Approximation {
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
         let dep = if pole_part {
+            debug!(
+                "Computing Integrated pole part of {}",
+                self.simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter())
+            );
             dependent.integrated_pole_part.expr()
         } else {
+            debug!(
+                "Computing Integrated part of {}",
+                self.simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter())
+            );
             dependent.integrated_4d.expr()
         };
         let Some((inner_t, sign)) = dep else {
@@ -512,8 +548,17 @@ impl Approximation {
             .get_single_atom()
             .unwrap();
 
-        info!(t_arg = %t_arg,"T arg for integrated 4d CT");
+        if pole_part {
+            debug!(t_arg = %t_arg,"T arg for pole part 4d CT");
+        } else {
+            debug!(t_arg = %t_arg,"T arg for integrated 4d CT");
+        }
         t_arg = t_arg.simplify_gamma() / uv_graph.denominator(&reduced, |_| 1);
+        if pole_part {
+            debug!(t_arg = %t_arg,"T arg for pole part 4d CT");
+        } else {
+            debug!(t_arg = %t_arg,"T arg for integrated 4d CT");
+        }
 
         let ep = vakint_symbol!("ε");
         let n_loops = uv_graph.n_loops(amplitude_subgraph);
@@ -524,8 +569,10 @@ impl Approximation {
             .unwrap()
             .to_atom();
 
+        debug!("Series: {}", pole_stripped.printer(LOGPRINTOPTS));
+
         if pole_part {
-            for i in 0..(n_loops as i64 + 1) {
+            for i in 1..(n_loops as i64 + 1) {
                 pole_stripped = pole_stripped
                     .replace(Atom::var(ep).npow(i))
                     .with(Atom::Zero);
@@ -540,12 +587,14 @@ impl Approximation {
 
         let mut atomarg = t_arg * pole_stripped;
 
+        debug!("Atomarg: {}", atomarg.printer(LOGPRINTOPTS));
+
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
-        // println!("Reps:");
+        // debug!("Reps:");
         // for r in &mom_reps {
-        //     println!("{r}");
+        //     debug!("{r}");
         // }
 
         // println!(
@@ -730,13 +779,6 @@ impl Approximation {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
         };
-
-        let Some(a) = &dependent.simple_approx else {
-            panic!("Should have computed the simple approx");
-        };
-
-        self.simple_approx = Some(a.dependent(self.subgraph.clone()));
-
         let (t4, _) = if let ApproxOp::Root = dependent.integrated_4d {
             (Atom::num(0), Sign::Positive)
         } else {

@@ -6,7 +6,9 @@ use color_eyre::Result;
 use colored::{ColoredString, Colorize};
 use eyre::Ok;
 use gammaloop_api::{
-    commands::{Profile, inspect::Inspect, integrate::Integrate, profile::UltraVioletProfile},
+    commands::{
+        Profile, Renormalize, inspect::Inspect, integrate::Integrate, profile::UltraVioletProfile,
+    },
     state::ProcessRef,
 };
 
@@ -658,6 +660,17 @@ fn test_grouped_subtraction() -> Result<()> {
 }
 
 #[test]
+fn v_diag() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("v_diag.toml".into()),
+        get_tests_workspace_path().join("v_diag"),
+        Some("v_diag".to_string()),
+        false,
+    )?;
+    Ok(())
+}
+
+#[test]
 fn scalar_bubble() -> Result<()> {
     let mut cli = get_test_cli(
         Some("scalar_bubble.toml".into()),
@@ -700,6 +713,11 @@ fn scalar_bubble() -> Result<()> {
     cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.46968e-03)), 1));
+    let renorm_command = Renormalize::default();
+
+    let res = renorm_command.run(&mut cli.state)?;
+
+    println!("{}", res[0]);
 
     clean_test(&cli.cli_settings.state_folder);
 
@@ -756,6 +774,11 @@ fn scalar_sunrise() -> Result<()> {
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     // assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-4.5184321377520566e-4+0e0i)");
 
+    let renorm_command = Renormalize::default();
+
+    let res = renorm_command.run(&mut cli.state)?;
+
+    println!("{}", res[0]);
     clean_test(&cli.cli_settings.state_folder);
 
     Ok(())

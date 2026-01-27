@@ -94,7 +94,8 @@ impl AmplitudeGraphTerm {
             .map(|a| a.data.orientation.clone())
             .collect();
 
-        debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations");
+        debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
+
         let orientation_parametric_integrand = GenericEvaluator::new_from_builder(
             [graph.derived_data.all_mighty_integrand.clone()],
             &graph.graph.param_builder,

@@ -159,7 +159,7 @@ impl GenericEvaluator {
             .iter()
             .map(|n| {
                 n.evaluator(fn_map, params, optimization_settings.clone())
-                    .unwrap()
+                    .expect(&format!("Failed to create evaluator for atom: {}", n))
             })
             .reduce(|mut acc, n| {
                 acc.merge(n, optimization_settings.cpe_iterations).unwrap();

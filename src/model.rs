@@ -1634,7 +1634,7 @@ impl Model {
 {n_parameters} parameters :{parameter_list}
 {n_vertices} vertices : {vertex_list}
 {n_couplings} couplings : {coupling_list}
-", 
+",
 model_name_label = "Model name",
 restriction_label = "Restriction",
 coupling_orders_label = "Coupling orders",
@@ -2018,6 +2018,27 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
     pub fn is_empty(&self) -> bool {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
+    }
+
+    pub fn apply_coupling_replacement_rules(&self, a: &Atom) -> Atom {
+        let mut reps = vec![];
+        for cpl in self.couplings.values() {
+            let [a, b] = cpl.rep_rule();
+            reps.push(Replacement::new(a.to_pattern(), b));
+        }
+
+        a.replace_multiple(&reps)
+    }
+    pub fn apply_parameter_replacement_rules(&self, a: &Atom) -> Atom {
+        let mut reps = vec![];
+        for p in self.parameters.values() {
+            let Some([a, b]) = p.rep_rule() else {
+                continue;
+            };
+            reps.push(Replacement::new(a.to_pattern(), b));
+        }
+
+        a.replace_multiple(&reps)
     }
 
     pub fn export_coupling_replacement_rules(
