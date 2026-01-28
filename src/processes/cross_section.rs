@@ -33,7 +33,8 @@ use crate::{
     },
     define_index,
     gammaloop_integrand::{
-        LmbMultiChannelingSetup, cross_section_integrand::CrossSectionIntegrandData,
+        GenericEvaluator, LmbMultiChannelingSetup,
+        cross_section_integrand::CrossSectionIntegrandData,
     },
     graph::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
@@ -57,6 +58,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::dual::HyperDual,
+    evaluate::{FunctionMap, OptimizationSettings},
     function,
     id::Replacement,
     parse, symbol,
@@ -668,8 +670,8 @@ impl CrossSectionGraph {
             self.build_multi_channeling_channels();
         }
         debug!("building parametric integrand");
-        //self.build_parametric_integrand(settings)?;
-        self.build_parametric_integrand_raised_cuts(settings)?;
+        self.build_parametric_integrand(settings)?;
+        //self.build_parametric_integrand_raised_cuts(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
@@ -834,10 +836,21 @@ impl CrossSectionGraph {
             })
             .collect();
 
+        let max_order = cross_free_powersets
+            .iter()
+            .map(|powerset| powerset.iter().map(|subset| subset.len()).max().unwrap())
+            .max()
+            .unwrap();
+
+        let pass_two_evaluators = (1..=max_order)
+            .map(|order| build_derivative_structure(order as u8))
+            .collect();
+
         let result = RaisedData {
             raised_cut_groups: raised_groups,
             cross_free_powersets,
             dual_shapes,
+            pass_two_evaluators,
         };
 
         self.derived_data.raised_data = result;
@@ -1073,11 +1086,11 @@ impl CrossSectionGraph {
             .max()
             .unwrap();
 
-        self.graph.param_builder.initialize_t_derivatives(max_order);
+        println!("max order: {}", max_order);
 
-        let derivative_structure_cache = (1..=max_order)
-            .map(|order| build_derivative_structure(order as u8))
-            .collect_vec();
+        self.graph
+            .param_builder
+            .initialize_t_derivatives(max_order - 1);
 
         let mut result = TiVec::new();
         for (raised_cut_id, cuts_in_group) in self
@@ -1090,8 +1103,6 @@ impl CrossSectionGraph {
             for cross_free_subset in
                 self.derived_data.raised_data.cross_free_powersets[raised_cut_id].iter()
             {
-                let num_derivatives = cross_free_subset.len() - 1;
-
                 let complement = cuts_in_group
                     .iter()
                     .filter(|cut| !cross_free_subset.contains(cut))
@@ -1968,10 +1979,12 @@ pub struct CrossSectionDerivedData {
 }
 
 #[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedData {
     pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
     pub cross_free_powersets: TiVec<RaisedCutId, Vec<Vec<CutId>>>,
     pub dual_shapes: TiVec<RaisedCutId, Vec<Option<Vec<Vec<usize>>>>>,
+    pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
 impl Default for RaisedData {
@@ -1986,6 +1999,7 @@ impl RaisedData {
             raised_cut_groups: TiVec::new(),
             cross_free_powersets: TiVec::new(),
             dual_shapes: TiVec::new(),
+            pass_two_evaluators: vec![],
         }
     }
 }
@@ -2006,14 +2020,7 @@ impl CrossSectionDerivedData {
     }
 }
 
-#[test]
-fn test_template() {
-    println!("result: {}", build_derivative_structure(1));
-    println!("result: {}", build_derivative_structure(2));
-    println!("result: {}", build_derivative_structure(3));
-}
-
-fn build_derivative_structure(order: u8) -> Atom {
+fn build_derivative_structure(order: u8) -> GenericEvaluator {
     let order = order as i32;
     let f = symbol!("f");
 
@@ -2054,5 +2061,38 @@ fn build_derivative_structure(order: u8) -> Atom {
         .replace(GS.rescale)
         .with(GS.rescale_star);
 
-    expression_to_derive
+    let params = params_for_derivative_order(order as u8);
+
+    GenericEvaluator::new_from_raw_params(
+        [expression_to_derive],
+        &params,
+        &FunctionMap::default(),
+        OptimizationSettings::default(),
+        None,
+    )
+    .unwrap()
+}
+
+fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
+    let f = symbol!("f");
+    let eta = symbol!("η");
+
+    let f_0 = function!(f, GS.rescale_star);
+    let eta_1 = function!(eta, GS.rescale_star).derivative(GS.rescale_star);
+
+    let mut f_parameters = vec![f_0.clone()];
+    let mut eta_params = vec![eta_1.clone()];
+
+    for _ in 2..=derivative_order {
+        let next_f = f_parameters.last().unwrap().derivative(GS.rescale_star);
+        f_parameters.push(next_f);
+
+        let next_eta = eta_params.last().unwrap().derivative(GS.rescale_star);
+        eta_params.push(next_eta);
+    }
+
+    let mut result = vec![];
+    result.extend(f_parameters);
+    result.extend(eta_params);
+    result
 }

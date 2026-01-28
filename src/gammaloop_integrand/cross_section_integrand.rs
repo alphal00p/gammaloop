@@ -16,13 +16,13 @@ use crate::{
     integrands::HasIntegrand,
     model::Model,
     momentum::{Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum},
-    momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample},
+    momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
         F, FloatLike, Length, h, h_dual,
-        hyperdual_utils::{DualOrNot, new_constant},
+        hyperdual_utils::{DualOrNot, new_constant, shape_for_t_derivatives},
         newton_solver::newton_iteration_and_derivative,
         serde_utils::SmartSerde,
     },
@@ -48,9 +48,11 @@ use std::{
     vec,
 };
 use symbolica::{
-    domains::{dual::HyperDual, float::Real},
-    evaluate::OptimizationSettings,
+    atom::AtomCore,
+    domains::{dual::HyperDual, float::Real, rational::Rational},
+    evaluate::{FunctionMap, OptimizationSettings},
     numerical_integration::{Grid, Sample},
+    parse,
 };
 use tracing::debug;
 use typed_index_collections::TiVec;
@@ -275,6 +277,14 @@ impl CrossSectionGraphTerm {
             .map(|data| data.orientation.clone())
             .collect();
 
+        println!(
+            "parameteric integrands len: {}",
+            graph.derived_data.cut_paramatric_integrand.len()
+        );
+        println!(
+            "dual shapes len: {}",
+            graph.derived_data.raised_data.dual_shapes.len()
+        );
         let parametric_integrand = graph
             .derived_data
             .cut_paramatric_integrand
@@ -610,30 +620,41 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &F::from_f64(settings.kinematics.e_cm),
             );
 
-            if self.raised_data.raised_cut_groups[raised_cut].len() > 1 {
-                for (subset_id, subset) in cross_free_subsets.iter().enumerate() {
-                    let dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
-                        .clone()
-                        .map(HyperDual::<F<T>>::new);
+            for (subset_id, subset) in cross_free_subsets.iter().enumerate() {
+                let dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
+                    .clone()
+                    .map(HyperDual::<F<T>>::new);
 
+                let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
                     if let Some(dual_shape) = &dual_shape {
-                        let dual_t = dual_shape.variable(0, solution.solution.clone());
-                        let dual_h_function = h_dual(&dual_t, None, None, &settings.lu_h_function);
-                        let dual_momenta = momentum_sample
+                        let dual_t_for_integrand =
+                            dual_shape.variable(0, solution.solution.clone());
+                        let dual_h_function =
+                            h_dual(&dual_t_for_integrand, None, None, &settings.lu_h_function);
+                        let dual_momenta_for_integrand = momentum_sample
                             .loop_moms()
-                            .rescale_with_hyper_dual(&dual_t, None);
+                            .rescale_with_hyper_dual(&dual_t_for_integrand, None);
+
+                        let dual_shape_for_esurface =
+                            HyperDual::<F<T>>::new(shape_for_t_derivatives(subset.len()));
+
+                        let dual_t_for_esurface =
+                            dual_shape_for_esurface.variable(0, solution.solution.clone());
+                        let dual_momenta_for_esurface = momentum_sample
+                            .loop_moms()
+                            .rescale_with_hyper_dual(&dual_t_for_esurface, None);
 
                         let dual_externals = momentum_sample
                             .external_moms()
                             .iter()
                             .map(|mom| FourMomentum {
                                 temporal: Energy {
-                                    value: new_constant(&dual_t, &mom.temporal.value),
+                                    value: new_constant(&dual_t_for_esurface, &mom.temporal.value),
                                 },
                                 spatial: ThreeMomentum {
-                                    px: new_constant(&dual_t, &mom.spatial.px),
-                                    py: new_constant(&dual_t, &mom.spatial.py),
-                                    pz: new_constant(&dual_t, &mom.spatial.pz),
+                                    px: new_constant(&dual_t_for_esurface, &mom.spatial.px),
+                                    py: new_constant(&dual_t_for_esurface, &mom.spatial.py),
+                                    pz: new_constant(&dual_t_for_esurface, &mom.spatial.pz),
                                 },
                             })
                             .collect();
@@ -641,52 +662,39 @@ impl GraphTerm for CrossSectionGraphTerm {
                         let dual_e_surface = representative_esurface.compute_from_dual_momenta(
                             &self.graph.loop_momentum_basis,
                             &masses,
-                            &dual_momenta,
+                            &dual_momenta_for_esurface,
                             &dual_externals,
                         );
-                    }
+
+                        let mut momentum_sample_with_duals = momentum_sample.clone();
+                        momentum_sample_with_duals.sample.dual_loop_moms =
+                            Some(dual_momenta_for_integrand);
+
+                        (
+                            DualOrNot::Dual(dual_t_for_integrand),
+                            DualOrNot::Dual(dual_h_function),
+                            DualOrNot::Dual(dual_e_surface),
+                            momentum_sample_with_duals,
+                        )
+                    } else {
+                        let h_function = h(&solution.solution, None, None, &settings.lu_h_function);
+                        let rescaled_momenta = momentum_sample
+                            .rescaled_loop_momenta(&solution.solution, Subspace::None);
+
+                        (
+                            DualOrNot::NonDual(solution.solution.clone()),
+                            DualOrNot::NonDual(h_function),
+                            DualOrNot::NonDual(solution.derivative_at_solution.clone()),
+                            rescaled_momenta,
+                        )
+                    };
+
+                let lu_params = LUParams { h_function, tstar };
+
+                if let Some((_channel_index, _alpha)) = &channel_id {
+                    todo!("implement multichanneling prefactor over duals");
                 }
-            } else {
-                let h_function = h(&solution.solution, None, None, &settings.lu_h_function);
 
-                let lu_params = LUParams {
-                    h_function: DualOrNot::NonDual(h_function),
-                    tstar: DualOrNot::NonDual(solution.solution.clone()),
-                };
-
-                let rescaled_momenta = MomentumSample {
-                    sample: momentum_sample
-                        .sample
-                        .rescaled_loop_momenta(&solution.solution, None),
-                };
-
-                //debug!(
-                //    "edges in cut: {:?}",
-                //    self.cuts[cut]
-                //        .cut
-                //        .iter_edges(&self.graph)
-                //        .map(|(_, e)| e.data.name.clone())
-                //        .collect_vec()
-                //);
-                //debug!("tstar: {:+16e}", lu_params.tstar);
-                //debug!(
-                //    "num iterations to find tstar: {}",
-                //    solution.num_iterations_used
-                //);
-                //debug!("rescaled loop moms:\n {}", rescaled_momenta.loop_moms());
-
-                let prefactor = if let Some((channel_index, alpha)) = &channel_id {
-                    self.multi_channeling_setup.compute_prefactor_impl(
-                        *channel_index,
-                        &rescaled_momenta,
-                        model,
-                        alpha,
-                    )
-                } else {
-                    rescaled_momenta.one()
-                };
-
-                let mut result = Complex::new_re(momentum_sample.zero());
                 let params = T::get_parameters(
                     &mut self.param_builder,
                     (settings.general.enable_cache, settings.general.debug_cache),
@@ -700,12 +708,30 @@ impl GraphTerm for CrossSectionGraphTerm {
                 );
 
                 let iterative = self.iterative_integrand.as_mut().map(|ev| {
-                    <T as GenericEvaluatorFloat>::get_evaluator(&mut ev[raised_cut][0])(&params)
+                    <T as GenericEvaluatorFloat>::get_evaluator(&mut ev[raised_cut][subset_id])(
+                        &params,
+                    )
                 });
+
+                let complex_dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
+                    .clone()
+                    .map(HyperDual::<Complex<F<T>>>::new);
+
+                let mut result = complex_dual_shape
+                    .clone()
+                    .map(|dual| DualOrNot::Dual(dual))
+                    .unwrap_or(DualOrNot::NonDual(Complex::new_re(momentum_sample.zero())));
+
+                let multiplicative_offset = subset.len();
 
                 for (i, e) in orientations.iter() {
                     if let Some(iterative) = &iterative {
-                        result += &iterative[i.0]
+                        result += DualOrNot::new_from_slice(
+                            &complex_dual_shape,
+                            iterative
+                                [i.0 * multiplicative_offset..(i.0 + 1) * multiplicative_offset]
+                                .as_ref(),
+                        );
                     } else {
                         self.param_builder.orientation_value(e, 1);
                         let a = T::get_parameters(
@@ -719,9 +745,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                             None,
                             Some(&lu_params),
                         );
-                        result += <T as GenericEvaluatorFloat>::get_evaluator_single(
-                            &mut self.parametric_integrand[raised_cut][0],
-                        )(&a);
+                        result += DualOrNot::new_from_slice(
+                            &complex_dual_shape,
+                            &<T as GenericEvaluatorFloat>::get_evaluator(
+                                &mut self.parametric_integrand[raised_cut][subset_id],
+                            )(&a),
+                        );
                     }
                 }
 
@@ -731,10 +760,37 @@ impl GraphTerm for CrossSectionGraphTerm {
                     todo!();
                 };
 
+                let mut params_for_pass_two = vec![];
+                match result {
+                    DualOrNot::Dual(dual_result) => {
+                        params_for_pass_two.extend_from_slice(&dual_result.values);
+                    }
+                    DualOrNot::NonDual(non_dual_result) => {
+                        params_for_pass_two.push(non_dual_result);
+                    }
+                }
+
+                match esurface_derivatives {
+                    DualOrNot::Dual(dual_e_surface) => {
+                        dual_e_surface.values[1..].iter().for_each(|v| {
+                            params_for_pass_two.push(Complex::new_re(v.clone()));
+                        });
+                    }
+                    DualOrNot::NonDual(non_dual_e_surface) => {
+                        params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
+                    }
+                }
+
+                let pass_two_evaluator =
+                    &mut self.raised_data.pass_two_evaluators[subset.len() - 1];
+                let pass_two_result = <T as GenericEvaluatorFloat>::get_evaluator_single(
+                    pass_two_evaluator,
+                )(&params_for_pass_two);
+
                 cut_threshold_counterterms.push(ct_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                cut_results.push(result * prefactor);
+                cut_results.push(pass_two_result);
             }
         }
 
@@ -858,64 +914,76 @@ impl HasIntegrand for CrossSectionIntegrand {
     }
 }
 
-//#[test]
-//fn dual_screwaround() {
-//    let x = parse!("x");
-//    let y = parse!("y");
-//    let z = parse!("z");
-//    let expr = &x * &y + &x * &z + &y * &z * &z + &z * &z * &z;
-//
-//    let shape = vec![vec![0], vec![1], vec![2], vec![3]];
-//
-//    let hyperdual_vectorizer =
-//        HyperDual::<symbolica::domains::float::Complex<Rational>>::new(shape.clone());
-//
-//    let params = vec![x, y, z];
-//    let evaluator = expr
-//        .evaluator(
-//            &FunctionMap::default(),
-//            &params,
-//            OptimizationSettings::default(),
-//        )
-//        .unwrap();
-//
-//    let dual_evaluator = evaluator.clone().vectorize(&hyperdual_vectorizer);
-//    let mut real_dual_evaluator = dual_evaluator
-//        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
-//
-//    let mut real_evaluator = evaluator
-//        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
-//
-//    let param_values = vec![
-//        Complex::new_re(F(1.0)),
-//        Complex::new_re(F(2.0)),
-//        Complex::new_re(F(3.0)),
-//    ];
-//
-//    let hyperdual_builder = HyperDual::<Complex<F<f64>>>::new(shape.clone());
-//
-//    let mut out = [Complex::new_re(F(0.0))];
-//    real_evaluator.evaluate(&param_values, &mut out);
-//    println!("result: {}", out[0]);
-//
-//    let dual_z = hyperdual_builder.variable(0, Complex::new_re(F(3.0)));
-//
-//    let dual_param_values = vec![
-//        Complex::new_re(F(1.0)),
-//        Complex::new_zero(),
-//        Complex::new_zero(),
-//        Complex::new_zero(),
-//        Complex::new_re(F(2.0)),
-//        Complex::new_zero(),
-//        Complex::new_zero(),
-//        Complex::new_zero(),
-//        dual_z.values[0],
-//        dual_z.values[1],
-//        dual_z.values[2],
-//        dual_z.values[3],
-//    ];
-//
-//    let mut dual_out = [Complex::new_re(F(0.0)); 4];
-//    real_dual_evaluator.evaluate(&dual_param_values, &mut dual_out);
-//    println!("dual result: {:?}", dual_out);
-//}
+#[test]
+fn dual_screwaround() {
+    let x = parse!("x");
+    let y = parse!("y");
+    let z = parse!("z");
+    let expr = &x * &y + &x * &z + &y * &z * &z + &z * &z * &z;
+
+    let shape = vec![vec![0], vec![1], vec![2], vec![3]];
+
+    let hyperdual_vectorizer =
+        HyperDual::<symbolica::domains::float::Complex<Rational>>::new(shape.clone());
+
+    let params = vec![x, y, z];
+    let mut evaluator = expr
+        .evaluator(
+            &FunctionMap::default(),
+            &params,
+            OptimizationSettings::default(),
+        )
+        .unwrap();
+
+    evaluator
+        .merge(
+            expr.evaluator(
+                &FunctionMap::default(),
+                &params,
+                OptimizationSettings::default(),
+            )
+            .unwrap(),
+            None,
+        )
+        .unwrap();
+
+    let dual_evaluator = evaluator.clone().vectorize(&hyperdual_vectorizer);
+    let mut real_dual_evaluator = dual_evaluator
+        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
+
+    let mut real_evaluator = evaluator
+        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
+
+    let param_values = vec![
+        Complex::new_re(F(1.0)),
+        Complex::new_re(F(2.0)),
+        Complex::new_re(F(3.0)),
+    ];
+
+    let hyperdual_builder = HyperDual::<Complex<F<f64>>>::new(shape.clone());
+
+    let mut out = [Complex::new_re(F(0.0)); 2];
+    real_evaluator.evaluate(&param_values, &mut out);
+    println!("result: {:?}", out);
+
+    let dual_z = hyperdual_builder.variable(0, Complex::new_re(F(3.0)));
+
+    let dual_param_values = vec![
+        Complex::new_re(F(1.0)),
+        Complex::new_zero(),
+        Complex::new_zero(),
+        Complex::new_zero(),
+        Complex::new_re(F(2.0)),
+        Complex::new_zero(),
+        Complex::new_zero(),
+        Complex::new_zero(),
+        dual_z.values[0],
+        dual_z.values[1],
+        dual_z.values[2],
+        dual_z.values[3],
+    ];
+
+    let mut dual_out = [Complex::new_re(F(0.0)); 8];
+    real_dual_evaluator.evaluate(&dual_param_values, &mut dual_out);
+    println!("dual result: {:?}", dual_out);
+}

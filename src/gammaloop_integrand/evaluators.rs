@@ -120,6 +120,16 @@ pub struct GenericEvaluator {
 }
 
 impl GenericEvaluator {
+    pub(crate) fn compute_out_size(&self) -> usize {
+        let number_type_size = if let Some(dual_shape) = &self.dual_shape {
+            dual_shape.iter().map(|vec| vec.len()).sum()
+        } else {
+            1
+        };
+
+        number_type_size * self.exprs.len()
+    }
+
     pub(crate) fn compile(
         &mut self,
         cpp_path: impl AsRef<Path>,
@@ -256,7 +266,7 @@ impl GenericEvaluatorFloat for f64 {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<Complex<F<Self>>> {
         |params: &[Complex<F<f64>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // info!("USING COMPILED COMPLEX SINGLE");
                 //

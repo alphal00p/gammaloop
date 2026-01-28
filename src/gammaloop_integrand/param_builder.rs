@@ -909,10 +909,17 @@ impl<T: FloatLike> ParamBuilder<T> {
                         }
                         constant_dual_values
                     })
+                    .flatten()
+                    .collect()
             })
-            .flatten()
             .collect();
         self.values.append(&mut higher_order_values);
+        println!("Initialized {} derivative values", self.values.len() - 1);
+
+        for values in self.values.iter() {
+            println!("values at order: ");
+            println!("len: {}", values.len());
+        }
     }
 
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
