@@ -1362,6 +1362,7 @@ dependencies = [
  "eyre",
  "gammaloop-api",
  "git-version",
+ "gmp-mpfr-sys",
  "idenso",
  "include_dir",
  "indexmap 2.13.0",

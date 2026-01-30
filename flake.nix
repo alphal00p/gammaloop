@@ -34,127 +34,91 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
-
       inherit (pkgs) lib;
 
       craneLib =
         (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain
         fenix.packages.${system}.stable.toolchain;
+
       src = craneLib.cleanCargoSource (craneLib.path ./.);
+
+      # Host Rust target triple, e.g. x86_64-unknown-linux-gnu
+      rustTarget = pkgs.stdenv.hostPlatform.rust.rustcTarget;
+
+      # Env var name Cargo uses to pick the linker for this target
+      cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
+
+      # Force the "Nix cc wrapper" as both C compiler and Rust linker.
+      nixCc = "${pkgs.stdenv.cc}/bin/cc";
+      nixCxx = "${pkgs.stdenv.cc}/bin/c++";
+
+      # Runtime library search path for locally-built binaries and for maturin/auditwheel
+      # (so it can locate libpython and libs like libmpfr at repair time).
+      runtimeLibPath = lib.makeLibraryPath [
+        pkgs.python313
+        pkgs.gmp
+        pkgs.mpfr
+        pkgs.libmpc
+        pkgs.openssl
+        pkgs.stdenv.cc.cc.lib
+      ];
 
       # Common arguments can be set here to avoid repeating them later
       commonArgs = {
         inherit src;
         strictDeps = true;
 
-        buildInputs =
-          [
-            # Add additional build inputs here
-            pkgs.openssl
-            pkgs.pkg-config
-            pkgs.gmp
-            pkgs.mpfr
-            pkgs.libmpc
-            pkgs.python313
-          ]
-          ++ lib.optionals pkgs.stdenv.isDarwin [
-            # Additional darwin specific inputs can be set here
-            pkgs.libiconv
-          ];
-
         nativeBuildInputs =
           [
             pkgs.pkg-config
-            pkgs.clang
-            pkgs.gmp.dev
-            pkgs.mpfr.dev
-            pkgs.libmpc
-            # pkgs.gcc
+            pkgs.gcc
             pkgs.git
             pkgs.python313
-            pkgs.gnum4
-            pkgs.gmp
-            pkgs.mpfr
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             pkgs.darwin.cctools
           ];
 
-        # Additional environment variables can be set directly
-        # Help gmp-mpfr-sys find system libraries
-        CPPFLAGS = "-I${pkgs.gmp.dev}/include -I${pkgs.mpfr.dev}/include -I${pkgs.libmpc}/include";
-        LDFLAGS = "-L${pkgs.gmp}/lib -L${pkgs.mpfr}/lib -L${pkgs.libmpc}/lib";
-        PKG_CONFIG_PATH = "${pkgs.gmp.dev}/lib/pkgconfig:${pkgs.mpfr.dev}/lib/pkgconfig:${pkgs.libmpc}/lib/pkgconfig";
+        buildInputs =
+          [
+            pkgs.openssl
 
-        # Force gmp-mpfr-sys to use system libraries
-        MPFR_LIB_DIR = "${pkgs.mpfr}/lib";
-        MPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
-        GMP_LIB_DIR = "${pkgs.gmp}/lib";
-        GMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
-        MPC_LIB_DIR = "${pkgs.libmpc}/lib";
-        MPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
+            # System GMP/MPFR/MPC (for gmp-mpfr-sys with feature use-system-libs)
+            pkgs.gmp
+            pkgs.gmp.dev
+            pkgs.mpfr
+            pkgs.mpfr.dev
+            pkgs.libmpc
 
-        # Additional variables to force system lib usage
-        GMP_MPFR_SYS_LIBRARY = "1";
-        LIBGMP_LIB_DIR = "${pkgs.gmp}/lib";
-        LIBGMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
-        LIBMPFR_LIB_DIR = "${pkgs.mpfr}/lib";
-        LIBMPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
-        LIBMPC_LIB_DIR = "${pkgs.libmpc}/lib";
-        LIBMPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
+            pkgs.python313
+          ]
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.libiconv
+          ];
 
-        # Disable source builds
-        GMP_NO_SYS = "0";
-        MPFR_NO_SYS = "0";
-        MPC_NO_SYS = "0";
+        # Hard override: use Nix's compiler wrapper everywhere.
+        CC = nixCc;
+        CXX = nixCxx;
 
-        # Rug-specific environment variables for system GMP
-        CARGO_FEATURE_USE_SYSTEM_LIBS = "1";
-        RUG_GMP_DIR = "${pkgs.gmp}";
-        RUG_MPFR_DIR = "${pkgs.mpfr}";
-        RUG_MPC_DIR = "${pkgs.libmpc}";
+        # Hard override: use Nix's cc wrapper as Rust linker for the host target.
+        "${cargoLinkerVar}" = nixCc;
+
+        # Final override in case something injects `-C linker=clang`.
+        RUSTFLAGS = "-C linker=${nixCc}";
+
+        # Make runtime libs discoverable inside Nix builds too (useful for build scripts/tests
+        # that execute freshly-built binaries).
+        LD_LIBRARY_PATH = runtimeLibPath;
+        DYLD_LIBRARY_PATH = runtimeLibPath;
       };
 
-      # CI-specific args that disable Python API to avoid pyo3 build issues
       ciArgs =
         commonArgs
         // {
           buildType = "release";
-          # Set PyO3 environment variables to help it find Python
+
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
-          # Help gmp-mpfr-sys find system libraries
-          CPPFLAGS = "-I${pkgs.gmp.dev}/include -I${pkgs.mpfr.dev}/include -I${pkgs.libmpc}/include";
-          LDFLAGS = "-L${pkgs.gmp}/lib -L${pkgs.mpfr}/lib -L${pkgs.libmpc}/lib";
-          PKG_CONFIG_PATH = "${pkgs.gmp.dev}/lib/pkgconfig:${pkgs.mpfr.dev}/lib/pkgconfig:${pkgs.libmpc}/lib/pkgconfig";
-
-          # Force gmp-mpfr-sys to use system libraries
-          MPFR_LIB_DIR = "${pkgs.mpfr}/lib";
-          MPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
-          GMP_LIB_DIR = "${pkgs.gmp}/lib";
-          GMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
-          MPC_LIB_DIR = "${pkgs.libmpc}/lib";
-          MPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
-
-          # Additional variables to force system lib usage
-          GMP_MPFR_SYS_LIBRARY = "1";
-          LIBGMP_LIB_DIR = "${pkgs.gmp}/lib";
-          LIBGMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
-          LIBMPFR_LIB_DIR = "${pkgs.mpfr}/lib";
-          LIBMPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
-          LIBMPC_LIB_DIR = "${pkgs.libmpc}/lib";
-          LIBMPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
-
-          # Disable source builds
-          GMP_NO_SYS = "0";
-          MPFR_NO_SYS = "0";
-          MPC_NO_SYS = "0";
-
-          # Rug-specific environment variables for system GMP
-          CARGO_FEATURE_USE_SYSTEM_LIBS = "1";
-          RUG_GMP_DIR = "${pkgs.gmp}";
-          RUG_MPFR_DIR = "${pkgs.mpfr}";
-          RUG_MPC_DIR = "${pkgs.libmpc}";
         };
 
       craneLibLLvmTools =
@@ -165,27 +129,16 @@
           "rustc"
         ]);
 
-      # Build *just* the cargo dependencies, so we can reuse
-      # all of that work (e.g. via cachix) when running in CI
       cargoArtifacts = craneLib.buildDepsOnly ciArgs;
 
-      # Build the actual crate itself, reusing the dependency
-      # artifacts from above.
       gammaloop = craneLib.buildPackage (commonArgs
         // {
           inherit cargoArtifacts;
         });
     in {
       checks = {
-        # Build the crate as part of `nix flake check` for convenience
         inherit gammaloop;
 
-        # Run clippy (and deny all warnings) on the crate source,
-        # again, reusing the dependency artifacts from above.
-        #
-        # Note that this is done as a separate derivation so that
-        # we can block the CI if there are issues here, but not
-        # prevent downstream consumers from building our crate by itself.
         gammaloop-clippy = craneLib.cargoClippy (ciArgs
           // {
             inherit cargoArtifacts;
@@ -197,72 +150,28 @@
             inherit cargoArtifacts;
           });
 
-        # Check formatting
         gammaloop-fmt = craneLib.cargoFmt {
           inherit src;
         };
 
-        # Audit dependencies
         gammaloop-audit = craneLib.cargoAudit {
           inherit src advisory-db;
         };
 
-        # Audit licenses
         gammaloop-deny = craneLib.cargoDeny {
           inherit src;
         };
 
-        # Run tests with cargo-nextest
-        # Consider setting `doCheck = false` on `gammaloop` if you do not want
-        # the tests to run twice
         gammaloop-nextest = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
             cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail";
-          });
-
-        # Individual partitioned test checks for CI
-        gammaloop-nextest-partition-1 = craneLib.cargoNextest (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:1/6";
-          });
-
-        gammaloop-nextest-partition-2 = craneLib.cargoNextest (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:2/6";
-          });
-
-        gammaloop-nextest-partition-3 = craneLib.cargoNextest (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:3/6";
-          });
-
-        gammaloop-nextest-partition-4 = craneLib.cargoNextest (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:4/6";
-          });
-
-        gammaloop-nextest-partition-5 = craneLib.cargoNextest (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:5/6";
-          });
-
-        gammaloop-nextest-partition-6 = craneLib.cargoNextest (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:6/6";
           });
       };
 
       packages =
         {
           default = gammaloop;
-          # Expose cargoArtifacts for CI caching
           inherit cargoArtifacts;
         }
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
@@ -272,24 +181,28 @@
             });
         };
 
-      apps = {
-        default = flake-utils.lib.mkApp {
-          drv = gammaloop;
-        };
+      apps.default = flake-utils.lib.mkApp {
+        drv = gammaloop;
       };
 
       devShells.default = craneLib.devShell {
-        # Inherit inputs from checks.
         checks = self.checks.${system};
 
-        # Additional dev-shell environment variables can be set directly
-        # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
         GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
 
-        # LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+        # Mirror the same hard overrides in the interactive shell.
+        CC = nixCc;
+        CXX = nixCxx;
+        "${cargoLinkerVar}" = nixCc;
+        RUSTFLAGS = "-C linker=${nixCc}";
 
-        # Extra inputs can be added here; cargo and rustc are provided by default.
+        # Make libpython + libgmp/libmpfr/libmpc visible to:
+        # - target/debug/stub_gen (runtime)
+        # - maturin/auditwheel (wheel repair step)
+        LD_LIBRARY_PATH = runtimeLibPath;
+        DYLD_LIBRARY_PATH = runtimeLibPath;
+
         packages = with pkgs; [
           tdf
           cargo-flamegraph
@@ -300,29 +213,25 @@
           jujutsu
           just
           dot-language-server
-          # pkgs.ripgrep
           cargo-insta
           cargo-udeps
-          cargo-insta
           cargo-machete
           openssl
           pyright
           gmp
           mpfr
+          libmpc
           form
           gnum4
           nickel
           nls
           typst
           cargo-nextest
-          # gcc_debug.out
-          # stdenv.cc.cc.lib
           pkg-config
           cargo-deny
           cargo-edit
           cargo-watch
           bacon
-          # python311
           gfortran
           gcc
           uv
