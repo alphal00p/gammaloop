@@ -62,10 +62,10 @@ impl Graph {
                         e.map(|e| {
                             let mut dot: DotEdgeData = e.into();
                             match flow {
-                                Flow::Sink => {
+                                Flow::Source => {
                                     dot.add_statement("pin", "x:@+right".to_string());
                                 }
-                                Flow::Source => {
+                                Flow::Sink => {
                                     dot.add_statement("pin", "x:@-left".to_string());
                                 }
                             }
@@ -88,7 +88,7 @@ impl Graph {
                             let mut dot: DotEdgeData = (*e.edge_data()).into();
 
                             match e.flow() {
-                                Some(Flow::Sink) => {
+                                Some(Flow::Source) => {
                                     assert!(
                                         self.initial_state_cut
                                             .left
@@ -97,15 +97,15 @@ impl Graph {
                                     dot.add_statement("is_cut", self.inv(p.any_hedge()));
                                     dot.add_statement(
                                         "pin",
-                                        format!("\"x:@+right,y:@edge{}\"", e.index),
+                                        format!("x:@+right,y:@edge{}", e.index),
                                     );
                                 }
-                                Some(Flow::Source) => {
+                                Some(Flow::Sink) => {
                                     assert!(self.initial_state_cut.left.includes(&p.any_hedge()));
                                     dot.add_statement("is_cut", p.any_hedge());
                                     dot.add_statement(
                                         "pin",
-                                        format!("\"x:@-left,y:@edge{}\"", e.index),
+                                        format!("x:@-left,y:@edge{}", e.index),
                                     );
                                 }
                                 None => {}
