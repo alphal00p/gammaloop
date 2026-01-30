@@ -139,14 +139,14 @@ fn finit_part_ghostlo() {
 
           in1 [style=invis];
           in1 -> v1:0
-          [particle="ghG" pin="x:@-left"];
+          [id=0 particle="ghG" pin="x:@-left"];
 
           out1 [style=invis];
           v2:1 -> out1
-          [particle="ghG" pin="x:@+right"];
+          [id=1 particle="ghG" pin="x:@+right"];
 
-          v1:2 -> v2:3 [particle= "g"];
-          v2:4 -> v1:5 [particle= "ghG~"];
+          v1:2 -> v2:3 [id=2 particle= "g"];
+          v2:4 -> v1:5 [id=3 particle= "ghG~"];
         }
     )
     .unwrap();

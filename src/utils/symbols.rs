@@ -311,12 +311,28 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 && ff.get_nargs() == 1
                 && let AtomView::Fun(arg) = ff.iter().next().unwrap()
             {
-                let args = arg.iter().collect_vec();
-                **out = GS
+                let mut args = vec![];
+                for a in arg.iter() {
+                    if let AtomView::Fun(a) = a
+                        && a.get_symbol().get_wildcard_level() > 0
+                    {
+                        return;
+                    }
+                    if let AtomView::Var(a) = a
+                        && a.get_symbol().get_wildcard_level() > 0
+                    {
+                        return;
+                    }
+
+                    args.push(a);
+                }
+                let expr = GS
                     ._linear
                     .f(args.as_slice())
                     .replace(GS._linear.f(&[W_.a___]))
                     .with(arg.get_symbol().f(&[W_.a___]));
+                println!(":{}->{}", f, expr);
+                **out = expr;
             }
         }
     ),

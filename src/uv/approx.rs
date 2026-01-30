@@ -28,7 +28,7 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function, parse, parse_lit,
     printer::PrintOptions,
     symbol,
@@ -169,8 +169,11 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
     let mut propagator_id = 1;
 
     let vk_prop = vakint_symbol!("prop");
+
+    // vakint::symbols::S.mom
     let vk_edge = vakint_symbol!("edge");
-    let vk_mom = vakint_symbol!("k");
+    let vk_mom = vakint::symbols::S.k;
+    let vk_ext_mom = vakint::symbols::S.p;
     let vk_topo = vakint_symbol!("topo");
 
     for (pair, index, _data) in graph.iter_edges_of(reduced) {
@@ -282,38 +285,14 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
         ));
 
     debug!(
-        "Integrand pre dot vakint: {:}",
-        integrand_vakint.printer(LOGPRINTOPTS)
-    );
-    // rewrite numerator
-    // linearize the numerator first
-    integrand_vakint = integrand_vakint
-        .replace(function!(GS.emr_mom, W_.prop_, W_.a___))
-        .with(GS.linearize.f(&[function!(GS.emr_mom, W_.a___)]));
-
-    // // rewrite numerator
-    // // linearize the numerator first
-    // integrand_vakint = integrand_vakint
-    //     .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
-    //     .with(function!(SPENSO_TAG.dot, W_.mom_, W_.x_))
-    //     .replace(function!(SPENSO_TAG.dot, W_.mom_, W_.x_))
-    //     .with(function!(GS.emr_mom, W_.mom_, W_.x_));
-
-    debug!(
         "Integrand pre vakint: {:}",
         integrand_vakint.printer(LOGPRINTOPTS)
     );
     // panic!("FUFU");
     for (i, l) in lmb.loop_edges.iter().enumerate() {
         integrand_vakint = integrand_vakint
-            .replace(function!(GS.emr_mom, usize::from(*l) as i64))
-            .with(function!(vk_mom, i as i64 + 1))
-            .replace(function!(
-                GS.emr_mom,
-                function!(vk_mom, i as i64 + 1),
-                W_.x___
-            ))
-            .with(function!(vk_mom, i as i64 + 1, W_.x___));
+            .replace(function!(GS.emr_mom, usize::from(*l), W_.x___))
+            .with(function!(vk_mom, i + 1, W_.x___));
     }
 
     // collect the topology
@@ -555,9 +534,9 @@ impl Approximation {
         }
         t_arg = t_arg.simplify_gamma() / uv_graph.denominator(&reduced, |_| 1);
         if pole_part {
-            debug!(t_arg = %t_arg,"T arg for pole part 4d CT");
+            debug!(t_arg = %t_arg,"T arg  gamma simplified for pole part 4d CT");
         } else {
-            debug!(t_arg = %t_arg,"T arg for integrated 4d CT");
+            debug!(t_arg = %t_arg,"T arg gamma simplified for integrated 4d CT");
         }
 
         let ep = vakint_symbol!("ε");
@@ -592,10 +571,10 @@ impl Approximation {
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
-        // debug!("Reps:");
-        // for r in &mom_reps {
-        //     debug!("{r}");
-        // }
+        println!("Reps:");
+        for r in &mom_reps {
+            println!("{r}");
+        }
 
         // println!(
         //     "Expand-prerep {} with dod={} in {:?}",
@@ -693,6 +672,7 @@ impl Approximation {
 
         let mut res = vakint.evaluate(integrand_vakint.as_view()).unwrap();
 
+        println!("\nRaw integrated CT:\n{:#}\n", res);
         let vk_metric = vakint_symbol!("g");
         // apply metric
         res = res
@@ -701,25 +681,39 @@ impl Approximation {
 
         res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
 
-        // multiply the results with a vacuum triangle that integrates to 1
-        // 1/(k^2 - m_UV^2)^3 = -i / (4 pi)^2 * 1/2 * 1/mUV^2
-        // name the mUV mass mUVi as this one should not be expanded
-        for l in &self.lmb.loop_edges {
-            if !reduced.includes(&graph[l].1) {
-                continue;
+        let mink = Minkowski {}.new_rep(4);
+        res = res
+            .replace(function!(GS.emr_mom, W_.x_, W_.i_) * function!(GS.emr_mom, W_.y_, W_.i_))
+            .when(W_.i_.filter(|a| {
+                println!("{}", a.to_atom());
+                matches!(a.to_atom(), Atom::Num(_))
+            }))
+            .with(
+                function!(GS.emr_mom, W_.x_, mink.to_symbolic([Atom::var(W_.i_)]))
+                    * function!(GS.emr_mom, W_.y_, mink.to_symbolic([Atom::var(W_.i_)])),
+            );
+
+        if !pole_part {
+            // multiply the results with a vacuum triangle that integrates to 1
+            // 1/(k^2 - m_UV^2)^3 = -i / (4 pi)^2 * 1/2 * 1/mUV^2
+            // name the mUV mass mUVi as this one should not be expanded
+            for l in &self.lmb.loop_edges {
+                if !reduced.includes(&graph[l].1) {
+                    continue;
+                }
+
+                //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
+
+                res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
+
+                let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+
+                // multiply CFF triangle
+                res *= Atom::num((3, 16))
+                    / (GS.emr_vec_index(*l, mink.to_atom()) * GS.emr_vec_index(*l, mink.to_atom())
+                        + GS.m_uv_int * GS.m_uv_int)
+                        .npow((5, 2));
             }
-
-            //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
-
-            res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
-
-            let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
-
-            // multiply CFF triangle
-            res *= Atom::num((3, 16))
-                / (GS.emr_vec_index(*l, mink.to_atom()) * GS.emr_vec_index(*l, mink.to_atom())
-                    + GS.m_uv_int * GS.m_uv_int)
-                    .npow((5, 2));
         }
 
         // println!("\nIntegrated CT:\n{}\n", res);

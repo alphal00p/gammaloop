@@ -148,11 +148,14 @@ pub trait LMBext {
             |e, a, b| {
                 Replacement::new(
                     GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
-                    (FunctionBuilder::new(GS.emr_mom)
-                        .add_arg(usize::from(e))
-                        .add_arg(a)
-                        .add_args(rep_args)
-                        .finish()
+                    (a.replace(function!(GS.emr_mom, W_.x_))
+                        .allow_new_wildcards_on_rhs(true)
+                        .with(
+                            FunctionBuilder::new(GS.emr_mom)
+                                .add_arg(W_.x_)
+                                .add_args(rep_args)
+                                .finish(),
+                        )
                         + b)
                         .to_pattern(),
                 )

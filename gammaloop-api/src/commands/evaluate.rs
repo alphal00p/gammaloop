@@ -34,7 +34,7 @@ pub struct Evaluate {
     pub graphs_group_name: Option<String>,
 
     /// The path to store results in
-    #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
+    #[arg(short = 'o', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
 
     /// Whether to evaluate numerically or not the resulting analytical expression
