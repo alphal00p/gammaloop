@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
-    network::parsing::SPENSO_TAG,
+    network::{library::TensorLibraryData, parsing::SPENSO_TAG},
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
@@ -110,6 +110,7 @@ pub struct WildCards {
 }
 
 pub struct GammaloopSymbols {
+    pub killing_func: Symbol,
     pub is_function: Symbol,
     pub is_symbol: Symbol,
     pub ufozero: Symbol,
@@ -135,6 +136,9 @@ pub struct GammaloopSymbols {
     pub v: Symbol,
     pub u: Symbol,
     pub color_wrap: Symbol,
+    /// Epsilon for dimensional regularization
+    pub dim_epsilon: Symbol,
+
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
     pub rescale: Symbol,
@@ -292,6 +296,15 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
 });
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
+    dim_epsilon: symbol!("ε"),
+    killing_func: symbol!(
+        "killing_func",
+        norm = |f, out| {
+            if let AtomView::Fun(f) = f {
+                **out = Atom::one()
+            }
+        }
+    ),
     ufozero: symbol!(
         "UFO::ZERO",
         norm = |_, out| {
@@ -361,7 +374,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     spensocind: symbol!("spenso::cind"),
     m_uv: symbol!("mUV"),
     m_uv_int: symbol!("mUVI"),
-    mu_r_sq: symbol!(format!("{}::μᵣ²", vakint::NAMESPACE)),
+    mu_r_sq: symbol!("μᵣ²"),
     delta_vec: symbol!(
         "δ",
         norm = |f, out| {

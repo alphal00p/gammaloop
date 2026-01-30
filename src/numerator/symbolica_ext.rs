@@ -16,7 +16,7 @@ use symbolica::{
     function,
 };
 
-use crate::utils::{TENSORLIB, W_};
+use crate::utils::{GS, TENSORLIB, W_};
 
 use super::ParsingNet;
 pub type ParsingNetError = spenso::network::TensorNetworkError<
@@ -32,6 +32,9 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 pub trait AtomCoreExt {
     fn to_param_color(&self) -> Atom;
     fn wrap_color(&self, symbol: Symbol) -> Atom;
+    fn kill_color(&self) -> Atom {
+        self.wrap_color(GS.killing_func)
+    }
 
     fn floatify(&self, prec: u32) -> Atom;
 
@@ -224,7 +227,7 @@ mod tests {
         .unwrap();
 
         for g in gls {
-            let mut numerator = g.numerator(&g.no_dummy());
+            let mut numerator = g.numerator(&g.no_dummy(), &g.empty_subgraph());
 
             // TODO Check if we include overall factor in main
             numerator.state.expr *= &g.global_prefactor.num * &g.global_prefactor.projector; // * &gl5.overall_factor;

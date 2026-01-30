@@ -27,7 +27,7 @@ impl Graph {
 
         if settings.output_full_numerator {
             let mut num = self
-                .numerator(&self.full_filter())
+                .numerator(&self.full_filter(), &self.empty_subgraph())
                 .get_single_atom()
                 .unwrap();
 

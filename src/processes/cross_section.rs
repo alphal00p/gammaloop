@@ -22,7 +22,7 @@ use spenso::{
     structure::concrete_index::ExpandedIndex,
 };
 use tracing::info;
-use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
+use vakint::Vakint;
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
@@ -139,7 +139,7 @@ impl CsAmplitudeCTDiagram {
         &mut self,
         graph: &Graph,
         lu_cut: &OrientedCut,
-        vakint: &Vakint,
+        vakint: (&Vakint, &vakint::VakintSettings),
         add_lu_cut_feynman_rules: bool,
         settings: &GenerationSettings,
         conjugate: bool,
@@ -666,13 +666,16 @@ impl CrossSectionGraph {
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
         }
+
+        let vk_settings = settings.uv.vakint.true_settings();
+        let vk = (crate::utils::vakint()?, &vk_settings);
         debug!("building parametric integrand");
-        self.build_parametric_integrand(settings)?;
+        self.build_parametric_integrand(settings, vk)?;
         //self.build_parametric_integrand_raised_cuts(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
-            self.build_threshold_counterterm(settings)?;
+            self.build_threshold_counterterm(settings, vk)?;
             self.build_subspace_data()?;
         }
 
@@ -963,9 +966,10 @@ impl CrossSectionGraph {
     pub(crate) fn build_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<()> {
         self.derived_data.cut_paramatric_integrand =
-            self.build_original_parametric_integrand(settings)?;
+            self.build_original_parametric_integrand(settings, vakint)?;
         Ok(())
     }
 
@@ -1036,9 +1040,9 @@ impl CrossSectionGraph {
     fn build_parametric_integrand_raised_cuts(
         &mut self,
         settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<()> {
         let global_num = self.graph.global_network();
-        let vakint = self.new_vakint();
 
         let (tree_structure, replacements) = self.get_initial_state_tree_data();
 
@@ -1153,6 +1157,10 @@ impl CrossSectionGraph {
                         .collect::<TiVec<SubgraphOrientationID, _>>();
 
                         let wood = self.graph.wood(&sandwich_subgraph);
+                        let mut vk_settings = vakint.1.clone();
+                        //  it needs to be the max number of loops across all divergent spinneys of that graph
+                        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+                        let vakint = (vakint.0, &vk_settings);
                         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
                         let constraint_data = ConstraintData {
@@ -1165,7 +1173,7 @@ impl CrossSectionGraph {
                         forest.compute(
                             &self.graph,
                             &sandwich_subgraph,
-                            &vakint,
+                            vakint,
                             &orientations,
                             &canonize_esurface,
                             &cut_edges,
@@ -1232,6 +1240,7 @@ impl CrossSectionGraph {
     fn build_original_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<TiVec<CutId, Atom>> {
         let global_num = self.graph.global_network();
 
@@ -1267,10 +1276,18 @@ impl CrossSectionGraph {
                 .filter(|o| settings.orientation_pattern.alt_filter(o))
                 .collect::<TiVec<AmplitudeOrientationID, _>>();
 
-            let vakint = self.new_vakint();
-
             let left_wood = self.graph.wood(&cut.left);
             let right_wood = self.graph.wood(&cut.right);
+
+            let mut vk_settings_left = vakint.1.clone();
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings_left.number_of_terms_in_epsilon_expansion = left_wood.max_loops as i64;
+            let vakint_left = (vakint.0, &vk_settings_left);
+
+            let mut vk_settings_right = vakint.1.clone();
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings_right.number_of_terms_in_epsilon_expansion = right_wood.max_loops as i64;
+            let vakint_right = (vakint.0, &vk_settings_right);
 
             let mut left_forest = left_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
             let mut right_forest = right_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
@@ -1278,7 +1295,7 @@ impl CrossSectionGraph {
             left_forest.compute(
                 &self.graph,
                 &cut.left,
-                &vakint,
+                vakint_left,
                 &left_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -1290,7 +1307,7 @@ impl CrossSectionGraph {
             right_forest.compute(
                 &self.graph,
                 &cut.right,
-                &vakint,
+                vakint_right,
                 &right_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -1451,21 +1468,6 @@ impl CrossSectionGraph {
         local_prefactor + integrated_prefactor
     }
 
-    fn new_vakint(&self) -> Vakint {
-        Vakint::new(Some(VakintSettings {
-            allow_unknown_integrals: false,
-            evaluation_order: EvaluationOrder::alphaloop_only(),
-            integral_normalization_factor: LoopNormalizationFactor::MSbar,
-            run_time_decimal_precision: 32,
-            number_of_terms_in_epsilon_expansion: self.graph.n_loops(&self.graph.no_dummy()) as i64
-                + 1,
-            // temporary_directory: Some("./form".into())R,
-            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
-            ..VakintSettings::default()
-        }))
-        .unwrap()
-    }
-
     fn build_lmbs(&mut self) {
         let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
 
@@ -1515,7 +1517,11 @@ impl CrossSectionGraph {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn build_threshold_counterterm(&mut self, settings: &GenerationSettings) -> Result<()> {
+    fn build_threshold_counterterm(
+        &mut self,
+        settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
+    ) -> Result<()> {
         // thershold enumeration as st cuts
         let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
             let mut unsorted = self.graph.all_st_cuts_for_cs(
@@ -1536,7 +1542,6 @@ impl CrossSectionGraph {
 
         let (initial_state_tree, replacements) = self.get_initial_state_tree_data();
 
-        let vakint = self.new_vakint();
         let global_num = self.graph.global_network();
 
         let mut counterterms = TiVec::<CutId, LUCounterTermData>::new();
@@ -1674,7 +1679,7 @@ impl CrossSectionGraph {
                     let left_ct = ct_diagram.get_tensor_network_cached(
                         &self.graph,
                         &cut.cut,
-                        &vakint,
+                        vakint,
                         true,
                         settings,
                         false,
@@ -1737,7 +1742,7 @@ impl CrossSectionGraph {
                     let right_ct = ct_diagram.get_tensor_network_cached(
                         &self.graph,
                         &cut.cut,
-                        &vakint,
+                        vakint,
                         false,
                         settings,
                         true,

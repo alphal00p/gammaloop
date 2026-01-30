@@ -48,7 +48,7 @@ use crate::{
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{F, FUN_LIB, GS, Length, TENSORLIB, VAKINT, W_, symbolica_ext::LOGPRINTOPTS},
+    utils::{F, FUN_LIB, GS, Length, TENSORLIB, W_, symbolica_ext::LOGPRINTOPTS},
     uv::{UVgenerationSettings, UltravioletGraph, approx::to_vakint_integrand},
 };
 use eyre::{Context, eyre};
@@ -56,7 +56,7 @@ use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::{HedgePair, Orientation},
-        subgraph::{SuBitGraph, SubGraphLike},
+        subgraph::{SuBitGraph, SubGraphLike, SubSetOps},
     },
     parser::DotGraph,
 };
@@ -420,7 +420,11 @@ impl AmplitudeGraph {
 
 impl AmplitudeGraph {
     pub fn renormalization_part(&mut self, settings: &UVgenerationSettings) -> Result<Atom> {
+        let mut vk_settings = settings.vakint.true_settings();
         let wood = self.graph.wood(&self.graph.no_dummy());
+        //  it needs to be the max number of loops across all divergent spinneys of that graph
+        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
         if self.derived_data.cff_expression.is_none() {
@@ -442,12 +446,12 @@ impl AmplitudeGraph {
             .map(|a| a.data.clone())
             .collect();
 
-        let vakint = self.new_vakint();
+        let vk = (crate::utils::vakint()?, &vk_settings);
 
         forest.compute(
             &self.graph,
             &self.graph.no_dummy(),
-            &vakint,
+            vk,
             &orientations,
             &canonize_esurface,
             &[],
@@ -456,7 +460,11 @@ impl AmplitudeGraph {
             false,
         );
 
-        forest.pole_part_of_ends(&self.graph)
+        forest.pole_part_of_ends(&self.graph).map(|a| {
+            (a * &self.graph.global_prefactor.projector)
+                .simplify_color()
+                .to_dots()
+        })
     }
 
     #[allow(dead_code)]
@@ -497,10 +505,12 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<()> {
+        let vk_settings = settings.uv.vakint.true_settings();
+        let vk = (crate::utils::vakint()?, &vk_settings);
         debug!("Generating Cff");
         self.generate_cff()?;
         debug!("Building Parametric Integrand");
-        self.build_parametric_integrand(settings)?;
+        self.build_parametric_integrand(settings, vk)?;
 
         if self.graph.is_group_master {
             debug!("Building Tropical Sampler");
@@ -520,6 +530,7 @@ impl AmplitudeGraph {
             self.derived_data.threshold_counterterms = self
                 .build_threshold_counterterm_parametric_integrand(
                     settings,
+                    vk,
                     locked_runtime_settings,
                     model,
                 )?;
@@ -596,55 +607,31 @@ impl AmplitudeGraph {
         cff_atom / factors_of_pi
     }
 
-    pub fn to_numerical(numerical_result: AtomView) -> Result<NumericalEvaluationResult> {
-        let vakint = {
-            let guard = VAKINT.read().unwrap();
-            if let Some(ref vakint) = *guard {
-                vakint.clone()
-            } else {
-                panic!("Vakint not initialised");
-            }
-        };
+    pub fn to_numerical(
+        numerical_result: AtomView,
+        true_settings: &vakint::VakintSettings,
+    ) -> Result<NumericalEvaluationResult> {
         Ok(NumericalEvaluationResult::from_atom(
             numerical_result,
-            vakint_symbol!(&vakint.settings.epsilon_symbol),
-            &vakint.settings,
+            vakint_symbol!(&true_settings.epsilon_symbol),
+            &true_settings,
         )?)
     }
 
-    pub fn new_vakint(&self) -> Vakint {
-        // TODO: avoid cloning by modifying Vakint's API so as to be able to set number_of_terms_in_epsilon_expansion for each call to evaluate
-        let mut vakint = {
-            let guard = VAKINT.read().unwrap();
-            if let Some(ref vakint) = *guard {
-                vakint.clone()
-            } else {
-                panic!("Vakint not initialised");
-            }
-        };
-        // FIXME: This is incorrect: it needs to be the max number of loops across all divergent spinneys of that graph
-        vakint.settings.number_of_terms_in_epsilon_expansion =
-            self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
-
-        vakint
-    }
-
-    pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph>>(
+    pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(
         &self,
         model: &Model,
         component: &S,
         evaluate_numerically: bool,
-        number_of_terms_in_epsilon_expansion: Option<usize>,
+        vakint: &Vakint,
+        settings: &vakint::VakintSettings,
         run_time_settings: &RuntimeSettings,
         include_global_numerator: bool,
     ) -> Result<Atom> {
-        let mut vakint = self.new_vakint();
-
-        if let Some(n_terms) = number_of_terms_in_epsilon_expansion {
-            vakint.settings.number_of_terms_in_epsilon_expansion = n_terms as i64;
-        }
-
-        let pysec_dec_enabled_in_vakint = vakint.settings.evaluation_order.0.iter().find_map(|o| {
+        let mut settings = settings.clone();
+        settings.number_of_terms_in_epsilon_expansion =
+            self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
+        let pysec_dec_enabled_in_vakint = settings.evaluation_order.0.iter().find_map(|o| {
             if let EvaluationMethod::PySecDec(opts) = o {
                 Some(opts)
             } else {
@@ -691,13 +678,13 @@ impl AmplitudeGraph {
             }
 
             // Make sure to properly do the upcasting to required precision in vakint settings
-            vakint.params_from_complex_f64(&complex_params)
+            vakint.params_from_complex_f64(&settings, &complex_params)
         } else {
             HashMap::default()
         };
 
         if let Some(pysec_dec_opts) = pysec_dec_enabled_in_vakint {
-            vakint.settings.evaluation_order.adjust(
+            settings.evaluation_order.adjust(
                 None,
                 pysec_dec_opts.relative_precision,
                 &HashMap::default(),
@@ -706,7 +693,9 @@ impl AmplitudeGraph {
             );
         }
 
-        let mut num = self.graph.numerator(component);
+        let mut num = self
+            .graph
+            .numerator(component, &self.graph.empty_subgraph());
         if include_global_numerator {
             num.state.expr *= &self.graph.global_prefactor.num;
         }
@@ -768,7 +757,9 @@ impl AmplitudeGraph {
         //     vakint_integrand.to_canonical_string()
         // );
 
-        let analytical_evaluation = vakint.evaluate(vakint_integrand.as_view()).unwrap();
+        let analytical_evaluation = vakint
+            .evaluate(&settings, vakint_integrand.as_view())
+            .unwrap();
         // println!(
         //     "\nVakint analytical evaluation:\n{:#}",
         //     analytical_evaluation
@@ -778,6 +769,7 @@ impl AmplitudeGraph {
         } else {
             let (numerical_evaluation, _error) = vakint
                 .numerical_evaluation(
+                    &settings,
                     analytical_evaluation.as_view(),
                     &HashMap::default(),
                     &complex_params_vakint,
@@ -787,8 +779,8 @@ impl AmplitudeGraph {
 
             // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
 
-            let numerical_evaluation_atom = numerical_evaluation
-                .to_atom(vakint_symbol!(vakint.settings.epsilon_symbol.clone()));
+            let numerical_evaluation_atom =
+                numerical_evaluation.to_atom(vakint_symbol!(settings.epsilon_symbol.clone()));
 
             Ok(numerical_evaluation_atom)
         }
@@ -797,9 +789,10 @@ impl AmplitudeGraph {
     pub(crate) fn build_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<()> {
         self.derived_data.all_mighty_integrand =
-            self.build_original_parametric_integrand(settings)?;
+            self.build_original_parametric_integrand(settings, vakint)?;
         Ok(())
     }
 
@@ -812,6 +805,7 @@ impl AmplitudeGraph {
     fn build_threshold_counterterm_parametric_integrand(
         &self,
         settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
@@ -910,7 +904,18 @@ impl AmplitudeGraph {
             }));
 
             let circled_wood = self.graph.wood(&circled);
+            let mut vk_settings_circled = vakint.1.clone();
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings_circled.number_of_terms_in_epsilon_expansion =
+                circled_wood.max_loops as i64;
+            let vakint_circled = (vakint.0, &vk_settings_circled);
+
             let complement_wood = self.graph.wood(&complement);
+            let mut vk_settings_complement = vakint.1.clone();
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings_complement.number_of_terms_in_epsilon_expansion =
+                complement_wood.max_loops as i64;
+            let vakint_complement = (vakint.0, &vk_settings_complement);
 
             let mut circled_forest =
                 circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
@@ -948,14 +953,12 @@ impl AmplitudeGraph {
             .filter(|a| settings.orientation_pattern.filter(a))
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
-            let vakint = self.new_vakint();
-
             // println!("//Circled\n{}", self.graph.dot(&circled));
             // println!("//Complement\n{}", self.graph.dot(&complement));
             circled_forest.compute(
                 &self.graph,
                 &circled,
-                &vakint,
+                vakint_circled,
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -967,7 +970,7 @@ impl AmplitudeGraph {
             complement_forest.compute(
                 &self.graph,
                 &complement,
-                &vakint,
+                vakint_complement,
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -1061,13 +1064,23 @@ impl AmplitudeGraph {
               amplitude_graph.name = %self.graph.name,
           )
       )]
-    fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
+    fn build_original_parametric_integrand(
+        &self,
+        settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
+    ) -> Result<Atom> {
         let wood = self.graph.wood(&self.graph.no_dummy());
         debug!(
             "Wood for {}{}",
             self.graph.name,
             wood.show_graphs(&self.graph)
         );
+
+        let mut vk_settings = vakint.1.clone();
+        //  it needs to be the max number of loops across all divergent spinneys of that graph
+        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+        let vakint = (vakint.0, &vk_settings);
+
         // debug!("{}", wood.dot(&self.graph));
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
@@ -1088,12 +1101,10 @@ impl AmplitudeGraph {
             .filter(|a| settings.orientation_pattern.filter(a))
             .collect();
 
-        let vakint = self.new_vakint();
-
         forest.compute(
             &self.graph,
             &self.graph.no_dummy(),
-            &vakint,
+            vakint,
             &orientations,
             &canonize_esurface,
             &[],

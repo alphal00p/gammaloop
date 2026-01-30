@@ -28,7 +28,7 @@ use tracing_subscriber::{reload, EnvFilter, Registry};
 use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
-    initialisation::{initialise, initialise_with_settings},
+    initialisation::initialise,
     integrands::HasIntegrand,
     model::{InputParamCard, Model},
     processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
@@ -263,7 +263,6 @@ impl SyncSettings for CLISettings {
         // println!("Syncing settings {}", self.global.logfile_directive);
         set_file_log_filter(&self.global.logfile_directive)?;
         set_stderr_log_filter(&self.global.display_directive)?;
-        initialise_with_settings(Some(&self.global))?;
         Ok(())
     }
 }

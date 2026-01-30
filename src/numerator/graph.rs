@@ -760,6 +760,8 @@ mod test {
 
     #[test]
     fn qqx_aaa_tree() {
+        test_initialise();
+
         let mut graph:AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
                     num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
                     ext    [style=invis]
@@ -772,11 +774,15 @@ mod test {
                     v2 -> v3 [particle="d" id=6];
         }).unwrap();
 
+        let set = GenerationSettings::default();
+        let vk_settings = set.uv.vakint.true_settings();
+        let vk = (crate::utils::vakint().unwrap(), &vk_settings);
+
         // let model = crate::utils::test_utils::load_generic_model("sm");
 
         graph.generate_cff().unwrap();
         graph
-            .build_parametric_integrand(&GenerationSettings::default())
+            .build_parametric_integrand(&GenerationSettings::default(), vk)
             .unwrap();
 
         println!("{}", graph.derived_data.all_mighty_integrand);
@@ -859,7 +865,10 @@ mod test {
         for g in &mut graphs {
             let mut out = String::new();
 
-            let new_a = (g.numerator(&g.full_filter()).state.expr
+            let new_a = (g
+                .numerator(&g.full_filter(), &g.empty_subgraph())
+                .state
+                .expr
                 * &g.global_prefactor.projector
                 * &g.global_prefactor.num
                 * &g.overall_factor)

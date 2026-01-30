@@ -3,16 +3,17 @@ use crate::{
         expression::{GraphOrientation, OrientationData, OrientationID},
         generation::{ConstraintData, ShiftRewrite},
     },
-    graph::{Edge, Graph, Vertex},
+    graph::{Edge, Graph, LMBext, Vertex},
     momentum::SignOrZero,
     numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
-    utils::{GS, ose_atom_from_index, symbolica_ext::CallSymbol},
+    utils::{GS, W_, ose_atom_from_index, symbolica_ext::CallSymbol},
     uv::approx::CFFapprox,
 };
 use color_eyre::Result;
 use eyre::eyre;
 use spenso::{
     network::{Network, store::TensorScalarStoreMapping},
+    shadowing::symbolica_utils::AtomCoreExt as _,
     structure::abstract_index::AIND_SYMBOLS,
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
@@ -59,7 +60,7 @@ impl Forest {
         &mut self,
         graph: &G,
         amplitude_subgraph: &S,
-        vakint: &Vakint,
+        vakint: (&Vakint, &vakint::VakintSettings),
         orientations: &TiVec<OID, O>,
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
@@ -161,6 +162,11 @@ impl Forest {
 
     pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<Atom> {
         let mut sum = Atom::Zero;
+
+        let wild = Atom::var(W_.x___);
+
+        let replacements =
+            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
         for (_, n) in &self.dag.nodes {
             if !n.children.is_empty() {
                 continue;
@@ -175,23 +181,36 @@ impl Forest {
                     .expr(&graph.full_filter()),
                 graph.name
             ))?;
+
+            debug!(
+                "{}:{}",
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+                atom.to_bare_ordered_string()
+            );
             sum += sign * atom;
         }
-
-        let ep = vakint_symbol!("ε");
         let n_loops = graph.n_loops(&graph.full_filter());
         let pole_stripped = sum
-            .series(ep, Atom::Zero, (n_loops as i64 + 1).into(), true)
+            .series(
+                GS.dim_epsilon,
+                Atom::Zero,
+                (n_loops as i64 + 1).into(),
+                true,
+            )
             .unwrap();
 
         let mut sum = Atom::Zero;
 
         for (power, p) in pole_stripped.terms() {
             if power < 0 {
-                sum += p * Atom::var(ep).npow(power);
+                sum += p * Atom::var(GS.dim_epsilon).npow(power);
             }
         }
-        Ok(sum)
+        Ok(sum.replace_multiple(&replacements))
     }
 
     #[instrument(skip_all)]

@@ -5,6 +5,7 @@ use gammalooprs::processes::AmplitudeGraph;
 
 use gammalooprs::processes::{Amplitude, ProcessCollection};
 
+use gammalooprs::utils::vakint;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -51,7 +52,7 @@ impl Evaluate {
     pub fn run(
         &self,
         state: &mut State,
-        _global_cli_settings: &CLISettings,
+        global_cli_settings: &CLISettings,
         default_runtime_settings: &RuntimeSettings,
     ) -> Result<Atom> {
         let (process_id, integrand_name) =
@@ -65,6 +66,19 @@ impl Evaluate {
                 ));
             }
         };
+
+        let mut true_settings = global_cli_settings
+            .global
+            .generation
+            .uv
+            .vakint
+            .true_settings();
+
+        let vakint = vakint()?;
+
+        if let Some(n_terms) = self.number_of_terms_in_epsilon_expansion {
+            true_settings.number_of_terms_in_epsilon_expansion = n_terms as i64;
+        }
 
         let mut full_evaluation = Atom::Zero;
 
@@ -96,7 +110,8 @@ impl Evaluate {
                     &state.model,
                     gc,
                     self.numerical,
-                    self.number_of_terms_in_epsilon_expansion,
+                    vakint,
+                    &true_settings,
                     default_runtime_settings,
                     // Only include the overall global numerator on the first of the connected components
                     i_gc == 0,
@@ -122,7 +137,7 @@ impl Evaluate {
             )?;
         } else if self.numerical {
             let numerical_evaluation_result =
-                AmplitudeGraph::to_numerical(full_evaluation.as_view())?;
+                AmplitudeGraph::to_numerical(full_evaluation.as_view(), &true_settings)?;
             info!(
                 "Numerical evaluation of the analytical result for process {}:\n{}",
                 state.process_list.processes[process_id]

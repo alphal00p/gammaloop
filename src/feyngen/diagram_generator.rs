@@ -4089,7 +4089,7 @@ impl ProcessDefinition {
                         } else {
                             // println!("Processing graph #{}...", i_g);
                             // println!("Bare graph: {}",bare_graph.dot_serialize());
-                            let mut numerator = bare_graph.numerator(&bare_graph.no_dummy());
+                            let mut numerator = bare_graph.numerator(&bare_graph.no_dummy(),&bare_graph.empty_subgraph());
 
 
                             // TODO Check if we include overall factor in main

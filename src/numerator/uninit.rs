@@ -1,15 +1,18 @@
 use std::sync::atomic::AtomicUsize;
 
 use linnet::half_edge::subgraph::subset::SubSet;
-use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetLike};
+use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps};
 use linnet::half_edge::{NodeIndex, involution::HedgePair};
 use spenso::network::library::TensorLibraryData;
-use symbolica::atom::Atom;
+use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use symbolica::atom::AtomCore;
+use symbolica::atom::{Atom, AtomView};
+use symbolica::symbol;
 use tracing::debug;
 use tracing::instrument;
 
 use crate::graph::Graph;
+use crate::numerator::symbolica_ext::AtomCoreExt as _;
 
 use super::{AppliedFeynmanRule, Numerator, UnInit};
 
@@ -55,7 +58,7 @@ impl Numerator<UnInit> {
                     num *= graph[sink_n].get_num();
                 }
 
-                num *= &e.data.num;
+                num *= &e.data.num //.kill_color();
             }
         }
 
@@ -71,7 +74,62 @@ impl Numerator<UnInit> {
             }
         }
 
-        debug!( numerator = %num.to_canonical_string(),"Numerator constructed",);
+        debug!( numerator = %num.to_bare_ordered_string(),"Numerator constructed",);
+
+        Numerator {
+            state: AppliedFeynmanRule {
+                expr: num,
+                state: Default::default(),
+            },
+        }
+    }
+    #[instrument(skip_all, fields(graph=%graph.name,debug_dot=%graph.debug_dot(),subgraph_dot=%graph.dot(subgraph)))]
+    #[allow(clippy::wrong_self_convention)]
+    pub(crate) fn fill_in_reduced<S: SubGraphLike + SubSetOps>(
+        self,
+        graph: &Graph,
+        subgraph: &S,
+        ignore: &S,
+    ) -> Numerator<AppliedFeynmanRule> {
+        let mut num = Atom::one();
+
+        let mut seen: SubSet<NodeIndex> = SubSet::empty(graph.n_nodes());
+
+        for (nid, _, _) in graph.underlying.iter_nodes_of(ignore) {
+            seen.add(nid);
+        }
+        let not_ignored = subgraph.subtract(ignore);
+
+        for (p, eid, e) in graph.underlying.iter_edges_of(&not_ignored) {
+            if let HedgePair::Paired { source, sink } = p {
+                let source_n = graph.node_id(source);
+                if !seen[source_n] {
+                    seen.add(source_n);
+                    num *= graph[source_n].get_num();
+                }
+                let sink_n = graph.node_id(sink);
+                if !seen[sink_n] {
+                    seen.add(sink_n);
+                    num *= graph[sink_n].get_num();
+                }
+
+                num *= &e.data.num //.kill_color();
+            }
+        }
+
+        let notseen = !seen;
+
+        // From all the nodes not yet covered by paired edges, include those included in the subgraph, ignoring dummies
+        for node_id in notseen.included_iter() {
+            if graph
+                .iter_crown(node_id)
+                .all(|h| subgraph.includes(&h) || graph[graph[&h]].is_dummy)
+            {
+                num *= graph[node_id].get_num()
+            }
+        }
+
+        debug!( numerator = %num.to_bare_ordered_string(),"Numerator constructed",);
 
         Numerator {
             state: AppliedFeynmanRule {

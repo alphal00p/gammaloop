@@ -52,7 +52,7 @@ use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::str::FromStr;
-use std::sync::{LazyLock, RwLock};
+use std::sync::{LazyLock, OnceLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
@@ -3441,7 +3441,27 @@ pub static INT_FUN_LIB: LazyLock<
     lib
 });
 
-pub static VAKINT: LazyLock<RwLock<Option<Vakint>>> = LazyLock::new(|| RwLock::new(None));
+pub static VAKINT: OnceLock<Result<Vakint>> = OnceLock::new();
+
+pub fn init_vakint() -> Result<()> {
+    let r: &Result<Vakint, eyre::Report> =
+        VAKINT.get_or_init(|| Vakint::new().map_err(|e| eyre!(e.to_string())));
+
+    match r {
+        Ok(_) => Ok(()),
+        Err(e) => Err(eyre!(e.to_string())),
+    }
+}
+
+pub fn vakint() -> Result<&'static Vakint> {
+    let r = VAKINT
+        .get()
+        .ok_or_else(|| eyre!("Vakint not initialised"))?;
+    match r {
+        Ok(v) => Ok(v),
+        Err(e) => Err(eyre!(e.to_string())),
+    }
+}
 
 impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
     #[inline]

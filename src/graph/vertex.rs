@@ -4,12 +4,18 @@ use linnet::{
     parser::DotVertexData,
 };
 
-use symbolica::atom::Atom;
+use spenso::network::library::TensorLibraryData;
+use symbolica::{
+    atom::{Atom, AtomView},
+    symbol,
+};
 
 use crate::{
     GammaLoopContext,
     feyngen::diagram_generator::NodeColorWithVertexRule,
     model::{ArcParticle, ArcVertexRule, Model},
+    numerator::symbolica_ext::AtomCoreExt,
+    utils::W_,
 };
 use color_eyre::Result;
 use eyre::{Context, eyre};
@@ -35,7 +41,7 @@ pub struct Vertex {
 
 impl Vertex {
     pub(crate) fn get_num(&self) -> Atom {
-        self.num.clone()
+        self.num.clone() //.kill_color()
     }
 }
 

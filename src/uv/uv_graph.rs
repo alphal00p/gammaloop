@@ -41,7 +41,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
-    fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
+    fn numerator<S: SubGraphLike + SubSetOps>(
+        &self,
+        subgraph: &S,
+        without: &S,
+    ) -> Numerator<AppliedFeynmanRule>;
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
@@ -259,10 +263,14 @@ impl UltravioletGraph for Graph {
 
         den
     }
-    fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule> {
+    fn numerator<S: SubGraphLike + SubSetOps>(
+        &self,
+        subgraph: &S,
+        without: &S,
+    ) -> Numerator<AppliedFeynmanRule> {
         let num = Numerator::default();
 
-        num.from_new_graph(self, subgraph)
+        num.fill_in_reduced(self, subgraph, without)
     }
 
     fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {

@@ -60,8 +60,7 @@ fn four_photon_one_loop_amp() {
     )
     .unwrap();
 
-    amp.generate_cff().unwrap();
-    amp.build_parametric_integrand(&GenerationSettings {
+    let set = GenerationSettings {
         orientation_pattern: OrientationPattern::from_orientation(
             &amp.derived_data
                 .cff_expression
@@ -75,8 +74,12 @@ fn four_photon_one_loop_amp() {
             ..Default::default()
         },
         ..Default::default()
-    })
-    .unwrap();
+    };
+    let vk_settings = set.uv.vakint.true_settings();
+    let vk = (crate::utils::vakint().unwrap(), &vk_settings);
+
+    amp.generate_cff().unwrap();
+    amp.build_parametric_integrand(&set, vk).unwrap();
 
     println!("{}", amp.derived_data.all_mighty_integrand);
 }
@@ -99,22 +102,22 @@ fn finit_part_ghostnnlo() {
     test_initialise().unwrap();
 
     let g: Vec<Graph> = dot!(digraph d1 {
+    projector = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+          in1 [style=invis];
+          in1 -> v1:0
+          [particle="ghG" pin="x:@-left"];
 
-      in1 [style=invis];
-      in1 -> v1:1
-      [particle="ghG" pin="x:@-left"];
+          out1 [style=invis];
+          v2:1 -> out1
+          [particle="ghG" pin="x:@+right"];
 
-      out1 [style=invis];
-      v2:2 -> out1
-      [particle="ghG" pin="x:@+right"];
-
-      v2 -> v1 [particle= "ghG~"];
-      v1 -> v3 [particle= "g"];
-      v2 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "g"];
-      v3 -> v4 [particle= "g"];
-    })
+          v2 -> v1 [particle= "ghG~"];
+          v1 -> v3 [particle= "g"];
+          v2 -> v4 [particle= "g"];
+          v3 -> v4 [particle= "g"];
+          v3 -> v4 [particle= "g"];
+          v3 -> v4 [particle= "g"];
+        })
     .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
@@ -131,11 +134,116 @@ fn finit_part_ghostnnlo() {
 
     println!("ren part: {}", a);
 }
+
 #[test]
-fn finit_part_ghostlo() {
+fn scalar_pole_part() {
+    test_initialise().unwrap();
+    let sunrise: Vec<Graph> = dot!( digraph sunrise{
+        edge [particle=scalar_1]
+        e        [style=invis]
+        e -> A:0   [ id=4]
+        B:1 -> e   [ id=5]
+        C:2 -> e   [ id=6]
+
+        A -> B    [ id=0]
+        B -> C     [ id=1]
+        C -> A   [ id=2]
+        B -> C    [ id=3]
+
+    },"scalars")
+    .unwrap();
+
+    let mut amp = Amplitude::from_graph_list("bub", sunrise).unwrap();
+
+    let model = load_generic_model("scalars");
+
+    let a = amp.graphs[0]
+        .renormalization_part(&UVgenerationSettings {
+            softct: false,
+            only_integrated: true,
+            ..Default::default()
+        })
+        .unwrap();
+
+    println!("ren part: {:>}", a);
+    println!(
+        "ren part: {:>}",
+        model.apply_parameter_replacement_rules(
+            &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
+        )
+    );
+}
+#[test]
+fn finite_part_ghost_nlo() {
+    test_initialise().unwrap();
+    let mut g: Vec<Graph> = dot!(
+        digraph d2 {
+
+                projector = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+
+              in1 [style=invis];
+              in1 -> v1:0
+              [dir=none particle="g" pin="x:@-left"];
+
+              out1 [style=invis];
+              v2:1 -> out1
+              [dir=none particle="g" pin="x:@+right"];
+
+              v3 -> v1 [particle= "ghG"];
+              v1 -> v4 [particle= "ghG"];
+              v2 -> v3 [id=3 particle= "ghG"];
+              v4 -> v2 [particle= "ghG"];
+              v3 -> v4 [particle= "g"];
+            }
+        digraph d1 {
+
+        projector = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
+
+      in1 [style=invis];
+      in1 -> v1:0
+      [particle="ghG" pin="x:@-left"];
+
+      out1 [style=invis];
+      v2:1 -> out1
+      [particle="ghG" pin="x:@+right"];
+
+      v1 -> v3 [particle= "g"];
+      v1 -> v4 [particle= "ghG"];
+      v2 -> v3 [particle= "g"];
+      v4 -> v2 [particle= "ghG"];
+      v3 -> v4 [particle= "g"];
+    })
+    .unwrap();
+
+    g.remove(0);
+    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+
+    let model = load_generic_model("sm");
+
+    let a = amp.graphs[0]
+        .renormalization_part(&UVgenerationSettings {
+            softct: false,
+            only_integrated: true,
+            ..Default::default()
+        })
+        .unwrap();
+
+    println!("ren part: {:>}", a);
+    println!(
+        "ren part: {:>}",
+        model.apply_parameter_replacement_rules(
+            &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
+        )
+    );
+}
+
+#[test]
+fn finit_part_ghlo() {
     test_initialise().unwrap();
 
     let g: Vec<Graph> = dot!(digraph d1 {
+
+        projector = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
 
           in1 [style=invis];
           in1 -> v1:0

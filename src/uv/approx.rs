@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use std::hash::Hash;
-
 use crate::{
     cff::{
         expression::{GraphOrientation, OrientationID},
@@ -11,13 +9,16 @@ use crate::{
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
     utils::{
-        GS, W_,
+        GS, VAKINT, W_,
         symbolica_ext::{CallSymbol, LOGPRINTOPTS, TypstFormat},
     },
     uv::UVgenerationSettings,
 };
 use ahash::AHashSet;
+use color_eyre::Result;
+use eyre::eyre;
 use idenso::gamma::GammaSimplifier;
+use std::hash::Hash;
 use tracing::debug;
 
 use spenso::{
@@ -36,7 +37,7 @@ use symbolica::{
 
 use linnet::half_edge::{
     HedgeGraph,
-    involution::{EdgeIndex, HedgePair},
+    involution::{EdgeIndex, Hedge, HedgePair},
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 
@@ -136,7 +137,14 @@ impl SimpleApprox {
     }
 }
 
-pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
+#[instrument(skip_all)]
+pub(crate) fn to_vakint_integrand<
+    E: UVE,
+    V,
+    H,
+    S: SubGraphLike + SubSetLike<Base = SuBitGraph>,
+    SS: SubGraphLike,
+>(
     integrand: &Atom,
     lmb: &LoopMomentumBasis,
     graph: &HedgeGraph<E, V, H>,
@@ -173,7 +181,6 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
     // vakint::symbols::S.mom
     let vk_edge = vakint_symbol!("edge");
     let vk_mom = vakint::symbols::S.k;
-    let vk_ext_mom = vakint::symbols::S.p;
     let vk_topo = vakint_symbol!("topo");
 
     for (pair, index, _data) in graph.iter_edges_of(reduced) {
@@ -288,12 +295,29 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
         "Integrand pre vakint: {:}",
         integrand_vakint.printer(LOGPRINTOPTS)
     );
+    let mut n_loops = 1;
+
+    let loop_edge_subgraph = reduced.included().subtract(&lmb.tree);
+    for (p, eid, d) in graph.iter_edges_of(&loop_edge_subgraph) {
+        integrand_vakint = integrand_vakint
+            .replace(function!(GS.emr_mom, usize::from(eid), W_.x___))
+            .with(function!(vk_mom, n_loops, W_.x___));
+        n_loops += 1;
+    }
     // panic!("FUFU");
     for (i, l) in lmb.loop_edges.iter().enumerate() {
-        integrand_vakint = integrand_vakint
+        if let Some(a) = integrand_vakint
             .replace(function!(GS.emr_mom, usize::from(*l), W_.x___))
-            .with(function!(vk_mom, i + 1, W_.x___));
+            .iter(function!(vk_mom, n_loops, W_.x___))
+            .next()
+        {
+            panic!("Found edge {l} in :{}", integrand_vakint);
+        }
     }
+
+    integrand_vakint = integrand_vakint
+        .replace(function!(GS.emr_mom, W_.x___))
+        .with(function!(vakint::symbols::S.p, W_.x___));
 
     // collect the topology
     integrand_vakint = integrand_vakint
@@ -304,11 +328,18 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
         .with(function!(vk_topo, W_.x_ * W_.y_));
 
     debug!(
+        "Graph with {}-{} loops:{}",
+        graph.cyclotomatic_number(reduced),
+        n_loops - 1,
+        graph.dot_lmb_of(&graph.full_filter(), lmb),
+    );
+    debug!(
         "Integrand vakint: {:>}",
         integrand_vakint.printer(PrintOptions {
             terms_on_new_line: true,
             color_builtin_symbols: false,
             color_namespace: false,
+            hide_all_namespaces: true,
             color_top_level_sum: false,
             ..Default::default()
         })
@@ -481,12 +512,12 @@ impl Approximation {
     >(
         &self,
         dependent: &Self,
-        vakint: &Vakint,
+        vakint: (&Vakint, &vakint::VakintSettings),
         uv_graph: &G,
         amplitude_subgraph: &S,
         settings: &UVgenerationSettings,
         pole_part: bool,
-    ) -> ApproxOp {
+    ) -> Result<ApproxOp> {
         let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
@@ -510,7 +541,7 @@ impl Approximation {
             dependent.integrated_4d.expr()
         };
         let Some((inner_t, sign)) = dep else {
-            return ApproxOp::NotComputed;
+            return Ok(ApproxOp::NotComputed);
         };
 
         //(int + inner)*red
@@ -522,7 +553,7 @@ impl Approximation {
         //Tb(A*(T(B)+Tb(B))=Tb(A*Tb(B))
         // (1 + G_inner)*G_red
         let mut t_arg = uv_graph
-            .numerator(&reduced)
+            .numerator(&reduced, &dependent.subgraph)
             .to_d_dim(GS.dim)
             .get_single_atom()
             .unwrap();
@@ -539,28 +570,32 @@ impl Approximation {
             debug!(t_arg = %t_arg,"T arg gamma simplified for integrated 4d CT");
         }
 
-        let ep = vakint_symbol!("ε");
         let n_loops = uv_graph.n_loops(amplitude_subgraph);
 
-        // strip the pole part of inner_t as this is removed by MS bar
-        let mut pole_stripped = inner_t
-            .series(ep, Atom::Zero, (n_loops as i64 + 1).into(), true)
-            .unwrap()
-            .to_atom();
+        let inner_series = inner_t
+            .series(
+                GS.dim_epsilon,
+                Atom::Zero,
+                (n_loops as i64 + 1).into(),
+                true,
+            )
+            .unwrap();
 
-        debug!("Series: {}", pole_stripped.printer(LOGPRINTOPTS));
+        debug!("Series: {}", inner_series.to_atom().printer(LOGPRINTOPTS));
 
-        if pole_part {
-            for i in 1..(n_loops as i64 + 1) {
-                pole_stripped = pole_stripped
-                    .replace(Atom::var(ep).npow(i))
-                    .with(Atom::Zero);
-            }
-        } else {
-            for i in -(uv_graph.n_loops(&dependent.subgraph) as i64)..0 {
-                pole_stripped = pole_stripped
-                    .replace(Atom::var(ep).npow(i))
-                    .with(Atom::Zero);
+        let mut pole_stripped = Atom::Zero;
+
+        for (power, p) in inner_series.terms() {
+            // println!("Power: {}", power);
+            // println!("Coeff: {}", p.printer(LOGPRINTOPTS));
+            if pole_part {
+                if power <= 0 {
+                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
+                }
+            } else {
+                if power > 0 {
+                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
+                }
             }
         }
 
@@ -571,10 +606,10 @@ impl Approximation {
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
-        println!("Reps:");
-        for r in &mom_reps {
-            println!("{r}");
-        }
+        // println!("Reps:");
+        // for r in &mom_reps {
+        //     println!("{r}");
+        // }
 
         // println!(
         //     "Expand-prerep {} with dod={} in {:?}",
@@ -667,31 +702,55 @@ impl Approximation {
         let integrand_vakint =
             to_vakint_integrand(&a, &self.lmb, graph, &reduced, &dependent.subgraph, true);
 
-        // let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
-        // println!("\nVakint expression:\n{:#}", vakint_expr);
+        // // let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
+        // debug!(
+        //     "\nVakint expression:\n{}",
+        //     integrand_vakint.printer(PrintOptions {
+        //         terms_on_new_line: true,
+        //         color_builtin_symbols: false,
+        //         color_namespace: false,
+        //         hide_all_namespaces: false,
+        //         color_top_level_sum: false,
+        //         ..Default::default()
+        //     })
+        // );
 
-        let mut res = vakint.evaluate(integrand_vakint.as_view()).unwrap();
+        debug!("{:#?}", &vakint.1);
 
-        println!("\nRaw integrated CT:\n{:#}\n", res);
+        let mut res = vakint
+            .0
+            .evaluate(&vakint.1, integrand_vakint.as_view())
+            .unwrap();
+
+        debug!(
+            "\nRaw integrated CT:\n{}\n",
+            res.printer(PrintOptions {
+                terms_on_new_line: true,
+                color_builtin_symbols: false,
+                color_namespace: false,
+                hide_all_namespaces: true,
+                color_top_level_sum: false,
+                ..Default::default()
+            })
+        );
         let vk_metric = vakint_symbol!("g");
+        let mink = Minkowski {}.new_rep(4);
         // apply metric
+        res = res
+            .replace(vakint::symbols::S.p.f(&[W_.i_, W_.j_]))
+            .when(W_.j_.filter(|r| r.to_atom().is_integer()))
+            .with(
+                vakint::symbols::S
+                    .p
+                    .f(&[Atom::var(W_.i_), mink.to_symbolic([Atom::var(W_.j_)])]),
+            )
+            .replace(vakint::symbols::S.p.f(&[W_.x__]))
+            .with(GS.emr_mom.f(&[W_.x__]));
         res = res
             .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
             .with(function!(GS.emr_mom, W_.x___, W_.y_));
 
         res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
-
-        let mink = Minkowski {}.new_rep(4);
-        res = res
-            .replace(function!(GS.emr_mom, W_.x_, W_.i_) * function!(GS.emr_mom, W_.y_, W_.i_))
-            .when(W_.i_.filter(|a| {
-                println!("{}", a.to_atom());
-                matches!(a.to_atom(), Atom::Num(_))
-            }))
-            .with(
-                function!(GS.emr_mom, W_.x_, mink.to_symbolic([Atom::var(W_.i_)]))
-                    * function!(GS.emr_mom, W_.y_, mink.to_symbolic([Atom::var(W_.i_)])),
-            );
 
         if !pole_part {
             // multiply the results with a vacuum triangle that integrates to 1
@@ -716,13 +775,15 @@ impl Approximation {
             }
         }
 
+        debug!(pole_part = %pole_part,res = %res,"Final integrated 4d CT");
+
         // println!("\nIntegrated CT:\n{}\n", res);
 
-        ApproxOp::Dependent {
+        Ok(ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrand: res },
             sign: -sign,
             subgraph: reduced,
-        }
+        })
     }
 
     pub(crate) fn compute_integrated<
@@ -734,11 +795,11 @@ impl Approximation {
     >(
         &mut self,
         graph: &G,
-        vakint: &Vakint,
+        vakint: (&Vakint, &vakint::VakintSettings),
         amplitude_subgraph: &S,
         dependent: &Self,
         settings: &UVgenerationSettings,
-    ) {
+    ) -> Result<()> {
         self.integrated_4d = self.integrated_4d(
             dependent,
             vakint,
@@ -746,9 +807,10 @@ impl Approximation {
             amplitude_subgraph,
             settings,
             false,
-        );
+        )?;
         self.integrated_pole_part =
-            self.integrated_4d(dependent, vakint, graph, amplitude_subgraph, settings, true);
+            self.integrated_4d(dependent, vakint, graph, amplitude_subgraph, settings, true)?;
+        Ok(())
     }
 
     /// Computes the 3d approximation of the UV
@@ -863,7 +925,11 @@ impl Approximation {
             }
         }
 
-        let mut atomarg = cff * uv_graph.numerator(&reduced).get_single_atom().unwrap();
+        let mut atomarg = cff
+            * uv_graph
+                .numerator(&reduced, &dependent.subgraph)
+                .get_single_atom()
+                .unwrap();
 
         // println!(
         //     "Expand-prerep {} with dod={} in {:?}",
@@ -1147,7 +1213,10 @@ impl Approximation {
 
         cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
 
-        let mut resnum = graph.numerator(&reduced).get_single_atom().unwrap();
+        let mut resnum = graph
+            .numerator(&reduced, &self.subgraph.included())
+            .get_single_atom()
+            .unwrap();
 
         let mut reps = Vec::new();
         for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {

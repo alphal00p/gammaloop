@@ -205,7 +205,7 @@ higher_loops = []
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica={git="https://github.com/benruijl/symbolica",rev="af3f1b2043b270401920e4ff76d938217d995fc3"}
-# vakint={git="https://github.com/alphal00p/vakint",rev="5a0a920d199f8993c00ecdb1a3af6e82aa3bd9f2"}
+vakint={git="https://github.com/alphal00p/vakint",rev="a768ac5edaf7f7ddf7517497a4c41b6d303cb1c9"}
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"

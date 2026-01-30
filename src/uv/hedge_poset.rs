@@ -639,6 +639,46 @@ mod tests {
     }
 
     #[test]
+    fn dotted() -> Result<()> {
+        test_initialise().unwrap();
+
+        let sunrise: Graph = dot!( digraph sunrise{
+            edge [particle=scalar_1]
+            e        [style=invis]
+            e -> A:0   [ id=4]
+            B:1 -> e   [ id=5]
+            C:2 -> e   [ id=6]
+
+            A -> B    [ id=0]
+            B -> C     [ id=1]
+            C -> A   [ id=2]
+            B -> C    [ id=3]
+
+        },"scalars")?;
+        // let spinneys = spectacles.spinneys(&spectacles.full_filter());
+        let f = SpinneyWood::from_spinneys(
+            sunrise
+                .spinneys(&sunrise.full_filter())
+                .into_iter()
+                .map(|a| Spinney::new(a.filter, &sunrise, &sunrise.loop_momentum_basis)),
+            &sunrise,
+        );
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"3",
+        );
+        let f = f.unfold();
+        println!("{}", f);
+        insta::assert_snapshot!(
+        f.graph.n_nodes(),
+        @"4",
+         );
+
+        Ok(())
+    }
+
+    #[test]
     fn spectacles() -> Result<()> {
         test_initialise().unwrap();
 
