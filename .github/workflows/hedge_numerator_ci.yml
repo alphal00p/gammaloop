@@ -9,8 +9,6 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Configure partition count here - change this to scale parallelism
-  PARTITION_COUNT: 6
 
 jobs:
   build-deps:
@@ -155,15 +153,8 @@ jobs:
     needs: build-deps
     environment: Cachix
     strategy:
-      max-parallel: 3
       matrix:
-        # Use multiple runners for test partitioning
-        partition: [1, 2, 3, 4, 5, 6]
-        os: [ubuntu-latest]
-        include:
-          # Also test on macOS for one partition to ensure cross-platform compatibility
-          - os: macos-latest
-            partition: 1
+        os: [ubuntu-latest, macos-latest]
 
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
@@ -199,50 +190,31 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-          key: ${{ needs.build-deps.outputs.cache-key }}-test-${{ matrix.partition }}-${{ matrix.os }}
+          key: ${{ needs.build-deps.outputs.cache-key }}-test-${{ matrix.os }}
           restore-keys: |
             ${{ needs.build-deps.outputs.cache-key }}-${{ matrix.os }}
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-${{ matrix.os }}-
             nix-deps-
 
-      - name: Run nextest (partition ${{ matrix.partition }})
+      - name: Run nextest
         run: |
-          echo "Starting nextest partition ${{ matrix.partition }} at $(date)"
+          echo "Starting nextest at $(date)"
           echo "Available disk space:"
           df -h
           echo "Available memory:"
           free -h || vm_stat
-          time nix build .#checks.gammaloop-nextest-partition-${{ matrix.partition }} --print-build-logs
-          echo "Nextest partition ${{ matrix.partition }} completed at $(date)"
+          time nix build .#checks.gammaloop-nextest --print-build-logs
+          echo "Nextest completed at $(date)"
         timeout-minutes: 120
 
       - name: Run doctests
-        if: matrix.partition == 1
+        if: matrix.os == 'ubuntu-latest'
         run: |
           echo "Starting doctests at $(date)"
           time nix develop --command cargo test --doc --verbose
           echo "Doctests completed at $(date)"
         timeout-minutes: 60
-
-      - name: Generate test report
-        if: always()
-        run: |
-          nix develop --command cargo nextest run \
-            --partition hash:${{ matrix.partition }}/${{ env.PARTITION_COUNT }} \
-            --reporter junit \
-            --output-file nextest-report-${{ matrix.partition }}.xml \
-            --test-threads 1 || true
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ matrix.os }}-${{ matrix.partition }}
-          path: |
-            nextest-report-*.xml
-            target/nextest/default/junit.xml
-          retention-days: 7
 
   security-audit:
     if: always()
