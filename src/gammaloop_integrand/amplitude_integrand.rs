@@ -100,6 +100,7 @@ impl AmplitudeGraphTerm {
             [graph.derived_data.all_mighty_integrand.clone()],
             &graph.graph.param_builder,
             OptimizationSettings::default(),
+            settings.generation.evaluator.store_atom,
         )
         .unwrap();
 
@@ -116,6 +117,7 @@ impl AmplitudeGraphTerm {
                 }),
                 &graph.graph.param_builder,
                 OptimizationSettings::default(),
+                settings.generation.evaluator.store_atom,
             )
         } else {
             None

@@ -107,7 +107,8 @@ impl CompiledComplexEvaluatorGL {
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
-    pub exprs: Vec<Atom>,
+    pub exprs: Option<Vec<Atom>>,
+    pub exprs_len: usize,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
     pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
@@ -139,13 +140,20 @@ impl GenericEvaluator {
         atoms: I,
         builder: &ParamBuilder<f64>,
         optimization_settings: OptimizationSettings,
+        store_atom: bool,
     ) -> Option<Self> {
         let params: Vec<Atom> = (&builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
             .collect();
 
-        Self::new_from_raw_params(atoms, &params, &builder.fn_map, optimization_settings)
+        Self::new_from_raw_params(
+            atoms,
+            &params,
+            &builder.fn_map,
+            optimization_settings,
+            store_atom,
+        )
     }
 
     pub(crate) fn new_from_raw_params<I: IntoIterator<Item = Atom>>(
@@ -153,6 +161,7 @@ impl GenericEvaluator {
         params: &[Atom],
         fn_map: &FunctionMap,
         optimization_settings: OptimizationSettings,
+        store_atom: bool,
     ) -> Option<Self> {
         let exprs: Vec<Atom> = atoms.into_iter().collect();
         let tree = exprs
@@ -177,7 +186,8 @@ impl GenericEvaluator {
             tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
 
         let evaluator = GenericEvaluator {
-            exprs,
+            exprs_len: exprs.len(),
+            exprs: if store_atom { Some(exprs) } else { None },
             rational: Some(rational),
             f64_compiled: None,
             f64_eager,
@@ -242,7 +252,7 @@ impl GenericEvaluatorFloat for f64 {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<Complex<F<Self>>> {
         |params: &[Complex<F<f64>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
+            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // info!("USING COMPILED COMPLEX SINGLE");
                 //
@@ -340,7 +350,7 @@ impl GenericEvaluatorFloat for f128 {
     ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
         |params: &[Complex<F<f128>>]| {
             // info!("USING COMPLEX F128 MULTIPLE");
-            let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
+            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
             generic_evaluator.f128.evaluate(params, &mut out);
             out
         }
@@ -383,7 +393,7 @@ impl GenericEvaluatorFloat for ArbPrec {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<Complex<F<ArbPrec>>> {
         |params: &[Complex<F<ArbPrec>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
+            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
             generic_evaluator.arb.evaluate(params, &mut out);
             out
         }

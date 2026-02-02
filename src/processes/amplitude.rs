@@ -1432,6 +1432,7 @@ pub mod test {
             [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
             param_builder,
             OptimizationSettings::default(),
+            true,
         )
         .unwrap();
         // println!(" {}", a);

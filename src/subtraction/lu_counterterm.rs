@@ -66,6 +66,7 @@ impl LUCounterTermEvaluators {
                     [atom.clone()],
                     param_builder,
                     OptimizationSettings::default(),
+                    settings.generation.evaluator.store_atom,
                 )
                 .unwrap()
             })
@@ -79,6 +80,7 @@ impl LUCounterTermEvaluators {
                     [atom.clone()],
                     param_builder,
                     OptimizationSettings::default(),
+                    settings.generation.evaluator.store_atom,
                 )
                 .unwrap()
             })
@@ -89,6 +91,7 @@ impl LUCounterTermEvaluators {
                 [atom.clone()],
                 param_builder,
                 OptimizationSettings::default(),
+                settings.generation.evaluator.store_atom,
             )
             .unwrap()
         });
@@ -107,6 +110,7 @@ impl LUCounterTermEvaluators {
                             orientations.iter().map(|or| or.select(atom)),
                             param_builder,
                             OptimizationSettings::default(),
+                            settings.generation.evaluator.store_atom,
                         )
                         .unwrap()
                     })
@@ -130,6 +134,7 @@ impl LUCounterTermEvaluators {
                             orientations.iter().map(|or| or.select(atom)),
                             param_builder,
                             OptimizationSettings::default(),
+                            settings.generation.evaluator.store_atom,
                         )
                         .unwrap()
                     })
@@ -149,6 +154,7 @@ impl LUCounterTermEvaluators {
                     orientations.iter().map(|or| or.select(atom)),
                     param_builder,
                     OptimizationSettings::default(),
+                    settings.generation.evaluator.store_atom,
                 )
                 .unwrap()
             }))

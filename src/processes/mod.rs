@@ -23,6 +23,8 @@ pub struct EvaluatorSettings {
     pub iterative_orientation_optimization: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compile: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub store_atom: bool,
 }
 
 #[derive(Clone, Encode, Decode)]

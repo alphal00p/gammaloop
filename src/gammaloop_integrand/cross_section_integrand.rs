@@ -34,7 +34,6 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
 };
-use tracing::debug;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
@@ -49,6 +48,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{
@@ -279,6 +279,7 @@ impl CrossSectionGraphTerm {
                     [integrand_for_cut.clone()],
                     &graph.graph.param_builder,
                     OptimizationSettings::default(),
+                    settings.generation.evaluator.store_atom,
                 )
                 .unwrap()
             })
@@ -299,6 +300,7 @@ impl CrossSectionGraphTerm {
                             orientations.iter().map(|or| or.select(integrand_for_cut)),
                             &graph.graph.param_builder,
                             OptimizationSettings::default(),
+                            settings.generation.evaluator.store_atom,
                         )
                         .unwrap()
                     })
