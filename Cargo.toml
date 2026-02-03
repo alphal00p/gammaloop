@@ -163,7 +163,7 @@ schemars = "1.0.4"
 ringbuffer = "0.16.0"
 tracing-indicatif = "0.3.13"
 
-gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
+#gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
 rug = { version = "1.27.0", features = ["serde"] }
 vakint = "0.1.2"
 vectorize = "0.2.0"
