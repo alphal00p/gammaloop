@@ -572,34 +572,7 @@ impl Approximation {
 
         let n_loops = uv_graph.n_loops(amplitude_subgraph);
 
-        let inner_series = inner_t
-            .series(
-                GS.dim_epsilon,
-                Atom::Zero,
-                (n_loops as i64 + 1).into(),
-                true,
-            )
-            .unwrap();
-
-        debug!("Series: {}", inner_series.to_atom().printer(LOGPRINTOPTS));
-
-        let mut pole_stripped = Atom::Zero;
-
-        for (power, p) in inner_series.terms() {
-            // println!("Power: {}", power);
-            // println!("Coeff: {}", p.printer(LOGPRINTOPTS));
-            if pole_part {
-                if power <= 0 {
-                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
-                }
-            } else {
-                if power > 0 {
-                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
-                }
-            }
-        }
-
-        let mut atomarg = t_arg * pole_stripped;
+        let mut atomarg = t_arg * inner_t;
 
         debug!("Atomarg: {}", atomarg.printer(LOGPRINTOPTS));
 
@@ -751,6 +724,35 @@ impl Approximation {
             .with(function!(GS.emr_mom, W_.x___, W_.y_));
 
         res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
+
+        let series = res
+            .series(
+                GS.dim_epsilon,
+                Atom::Zero,
+                (n_loops as i64 + 1).into(),
+                true,
+            )
+            .unwrap();
+
+        debug!("Series: {}", series.to_atom().printer(LOGPRINTOPTS));
+
+        let mut pole_stripped = Atom::Zero;
+
+        for (power, p) in series.terms() {
+            // println!("Power: {}", power);
+            // println!("Coeff: {}", p.printer(LOGPRINTOPTS));
+            if pole_part {
+                if power < 0 {
+                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
+                }
+            } else {
+                if power >= 0 {
+                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
+                }
+            }
+        }
+
+        res = pole_stripped;
 
         if !pole_part {
             // multiply the results with a vacuum triangle that integrates to 1

@@ -148,7 +148,7 @@ impl VakintSettings {
             temporary_directory: self.temporary_directory.clone(),
             epsilon_symbol: GS.dim_epsilon.get_name().into(),
             mu_r_sq_symbol: GS.mu_r_sq.get_name().into(),
-            integral_normalization_factor: vakint::LoopNormalizationFactor::MSbar,
+            integral_normalization_factor: vakint::LoopNormalizationFactor::FMFTandMATAD, //Custom("1".to_string()),
             number_of_terms_in_epsilon_expansion: 5,
             // ..Default::default()
         }

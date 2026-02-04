@@ -22,6 +22,8 @@ use symbolica::{
     id::Replacement,
 };
 
+use color_eyre::Result;
+
 use super::aind::Aind;
 
 #[allow(dead_code)]
@@ -130,7 +132,7 @@ impl UFOSymbols {
         momenta: &[(Flow, EdgeIndex)],
         mut atom: Atom,
         dummy: impl Fn(usize) -> Aind,
-    ) -> Atom {
+    ) -> Result<Atom> {
         let mink: LibraryRep = Minkowski {}.into();
         let bis: LibraryRep = Bispinor {}.into();
 
@@ -267,8 +269,6 @@ impl UFOSymbols {
                     let arg = f.iter().next().unwrap();
                     let a = if let Ok(a) = i64::try_from(arg) {
                         if a < 0 {
-                            
-
                             (-a) as usize
                         } else {
                             return;
@@ -352,38 +352,38 @@ impl UFOSymbols {
 
         atom = atom.replace_map(|term, _, out| {
             if let AtomView::Fun(f) = term
-                && f.get_symbol() == self.pslash {
-                    let mut gamma = FunctionBuilder::new(AGS.gamma);
+                && f.get_symbol() == self.pslash
+            {
+                let mut gamma = FunctionBuilder::new(AGS.gamma);
 
-                    let mut count = 0;
+                let mut count = 0;
 
-                    for a in f.iter() {
-                        count += 1;
-                        if count <= 2 {
-                            gamma = gamma.add_arg(a);
-                        } else if let Ok(i) = i64::try_from(a) {
-                            max_dummy += 1;
-
-                            let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
-
-                            gamma = gamma.add_arg(minki.to_atom());
-
-                            **out = gamma.finish()
-                                * GS.emr_mom(momenta[i as usize].1, minki.to_atom());
-                            return;
-                        }
-                    }
-
-                    if count == 2 {
+                for a in f.iter() {
+                    count += 1;
+                    if count <= 2 {
+                        gamma = gamma.add_arg(a);
+                    } else if let Ok(i) = i64::try_from(a) {
                         max_dummy += 1;
 
                         let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
 
                         gamma = gamma.add_arg(minki.to_atom());
 
-                        **out = gamma.finish() * GS.emr_mom(momenta[0].1, minki.to_atom());
+                        **out = gamma.finish() * GS.emr_mom(momenta[i as usize].1, minki.to_atom());
+                        return;
                     }
                 }
+
+                if count == 2 {
+                    max_dummy += 1;
+
+                    let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
+
+                    gamma = gamma.add_arg(minki.to_atom());
+
+                    **out = gamma.finish() * GS.emr_mom(momenta[0].1, minki.to_atom());
+                }
+            }
         });
 
         for (i, (f, e)) in momenta.iter().enumerate() {
@@ -401,7 +401,50 @@ impl UFOSymbols {
 
         // debug!(out = atom.printer(LOGPRINTOPTS).to_string());
         // println!("out:{atom:#}");
-        atom
+
+        if atom
+            .replace(self.gamma.f(&[W_.a__]))
+            .match_iter()
+            .next()
+            .is_some()
+            || atom
+                .replace(self.sigma.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.pslash.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.gamma5.f(&[W_.a__]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.projm.f(&[W_.a__]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.projp.f(&[W_.a__]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.charge_conj.f(&[W_.a__]))
+                .match_iter()
+                .next()
+                .is_some()
+        {
+            return Err(color_eyre::eyre::eyre!(
+                "Some spinor structures were not fully re-indexed: {}",
+                atom
+            ));
+        }
+
+        Ok(atom)
     }
 
     pub(crate) fn reindex_color(
@@ -409,7 +452,7 @@ impl UFOSymbols {
         slots: &[&OrderedStructure<LibraryRep, Aind>],
         mut atom: Atom,
         dummy: impl Fn(usize) -> Aind,
-    ) -> Atom {
+    ) -> Result<Atom> {
         let adj = ColorAdjoint {};
         let fund = ColorFundamental {};
         let antifund = ColorAntiFundamental {};
@@ -566,8 +609,6 @@ impl UFOSymbols {
                     let arg = f.iter().next().unwrap();
                     let a = if let Ok(a) = i64::try_from(arg) {
                         if a < 0 {
-                            
-
                             (-a) as usize
                         } else {
                             return;
@@ -621,16 +662,60 @@ impl UFOSymbols {
             ),
         ]
         .into_iter()
-        .map(|(pat, rep)| {
-            
-            Replacement::new(pat.to_pattern(), rep)
-        })
+        .map(|(pat, rep)| Replacement::new(pat.to_pattern(), rep))
         .collect();
 
         atom = atom.replace_multiple(&reps);
 
+        if atom
+            .replace(self.t.f(&[W_.a___]))
+            .match_iter()
+            .next()
+            .is_some()
+            || atom
+                .replace(self.f.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.d.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.levicivita.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.antilevicivita.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.t6.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.k6.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+            || atom
+                .replace(self.k6bar.f(&[W_.a___]))
+                .match_iter()
+                .next()
+                .is_some()
+        {
+            return Err(color_eyre::eyre::eyre!(
+                "Some color structures were not fully re-indexed: {}",
+                atom
+            ));
+        }
+
         // println!("Out:{:#}", atom);
-        atom
+        Ok(atom)
     }
 }
 

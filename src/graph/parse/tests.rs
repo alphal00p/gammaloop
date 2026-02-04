@@ -383,6 +383,29 @@ fn xs_parsing() {
 }
 
 #[test]
+fn massive_gluon() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+    digraph ddxaaapentagon{
+        // num = "-2";
+        ext   [style=invis];
+        ext	-> 0:0	 [id=0 particle="d"];
+        ext	-> 1:1	 [id=1 particle="d~"];
+        2:2	-> ext	 [id=2 particle="a"];
+        3:3	-> ext	 [id=3 particle="a"];
+        4:4	-> ext   [id=4 particle="a"];
+
+        0	-> 2	 [id=5 particle="d"];
+        2	-> 3	 [id=6 particle="d"];
+        3	-> 4	 [id=7 particle="d"];
+        4 -> 1     [id=8 particle="d"];
+        // 1 -> 0     [id=9 lmb_id="0" particle="g"];
+        // The option below would introduce an IR regulator
+        1 -> 0     [id=9 lmb_id="0" particle="g" mass="1"];
+    })
+    .unwrap();
+}
+#[test]
 fn xs_glueing() {
     test_initialise().unwrap();
     let g: Graph = dot!(

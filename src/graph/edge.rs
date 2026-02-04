@@ -140,17 +140,15 @@ impl PossibleParticle {
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
-        match self {
-            PossibleParticle::Particle(p) => p.color_reps(flow),
-            _ => IndexLess::scalar_structure(),
-        }
+        self.particle()
+            .map(|p| p.color_reps(flow))
+            .unwrap_or_else(IndexLess::scalar_structure)
     }
 
     pub(crate) fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
-        match self {
-            PossibleParticle::Particle(p) => p.spin_reps(),
-            _ => IndexLess::scalar_structure(),
-        }
+        self.particle()
+            .map(|p| p.spin_reps())
+            .unwrap_or_else(IndexLess::scalar_structure)
     }
 
     pub(crate) fn particle(&self) -> Option<ArcParticle> {

@@ -20,12 +20,13 @@ use crate::settings::runtime::DiscreteGraphSamplingSettings;
 use crate::utils::W_;
 use crate::utils::symbolica_ext::TypstFormat;
 use crate::uv::profile::{ProfileSettings, UVProfileable};
-use idenso::color::ColorSimplifier;
+use idenso::color::{CS, ColorSimplifier};
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
+use spenso::shadowing::symbolica_utils::AtomCoreExt as _;
 use symbolica::atom::Symbol;
 use symbolica::symbol;
 use tabled::settings::Settings;
@@ -229,11 +230,20 @@ fn finite_part_ghost_nlo() {
         .unwrap();
 
     println!("ren part: {:>}", a);
-    println!(
-        "ren part: {:>}",
-        model.apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
-        )
+    insta::assert_snapshot!(
+        (model
+            .apply_parameter_replacement_rules(
+                &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
+            )
+            .collect_factors()
+            .replace(CS.tr)
+            .with(Atom::num((1, 2)))
+            .replace(CS.nc)
+            .with(CS.ca)
+            .replace(parse!("UFO::aS"))
+            .with(parse!("gs").npow(2) / (Atom::var(Symbol::PI) * 4))
+            / 8)
+        .expand_num().to_bare_ordered_string(),@"(-3/16+5/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
     );
 }
 
@@ -272,11 +282,21 @@ fn finit_part_ghlo() {
         .unwrap();
 
     println!("ren part: {:>}", a);
-    println!(
-        "ren part: {:>}",
-        model.apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
-        )
+    insta::assert_snapshot!(
+        (model
+            .apply_parameter_replacement_rules(
+                &model.apply_coupling_replacement_rules(&a.simplify_color().expand())
+            )
+            .collect_factors()
+            .replace(CS.tr)
+            .with(Atom::num((1, 2)))
+            .replace(CS.nc)
+            .with(CS.ca)
+            .replace(parse!("UFO::aS"))
+            .with(parse!("gs").npow(2) / (Atom::var(Symbol::PI) * 4))
+            / 8)
+        .expand_num()
+        .to_bare_ordered_string(),@"-1/2*ca*dot(P(0),P(0),mink(4))*gs^2*ε^(-1)"
     );
 }
 
