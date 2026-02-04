@@ -13,10 +13,10 @@ use tracing::info;
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Inspect {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(short = 's', long = "process", value_name = "PROCESS")]
     pub process: Option<ProcessRef>,
     /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    #[arg(short = 'i', long = "name", value_name = "NAME")]
     pub integrand_name: Option<String>,
     /// The point to inspect (x y) or (p0 px ...)
     #[arg(short = 'p', num_args = 2.., value_name = "POINT",
