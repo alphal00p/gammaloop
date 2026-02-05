@@ -2,6 +2,7 @@ use std::fs::File;
 use std::{fs, path::PathBuf};
 
 use crate::state::{ProcessListExt, ProcessRef, State};
+use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
@@ -34,14 +35,17 @@ pub struct Renormalize {
 }
 
 impl Renormalize {
-    pub fn run(&self, state: &mut State) -> Result<Vec<Atom>> {
+    pub fn run(&self, state: &mut State, global_cli_settings: &CLISettings) -> Result<Vec<Atom>> {
         let (process_id, _) =
             state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
         let amplitude = state
             .process_list
             .get_amplitude_mut_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
 
-        let settings = UVgenerationSettings::default();
+        let mut settings = global_cli_settings.global.generation.uv.clone();
+
+        settings.only_integrated = true;
+        settings.generate_integrated = true;
 
         let mut renormalization_part: Vec<Atom> = Vec::new();
         let output_dir = if let Some(path) = self.result_path.clone() {
@@ -62,13 +66,6 @@ impl Renormalize {
         };
 
         for (index, graph_term) in amplitude.graphs.iter_mut().enumerate() {
-            if graph_term.derived_data.cff_expression.is_none() {
-                return Err(color_eyre::eyre::eyre!(
-                    "Graph '{}' has no CFF expression. Generate integrands before renormalizing.",
-                    graph_term.graph.name
-                ));
-            }
-
             let part = graph_term.renormalization_part(&settings)?;
             let (expr_to_print, clipped) = clip_expr(&part);
             if clipped {

@@ -243,7 +243,7 @@ fn finite_part_ghost_nlo() {
             .replace(parse!("UFO::aS"))
             .with(parse!("gs").npow(2) / (Atom::var(Symbol::PI) * 4))
             / 8)
-        .expand_num().to_bare_ordered_string(),@"(-3/16+5/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+        .expand_num().to_bare_ordered_string(),@"(-5/32*ε+3/16)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)*𝜋^4"
     );
 }
 

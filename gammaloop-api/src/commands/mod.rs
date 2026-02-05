@@ -168,7 +168,7 @@ impl Commands {
                 }
 
                 Commands::Renormalize(r) => {
-                    _ = r.run(state)?;
+                    _ = r.run(state, global_cli_settings)?;
                 }
 
                 Commands::Display(l) => l.run(state)?,
