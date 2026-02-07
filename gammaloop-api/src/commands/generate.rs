@@ -16,6 +16,7 @@ use color_eyre::Result;
 use regex::Regex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use symbolica::parse;
 use thiserror::Error;
 
 use eyre::eyre;
@@ -274,6 +275,14 @@ pub struct SpecArgs {
     /// Graph name prefix
     #[arg(long = "graph-prefix", short = 'g')]
     pub graph_prefix: Option<String>,
+
+    /// Global prefactor projector (Symbolica atom string)
+    #[arg(long = "global-prefactor-projector", value_name = "ATOM")]
+    pub global_prefactor_projector: Option<String>,
+
+    /// Global prefactor numerator (Symbolica atom string)
+    #[arg(long = "global-prefactor-num", value_name = "ATOM")]
+    pub global_prefactor_num: Option<String>,
 
     /// Fast cut filter switch multiplicity
     #[arg(
@@ -932,7 +941,14 @@ pub fn parse_spec_with_model(
         })
         .transpose()
         .map_err(ParseError::InvalidLmbSpec)?;
-    spec.process_definition.prefactor = GlobalPrefactor::default();
+    let mut prefactor = GlobalPrefactor::default();
+    if let Some(projector) = &args.global_prefactor_projector {
+        prefactor.projector = parse!(projector);
+    }
+    if let Some(num) = &args.global_prefactor_num {
+        prefactor.num = parse!(num);
+    }
+    spec.process_definition.prefactor = prefactor;
 
     Ok(spec)
 }
@@ -1779,6 +1795,8 @@ mod tests {
             integrand_name: None,
             only_diagrams: true,
             veto_vertex_interactions: None,
+            global_prefactor_num: None,
+            global_prefactor_projector: None,
         }
     }
 

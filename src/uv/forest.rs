@@ -6,11 +6,15 @@ use crate::{
     graph::{Edge, Graph, LMBext, Vertex},
     momentum::SignOrZero,
     numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
-    utils::{GS, W_, ose_atom_from_index, symbolica_ext::CallSymbol},
+    utils::{
+        GS, W_, ose_atom_from_index,
+        symbolica_ext::{CallSymbol, LogPrint},
+    },
     uv::approx::CFFapprox,
 };
 use color_eyre::Result;
 use eyre::eyre;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use spenso::{
     network::{Network, store::TensorScalarStoreMapping},
     shadowing::symbolica_utils::AtomCoreExt as _,
@@ -67,10 +71,10 @@ impl Forest {
         constraint_data: Option<ConstraintData>,
         settings: &UVgenerationSettings,
         _conjugate: bool,
-    ) {
+    ) -> Result<()> {
         let order = self.dag.compute_topological_order();
 
-        for n in order {
+        for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.root(
@@ -101,8 +105,9 @@ impl Forest {
                             vakint,
                             amplitude_subgraph,
                             &parent.data,
+                            i,
                             settings,
-                        );
+                        )?;
                     }
                     if settings.only_integrated {
                         continue;
@@ -158,6 +163,7 @@ impl Forest {
                 }
             }
         }
+        Ok(())
     }
 
     pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<Atom> {
@@ -172,7 +178,7 @@ impl Forest {
                 continue;
             }
 
-            let (atom, sign) = n.data.integrated_pole_part.expr().ok_or(eyre!(
+            let (mut atom, sign) = n.data.integrated_pole_part.expr().ok_or(eyre!(
                 "Integrated pole part not computed for {} of graph {}",
                 n.data
                     .simple_approx
@@ -182,34 +188,67 @@ impl Forest {
                 graph.name
             ))?;
 
+            atom = sign * atom;
+
+            // debug!(
+            //     forest_term=%
+            //     n.data
+            //         .simple_approx
+            //         .as_ref()
+            //         .unwrap()
+            //         .expr(&graph.full_filter()),
+            //    expr = % atom,"Term before simplification"
+            // );
+            //
             debug!(
-                "{}:{}",
+                forest_term=%
                 n.data
                     .simple_approx
                     .as_ref()
                     .unwrap()
                     .expr(&graph.full_filter()),
-                atom.to_bare_ordered_string()
+               expr = % atom.expand_num().log_print(),"Term before simplification"
             );
-            sum += sign * atom;
-        }
-        let n_loops = graph.n_loops(&graph.full_filter());
-        let pole_stripped = sum
-            .series(
-                GS.dim_epsilon,
-                Atom::Zero,
-                (n_loops as i64 + 1).into(),
-                true,
-            )
-            .unwrap();
 
-        let mut sum = Atom::Zero;
+            let atom = (atom
+                * &graph.global_prefactor.projector
+                * &graph.global_prefactor.num
+                * &graph.overall_factor)
+                .simplify_color()
+                .expand_num()
+                .to_dots();
+            // .replace(GS.dim)
+            // .max_level(0)
+            // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        for (power, p) in pole_stripped.terms() {
-            if power < 0 {
-                sum += p * Atom::var(GS.dim_epsilon).npow(power);
-            }
+            debug!(
+                forest_term=%
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+               expr = % atom.log_print(),"Term"
+            );
+            sum += atom;
         }
+        // let n_loops = graph.n_loops(&graph.full_filter());
+        // let pole_stripped = sum
+        //     .series(
+        //         GS.dim_epsilon,
+        //         Atom::Zero,
+        //         (n_loops as i64 + 1).into(),
+        //         true,
+        //     )
+        //     .unwrap();
+
+        // let mut sum = Atom::Zero;
+
+        // for (power, p) in pole_stripped.terms() {
+        //     if power < 0 {
+        //         sum += p * Atom::var(GS.dim_epsilon).npow(power);
+        //     }
+        // }
         Ok(sum.replace_multiple(&replacements))
     }
 

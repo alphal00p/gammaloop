@@ -208,7 +208,7 @@ impl SetArgs {
                     .to_ascii_lowercase();
                 match ext.as_str() {
                     "toml" => Ok(fig.merge(figment::providers::Toml::file(file))),
-                    "yaml" | "yml" => Ok(fig.merge(figment::providers::Yaml::file(file))),
+                    // "yaml" | "yml" => Ok(fig.merge(figment::providers::Yaml::file(file))),
                     "json" => Ok(fig.merge(figment::providers::Json::file(file))),
                     _ => Err(color_eyre::eyre::eyre!(
                         "Unsupported settings file extension: {}",

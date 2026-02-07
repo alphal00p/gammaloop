@@ -3,7 +3,7 @@ use crate::utils::{
     serde_utils::{
         IsDefault, is_default_form_path, is_default_pysecdec_relative_precision,
         is_default_python_path, is_default_vakint_evaluation_methods,
-        is_default_vakint_normalization, is_false, is_true, is_usize,
+        is_default_vakint_normalization, is_false, is_one_string, is_true, is_usize,
     },
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -106,6 +106,8 @@ pub struct VakintSettings {
     pub temporary_directory: Option<String>,
     #[serde(skip_serializing_if = "is_default_vakint_normalization")]
     pub normalization: String,
+    #[serde(skip_serializing_if = "is_one_string")]
+    pub additional_normalization: String,
 }
 
 impl VakintSettings {
@@ -148,7 +150,13 @@ impl VakintSettings {
             temporary_directory: self.temporary_directory.clone(),
             epsilon_symbol: GS.dim_epsilon.get_name().into(),
             mu_r_sq_symbol: GS.mu_r_sq.get_name().into(),
-            integral_normalization_factor: vakint::LoopNormalizationFactor::FMFTandMATAD, //Custom("1".to_string()),
+            integral_normalization_factor: match self.normalization.as_str() {
+                "MSbar" => vakint::LoopNormalizationFactor::Custom("1".to_string()),
+                "FMFTandMATAD" => vakint::LoopNormalizationFactor::FMFTandMATAD,
+                "pySecDec" => vakint::LoopNormalizationFactor::pySecDec,
+                _ => vakint::LoopNormalizationFactor::Custom(self.normalization.clone()),
+            },
+            //Custom("1".to_string()),
             number_of_terms_in_epsilon_expansion: 5,
             // ..Default::default()
         }
@@ -173,6 +181,7 @@ impl Default for VakintSettings {
             clean_tmp_dir: true,
             temporary_directory: None,
             normalization: "MSbar".to_string(),
+            additional_normalization: "1".to_string(),
         }
     }
 }

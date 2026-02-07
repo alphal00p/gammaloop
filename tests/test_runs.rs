@@ -715,7 +715,7 @@ fn scalar_bubble() -> Result<()> {
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.46968e-03)), 1));
     let renorm_command = Renormalize::default();
 
-    let res = renorm_command.run(&mut cli.state)?;
+    let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;
 
     println!("{}", res[0]);
 
@@ -776,7 +776,7 @@ fn scalar_sunrise() -> Result<()> {
 
     let renorm_command = Renormalize::default();
 
-    let res = renorm_command.run(&mut cli.state)?;
+    let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;
 
     println!("{}", res[0]);
     clean_test(&cli.cli_settings.state_folder);

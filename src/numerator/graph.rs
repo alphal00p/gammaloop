@@ -423,7 +423,7 @@ mod test {
         graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
         numerator::aind::Aind,
-        processes::{Amplitude, AmplitudeGraph},
+        processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
             GlobalSettings, RuntimeSettings,
             global::GenerationSettings,
@@ -454,7 +454,7 @@ mod test {
             v2 -> v1 [pdg=1];
         })
         .unwrap();
-        println!("{}", graph.dot_serialize());
+        println!("{}", graph.dot_serialize(&DotExportSettings::default()));
         let reps = graph.get_ose_replacements();
         for r in reps {
             println!("{r}")
@@ -534,7 +534,7 @@ mod test {
             v12 -> v7 [pdg=6];
         })
         .unwrap();
-        println!("{}", graph.dot_serialize());
+        println!("{}", graph.dot_serialize(&DotExportSettings::default()));
         let reps = graph.get_ose_replacements();
         for r in reps {
             println!("{r}")
@@ -616,7 +616,7 @@ mod test {
         let mut settings = RuntimeSettings::default();
 
         for g in graphs {
-            println!("{}", g.dot_serialize());
+            println!("{}", g.dot_serialize(&DotExportSettings::default()));
             settings.kinematics = KinematicsSettings::random(&g, 42);
 
             // Amplitude::new(name)
@@ -728,7 +728,8 @@ mod test {
 
         for g in &mut graphs {
             let mut out = String::new();
-            g.dot_serialize_fmt(&mut out).unwrap();
+            g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
+                .unwrap();
             println!("{}", out);
 
             assert!(g.iter_nodes().all(|(_, _, v)| {
@@ -753,7 +754,8 @@ mod test {
 
         for g in &mut graphs {
             let mut out = String::new();
-            g.dot_serialize_fmt(&mut out).unwrap();
+            g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
+                .unwrap();
             println!("{}", out);
         }
     }
@@ -880,7 +882,8 @@ mod test {
             } else {
                 a = Some(new_a);
             }
-            g.dot_serialize_fmt(&mut out).unwrap();
+            g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
+                .unwrap();
             println!("{}", out);
         }
 

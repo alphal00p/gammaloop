@@ -80,7 +80,8 @@
           },
         },
         "cargo": {
-          "features": ["python_api"],
+          // "features": ["python_api"],
+          "features": ["no_pyo3"],
           "allTargets": true,
         },
         "diagnostics": {
@@ -92,7 +93,8 @@
 
         "check": {
           "onSave": true,
-          "features": ["python_api"],
+          // "features": ["python_api"],
+          "features": ["no_pyo3"],
           "command": "check",
         },
         "runnables": {

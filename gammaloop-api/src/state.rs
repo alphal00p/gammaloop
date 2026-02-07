@@ -43,7 +43,7 @@ use gammalooprs::{
 
 use crate::{
     commands::{save::SaveState, Commands},
-    tracing::{set_file_log_filter, set_stderr_log_filter},
+    tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
 };
 
@@ -263,6 +263,7 @@ impl SyncSettings for CLISettings {
         // println!("Syncing settings {}", self.global.logfile_directive);
         set_file_log_filter(&self.global.logfile_directive)?;
         set_stderr_log_filter(&self.global.display_directive)?;
+        set_log_style(self.global.log_style.clone());
         Ok(())
     }
 }

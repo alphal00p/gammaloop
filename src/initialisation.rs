@@ -16,9 +16,11 @@ pub fn initialise() -> Result<()> {
         let (panic, eyre) = HookBuilder::default()
             .capture_span_trace_by_default(cfg!(debug_assertions))
             .into_hooks();
+        // println!("Installing panic and eyre hooks");
         panic.install();
         eyre.install().unwrap();
 
+        // println!("Initializing symbols");
         let _ = GS.delta_vec;
         let _ = INBUILTS.conj;
         let _ = SPENSO_TAG.tag;
@@ -27,9 +29,12 @@ pub fn initialise() -> Result<()> {
         // let _ = Symbol::id();
         let _ = UFOSymbol::zero();
 
+        // println!("Setting up interrupt handler");
         crate::set_interrupt_handler();
+        // println!("Initialize_reps");
         crate::initialize_reps();
     });
+    // println!("Initializing Vakint");
     init_vakint()?;
     Ok(())
 }

@@ -12,10 +12,10 @@ use eyre::eyre;
 use itertools::Itertools;
 // use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
-
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::{IndexLess, PermutedStructure};
 use tabled::settings::Modify;
 use tabled::{
@@ -62,7 +62,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use crate::utils::GS;
 
 use symbolica::printer::{AtomPrinter, PrintOptions};
-use symbolica::{function, parse, symbol};
+use symbolica::{function, get_symbol, parse, symbol};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableInputParamCard<T> {
@@ -285,7 +285,35 @@ where
     T: AsRef<str>,
 {
     fn from(s: T) -> Self {
-        UFOSymbol(symbol!(format!("UFO::{}", s.as_ref())))
+        let is_zero = s.as_ref() == "ZERO";
+        if is_zero {
+            UFOSymbol::zero()
+        } else {
+            let name = format!("UFO::{}", s.as_ref());
+            if let Some(a) = get_symbol!(&name) {
+                UFOSymbol(a)
+            } else {
+                UFOSymbol(symbol!(
+                    &name,
+                    print = |a, opt| {
+                        let AtomView::Var(a) = a else {
+                            return None;
+                        };
+                        match opt.custom_print_mode {
+                            Some(("spenso", i)) => {
+                                let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
+                                if SpensoPrintSettings::from(i).is_typst() {
+                                    Some(format!("\"{}\"", a.get_symbol().get_stripped_name()))
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        }
+                    }
+                ))
+            }
+        }
     }
 }
 
@@ -1967,7 +1995,6 @@ n_couplings = format!("{}", self.couplings.len()).green(),
                 verbose: false,
                 ..OptimizationSettings::default()
             });
-
         let mut ext: ExternalFunctionMap = HashMap::default();
         ext.insert(
             "complexconjugate".to_string(),

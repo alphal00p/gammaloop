@@ -179,29 +179,33 @@ impl CsAmplitudeCTDiagram {
             let mut left_forest = left_wood.unfold(graph, &graph.loop_momentum_basis);
             let mut right_forest = right_wood.unfold(graph, &graph.loop_momentum_basis);
 
-            left_forest.compute(
-                graph,
-                &self.left_subgraph,
-                vakint,
-                &left_orientations,
-                &None,
-                &all_cut_edges,
-                None,
-                &settings.uv,
-                conjugate,
-            );
+            left_forest
+                .compute(
+                    graph,
+                    &self.left_subgraph,
+                    vakint,
+                    &left_orientations,
+                    &None,
+                    &all_cut_edges,
+                    None,
+                    &settings.uv,
+                    conjugate,
+                )
+                .unwrap();
 
-            right_forest.compute(
-                graph,
-                &self.right_subgraph,
-                vakint,
-                &right_orientations,
-                &None,
-                &all_cut_edges,
-                None,
-                &settings.uv,
-                conjugate,
-            );
+            right_forest
+                .compute(
+                    graph,
+                    &self.right_subgraph,
+                    vakint,
+                    &right_orientations,
+                    &None,
+                    &all_cut_edges,
+                    None,
+                    &settings.uv,
+                    conjugate,
+                )
+                .unwrap();
 
             let left_expr = left_forest.orientation_parametric_expr(
                 Some(
@@ -266,9 +270,13 @@ impl CrossSection {
         Ok(())
     }
 
-    pub fn write_dot_fmt<W: std::fmt::Write>(&self, writer: &mut W) -> Result<(), std::fmt::Error> {
+    pub fn write_dot_fmt<W: std::fmt::Write>(
+        &self,
+        writer: &mut W,
+        settings: &DotExportSettings,
+    ) -> Result<(), std::fmt::Error> {
         for graph in &self.supergraphs {
-            graph.write_dot_fmt(writer)?;
+            graph.write_dot_fmt(writer, settings)?;
             writeln!(writer)?;
         }
         Ok(())
@@ -842,8 +850,9 @@ impl CrossSectionGraph {
     pub(crate) fn write_dot_fmt<W: std::fmt::Write>(
         &self,
         writer: &mut W,
+        settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        self.graph.dot_serialize_fmt(writer)
+        self.graph.dot_serialize_fmt(writer, settings)
     }
 
     pub(crate) fn update_surface_cache(&mut self) {
@@ -1019,7 +1028,7 @@ impl CrossSectionGraph {
 
         prop_atoms = prop_atoms.replace_multiple(&replacements);
 
-        let initial_state_tree_expr = numerator::symbolica_ext::AtomCoreExt::wrap_color(
+        let initial_state_tree_expr = ColorSimplifier::wrap_color(
             &(self
                 .graph
                 .iter_edges_of(&tree_structure)

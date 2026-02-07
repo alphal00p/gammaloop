@@ -28,6 +28,7 @@ use crate::{
     initialisation::test_initialise,
     momentum_sample::LoopIndex,
     numerator::{Numerator, UnInit, aind::Aind},
+    processes::DotExportSettings,
     utils::test_utils::load_generic_model,
 };
 
@@ -103,7 +104,7 @@ fn symbolica_parse() {
     )
     .unwrap();
 
-    println!("{}", g.dot_serialize());
+    println!("{}", g.dot_serialize(&DotExportSettings::default()));
 
     let g = Graph::from_symbolica_graph(
         &model,
@@ -119,7 +120,7 @@ fn symbolica_parse() {
     )
     .unwrap();
 
-    println!("{}", g.dot_serialize());
+    println!("{}", g.dot_serialize(&DotExportSettings::default()));
 
     let g = Graph::from_symbolica_graph(
         &model,
@@ -130,7 +131,7 @@ fn symbolica_parse() {
     )
     .unwrap();
 
-    println!("{}", g.dot_serialize());
+    println!("{}", g.dot_serialize(&DotExportSettings::default()));
 
     let mut a = symbolica::graph::Graph::new();
 
@@ -163,7 +164,7 @@ fn symbolica_parse() {
     )
     .unwrap();
 
-    println!("{}", g.dot_serialize());
+    println!("{}", g.dot_serialize(&DotExportSettings::default()));
 
     // let g = Graph::from_symbolica_graph(
     //     &model,
@@ -217,7 +218,7 @@ fn test_load() {
     ,"scalars")
     .unwrap();
 
-    println!("{}", graph[0].dot_serialize());
+    println!("{}", graph[0].dot_serialize(&DotExportSettings::default()));
 
     println!(
         "{}",
@@ -790,7 +791,7 @@ fn scalar_without_model() {
     )
     .unwrap();
 
-    println!("{}", g.dot_serialize())
+    println!("{}", g.dot_serialize(&DotExportSettings::default()))
 }
 
 #[test]
@@ -859,7 +860,7 @@ fn parse() {
             .dot_lmb_of(&g.underlying.full(), &g.loop_momentum_basis)
     );
 
-    println!("{}", g.dot_serialize());
+    println!("{}", g.dot_serialize(&DotExportSettings::default()));
     // return;
     let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
 

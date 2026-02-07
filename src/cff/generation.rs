@@ -864,7 +864,7 @@ mod tests_cff {
     };
     use symbolica::{
         domains::float::{FloatLike as SymFloatLike, Real},
-        evaluate::{ExpressionEvaluator, FunctionMap},
+        evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
         parse, symbol,
     };
     use utils::FloatLike;
@@ -906,7 +906,7 @@ mod tests_cff {
             tree.common_subexpression_elimination();
 
             let tree_double = tree.map_coeff(&|c| (&c.re).into());
-            tree_double.linearize(None, false)
+            tree_double.linearize(&OptimizationSettings::default())
         }
     }
 

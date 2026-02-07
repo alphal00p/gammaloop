@@ -2,6 +2,7 @@ use std::ops::Index;
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
+use idenso::color::ColorSimplifier;
 use itertools::Itertools;
 use linnet::{
     half_edge::{

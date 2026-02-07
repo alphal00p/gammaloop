@@ -1,4 +1,4 @@
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use linnet::{
     half_edge::{
         HedgeGraph,
@@ -7,6 +7,8 @@ use linnet::{
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
 };
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use symbolica::atom::AtomCore;
 
 use crate::{
     graph::Graph,
@@ -29,7 +31,8 @@ impl Graph {
             let mut num = self
                 .numerator(&self.full_filter(), &self.empty_subgraph())
                 .get_single_atom()
-                .unwrap();
+                .unwrap()
+                .simplify_metrics();
 
             if settings.do_color_algebra {
                 num = num.simplify_color();
@@ -39,10 +42,12 @@ impl Graph {
                 num = num.simplify_gamma();
             }
 
-            dotgraph
-                .global_data
-                .statements
-                .insert("full_num".into(), num.to_quoted());
+            dotgraph.global_data.statements.insert(
+                "full_num".into(),
+                num.printer(SpensoPrintSettings::typst().typst_symbolica())
+                    .to_string()
+                    .replace("\"", "\\\""),
+            );
         }
 
         dotgraph

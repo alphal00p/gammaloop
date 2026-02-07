@@ -3819,6 +3819,15 @@ impl ProcessDefinition {
                         &external_connections,
                     )?;
 
+                    bare_graph.global_data.num = self.prefactor.num.clone();
+
+                    bare_graph.global_data.projectors = if self.prefactor.projector != Atom::num(1)
+                    {
+                        Some(self.prefactor.projector.clone())
+                    } else {
+                        None
+                    };
+
                     let fermion_sign = if self.generation_type == GenerationType::Amplitude {
                         if (!self.allow_symmetrization_of_external_fermions_in_amplitudes)
                             || (!self.symmetrize_initial_states && !self.symmetrize_final_states)

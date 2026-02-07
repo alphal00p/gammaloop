@@ -8,10 +8,13 @@ use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::utils::symbolica_ext::TypstFormat;
 use gammalooprs::uv::UVgenerationSettings;
+use idenso::color::{ColorSimplifier, CS};
+use idenso::metric::MetricSimplifier;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::io::Write as _;
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::parse;
 use symbolica::printer::PrintOptions;
 use tracing::info;
 
@@ -24,6 +27,12 @@ pub struct Renormalize {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
     #[arg(short = 'p', long = "process", value_name = "PROCESS")]
     pub process: Option<ProcessRef>,
+
+    #[arg(short = 'a', long = "align-to-rqft", default_value_t = false)]
+    pub align_to_rqft: bool,
+
+    #[arg(short = 'f', long = "print-namespaces", default_value_t = false)]
+    pub print_namespaces: bool,
 
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
@@ -56,8 +65,12 @@ impl Renormalize {
         };
 
         const MAX_PRINT_CHARS: usize = 4000;
-        let clip_expr = |expr: &Atom| -> (String, bool) {
-            let expr_str = expr.to_string();
+        let clip_expr = |expr: &Atom, print_namespaces: bool| -> (String, bool) {
+            let expr_str = if print_namespaces {
+                format!("{:#}", expr)
+            } else {
+                format!("{}", expr)
+            };
             if expr_str.len() > MAX_PRINT_CHARS {
                 (format!("{}...", &expr_str[..MAX_PRINT_CHARS]), true)
             } else {
@@ -66,8 +79,28 @@ impl Renormalize {
         };
 
         for (index, graph_term) in amplitude.graphs.iter_mut().enumerate() {
-            let part = graph_term.renormalization_part(&settings)?;
-            let (expr_to_print, clipped) = clip_expr(&part);
+            let mut part = graph_term.renormalization_part(&settings)?;
+
+            part = state
+                .model
+                .apply_parameter_replacement_rules(&state.model.apply_coupling_replacement_rules(
+                    &part.simplify_color().expand().simplify_metrics().to_dots(),
+                ))
+                .collect_factors();
+
+            if self.align_to_rqft {
+                part = (part
+                    .replace(CS.tr)
+                    .with(Atom::num((1, 2)))
+                    .replace(CS.nc)
+                    .with(CS.ca)
+                    .replace(parse!("UFO::aS"))
+                    .with(parse!("gs").npow(2) / (Atom::var(Symbol::PI) * 4))
+                    / 8)
+                .expand_num()
+            }
+
+            let (expr_to_print, clipped) = clip_expr(&part, self.print_namespaces);
             if clipped {
                 info!(
                     "Renormalization part for graph '{}' (clipped):\n{}",
@@ -79,7 +112,6 @@ impl Renormalize {
                     graph_term.graph.name, expr_to_print
                 );
             }
-
             if let Some(dir) = &output_dir {
                 let sanitized_name = graph_term
                     .graph

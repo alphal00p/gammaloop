@@ -254,9 +254,15 @@ impl EdgeMass {
 impl UVE for Edge {
     fn mass_atom(&self) -> Atom {
         match &self.particle {
-            PossibleParticle::JustMass { expr, .. } => expr.clone(),
-            PossibleParticle::Particle(p) => p.mass.0.into(),
-            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
+            PossibleParticle::JustMass { expr, .. } => {
+                expr.replace(UFOSymbol::zero().0).with(Atom::Zero)
+            }
+            PossibleParticle::Particle(p) => Atom::var(p.mass.0.0)
+                .replace(UFOSymbol::zero().0)
+                .with(Atom::Zero),
+            PossibleParticle::MassOverriddenParticle { mass, .. } => {
+                mass.replace(UFOSymbol::zero().0).with(Atom::Zero)
+            }
         }
     }
 }

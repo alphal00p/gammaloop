@@ -214,7 +214,9 @@
         spacing: 2em,
         ..noed,
       ),
-      // {set align(left);raw(parse)},
+      if g.global_statements.at("full_num",default:none)!= none{
+        [$#eval(g.global_statements.full_num.replace("\\\"","\""),mode: "math")$]
+      }
     ))
   }
   for d in diags{

@@ -634,9 +634,9 @@ struct NumeratorData {
 }
 
 impl Graph {
-    pub fn dot_serialize(&self) -> String {
+    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {
         let mut out = String::new();
-        self.dot_serialize_fmt(&mut out).unwrap();
+        self.dot_serialize_fmt(&mut out, settings).unwrap();
         out
     }
 
@@ -661,8 +661,9 @@ impl Graph {
     pub fn dot_serialize_fmt(
         &self,
         writer: &mut impl std::fmt::Write,
+        settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        let g = DotGraph::from(self);
+        let g = self.to_dot_graph_with_settings(settings);
         g.write_fmt(writer)
     }
 

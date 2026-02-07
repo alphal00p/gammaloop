@@ -27,7 +27,7 @@ required-features = ["cli"]
 
 [features]
 # Keep Python optional unless explicitly enabled.
-default = ["cli", "python_api"]
+default = ["cli"]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
 python_api = [
     "ufo_support",
@@ -39,11 +39,13 @@ python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
 pyo3-extension-module = ["dep:pyo3", "pyo3/extension-module", "gammalooprs/pyo3-extension-module"]
 python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
 cli = []
+no_pyo3 = []
 
 [dependencies]
 include_dir = "0.7"
 pyo3-stub-gen = { version = "0.13", optional = true, default-features = false }
 spenso = { version = "0.6", features = ["shadowing"] }
+idenso = "0.3"
 clap = "4.5.47"
 # clap-repl = "0.3.2"
 color-eyre = "0.6.5"
@@ -77,7 +79,7 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing-appender = "0.2.3"
 serde_yaml = "*"
 thiserror = "2.0.16"
-figment = { version = "0.10.19", features = ["yaml", "json", "toml"] }
+figment = { version = "0.10.19", features = ["json", "toml"] }
 reedline = "0.42.0"
 shlex = "1.3.0"
 nu-ansi-term = "0.50.1"
@@ -91,7 +93,7 @@ json5 = "0.4.1"
 numpy = { version = "0.25.0", optional = true }
 ndarray = { version = "0.16" }
 rayon = "1.5"
-linnet = { version = "0.16", features = [
+linnet = { version = "0.17", features = [
     "drawing",
     "serde",
     "bincode",

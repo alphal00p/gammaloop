@@ -112,6 +112,7 @@ impl Evaluate {
                     self.numerical,
                     vakint,
                     &true_settings,
+                    &global_cli_settings.global.generation.uv.vakint,
                     default_runtime_settings,
                     // Only include the overall global numerator on the first of the connected components
                     i_gc == 0,

@@ -9,41 +9,53 @@ use crate::{
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
     utils::{
-        GS, VAKINT, W_,
-        symbolica_ext::{CallSymbol, LOGPRINTOPTS, TypstFormat},
+        GS, W_,
+        symbolica_ext::{CallSymbol, LOGPRINTOPTS, LogPrint, TypstFormat},
     },
-    uv::UVgenerationSettings,
+    uv::{UVgenerationSettings, settings::VakintSettings},
 };
 use ahash::AHashSet;
 use color_eyre::Result;
-use eyre::eyre;
-use idenso::gamma::GammaSimplifier;
-use std::hash::Hash;
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use std::{
+    collections::{BTreeSet, HashSet},
+    hash::Hash,
+};
 use tracing::debug;
 
 use spenso::{
-    network::library::TensorLibraryData,
+    network::{
+        library::{TensorLibraryData, symbolic::ETS},
+        parsing::SPENSO_TAG,
+    },
+    shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         representation::{Minkowski, RepName},
         slot::{DummyAind, IsAbstractSlot, Slot},
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
-    function, parse, parse_lit,
+    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
+    function,
+    id::{MatchSettings, Replacement},
+    parse, parse_lit,
     printer::PrintOptions,
+    solve::SolveError,
     symbol,
 };
 
 use linnet::half_edge::{
-    HedgeGraph,
-    involution::{EdgeIndex, Hedge, HedgePair},
-    subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+    HedgeGraph, NodeIndex,
+    builder::HedgeGraphBuilder,
+    involution::{EdgeIndex, HedgePair},
+    subgraph::{
+        Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps,
+    },
 };
 
 use tracing::{info, instrument};
 use typed_index_collections::TiVec;
-use vakint::{Vakint, vakint_symbol};
+use vakint::{Vakint, VakintExpression, vakint_symbol};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use super::{IntegrandExpr, UltravioletGraph, uv_graph::UVE};
@@ -146,17 +158,17 @@ pub(crate) fn to_vakint_integrand<
     SS: SubGraphLike,
 >(
     integrand: &Atom,
-    lmb: &LoopMomentumBasis,
     graph: &HedgeGraph<E, V, H>,
     reduced: &S,
     dependent_subgraph: &SS,
+    settings: &VakintSettings,
     substitute_masses_to_m_uv: bool,
-) -> Atom {
+) -> VakintExpression {
     let mut integrand_vakint = integrand.clone();
 
     debug!(
-        "Integrand vakint init: {:}",
-        integrand_vakint.printer(LOGPRINTOPTS)
+        integrand = %integrand.log_print(),
+        "Integrand vakint init"
     );
     //Atom::Zero
 
@@ -176,15 +188,30 @@ pub(crate) fn to_vakint_integrand<
 
     let mut propagator_id = 1;
 
-    let vk_prop = vakint_symbol!("prop");
-
-    // vakint::symbols::S.mom
+    let vk_prop = vakint::symbols::S.prop;
     let vk_edge = vakint_symbol!("edge");
-    let vk_mom = vakint::symbols::S.k;
     let vk_topo = vakint_symbol!("topo");
+
+    // let contracted_nodes: BTreeSet<NodeIndex> = graph
+    //     .iter_nodes_of(dependent_subgraph)
+    //     .map(|(nid, c, v)| nid)
+    //     .collect();
+
+    debug!(reduced = %graph.dot(reduced), "Den to prop for");
+    // let first = contracted_nodes.first();
 
     for (pair, index, _data) in graph.iter_edges_of(reduced) {
         if let HedgePair::Paired { source, sink } = pair {
+            // let source = if contracted_nodes.contains(&graph.node_id(source)) {
+            //     first.unwrap().clone()
+            // } else {
+            //     graph.node_id(source)
+            // };
+            // let sink = if contracted_nodes.contains(&graph.node_id(sink)) {
+            //     first.unwrap().clone()
+            // } else {
+            //     graph.node_id(sink)
+            // };
             integrand_vakint = integrand_vakint
                 .replace(function!(
                     GS.den,
@@ -198,8 +225,8 @@ pub(crate) fn to_vakint_integrand<
                     propagator_id,
                     function!(
                         vk_edge,
-                        usize::from(graph.node_id(source)) as i64,
-                        usize::from(graph.node_id(sink)) as i64
+                        usize::from(graph.node_id(source)),
+                        usize::from(graph.node_id(sink))
                     ),
                     W_.mom_,
                     if substitute_masses_to_m_uv {
@@ -215,34 +242,44 @@ pub(crate) fn to_vakint_integrand<
         }
     }
 
+    let mut first: Option<NodeIndex> = None;
+
+    debug!(
+        reduced = %graph.dot(dependent_subgraph),
+        "Shrinking subgraph for vakint"
+    );
     // shrink vertices of the subgraph
-    for (pair, _index, _data) in graph.iter_edges_of(dependent_subgraph) {
-        if let HedgePair::Paired { source, sink } = pair {
+    for (id, _crown, _data) in graph.iter_nodes_of(dependent_subgraph) {
+        debug!(id=%id,"Shrinking Node");
+
+        if let Some(first) = first {
             integrand_vakint = integrand_vakint
                 .replace(function!(
                     vk_prop,
                     W_.x_,
-                    function!(vk_edge, usize::from(graph.node_id(source)) as i64, W_.y_),
+                    function!(vk_edge, id.0, W_.y_),
                     W_.x___
                 ))
                 .with(function!(
                     vk_prop,
                     W_.x_,
-                    function!(vk_edge, usize::from(graph.node_id(sink)) as i64, W_.y_),
+                    function!(vk_edge, first.0, W_.y_),
                     W_.x___
                 ))
                 .replace(function!(
                     vk_prop,
                     W_.x_,
-                    function!(vk_edge, W_.y_, usize::from(graph.node_id(source)) as i64),
+                    function!(vk_edge, W_.y_, id.0),
                     W_.x___
                 ))
                 .with(function!(
                     vk_prop,
                     W_.x_,
-                    function!(vk_edge, W_.y_, usize::from(graph.node_id(sink)) as i64),
+                    function!(vk_edge, W_.y_, first.0),
                     W_.x___
-                ));
+                ))
+        } else {
+            first = Some(id);
         }
     }
 
@@ -291,61 +328,250 @@ pub(crate) fn to_vakint_integrand<
             W_.e_ + W_.f_
         ));
 
-    debug!(
-        "Integrand pre vakint: {:}",
-        integrand_vakint.printer(LOGPRINTOPTS)
-    );
-    let mut n_loops = 1;
+    // println!(
+    //     "Integrand pre vakint: {:}",
+    //     VakintExpression::try_from(
+    //         integrand_vakint
+    //             .replace(function!(vk_prop, W_.x__))
+    //             .with(function!(vk_topo, function!(vk_prop, W_.x__)))
+    //             .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
+    //             .repeat()
+    //             .with(function!(vk_topo, W_.x_ * W_.y_))
+    //     )
+    //     .unwrap()
+    // );
 
-    let loop_edge_subgraph = reduced.included().subtract(&lmb.tree);
-    for (p, eid, d) in graph.iter_edges_of(&loop_edge_subgraph) {
-        integrand_vakint = integrand_vakint
-            .replace(function!(GS.emr_mom, usize::from(eid), W_.x___))
-            .with(function!(vk_mom, n_loops, W_.x___));
-        n_loops += 1;
-    }
-    // panic!("FUFU");
-    for (i, l) in lmb.loop_edges.iter().enumerate() {
-        if let Some(a) = integrand_vakint
-            .replace(function!(GS.emr_mom, usize::from(*l), W_.x___))
-            .iter(function!(vk_mom, n_loops, W_.x___))
-            .next()
-        {
-            panic!("Found edge {l} in :{}", integrand_vakint);
+    let mut a = VakintExpression::try_from(
+        integrand_vakint
+            .replace(function!(vk_prop, W_.x__))
+            .with(function!(vk_topo, function!(vk_prop, W_.x__)))
+            .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
+            .repeat()
+            .with(function!(vk_topo, W_.x_ * W_.y_)),
+    )
+    .unwrap();
+
+    for (i, t) in a.0.iter_mut().enumerate() {
+        debug!(integral=%t.integral,"Starting integral");
+
+        let mut graph = HedgeGraphBuilder::new();
+        //prop(<id>, edge(<node_source>,<node_sink>), <mom>, <mass>, <power>)
+        let pat = function!(
+            vk_prop,
+            W_.a_,
+            function!(vakint::symbols::S.edge, W_.i_, W_.j_),
+            W_.c_,
+            W_.d_,
+            W_.e_
+        )
+        .to_pattern();
+        let mut nodemap = std::collections::HashMap::new();
+
+        struct ContractibleEdge {
+            mom: Atom,
+            mass: Atom,
+            power: i32,
         }
+
+        for m in t.integral.pattern_match(&pat, None, None) {
+            let i: usize = m[&W_.i_].as_view().try_into().unwrap();
+            let j: usize = m[&W_.j_].as_view().try_into().unwrap();
+            nodemap.entry(i).or_insert_with(|| graph.add_node(()));
+            nodemap.entry(j).or_insert_with(|| graph.add_node(()));
+
+            graph.add_edge(
+                nodemap[&i],
+                nodemap[&j],
+                ContractibleEdge {
+                    mom: m[&W_.c_].clone(),
+                    mass: m[&W_.d_].clone(),
+                    power: m[&W_.e_].as_view().try_into().unwrap(),
+                },
+                false,
+            );
+        }
+
+        let mut system = vec![];
+        let mut vars = HashSet::new();
+
+        let mut graph: HedgeGraph<ContractibleEdge, ()> = graph.build();
+
+        loop {
+            let mut to_contract = None;
+
+            for (n, mut crown, _) in graph.iter_nodes() {
+                if crown.len() == 2 {
+                    let a = graph[&crown.next().unwrap()];
+                    let b = graph[&crown.next().unwrap()];
+                    if a != b && graph[a].mass == graph[b].mass {
+                        to_contract = Some((graph[&b].1, a, graph[a].power + graph[b].power));
+                        break;
+                    }
+                }
+            }
+            if let Some((pair, a, power)) = to_contract {
+                let mut to_contract: SuBitGraph = graph.empty_subgraph();
+                to_contract.add(pair);
+                graph[a].power = power;
+                graph.contract_subgraph(&to_contract, ());
+            } else {
+                break;
+            }
+        }
+
+        debug!(graph = %graph.base_dot(), "Graph");
+
+        let mut new_integral: Atom = 1.into();
+        for (p, eid, e) in graph.iter_edges() {
+            let HedgePair::Paired { source, sink } = p else {
+                continue;
+            };
+            new_integral *= function!(
+                vk_prop,
+                eid.0 + 1, //vakint propagator ids are 1-indexed
+                function!(
+                    vakint::symbols::S.edge,
+                    graph.node_id(source).0,
+                    graph.node_id(sink).0
+                ),
+                &e.data.mom,
+                &e.data.mass.npow(2).replace(GS.m_uv).with(GS.m_uv_int),
+                e.data.power
+            )
+        }
+
+        // println!("{}->{}", t.integral, new_integral);
+        t.integral = function!(vakint::symbols::S.topo, new_integral);
+
+        let nloops = graph.cyclotomatic_number(&graph.full_filter());
+
+        let lmb = graph.lmb();
+        let mom_pat = function!(GS.emr_mom, W_.a_).to_pattern();
+        for (p, e, ed) in graph.iter_edges() {
+            if p.is_paired() {
+                // println!("{e}");
+                let loop_expr = lmb.loop_atom::<Atom>(e, vakint::symbols::S.k, &[], false);
+
+                ed.data
+                    .mom
+                    .pattern_match(&mom_pat, None, None)
+                    .for_each(|m| {
+                        let var = mom_pat.replace_wildcards(&m);
+                        vars.insert(var);
+                    });
+
+                // println!("{loop_expr}");
+
+                // println!("{external_expr}");
+                let is_zero = &ed.data.mom - loop_expr;
+                // println!("Momentum check for edge {}: {}", e, is_zero);
+                system.push(is_zero);
+            }
+        }
+
+        let vars = vars.into_iter().collect::<Vec<_>>();
+        let add_additional_args = [
+            Replacement::new(
+                function!(GS.emr_mom, W_.i_).to_pattern(),
+                function!(GS.emr_mom, W_.i_, W_.a___),
+            )
+            .with_settings(MatchSettings {
+                allow_new_wildcards_on_rhs: true,
+                ..Default::default()
+            }),
+            Replacement::new(
+                function!(vakint::symbols::S.k, W_.i_).to_pattern(),
+                function!(vakint::symbols::S.k, W_.i_, W_.a___),
+            )
+            .with_settings(MatchSettings {
+                allow_new_wildcards_on_rhs: true,
+                ..Default::default()
+            }),
+        ];
+        let a = Atom::solve_linear_system::<u8, _, _>(&system, &vars);
+        match a {
+            Ok(a) => {
+                for (v, k) in a.iter().zip(vars.iter()) {
+                    let lhs = k.replace_multiple(&add_additional_args);
+                    let rhs = v.replace_multiple(&add_additional_args);
+                    // println!("Momentum solution: {} -> {}", lhs, rhs);
+                    t.integral = t.integral.replace(lhs.to_pattern()).with(rhs.to_pattern());
+                    t.numerator = t.numerator.replace(lhs.to_pattern()).with(rhs.to_pattern());
+                }
+            }
+            Err(SolveError::Underdetermined {
+                partial_solution, ..
+            }) => {
+                let mut reps = vec![];
+                for (p, v) in partial_solution.iter().zip(vars.iter()).rev() {
+                    let p = p.replace_multiple(&reps);
+
+                    if &p == v {
+                        reps.push(Replacement::new(
+                            p.replace_multiple(&add_additional_args).to_pattern(),
+                            Atom::Zero,
+                        ))
+                    } else {
+                        reps.push(Replacement::new(
+                            v.replace_multiple(&add_additional_args).to_pattern(),
+                            p.replace_multiple(&add_additional_args).to_pattern(),
+                        ))
+                    }
+
+                    // println!("Partial solution: {}->{}", v, p);
+                }
+                // for r in &reps {
+                //     println!("Rep: {:#}", r);
+                // }
+
+                t.integral = t.integral.replace_multiple(&reps);
+                t.numerator = t.numerator.replace_multiple(&reps);
+            }
+            Err(a) => {
+                panic!(
+                    "Could not solve momentum system for vakint integrand: {}",
+                    a
+                );
+            }
+        }
+
+        // debug!(
+        //     "Graph from vakint expression:\n{}\n{}",
+        //     graph.dot_lmb_of(&graph.full_filter(), &graph.lmb()),
+        //     term
+        // );
+
+        t.numerator *= parse!(&settings.additional_normalization).npow(nloops);
+
+        t.numerator = t.numerator.simplify_metrics().to_dots();
+        t.integral = t
+            .integral
+            .replace(function!(GS.emr_mom, W_.x___))
+            .with(function!(vakint::symbols::S.p, W_.x___));
+        t.numerator = t
+            .numerator
+            .replace(function!(GS.emr_mom, W_.x___))
+            .with(function!(vakint::symbols::S.p, W_.x___))
+            .replace(function!(
+                SPENSO_TAG.dot,
+                Minkowski {}.new_rep(GS.dim).to_symbolic([]),
+                W_.a_,
+                W_.b_
+            ))
+            .with(vakint::symbols::S.dot(W_.a_, W_.b_))
+            .replace(function!(
+                ETS.metric,
+                Minkowski {}.to_symbolic([W_.a__]),
+                Minkowski {}.to_symbolic([W_.b__])
+            ))
+            .with(function!(
+                vakint::symbols::S.metric,
+                Minkowski {}.to_symbolic([W_.a__]),
+                Minkowski {}.to_symbolic([W_.b__])
+            ));
     }
 
-    integrand_vakint = integrand_vakint
-        .replace(function!(GS.emr_mom, W_.x___))
-        .with(function!(vakint::symbols::S.p, W_.x___));
-
-    // collect the topology
-    integrand_vakint = integrand_vakint
-        .replace(function!(vk_prop, W_.x__))
-        .with(function!(vk_topo, function!(vk_prop, W_.x__)))
-        .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
-        .repeat()
-        .with(function!(vk_topo, W_.x_ * W_.y_));
-
-    debug!(
-        "Graph with {}-{} loops:{}",
-        graph.cyclotomatic_number(reduced),
-        n_loops - 1,
-        graph.dot_lmb_of(&graph.full_filter(), lmb),
-    );
-    debug!(
-        "Integrand vakint: {:>}",
-        integrand_vakint.printer(PrintOptions {
-            terms_on_new_line: true,
-            color_builtin_symbols: false,
-            color_namespace: false,
-            hide_all_namespaces: true,
-            color_top_level_sum: false,
-            ..Default::default()
-        })
-    );
-
-    integrand_vakint
+    a
 }
 
 #[derive(Clone)]
@@ -515,6 +741,7 @@ impl Approximation {
         vakint: (&Vakint, &vakint::VakintSettings),
         uv_graph: &G,
         amplitude_subgraph: &S,
+        topo_order: usize,
         settings: &UVgenerationSettings,
         pole_part: bool,
     ) -> Result<ApproxOp> {
@@ -559,22 +786,27 @@ impl Approximation {
             .unwrap();
 
         if pole_part {
-            debug!(t_arg = %t_arg,"T arg for pole part 4d CT");
+            debug!(t_arg = %t_arg.log_print(),"T arg for pole part 4d CT");
         } else {
-            debug!(t_arg = %t_arg,"T arg for integrated 4d CT");
+            debug!(t_arg = %t_arg.log_print(),"T arg for integrated 4d CT");
         }
-        t_arg = t_arg.simplify_gamma() / uv_graph.denominator(&reduced, |_| 1);
+        t_arg = t_arg.simplify_metrics().simplify_gamma() / uv_graph.denominator(&reduced, |_| 1);
         if pole_part {
-            debug!(t_arg = %t_arg,"T arg  gamma simplified for pole part 4d CT");
+            debug!(t_arg = %t_arg.log_print(),"T arg  gamma simplified for pole part 4d CT");
         } else {
-            debug!(t_arg = %t_arg,"T arg gamma simplified for integrated 4d CT");
+            debug!(t_arg = %t_arg.log_print(),"T arg gamma simplified for integrated 4d CT");
         }
+
+        t_arg = t_arg
+            .replace(GS.dim)
+            .max_level(0)
+            .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
         let n_loops = uv_graph.n_loops(amplitude_subgraph);
 
         let mut atomarg = t_arg * inner_t;
 
-        debug!("Atomarg: {}", atomarg.printer(LOGPRINTOPTS));
+        debug!(atomarg = %atomarg.log_print(),"t_arg * inner_t for 4d CT");
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
@@ -630,13 +862,7 @@ impl Approximation {
                 ));
         }
 
-        // atomarg = atomarg
-        //     .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
-        //     .repeat()
-        //     .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
-
-        // println!("atomarg:{}", atomarg);
-
+        debug!(atomarg = %atomarg.log_print(),"t_arg * inner_t after rescaling masses for 4d CT");
         // den(..) tags a propagator, its first derivative is 1 and the rest is 0
         let mut a = atomarg
             .series(GS.rescale, Atom::Zero, self.dod.into(), true)
@@ -646,6 +872,8 @@ impl Approximation {
             .with(Atom::num(1))
             .replace(parse!("der(x__, den(y__))"))
             .with(Atom::num(0));
+
+        debug!(a = %a.log_print(),"Series expanded for 4d CT");
 
         if soft_ct {
             let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
@@ -672,59 +900,101 @@ impl Approximation {
             a = a.replace(GS.rescale).with(Atom::num(1));
         }
 
-        let integrand_vakint =
-            to_vakint_integrand(&a, &self.lmb, graph, &reduced, &dependent.subgraph, true);
-
-        // // let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
-        // debug!(
-        //     "\nVakint expression:\n{}",
-        //     integrand_vakint.printer(PrintOptions {
-        //         terms_on_new_line: true,
-        //         color_builtin_symbols: false,
-        //         color_namespace: false,
-        //         hide_all_namespaces: false,
-        //         color_top_level_sum: false,
-        //         ..Default::default()
-        //     })
-        // );
-
-        debug!("{:#?}", &vakint.1);
-
-        let mut res = vakint
-            .0
-            .evaluate(&vakint.1, integrand_vakint.as_view())
-            .unwrap();
-
-        debug!(
-            "\nRaw integrated CT:\n{}\n",
-            res.printer(PrintOptions {
-                terms_on_new_line: true,
-                color_builtin_symbols: false,
-                color_namespace: false,
-                hide_all_namespaces: true,
-                color_top_level_sum: false,
-                ..Default::default()
-            })
+        let mut integrand_vakint = to_vakint_integrand(
+            &a,
+            graph,
+            &reduced,
+            &dependent.subgraph,
+            &settings.vakint,
+            true,
         );
+
+        for t in &integrand_vakint.0 {
+            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term as input");
+        }
+        debug!(settings = ?&vakint.1,"Vakint args");
+
+        // let mut res = vakint
+        //     .0
+        //     .evaluate(&vakint.1, integrand_vakint.as_view())
+        //     .unwrap();
+
+        integrand_vakint.canonicalize(&vakint.1, &vakint.0.topologies, false)?;
+        for t in &integrand_vakint.0 {
+            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term after canonicalization");
+        }
+        integrand_vakint.tensor_reduce(&vakint.0, &vakint.1)?;
+        for t in &integrand_vakint.0 {
+            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term after tensor reduction");
+        }
+        integrand_vakint.evaluate_integral(&vakint.0, &vakint.1)?;
+        for t in &integrand_vakint.0 {
+            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term after evaluation");
+        }
+
+        let mut res: Atom = integrand_vakint.into();
+
+        debug!(res = %res.expand().log_print(),"Raw post vakint ");
+
         let vk_metric = vakint_symbol!("g");
-        let mink = Minkowski {}.new_rep(4);
+        let mink = Minkowski {}.new_rep(GS.dim);
         // apply metric
         res = res
             .replace(vakint::symbols::S.p.f(&[W_.i_, W_.j_]))
             .when(W_.j_.filter(|r| r.to_atom().is_integer()))
-            .with(
+            .with(vakint::symbols::S.p.f(&[
+                Atom::var(W_.i_),
+                mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.j_)])]),
+            ]))
+            .replace(
                 vakint::symbols::S
                     .p
-                    .f(&[Atom::var(W_.i_), mink.to_symbolic([Atom::var(W_.j_)])]),
+                    .f(&[Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
             )
+            .when(W_.j_.filter(|r| r.to_atom().is_integer()))
+            .with(vakint::symbols::S.p.f(&[
+                Atom::var(W_.i_),
+                mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.j_)])]),
+            ]))
             .replace(vakint::symbols::S.p.f(&[W_.x__]))
             .with(GS.emr_mom.f(&[W_.x__]));
         res = res
             .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
-            .with(function!(GS.emr_mom, W_.x___, W_.y_));
+            .with(function!(GS.emr_mom, W_.x___, W_.y_))
+            .replace(function!(
+                vk_metric,
+                vakint::symbols::S.dot_dummy_ind(W_.x_),
+                W_.y_
+            ))
+            .when(W_.x_.filter(|r| r.to_atom().is_integer()))
+            .with(function!(
+                vk_metric,
+                mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.x_)])]),
+                W_.y_
+            ))
+            .replace(function!(
+                vk_metric,
+                W_.x_,
+                vakint::symbols::S.dot_dummy_ind(W_.y_)
+            ))
+            .when(W_.y_.filter(|r| r.to_atom().is_integer()))
+            .with(function!(
+                vk_metric,
+                mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.y_)])]),
+                W_.x_
+            ))
+            .replace(function!(vk_metric, W_.x_, W_.y_))
+            .with(function!(ETS.metric, W_.x_, W_.y_));
 
         res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
 
+        res = res
+            .simplify_metrics()
+            .replace(GS.dim)
+            .max_level(0)
+            .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+
+        debug!(res = %res.expand().log_print(),"Replaced post vakint ");
         let series = res
             .series(
                 GS.dim_epsilon,
@@ -734,7 +1004,7 @@ impl Approximation {
             )
             .unwrap();
 
-        debug!("Series: {}", series.to_atom().printer(LOGPRINTOPTS));
+        debug!(series = %series.to_atom().log_print(),"Series ");
 
         let mut pole_stripped = Atom::Zero;
 
@@ -777,7 +1047,20 @@ impl Approximation {
             }
         }
 
-        debug!(pole_part = %pole_part,res = %res,"Final integrated 4d CT");
+        debug!(pole_part = %pole_part,res = %res.log_print(),"Final integrated 4d CT");
+
+        if res
+            .replace(GS.dim)
+            .max_level(0)
+            .match_iter()
+            .next()
+            .is_some()
+        {
+            panic!(
+                "The t_arg should not contain dim after expansion, found {}",
+                res
+            );
+        }
 
         // println!("\nIntegrated CT:\n{}\n", res);
 
@@ -800,6 +1083,7 @@ impl Approximation {
         vakint: (&Vakint, &vakint::VakintSettings),
         amplitude_subgraph: &S,
         dependent: &Self,
+        topo_order: usize,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         self.integrated_4d = self.integrated_4d(
@@ -807,11 +1091,19 @@ impl Approximation {
             vakint,
             graph,
             amplitude_subgraph,
+            topo_order,
             settings,
             false,
         )?;
-        self.integrated_pole_part =
-            self.integrated_4d(dependent, vakint, graph, amplitude_subgraph, settings, true)?;
+        self.integrated_pole_part = self.integrated_4d(
+            dependent,
+            vakint,
+            graph,
+            amplitude_subgraph,
+            topo_order,
+            settings,
+            true,
+        )?;
         Ok(())
     }
 

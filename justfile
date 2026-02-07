@@ -4,6 +4,10 @@
 build-cli:
     cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim
 
+# Build gammaloop CLI without Python (no pyo3)
+build-cli-no-pyo3:
+    cargo build -p gammaloop-api --bin gammaloop --no-default-features --features cli,no_pyo3 --profile dev-optim
+
 # Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
 build-cli-abi:
     cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --profile dev-optim

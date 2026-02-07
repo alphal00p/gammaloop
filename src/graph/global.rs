@@ -48,7 +48,7 @@ impl ParseData {
         }
     }
 
-    pub(crate) fn with_polarizations(self, polarizations: Atom) -> Self {
+    pub(crate) fn with_projectors(self, polarizations: Atom) -> Self {
         ParseData {
             name: self.name,
             overall_factor: self.overall_factor,
@@ -87,7 +87,7 @@ impl From<linnet::parser::GlobalData> for ParseData {
 
         if let Some(polarizations) = value.statements.get("projector") {
             parse_data = parse_data
-                .with_polarizations(polarizations.strip_parse().context("projector").unwrap());
+                .with_projectors(polarizations.strip_parse().context("projector").unwrap());
         }
 
         if let Some(factor) = value.statements.get("num") {
@@ -217,7 +217,12 @@ mod tests {
         parser::{DotGraph, DotVertexData},
     };
 
-    use crate::{dot, graph::Graph, graph::parse::IntoGraph, initialisation::test_initialise};
+    use crate::{
+        dot,
+        graph::{Graph, parse::IntoGraph},
+        initialisation::test_initialise,
+        processes::DotExportSettings,
+    };
 
     #[test]
     fn params_roundtrip_in_global_data() {
@@ -241,7 +246,7 @@ mod tests {
             Ok(g) => {
                 let g: Graph = g;
                 // g.to_dot_graph_with_settings().dot()
-                let serialized = g.dot_serialize();
+                let serialized = g.dot_serialize(&DotExportSettings::default());
                 let parsed: DotGraph<NodeStorageVec<DotVertexData>> =
                     DotGraph::from_string(serialized).unwrap();
 

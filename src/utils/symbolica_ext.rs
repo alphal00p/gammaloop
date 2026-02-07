@@ -2,6 +2,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use std::{
     collections::BTreeMap,
     fmt::{Display, Write},
@@ -865,5 +866,17 @@ where
             .add_args(args.1)
             .add_args(args.2)
             .finish()
+    }
+}
+
+pub trait LogPrint {
+    fn log_print(&self) -> String;
+}
+
+impl<A: AtomCore> LogPrint for A {
+    fn log_print(&self) -> String {
+        let mut settings = SpensoPrintSettings::compact().nice_symbolica();
+        // settings.hide_all_namespaces = false;
+        self.printer(settings).to_string()
     }
 }

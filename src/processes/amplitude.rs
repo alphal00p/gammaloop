@@ -49,7 +49,10 @@ use crate::{
     signature::SignatureLike,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, FUN_LIB, GS, Length, TENSORLIB, W_, symbolica_ext::LOGPRINTOPTS},
-    uv::{UVgenerationSettings, UltravioletGraph, approx::to_vakint_integrand},
+    uv::{
+        UVgenerationSettings, UltravioletGraph, approx::to_vakint_integrand,
+        settings::VakintSettings,
+    },
 };
 use eyre::{Context, eyre};
 use itertools::Itertools;
@@ -336,9 +339,13 @@ impl Amplitude {
               amplitude.name = %self.name,
           )
       )]
-    pub fn write_dot_fmt<W: fmt::Write>(&self, writer: &mut W) -> Result<(), std::fmt::Error> {
+    pub fn write_dot_fmt<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+        settings: &DotExportSettings,
+    ) -> Result<(), std::fmt::Error> {
         for graph in &self.graphs {
-            graph.write_dot_fmt(writer)?;
+            graph.write_dot_fmt(writer, settings)?;
             writeln!(writer)?;
         }
         Ok(())
@@ -458,13 +465,9 @@ impl AmplitudeGraph {
             None,
             &settings,
             false,
-        );
+        )?;
 
-        forest.pole_part_of_ends(&self.graph).map(|a| {
-            (a * &self.graph.global_prefactor.projector)
-                .simplify_color()
-                .to_dots()
-        })
+        forest.pole_part_of_ends(&self.graph)
     }
 
     #[allow(dead_code)]
@@ -479,8 +482,9 @@ impl AmplitudeGraph {
     pub(crate) fn write_dot_fmt<W: fmt::Write>(
         &self,
         writer: &mut W,
+        settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        self.graph.dot_serialize_fmt(writer)
+        self.graph.dot_serialize_fmt(writer, settings)
     }
 
     pub(crate) fn generate_cff(&mut self) -> Result<()> {
@@ -624,14 +628,15 @@ impl AmplitudeGraph {
         component: &S,
         evaluate_numerically: bool,
         vakint: &Vakint,
-        settings: &vakint::VakintSettings,
+        true_settings: &vakint::VakintSettings,
+        settings: &VakintSettings,
         run_time_settings: &RuntimeSettings,
         include_global_numerator: bool,
     ) -> Result<Atom> {
-        let mut settings = settings.clone();
-        settings.number_of_terms_in_epsilon_expansion =
+        let mut true_settings = true_settings.clone();
+        true_settings.number_of_terms_in_epsilon_expansion =
             self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
-        let pysec_dec_enabled_in_vakint = settings.evaluation_order.0.iter().find_map(|o| {
+        let pysec_dec_enabled_in_vakint = true_settings.evaluation_order.0.iter().find_map(|o| {
             if let EvaluationMethod::PySecDec(opts) = o {
                 Some(opts)
             } else {
@@ -678,13 +683,13 @@ impl AmplitudeGraph {
             }
 
             // Make sure to properly do the upcasting to required precision in vakint settings
-            vakint.params_from_complex_f64(&settings, &complex_params)
+            vakint.params_from_complex_f64(&true_settings, &complex_params)
         } else {
             HashMap::default()
         };
 
         if let Some(pysec_dec_opts) = pysec_dec_enabled_in_vakint {
-            settings.evaluation_order.adjust(
+            true_settings.evaluation_order.adjust(
                 None,
                 pysec_dec_opts.relative_precision,
                 &HashMap::default(),
@@ -739,27 +744,22 @@ impl AmplitudeGraph {
         //         .with(function!(vk_mom, i as i64 + 1, W_.x___));
         // }
 
-        let vakint_integrand = to_vakint_integrand(
+        let mut vakint_integrand = to_vakint_integrand(
             &four_dimensional_integrand,
-            &self.graph.lmb_of(component),
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
+            &settings,
             false,
         );
 
-        // println!(
-        //     "\nVakint expression:\n{:#}",
-        //     VakintExpression::try_from(vakint_integrand.clone()).unwrap()
-        // );
-        // println!(
-        //     "\nVakint expression raw:\n{}",
-        //     vakint_integrand.to_canonical_string()
-        // );
-
-        let analytical_evaluation = vakint
-            .evaluate(&settings, vakint_integrand.as_view())
-            .unwrap();
+        vakint_integrand.canonicalize(&true_settings, &vakint.topologies, false)?;
+        // println!("Canonized: {}", vakint_integrand);
+        vakint_integrand.tensor_reduce(vakint, &true_settings)?;
+        // println!("Tensor Reduced {}", vakint_integrand);
+        vakint_integrand.evaluate_integral(vakint, &true_settings)?;
+        // println!("Evaluated {}", vakint_integrand);
+        let analytical_evaluation: Atom = vakint_integrand.into();
         // println!(
         //     "\nVakint analytical evaluation:\n{:#}",
         //     analytical_evaluation
@@ -769,7 +769,7 @@ impl AmplitudeGraph {
         } else {
             let (numerical_evaluation, _error) = vakint
                 .numerical_evaluation(
-                    &settings,
+                    &true_settings,
                     analytical_evaluation.as_view(),
                     &HashMap::default(),
                     &complex_params_vakint,
@@ -780,7 +780,7 @@ impl AmplitudeGraph {
             // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
 
             let numerical_evaluation_atom =
-                numerical_evaluation.to_atom(vakint_symbol!(settings.epsilon_symbol.clone()));
+                numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()));
 
             Ok(numerical_evaluation_atom)
         }
@@ -965,7 +965,7 @@ impl AmplitudeGraph {
                 None,
                 &settings.uv,
                 false,
-            );
+            )?;
 
             complement_forest.compute(
                 &self.graph,
@@ -977,7 +977,7 @@ impl AmplitudeGraph {
                 None,
                 &settings.uv,
                 false,
-            );
+            )?;
 
             let circled_expr = circled_forest.orientation_parametric_expr(
                 Some(&edges_in_cut),
@@ -1111,7 +1111,7 @@ impl AmplitudeGraph {
             None,
             &settings.uv,
             false,
-        );
+        )?;
 
         let global_num = self.graph.global_network();
         let mut full = forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
@@ -1374,16 +1374,14 @@ impl Amplitude {
 
         if !self.graphs.is_empty() {
             if self.external_particles != new_external_particels {
-                return Err(eyre!("amplitude graph has different number of externals")).with_note(
-                    || {
-                        format!(
-                            "Found {} externals, expected {} for the graph {}",
-                            new_external_particels.len(),
-                            self.external_particles.len(),
-                            DotGraph::from(&graph).debug_dot()
-                        )
-                    },
-                );
+                return Err(eyre!("amplitude graph has different externals")).with_context(|| {
+                    format!(
+                        "Found {} externals, expected {} for the graph {}",
+                        new_external_particels.len(),
+                        self.external_particles.len(),
+                        DotGraph::from(&graph).debug_dot()
+                    )
+                });
             }
 
             if self.external_signature != new_external_signature {
@@ -1409,7 +1407,7 @@ pub mod test {
 
     use crate::{
         dot,
-        gammaloop_integrand::{GenericEvaluator, ParamBuilder},
+        gammaloop_integrand::GenericEvaluator,
         graph::parse::IntoGraph,
         initialisation::test_initialise,
         processes::AmplitudeGraph,

@@ -3,7 +3,7 @@ use gammalooprs::{
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
     initialisation::initialise,
-    processes::ProcessCollection,
+    processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
@@ -74,6 +74,7 @@ fn _gammaloop(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     gammalooprs::set_interrupt_handler();
     m.add_class::<GammaLoopAPI>()?;
     m.add_class::<LogLevel>()?;
+    m.add_class::<DotExportSettings>()?;
     /*
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
@@ -396,6 +397,7 @@ impl GammaLoopAPI {
             // Try to serialize using strings when saving run history
             no_try_strings: false,
             command: None,
+            fresh_state: false,
         };
         let (state, run_history, cli_settings, default_runtime_settings) =
             one_shot.load().map_err(|e| {
@@ -796,11 +798,12 @@ impl GammaLoopAPI {
         }
     }
 
-    #[pyo3(name="get_dot_files", signature = (process_id=None, integrand_name=None))]
+    #[pyo3(name="get_dot_files", signature = (process_id=None, integrand_name=None,settings=DotExportSettings::default()))]
     pub(crate) fn get_dot_files(
         &mut self,
         process_id: Option<usize>,
         integrand_name: Option<String>,
+        settings: DotExportSettings,
     ) -> PyResult<String> {
         let (pid, name) = self
             .gammaloop_state
@@ -812,24 +815,30 @@ impl GammaLoopAPI {
         let mut dot_output = String::new();
         match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => match &amplitudes.get(&name) {
-                Some(amplitude) => amplitude.write_dot_fmt(&mut dot_output).map_err(|e| {
-                    exceptions::PyException::new_err(format!(
-                        "Could not write DOT format for amplitude {}: {}",
-                        name, e
-                    ))
-                }),
+                Some(amplitude) => {
+                    amplitude
+                        .write_dot_fmt(&mut dot_output, &settings)
+                        .map_err(|e| {
+                            exceptions::PyException::new_err(format!(
+                                "Could not write DOT format for amplitude {}: {}",
+                                name, e
+                            ))
+                        })
+                }
                 None => Err(exceptions::PyException::new_err(format!(
                     "Could not find amplitude named {}",
                     name
                 ))),
             },
             ProcessCollection::CrossSections(cross_sections) => match &cross_sections.get(&name) {
-                Some(cross_section) => cross_section.write_dot_fmt(&mut dot_output).map_err(|e| {
-                    exceptions::PyException::new_err(format!(
-                        "Could not write DOT format for amplitude {}: {}",
-                        name, e
-                    ))
-                }),
+                Some(cross_section) => cross_section
+                    .write_dot_fmt(&mut dot_output, &settings)
+                    .map_err(|e| {
+                        exceptions::PyException::new_err(format!(
+                            "Could not write DOT format for amplitude {}: {}",
+                            name, e
+                        ))
+                    }),
                 None => Err(exceptions::PyException::new_err(format!(
                     "Could not find cross-section named {}",
                     name

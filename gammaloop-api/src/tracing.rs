@@ -6,7 +6,7 @@ use std::{
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
 use eyre::Context;
-use gammalooprs::utils::tracing::{LogFormat, LOG_GUARD};
+use gammalooprs::utils::tracing::{LogFormat, LogStyle, LOG_GUARD};
 use tracing::{level_filters::LevelFilter, Event, Subscriber};
 use tracing_appender::{
     non_blocking::NonBlockingBuilder,
@@ -257,16 +257,53 @@ pub(crate) fn init_tracing(
     handles.file_handle.clone()
 }
 
-pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
+pub static LOG_STYLE: LazyLock<Mutex<LogStyle>> = LazyLock::new(|| Mutex::new(LogStyle::default()));
+
+pub fn set_log_style(style: LogStyle) {
+    *LOG_STYLE.lock().unwrap() = style;
+}
 
 /// Collect the event's formatted "message" field.
+#[derive(Default)]
 struct MessageVisitor {
     message: Option<String>,
+    fields: Vec<(String, String)>,
 }
 impl tracing::field::Visit for MessageVisitor {
     fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
+        self.record_value(f, format!("{v:?}"));
+    }
+
+    fn record_str(&mut self, f: &tracing::field::Field, v: &str) {
+        self.record_value(f, v.to_string());
+    }
+
+    fn record_bool(&mut self, f: &tracing::field::Field, v: bool) {
+        self.record_value(f, v.to_string());
+    }
+
+    fn record_i64(&mut self, f: &tracing::field::Field, v: i64) {
+        self.record_value(f, v.to_string());
+    }
+
+    fn record_u64(&mut self, f: &tracing::field::Field, v: u64) {
+        self.record_value(f, v.to_string());
+    }
+
+    fn record_f64(&mut self, f: &tracing::field::Field, v: f64) {
+        self.record_value(f, v.to_string());
+    }
+
+    fn record_error(&mut self, f: &tracing::field::Field, v: &(dyn std::error::Error + 'static)) {
+        self.record_value(f, v.to_string());
+    }
+}
+impl MessageVisitor {
+    fn record_value(&mut self, f: &tracing::field::Field, value: String) {
         if f.name() == "message" {
-            self.message = Some(format!("{v:?}"));
+            self.message = Some(value);
+        } else {
+            self.fields.push((f.name().to_string(), value));
         }
     }
 }
@@ -287,44 +324,117 @@ where
     ) -> std::fmt::Result {
         let now = Local::now();
         let meta = event.metadata();
+        let style = LOG_STYLE.lock().unwrap().clone();
 
-        let mut v = MessageVisitor { message: None };
+        let mut v = MessageVisitor::default();
         event.record(&mut v);
         let msg = v.message.as_deref().unwrap_or("");
+        let field_suffix = if style.include_fields && !v.fields.is_empty() {
+            let mut s = String::new();
+            if !msg.is_empty() {
+                s.push(' ');
+            }
+            s.push('{');
+            for (i, (k, v)) in v.fields.iter().enumerate() {
+                if i > 0 {
+                    s.push_str(", ");
+                }
+                s.push_str(k);
+                s.push('=');
+                s.push_str(v);
+            }
+            s.push('}');
+            s
+        } else {
+            String::new()
+        };
+        let rendered = format!("{msg}{field_suffix}");
 
-        match *LOG_FORMAT.lock().unwrap() {
+        let ts_long = format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+            now.year(),
+            now.month(),
+            now.day(),
+            now.hour(),
+            now.minute(),
+            now.second(),
+            now.timestamp_subsec_millis()
+        );
+        let ts_short_ms = format!(
+            "{:02}:{:02}:{:02}.{:03}",
+            now.hour(),
+            now.minute(),
+            now.second(),
+            now.timestamp_subsec_millis()
+        );
+        let ts_short = format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second());
+
+        let long_source = if style.full_line_source {
+            format_full_source(meta)
+        } else {
+            format_target(meta.module_path().unwrap_or("").to_string(), *meta.level())
+        };
+        let short_source = if style.full_line_source {
+            Some(format_full_source(meta))
+        } else {
+            None
+        };
+
+        match style.log_format {
             LogFormat::Long => {
+                let timestamp = if style.short_timestamp {
+                    &ts_short_ms
+                } else {
+                    &ts_long
+                };
                 write!(
                     w,
-                    "[{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}] @{} {}: {}",
-                    now.year(),
-                    now.month(),
-                    now.day(),
-                    now.hour(),
-                    now.minute(),
-                    now.second(),
-                    now.timestamp_subsec_millis(),
-                    format_target(meta.module_path().unwrap_or("").to_string(), *meta.level()),
+                    "[{}] @{} {}: {}",
+                    timestamp,
+                    long_source,
                     format_level(*meta.level()),
-                    msg
+                    rendered
                 )?;
             }
             LogFormat::Short => {
-                write!(
-                    w,
-                    "[{:02}:{:02}:{:02}] {}: {}",
-                    now.hour(),
-                    now.minute(),
-                    now.second(),
-                    format_level(*meta.level()),
-                    msg
-                )?;
+                if let Some(source) = short_source {
+                    write!(
+                        w,
+                        "[{}] @{} {}: {}",
+                        ts_short,
+                        source,
+                        format_level(*meta.level()),
+                        rendered
+                    )?;
+                } else {
+                    write!(
+                        w,
+                        "[{}] {}: {}",
+                        ts_short,
+                        format_level(*meta.level()),
+                        rendered
+                    )?;
+                }
             }
             LogFormat::Min => {
-                write!(w, "{}: {}", format_level(*meta.level()), msg)?;
+                if let Some(source) = short_source {
+                    write!(
+                        w,
+                        "@{} {}: {}",
+                        source,
+                        format_level(*meta.level()),
+                        rendered
+                    )?;
+                } else {
+                    write!(w, "{}: {}", format_level(*meta.level()), rendered)?;
+                }
             }
             LogFormat::None => {
-                write!(w, "{}", msg)?;
+                if let Some(source) = short_source {
+                    write!(w, "@{} {}", source, rendered)?;
+                } else {
+                    write!(w, "{}", rendered)?;
+                }
             }
         }
         writeln!(w)
@@ -351,4 +461,33 @@ pub(crate) fn format_target(target: String, level: tracing::Level) -> ColoredStr
         shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
     }
     format!("{:<20}", shortened_path).bright_blue()
+}
+
+pub(crate) fn format_full_source(meta: &tracing::Metadata<'_>) -> ColoredString {
+    let module = meta.module_path().unwrap_or("");
+    let file = meta.file().unwrap_or("");
+    let line = meta.line();
+
+    let mut parts = Vec::new();
+    if !module.is_empty() {
+        parts.push(module.to_string());
+    }
+    if !file.is_empty() {
+        let mut file_part = file.to_string();
+        if let Some(line) = line {
+            file_part.push(':');
+            file_part.push_str(&line.to_string());
+        }
+        parts.push(file_part);
+    } else if let Some(line) = line {
+        parts.push(line.to_string());
+    }
+
+    let source = if parts.is_empty() {
+        meta.target().to_string()
+    } else {
+        parts.join(" ")
+    };
+
+    source.bright_blue()
 }

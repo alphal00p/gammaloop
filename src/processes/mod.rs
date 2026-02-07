@@ -36,7 +36,7 @@ pub struct ProcessList {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 pub struct DotExportSettings {
     // pub root_folder: PathBuf,
     pub combine_diagrams: bool,
@@ -45,6 +45,15 @@ pub struct DotExportSettings {
     pub split_xs_by_initial_states: bool,
     pub do_gamma_algebra: bool,
     pub do_color_algebra: bool,
+}
+
+#[cfg(feature = "python_api")]
+#[cfg_attr(feature = "python_api", pyo3::pymethods)]
+impl DotExportSettings {
+    #[new]
+    fn new() -> Self {
+        DotExportSettings::default()
+    }
 }
 
 impl Default for DotExportSettings {
