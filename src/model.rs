@@ -48,7 +48,7 @@ use symbolica::domains::rational::{Fraction, Rational};
 
 type ExternalFunctionMap =
     HashMap<String, Box<dyn Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> + Send + Sync>, RandomState>;
-use symbolica::evaluate::FunctionMap;
+use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use symbolica::id::Replacement;
 use tracing::info;
 
@@ -1962,7 +1962,11 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params)
             .unwrap()
-            .linearize(Some(1), false);
+            .linearize(&OptimizationSettings {
+                cpe_iterations: Some(1),
+                verbose: false,
+                ..OptimizationSettings::default()
+            });
 
         let mut ext: ExternalFunctionMap = HashMap::default();
         ext.insert(
