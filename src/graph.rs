@@ -17,6 +17,7 @@ use linnet::{
 };
 use tracing::debug;
 
+use color_eyre::Result;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
 use symbolica::atom::Atom;
@@ -272,7 +273,13 @@ impl Graph {
             }
         }
 
-        assert_eq!(source_nodes.len(), target_nodes.len());
+        // They don't need to be the same!
+        // assert_eq!(
+        //     source_nodes.len(),
+        //     target_nodes.len(),
+        //     "The number of source and target nodes should be the same{}",
+        //     self.debug_dot()
+        // );
 
         let source_node_vec = source_nodes.into_iter().collect_vec();
         let target_node_vec = target_nodes.into_iter().collect_vec();

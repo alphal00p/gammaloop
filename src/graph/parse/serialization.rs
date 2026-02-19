@@ -28,10 +28,13 @@ impl Graph {
         };
 
         if settings.output_full_numerator {
-            let mut num = self
+            let mut num = (self
                 .numerator(&self.full_filter(), &self.empty_subgraph())
                 .get_single_atom()
                 .unwrap()
+                * &self.global_prefactor.num
+                * &self.global_prefactor.projector
+                * &self.overall_factor)
                 .simplify_metrics();
 
             if settings.do_color_algebra {
@@ -92,11 +95,6 @@ impl Graph {
 
                                 match e.flow() {
                                     Some(Flow::Source) => {
-                                        //assert!(
-                                        //    self.initial_state_cut
-                                        //        .left
-                                        //        .includes(&self.inv(p.any_hedge()))
-                                        //);
                                         dot.add_statement("is_cut", self.inv(p.any_hedge()));
                                         dot.add_statement(
                                             "pin",
@@ -104,7 +102,6 @@ impl Graph {
                                         );
                                     }
                                     Some(Flow::Sink) => {
-                                        // assert!(self.initial_state_cut.left.includes(&p.any_hedge()));
                                         dot.add_statement("is_cut", p.any_hedge());
                                         dot.add_statement(
                                             "pin",

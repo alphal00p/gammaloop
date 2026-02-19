@@ -396,29 +396,44 @@ pub(crate) fn to_vakint_integrand<
 
         let mut graph: HedgeGraph<ContractibleEdge, ()> = graph.build();
 
-        loop {
-            let mut to_contract = None;
-
-            for (n, mut crown, _) in graph.iter_nodes() {
-                if crown.len() == 2 {
-                    let a = graph[&crown.next().unwrap()];
-                    let b = graph[&crown.next().unwrap()];
-                    if a != b && graph[a].mass == graph[b].mass {
-                        to_contract = Some((graph[&b].1, a, graph[a].power + graph[b].power));
-                        break;
-                    }
+        while let Some(same_mass_two_bond) = graph.a_bond(&|c| {
+            let mut count = 0;
+            let mut mass = None;
+            for (_, _, d) in graph.iter_edges_of(c) {
+                count += 1;
+                if mass.is_none() {
+                    mass = Some(d.data.mass.clone());
+                } else if mass.as_ref().unwrap() != &d.data.mass {
+                    return false;
+                }
+                if count > 2 {
+                    return false;
                 }
             }
-            if let Some((pair, a, power)) = to_contract {
-                let mut to_contract: SuBitGraph = graph.empty_subgraph();
-                to_contract.add(pair);
-                graph[a].power = power;
-                graph.contract_subgraph(&to_contract, ());
-            } else {
-                break;
-            }
+            count == 2
+        }) {
+            let mut iter = same_mass_two_bond.included_iter();
+            let first = graph[&iter.next().unwrap()];
+            let second = graph[&iter.next().unwrap()];
+            graph[first].power += graph[second].power;
+            let mut to_contract: SuBitGraph = graph.empty_subgraph();
+            to_contract.add(graph[&second].1);
+            graph.contract_subgraph(&to_contract, ());
+        }
+        let mut nodes_to_merge = vec![];
+
+        for c in graph.connected_components(&graph.full_filter()) {
+            let Some((nid, _, _)) = graph.iter_nodes_of(&c).next() else {
+                continue;
+            };
+            nodes_to_merge.push(nid);
         }
 
+        if nodes_to_merge.len() > 0 {
+            graph.identify_nodes(&nodes_to_merge, ());
+        }
+
+        graph.forget_identification_history();
         debug!(graph = %graph.base_dot(), "Graph");
 
         let mut new_integral: Atom = 1.into();
@@ -942,6 +957,12 @@ impl Approximation {
         let mut res: Atom = integrand_vakint.into();
 
         debug!(res = %res.expand().log_print(),"Raw post vakint ");
+
+        res = res
+            .replace(parse_lit!(vakint::cl2))
+            .with(parse_lit!(cl2))
+            .replace(parse_lit!(vakint::sqrt3))
+            .with(parse_lit!(sqrt(3)));
 
         let vk_metric = vakint_symbol!("g");
         let mink = Minkowski {}.new_rep(GS.dim);

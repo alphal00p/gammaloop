@@ -10,7 +10,7 @@ use linnet::half_edge::{
         Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
         cycle::SignedCycle,
     },
-    tree::SimpleTraversalTree,
+    tree::{SimpleTraversalTree, TTRoot},
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -370,6 +370,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             let tree =
                 SimpleTraversalTree::depth_first_traverse(self, subgraph, &self.node_id(i), None)
                     .unwrap();
+
             let external = self.full_crown(subgraph);
             // println!("lmb");
             // println!("{}", tree.dot(self));
@@ -579,9 +580,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 tree
             } else {
                 let root_node = self.node_id(root);
-                let tree = if forest_guide.is_empty()
-                    && self.number_of_nodes_in_subgraph(subgraph) == 1
-                {
+                let tree = if forest_guide.is_empty() {
                     SimpleTraversalTree::empty(self)
                 } else {
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
@@ -623,7 +622,12 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                     source,
                                     self,
                                 )
-                                .unwrap(),
+                                .expect(&format!(
+                                    "Failed to get cycle from tree:{}\n{}\n{}",
+                                    tree.get_cycle(source, self).unwrap().is_circuit(self),
+                                    self.dot(&tree.get_cycle(source, self).unwrap().filter),
+                                    self.dot(&cover),
+                                )),
                             );
                             loop_edges.push(e);
                         }

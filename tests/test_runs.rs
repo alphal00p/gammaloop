@@ -103,6 +103,18 @@ fn test_epem_dd_dt() -> Result<()> {
     // todo add integration
     Ok(())
 }
+#[test]
+fn test_pentabox_dario() -> Result<()> {
+    let state = get_test_cli(
+        Some("test_qqx_aaa_pentabox_generate.toml".into()),
+        get_tests_workspace_path().join("test_qqx_aaa_pentabox_generate"),
+        None,
+        false,
+    )?;
+
+    // todo add integration
+    Ok(())
+}
 
 #[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {

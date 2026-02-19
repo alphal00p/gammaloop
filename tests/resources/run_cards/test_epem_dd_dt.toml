@@ -1,7 +1,7 @@
 commands = [
 "import model sm",
-"import graphs tests/resources/graphs/epem_dd_dt.dot",
-"generate",
+"generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes ",
+"integrate"
 ]
 
 [default_runtime_settings.kinematics]
@@ -11,26 +11,21 @@ e_cm = 1.0
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [[91.188, 0.0, 0.0, 0.0]]
-helicities = [1]
+momenta = [[1.0, 0.0, 0.0, 1.0],[1.0,0.0,0.0,-1.0]]
+helicities = [1,1]
+
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = true
-compile = false
-
-[cli_settings.global.generation]
-enable_thresholds = false
-
-[default_runtime_settings.sampling]
-type = "discrete_graph_sampling"
-
-[default_runtime_settings.sampling.sampling_type]
-subtype = "discrete_multi_channeling"
-
-[default_runtime_settings.integrator]
-n_max = 100000000
-n_start = 100000
-
+compile = true
 #[cli_settings.global.generation.orientation_pattern]
 #pat = "orientation_delta(1,1,1,-1,1,-1,1)"
 
+[default_runtime_settings.integrator]
+seed = 42
+n_increase = 0
+n_start = 10000
+n_max = 1000000
+discrete_dim_learning_rate = 1.5
+continuous_dim_learning_rate = 1.5
+max_prob_ratio = 0.01

@@ -516,9 +516,21 @@ impl GraphTerm for CrossSectionGraphTerm {
                     self.graph.name
                 )
             })?;
+
+        if externals.len() != self.graph.loop_momentum_basis.ext_edges.len() {
+            return Err(eyre!(
+                "Number Externals supplied in the settings {} do not match number of externals {} in graph {}",
+                externals.len(),
+                self.graph.loop_momentum_basis.ext_edges.len(),
+                self.graph.name
+            ));
+        }
+
         self.graph
             .param_builder
             .add_external_four_mom_all_derivatives(&externals);
+
+        // self.graph.param_builder.add_external_four_mom(&externals);
 
         let pols = self.graph.param_builder.pairs.polarizations_values(
             &self.graph,

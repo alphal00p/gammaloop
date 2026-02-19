@@ -61,15 +61,10 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     {
         let ref_graph = self.as_ref();
         let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
-            &ref_graph
-                .paton_cycle_basis(subgraph, &init_node, None)
-                .unwrap()
-                .0,
-            &Some,
-        )
-        .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-        .unwrap();
+        let all_subcycles: Vec<_> =
+            Cycle::all_sum_powerset_filter_map(&ref_graph.cycle_basis_of(subgraph).0, &Some)
+                .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
+                .unwrap();
 
         // println!("{}", self.base_dot());
         let spinneys: AHashSet<_> = InternalSubGraph::all_unions_iterative(&all_subcycles);
@@ -156,15 +151,10 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         }
 
         let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
-            &ref_graph
-                .paton_cycle_basis(subgraph, &init_node, None)
-                .unwrap()
-                .0,
-            &Some,
-        )
-        .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-        .unwrap();
+        let all_subcycles: Vec<_> =
+            Cycle::all_sum_powerset_filter_map(&ref_graph.cycle_basis_of(subgraph).0, &Some)
+                .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
+                .unwrap();
 
         // for s in &all_subcycles {
         //     println!("Subcycle: {}", self.as_ref().dot(s));
