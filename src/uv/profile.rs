@@ -68,7 +68,7 @@ impl Default for ProfileSettings {
     }
 }
 
-fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
+pub fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
     let log_start = start;
     let log_stop = stop;
     let step = (log_stop - log_start) / (num - 1) as f64;
