@@ -2148,6 +2148,7 @@ fn build_derivative_structure(order: u8) -> GenericEvaluator {
         &FunctionMap::default(),
         OptimizationSettings::default(),
         None,
+        true,
     )
     .unwrap()
 }
@@ -2174,72 +2175,4 @@ fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
     result.extend(f_parameters);
     result.extend(eta_params);
     result
-}
-
-#[test]
-fn test_symbolica_duals() {
-    create_hyperdual_from_components!(ThirdDerivative, [[0], [1], [2]]);
-    //let dual_shape_comp = ThirdDerivative::new_variable(0, 0.0);
-
-    let expr = parse!("t^-1");
-    let dual_shape = HyperDual::new(vec![vec![0], vec![1], vec![2]]);
-    let dual_shape_real = HyperDual::new(vec![vec![0], vec![1], vec![2]]);
-
-    let mut function_map = FunctionMap::default();
-
-    let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
-    function_map.add_constant(parse!("𝜋"), pi_rational.into());
-
-    let t = F(4.409081537009721);
-    let h = utils::h(&t, None, None, &HFunctionSettings::default());
-    println!("h: {}", h);
-    let dual_t = dual_shape.variable(0, Complex::new_re(t));
-    let dual_h: HyperDual<F<f64>> = utils::h_dual(
-        &dual_shape_real.variable(0, t),
-        None,
-        None,
-        &HFunctionSettings::default(),
-    );
-
-    println!("dual h: {}", dual_h);
-
-    let mut dual_h_complex = dual_shape.clone();
-    dual_h_complex
-        .values
-        .iter_mut()
-        .zip(dual_h.values.clone().iter())
-        .for_each(|(v, re_ve)| *v = Complex::new_re(*re_ve));
-
-    let evaluator = expr
-        .evaluator(
-            &function_map,
-            &vec![parse!("t"), parse!("h")],
-            OptimizationSettings::default(),
-        )
-        .unwrap();
-
-    let dual_evaluator = evaluator.clone().vectorize(&dual_shape, HashMap::new());
-
-    let mut evaluator_f64: ExpressionEvaluator<Complex<F<f64>>> = evaluator
-        .clone()
-        .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
-
-    let mut dual_evaluator_f64: ExpressionEvaluator<Complex<F<f64>>> =
-        dual_evaluator.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
-
-    let mut out = [Complex::new_zero(); 1];
-    let params = [Complex::new_re(t), Complex::new_re(h)];
-
-    evaluator_f64.evaluate(&params, &mut out);
-    println!("output: {}", out[0]);
-
-    let mut dual_params = dual_t.values.clone();
-    dual_params.append(&mut dual_h_complex.values);
-
-    let mut dual_out = [Complex::new_zero(); 3];
-    dual_evaluator_f64.evaluate(&dual_params, &mut dual_out);
-    println!("dual output: {:?}", dual_out);
-
-    let inv_t = dual_t.inv();
-    println!("inv t: {}", inv_t);
 }

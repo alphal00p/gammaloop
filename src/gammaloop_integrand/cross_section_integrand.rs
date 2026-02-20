@@ -30,6 +30,7 @@ use crate::{
         serde_utils::SmartSerde,
     },
 };
+use ahash::{HashMap, HashMapExt};
 use bincode::Encode;
 use bincode_trait_derive::Decode;
 use color_eyre::Result;
@@ -57,7 +58,6 @@ use symbolica::{
     numerical_integration::{Grid, Sample},
     parse,
 };
-use tracing::debug;
 use tracing::debug;
 use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
@@ -844,7 +844,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let pass_two_evaluator =
                     &mut self.raised_data.pass_two_evaluators[subset.len() - 1];
 
-                debug!("pass two evaluator: {}", pass_two_evaluator.exprs[0]);
                 let pass_two_result = <T as GenericEvaluatorFloat>::get_evaluator_single(
                     pass_two_evaluator,
                 )(&params_for_pass_two);
@@ -982,78 +981,4 @@ impl HasIntegrand for CrossSectionIntegrand {
 
         self.data.graph_terms[0].graph.get_loop_number() * 3
     }
-}
-
-#[test]
-fn dual_screwaround() {
-    let x = parse!("x");
-    let y = parse!("y");
-    let z = parse!("z");
-    let expr = &x * &y + &x * &z + &y * &z * &z + &z * &z * &z;
-
-    let shape = vec![vec![0], vec![1], vec![2], vec![3]];
-
-    let hyperdual_vectorizer =
-        HyperDual::<symbolica::domains::float::Complex<Rational>>::new(shape.clone());
-
-    let params = vec![x, y, z];
-    let mut evaluator = expr
-        .evaluator(
-            &FunctionMap::default(),
-            &params,
-            OptimizationSettings::default(),
-        )
-        .unwrap();
-
-    evaluator
-        .merge(
-            expr.evaluator(
-                &FunctionMap::default(),
-                &params,
-                OptimizationSettings::default(),
-            )
-            .unwrap(),
-            None,
-        )
-        .unwrap();
-
-    let dual_evaluator = evaluator.clone().vectorize(&hyperdual_vectorizer);
-    let mut real_dual_evaluator = dual_evaluator
-        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
-
-    let mut real_evaluator = evaluator
-        .map_coeff(&|coeff| Complex::<F<f64>>::new(F::from(&coeff.re), F::from(&coeff.im)));
-
-    let param_values = vec![
-        Complex::new_re(F(1.0)),
-        Complex::new_re(F(2.0)),
-        Complex::new_re(F(3.0)),
-    ];
-
-    let hyperdual_builder = HyperDual::<Complex<F<f64>>>::new(shape.clone());
-
-    let mut out = [Complex::new_re(F(0.0)); 2];
-    real_evaluator.evaluate(&param_values, &mut out);
-    println!("result: {:?}", out);
-
-    let dual_z = hyperdual_builder.variable(0, Complex::new_re(F(3.0)));
-
-    let dual_param_values = vec![
-        Complex::new_re(F(1.0)),
-        Complex::new_zero(),
-        Complex::new_zero(),
-        Complex::new_zero(),
-        Complex::new_re(F(2.0)),
-        Complex::new_zero(),
-        Complex::new_zero(),
-        Complex::new_zero(),
-        dual_z.values[0],
-        dual_z.values[1],
-        dual_z.values[2],
-        dual_z.values[3],
-    ];
-
-    let mut dual_out = [Complex::new_re(F(0.0)); 8];
-    real_dual_evaluator.evaluate(&dual_param_values, &mut dual_out);
-    println!("dual result: {:?}", dual_out);
 }

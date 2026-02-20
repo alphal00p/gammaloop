@@ -457,6 +457,11 @@ impl AmplitudeGraph {
 
         let vk = (crate::utils::vakint()?, &vk_settings);
 
+        let post = PostProcessingSetup {
+            constraint_data: None,
+            rewrite_esurfaces: None,
+        };
+
         forest.compute(
             &self.graph,
             &self.graph.no_dummy(),
@@ -464,7 +469,8 @@ impl AmplitudeGraph {
             &orientations,
             &canonize_esurface,
             &[],
-            None,
+            &[],
+            post,
             &settings,
             false,
         )?;
@@ -959,7 +965,6 @@ impl AmplitudeGraph {
             .filter(|a| settings.orientation_pattern.filter(a))
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
-            let vakint = self.new_vakint();
             let post = PostProcessingSetup {
                 constraint_data: None,
                 rewrite_esurfaces: None,
@@ -1114,7 +1119,6 @@ impl AmplitudeGraph {
             .filter(|a| settings.orientation_pattern.filter(a))
             .collect();
 
-        let vakint = self.new_vakint();
         let post = PostProcessingSetup {
             constraint_data: None,
             rewrite_esurfaces: None,

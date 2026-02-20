@@ -15,8 +15,8 @@ use symbolica::{
         rational::Rational,
     },
     evaluate::{
-        CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
-        OptimizationSettings,
+        CompileOptions, CompiledComplexEvaluator, Dualizer, ExportSettings, ExpressionEvaluator,
+        FunctionMap, OptimizationSettings,
     },
 };
 use typed_index_collections::TiVec;
@@ -138,7 +138,7 @@ impl GenericEvaluator {
             1
         };
 
-        number_type_size * self.exprs.len()
+        number_type_size * self.exprs_len
     }
 
     pub(crate) fn compile(
@@ -173,16 +173,11 @@ impl GenericEvaluator {
             .collect();
 
         Self::new_from_raw_params(
-            
             atoms,
-           
             &params,
-           
             &builder.fn_map,
-           
             optimization_settings,
             dual_shape,
-        ,
             store_atom,
         )
     }
@@ -209,7 +204,10 @@ impl GenericEvaluator {
 
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
-            tree = tree.vectorize(&dual);
+            let dualizer = Dualizer::new(dual, vec![]);
+            tree = tree
+                .vectorize(&dualizer, ahash::HashMap::default())
+                .unwrap();
         }
 
         let rational = tree.clone();
