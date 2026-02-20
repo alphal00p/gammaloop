@@ -344,6 +344,7 @@ impl CrossSectionIntegrand {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct IrLimit {
     colinear: Vec<Vec<HardOrSoft>>,
     soft: Vec<EdgeIndex>,
@@ -387,7 +388,7 @@ impl Display for IrLimit {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum HardOrSoft {
     Hard(EdgeIndex),
     Soft(EdgeIndex),
@@ -412,6 +413,15 @@ impl Display for HardOrSoft {
 }
 
 impl IrLimit {
+    fn canonize(&mut self) {
+        for colinear_set in &mut self.colinear.iter_mut() {
+            colinear_set.sort();
+        }
+
+        self.colinear.sort();
+        self.soft.sort();
+    }
+
     fn check_min_colinear_size(&self) -> bool {
         self.colinear
             .iter()
@@ -601,10 +611,12 @@ impl IrLimit {
             }
         }
 
-        let ir_limit = IrLimit {
+        let mut ir_limit = IrLimit {
             colinear: colinear_sets,
             soft: soft_edges,
         };
+
+        ir_limit.canonize();
 
         Ok(ir_limit)
     }
