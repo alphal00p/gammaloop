@@ -430,7 +430,7 @@ impl GenericEvaluatorFloat for ArbPrec {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<Complex<F<ArbPrec>>> {
         |params: &[Complex<F<ArbPrec>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             generic_evaluator.arb.evaluate(params, &mut out);
             out
         }
