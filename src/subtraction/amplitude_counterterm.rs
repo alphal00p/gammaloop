@@ -70,6 +70,7 @@ impl AmplitudeCountertermAtom {
                     self.parametric_integrated.clone(),
                 ],
                 param_builder,
+                None,
                 optimiation_settings.clone(),
                 global_settings.generation.evaluator.store_atom,
             )
@@ -87,6 +88,7 @@ impl AmplitudeCountertermAtom {
                         .iter()
                         .map(|or| or.select(&self.parametric_local + &self.parametric_integrated)),
                     param_builder,
+                    None,
                     optimiation_settings,
                     global_settings.generation.evaluator.store_atom,
                 )
@@ -504,7 +506,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
 
             for (_i, orientation) in orientations.iter() {
-                param_builder.orientation_value(orientation);
+                param_builder.orientation_value(orientation, 1);
 
                 let params = T::get_parameters(
                     param_builder,

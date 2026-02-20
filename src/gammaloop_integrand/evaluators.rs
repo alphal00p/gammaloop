@@ -9,10 +9,14 @@ use linnet::half_edge::{
 use spenso::algebra::complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso};
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::{float::Complex as SymComplex, rational::Rational},
+    domains::{
+        dual::{self, HyperDual},
+        float::Complex as SymComplex,
+        rational::Rational,
+    },
     evaluate::{
-        CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
-        OptimizationSettings,
+        CompileOptions, CompiledComplexEvaluator, Dualizer, ExportSettings, ExpressionEvaluator,
+        FunctionMap, OptimizationSettings,
     },
 };
 use typed_index_collections::TiVec;
@@ -23,7 +27,7 @@ use crate::{
     graph::Graph,
     momentum::Helicity,
     momentum_sample::MomentumSample,
-    utils::{ArbPrec, F, FloatLike, f128},
+    utils::{ArbPrec, F, FloatLike, Length, f128},
 };
 
 use super::{
@@ -55,6 +59,15 @@ impl<'a, OID: IndexLike> SingleOrAllOrientations<'a, OID> {
                     id: *id,
                 }
             }
+        }
+    }
+}
+
+impl<OID> Length for SingleOrAllOrientations<'_, OID> {
+    fn len(&self) -> usize {
+        match self {
+            SingleOrAllOrientations::Single { .. } => 1,
+            SingleOrAllOrientations::All { all, .. } => all.len(),
         }
     }
 }
@@ -113,10 +126,21 @@ pub struct GenericEvaluator {
     pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
+    pub dual_shape: Option<Vec<Vec<usize>>>,
     pub arb: ExpressionEvaluator<Complex<F<ArbPrec>>>,
 }
 
 impl GenericEvaluator {
+    pub(crate) fn compute_out_size(&self) -> usize {
+        let number_type_size = if let Some(dual_shape) = &self.dual_shape {
+            dual_shape.iter().map(|vec| vec.len()).sum()
+        } else {
+            1
+        };
+
+        number_type_size * self.exprs_len
+    }
+
     pub(crate) fn compile(
         &mut self,
         cpp_path: impl AsRef<Path>,
@@ -139,6 +163,7 @@ impl GenericEvaluator {
     pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
         atoms: I,
         builder: &ParamBuilder<f64>,
+        dual_shape: Option<Vec<Vec<usize>>>,
         optimization_settings: OptimizationSettings,
         store_atom: bool,
     ) -> Option<Self> {
@@ -152,6 +177,7 @@ impl GenericEvaluator {
             &params,
             &builder.fn_map,
             optimization_settings,
+            dual_shape,
             store_atom,
         )
     }
@@ -161,10 +187,11 @@ impl GenericEvaluator {
         params: &[Atom],
         fn_map: &FunctionMap,
         optimization_settings: OptimizationSettings,
+        dual_shape: Option<Vec<Vec<usize>>>,
         store_atom: bool,
     ) -> Option<Self> {
         let exprs: Vec<Atom> = atoms.into_iter().collect();
-        let tree = exprs
+        let mut tree = exprs
             .iter()
             .map(|n| {
                 n.evaluator(fn_map, params, optimization_settings.clone())
@@ -175,10 +202,19 @@ impl GenericEvaluator {
                 acc
             })?;
 
+        if let Some(dual_shape) = &dual_shape {
+            let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
+            let dualizer = Dualizer::new(dual, vec![]);
+            tree = tree
+                .vectorize(&dualizer, ahash::HashMap::default())
+                .unwrap();
+        }
+
         let rational = tree.clone();
         let f64_eager = tree
             .clone()
             .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+
         let f128 = tree
             .clone()
             .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
@@ -192,6 +228,7 @@ impl GenericEvaluator {
             f64_compiled: None,
             f64_eager,
             f128,
+            dual_shape,
             arb,
         };
 
@@ -252,7 +289,7 @@ impl GenericEvaluatorFloat for f64 {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<Complex<F<Self>>> {
         |params: &[Complex<F<f64>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // info!("USING COMPILED COMPLEX SINGLE");
                 //
@@ -350,7 +387,7 @@ impl GenericEvaluatorFloat for f128 {
     ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
         |params: &[Complex<F<f128>>]| {
             // info!("USING COMPLEX F128 MULTIPLE");
-            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             generic_evaluator.f128.evaluate(params, &mut out);
             out
         }
@@ -393,7 +430,7 @@ impl GenericEvaluatorFloat for ArbPrec {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<Complex<F<ArbPrec>>> {
         |params: &[Complex<F<ArbPrec>>]| {
-            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             generic_evaluator.arb.evaluate(params, &mut out);
             out
         }

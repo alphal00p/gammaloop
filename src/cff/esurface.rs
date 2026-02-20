@@ -1,16 +1,20 @@
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::owo_colors::colors::Default;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
-use linnet::half_edge::subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubGraphOps};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation};
+use linnet::half_edge::subgraph::{
+    ModifySubSet, OrientedCut, SuBitGraph, SubGraphOps, SubSetLike, SubSetOps,
+};
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 
 use symbolica::atom::{Atom, AtomCore};
+use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
@@ -27,6 +31,7 @@ use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
 use crate::processes::CrossSectionCut;
+use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{
     F, FloatLike, GS, compute_loop_part, compute_loop_part_subspace, compute_shift_part,
     compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
@@ -82,6 +87,51 @@ impl Esurface {
             .fold(builder_atom, |acc, energy| acc + energy);
 
         energy_sum + &symbolic_shift
+    }
+
+    #[inline]
+    pub(crate) fn compute_from_dual_momenta<T: FloatLike>(
+        &self,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &EdgeVec<F<T>>,
+        dual_loop_moms: &LoopMomenta<HyperDual<F<T>>>,
+        dual_external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
+    ) -> HyperDual<F<T>> {
+        let spatial_part_of_externals = dual_external_moms
+            .iter()
+            .map(|mom| mom.spatial.clone())
+            .collect::<TiVec<ExternalIndex, _>>();
+
+        let energy_sum = self
+            .energies
+            .iter()
+            .map(|index| {
+                let signature = &lmb.edge_signatures[*index];
+                let momentum = signature
+                    .try_compute_momentum(&dual_loop_moms.0, &spatial_part_of_externals.raw)
+                    .unwrap_or_else(|| unreachable!());
+                let mass = &real_mass_vector[*index];
+
+                (momentum.norm_squared() + mass * mass).sqrt()
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| dual_loop_moms[LoopIndex(0)].px.zero());
+
+        let shift_part = self
+            .external_shift
+            .iter()
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].external;
+                new_constant(&energy_sum, &F::from_f64(*sign as f64))
+                    * external_signature
+                        .try_apply(&dual_external_moms.raw)
+                        .map(|mom| mom.temporal.value)
+                        .unwrap_or_else(|| energy_sum.zero())
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| energy_sum.zero());
+
+        energy_sum + shift_part
     }
 
     /// Compute the value of the esurface from the momenta, needed to check if an arbitrary point
@@ -574,6 +624,91 @@ impl Esurface {
         }
     }
 
+    pub(crate) fn new_from_subgraph(
+        subgraph: &SuBitGraph,
+        graph: &Graph,
+        orientation: &EdgeVec<Orientation>,
+    ) -> Self {
+        if graph.initial_state_cut.is_empty() {
+            todo!("handle case for amplitudes")
+        }
+
+        let subgraph_without_is_cut = subgraph.subtract(
+            &graph
+                .initial_state_cut
+                .left
+                .union(&graph.initial_state_cut.right),
+        );
+
+        let mut unit_flow = None;
+
+        let vertex_set = graph
+            .iter_nodes_of(subgraph)
+            .map(|(node_id, _, _)| VertexSet::from_usize(node_id.into()))
+            .reduce(|acc, v| acc.join(&v))
+            .unwrap();
+
+        let virtual_boundary = graph
+            .iter_edges_of(&subgraph_without_is_cut)
+            .filter_map(|(pair, edge_id, _)| match pair {
+                HedgePair::Split { split, .. } => {
+                    if let Some(common_flow) = unit_flow {
+                        match orientation[edge_id] {
+                            Orientation::Default => {
+                                if common_flow != split {
+                                    panic!("inconsistent flow on virtual boundary, cannot construct esurface");
+                                }
+                            }
+                            Orientation::Reversed => {
+                                if common_flow != -split {
+                                    panic!("inconsistent flow on virtual boundary, cannot construct esurface");
+                                }
+                            }
+                            Orientation::Undirected => unreachable!(),
+                        }
+                    } else {
+                        match orientation[edge_id] {
+                            Orientation::Default => unit_flow = Some(split),
+                            Orientation::Reversed => unit_flow = Some(-split),
+                            Orientation::Undirected => (),
+                        }
+                    }
+                    Some(edge_id)
+                }
+                _ => None,
+            }).sorted()
+            .collect_vec();
+
+        let flow = unit_flow.expect("no virtual boundary found, cannot construct esurface");
+
+        let is_cut_part_of_subgraph = subgraph.intersection(
+            &graph
+                .initial_state_cut
+                .left
+                .union(&graph.initial_state_cut.right),
+        );
+
+        let mut exernal_shift = Vec::new();
+
+        for (pair, edge_index, _) in graph.iter_edges_of(&is_cut_part_of_subgraph) {
+            match pair {
+                HedgePair::Split {
+                    split: edge_flow, ..
+                } => {
+                    let sign = if flow == edge_flow { 1 } else { -1 };
+                    exernal_shift.push((edge_index, sign));
+                }
+                _ => {}
+            }
+        }
+
+        Self {
+            energies: virtual_boundary,
+            external_shift: exernal_shift,
+            vertex_set,
+        }
+    }
+
     pub(crate) fn new_from_cut_left<E, V, H>(
         graph: &HedgeGraph<E, V, H>,
         cut: &CrossSectionCut,
@@ -674,7 +809,9 @@ pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq, Encode, Decode)]
+#[derive(
+    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq, Encode, Decode, Hash,
+)]
 pub struct EsurfaceID(pub usize);
 
 /// Container for esurfaces that exist at a given point in the phase space
@@ -743,6 +880,39 @@ pub(crate) fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> E
     res.retain(|(_index, sign)| *sign != 0);
     res.sort_by(|(index_1, _), (index_2, _)| index_1.cmp(index_2));
     res
+}
+
+pub(crate) fn remove_zeros_duplicates(external_shift: &mut ExternalShift) {
+    while remove_zeros_impl(external_shift) {}
+}
+
+fn remove_zeros_impl(external_shift: &mut ExternalShift) -> bool {
+    let pair = external_shift.iter().enumerate().find_map(
+        |(index_in_external_shift, (edge_index, sign))| {
+            let other_index_in_external_shift = external_shift.iter().enumerate().find(
+                |(other_index_in_external_shift, (other_edge_index, _))| {
+                    index_in_external_shift != *other_index_in_external_shift
+                        && edge_index == other_edge_index
+                },
+            );
+
+            other_index_in_external_shift.map(|(other_index_in_external_shift, (_, other_sign))| {
+                assert!(sign + other_sign == 0);
+                (index_in_external_shift, other_index_in_external_shift)
+            })
+        },
+    );
+
+    if let Some((first_index_to_remove, other_index_to_remove)) = pair {
+        let max_index = first_index_to_remove.max(other_index_to_remove);
+        let min_index = first_index_to_remove.min(other_index_to_remove);
+
+        external_shift.remove(max_index);
+        external_shift.remove(min_index);
+        true
+    } else {
+        false
+    }
 }
 
 impl From<EsurfaceID> for Atom {

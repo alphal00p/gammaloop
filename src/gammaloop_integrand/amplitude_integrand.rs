@@ -99,6 +99,7 @@ impl AmplitudeGraphTerm {
         let orientation_parametric_integrand = GenericEvaluator::new_from_builder(
             [graph.derived_data.all_mighty_integrand.clone()],
             &graph.graph.param_builder,
+            None,
             OptimizationSettings::default(),
             settings.generation.evaluator.store_atom,
         )
@@ -116,6 +117,7 @@ impl AmplitudeGraphTerm {
                     selected
                 }),
                 &graph.graph.param_builder,
+                None,
                 OptimizationSettings::default(),
                 settings.generation.evaluator.store_atom,
             )
@@ -282,7 +284,7 @@ impl AmplitudeGraphTerm {
                 if let Some(iterative) = &iterative {
                     result += &iterative[i.0]
                 } else {
-                    self.param_builder.orientation_value(e);
+                    self.param_builder.orientation_value(e, 1);
                     let a = T::get_parameters(
                         &mut self.param_builder,
                         (settings.general.enable_cache, settings.general.debug_cache),
@@ -367,21 +369,31 @@ impl GraphTerm for AmplitudeGraphTerm {
                 format!("when getting externals to build amplitude graph term for integrand for graph: {}", self.graph.name)
             })?;
 
-        self.graph.param_builder.add_external_four_mom(&externals);
+        self.graph
+            .param_builder
+            .add_external_four_mom_all_derivatives(&externals);
         let pols = self.graph.param_builder.pairs.polarizations_values(
             &self.graph,
             &externals,
             settings.kinematics.externals.get_helicities(),
         );
 
-        self.graph.param_builder.values[self
-            .graph
-            .param_builder
-            .pairs
-            .polarizations
-            .value_range
-            .clone()]
-        .clone_from_slice(&pols);
+        for (value_index, values) in self.graph.param_builder.values.iter_mut().enumerate() {
+            let multiplicative_offset = value_index + 1;
+            let mut polarization_start = self
+                .graph
+                .param_builder
+                .pairs
+                .polarizations
+                .value_range
+                .start
+                * multiplicative_offset;
+
+            for pol_value in pols.iter() {
+                values[polarization_start] = pol_value.clone();
+                polarization_start += multiplicative_offset;
+            }
+        }
 
         self.graph
             .param_builder

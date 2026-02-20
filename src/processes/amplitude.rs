@@ -34,7 +34,9 @@ use crate::{
         expression::{
             AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
         },
-        generation::{generate_cff_expression, get_orientations_from_subgraph},
+        generation::{
+            PostProcessingSetup, generate_cff_expression, get_orientations_from_subgraph,
+        },
     },
     gammaloop_integrand::{
         LmbMultiChannelingSetup,
@@ -455,6 +457,11 @@ impl AmplitudeGraph {
 
         let vk = (crate::utils::vakint()?, &vk_settings);
 
+        let post = PostProcessingSetup {
+            constraint_data: None,
+            rewrite_esurfaces: None,
+        };
+
         forest.compute(
             &self.graph,
             &self.graph.no_dummy(),
@@ -462,7 +469,8 @@ impl AmplitudeGraph {
             &orientations,
             &canonize_esurface,
             &[],
-            None,
+            &[],
+            post,
             &settings,
             false,
         )?;
@@ -495,6 +503,7 @@ impl AmplitudeGraph {
         let cff_expression = generate_cff_expression(
             &self.graph.underlying,
             &shift_rewrite,
+            &self.graph.get_edges_in_initial_state_cut(),
             &self.graph.dummy_list(),
         )?;
         self.derived_data.cff_expression = Some(cff_expression);
@@ -661,7 +670,10 @@ impl AmplitudeGraph {
                         .iter()
                         .zip(ps.value_range)
                         .map(|(a, value_index)| {
-                            (a.to_canonical_string(), param_builder.values[value_index])
+                            (
+                                a.to_canonical_string(),
+                                param_builder.values[0][value_index],
+                            )
                         })
                 {
                     complex_params.insert(
@@ -953,6 +965,10 @@ impl AmplitudeGraph {
             .filter(|a| settings.orientation_pattern.filter(a))
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
+            let post = PostProcessingSetup {
+                constraint_data: None,
+                rewrite_esurfaces: None,
+            };
             // println!("//Circled\n{}", self.graph.dot(&circled));
             // println!("//Complement\n{}", self.graph.dot(&complement));
             circled_forest.compute(
@@ -962,7 +978,8 @@ impl AmplitudeGraph {
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                None,
+                &self.graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 false,
             )?;
@@ -974,7 +991,8 @@ impl AmplitudeGraph {
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                None,
+                &self.graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 false,
             )?;
@@ -1101,6 +1119,10 @@ impl AmplitudeGraph {
             .filter(|a| settings.orientation_pattern.filter(a))
             .collect();
 
+        let post = PostProcessingSetup {
+            constraint_data: None,
+            rewrite_esurfaces: None,
+        };
         forest.compute(
             &self.graph,
             &self.graph.no_dummy(),
@@ -1108,7 +1130,8 @@ impl AmplitudeGraph {
             &orientations,
             &canonize_esurface,
             &[],
-            None,
+            &self.graph.get_edges_in_initial_state_cut(),
+            post.clone(),
             &settings.uv,
             false,
         )?;
@@ -1440,6 +1463,7 @@ pub mod test {
         GenericEvaluator::new_from_builder(
             [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
             param_builder,
+            None,
             OptimizationSettings::default(),
             true,
         )

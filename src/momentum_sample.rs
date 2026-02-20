@@ -5,12 +5,14 @@ use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
 use crate::signature::LoopSignature;
-use crate::utils::{F, FloatLike, Length};
+use crate::utils::hyperdual_utils::new_constant;
+use crate::utils::{F, FloatLike, Length, PrecisionUpgradable};
 use crate::{DependentMomentaConstructor, define_index, settings::runtime::kinematic::Externals};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use derive_more::{From, Into};
 use eyre::eyre;
+use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::nodestore::NodeStorageOps;
@@ -20,6 +22,7 @@ use linnet::half_edge::subgraph::{
 };
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
+use symbolica::domains::dual::{DualNumberStructure, HyperDual};
 use symbolica::domains::float::FloatLike as SymFloatLike;
 use tabled::settings::Style;
 
@@ -384,16 +387,81 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
         }
     }
 
+    pub(crate) fn rescale_with_hyper_dual(
+        &self,
+        factor: &HyperDual<F<T>>,
+        subspace: Subspace,
+    ) -> LoopMomenta<HyperDual<F<T>>> {
+        match subspace {
+            None => LoopMomenta::from_iter(self.iter().map(|k| {
+                ThreeMomentum::new(
+                    new_constant(factor, &k.px) * factor,
+                    new_constant(factor, &k.py) * factor,
+                    new_constant(factor, &k.pz) * factor,
+                )
+            })),
+            Some(subspace) => LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
+                if subspace.contains(&i) {
+                    ThreeMomentum::new(
+                        new_constant(factor, &k.px) * factor,
+                        new_constant(factor, &k.py) * factor,
+                        new_constant(factor, &k.pz) * factor,
+                    )
+                } else {
+                    ThreeMomentum::new(
+                        new_constant(factor, &k.px),
+                        new_constant(factor, &k.py),
+                        new_constant(factor, &k.pz),
+                    )
+                }
+            })),
+        }
+    }
+
     pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
         LoopMomenta::from_iter(self.iter().map(|k| k.rotate(rotation)))
     }
 
-    pub(crate) fn lmb_transform(&self, from: &LoopMomentumBasis, to: &LoopMomentumBasis) -> Self {
+    pub(crate) fn lmb_transform(
+        &self,
+        from: &LoopMomentumBasis,
+        to: &LoopMomentumBasis,
+        externals: &ExternalThreeMomenta<F<T>>,
+    ) -> Self {
         LoopMomenta::from_iter(
             to.loop_edges
                 .iter()
-                .map(|e_id| from.edge_signatures[*e_id].internal.apply_typed(self)),
+                .map(|e_id| from.edge_signatures[*e_id].compute_momentum(self, externals)),
         )
+    }
+}
+
+impl<T: FloatLike> LoopMomenta<HyperDual<F<T>>> {
+    fn lmb_transform(
+        &self,
+        from: &LoopMomentumBasis,
+        to: &LoopMomentumBasis,
+        externals: &ExternalThreeMomenta<HyperDual<F<T>>>,
+    ) -> Self {
+        LoopMomenta::from_iter(to.loop_edges.iter().map(|e_id| {
+            from.edge_signatures[*e_id]
+                .try_compute_momentum(&self.0, &externals.raw)
+                .unwrap()
+        }))
+    }
+
+    fn rescale(&self, factor: &HyperDual<F<T>>, subspace: Subspace) -> Self {
+        match subspace {
+            None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
+            // this branch is wrong
+            Some(subspace) => LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
+                if subspace.contains(&i) {
+                    k * factor
+                } else {
+                    k.clone()
+                }
+            })),
+        }
     }
 }
 
@@ -443,9 +511,16 @@ pub type ExternalFourMomenta<T> = TiVec<ExternalIndex, FourMomentum<T>>;
 // }
 pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // should be the same length as #externals
 
+fn extract_external_spatial<T: Clone>(
+    external_four_momenta: &ExternalFourMomenta<T>,
+) -> ExternalThreeMomenta<T> {
+    ExternalThreeMomenta::from_iter(external_four_momenta.iter().map(|fm| fm.spatial.clone()))
+}
+
 #[derive(Debug, Clone)]
 pub struct BareMomentumSample<T: FloatLike> {
     pub loop_moms: LoopMomenta<F<T>>,
+    pub dual_loop_moms: Option<LoopMomenta<HyperDual<F<T>>>>,
     pub loop_mom_cache_id: usize,
     /// Base cache ID for the fundamental loop momentum configuration (before transformations)
     pub loop_mom_base_cache_id: usize,
@@ -512,6 +587,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
 
         Ok(Self {
             loop_moms,
+            dual_loop_moms: None,
             loop_mom_cache_id,
             loop_mom_base_cache_id: loop_mom_cache_id, // Initially same as cache_id
             external_mom_cache_id,
@@ -554,6 +630,10 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_mom_cache_id: self.external_mom_cache_id,
             external_mom_base_cache_id: self.external_mom_base_cache_id,
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect(),
+            dual_loop_moms: self
+                .dual_loop_moms
+                .as_ref()
+                .map(|_dlm| todo!("make sure the cast works if there are hyperdual momenta")),
             external_moms: self.external_moms.iter().map(FourMomentum::cast).collect(),
             jacobian: self.jacobian.clone().into(),
             orientation: self.orientation,
@@ -563,9 +643,13 @@ impl<T: FloatLike> BareMomentumSample<T> {
     pub(crate) fn higher_precision(&self) -> BareMomentumSample<T::Higher>
     where
         T::Higher: FloatLike,
+        T::Lower: FloatLike,
     {
         BareMomentumSample {
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::higher).collect(),
+            dual_loop_moms: self.dual_loop_moms.as_ref().map(|dlm| {
+                LoopMomenta::from_iter(dlm.iter().map(|m| m.clone().map(&|x| x.higher())))
+            }),
             external_moms: self
                 .external_moms
                 .iter()
@@ -582,10 +666,14 @@ impl<T: FloatLike> BareMomentumSample<T> {
 
     pub(crate) fn lower_precision(&self) -> BareMomentumSample<T::Lower>
     where
+        T::Higher: FloatLike,
         T::Lower: FloatLike,
     {
         BareMomentumSample {
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::lower).collect(),
+            dual_loop_moms: self.dual_loop_moms.as_ref().map(|dlm| {
+                LoopMomenta::from_iter(dlm.iter().map(|m| m.clone().map(&|x| x.lower())))
+            }),
             external_moms: self.external_moms.iter().map(FourMomentum::lower).collect(),
             jacobian: self.jacobian.lower(),
             orientation: self.orientation,
@@ -605,6 +693,10 @@ impl<T: FloatLike> BareMomentumSample<T> {
     ) -> Self {
         Self {
             loop_moms: self.loop_moms.iter().map(|l| l.rotate(rotation)).collect(),
+            dual_loop_moms: self
+                .dual_loop_moms
+                .as_ref()
+                .map(|dlm| LoopMomenta::from_iter(dlm.iter().map(|l| l.rotate(rotation)))),
             external_moms: self
                 .external_moms
                 .iter()
@@ -624,6 +716,10 @@ impl<T: FloatLike> BareMomentumSample<T> {
     pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {
             loop_moms: self.loop_moms.rescale(factor, subspace),
+            dual_loop_moms: self
+                .dual_loop_moms
+                .as_ref()
+                .map(|dlm| dlm.rescale(&new_constant(&dlm[LoopIndex(0)].px, factor), subspace)),
             loop_mom_cache_id: self.loop_mom_cache_id + 1,
             loop_mom_base_cache_id: self.loop_mom_base_cache_id, // Preserve base cache ID
             external_moms: self.external_moms.clone(),
@@ -637,7 +733,25 @@ impl<T: FloatLike> BareMomentumSample<T> {
     #[inline]
     pub(crate) fn lmb_transform(&self, from: &LoopMomentumBasis, to: &LoopMomentumBasis) -> Self {
         Self {
-            loop_moms: self.loop_moms.lmb_transform(from, to),
+            loop_moms: self.loop_moms.lmb_transform(
+                from,
+                to,
+                &extract_external_spatial(&self.external_moms),
+            ),
+            dual_loop_moms: self.dual_loop_moms.as_ref().map(|dlm| {
+                let dual_externals = self
+                    .external_moms
+                    .iter()
+                    .map(|four_mom| {
+                        ThreeMomentum::new(
+                            new_constant(&dlm[LoopIndex(0)].px, &four_mom.spatial.px),
+                            new_constant(&dlm[LoopIndex(0)].px, &four_mom.spatial.py),
+                            new_constant(&dlm[LoopIndex(0)].px, &four_mom.spatial.pz),
+                        )
+                    })
+                    .collect();
+                dlm.lmb_transform(from, to, &dual_externals)
+            }),
             loop_mom_cache_id: self.loop_mom_cache_id + 1,
             loop_mom_base_cache_id: self.loop_mom_base_cache_id, // Preserve base cache ID
             external_moms: self.external_moms.clone(),
@@ -748,7 +862,8 @@ impl<T: FloatLike> MomentumSample<T> {
 
     pub(crate) fn higher_precision(&self) -> MomentumSample<T::Higher>
     where
-        T::Higher: FloatLike,
+        T::Higher: FloatLike + Default,
+        T::Lower: FloatLike + Default,
     {
         MomentumSample {
             sample: self.sample.higher_precision(),
@@ -757,7 +872,8 @@ impl<T: FloatLike> MomentumSample<T> {
 
     pub(crate) fn lower_precision(&self) -> MomentumSample<T::Lower>
     where
-        T::Lower: FloatLike,
+        T::Lower: FloatLike + Default,
+        T::Higher: FloatLike + Default,
     {
         MomentumSample {
             sample: self.sample.lower_precision(),

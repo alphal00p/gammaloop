@@ -413,7 +413,7 @@ impl LmbMultiChannelingSetup {
 
         BareMomentumSample {
             loop_moms: new_loop_moms,
-
+            dual_loop_moms: momentum_sample.dual_loop_moms.clone().map(|dlm| todo!()),
             loop_mom_cache_id,
             loop_mom_base_cache_id: momentum_sample.loop_mom_base_cache_id,
             external_mom_cache_id: momentum_sample.external_mom_cache_id,

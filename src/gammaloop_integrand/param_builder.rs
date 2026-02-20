@@ -7,10 +7,14 @@ use std::{
 use bincode::{Decode, Encode};
 use idenso::color::CS;
 
+use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
-    algebra::{algebraic_traits::RefOne, complex::Complex},
+    algebra::{
+        algebraic_traits::{RefOne, RefZero},
+        complex::{Complex, mul},
+    },
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
@@ -18,7 +22,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
-    domains::rational::Rational,
+    domains::{dual::HyperDual, rational::Rational},
     evaluate::FunctionMap,
     id::Replacement,
     parse_lit, symbol,
@@ -33,12 +37,12 @@ use crate::{
     graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     model::Model,
     momentum::{Helicity, PolType},
-    momentum_sample::{self, ExternalFourMomenta, MomentumSample},
+    momentum_sample::{self, ExternalFourMomenta, LoopMomenta, MomentumSample},
     numerator::ParsingNet,
     signature,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
-        symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
+        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
     },
 };
 
@@ -408,37 +412,46 @@ impl GammaLoopPairs {
         &self,
         ext: &ExternalFourMomenta<F<T>>,
         values: &mut [Complex<F<T>>],
+        multiplicative_offset: usize,
     ) {
-        let mut e_start = self.external_energies.value_range.start;
-        let mut s_start = self.external_spatial.value_range.start;
+        let mut e_start = self.external_energies.value_range.start * multiplicative_offset;
+        let mut s_start = self.external_spatial.value_range.start * multiplicative_offset;
 
         for e in ext {
             values[e_start] = Complex::new_re(e.temporal.value.clone());
-            e_start += 1;
+            e_start += multiplicative_offset;
             for c in &e.spatial {
                 values[s_start] = Complex::new_re(c.clone());
-                s_start += 1;
+                s_start += multiplicative_offset;
             }
         }
 
-        debug_assert_eq!(e_start, self.external_energies.value_range.end);
-        debug_assert_eq!(s_start, self.external_spatial.value_range.end);
+        debug_assert_eq!(
+            e_start,
+            self.external_energies.value_range.end * multiplicative_offset
+        );
+        debug_assert_eq!(
+            s_start,
+            self.external_spatial.value_range.end * multiplicative_offset
+        );
     }
 
     pub(crate) fn add_additional_params<T: FloatLike>(
         &self,
         additional_params: &[F<T>],
         values: &mut [Complex<F<T>>],
+        multiplicative_offset: usize,
     ) {
-        let mut start = self.additional_params.value_range.start;
+        let mut start = self.additional_params.value_range.start * multiplicative_offset;
 
         for p in additional_params {
             values[start] = Complex::new_re(p.clone());
-            start += 1;
+            start += multiplicative_offset;
         }
 
         debug_assert_eq!(
-            start, self.additional_params.value_range.end,
+            start,
+            self.additional_params.value_range.end * multiplicative_offset,
             "Not filled up additional params"
         );
     }
@@ -522,11 +535,29 @@ impl GammaLoopPairs {
         lu_params: &LUParams<T>,
         values: &mut [Complex<F<T>>],
     ) {
-        values[self.tstar.value_range.start] = Complex::new_re(lu_params.tstar.clone());
-        values[self.esurface_derivative_lu_cut.value_range.start] =
-            Complex::new_re(lu_params.esurface_derivative.clone());
-        values[self.h_function_lu_cut.value_range.start] =
-            Complex::new_re(lu_params.h_function.clone());
+        match (&lu_params.tstar, &lu_params.h_function) {
+            (DualOrNot::Dual(tstar), DualOrNot::Dual(h_function)) => {
+                let multiplicative_offset = tstar.values.len();
+
+                values[self.tstar.value_range.start * multiplicative_offset..]
+                    .iter_mut()
+                    .zip(tstar.values.iter())
+                    .for_each(|(v, t)| *v = Complex::new_re(t.clone()));
+
+                values[self.h_function_lu_cut.value_range.start * multiplicative_offset..]
+                    .iter_mut()
+                    .zip(h_function.values.iter())
+                    .for_each(|(v, h)| *v = Complex::new_re(h.clone()));
+            }
+            (DualOrNot::NonDual(tstar), DualOrNot::NonDual(h_function)) => {
+                values[self.tstar.value_range.start] = Complex::new_re(tstar.clone());
+                values[self.h_function_lu_cut.value_range.start] =
+                    Complex::new_re(h_function.clone());
+            }
+            _ => {
+                unreachable!("LU params must both be dual or non-dual");
+            }
+        }
     }
 }
 
@@ -584,7 +615,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParamBuilder<T: FloatLike = f64> {
-    pub values: Vec<Complex<F<T>>>,
+    pub values: Vec<Vec<Complex<F<T>>>>,
     pub pairs: GammaLoopPairs,
     pub polarization_cache: ParamCache<T>,
 
@@ -611,9 +642,8 @@ pub struct ThresholdParams<T: FloatLike> {
 }
 
 pub struct LUParams<T: FloatLike> {
-    pub tstar: F<T>,
-    pub esurface_derivative: F<T>,
-    pub h_function: F<T>,
+    pub tstar: DualOrNot<F<T>>,
+    pub h_function: DualOrNot<F<T>>,
 }
 
 pub trait UpdateAndGetParams<T: FloatLike> {
@@ -644,24 +674,54 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         right_threshold_params: Option<&ThresholdParams<f64>>,
         lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
-        let loop_moms_start = self.pairs.loop_moms_spatial.value_range.start;
+        let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
+            dual_loops.first().unwrap().px.values.len()
+        } else {
+            1
+        };
 
-        let flattened_loop_momenta = sample
-            .loop_moms()
-            .iter()
-            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
+        let value_index = multiplicative_offset - 1;
 
-        self.pairs
-            .add_additional_params(additional_params, &mut self.values);
+        let loop_moms_start =
+            self.pairs.loop_moms_spatial.value_range.start * multiplicative_offset;
 
-        for (shift, value) in flattened_loop_momenta.enumerate() {
-            self.values[loop_moms_start + shift] = Complex::new_re(value);
-        }
+        let flattened_loop_momenta = if let Some(dual_loop_moms) = &sample.sample.dual_loop_moms {
+            dual_loop_moms
+                .iter()
+                .flat_map(|mom| {
+                    vec![
+                        mom.px.values.clone(),
+                        mom.py.values.clone(),
+                        mom.pz.values.clone(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                })
+                .collect_vec()
+        } else {
+            sample
+                .loop_moms()
+                .iter()
+                .flat_map(|mom| vec![mom.px.clone(), mom.py.clone(), mom.pz.clone()].into_iter())
+                .collect_vec()
+        };
+
+        self.values[value_index][loop_moms_start..]
+            .iter_mut()
+            .zip(flattened_loop_momenta)
+            .for_each(|(value, loop_mom_component)| *value = Complex::new_re(loop_mom_component));
+
+        self.pairs.add_additional_params(
+            additional_params,
+            &mut self.values[value_index],
+            multiplicative_offset,
+        );
+
+        self.add_external_four_mom(sample.external_moms(), multiplicative_offset);
 
         // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
 
-        self.add_external_four_mom(sample.external_moms());
-        self.polarizations_values(cache, graph, sample, helicities);
+        self.polarizations_values(cache, graph, sample, helicities, multiplicative_offset);
 
         if let Some(threshold_params) = left_threshold_params {
             self.left_threshold_params(threshold_params);
@@ -672,10 +732,11 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         }
 
         if let Some(lu_params) = lu_params {
-            self.lu_params(lu_params);
+            self.pairs
+                .lu_params(lu_params, &mut self.values[value_index]);
         }
 
-        Cow::Borrowed(&self.values)
+        Cow::Borrowed(&self.values[value_index])
     }
 }
 
@@ -692,30 +753,65 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
     ) -> Cow<'_, Vec<Complex<F<f128>>>> {
-        let mut loop_mom_start = self.pairs.loop_moms_spatial.value_range.start;
-        let mut values = self.higher();
+        let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
+            dual_loops.first().unwrap().px.values.len()
+        } else {
+            1
+        };
 
-        let flattened_loop_momenta = sample
-            .loop_moms()
-            .clone()
-            .into_iter()
-            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
+        let value_index = multiplicative_offset - 1;
+
+        let loop_mom_start = self.pairs.loop_moms_spatial.value_range.start * multiplicative_offset;
+
+        let mut values = self.higher(value_index);
+
+        let flattened_loop_momenta = if let Some(dual_loop_moms) = &sample.sample.dual_loop_moms {
+            dual_loop_moms
+                .iter()
+                .flat_map(|mom| {
+                    vec![
+                        mom.px.values.clone(),
+                        mom.py.values.clone(),
+                        mom.pz.values.clone(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                })
+                .collect_vec()
+        } else {
+            sample
+                .loop_moms()
+                .clone()
+                .into_iter()
+                .flat_map(|mom| vec![mom.px, mom.py, mom.pz])
+                .collect_vec()
+        };
+
+        values[loop_mom_start..]
+            .iter_mut()
+            .zip(flattened_loop_momenta)
+            .for_each(|(value, loop_mom_component)| *value = Complex::new_re(loop_mom_component));
 
         self.pairs
-            .add_additional_params(additional_params, &mut values);
+            .add_additional_params(additional_params, &mut values, multiplicative_offset);
 
-        for value in flattened_loop_momenta {
-            values[loop_mom_start] = Complex::new_re(value);
-            loop_mom_start += 1;
-        }
-
-        self.pairs
-            .add_external_four_mom_impl(sample.external_moms(), &mut values);
-        values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
-            &self
-                .pairs
-                .polarizations_values(graph, sample.external_moms(), helicities),
+        self.pairs.add_external_four_mom_impl(
+            sample.external_moms(),
+            &mut values,
+            multiplicative_offset,
         );
+
+        let polarization_values =
+            self.pairs
+                .polarizations_values(graph, sample.external_moms(), helicities);
+
+        let mut polarization_start =
+            self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+        for val in polarization_values {
+            values[polarization_start] = val;
+            polarization_start += multiplicative_offset;
+        }
 
         if let Some(threshold_params) = left_threshold_params {
             self.pairs
@@ -748,31 +844,68 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
         right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
         lu_params: Option<&LUParams<ArbPrec>>,
     ) -> Cow<'_, Vec<Complex<F<ArbPrec>>>> {
-        let mut loop_mom_start = self.pairs.loop_moms_spatial.value_range.start;
-        let mut values: Vec<Complex<F<ArbPrec>>> =
-            self.values.iter().map(|v| v.higher().higher()).collect();
+        let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
+            dual_loops.first().unwrap().px.values.len()
+        } else {
+            1
+        };
 
-        let flattened_loop_momenta = sample
-            .loop_moms()
-            .clone()
-            .into_iter()
-            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
+        let value_index = multiplicative_offset - 1;
+
+        let loop_mom_start = self.pairs.loop_moms_spatial.value_range.start * multiplicative_offset;
+
+        let mut values: Vec<Complex<F<ArbPrec>>> = self.values[value_index]
+            .iter()
+            .map(|v| v.higher().higher())
+            .collect();
+
+        let flattened_loop_momenta = if let Some(dual_loop_moms) = &sample.sample.dual_loop_moms {
+            dual_loop_moms
+                .iter()
+                .flat_map(|mom| {
+                    vec![
+                        mom.px.values.clone(),
+                        mom.py.values.clone(),
+                        mom.pz.values.clone(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                })
+                .collect_vec()
+        } else {
+            sample
+                .loop_moms()
+                .clone()
+                .into_iter()
+                .flat_map(|mom| vec![mom.px, mom.py, mom.pz])
+                .collect_vec()
+        };
+
+        values[loop_mom_start..]
+            .iter_mut()
+            .zip(flattened_loop_momenta)
+            .for_each(|(value, loop_mom_component)| *value = Complex::new_re(loop_mom_component));
 
         self.pairs
-            .add_additional_params(additional_params, &mut values);
+            .add_additional_params(additional_params, &mut values, multiplicative_offset);
 
-        for value in flattened_loop_momenta {
-            values[loop_mom_start] = Complex::new_re(value);
-            loop_mom_start += 1;
-        }
-
-        self.pairs
-            .add_external_four_mom_impl(sample.external_moms(), &mut values);
-        values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
-            &self
-                .pairs
-                .polarizations_values(graph, sample.external_moms(), helicities),
+        self.pairs.add_external_four_mom_impl(
+            sample.external_moms(),
+            &mut values,
+            multiplicative_offset,
         );
+
+        let polarization_values =
+            self.pairs
+                .polarizations_values(graph, sample.external_moms(), helicities);
+
+        let mut polarization_start =
+            self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+        for val in polarization_values {
+            values[polarization_start] = val;
+            polarization_start += multiplicative_offset;
+        }
 
         if let Some(threshold_params) = left_threshold_params {
             self.pairs
@@ -797,8 +930,11 @@ where
     T::Higher: FloatLike,
     T::Lower: FloatLike,
 {
-    fn higher(&self) -> Vec<Complex<F<T::Higher>>> {
-        self.values.iter().map(|v| v.higher()).collect()
+    fn higher(&self, value_index: usize) -> Vec<Complex<F<T::Higher>>> {
+        self.values[value_index]
+            .iter()
+            .map(|v| v.higher())
+            .collect()
     }
     // fn lower(&self) -> Vec<Complex<F<T::Lower>>> {
     //     self.values.iter().map(|v| v.lower()).collect()
@@ -807,7 +943,7 @@ where
 impl<T: FloatLike> ParamBuilder<T> {
     pub fn model_values(&self) -> &[Complex<F<T>>] {
         let range = self.pairs.model_parameters.value_range.clone();
-        &self.values[range]
+        &self.values[0][range]
     }
     pub fn validate(&self) {
         self.pairs.validate();
@@ -852,6 +988,34 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.fn_map.add_function(name, rename, args, body)
     }
 
+    pub fn initialize_t_derivatives(&mut self, num_derivatives: usize) {
+        let mut higher_order_values = (1..=num_derivatives)
+            .map(|derivative_order| {
+                self.values
+                    .first()
+                    .unwrap()
+                    .clone()
+                    .into_iter()
+                    .map(move |value| {
+                        let mut constant_dual_values = vec![value.clone()];
+                        for _ in 0..derivative_order {
+                            constant_dual_values.push(value.ref_zero());
+                        }
+                        constant_dual_values
+                    })
+                    .flatten()
+                    .collect()
+            })
+            .collect();
+        self.values.append(&mut higher_order_values);
+        println!("Initialized {} derivative values", self.values.len() - 1);
+
+        for values in self.values.iter() {
+            println!("values at order: ");
+            println!("len: {}", values.len());
+        }
+    }
+
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
         self.fn_map.add_constant(key, value)
     }
@@ -863,7 +1027,6 @@ impl<T: FloatLike> ParamBuilder<T> {
             fn_map: FunctionMap::default(),
             pairs: GammaLoopPairs::default(),
             values: Vec::new(),
-
             reps: Vec::new(),
         }
     }
@@ -939,7 +1102,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         new.add_constant(GS.pi.into(), pi_rational.into());
 
-        new.values = vec![Complex::new_re(F(T::from_f64(0.))); len];
+        new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
         new.update_model_values(model);
         new.update_idenso_values();
 
@@ -951,78 +1114,127 @@ impl<T: FloatLike> ParamBuilder<T> {
     #[inline]
     pub(crate) fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
         debug_assert!(self.pairs.m_uv.value_range.len() == 1);
-        self.values[self.pairs.m_uv.value_range.start] = m_uv;
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.m_uv.value_range.start * multiplicative_offset] = m_uv.clone();
+        }
     }
 
     pub(crate) fn mu_r_sq_value(&mut self, mu_r_sq: Complex<F<T>>) {
         debug_assert!(self.pairs.mu_r_sq.value_range.len() == 1);
-        self.values[self.pairs.mu_r_sq.value_range.start] = mu_r_sq;
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.mu_r_sq.value_range.start * multiplicative_offset] = mu_r_sq.clone();
+        }
     }
 
     pub(crate) fn update_idenso_values(&mut self) {
         let tr_value = Complex::new_re(F(T::from_f64(0.5)));
         let nc_value = Complex::new_re(F(T::from_f64(3.)));
-
         debug_assert!(self.pairs.idenso_vars.value_range.len() == 2);
-        self.values[self.pairs.idenso_vars.value_range.start] = tr_value;
-        self.values[self.pairs.idenso_vars.value_range.start + 1] = nc_value;
+
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.idenso_vars.value_range.start * multiplicative_offset] =
+                tr_value.clone();
+            values[self.pairs.idenso_vars.value_range.start * multiplicative_offset
+                + multiplicative_offset] = nc_value.clone();
+        }
     }
 
     pub(crate) fn update_model_values(&mut self, model: &Model) {
-        let mut pos = self.pairs.model_parameters.value_range.start;
-        for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
-            if let Some(value) = cpl.value {
-                self.values[pos] = value.map(F::from_f64);
-                pos += 1;
+        for (value_index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = value_index + 1;
+            let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
+            let value_index = multiplicative_offset - 1;
+            for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
+                if let Some(value) = cpl.value {
+                    values[pos] = value.map(F::from_f64);
+                    pos += multiplicative_offset;
+                }
             }
-        }
-        for param in model.parameters.values().filter(|p| p.value.is_some()) {
-            if let Some(value) = param.value {
-                let value = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
-                self.values[pos] = value;
-                pos += 1;
+            for param in model.parameters.values().filter(|p| p.value.is_some()) {
+                if let Some(value) = param.value {
+                    let value =
+                        Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
+                    values[pos] = value.clone();
+                    pos += multiplicative_offset;
+                }
             }
-        }
 
-        debug_assert_eq!(pos, self.pairs.model_parameters.value_range.end);
+            debug_assert_eq!(
+                pos,
+                self.pairs.model_parameters.value_range.end * multiplicative_offset
+            );
+        }
     }
 
-    pub(crate) fn add_external_four_mom(&mut self, ext: &ExternalFourMomenta<F<T>>) {
-        self.pairs.add_external_four_mom_impl(ext, &mut self.values);
+    pub(crate) fn add_external_four_mom(
+        &mut self,
+        ext: &ExternalFourMomenta<F<T>>,
+        multiplicative_offset: usize,
+    ) {
+        let value_index = multiplicative_offset - 1;
+        self.pairs.add_external_four_mom_impl(
+            ext,
+            &mut self.values[value_index],
+            multiplicative_offset,
+        );
     }
 
-    pub(crate) fn orientation_value<O: GraphOrientation>(&mut self, orientation: &O) {
+    pub(crate) fn add_external_four_mom_all_derivatives(
+        &mut self,
+        ext: &ExternalFourMomenta<F<T>>,
+    ) {
+        for value_index in 0..self.values.len() {
+            let multiplicative_offset = value_index + 1;
+            self.pairs.add_external_four_mom_impl(
+                ext,
+                &mut self.values[value_index],
+                multiplicative_offset,
+            );
+        }
+    }
+
+    pub(crate) fn orientation_value<O: GraphOrientation>(
+        &mut self,
+        orientation: &O,
+        multiplicative_offset: usize,
+    ) {
         let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
         let one = zero.ref_one();
         let minusone = -(one.clone());
 
-        let mut o_start = self.pairs.orientations.value_range.start;
+        let mut o_start = self.pairs.orientations.value_range.start * multiplicative_offset;
+        let value_index = multiplicative_offset - 1;
 
         for (_, i) in orientation.orientation() {
             match i {
                 Orientation::Default => {
-                    self.values[o_start] = one.clone();
-                    o_start += 1;
-                    self.values[o_start] = one.clone();
-                    o_start += 1;
-                    self.values[o_start] = zero.clone();
-                    o_start += 1;
+                    self.values[value_index][o_start] = one.clone();
+                    o_start += multiplicative_offset;
+                    self.values[value_index][o_start] = one.clone();
+                    o_start += multiplicative_offset;
+                    self.values[value_index][o_start] = zero.clone();
+                    o_start += multiplicative_offset;
                 }
                 Orientation::Reversed => {
-                    self.values[o_start] = minusone.clone();
-                    o_start += 1;
-                    self.values[o_start] = zero.clone();
-                    o_start += 1;
-                    self.values[o_start] = one.clone();
-                    o_start += 1;
+                    self.values[value_index][o_start] = minusone.clone();
+                    o_start += multiplicative_offset;
+                    self.values[value_index][o_start] = zero.clone();
+                    o_start += multiplicative_offset;
+                    self.values[value_index][o_start] = one.clone();
+                    o_start += multiplicative_offset;
                 }
                 Orientation::Undirected => {
-                    self.values[o_start] = zero.clone();
-                    o_start += 1;
-                    self.values[o_start] = zero.clone();
-                    o_start += 1;
-                    self.values[o_start] = zero.clone();
-                    o_start += 1;
+                    self.values[value_index][o_start] = zero.clone();
+                    o_start += multiplicative_offset;
+                    self.values[value_index][o_start] = zero.clone();
+                    o_start += multiplicative_offset;
+                    self.values[value_index][o_start] = zero.clone();
+                    o_start += multiplicative_offset;
                 }
             }
         }
@@ -1034,9 +1246,11 @@ impl<T: FloatLike> ParamBuilder<T> {
         graph: &Graph,
         sample: &MomentumSample<T>,
         helicities: &[Helicity],
+        multiplicative_offset: usize,
     ) {
         let cache_id = sample.sample.external_mom_cache_id;
         let base_cache_id = sample.sample.external_mom_base_cache_id;
+        let value_index = multiplicative_offset - 1;
 
         // Validate cache consistency
         if cache_id < base_cache_id {
@@ -1073,7 +1287,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
 
             if !cache {
-                self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(v);
+                let mut polarization_start =
+                    self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+                for pol_value in v {
+                    self.values[value_index][polarization_start] = pol_value.clone();
+                    polarization_start += multiplicative_offset;
+                }
                 return;
             }
             v
@@ -1101,8 +1321,15 @@ impl<T: FloatLike> ParamBuilder<T> {
                     self.pairs
                         .polarizations_values(graph, sample.external_moms(), helicities)
                 });
-                self.values[self.pairs.polarizations.value_range.clone()]
-                    .clone_from_slice(&computed_pols);
+
+                let mut polarization_start =
+                    self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+                for pol_value in &computed_pols {
+                    self.values[value_index][polarization_start] = pol_value.clone();
+                    polarization_start += multiplicative_offset;
+                }
+
                 return;
             }
 
@@ -1119,7 +1346,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             self.polarization_cache.get(cache_id).unwrap()
         };
 
-        self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(pols);
+        let mut polarization_start =
+            self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+        for pol_value in pols {
+            self.values[value_index][polarization_start] = pol_value.clone();
+            polarization_start += multiplicative_offset;
+        }
     }
 
     /// Debug function to search cache for matching polarizations to detect missed cache hits
@@ -1250,15 +1483,12 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn left_threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
         self.pairs
-            .left_threshold_params(threshold_params, &mut self.values);
+            .left_threshold_params(threshold_params, &mut self.values[0]);
     }
 
     pub(crate) fn right_threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
         self.pairs
-            .right_threshold_params(threshold_params, &mut self.values);
-    }
-    pub(crate) fn lu_params(&mut self, lu_params: &LUParams<T>) {
-        self.pairs.lu_params(lu_params, &mut self.values);
+            .right_threshold_params(threshold_params, &mut self.values[0]);
     }
 
     pub fn table(&self) -> Table {
@@ -1275,7 +1505,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             for (p, v) in i.params.iter().zip(i.value_range.clone()) {
                 table.push_record(vec![
                     p.printer(LOGPRINTOPTS).to_string().to_string(),
-                    self.values[v].to_string(),
+                    self.values[0][v].to_string(),
                     format!("{}", v),
                 ]);
             }

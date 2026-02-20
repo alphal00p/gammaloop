@@ -1,23 +1,28 @@
+use std::collections::HashMap;
+
 use crate::{
     cff::{
+        cff_graph::{CFFEdge, CFFEdgeType, CFFVertex, VertexSet},
         cut_expression::CFFCutsExpression,
-        esurface::add_external_shifts,
+        esurface::{self, add_external_shifts, remove_zeros_duplicates},
         expression::OrientationData,
-        hsurface::HsurfaceID,
-        surface::{HybridSurface, HybridSurfaceID},
+        hsurface::{Hsurface, HsurfaceID},
+        surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
         tree::Tree,
     },
-    graph::get_cff_inverse_energy_product_impl,
+    graph::{Graph, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
 };
+use ahash::HashSet;
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
+use eyre::{Ok, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
     involution::{EdgeVec, HedgePair},
-    subgraph::{OrientedCut, SubGraphLike},
+    subgraph::{self, OrientedCut, SubGraphLike, SubSetOps},
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
@@ -142,6 +147,129 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
         identifier: x,
         num_edges,
     })
+}
+
+pub(crate) fn generate_supergraph_cff(
+    graph: &Graph,
+) -> Result<CFFExpression<SuperGraphOrientationID>> {
+    // lots of gymnastics to handle the is cut
+
+    let graph_without_is_cut = graph.underlying.full_filter().subtract(
+        &graph
+            .initial_state_cut
+            .left
+            .union(&graph.initial_state_cut.right),
+    );
+
+    let mut orientations =
+        get_orientations_from_subgraph(&graph.underlying, &graph_without_is_cut, &[]);
+
+    let representative_cff_graph = orientations.first().ok_or(eyre!("no orientations"))?;
+
+    println!("representative cff graph: {:?}", representative_cff_graph);
+
+    let incoming_nodes_pairs = graph
+        .iter_edges_of(&graph.initial_state_cut.right)
+        .map(|(pair, edge_id, _)| match pair {
+            HedgePair::Split { sink, .. } => {
+                let node_id = graph.node_id(sink);
+
+                println!("node id: {:?}", node_id);
+                let cff_vertex = CFFVertex::new(node_id.0);
+                println!("cff vertex: {:?}", cff_vertex);
+                let index = representative_cff_graph
+                    .vertices
+                    .iter()
+                    .position(|v| v.vertex_set == cff_vertex.vertex_set)
+                    .unwrap();
+
+                (index, edge_id)
+            }
+            _ => {
+                unreachable!()
+            }
+        })
+        .collect_vec();
+
+    let dummy_id_for_base_for_outgoing = graph.n_edges();
+    let mut dummy_id_map = HashMap::<EdgeIndex, EdgeIndex>::new();
+
+    let outgoing_node_pairs = graph
+        .iter_edges_of(&graph.initial_state_cut.left)
+        .map(|(pair, edge_id, _)| match pair {
+            HedgePair::Split { source, .. } => {
+                let node_id = graph.node_id(source);
+                let cff_vertex = CFFVertex::new(node_id.0);
+                let index = representative_cff_graph
+                    .vertices
+                    .iter()
+                    .position(|v| v.vertex_set == cff_vertex.vertex_set)
+                    .unwrap();
+
+                let dummy_edge_id = EdgeIndex::from(dummy_id_for_base_for_outgoing + edge_id.0);
+                dummy_id_map.insert(dummy_edge_id, edge_id);
+
+                (index, dummy_edge_id)
+            }
+            _ => {
+                unreachable!()
+            }
+        })
+        .collect_vec();
+
+    //drop(representative_cff_graph);
+    for orientation in orientations.iter_mut() {
+        for &(node_id, edge_id) in incoming_nodes_pairs.iter() {
+            orientation.vertices[node_id].incoming_edges.push(CFFEdge {
+                edge_id,
+                edge_type: CFFEdgeType::External,
+            });
+        }
+
+        for &(node_id, edge_id) in outgoing_node_pairs.iter() {
+            orientation.vertices[node_id].outgoing_edges.push(CFFEdge {
+                edge_id,
+                edge_type: CFFEdgeType::External,
+            });
+        }
+    }
+
+    let mut surface_cache = SurfaceCache {
+        esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
+        hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+    };
+
+    // here we can provide the emptry list for initial state cut, because the graphs are already patched to give the correct result
+    let mut result = generate_cff_from_orientations(orientations, &mut surface_cache, &[], &None)?;
+    result.surfaces.esurface_cache.clear(); // we need to clean it
+
+    if !surface_cache.hsurface_cache.is_empty() {
+        Err(eyre!(
+            "Supergraph CFF generation should not produce Hsurfaces"
+        ))
+    } else {
+        for mut esurface in surface_cache.esurface_cache.drain(..) {
+            for external_shift_entry in esurface.external_shift.iter_mut() {
+                if let Some(original_edge_id) = dummy_id_map.get(&external_shift_entry.0) {
+                    external_shift_entry.0 = *original_edge_id;
+                }
+            }
+
+            remove_zeros_duplicates(&mut esurface.external_shift);
+
+            if let Some(_) = result
+                .surfaces
+                .esurface_cache
+                .position(|val| *val == esurface)
+            {
+                // already present
+            } else {
+                result.surfaces.esurface_cache.push(esurface);
+            }
+        }
+        println!("esurfaces: {:#?}", result.surfaces.esurface_cache);
+        Ok(result)
+    }
 }
 
 fn get_orientations<E, V, H>(
@@ -332,6 +460,7 @@ fn get_possible_orientations_for_cut_list<E, V, H>(
 pub(crate) fn generate_cff_expression<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
+    edges_in_initial_state_cut: &[EdgeIndex],
     dummy_edges: &[EdgeIndex],
 ) -> Result<CFFExpression<AmplitudeOrientationID>> {
     let graphs = get_orientations(graph, dummy_edges);
@@ -340,8 +469,12 @@ pub(crate) fn generate_cff_expression<E, V, H>(
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
     };
-    let graph_cff =
-        generate_cff_from_orientations(graphs, &mut surface_cache, None, canonize_esurface)?;
+    let graph_cff = generate_cff_from_orientations(
+        graphs,
+        &mut surface_cache,
+        edges_in_initial_state_cut,
+        canonize_esurface,
+    )?;
 
     // patch the surface cache
     surface_cache.set_subspaces(&graph.full_graph());
@@ -353,10 +486,16 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
     reversed_dangling: &[EdgeIndex],
+    edges_in_initial_state_cut: &[EdgeIndex],
     surface_cache: &mut SurfaceCache,
 ) -> Result<CFFExpression<SubgraphOrientationID>> {
     let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling);
-    let cff = generate_cff_from_orientations(graphs, surface_cache, None, canonize_esurface)?;
+    let cff = generate_cff_from_orientations(
+        graphs,
+        surface_cache,
+        edges_in_initial_state_cut,
+        canonize_esurface,
+    )?;
     Ok(cff)
 }
 
@@ -371,9 +510,10 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
     contract_edges: &[EdgeIndex],
+    edges_in_initial_state_cut: &[EdgeIndex],
     orientation: &EdgeVec<Orientation>,
     cut_edges: &[EdgeIndex],
-    constraint_data: Option<ConstraintData<'_>>,
+    setup: PostProcessingSetup<'_>,
 ) -> Result<Atom> {
     let mut generation_graph =
         CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), subgraph)?;
@@ -396,49 +536,258 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     let generate_tree_for_orientation = generate_tree_for_orientation(
         generation_graph,
         &mut surface_cache,
-        None,
+        edges_in_initial_state_cut,
         canonize_esurface,
     );
 
-    let mut tree: Tree<HybridSurfaceID> = generate_tree_for_orientation.map(forget_graphs);
+    let mut tree = generate_tree_for_orientation.map(forget_graphs);
 
-    if let Some(constraint_data) = constraint_data {
-        tree.filter_mut(|surface_id| match surface_id {
-            HybridSurfaceID::Esurface(esurface_id) => {
-                let esurface_to_compare = &surface_cache.esurface_cache[*esurface_id];
-                constraint_data
-                    .illegal_esurfaces
-                    .iter()
-                    .all(|illegal_esurface| {
-                        let res = esurface_to_compare != *illegal_esurface;
-                        res
-                    })
-            }
-            HybridSurfaceID::Hsurface(hsurface_id) => {
-                let hsurface_to_compare = &surface_cache.hsurface_cache[*hsurface_id];
-                constraint_data
-                    .illegal_esurfaces
-                    .iter()
-                    .all(|illegal_esurface| {
-                        !hsurface_to_compare
-                            .equality_under_energy_conservation(
-                                *illegal_esurface,
-                                constraint_data.constraints,
-                            )
-                            .unwrap_or(
-                                hsurface_to_compare.equality_by_try_convert(*illegal_esurface),
-                            )
-                    })
-            }
-            HybridSurfaceID::Unit => true,
-        });
-    }
+    post_process(&mut tree, orientation, &surface_cache, setup);
+
+    let surface_cache_to_use = setup
+        .rewrite_esurfaces
+        .map_or(&surface_cache, |rewrite| rewrite.allowed_targets);
 
     let atom_tree = tree.to_atom_inv();
-    let atom_tree_substituted = surface_cache.substitute_energies(&atom_tree, cut_edges);
+    let atom_tree_substituted = surface_cache_to_use.substitute_energies(&atom_tree, cut_edges);
     let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph, contract_edges);
 
     Ok(atom_tree_substituted * &inverse_energies)
+}
+
+#[derive(Clone, Copy)]
+pub struct PostProcessingSetup<'a> {
+    pub constraint_data: Option<ConstraintData<'a>>,
+    pub rewrite_esurfaces: Option<EsurfaceRewritingInstructions<'a>>,
+}
+
+#[derive(Clone, Copy)]
+pub struct EsurfaceRewritingInstructions<'a> {
+    pub allowed_targets: &'a SurfaceCache,
+    pub graph: &'a Graph,
+    pub cuts: &'a TiVec<CutId, CrossSectionCut>,
+    pub subgraph_location: (Option<CutId>, Option<CutId>),
+}
+
+fn post_process(
+    tree: &mut Tree<HybridSurfaceID>,
+    orientation: &EdgeVec<Orientation>,
+    surface_cache: &SurfaceCache,
+    setup: PostProcessingSetup<'_>,
+) {
+    if let Some(constraint_data) = setup.constraint_data {
+        tree.map_mut(|surface_id| {
+            let esurface_is_allowed = match surface_id {
+                HybridSurfaceID::Esurface(esurface_id) => {
+                    let esurface_to_compare = &surface_cache.esurface_cache[*esurface_id];
+                    constraint_data
+                        .illegal_esurfaces
+                        .iter()
+                        .all(|illegal_esurface| {
+                            let res = esurface_to_compare != *illegal_esurface;
+                            res
+                        })
+                }
+                HybridSurfaceID::Hsurface(hsurface_id) => {
+                    let hsurface_to_compare = &surface_cache.hsurface_cache[*hsurface_id];
+                    constraint_data
+                        .illegal_esurfaces
+                        .iter()
+                        .all(|illegal_esurface| {
+                            !hsurface_to_compare
+                                .equality_under_energy_conservation(
+                                    *illegal_esurface,
+                                    constraint_data.constraints,
+                                )
+                                .unwrap_or(
+                                    hsurface_to_compare.equality_by_try_convert(*illegal_esurface),
+                                )
+                        })
+                }
+                HybridSurfaceID::Unit => true,
+                HybridSurfaceID::Infinite => true,
+            };
+
+            if !esurface_is_allowed {
+                *surface_id = HybridSurfaceID::Infinite
+            }
+        });
+    }
+
+    if let Some(rewrite_esurfaces) = setup.rewrite_esurfaces {
+        let hashset_of_appearing_ids = tree
+            .iter_nodes()
+            .map(|node| node.data)
+            .collect::<HashSet<HybridSurfaceID>>();
+
+        let mut id_map = HashMap::<HybridSurfaceID, HybridSurfaceID>::new();
+        id_map.insert(HybridSurfaceID::Unit, HybridSurfaceID::Unit);
+        id_map.insert(HybridSurfaceID::Infinite, HybridSurfaceID::Infinite);
+
+        for appearing_id in hashset_of_appearing_ids.iter() {
+            let surface_to_rewrite = surface_cache.get_surface(*appearing_id);
+
+            match surface_to_rewrite {
+                HybridSurfaceRef::Unit(_) => continue,
+                HybridSurfaceRef::Infinite(_) => continue,
+                HybridSurfaceRef::Esurface(esurface) => {
+                    if let Some(esurface_id) = rewrite_esurfaces
+                        .allowed_targets
+                        .esurface_cache
+                        .position(|allowed_esurface| allowed_esurface == esurface)
+                    {
+                        let new_id = HybridSurfaceID::Esurface(esurface_id);
+                        id_map.insert(*appearing_id, new_id);
+                    } else {
+                        let complete_to_right =
+                            if let Some(cut_id) = rewrite_esurfaces.subgraph_location.1 {
+                                let edges_in_cut = rewrite_esurfaces
+                                    .graph
+                                    .iter_edges_of(&rewrite_esurfaces.cuts[cut_id].cut)
+                                    .map(|(_, edge_id, _)| edge_id)
+                                    .collect_vec();
+
+                                edges_in_cut
+                                    .iter()
+                                    .all(|edge_id| esurface.energies.contains(edge_id))
+                            } else {
+                                false
+                            };
+
+                        let complete_to_left =
+                            if let Some(cut_id) = rewrite_esurfaces.subgraph_location.0 {
+                                let edges_in_cut = rewrite_esurfaces
+                                    .graph
+                                    .iter_edges_of(&rewrite_esurfaces.cuts[cut_id].cut)
+                                    .map(|(_, edge_id, _)| edge_id)
+                                    .collect_vec();
+
+                                edges_in_cut
+                                    .iter()
+                                    .all(|edge_id| esurface.energies.contains(edge_id))
+                            } else {
+                                false
+                            };
+
+                        if complete_to_left && complete_to_right {
+                            panic!("esurface has no connected component");
+                        }
+
+                        if !complete_to_left && !complete_to_right {
+                            println!("esurface: {:#?}", esurface);
+                            panic!("esurface cannot be rewritten to any allowed target");
+                        }
+
+                        let vertices_to_add = if complete_to_left {
+                            let cut_id = rewrite_esurfaces.subgraph_location.0.unwrap();
+                            &rewrite_esurfaces.cuts[cut_id].left
+                        } else if complete_to_right {
+                            let cut_id = rewrite_esurfaces.subgraph_location.1.unwrap();
+                            &rewrite_esurfaces.cuts[cut_id].right
+                        } else {
+                            unreachable!()
+                        };
+
+                        let new_esurface_subgraph = esurface
+                            .vertex_set
+                            .subgraph(rewrite_esurfaces.graph)
+                            .union(vertices_to_add);
+
+                        let new_esurface = Esurface::new_from_subgraph(
+                            &new_esurface_subgraph,
+                            rewrite_esurfaces.graph,
+                            orientation,
+                        );
+
+                        let new_esurface_id = rewrite_esurfaces
+                            .allowed_targets
+                            .esurface_cache
+                            .position(|allowed_esurface| allowed_esurface == &new_esurface)
+                            .expect("constructed esurface not in allowed targets");
+
+                        let new_id = HybridSurfaceID::Esurface(new_esurface_id);
+                        id_map.insert(*appearing_id, new_id);
+                    }
+                }
+                HybridSurfaceRef::Hsurface(hsurface) => {
+                    let complete_to_left =
+                        if let Some(cut_id) = rewrite_esurfaces.subgraph_location.0 {
+                            let edges_in_cut = rewrite_esurfaces
+                                .graph
+                                .iter_edges_of(&rewrite_esurfaces.cuts[cut_id].cut)
+                                .map(|(_, edge_id, _)| edge_id)
+                                .collect_vec();
+
+                            hsurface
+                                .negative_energies
+                                .iter()
+                                .all(|edge_id| edges_in_cut.contains(edge_id))
+                        } else {
+                            false
+                        };
+
+                    let complete_to_right =
+                        if let Some(cut_id) = rewrite_esurfaces.subgraph_location.1 {
+                            let edges_in_cut = rewrite_esurfaces
+                                .graph
+                                .iter_edges_of(&rewrite_esurfaces.cuts[cut_id].cut)
+                                .map(|(_, edge_id, _)| edge_id)
+                                .collect_vec();
+
+                            hsurface
+                                .negative_energies
+                                .iter()
+                                .all(|edge_id| edges_in_cut.contains(edge_id))
+                        } else {
+                            false
+                        };
+
+                    if complete_to_left && complete_to_right {
+                        panic!(
+                            "hsurface has no connected component supergraph, it cannot exist, but it does"
+                        );
+                    }
+
+                    if !complete_to_left && !complete_to_right {
+                        println!("hsurface: {:#?}", hsurface);
+                        panic!("hsurface cannot be rewritten to any allowed target");
+                    }
+
+                    let vertices_to_add = if complete_to_left {
+                        let cut_id = rewrite_esurfaces.subgraph_location.0.unwrap();
+                        &rewrite_esurfaces.cuts[cut_id].left
+                    } else if complete_to_right {
+                        let cut_id = rewrite_esurfaces.subgraph_location.1.unwrap();
+                        &rewrite_esurfaces.cuts[cut_id].right
+                    } else {
+                        unreachable!()
+                    };
+
+                    let new_esurface_subgraph = hsurface
+                        .vertex_set
+                        .subgraph(rewrite_esurfaces.graph)
+                        .union(vertices_to_add);
+
+                    let new_esurface = Esurface::new_from_subgraph(
+                        &new_esurface_subgraph,
+                        rewrite_esurfaces.graph,
+                        orientation,
+                    );
+
+                    let new_esurface_id = rewrite_esurfaces
+                        .allowed_targets
+                        .esurface_cache
+                        .position(|allowed_esurface| allowed_esurface == &new_esurface)
+                        .expect("constructed esurface not in allowed targets");
+
+                    let new_id = HybridSurfaceID::Esurface(new_esurface_id);
+                    id_map.insert(*appearing_id, new_id);
+                }
+            }
+        }
+
+        tree.map_mut(|surface_id| *surface_id = id_map[surface_id]);
+    }
 }
 
 #[allow(dead_code)]
@@ -447,6 +796,7 @@ fn generate_cff_for_orientation<E, V, H>(
     canonize_esurface: &Option<ShiftRewrite>,
     cache: &mut SurfaceCache,
     cuts: &TiVec<CutId, CrossSectionCut>,
+    edges_in_initial_state_cut: &[EdgeIndex],
     orientation_data: &CutOrientationData,
 ) -> Vec<SingleCutOrientationExpression> {
     orientation_data
@@ -467,13 +817,21 @@ fn generate_cff_for_orientation<E, V, H>(
             )
             .unwrap();
 
-            let left_tree =
-                generate_tree_for_orientation(left_diagram, cache, None, canonize_esurface)
-                    .map(forget_graphs);
+            let left_tree = generate_tree_for_orientation(
+                left_diagram,
+                cache,
+                edges_in_initial_state_cut,
+                canonize_esurface,
+            )
+            .map(forget_graphs);
 
-            let right_tree =
-                generate_tree_for_orientation(right_diagram, cache, None, canonize_esurface)
-                    .map(forget_graphs);
+            let right_tree = generate_tree_for_orientation(
+                right_diagram,
+                cache,
+                edges_in_initial_state_cut,
+                canonize_esurface,
+            )
+            .map(forget_graphs);
 
             SingleCutOrientationExpression {
                 left: left_tree,
@@ -485,6 +843,7 @@ fn generate_cff_for_orientation<E, V, H>(
 
 pub(crate) fn generate_cff_with_cuts<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
+    edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
     cuts: &TiVec<CutId, CrossSectionCut>,
 ) -> Result<CFFCutsExpression> {
@@ -517,6 +876,7 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
                 &cut.left,
                 canonize_esurface,
                 &reversed_dangling,
+                edges_in_initial_state_cut,
                 &mut surface_cache,
             )?
             .into();
@@ -527,6 +887,7 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
                 &cut.right,
                 canonize_esurface,
                 &reversed_dangling,
+                edges_in_initial_state_cut,
                 &mut surface_cache,
             )?
             .into();
@@ -589,7 +950,7 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
 fn generate_cff_from_orientations<O: OrientationID>(
     orientations_and_graphs: Vec<CFFGenerationGraph>,
     generator_cache: &mut SurfaceCache,
-    rewrite_at_cache_growth: Option<&Esurface>,
+    edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Result<CFFExpression<O>, Report> {
     // filter cyclic orientations beforehand
@@ -610,7 +971,7 @@ fn generate_cff_from_orientations<O: OrientationID>(
             let tree = generate_tree_for_orientation(
                 graph.clone(),
                 generator_cache,
-                rewrite_at_cache_growth,
+                edges_in_initial_state_cut,
                 canonize_esurface,
             );
             let expression = tree.map(forget_graphs);
@@ -680,6 +1041,7 @@ impl SurfaceCache {
             HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
             HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
             HybridSurfaceID::Unit => HybridSurfaceRef::Unit(UnitSurface {}),
+            HybridSurfaceID::Infinite => HybridSurfaceRef::Infinite(InfiniteSurface {}),
         }
     }
 
@@ -701,7 +1063,7 @@ impl SurfaceCache {
 fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
     generator_cache: &mut SurfaceCache,
-    rewrite_at_cache_growth: Option<&Esurface>,
+    edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Tree<GenerationData> {
     let mut tree = Tree::from_root(GenerationData {
@@ -712,7 +1074,7 @@ fn generate_tree_for_orientation(
     while let Some(()) = advance_tree(
         &mut tree,
         generator_cache,
-        rewrite_at_cache_growth,
+        edges_in_initial_state_cut,
         canonize_esurface,
     ) {}
 
@@ -722,7 +1084,7 @@ fn generate_tree_for_orientation(
 fn advance_tree(
     tree: &mut Tree<GenerationData>,
     generator_cache: &mut SurfaceCache,
-    rewrite_at_cache_growth: Option<&Esurface>,
+    edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Option<()> {
     let bottom_layer = tree.get_bottom_layer();
@@ -738,6 +1100,123 @@ fn advance_tree(
 
             let (option_children, surface) = graph.generate_children();
 
+            // treat the edges in the initial state cut as true externals
+            let surface = match surface {
+                HybridSurface::Esurface(esurface) => {
+                    let energies_to_be_moved = esurface
+                        .energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    if energies_to_be_moved.is_empty() {
+                        HybridSurface::Esurface(esurface)
+                    } else {
+                        let new_energies = esurface
+                            .energies
+                            .iter()
+                            .filter(|edge_id| !energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = esurface.external_shift.clone();
+                        for energy_to_move in energies_to_be_moved.iter() {
+                            new_shift.push((*energy_to_move, 1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        HybridSurface::Esurface(Esurface {
+                            energies: new_energies,
+                            external_shift: new_shift,
+                            vertex_set: esurface.vertex_set.clone(),
+                        })
+                    }
+                }
+                HybridSurface::Unit(unit) => HybridSurface::Unit(unit),
+                HybridSurface::Infinite(infinite) => HybridSurface::Infinite(infinite),
+                HybridSurface::Hsurface(hsurface) => {
+                    let positive_energies_to_be_moved = hsurface
+                        .positive_energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    let negative_energies_to_be_moved = hsurface
+                        .negative_energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    if positive_energies_to_be_moved.is_empty()
+                        && negative_energies_to_be_moved.is_empty()
+                    {
+                        HybridSurface::Hsurface(hsurface)
+                    } else if !positive_energies_to_be_moved.is_empty()
+                        && negative_energies_to_be_moved.is_empty()
+                    {
+                        let new_positive_energies = hsurface
+                            .positive_energies
+                            .iter()
+                            .filter(|edge_id| !positive_energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = hsurface.external_shift.clone();
+
+                        for positive_energy_to_move in positive_energies_to_be_moved.iter() {
+                            new_shift.push((*positive_energy_to_move, 1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        HybridSurface::Hsurface(Hsurface {
+                            positive_energies: new_positive_energies,
+                            negative_energies: hsurface.negative_energies.clone(),
+                            external_shift: new_shift,
+                            vertex_set: hsurface.vertex_set.clone(),
+                        })
+                    } else if !negative_energies_to_be_moved.is_empty()
+                        && positive_energies_to_be_moved.is_empty()
+                    {
+                        let new_negative_energies = hsurface
+                            .negative_energies
+                            .iter()
+                            .filter(|edge_id| !negative_energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = hsurface.external_shift.clone();
+
+                        for negative_energy_to_move in negative_energies_to_be_moved.iter() {
+                            new_shift.push((*negative_energy_to_move, -1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        if new_negative_energies.is_empty() {
+                            HybridSurface::Esurface(Esurface {
+                                energies: hsurface.positive_energies.clone(),
+                                external_shift: new_shift,
+                                vertex_set: hsurface.vertex_set.clone(),
+                            })
+                        } else {
+                            HybridSurface::Hsurface(Hsurface {
+                                positive_energies: hsurface.positive_energies.clone(),
+                                negative_energies: new_negative_energies,
+                                external_shift: new_shift,
+                                vertex_set: hsurface.vertex_set.clone(),
+                            })
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+            };
+
             let surface_id = match surface {
                 HybridSurface::Esurface(mut esurface) => {
                     if let Some(shift_rewrite) = canonize_esurface {
@@ -750,42 +1229,8 @@ fn advance_tree(
                     let esurface_id = match option_esurface_id {
                         Some(esurface_id) => esurface_id,
                         None => {
-                            if let Some(rewrite_esurface) = rewrite_at_cache_growth {
-                                esurface
-                                    .energies
-                                    .retain(|e| !rewrite_esurface.energies.contains(e));
-
-                                let negative_rewriter_esurface_shift = rewrite_esurface
-                                    .external_shift
-                                    .iter()
-                                    .map(|(index, sign)| (*index, -sign))
-                                    .collect_vec();
-
-                                esurface.external_shift = add_external_shifts(
-                                    &esurface.external_shift,
-                                    &negative_rewriter_esurface_shift,
-                                );
-
-                                if let Some(shift_rewrite) = canonize_esurface {
-                                    esurface.canonicalize_shift(shift_rewrite);
-                                }
-
-                                let new_option_esurface_id = generator_cache
-                                    .esurface_cache
-                                    .position(|val| *val == esurface);
-
-                                match new_option_esurface_id {
-                                    Some(new_esurface_id) => new_esurface_id,
-                                    None => panic!(
-                                        "rewriting the esurface did not yield an existing esurface\n
-                                        rewritten esurface: {:#?} \n
-                                        using {:#?}\n ", esurface, rewrite_esurface,
-                                    ),
-                                }
-                            } else {
-                                generator_cache.esurface_cache.push(esurface);
-                                Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
-                            }
+                            generator_cache.esurface_cache.push(esurface);
+                            Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
                         }
                     };
 
@@ -807,6 +1252,7 @@ fn advance_tree(
                     HybridSurfaceID::Hsurface(hsurface_id)
                 }
                 HybridSurface::Unit(_) => HybridSurfaceID::Unit,
+                HybridSurface::Infinite(_) => HybridSurfaceID::Infinite,
             };
 
             (option_children, surface_id)
@@ -1063,7 +1509,7 @@ mod tests_cff {
         let cff = generate_cff_from_orientations(
             orientations,
             &mut surface_cache,
-            None,
+            &vec![],
             &shift_rewrite.clone(),
         )
         .unwrap();
@@ -1146,7 +1592,7 @@ mod tests_cff {
             triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
 
         let cff_hedge =
-            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[]).unwrap();
+            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[], &[]).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
@@ -1185,7 +1631,7 @@ mod tests_cff {
         let mut surface_cache = SurfaceCache::new();
 
         let cff =
-            generate_cff_from_orientations(orientations, &mut surface_cache, None, &shift_rewrite)
+            generate_cff_from_orientations(orientations, &mut surface_cache, &[], &shift_rewrite)
                 .unwrap();
 
         let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
@@ -1262,7 +1708,7 @@ mod tests_cff {
         let hedge_double_traingle: HedgeGraph<(), (), ()> =
             hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
         let cff_hedge =
-            generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[]).unwrap();
+            generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
         let cff_res =
             energy_prefactor * cff_hedge_evaluator.evaluate_single(&energy_cache.as_ref());
@@ -1324,7 +1770,7 @@ mod tests_cff {
         let mut surface_cache = SurfaceCache::new();
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
         let cff =
-            generate_cff_from_orientations(orientataions, &mut surface_cache, None, &shift_rewrite)
+            generate_cff_from_orientations(orientataions, &mut surface_cache, &[], &shift_rewrite)
                 .unwrap();
 
         let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
@@ -1391,7 +1837,7 @@ mod tests_cff {
         tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
 
         let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
-        let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[]).unwrap();
+        let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[]).unwrap();
 
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
         let res = cff_hedge_evaluator.evaluate_single(&energies_cache.as_ref()) * energy_prefactor;
@@ -1477,7 +1923,7 @@ mod tests_cff {
         let _cff = generate_cff_from_orientations::<AmplitudeOrientationID>(
             orientations,
             &mut surface_cache,
-            None,
+            &[],
             &Some(shift_rewrite),
         )
         .unwrap();
@@ -1534,7 +1980,7 @@ mod tests_cff {
         let _cff = generate_cff_from_orientations::<AmplitudeOrientationID>(
             orientations,
             &mut surface_cache,
-            None,
+            &[],
             &Some(shift_rewrite),
         )
         .unwrap();
@@ -1586,7 +2032,7 @@ mod tests_cff {
         let cff = generate_cff_from_orientations(
             orientations,
             &mut surface_cache,
-            None,
+            &[],
             &Some(shift_rewrite),
         )
         .unwrap();
@@ -1609,7 +2055,7 @@ mod tests_cff {
     }
 
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
-        let cff = generate_cff_expression(&graph, &None, &[]).unwrap();
+        let cff = generate_cff_expression(&graph, &None, &[], &[]).unwrap();
 
         let mut cff_atom = cff.to_atom(OrientationPattern::default());
         cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
