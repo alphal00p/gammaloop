@@ -148,11 +148,14 @@ pub trait LMBext {
             |e, a, b| {
                 Replacement::new(
                     GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
-                    (FunctionBuilder::new(GS.emr_mom)
-                        .add_arg(usize::from(e))
-                        .add_arg(a)
-                        .add_args(rep_args)
-                        .finish()
+                    (a.replace(function!(GS.emr_mom, W_.x_))
+                        .allow_new_wildcards_on_rhs(true)
+                        .with(
+                            FunctionBuilder::new(GS.emr_mom)
+                                .add_arg(W_.x_)
+                                .add_args(rep_args)
+                                .finish(),
+                        )
                         + b)
                         .to_pattern(),
                 )
@@ -259,7 +262,6 @@ pub trait LMBext {
         )
     }
 
-    #[allow(clippy::too_many_arguments)]
     #[allow(clippy::too_many_arguments)]
     fn replacement_impl<'a, S: SubSetLike, I>(
         &self,
@@ -373,7 +375,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             // println!("{}", tree.dot(self));
             self.lmb_impl(subgraph.included(), &tree.tree_subgraph, external)
         } else {
-            panic!("ata")
+            self.empty_lmb()
         }
     }
 
@@ -577,19 +579,30 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 tree
             } else {
                 let root_node = self.node_id(root);
-                let tree =
+                let tree = if forest_guide.is_empty()
+                    && self.number_of_nodes_in_subgraph(subgraph) == 1
+                {
+                    SimpleTraversalTree::empty(self)
+                } else {
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
                         .expect(&format!(
                             "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
                             self.dot(forest_guide),
                             self.dot(subgraph)
-                        ));
+                        ))
+                };
                 tree
             };
 
             forest_edge.union_with(&tree.tree_subgraph);
 
-            let cover = tree.covers(subgraph);
+            let mut cover = tree.covers(subgraph);
+
+            for i in self.iter_crown(self.node_id(root)) {
+                if subgraph.includes(&i) {
+                    cover.add(i);
+                }
+            }
             //remove all edges in cover+node_crowns from not_seen and externals
             //if the edge is a non-tree, full internal edge then it is a loop edge
             for (p, e, _) in self.iter_edges_of(&cover) {

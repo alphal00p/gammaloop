@@ -1,4 +1,4 @@
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use linnet::{
     half_edge::{
         HedgeGraph,
@@ -7,6 +7,8 @@ use linnet::{
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
 };
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use symbolica::atom::AtomCore;
 
 use crate::{
     graph::Graph,
@@ -27,9 +29,10 @@ impl Graph {
 
         if settings.output_full_numerator {
             let mut num = self
-                .numerator(&self.full_filter())
+                .numerator(&self.full_filter(), &self.empty_subgraph())
                 .get_single_atom()
-                .unwrap();
+                .unwrap()
+                .simplify_metrics();
 
             if settings.do_color_algebra {
                 num = num.simplify_color();
@@ -39,10 +42,12 @@ impl Graph {
                 num = num.simplify_gamma();
             }
 
-            dotgraph
-                .global_data
-                .statements
-                .insert("full_num".into(), num.to_quoted());
+            dotgraph.global_data.statements.insert(
+                "full_num".into(),
+                num.printer(SpensoPrintSettings::typst().typst_symbolica())
+                    .to_string()
+                    .replace("\"", "\\\""),
+            );
         }
 
         dotgraph
@@ -62,10 +67,10 @@ impl Graph {
                         e.map(|e| {
                             let mut dot: DotEdgeData = e.into();
                             match flow {
-                                Flow::Sink => {
+                                Flow::Source => {
                                     dot.add_statement("pin", "x:@+right".to_string());
                                 }
-                                Flow::Source => {
+                                Flow::Sink => {
                                     dot.add_statement("pin", "x:@-left".to_string());
                                 }
                             }
@@ -88,7 +93,7 @@ impl Graph {
                             let mut dot: DotEdgeData = (*e.edge_data()).into();
 
                             match e.flow() {
-                                Some(Flow::Sink) => {
+                                Some(Flow::Source) => {
                                     assert!(
                                         self.initial_state_cut
                                             .left
@@ -97,15 +102,15 @@ impl Graph {
                                     dot.add_statement("is_cut", self.inv(p.any_hedge()));
                                     dot.add_statement(
                                         "pin",
-                                        format!("\"x:@+right,y:@edge{}\"", e.index),
+                                        format!("x:@+right,y:@edge{}", e.index),
                                     );
                                 }
-                                Some(Flow::Source) => {
+                                Some(Flow::Sink) => {
                                     assert!(self.initial_state_cut.left.includes(&p.any_hedge()));
                                     dot.add_statement("is_cut", p.any_hedge());
                                     dot.add_statement(
                                         "pin",
-                                        format!("\"x:@-left,y:@edge{}\"", e.index),
+                                        format!("x:@-left,y:@edge{}", e.index),
                                     );
                                 }
                                 None => {}

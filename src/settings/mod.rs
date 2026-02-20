@@ -8,7 +8,7 @@ use crate::{
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
     settings::runtime::HFunctionSettings,
-    utils::{F, FloatLike, serde_utils::IsDefault},
+    utils::{F, FloatLike, serde_utils::IsDefault, tracing::LogStyle},
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
@@ -22,6 +22,8 @@ pub struct GlobalSettings {
     #[serde(skip_serializing_if = "is_default_display_directive")]
     #[serde(default = "default_display_directive")]
     pub display_directive: String,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub log_style: LogStyle,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -88,6 +90,7 @@ impl Default for GlobalSettings {
         Self {
             logfile_directive: default_logfile_directive(),
             display_directive: default_display_directive(),
+            log_style: LogStyle::default(),
             generation: GenerationSettings::default(),
             n_cores: Parallelisation::default(),
         }

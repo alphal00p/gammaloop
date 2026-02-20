@@ -3,9 +3,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
-use crate::state::State;
+use crate::state::{ProcessRef, State};
 use color_eyre::Result;
-use eyre::eyre;
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Display {
@@ -23,30 +22,18 @@ pub enum Display {
     },
     Processes,
     Integrands {
-        process_id: Option<usize>,
+        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+        process: Option<ProcessRef>,
     },
 }
 
 impl Display {
     pub fn run(&self, state: &State) -> Result<()> {
         match self {
-            Display::Integrands { process_id } => {
-                let process = if let Some(proc_id) = process_id {
-                    if *proc_id >= state.process_list.processes.len() {
-                        return Err(eyre!(
-                            "Process ID {} invalid, only {} processes available",
-                            proc_id,
-                            state.process_list.processes.len()
-                        ));
-                    }
-                    &state.process_list.processes[*proc_id]
-                } else if state.process_list.processes.len() == 1 {
-                    &state.process_list.processes[0]
-                } else {
-                    return Err(eyre!(
-                        "Multiple processes available, please specify the process."
-                    ));
-                };
+            Display::Integrands { process } => {
+                let process_id = state.resolve_process_ref(process.as_ref())?;
+                let process = &state.process_list.processes[process_id];
 
                 info!("Integrands for process {}:", process.definition.process_id);
                 for integrand in process.get_integrand_names() {

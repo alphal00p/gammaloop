@@ -76,12 +76,15 @@ impl Set {
     ) -> Result<()> {
         match self {
             Set::Model { pairs } => {
-                for KvPair { key, value } in pairs {
+                for KvPair { key, value } in pairs.iter() {
                     let value = json5::from_str::<Complex<F<f64>>>(value).with_context(|| {
                         format!("While parsing JSON value {value} for key '{key}'")
                     })?;
 
-                    if let Some(p) = state.model_parameters.get_mut(&UFOSymbol::from(key)) {
+                    if let Some(p) = state
+                        .model_parameters
+                        .get_mut(&UFOSymbol::from(key.as_str()))
+                    {
                         *p = value;
                         continue;
                     } else {
@@ -115,36 +118,17 @@ impl Set {
                 *default_runtime_settings = input.merge_figment(fig)?.extract()?;
             }
             Self::Process { input, process } => {
-                let p = &mut state.process_list.processes[process.process_id];
+                let process_id = state.resolve_process_ref(process.process.as_ref())?;
+
                 if let Some(name) = &process.integrand_name {
-                    match &mut p.collection {
-                        ProcessCollection::Amplitudes(a) => {
-                            let Some(a) = a.get_mut(name) else {
-                                return Err(eyre!(
-                                    "No amplitude named '{}' in process id {}",
-                                    name,
-                                    process.process_id
-                                ));
-                            };
-                            let Some(a) = &mut a.integrand else {
-                                return Err(eyre!(
-                                    "No integrand in amplitude '{}' in process id {}",
-                                    name,
-                                    process.process_id
-                                ));
-                            };
+                    let integrand = state.process_list.get_integrand_mut(process_id, name)?;
 
-                            let settings = a.get_mut_settings();
-                            let fig = Figment::from(Serialized::defaults(&settings));
+                    let settings = integrand.get_mut_settings();
+                    let fig = Figment::from(Serialized::defaults(&settings));
 
-                            *settings = input.merge_figment(fig)?.extract()?;
-                        }
-                        ProcessCollection::CrossSections(_a) => {
-                            // a[name].preprocess(&self.model, &global_settings.generation)?;
-                        }
-                    }
+                    *settings = input.merge_figment(fig)?.extract()?;
                 } else {
-                    match &mut p.collection {
+                    match &mut state.process_list.processes[process_id].collection {
                         ProcessCollection::Amplitudes(a) => {
                             for (_, amp) in a.iter_mut() {
                                 if let Some(a) = &mut amp.integrand {
@@ -155,7 +139,15 @@ impl Set {
                                 };
                             }
                         }
-                        ProcessCollection::CrossSections(_a) => {
+                        ProcessCollection::CrossSections(a) => {
+                            for (_, xs) in a.iter_mut() {
+                                if let Some(a) = &mut xs.integrand {
+                                    let settings = a.get_mut_settings();
+                                    let fig = Figment::from(Serialized::defaults(&settings));
+
+                                    *settings = input.merge_figment(fig)?.extract()?;
+                                };
+                            }
                             // a[name].preprocess(&self.model, &global_settings.generation)?;
                         }
                     }
@@ -216,7 +208,7 @@ impl SetArgs {
                     .to_ascii_lowercase();
                 match ext.as_str() {
                     "toml" => Ok(fig.merge(figment::providers::Toml::file(file))),
-                    "yaml" | "yml" => Ok(fig.merge(figment::providers::Yaml::file(file))),
+                    // "yaml" | "yml" => Ok(fig.merge(figment::providers::Yaml::file(file))),
                     "json" => Ok(fig.merge(figment::providers::Json::file(file))),
                     _ => Err(color_eyre::eyre::eyre!(
                         "Unsupported settings file extension: {}",
@@ -227,7 +219,7 @@ impl SetArgs {
             SetArgs::Kv { pairs } => {
                 let mut figment = Figment::new();
 
-                for KvPair { key, value } in pairs {
+                for KvPair { key, value } in pairs.iter() {
                     figment = figment.adjoin((key.clone(), infer_cli_value(value)?));
                 }
 

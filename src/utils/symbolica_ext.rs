@@ -2,6 +2,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use std::{
     collections::BTreeMap,
     fmt::{Display, Write},
@@ -35,7 +36,7 @@ pub static COMPLEXRATPOLYFIELD: LazyLock<
 > = LazyLock::new(|| FractionField::new(PolynomialRing::<_, u16>::new(Q_I.clone())));
 
 pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
-    hide_all_namespaces: false,
+    hide_all_namespaces: true,
     color_namespace: false,
     color_builtin_symbols: false,
     color_top_level_sum: false,
@@ -865,5 +866,17 @@ where
             .add_args(args.1)
             .add_args(args.2)
             .finish()
+    }
+}
+
+pub trait LogPrint {
+    fn log_print(&self) -> String;
+}
+
+impl<A: AtomCore> LogPrint for A {
+    fn log_print(&self) -> String {
+        let mut settings = SpensoPrintSettings::compact().nice_symbolica();
+        // settings.hide_all_namespaces = false;
+        self.printer(settings).to_string()
     }
 }

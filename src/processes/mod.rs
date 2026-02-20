@@ -4,9 +4,9 @@ use std::{fs, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::Context;
-use tracing::debug;
 use rayon::ThreadPool;
 use schemars::JsonSchema;
+use tracing::debug;
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
@@ -23,6 +23,8 @@ pub struct EvaluatorSettings {
     pub iterative_orientation_optimization: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compile: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub store_atom: bool,
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -34,7 +36,7 @@ pub struct ProcessList {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 pub struct DotExportSettings {
     // pub root_folder: PathBuf,
     pub combine_diagrams: bool,
@@ -43,6 +45,15 @@ pub struct DotExportSettings {
     pub split_xs_by_initial_states: bool,
     pub do_gamma_algebra: bool,
     pub do_color_algebra: bool,
+}
+
+#[cfg(feature = "python_api")]
+#[cfg_attr(feature = "python_api", pyo3::pymethods)]
+impl DotExportSettings {
+    #[new]
+    fn new() -> Self {
+        DotExportSettings::default()
+    }
 }
 
 impl Default for DotExportSettings {
@@ -245,7 +256,7 @@ impl ProcessList {
             Err(color_eyre::eyre::eyre!("No processes generated yet."))
         } else if self.processes.len() > 1 {
             Err(color_eyre::eyre::eyre!(
-                "There are {} processes available. Please specify a process id.",
+                "There are {} processes available. Please specify a process.",
                 self.processes.len()
             ))
         } else {

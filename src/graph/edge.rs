@@ -1,4 +1,7 @@
-use std::{cell::RefCell, fmt::Display};
+use std::{
+    fmt::Display,
+    sync::{Arc, Mutex},
+};
 
 use eyre::Context;
 use linnet::{
@@ -137,17 +140,15 @@ impl PossibleParticle {
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
-        match self {
-            PossibleParticle::Particle(p) => p.color_reps(flow),
-            _ => IndexLess::scalar_structure(),
-        }
+        self.particle()
+            .map(|p| p.color_reps(flow))
+            .unwrap_or_else(IndexLess::scalar_structure)
     }
 
     pub(crate) fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
-        match self {
-            PossibleParticle::Particle(p) => p.spin_reps(),
-            _ => IndexLess::scalar_structure(),
-        }
+        self.particle()
+            .map(|p| p.spin_reps())
+            .unwrap_or_else(IndexLess::scalar_structure)
     }
 
     pub(crate) fn particle(&self) -> Option<ArcParticle> {
@@ -203,7 +204,7 @@ pub enum EdgeMass {
     Zero,
     Value(Complex<F<f64>>),
     ModelVar(Symbol),
-    Evaluator(RefCell<ExpressionEvaluator<Complex<F<f64>>>>),
+    Evaluator(Arc<Mutex<ExpressionEvaluator<Complex<F<f64>>>>>),
 }
 
 impl EdgeMass {
@@ -230,9 +231,9 @@ impl EdgeMass {
             .evaluator(&paramb.fn_map, &params, OptimizationSettings::default())
             .map_err(|a| eyre!(a))?;
 
-        Ok(EdgeMass::Evaluator(RefCell::new(a.map_coeff(&|r| {
-            Complex::new(F::from(&r.re), F::from(&r.im))
-        }))))
+        Ok(EdgeMass::Evaluator(Arc::new(Mutex::new(a.map_coeff(
+            &|r| Complex::new(F::from(&r.re), F::from(&r.im)),
+        )))))
     }
 
     pub fn value<T: FloatLike>(
@@ -244,7 +245,7 @@ impl EdgeMass {
             EdgeMass::Zero => None,
             EdgeMass::Value(v) => Some(*v),
             EdgeMass::ModelVar(s) => model.get_symbol_value(UFOSymbol(*s)),
-            EdgeMass::Evaluator(a) => Some(a.borrow_mut().evaluate_single(&paramb.values[0])),
+            EdgeMass::Evaluator(a) => Some(a.lock().unwrap().evaluate_single(&paramb.values[0])),
         }
         .map(|a| a.map_ref(|a| F::from_ff64(*a)))
     }
@@ -253,9 +254,15 @@ impl EdgeMass {
 impl UVE for Edge {
     fn mass_atom(&self) -> Atom {
         match &self.particle {
-            PossibleParticle::JustMass { expr, .. } => expr.clone(),
-            PossibleParticle::Particle(p) => p.mass.0.into(),
-            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
+            PossibleParticle::JustMass { expr, .. } => {
+                expr.replace(UFOSymbol::zero().0).with(Atom::Zero)
+            }
+            PossibleParticle::Particle(p) => Atom::var(p.mass.0.0)
+                .replace(UFOSymbol::zero().0)
+                .with(Atom::Zero),
+            PossibleParticle::MassOverriddenParticle { mass, .. } => {
+                mass.replace(UFOSymbol::zero().0).with(Atom::Zero)
+            }
         }
     }
 }

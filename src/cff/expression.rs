@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, fmt::Display};
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -12,7 +12,7 @@ use derive_more::{From, Into};
 use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
     GVEdgeAttrs, HedgeGraph,
-    involution::{EdgeVec, Orientation},
+    involution::{EdgeVec, Orientation, SignOrZero},
     nodestore::NodeStorageOps,
 };
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ use symbolica::{
     id::{Pattern, Replacement},
     symbol,
 };
+use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use super::{
@@ -177,7 +178,9 @@ impl OrientationID for SuperGraphOrientationID {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone, Debug, PartialOrd, Ord, Hash, PartialEq, Eq, Serialize, Deserialize, Encode, Decode,
+)]
 pub struct OrientationData {
     pub orientation: EdgeVec<Orientation>,
 }
@@ -185,6 +188,17 @@ pub struct OrientationData {
 impl GraphOrientation for OrientationData {
     fn orientation(&self) -> &EdgeVec<Orientation> {
         &self.orientation
+    }
+}
+
+impl Display for OrientationData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut table = Builder::new();
+
+        for (i, item) in self.orientation.iter() {
+            table.push_column(&[i.to_string(), SignOrZero::from(*item).to_string()]);
+        }
+        table.build().with(Style::rounded()).fmt(f)
     }
 }
 

@@ -1,13 +1,9 @@
 use color_eyre::{Result, config::HookBuilder};
 use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::parsing::SPENSO_TAG;
-use vakint::{
-    EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, MATADOptions,
-    PySecDecOptions, Vakint, VakintSettings,
-};
 
-use crate::utils::VAKINT;
-use crate::{model::UFOSymbol, numerator::ufo::UFO, settings::GlobalSettings, utils::GS};
+use crate::utils::init_vakint;
+use crate::{model::UFOSymbol, numerator::ufo::UFO, utils::GS};
 static INITIALISED: std::sync::Once = std::sync::Once::new();
 
 pub fn initialise() -> Result<()> {
@@ -20,99 +16,26 @@ pub fn initialise() -> Result<()> {
         let (panic, eyre) = HookBuilder::default()
             .capture_span_trace_by_default(cfg!(debug_assertions))
             .into_hooks();
+        // println!("Installing panic and eyre hooks");
         panic.install();
         eyre.install().unwrap();
 
+        // println!("Initializing symbols");
         let _ = GS.delta_vec;
         let _ = INBUILTS.conj;
         let _ = SPENSO_TAG.tag;
         let _ = UFO.complexconjugate;
+
         // let _ = Symbol::id();
         let _ = UFOSymbol::zero();
 
+        // println!("Setting up interrupt handler");
         crate::set_interrupt_handler();
+        // println!("Initialize_reps");
         crate::initialize_reps();
     });
-    Ok(())
-}
-
-pub fn initialise_vakint(global_settings: &GlobalSettings) -> Result<()> {
-    let vakint_settings = &global_settings.generation.uv.vakint;
-
-    let mut vakint_evaluation_methods = EvaluationOrder::empty();
-    for method in &vakint_settings.evaluation_methods {
-        match method.as_str() {
-            "alphaloop" => vakint_evaluation_methods
-                .0
-                .push(EvaluationMethod::AlphaLoop),
-            "matad" => vakint_evaluation_methods
-                .0
-                .push(EvaluationMethod::MATAD(MATADOptions {
-                    expand_masters: vakint_settings.matad.expand_masters,
-                    susbstitute_masters: vakint_settings.matad.susbstitute_masters,
-                    substitute_hpls: vakint_settings.matad.substitute_hpls,
-                    direct_numerical_substition: vakint_settings.matad.direct_numerical_substition,
-                })),
-            "fmft" => vakint_evaluation_methods
-                .0
-                .push(EvaluationMethod::FMFT(FMFTOptions {
-                    expand_masters: vakint_settings.fmft.expand_masters,
-                    susbstitute_masters: vakint_settings.fmft.susbstitute_masters,
-                })),
-            "pysecdec" => {
-                vakint_evaluation_methods
-                    .0
-                    .push(EvaluationMethod::PySecDec(PySecDecOptions {
-                        quiet: vakint_settings.pysecdec.quiet,
-                        relative_precision: vakint_settings.pysecdec.relative_precision,
-                        min_n_evals: vakint_settings.pysecdec.min_n_evals as u64,
-                        max_n_evals: vakint_settings.pysecdec.max_n_evals as u64,
-                        reuse_existing_output: vakint_settings
-                            .pysecdec
-                            .reuse_existing_output
-                            .clone(),
-                        ..PySecDecOptions::default()
-                    }))
-            }
-            other => {
-                return Err(color_eyre::eyre::eyre!(
-                    "Unknown Vakint evaluation method: {}",
-                    other
-                ));
-            }
-        }
-    }
-
-    *VAKINT.write().unwrap() = Some(Vakint::new(Some(VakintSettings {
-        allow_unknown_integrals: false,
-        evaluation_order: vakint_evaluation_methods,
-        integral_normalization_factor: if vakint_settings.normalization.to_uppercase() == "MSBAR" {
-            LoopNormalizationFactor::MSbar
-        } else {
-            LoopNormalizationFactor::Custom(vakint_settings.normalization.clone())
-        },
-        run_time_decimal_precision: vakint_settings.run_time_decimal_precision as u32,
-        number_of_terms_in_epsilon_expansion: 5,
-        temporary_directory: vakint_settings.temporary_directory.clone(),
-        mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
-        form_exe_path: vakint_settings.form_exe_path.clone(),
-        python_exe_path: vakint_settings.python_exe_path.clone(),
-        clean_tmp_dir: vakint_settings.clean_tmp_dir,
-        ..VakintSettings::default()
-    }))?);
-
-    Ok(())
-}
-
-pub fn initialise_with_settings(settings: Option<&GlobalSettings>) -> Result<()> {
-    let global_settings = if let Some(s) = settings {
-        s
-    } else {
-        &GlobalSettings::default()
-    };
-
-    initialise_vakint(global_settings)?;
-
+    // println!("Initializing Vakint");
+    init_vakint()?;
     Ok(())
 }
 
@@ -121,7 +44,7 @@ pub fn test_initialise() -> Result<()> {
 
     init_test_tracing();
     initialise()?;
-    initialise_with_settings(None)?;
+    init_vakint()?;
 
     Ok(())
 }
@@ -131,8 +54,7 @@ pub fn bench_initialise() -> Result<()> {
 
     init_bench_tracing();
     initialise()?;
-
-    initialise_with_settings(None)?;
+    init_vakint()?;
 
     Ok(())
 }

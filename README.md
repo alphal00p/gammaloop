@@ -229,6 +229,19 @@ The CLI supports the following main command categories:
 - **`evaluate <options>`** - Batch evaluation of integrands
 - **`bench <options>`** - Benchmark integrand evaluation performance
 
+#### Process References
+Commands that target a specific process accept `--process <ref>` (short `-p`), where `<ref>` can be:
+- `#<id>` - Explicit numeric id
+- `name:<process_name>` - Explicit process name
+- `<id>` or `<process_name>` - Implicit reference (if ambiguous, use a prefix)
+
+Examples:
+```bash
+./bin/gammaloop -c "display processes"
+./bin/gammaloop -c "display integrands --process #0"
+./bin/gammaloop -c "integrate --process name:pp_ttbar --integrand amp_0"
+```
+
 ### CLI Options and State Control
 
 #### State Folder Management

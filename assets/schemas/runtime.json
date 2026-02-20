@@ -1064,11 +1064,30 @@
         "escalate_for_large_weight_threshold"
       ]
     },
+    "StabilityRecordingSettings": {
+      "type": "object",
+      "properties": {
+        "record_rotated_results": {
+          "type": "boolean"
+        },
+        "record_all_stability_levels": {
+          "type": "boolean"
+        },
+        "record_loop_momenta_escalation": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "StabilitySettings": {
       "type": "object",
       "properties": {
         "check_on_norm": {
           "type": "boolean"
+        },
+        "loop_momenta_norm_escalation_factor": {
+          "type": "number",
+          "format": "double"
         },
         "levels": {
           "type": "array",
@@ -1078,6 +1097,9 @@
         },
         "rotate_numerator": {
           "type": "boolean"
+        },
+        "recording": {
+          "$ref": "#/$defs/StabilityRecordingSettings"
         },
         "rotation_axis": {
           "type": "array",

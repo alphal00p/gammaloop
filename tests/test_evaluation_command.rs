@@ -28,15 +28,7 @@ fn compare_numerical_evaluation(
     } else {
         panic!("Expected Evaluate command");
     };
-    let vakint_settings = {
-        let lock = VAKINT.read().unwrap();
-        lock.as_ref()
-            .unwrap_or_else(|| {
-                panic!("VAKINT not initialized in CLI yet");
-            })
-            .settings
-            .clone()
-    };
+    let vakint_settings = cli.cli_settings.global.generation.uv.vakint.true_settings();
     let num_eval = NumericalEvaluationResult::from_atom(
         eval.as_view(),
         vakint_symbol!(&vakint_settings.epsilon_symbol),

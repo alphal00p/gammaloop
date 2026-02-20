@@ -257,6 +257,10 @@ pub fn is_default_vakint_normalization(val: &String) -> bool {
     show_defaults_helper(val == "MSbar")
 }
 
+pub fn is_one_string(val: &String) -> bool {
+    show_defaults_helper(val == "1")
+}
+
 pub fn is_float<const D: i64>(val: &f64) -> bool {
     show_defaults_helper(*val == D as f64)
 }
@@ -327,6 +331,7 @@ pub fn _default_stability_levels() -> Vec<crate::settings::runtime::StabilityLev
     vec![
         crate::settings::runtime::StabilityLevelSetting::default_double(),
         crate::settings::runtime::StabilityLevelSetting::default_quad(),
+        crate::settings::runtime::StabilityLevelSetting::default_arb(),
     ]
 }
 

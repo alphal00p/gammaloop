@@ -50,15 +50,18 @@ use crate::{
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{F, FUN_LIB, GS, Length, TENSORLIB, VAKINT, W_, symbolica_ext::LOGPRINTOPTS},
-    uv::{UltravioletGraph, approx::to_vakint_integrand},
+    utils::{F, FUN_LIB, GS, Length, TENSORLIB, W_, symbolica_ext::LOGPRINTOPTS},
+    uv::{
+        UVgenerationSettings, UltravioletGraph, approx::to_vakint_integrand,
+        settings::VakintSettings,
+    },
 };
 use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::{HedgePair, Orientation},
-        subgraph::{SuBitGraph, SubGraphLike},
+        subgraph::{SuBitGraph, SubGraphLike, SubSetOps},
     },
     parser::DotGraph,
 };
@@ -338,9 +341,13 @@ impl Amplitude {
               amplitude.name = %self.name,
           )
       )]
-    pub fn write_dot_fmt<W: fmt::Write>(&self, writer: &mut W) -> Result<(), std::fmt::Error> {
+    pub fn write_dot_fmt<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+        settings: &DotExportSettings,
+    ) -> Result<(), std::fmt::Error> {
         for graph in &self.graphs {
-            graph.write_dot_fmt(writer)?;
+            graph.write_dot_fmt(writer, settings)?;
             writeln!(writer)?;
         }
         Ok(())
@@ -421,6 +428,50 @@ impl AmplitudeGraph {
 }
 
 impl AmplitudeGraph {
+    pub fn renormalization_part(&mut self, settings: &UVgenerationSettings) -> Result<Atom> {
+        let mut vk_settings = settings.vakint.true_settings();
+        let wood = self.graph.wood(&self.graph.no_dummy());
+        //  it needs to be the max number of loops across all divergent spinneys of that graph
+        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+
+        let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+        if self.derived_data.cff_expression.is_none() {
+            debug!("Generating Cff");
+            self.generate_cff()?;
+        }
+
+        let canonize_esurface = self
+            .graph
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        let orientations: TiVec<AmplitudeOrientationID, OrientationData> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .iter()
+            .map(|a| a.data.clone())
+            .collect();
+
+        let vk = (crate::utils::vakint()?, &vk_settings);
+
+        forest.compute(
+            &self.graph,
+            &self.graph.no_dummy(),
+            vk,
+            &orientations,
+            &canonize_esurface,
+            &[],
+            None,
+            &settings,
+            false,
+        )?;
+
+        forest.pole_part_of_ends(&self.graph)
+    }
+
     #[allow(dead_code)]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
@@ -433,8 +484,9 @@ impl AmplitudeGraph {
     pub(crate) fn write_dot_fmt<W: fmt::Write>(
         &self,
         writer: &mut W,
+        settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        self.graph.dot_serialize_fmt(writer)
+        self.graph.dot_serialize_fmt(writer, settings)
     }
 
     pub(crate) fn generate_cff(&mut self) -> Result<()> {
@@ -460,10 +512,12 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<()> {
+        let vk_settings = settings.uv.vakint.true_settings();
+        let vk = (crate::utils::vakint()?, &vk_settings);
         debug!("Generating Cff");
         self.generate_cff()?;
         debug!("Building Parametric Integrand");
-        self.build_parametric_integrand(settings)?;
+        self.build_parametric_integrand(settings, vk)?;
 
         if self.graph.is_group_master {
             debug!("Building Tropical Sampler");
@@ -483,6 +537,7 @@ impl AmplitudeGraph {
             self.derived_data.threshold_counterterms = self
                 .build_threshold_counterterm_parametric_integrand(
                     settings,
+                    vk,
                     locked_runtime_settings,
                     model,
                 )?;
@@ -559,55 +614,32 @@ impl AmplitudeGraph {
         cff_atom / factors_of_pi
     }
 
-    pub fn to_numerical(numerical_result: AtomView) -> Result<NumericalEvaluationResult> {
-        let vakint = {
-            let guard = VAKINT.read().unwrap();
-            if let Some(ref vakint) = *guard {
-                vakint.clone()
-            } else {
-                panic!("Vakint not initialised");
-            }
-        };
+    pub fn to_numerical(
+        numerical_result: AtomView,
+        true_settings: &vakint::VakintSettings,
+    ) -> Result<NumericalEvaluationResult> {
         Ok(NumericalEvaluationResult::from_atom(
             numerical_result,
-            vakint_symbol!(&vakint.settings.epsilon_symbol),
-            &vakint.settings,
+            vakint_symbol!(&true_settings.epsilon_symbol),
+            &true_settings,
         )?)
     }
 
-    pub fn new_vakint(&self) -> Vakint {
-        // TODO: avoid cloning by modifying Vakint's API so as to be able to set number_of_terms_in_epsilon_expansion for each call to evaluate
-        let mut vakint = {
-            let guard = VAKINT.read().unwrap();
-            if let Some(ref vakint) = *guard {
-                vakint.clone()
-            } else {
-                panic!("Vakint not initialised");
-            }
-        };
-        // FIXME: This is incorrect: it needs to be the max number of loops across all divergent spinneys of that graph
-        vakint.settings.number_of_terms_in_epsilon_expansion =
-            self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
-
-        vakint
-    }
-
-    pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph>>(
+    pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(
         &self,
         model: &Model,
         component: &S,
         evaluate_numerically: bool,
-        number_of_terms_in_epsilon_expansion: Option<usize>,
+        vakint: &Vakint,
+        true_settings: &vakint::VakintSettings,
+        settings: &VakintSettings,
         run_time_settings: &RuntimeSettings,
         include_global_numerator: bool,
     ) -> Result<Atom> {
-        let mut vakint = self.new_vakint();
-
-        if let Some(n_terms) = number_of_terms_in_epsilon_expansion {
-            vakint.settings.number_of_terms_in_epsilon_expansion = n_terms as i64;
-        }
-
-        let pysec_dec_enabled_in_vakint = vakint.settings.evaluation_order.0.iter().find_map(|o| {
+        let mut true_settings = true_settings.clone();
+        true_settings.number_of_terms_in_epsilon_expansion =
+            self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
+        let pysec_dec_enabled_in_vakint = true_settings.evaluation_order.0.iter().find_map(|o| {
             if let EvaluationMethod::PySecDec(opts) = o {
                 Some(opts)
             } else {
@@ -657,13 +689,13 @@ impl AmplitudeGraph {
             }
 
             // Make sure to properly do the upcasting to required precision in vakint settings
-            vakint.params_from_complex_f64(&complex_params)
+            vakint.params_from_complex_f64(&true_settings, &complex_params)
         } else {
             HashMap::default()
         };
 
         if let Some(pysec_dec_opts) = pysec_dec_enabled_in_vakint {
-            vakint.settings.evaluation_order.adjust(
+            true_settings.evaluation_order.adjust(
                 None,
                 pysec_dec_opts.relative_precision,
                 &HashMap::default(),
@@ -672,7 +704,9 @@ impl AmplitudeGraph {
             );
         }
 
-        let mut num = self.graph.numerator(component);
+        let mut num = self
+            .graph
+            .numerator(component, &self.graph.empty_subgraph());
         if include_global_numerator {
             num.state.expr *= &self.graph.global_prefactor.num;
         }
@@ -716,25 +750,22 @@ impl AmplitudeGraph {
         //         .with(function!(vk_mom, i as i64 + 1, W_.x___));
         // }
 
-        let vakint_integrand = to_vakint_integrand(
+        let mut vakint_integrand = to_vakint_integrand(
             &four_dimensional_integrand,
-            &self.graph.lmb_of(component),
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
+            &settings,
             false,
         );
 
-        // println!(
-        //     "\nVakint expression:\n{:#}",
-        //     VakintExpression::try_from(vakint_integrand.clone()).unwrap()
-        // );
-        // println!(
-        //     "\nVakint expression raw:\n{}",
-        //     vakint_integrand.to_canonical_string()
-        // );
-
-        let analytical_evaluation = vakint.evaluate(vakint_integrand.as_view()).unwrap();
+        vakint_integrand.canonicalize(&true_settings, &vakint.topologies, false)?;
+        // println!("Canonized: {}", vakint_integrand);
+        vakint_integrand.tensor_reduce(vakint, &true_settings)?;
+        // println!("Tensor Reduced {}", vakint_integrand);
+        vakint_integrand.evaluate_integral(vakint, &true_settings)?;
+        // println!("Evaluated {}", vakint_integrand);
+        let analytical_evaluation: Atom = vakint_integrand.into();
         // println!(
         //     "\nVakint analytical evaluation:\n{:#}",
         //     analytical_evaluation
@@ -744,6 +775,7 @@ impl AmplitudeGraph {
         } else {
             let (numerical_evaluation, _error) = vakint
                 .numerical_evaluation(
+                    &true_settings,
                     analytical_evaluation.as_view(),
                     &HashMap::default(),
                     &complex_params_vakint,
@@ -753,8 +785,8 @@ impl AmplitudeGraph {
 
             // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
 
-            let numerical_evaluation_atom = numerical_evaluation
-                .to_atom(vakint_symbol!(vakint.settings.epsilon_symbol.clone()));
+            let numerical_evaluation_atom =
+                numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()));
 
             Ok(numerical_evaluation_atom)
         }
@@ -763,9 +795,10 @@ impl AmplitudeGraph {
     pub(crate) fn build_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<()> {
         self.derived_data.all_mighty_integrand =
-            self.build_original_parametric_integrand(settings)?;
+            self.build_original_parametric_integrand(settings, vakint)?;
         Ok(())
     }
 
@@ -778,6 +811,7 @@ impl AmplitudeGraph {
     fn build_threshold_counterterm_parametric_integrand(
         &self,
         settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
@@ -876,7 +910,18 @@ impl AmplitudeGraph {
             }));
 
             let circled_wood = self.graph.wood(&circled);
+            let mut vk_settings_circled = vakint.1.clone();
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings_circled.number_of_terms_in_epsilon_expansion =
+                circled_wood.max_loops as i64;
+            let vakint_circled = (vakint.0, &vk_settings_circled);
+
             let complement_wood = self.graph.wood(&complement);
+            let mut vk_settings_complement = vakint.1.clone();
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings_complement.number_of_terms_in_epsilon_expansion =
+                complement_wood.max_loops as i64;
+            let vakint_complement = (vakint.0, &vk_settings_complement);
 
             let mut circled_forest =
                 circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
@@ -924,7 +969,7 @@ impl AmplitudeGraph {
             circled_forest.compute(
                 &self.graph,
                 &circled,
-                &vakint,
+                vakint_circled,
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -932,12 +977,12 @@ impl AmplitudeGraph {
                 post.clone(),
                 &settings.uv,
                 false,
-            );
+            )?;
 
             complement_forest.compute(
                 &self.graph,
                 &complement,
-                &vakint,
+                vakint_complement,
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -945,7 +990,7 @@ impl AmplitudeGraph {
                 post.clone(),
                 &settings.uv,
                 false,
-            );
+            )?;
 
             let circled_expr = circled_forest.orientation_parametric_expr(
                 Some(&edges_in_cut),
@@ -1032,13 +1077,23 @@ impl AmplitudeGraph {
               amplitude_graph.name = %self.graph.name,
           )
       )]
-    fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
+    fn build_original_parametric_integrand(
+        &self,
+        settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
+    ) -> Result<Atom> {
         let wood = self.graph.wood(&self.graph.no_dummy());
         debug!(
             "Wood for {}{}",
             self.graph.name,
             wood.show_graphs(&self.graph)
         );
+
+        let mut vk_settings = vakint.1.clone();
+        //  it needs to be the max number of loops across all divergent spinneys of that graph
+        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+        let vakint = (vakint.0, &vk_settings);
+
         // debug!("{}", wood.dot(&self.graph));
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
@@ -1067,7 +1122,7 @@ impl AmplitudeGraph {
         forest.compute(
             &self.graph,
             &self.graph.no_dummy(),
-            &vakint,
+            vakint,
             &orientations,
             &canonize_esurface,
             &[],
@@ -1075,7 +1130,7 @@ impl AmplitudeGraph {
             post.clone(),
             &settings.uv,
             false,
-        );
+        )?;
 
         let global_num = self.graph.global_network();
         let mut full = forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
@@ -1338,16 +1393,14 @@ impl Amplitude {
 
         if !self.graphs.is_empty() {
             if self.external_particles != new_external_particels {
-                return Err(eyre!("amplitude graph has different number of externals")).with_note(
-                    || {
-                        format!(
-                            "Found {} externals, expected {} for the graph {}",
-                            new_external_particels.len(),
-                            self.external_particles.len(),
-                            DotGraph::from(&graph).debug_dot()
-                        )
-                    },
-                );
+                return Err(eyre!("amplitude graph has different externals")).with_context(|| {
+                    format!(
+                        "Found {} externals, expected {} for the graph {}",
+                        new_external_particels.len(),
+                        self.external_particles.len(),
+                        DotGraph::from(&graph).debug_dot()
+                    )
+                });
             }
 
             if self.external_signature != new_external_signature {
@@ -1373,7 +1426,7 @@ pub mod test {
 
     use crate::{
         dot,
-        gammaloop_integrand::{GenericEvaluator, ParamBuilder},
+        gammaloop_integrand::GenericEvaluator,
         graph::parse::IntoGraph,
         initialisation::test_initialise,
         processes::AmplitudeGraph,
@@ -1408,6 +1461,7 @@ pub mod test {
             param_builder,
             None,
             OptimizationSettings::default(),
+            true,
         )
         .unwrap();
         // println!(" {}", a);

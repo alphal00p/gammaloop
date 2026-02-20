@@ -46,6 +46,17 @@ type = "default"
 mode = "spherical"
 mapping = "linear"
 
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
 
 [cli_settings.global.generation.uv]
 generate_integrated = false

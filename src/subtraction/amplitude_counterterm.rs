@@ -72,6 +72,7 @@ impl AmplitudeCountertermAtom {
                 param_builder,
                 None,
                 optimiation_settings.clone(),
+                global_settings.generation.evaluator.store_atom,
             )
             .unwrap(),
         );
@@ -89,6 +90,7 @@ impl AmplitudeCountertermAtom {
                     param_builder,
                     None,
                     optimiation_settings,
+                    global_settings.generation.evaluator.store_atom,
                 )
                 .unwrap(),
             ))

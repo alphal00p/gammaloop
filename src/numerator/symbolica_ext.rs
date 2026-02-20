@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use idenso::{
-    color::{CS, SelectiveExpand},
+    color::{CS, ColorSimplifier, SelectiveExpand},
     representations::{ColorAdjoint, ColorFundamental},
 };
 use spenso::{
@@ -16,7 +16,7 @@ use symbolica::{
     function,
 };
 
-use crate::utils::{TENSORLIB, W_};
+use crate::utils::{GS, TENSORLIB, W_};
 
 use super::ParsingNet;
 pub type ParsingNetError = spenso::network::TensorNetworkError<
@@ -31,7 +31,8 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 
 pub trait AtomCoreExt {
     fn to_param_color(&self) -> Atom;
-    fn wrap_color(&self, symbol: Symbol) -> Atom;
+    // fn wrap_color(&self, symbol: Symbol) -> Atom;
+    fn kill_color(&self) -> Atom;
 
     fn floatify(&self, prec: u32) -> Atom;
 
@@ -47,6 +48,9 @@ impl AtomCoreExt for Atom {
     fn to_param_color(&self) -> Atom {
         self.as_view().to_param_color()
     }
+    fn kill_color(&self) -> Atom {
+        self.wrap_color(GS.killing_func)
+    }
 
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.as_view().map_mink_dim(dim)
@@ -55,9 +59,9 @@ impl AtomCoreExt for Atom {
         self.as_view().floatify(prec)
     }
 
-    fn wrap_color(&self, symbol: Symbol) -> Atom {
-        self.as_view().wrap_color(symbol)
-    }
+    // fn wrap_color(&self, symbol: Symbol) -> Atom {
+    //     self.as_view().wrap_color(symbol)
+    // }
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom {
         self.as_view().unwrap_function(symbol)
@@ -69,6 +73,10 @@ impl AtomCoreExt for Atom {
 }
 
 impl AtomCoreExt for AtomView<'_> {
+    fn kill_color(&self) -> Atom {
+        self.wrap_color(GS.killing_func)
+    }
+
     fn to_param_color(&self) -> Atom {
         let adj = ColorAdjoint {};
         let fund = ColorFundamental {};
@@ -104,11 +112,11 @@ impl AtomCoreExt for AtomView<'_> {
         self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a_]))
             .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a_)]))
     }
-    fn wrap_color(&self, symbol: Symbol) -> Atom {
-        self.expand_color()
-            .into_iter()
-            .fold(Atom::Zero, |a, (c, s)| a + function!(symbol, c) * s)
-    }
+    // fn wrap_color(&self, symbol: Symbol) -> Atom {
+    //     self.expand_color()
+    //         .into_iter()
+    //         .fold(Atom::Zero, |a, (c, s)| a + function!(symbol, c) * s)
+    // }
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom {
         self.replace(function!(symbol, W_.a___)).with(W_.a___)
@@ -224,7 +232,7 @@ mod tests {
         .unwrap();
 
         for g in gls {
-            let mut numerator = g.numerator(&g.no_dummy());
+            let mut numerator = g.numerator(&g.no_dummy(), &g.empty_subgraph());
 
             // TODO Check if we include overall factor in main
             numerator.state.expr *= &g.global_prefactor.num * &g.global_prefactor.projector; // * &gl5.overall_factor;

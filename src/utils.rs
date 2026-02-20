@@ -54,7 +54,7 @@ use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::str::FromStr;
-use std::sync::{LazyLock, RwLock};
+use std::sync::{LazyLock, OnceLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
@@ -608,7 +608,7 @@ impl<const N: u32> From<VarFloat<N>> for symbolica::domains::float::Float {
         symbolica::domains::float::Float::from(value.float)
     }
 }
-impl FloatLike for VarFloat<113> {
+impl FloatLike for f128 {
     fn E(&self) -> Self {
         Self::E()
     }
@@ -671,6 +671,67 @@ impl FloatLike for VarFloat<113> {
     }
 }
 
+impl FloatLike for ArbPrec {
+    fn E(&self) -> Self {
+        Self::E()
+    }
+
+    fn PIHALF(&self) -> Self {
+        Self::PIHALF()
+    }
+
+    fn SQRT_2(&self) -> Self {
+        Self::from_f64(2.0).sqrt()
+    }
+
+    fn SQRT_2_HALF(&self) -> Self {
+        Self::from_f64(2.0).sqrt() / Self::from_f64(2.0)
+    }
+
+    fn rem_euclid(&self, rhs: &Self) -> Self {
+        let r = self.ref_rem(rhs);
+        if r < r.zero() { r + rhs } else { r }
+    }
+
+    fn FRAC_1_PI(&self) -> Self {
+        Self::FRAC_1_PI()
+    }
+
+    fn PI(&self) -> Self {
+        Self::PI()
+    }
+
+    fn TAU(&self) -> Self {
+        Self::TAU()
+    }
+
+    fn from_f64(x: f64) -> Self {
+        VarFloat::from_f64(x)
+    }
+
+    fn into_f64(&self) -> f64 {
+        self.to_f64()
+    }
+
+    fn is_nan(&self) -> bool {
+        self.float.is_nan()
+    }
+
+    fn is_infinite(&self) -> bool {
+        self.float.is_infinite()
+    }
+
+    fn floor(&self) -> Self {
+        self.float.clone().floor().into()
+    }
+
+    fn try_extract_externals_from_cache(
+        _externals: &Externals,
+    ) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>> {
+        None
+    }
+}
+
 impl<const N: u32> VarFloat<N> {
     fn one() -> Self {
         VarFloat {
@@ -727,15 +788,28 @@ impl<const N: u32> Default for VarFloat<N> {
 }
 
 impl PrecisionUpgradable for f128 {
-    type Higher = f128;
+    type Higher = ArbPrec;
     type Lower = f64;
+
+    fn higher(&self) -> Self::Higher {
+        ArbPrec::from(self.float.clone())
+    }
+
+    fn lower(&self) -> Self::Lower {
+        self.to_f64()
+    }
+}
+
+impl PrecisionUpgradable for ArbPrec {
+    type Higher = ArbPrec;
+    type Lower = f128;
 
     fn higher(&self) -> Self::Higher {
         self.clone()
     }
 
     fn lower(&self) -> Self::Lower {
-        self.to_f64()
+        f128::from(self.float.clone())
     }
 }
 
@@ -1670,6 +1744,7 @@ impl From<F<f64>> for Rational {
 
 #[allow(non_camel_case_types)]
 pub type f128 = VarFloat<113>;
+pub type ArbPrec = VarFloat<1000>;
 
 /// An iterator which iterates two other iterators simultaneously
 #[derive(Clone, Debug)]
@@ -3485,7 +3560,27 @@ pub static INT_FUN_LIB: LazyLock<
     lib
 });
 
-pub static VAKINT: LazyLock<RwLock<Option<Vakint>>> = LazyLock::new(|| RwLock::new(None));
+pub static VAKINT: OnceLock<Result<Vakint>> = OnceLock::new();
+
+pub fn init_vakint() -> Result<()> {
+    let r: &Result<Vakint, eyre::Report> =
+        VAKINT.get_or_init(|| Vakint::new().map_err(|e| eyre!(e.to_string())));
+
+    match r {
+        Ok(_) => Ok(()),
+        Err(e) => Err(eyre!(e.to_string())),
+    }
+}
+
+pub fn vakint() -> Result<&'static Vakint> {
+    let r = VAKINT
+        .get()
+        .ok_or_else(|| eyre!("Vakint not initialised"))?;
+    match r {
+        Ok(v) => Ok(v),
+        Err(e) => Err(eyre!(e.to_string())),
+    }
+}
 
 impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
     #[inline]

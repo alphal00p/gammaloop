@@ -423,7 +423,7 @@ mod test {
         graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
         numerator::aind::Aind,
-        processes::{Amplitude, AmplitudeGraph},
+        processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
             GlobalSettings, RuntimeSettings,
             global::GenerationSettings,
@@ -454,7 +454,7 @@ mod test {
             v2 -> v1 [pdg=1];
         })
         .unwrap();
-        println!("{}", graph.dot_serialize());
+        println!("{}", graph.dot_serialize(&DotExportSettings::default()));
         let reps = graph.get_ose_replacements();
         for r in reps {
             println!("{r}")
@@ -534,7 +534,7 @@ mod test {
             v12 -> v7 [pdg=6];
         })
         .unwrap();
-        println!("{}", graph.dot_serialize());
+        println!("{}", graph.dot_serialize(&DotExportSettings::default()));
         let reps = graph.get_ose_replacements();
         for r in reps {
             println!("{r}")
@@ -616,7 +616,7 @@ mod test {
         let mut settings = RuntimeSettings::default();
 
         for g in graphs {
-            println!("{}", g.dot_serialize());
+            println!("{}", g.dot_serialize(&DotExportSettings::default()));
             settings.kinematics = KinematicsSettings::random(&g, 42);
 
             // Amplitude::new(name)
@@ -728,7 +728,8 @@ mod test {
 
         for g in &mut graphs {
             let mut out = String::new();
-            g.dot_serialize_fmt(&mut out).unwrap();
+            g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
+                .unwrap();
             println!("{}", out);
 
             assert!(g.iter_nodes().all(|(_, _, v)| {
@@ -753,13 +754,16 @@ mod test {
 
         for g in &mut graphs {
             let mut out = String::new();
-            g.dot_serialize_fmt(&mut out).unwrap();
+            g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
+                .unwrap();
             println!("{}", out);
         }
     }
 
     #[test]
     fn qqx_aaa_tree() {
+        test_initialise();
+
         let mut graph:AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
                     num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
                     ext    [style=invis]
@@ -772,11 +776,15 @@ mod test {
                     v2 -> v3 [particle="d" id=6];
         }).unwrap();
 
+        let set = GenerationSettings::default();
+        let vk_settings = set.uv.vakint.true_settings();
+        let vk = (crate::utils::vakint().unwrap(), &vk_settings);
+
         // let model = crate::utils::test_utils::load_generic_model("sm");
 
         graph.generate_cff().unwrap();
         graph
-            .build_parametric_integrand(&GenerationSettings::default())
+            .build_parametric_integrand(&GenerationSettings::default(), vk)
             .unwrap();
 
         println!("{}", graph.derived_data.all_mighty_integrand);
@@ -859,7 +867,10 @@ mod test {
         for g in &mut graphs {
             let mut out = String::new();
 
-            let new_a = (g.numerator(&g.full_filter()).state.expr
+            let new_a = (g
+                .numerator(&g.full_filter(), &g.empty_subgraph())
+                .state
+                .expr
                 * &g.global_prefactor.projector
                 * &g.global_prefactor.num
                 * &g.overall_factor)
@@ -871,7 +882,8 @@ mod test {
             } else {
                 a = Some(new_a);
             }
-            g.dot_serialize_fmt(&mut out).unwrap();
+            g.dot_serialize_fmt(&mut out, &DotExportSettings::default())
+                .unwrap();
             println!("{}", out);
         }
 

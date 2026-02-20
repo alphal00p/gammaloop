@@ -1,3 +1,19 @@
+#[cfg(all(
+    feature = "no_pyo3",
+    any(
+        feature = "python_api",
+        feature = "python_abi",
+        feature = "python_stubgen",
+        feature = "pyo3-extension-module",
+        feature = "ufo_support",
+    )
+))]
+compile_error!(
+    "feature `no_pyo3` is incompatible with python/pyo3 features (python_api, python_abi, \
+python_stubgen, pyo3-extension-module, ufo_support). Use --no-default-features --features \
+cli,no_pyo3."
+);
+
 use ::tracing::debug;
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
@@ -5,6 +21,7 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use commands::save::SaveState;
 use commands::Commands;
 
+use eyre::eyre;
 use gammalooprs::utils::serde_utils::SerdeFileError;
 use reedline::DefaultPrompt;
 use reedline::DefaultPromptSegment;
@@ -68,6 +85,10 @@ pub struct OneShot {
     /// Don't actually run anything, just build up run card
     #[arg(short = 'd', long, default_value_t = false)]
     pub dry_run: bool,
+
+    /// Don't try to load state, just start with a new one
+    #[arg(short = 'f', long, default_value_t = false)]
+    pub fresh_state: bool,
 
     /// Path to the state folder
     #[arg(short = 's', long, default_value = "./gammaloop_state", value_hint = clap::ValueHint::DirPath)]
@@ -171,6 +192,7 @@ impl OneShot {
             command: None,
             level: Some(LogLevel::Info),
             no_try_strings: false,
+            fresh_state: false,
             trace_logs_filename: None,
         }
     }
@@ -225,26 +247,31 @@ impl OneShot {
     }
 
     pub fn load(&mut self) -> Result<(State, RunHistory, CLISettings, RuntimeSettings)> {
-        let (state, run_history, cli_settings, default_runtime_settings) = match State::load(
-            self.state_folder.clone(),
-            self.model_file.clone(),
-            self.trace_logs_filename.clone(),
-        ) {
+        let (state, run_history, cli_settings, default_runtime_settings) = match if self.fresh_state
+        {
+            Err(eyre!("Fresh state requested, skipping load"))
+        } else {
+            State::load(
+                self.state_folder.clone(),
+                self.model_file.clone(),
+                self.trace_logs_filename.clone(),
+            )
+        } {
             Ok(state) => {
-                let mut global = match CLISettings::from_file_typed(
-                    self.state_folder.join("cli_settings.toml"),
-                ) {
-                    Ok(a) => a,
-                    Err(SerdeFileError::FileError(_)) => {
-                        println!(
-                            "File error for {} loading default ",
-                            &self.state_folder.join("cli_settings.toml").display()
-                        );
-                        CLISettings::default()
-                    }
+                let mut global =
+                    match CLISettings::from_file_typed(self.state_folder.join("cli_settings.toml"))
+                    {
+                        Ok(a) => a,
+                        Err(SerdeFileError::FileError(_)) => {
+                            println!(
+                                "File error for {} loading default ",
+                                &self.state_folder.join("cli_settings.toml").display()
+                            );
+                            CLISettings::default()
+                        }
 
-                    Err(e) => return Err(e.into()),
-                };
+                        Err(e) => return Err(e.into()),
+                    };
 
                 global.override_with(self);
 

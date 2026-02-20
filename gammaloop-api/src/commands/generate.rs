@@ -16,6 +16,7 @@ use color_eyre::Result;
 use regex::Regex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use symbolica::parse;
 use thiserror::Error;
 
 use eyre::eyre;
@@ -31,7 +32,7 @@ use gammalooprs::processes::{CrossSection, Process, ProcessDefinition, ProcessLi
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
 use crate::commands::set::KvPair;
-use crate::state::State;
+use crate::state::{ProcessRef, State};
 
 // =================== CLI containers (kept close to your structure) ===================
 
@@ -275,6 +276,14 @@ pub struct SpecArgs {
     #[arg(long = "graph-prefix", short = 'g')]
     pub graph_prefix: Option<String>,
 
+    /// Global prefactor projector (Symbolica atom string)
+    #[arg(long = "global-prefactor-projector", value_name = "ATOM")]
+    pub global_prefactor_projector: Option<String>,
+
+    /// Global prefactor numerator (Symbolica atom string)
+    #[arg(long = "global-prefactor-num", value_name = "ATOM")]
+    pub global_prefactor_num: Option<String>,
+
     /// Fast cut filter switch multiplicity
     #[arg(
         long = "max-multiplicity-for-fast-cut-filter",
@@ -432,31 +441,12 @@ impl Generate {
                 }
             }
             Some(GenerateCmd::Existing(process_args)) => {
-                if process_args.process_id >= state.process_list.processes.len() {
-                    return Err(eyre!(
-                        "No process with ID {}. Existing processes have IDs in range 0..{}",
-                        process_args.process_id,
-                        state.process_list.processes.len()
-                    ));
-                }
-                if let Some(integrand_name) = process_args.integrand_name.as_ref() {
-                    if !state.process_list.processes[process_args.process_id]
-                        .collection
-                        .get_integrand_names()
-                        .contains(&integrand_name.as_str())
-                    {
-                        return Err(eyre!(
-                            "Process ID {} exists, but has no integrand named '{}'. Existing integrands: {:?}",
-                            process_args.process_id,
-                            integrand_name,
-                            state.process_list.processes[process_args.process_id].collection.get_integrand_names()
-                        ));
-                    }
-                }
+                let process_id = state.resolve_process_ref(process_args.process.as_ref())?;
+
                 state.generate_integrand(
                     global_settings,
                     runtime_settings.into(),
-                    process_args.process_id,
+                    process_id,
                     process_args.integrand_name.clone(),
                 )?;
                 if global_settings.generation.evaluator.compile {
@@ -464,7 +454,7 @@ impl Generate {
                         compile_folder,
                         override_existing_compiled,
                         global_settings,
-                        Some(process_args.process_id),
+                        Some(process_id),
                         process_args.integrand_name.clone(),
                     )?;
                 }
@@ -489,9 +479,9 @@ impl Generate {
 
 #[derive(Args, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct ProcessArgs {
-    /// Stored process ID
-    #[arg(long = "process-id", short = 'p')]
-    pub process_id: usize,
+    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    #[arg(long = "process", short = 'p', value_name = "PROCESS")]
+    pub process: Option<ProcessRef>,
 
     /// Optional human name
     #[arg(long = "integrand-name", short = 'i')]
@@ -951,7 +941,14 @@ pub fn parse_spec_with_model(
         })
         .transpose()
         .map_err(ParseError::InvalidLmbSpec)?;
-    spec.process_definition.prefactor = GlobalPrefactor::default();
+    let mut prefactor = GlobalPrefactor::default();
+    if let Some(projector) = &args.global_prefactor_projector {
+        prefactor.projector = parse!(projector);
+    }
+    if let Some(num) = &args.global_prefactor_num {
+        prefactor.num = parse!(num);
+    }
+    spec.process_definition.prefactor = prefactor;
 
     Ok(spec)
 }
@@ -1798,6 +1795,8 @@ mod tests {
             integrand_name: None,
             only_diagrams: true,
             veto_vertex_interactions: None,
+            global_prefactor_num: None,
+            global_prefactor_projector: None,
         }
     }
 

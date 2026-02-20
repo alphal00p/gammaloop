@@ -8,8 +8,12 @@ commands = [
 
 [cli_settings.global]
 
-logfile_directive = "off,gammalooprs[orientation_parametric_expr]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "off,info,gammalooprs[orientation_parametric_expr]=debug"#,gammalooprs[final_integrand]=debug"
+logfile_directive = "info,gammalooprs::integrands::inspect=off"#,gammalooprs[build_original_parametric_integrand]=debug"
+
+display_directive = "info,gammalooprs::integrands::inspect=off"
+# display_directive = "info,gammalooprs::integrands::inspect=off"
+# display_directive = "info,gammalooprs::integrands[inspect]=off"
+# display_directive = "info,gammalooprs::integrands[inspect{message=.*jacobian.*}]=off"#,gammalooprs::uv::profile[profile]=info,gammalooprs::integrands[inspect]=off"#,gammalooprs[final_integrand]=debug"
 
 
 [default_runtime_settings.kinematics.externals]
@@ -21,7 +25,7 @@ type = "constant"
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
     [
-        0.0,
+        1.0,
         0.0,
         0.0,
         0.0,

@@ -45,7 +45,7 @@ use symbolica::{
         integer::IntegerRing,
         rational::{Rational, RationalField},
     },
-    evaluate::{ExpressionEvaluator, FunctionMap},
+    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
     poly::{Exponent, polynomial::MultivariatePolynomial},
 };
 
@@ -2853,7 +2853,11 @@ impl Rotation {
                     &shadow_t.try_into_parametric().unwrap().tensor.data(),
                 )
                 .unwrap()
-                .linearize(Some(1), false);
+                .linearize(&OptimizationSettings {
+                    cpe_iterations: Some(1),
+                    verbose: false,
+                    ..OptimizationSettings::default()
+                });
 
         let i = Bispinor {}.new_slot(4, 1);
 
@@ -2883,7 +2887,11 @@ impl Rotation {
         let spinor_eval: EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, OrderedStructure> =
             res.to_evaluation_tree(&fn_map, &params)
                 .unwrap()
-                .linearize(Some(1), false);
+                .linearize(&OptimizationSettings {
+                    cpe_iterations: Some(1),
+                    verbose: false,
+                    ..OptimizationSettings::default()
+                });
 
         Self {
             method,

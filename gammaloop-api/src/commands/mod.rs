@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    state::{CommandHistory, RunHistory, State},
+    state::{CommandHistory, ProcessRef, RunHistory, State},
     CLISettings,
 };
 pub mod display;
@@ -33,6 +33,8 @@ pub mod run;
 pub use run::Run;
 pub mod evaluate;
 pub use evaluate::Evaluate;
+pub mod renormalize;
+pub use renormalize::Renormalize;
 pub mod profile;
 pub use profile::Profile;
 
@@ -64,18 +66,20 @@ pub enum Commands {
 
     Evaluate(Evaluate),
 
+    Renormalize(Renormalize),
+
     /// Benchmark raw integrand evaluation speed
     Bench {
         /// Number of random samples to evaluate
         #[arg(short = 's', long, value_name = "SAMPLES")]
         samples: usize,
-        /// The process id to inspect
-        #[arg(short = 'i', long = "process-id", value_name = "ID")]
-        process_id: usize,
+        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+        process: ProcessRef,
 
-        /// The name of the process to inspect
+        /// The integrand name to inspect
         #[arg(short = 'n', long = "name", value_name = "NAME")]
-        process_name: String,
+        integrand_name: String,
         /// Number of cores to parallelize over
         #[arg(short = 'c', long)]
         n_cores: usize,
@@ -121,7 +125,7 @@ impl Commands {
         } else {
             match self {
                 Commands::Profile(p) => {
-                    p.run(state, global_cli_settings, default_runtime_settings)?;
+                    p.run(state, global_cli_settings)?;
                 }
                 Commands::Quit(s) => {
                     return Ok(ControlFlow::Break(s));
@@ -131,11 +135,12 @@ impl Commands {
                 }
                 Commands::Bench {
                     samples,
-                    process_id,
-                    process_name,
+                    process,
+                    integrand_name,
                     n_cores,
                 } => {
-                    state.bench(samples, process_id, process_name, n_cores)?;
+                    let process_id = process.resolve(&state.process_list)?;
+                    state.bench(samples, process_id, integrand_name, n_cores)?;
                 }
                 Commands::Import(s) => s.run(state)?,
                 Commands::Save(s) => s.run(
@@ -160,6 +165,10 @@ impl Commands {
 
                 Commands::Evaluate(g) => {
                     _ = g.run(state, global_cli_settings, default_runtime_settings)?;
+                }
+
+                Commands::Renormalize(r) => {
+                    _ = r.run(state, global_cli_settings)?;
                 }
 
                 Commands::Display(l) => l.run(state)?,

@@ -5,6 +5,7 @@ use gammalooprs::processes::AmplitudeGraph;
 
 use gammalooprs::processes::{Amplitude, ProcessCollection};
 
+use gammalooprs::utils::vakint;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +15,10 @@ use gammalooprs::settings::RuntimeSettings;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
-use crate::{state::State, CLISettings};
+use crate::{
+    state::{ProcessRef, State},
+    CLISettings,
+};
 
 #[cfg_attr(
     feature = "python_api",
@@ -22,16 +26,16 @@ use crate::{state::State, CLISettings};
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Evaluate {
-    /// The process id to inspect
-    #[arg(short = 'i', long = "process-id", value_name = "ID")]
-    pub process_id: Option<usize>,
+    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    pub process: Option<ProcessRef>,
 
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
     pub graphs_group_name: Option<String>,
 
     /// The path to store results in
-    #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
+    #[arg(short = 'o', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
 
     /// Whether to evaluate numerically or not the resulting analytical expression
@@ -48,12 +52,11 @@ impl Evaluate {
     pub fn run(
         &self,
         state: &mut State,
-        _global_cli_settings: &CLISettings,
+        global_cli_settings: &CLISettings,
         default_runtime_settings: &RuntimeSettings,
     ) -> Result<Atom> {
-        let (process_id, integrand_name) = state
-            .process_list
-            .find_integrand(self.process_id, self.graphs_group_name.as_ref())?;
+        let (process_id, integrand_name) =
+            state.find_integrand_ref(self.process.as_ref(), self.graphs_group_name.as_ref())?;
 
         let amplitude: &Amplitude = match &state.process_list.processes[process_id].collection {
             ProcessCollection::Amplitudes(amplitudes) => amplitudes.get(&integrand_name).unwrap(),
@@ -63,6 +66,19 @@ impl Evaluate {
                 ));
             }
         };
+
+        let mut true_settings = global_cli_settings
+            .global
+            .generation
+            .uv
+            .vakint
+            .true_settings();
+
+        let vakint = vakint()?;
+
+        if let Some(n_terms) = self.number_of_terms_in_epsilon_expansion {
+            true_settings.number_of_terms_in_epsilon_expansion = n_terms as i64;
+        }
 
         let mut full_evaluation = Atom::Zero;
 
@@ -94,7 +110,9 @@ impl Evaluate {
                     &state.model,
                     gc,
                     self.numerical,
-                    self.number_of_terms_in_epsilon_expansion,
+                    vakint,
+                    &true_settings,
+                    &global_cli_settings.global.generation.uv.vakint,
                     default_runtime_settings,
                     // Only include the overall global numerator on the first of the connected components
                     i_gc == 0,
@@ -120,7 +138,7 @@ impl Evaluate {
             )?;
         } else if self.numerical {
             let numerical_evaluation_result =
-                AmplitudeGraph::to_numerical(full_evaluation.as_view())?;
+                AmplitudeGraph::to_numerical(full_evaluation.as_view(), &true_settings)?;
             info!(
                 "Numerical evaluation of the analytical result for process {}:\n{}",
                 state.process_list.processes[process_id]

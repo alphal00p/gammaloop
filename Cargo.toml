@@ -56,7 +56,7 @@ insta.opt-level = 3
 # # ] }
 
 [dependencies]
-symbolica = { version = "1", default-features = false, features = [
+symbolica = { version = "1.3", default-features = false, features = [
     "serde",
     "bincode",
 ] }
@@ -65,7 +65,7 @@ idenso = { version = "0.3", features = ["bincode"] }
 spenso-macros = { version = "0.3" }
 spenso-hep-lib = { version = "0.1.7" }
 spenso = { version = "0.6", features = ["shadowing"] }
-linnet = { version = "0.16.1", features = [
+linnet = { version = "0.17.0", features = [
     # "drawing",
     "serde",
     "bincode",
@@ -129,7 +129,7 @@ typed-index-collections = { version = "3.3.0", features = [
 thiserror = "1.0.63"
 serde_repr = "0.1.19"
 # compensated-summation = "0.3.0"
-serde_with = "3.9.0"
+# serde_with = "3.9.0"
 tabled = { version = "0.20.0", features = ["ansi"] }
 pathfinding = "4.11.0"
 insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
@@ -163,10 +163,12 @@ schemars = "1.0.4"
 ringbuffer = "0.16.0"
 tracing-indicatif = "0.3.13"
 
-# gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
+#gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
 rug = { version = "1.27.0", features = ["serde"] }
 vakint = "0.1.2"
 vectorize = "0.2.0"
+twofloat = "0.8.4"
+nu-ansi-term = "0.50.3"
 [dependencies.pyo3]
 features = ["eyre", "auto-initialize"]
 optional = true
@@ -174,8 +176,7 @@ version = "0.25"
 
 [build-dependencies]
 # pyo3-build-config = "*"
-vergen = { version = "9", default-features = false }
-vergen-gitcl = "1"
+vergen-gitcl = { version = "9", default-features = false }
 #pyo3-build-config = "*"
 
 [lib]
@@ -186,6 +187,7 @@ bench = false
 default = []
 python_api = ["pyo3"]
 python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
+pyo3-extension-module = ["pyo3/extension-module"]
 # insta.opt-level = 3
 python_stubgen = ["python_api", "pyo3-stub-gen"]
 fjcore = []
@@ -195,21 +197,26 @@ higher_loops = []
 # use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]
 
 [patch.crates-io]
-# idenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-# spenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-# spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-# spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
+#symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+#symbolica = { version = "1.2.1", default-features = false, features = [
+#    "serde",
+#    "bincode",
+#] }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica={git="https://github.com/benruijl/symbolica",rev="af3f1b2043b270401920e4ff76d938217d995fc3"}
-# vakint={git="https://github.com/alphal00p/vakint",rev="5a0a920d199f8993c00ecdb1a3af6e82aa3bd9f2"}
+# vakint = {path="../../vakint"}
+vakint={git="https://github.com/alphal00p/vakint",rev="10ffd4e8559696b1dc79b21ef3e700caac663aa8"}
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
 # linnet = { path = "../../linnet" }
-linnet = { git = "https://github.com/alphal00p/linnet", rev = "c2ce79b7ddb6ce923a0024aec7142931185c8610" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "d8c02a0a7b96ac8d46a8770097c354535cd4baff" }
 # spenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
 # spenso={path="../../spenso/spenso"}
 # idenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }

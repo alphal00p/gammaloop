@@ -3819,6 +3819,15 @@ impl ProcessDefinition {
                         &external_connections,
                     )?;
 
+                    bare_graph.global_data.num = self.prefactor.num.clone();
+
+                    bare_graph.global_data.projectors = if self.prefactor.projector != Atom::num(1)
+                    {
+                        Some(self.prefactor.projector.clone())
+                    } else {
+                        None
+                    };
+
                     let fermion_sign = if self.generation_type == GenerationType::Amplitude {
                         if (!self.allow_symmetrization_of_external_fermions_in_amplitudes)
                             || (!self.symmetrize_initial_states && !self.symmetrize_final_states)
@@ -4089,7 +4098,7 @@ impl ProcessDefinition {
                         } else {
                             // println!("Processing graph #{}...", i_g);
                             // println!("Bare graph: {}",bare_graph.dot_serialize());
-                            let mut numerator = bare_graph.numerator(&bare_graph.no_dummy());
+                            let mut numerator = bare_graph.numerator(&bare_graph.no_dummy(),&bare_graph.empty_subgraph());
 
 
                             // TODO Check if we include overall factor in main

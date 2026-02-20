@@ -3,14 +3,21 @@ use crate::{
         expression::{GraphOrientation, OrientationData, OrientationID},
         generation::{ConstraintData, PostProcessingSetup, ShiftRewrite},
     },
-    graph::{Edge, Graph, Vertex},
+    graph::{Edge, Graph, LMBext, Vertex},
     momentum::SignOrZero,
     numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
-    utils::{GS, ose_atom_from_index, symbolica_ext::CallSymbol},
+    utils::{
+        GS, W_, ose_atom_from_index,
+        symbolica_ext::{CallSymbol, LogPrint},
+    },
     uv::approx::CFFapprox,
 };
+use color_eyre::Result;
+use eyre::eyre;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use spenso::{
     network::{Network, store::TensorScalarStoreMapping},
+    shadowing::symbolica_utils::AtomCoreExt as _,
     structure::abstract_index::AIND_SYMBOLS,
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
@@ -29,7 +36,7 @@ use std::fmt::Write;
 use tracing::{debug, instrument};
 
 use typed_index_collections::TiVec;
-use vakint::Vakint;
+use vakint::{Vakint, vakint_symbol};
 
 use super::{
     UVgenerationSettings, UltravioletGraph,
@@ -57,7 +64,7 @@ impl Forest {
         &mut self,
         graph: &G,
         amplitude_subgraph: &S,
-        vakint: &Vakint,
+        vakint: (&Vakint, &vakint::VakintSettings),
         orientations: &TiVec<OID, O>,
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
@@ -65,10 +72,10 @@ impl Forest {
         post_processing: PostProcessingSetup<'_>,
         settings: &UVgenerationSettings,
         _conjugate: bool,
-    ) {
+    ) -> Result<()> {
         let order = self.dag.compute_topological_order();
 
-        for n in order {
+        for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.root(
@@ -82,22 +89,32 @@ impl Forest {
                     );
                 }
                 1 => {
+                    // debug!("")
                     let [current, parent] = &mut self
                         .dag
                         .nodes
                         .get_disjoint_mut([n, self.dag.nodes[n].parents[0]])
                         .unwrap();
 
-                    assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
+                    let Some(a) = &parent.data.simple_approx else {
+                        panic!("Should have computed the simple approx");
+                    };
+                    current.data.simple_approx = Some(a.dependent(current.data.subgraph.clone()));
+
                     if settings.generate_integrated {
                         current.data.compute_integrated(
                             graph,
                             vakint,
                             amplitude_subgraph,
                             &parent.data,
+                            i,
                             settings,
-                        );
+                        )?;
                     }
+                    if settings.only_integrated {
+                        continue;
+                    }
+                    assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
                     current.data.compute(
                         graph,
                         amplitude_subgraph,
@@ -149,6 +166,93 @@ impl Forest {
                 }
             }
         }
+        Ok(())
+    }
+
+    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<Atom> {
+        let mut sum = Atom::Zero;
+
+        let wild = Atom::var(W_.x___);
+
+        let replacements =
+            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+        for (_, n) in &self.dag.nodes {
+            if !n.children.is_empty() {
+                continue;
+            }
+
+            let (mut atom, sign) = n.data.integrated_pole_part.expr().ok_or(eyre!(
+                "Integrated pole part not computed for {} of graph {}",
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+                graph.name
+            ))?;
+
+            atom = sign * atom;
+
+            // debug!(
+            //     forest_term=%
+            //     n.data
+            //         .simple_approx
+            //         .as_ref()
+            //         .unwrap()
+            //         .expr(&graph.full_filter()),
+            //    expr = % atom,"Term before simplification"
+            // );
+            //
+            debug!(
+                forest_term=%
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+               expr = % atom.expand_num().log_print(),"Term before simplification"
+            );
+
+            let atom = (atom
+                * &graph.global_prefactor.projector
+                * &graph.global_prefactor.num
+                * &graph.overall_factor)
+                .simplify_color()
+                .expand_num()
+                .to_dots();
+            // .replace(GS.dim)
+            // .max_level(0)
+            // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+
+            debug!(
+                forest_term=%
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+               expr = % atom.log_print(),"Term"
+            );
+            sum += atom;
+        }
+        // let n_loops = graph.n_loops(&graph.full_filter());
+        // let pole_stripped = sum
+        //     .series(
+        //         GS.dim_epsilon,
+        //         Atom::Zero,
+        //         (n_loops as i64 + 1).into(),
+        //         true,
+        //     )
+        //     .unwrap();
+
+        // let mut sum = Atom::Zero;
+
+        // for (power, p) in pole_stripped.terms() {
+        //     if power < 0 {
+        //         sum += p * Atom::var(GS.dim_epsilon).npow(power);
+        //     }
+        // }
+        Ok(sum.replace_multiple(&replacements))
     }
 
     #[instrument(skip_all)]
@@ -201,9 +305,10 @@ impl Forest {
                     .wrap_color(GS.color_wrap)
                     .parse_into_net()
                     .unwrap();
-
-                s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
+        }
+        for (_, edge_index, _) in graph.iter_edges() {
+            s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
         }
         s
     }

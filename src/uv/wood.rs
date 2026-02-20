@@ -20,6 +20,7 @@ use super::{
 
 pub struct Wood {
     poset: Poset<InternalSubGraph, ()>,
+    pub max_loops: usize,
     additional_unions: SecondaryMap<PosetNode, Vec<PosetNode>>,
 }
 
@@ -37,11 +38,18 @@ impl Wood {
 
         poset.invert();
         poset.compute_topological_order();
+        let mut max_loops = 0;
 
         let mut unions = SecondaryMap::new();
 
         for (i, sg) in poset.nodes.iter() {
             let cs = ref_graph.connected_components(&sg.data);
+            let nloop = cs.iter().map(|c| ref_graph.cyclotomatic_number(c)).max();
+            if let Some(nloop) = nloop {
+                if nloop > max_loops {
+                    max_loops = nloop;
+                }
+            }
 
             if cs.len() > 1 {
                 // sg is a disjoint union of spinneys (at the level of half-edges) (strongly disjoint)
@@ -71,6 +79,7 @@ impl Wood {
 
         // let coverset = poset.to_cover_set();
         Wood {
+            max_loops,
             poset,
             additional_unions: unions,
         }

@@ -41,7 +41,7 @@ use crate::{
     numerator::ParsingNet,
     signature,
     utils::{
-        F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128, hyperdual_utils::DualOrNot,
+        ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
         symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
     },
 };
@@ -451,7 +451,8 @@ impl GammaLoopPairs {
 
         debug_assert_eq!(
             start,
-            self.additional_params.value_range.end * multiplicative_offset
+            self.additional_params.value_range.end * multiplicative_offset,
+            "Not filled up additional params"
         );
     }
 
@@ -812,6 +813,146 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
             values[polarization_start] = val;
             polarization_start += multiplicative_offset;
         }
+
+        if let Some(threshold_params) = left_threshold_params {
+            self.pairs
+                .left_threshold_params(threshold_params, &mut values);
+        }
+
+        if let Some(threshold_params) = right_threshold_params {
+            self.pairs
+                .right_threshold_params(threshold_params, &mut values);
+        }
+
+        if let Some(lu_params) = lu_params {
+            self.pairs.lu_params(lu_params, &mut values);
+        }
+
+        Cow::Owned(values)
+    }
+}
+
+impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
+    #[allow(clippy::too_many_arguments)]
+    fn update_emr_and_get_params(
+        &mut self,
+        _cache: (bool, bool),
+        sample: &MomentumSample<ArbPrec>,
+        graph: &Graph,
+        helicities: &[Helicity],
+        additional_params: &[F<ArbPrec>],
+        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        lu_params: Option<&LUParams<ArbPrec>>,
+    ) -> Cow<'_, Vec<Complex<F<ArbPrec>>>> {
+        let mut loop_mom_start = self.pairs.loop_moms_spatial.value_range.start;
+        let mut values: Vec<Complex<F<ArbPrec>>> =
+            self.values.iter().map(|v| v.higher().higher()).collect();
+
+        let flattened_loop_momenta = if let Some(dual_loop_moms) = &sample.sample.dual_loop_moms {
+            dual_loop_moms
+                .iter()
+                .flat_map(|mom| {
+                    vec![
+                        mom.px.values.clone(),
+                        mom.py.values.clone(),
+                        mom.pz.values.clone(),
+                    ]
+                    .into_iter()
+                    .flatten()
+                })
+                .collect_vec()
+        } else {
+            sample
+                .loop_moms()
+                .clone()
+                .into_iter()
+                .flat_map(|mom| vec![mom.px, mom.py, mom.pz])
+                .collect_vec()
+        };
+
+        values[loop_mom_start..]
+            .iter_mut()
+            .zip(flattened_loop_momenta)
+            .for_each(|(value, loop_mom_component)| *value = Complex::new_re(loop_mom_component));
+
+        self.pairs
+            .add_additional_params(additional_params, &mut values, multiplicative_offset);
+
+        self.pairs.add_external_four_mom_impl(
+            sample.external_moms(),
+            &mut values,
+            multiplicative_offset,
+        );
+
+        let polarization_values =
+            self.pairs
+                .polarizations_values(graph, sample.external_moms(), helicities);
+
+        let mut polarization_start =
+            self.pairs.polarizations.value_range.start * multiplicative_offset;
+
+        for val in polarization_values {
+            values[polarization_start] = val;
+            polarization_start += multiplicative_offset;
+        }
+
+        if let Some(threshold_params) = left_threshold_params {
+            self.pairs
+                .left_threshold_params(threshold_params, &mut values);
+        }
+
+        if let Some(threshold_params) = right_threshold_params {
+            self.pairs
+                .right_threshold_params(threshold_params, &mut values);
+        }
+
+        if let Some(lu_params) = lu_params {
+            self.pairs.lu_params(lu_params, &mut values);
+        }
+
+        Cow::Owned(values)
+    }
+}
+
+impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
+    #[allow(clippy::too_many_arguments)]
+    fn update_emr_and_get_params(
+        &mut self,
+        _cache: (bool, bool),
+        sample: &MomentumSample<ArbPrec>,
+        graph: &Graph,
+        helicities: &[Helicity],
+        additional_params: &[F<ArbPrec>],
+        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        lu_params: Option<&LUParams<ArbPrec>>,
+    ) -> Cow<'_, Vec<Complex<F<ArbPrec>>>> {
+        let mut loop_mom_start = self.pairs.loop_moms_spatial.value_range.start;
+        let mut values: Vec<Complex<F<ArbPrec>>> =
+            self.values.iter().map(|v| v.higher().higher()).collect();
+
+        let flattened_loop_momenta = sample
+            .loop_moms()
+            .clone()
+            .into_iter()
+            .flat_map(|mom| vec![mom.px, mom.py, mom.pz]);
+
+        self.pairs
+            .add_additional_params(additional_params, &mut values);
+
+        for value in flattened_loop_momenta {
+            values[loop_mom_start] = Complex::new_re(value);
+            loop_mom_start += 1;
+        }
+
+        self.pairs
+            .add_external_four_mom_impl(sample.external_moms(), &mut values);
+        values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
+            &self
+                .pairs
+                .polarizations_values(graph, sample.external_moms(), helicities),
+        );
 
         if let Some(threshold_params) = left_threshold_params {
             self.pairs

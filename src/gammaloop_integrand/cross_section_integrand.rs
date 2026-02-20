@@ -58,6 +58,7 @@ use symbolica::{
     parse,
 };
 use tracing::debug;
+use tracing::debug;
 use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
@@ -304,6 +305,7 @@ impl CrossSectionGraphTerm {
                             &graph.graph.param_builder,
                             dual_shape.clone(),
                             OptimizationSettings::default(),
+                            settings.generation.evaluator.store_atom,
                         )
                         .unwrap()
                     })
@@ -334,6 +336,7 @@ impl CrossSectionGraphTerm {
                                     &graph.graph.param_builder,
                                     dual_shape.clone(),
                                     OptimizationSettings::default(),
+                                    settings.generation.evaluator.store_atom,
                                 )
                                 .unwrap()
                             })

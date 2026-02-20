@@ -27,7 +27,7 @@ use crate::{
     graph::Graph,
     momentum::Helicity,
     momentum_sample::MomentumSample,
-    utils::{F, FloatLike, Length, f128},
+    utils::{ArbPrec, F, FloatLike, Length, f128},
 };
 
 use super::{
@@ -120,12 +120,14 @@ impl CompiledComplexEvaluatorGL {
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
-    pub exprs: Vec<Atom>,
+    pub exprs: Option<Vec<Atom>>,
+    pub exprs_len: usize,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
     pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
     pub dual_shape: Option<Vec<Vec<usize>>>,
+    pub arb: ExpressionEvaluator<Complex<F<ArbPrec>>>,
 }
 
 impl GenericEvaluator {
@@ -163,6 +165,7 @@ impl GenericEvaluator {
         builder: &ParamBuilder<f64>,
         dual_shape: Option<Vec<Vec<usize>>>,
         optimization_settings: OptimizationSettings,
+        store_atom: bool,
     ) -> Option<Self> {
         let params: Vec<Atom> = (&builder.pairs)
             .into_iter()
@@ -170,11 +173,17 @@ impl GenericEvaluator {
             .collect();
 
         Self::new_from_raw_params(
+            
             atoms,
+           
             &params,
+           
             &builder.fn_map,
+           
             optimization_settings,
             dual_shape,
+        ,
+            store_atom,
         )
     }
 
@@ -184,13 +193,14 @@ impl GenericEvaluator {
         fn_map: &FunctionMap,
         optimization_settings: OptimizationSettings,
         dual_shape: Option<Vec<Vec<usize>>>,
+        store_atom: bool,
     ) -> Option<Self> {
         let exprs: Vec<Atom> = atoms.into_iter().collect();
         let mut tree = exprs
             .iter()
             .map(|n| {
                 n.evaluator(fn_map, params, optimization_settings.clone())
-                    .unwrap()
+                    .expect(&format!("Failed to create evaluator for atom: {}", n))
             })
             .reduce(|mut acc, n| {
                 acc.merge(n, optimization_settings.cpe_iterations).unwrap();
@@ -207,15 +217,21 @@ impl GenericEvaluator {
             .clone()
             .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
 
-        let f128 = tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+        let f128 = tree
+            .clone()
+            .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+        let arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+            tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
 
         let evaluator = GenericEvaluator {
-            exprs,
+            exprs_len: exprs.len(),
+            exprs: if store_atom { Some(exprs) } else { None },
             rational: Some(rational),
             f64_compiled: None,
             f64_eager,
             f128,
             dual_shape,
+            arb,
         };
 
         Some(evaluator)
@@ -389,6 +405,49 @@ impl GenericEvaluatorFloat for f128 {
         left_threshold_params: Option<&ThresholdParams<f128>>,
         right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
+    ) -> Cow<'a, Vec<Complex<F<Self>>>> {
+        param_builder.update_emr_and_get_params(
+            cache,
+            sample,
+            graph,
+            helicities,
+            additional_params,
+            left_threshold_params,
+            right_threshold_params,
+            lu_params,
+        )
+    }
+}
+
+impl GenericEvaluatorFloat for ArbPrec {
+    #[inline(always)]
+    fn get_evaluator_single(
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Complex<F<ArbPrec>> {
+        #[inline(always)]
+        |params: &[Complex<F<ArbPrec>>]| generic_evaluator.arb.evaluate_single(params)
+    }
+
+    fn get_evaluator(
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<Complex<F<ArbPrec>>> {
+        |params: &[Complex<F<ArbPrec>>]| {
+            let mut out = vec![Complex::default(); generic_evaluator.exprs_len];
+            generic_evaluator.arb.evaluate(params, &mut out);
+            out
+        }
+    }
+
+    fn get_parameters<'a>(
+        param_builder: &'a mut ParamBuilder,
+        cache: (bool, bool),
+        graph: &'a Graph,
+        sample: &'a MomentumSample<Self>,
+        helicities: &[Helicity],
+        additional_params: &[F<ArbPrec>],
+        left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
+        lu_params: Option<&LUParams<ArbPrec>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
         param_builder.update_emr_and_get_params(
             cache,

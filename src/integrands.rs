@@ -1,11 +1,14 @@
-use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
+use crate::evaluation_result::{EvaluationMetaData, EvaluationResult, StabilityEvaluation};
+use colored::Colorize;
 // use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::gammaloop_integrand::GLIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
+use crate::inspect::havana_sample;
 use crate::model::Model;
 use crate::momentum::FourMomentum;
+use crate::momentum::ThreeMomentum;
 use crate::observables::EventManager;
-use crate::utils::{F, FloatLike};
+use crate::utils::{F, FloatLike, f128};
 use crate::{
     settings::{
         RuntimeSettings,
@@ -15,14 +18,14 @@ use crate::{
 };
 use bincode_trait_derive::{Decode, Encode};
 use enum_dispatch::enum_dispatch;
-#[allow(unused_imports)]
-use tracing::{debug, error, info, trace, warn};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use std::fmt::{Display, Formatter};
 use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
+#[allow(unused_imports)]
+use tracing::{debug, error, info, instrument, trace, warn};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -58,6 +61,88 @@ impl Default for IntegrandSettings {
 
 #[enum_dispatch]
 pub trait HasIntegrand {
+    #[instrument(skip_all)]
+    fn inspect(
+        &mut self,
+        settings: &RuntimeSettings,
+        model: &Model,
+        mut pt: Vec<F<f64>>,
+        discrete_dimensions: &[usize],
+        mut force_radius: bool,
+        is_momentum_space: bool,
+        use_f128: bool,
+    ) -> (Option<f64>, EvaluationResult) {
+        if self.get_n_dim() as isize == pt.len() as isize - 1 {
+            force_radius = true;
+        }
+
+        let (jac, xs_f128) = if is_momentum_space {
+            let (xs, inv_jac) = utils::global_inv_parameterize::<f128>(
+                &pt.chunks_exact_mut(3)
+                    .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
+                    .collect::<Vec<ThreeMomentum<F<f128>>>>(),
+                F(settings.kinematics.e_cm).higher(),
+                // TODO! return an error instead of panic
+                &settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .unwrap_or_else(|| {
+                        panic!("Invalid sampling method for momentum-space inspect.")
+                    }),
+                force_radius,
+            );
+
+            info!(
+                target: "gammalooprs::integrands::inspect",
+                "f128 sampling jacobian for this point = {:+.32e}",
+                inv_jac.inv()
+            );
+
+            (Some(inv_jac.inv().0.to_f64()), xs)
+        } else {
+            (
+                None,
+                pt.iter()
+                    .map(|x| F::<f128>::from_ff64(*x))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let xs_f64 = xs_f128.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>();
+
+        let sample = {
+            let cont_sample = if force_radius {
+                xs_f64.clone()[1..].to_vec()
+            } else {
+                xs_f64.clone()
+            };
+            havana_sample(cont_sample, discrete_dimensions)
+        };
+
+        let eval_result =
+            self.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero());
+        info!(
+            target: "gammalooprs::integrands::inspect",
+            "\nInput point in unit hypercube xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+            format!(
+                "( {} )",
+                xs_f64
+                    .iter()
+                    .map(|&x| format!("{:.16}", x))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .blue(),
+            self.name().to_string().green(),
+            format!(
+                "( {:+.16e}, {:+.16e} i)",
+                eval_result.integrand_result.re, eval_result.integrand_result.im
+            )
+            .blue(),
+        );
+
+        (jac, eval_result)
+    }
+
     fn create_grid(&self) -> Grid<F<f64>>;
 
     fn name(&self) -> String;
@@ -329,6 +414,17 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
+            final_is_stable: !is_nan,
+            loop_momenta_escalation: None,
+            stability_evaluations: vec![StabilityEvaluation {
+                precision: Precision::Double,
+                result: Complex::new(itg_wgt, F(0.)) * jac,
+                parameterization_time,
+                ltd_evaluation_time: evaluation_time,
+                is_stable: !is_nan,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }],
         };
 
         EvaluationResult {
@@ -479,6 +575,17 @@ impl HasIntegrand for UnitVolumeIntegrand {
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
+            final_is_stable: !is_nan,
+            loop_momenta_escalation: None,
+            stability_evaluations: vec![StabilityEvaluation {
+                precision: Precision::Double,
+                result: Complex::new(itg_wgt, F(0.)) * jac,
+                parameterization_time,
+                ltd_evaluation_time: evaluation_time,
+                is_stable: !is_nan,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }],
         };
 
         EvaluationResult {

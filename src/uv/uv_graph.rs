@@ -1,4 +1,5 @@
 use ahash::AHashSet;
+use idenso::metric::MetricSimplifier;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{Hedge, HedgePair},
@@ -7,9 +8,12 @@ use linnet::half_edge::{
         SubSetOps, subset::SubSet,
     },
 };
+use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
+    domains::atom::AtomField,
     function,
+    poly::series::Series,
 };
 
 use crate::{
@@ -17,7 +21,7 @@ use crate::{
     graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
     momentum_sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    utils::{GS, W_},
+    utils::{GS, W_, symbolica_ext::CallSymbol},
 };
 
 use super::{Wood, spenso_lor_atom};
@@ -38,7 +42,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
-    fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
+    fn numerator<S: SubGraphLike + SubSetOps>(
+        &self,
+        subgraph: &S,
+        without: &S,
+    ) -> Numerator<AppliedFeynmanRule>;
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
@@ -74,7 +82,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         expr: &Atom,
         expansion: Symbol,
         lmb: &LoopMomentumBasis,
-    ) -> Vec<(SubSet<LoopIndex>, Atom)>
+    ) -> Vec<(SubSet<LoopIndex>, Series<AtomField>)>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
@@ -93,7 +101,9 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .replace(function!(GS.broadcasting_sqrt, W_.a_))
             .with(Atom::var(W_.a_).sqrt())
             .replace_multiple(&ose_reps)
-            .replace_multiple(&mom_reps);
+            .replace_multiple(&mom_reps)
+            .replace(GS.if_sigma.f(&[W_.a_]))
+            .with(Atom::one());
         // .replace_multiple(&q3_reps);
         let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
 
@@ -114,9 +124,9 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
             let series = expr.series(expansion, Atom::Zero, 0.into(), true).unwrap();
 
-            expr = series.to_atom().expand();
+            // expr = series.to_atom().expand();
 
-            limits.push((ls, expr));
+            limits.push((ls, series));
         }
         limits
     }
@@ -238,9 +248,9 @@ impl UltravioletGraph for Graph {
                     function!(GS.emr_mom, usize::from(eid) as i64),
                     m2,
                     spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
-                            .npow(2)
-                            //.to_dots()
-                            - m2
+                        .npow(2)
+                        .to_dots()
+                        - m2
                 );
                 for _i in 0..edge_power.abs() {
                     if is_power_negative {
@@ -254,10 +264,14 @@ impl UltravioletGraph for Graph {
 
         den
     }
-    fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule> {
+    fn numerator<S: SubGraphLike + SubSetOps>(
+        &self,
+        subgraph: &S,
+        without: &S,
+    ) -> Numerator<AppliedFeynmanRule> {
         let num = Numerator::default();
 
-        num.from_new_graph(self, subgraph)
+        num.fill_in_reduced(self, subgraph, without)
     }
 
     fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {

@@ -7,16 +7,45 @@ use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*, registry::Registry, reload};
-
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[repr(usize)]
 #[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum, Serialize, Deserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Hash,
+    Encode,
+    Decode,
+    JsonSchema,
+    ValueEnum,
+    Serialize,
+    Deserialize,
+    Default,
 )]
 pub enum LogFormat {
+    #[default]
     Long,
     Short,
     Min,
     None,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, JsonSchema, PartialEq, Default)]
+#[serde(default, deny_unknown_fields)]
+pub struct LogStyle {
+    #[serde(skip_serializing_if = "crate::utils::serde_utils::IsDefault::is_default")]
+    pub log_format: LogFormat,
+    #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
+    pub short_timestamp: bool,
+    #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
+    pub full_line_source: bool,
+    #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
+    pub include_fields: bool,
 }
 
 #[repr(usize)]

@@ -16,17 +16,20 @@ use gammalooprs::{
 };
 use tracing::{info, warn};
 
-use crate::{state::State, CLISettings};
+use crate::{
+    state::{ProcessRef, State},
+    CLISettings,
+};
 
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(unsendable, name = "IntegrationSettings")
 )]
-#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Integrate {
-    /// The process id to inspect
-    #[arg(short = 'p', long = "process-id", value_name = "ID")]
-    pub process_id: Option<usize>,
+    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    pub process: Option<ProcessRef>,
 
     /// The name of the process to inspect
     #[arg(short = 'i', long = "name", value_name = "NAME")]
@@ -86,9 +89,8 @@ impl Integrate {
 
         let target = self.target.clone().map(|t| Complex::new(F(t[0]), F(t[1])));
 
-        let (process_id, integrand_name) = state
-            .process_list
-            .find_integrand(self.process_id, self.integrand_name.as_ref())?;
+        let (process_id, integrand_name) =
+            state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
 
         if self.restart && workspace_path.exists() {
             fs::remove_dir_all(&workspace_path)?;

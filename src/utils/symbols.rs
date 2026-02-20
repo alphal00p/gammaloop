@@ -4,19 +4,22 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
-    network::parsing::SPENSO_TAG,
+    network::{library::TensorLibraryData, parsing::SPENSO_TAG},
+    shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
         representation::{Minkowski, RepName, Representation},
         slot::{DummyAind, IsAbstractSlot},
     },
+    utils::{to_subscript, to_superscript},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
     function,
     id::Replacement,
+    printer::PrintState,
     symbol,
 };
 
@@ -110,14 +113,19 @@ pub struct WildCards {
 }
 
 pub struct GammaloopSymbols {
+    pub killing_func: Symbol,
     pub is_function: Symbol,
     pub is_symbol: Symbol,
     pub ufozero: Symbol,
     pub _linear: Symbol,
     pub linearize: Symbol,
-    pub spensocind: Symbol,
     pub loop_mom: Symbol,
     pub edgeid: Symbol,
+    pub uvaind: Symbol,
+    pub edgeaind: Symbol,
+    pub dummyaind: Symbol,
+    pub hedgeaind: Symbol,
+    pub vertexaind: Symbol,
     pub vertexid: Symbol,
     pub source_id: Symbol,
     pub sink_id: Symbol,
@@ -135,6 +143,9 @@ pub struct GammaloopSymbols {
     pub v: Symbol,
     pub u: Symbol,
     pub color_wrap: Symbol,
+    /// Epsilon for dimensional regularization
+    pub dim_epsilon: Symbol,
+
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
     pub rescale: Symbol,
@@ -149,6 +160,8 @@ pub struct GammaloopSymbols {
     ///for selecting orientations at generation
     pub selected: Symbol,
 
+    /// For analytic UV profiling
+    pub expansion: Symbol,
     ///For selecting a concete index.
     pub delta_vec: Symbol,
     pub emr_mom: Symbol,
@@ -289,11 +302,263 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
     z___: symbol!("z___"),
 });
 
+macro_rules! spenso_print_scripted_indexed {
+    ($a:ident, $opt:ident, $symbol:expr) => {{
+        match $opt.custom_print_mode {
+            Some(("spenso", i)) => {
+                let SpensoPrintSettings {
+                    parens,
+                    symbol_scripts,
+                    commas,
+                    ..
+                } = SpensoPrintSettings::from(i);
+
+                let AtomView::Fun(f) = $a else {
+                    return None;
+                };
+
+                let mut argiter = f.iter();
+                let id = argiter.next().unwrap();
+                let Ok(i) = usize::try_from(id) else {
+                    return None;
+                };
+
+                let mut out = $symbol.to_string();
+                out.push_str(&to_subscript(i as isize));
+                if $opt.color_builtin_symbols {
+                    out = nu_ansi_term::Color::Magenta.paint(out).to_string();
+                }
+
+                let mut first = true;
+                for arg in argiter {
+                    if first {
+                        if symbol_scripts {
+                            out.push('^');
+                        }
+                        first = false;
+                        if parens {
+                            out.push('(');
+                        }
+                    } else if commas {
+                        out.push(',');
+                    } else {
+                        out.push(' ');
+                    }
+                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
+                }
+                if !first && parens {
+                    out.push(')');
+                }
+                Some(out)
+            }
+            _ => None,
+        }
+    }};
+}
+
+macro_rules! spenso_print_simple_indexed {
+    ($a:ident, $opt:ident, $symbol:expr) => {{
+        match $opt.custom_print_mode {
+            Some(("spenso", _)) => {
+                let AtomView::Fun(f) = $a else {
+                    return None;
+                };
+
+                let mut out = $symbol.to_string();
+                let mut args = f.iter();
+
+                let id = args.next().unwrap();
+                let Ok(i) = usize::try_from(id) else {
+                    return None;
+                };
+
+                out.push_str(&to_subscript(i as isize));
+                let mut first = true;
+                for arg in args {
+                    if first {
+                        first = false;
+                        out.push('(');
+                    } else {
+                        out.push(',');
+                    }
+                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
+                }
+                if !first {
+                    out.push(')');
+                }
+                Some(out)
+            }
+            _ => None,
+        }
+    }};
+}
+
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
+    dim_epsilon: symbol!("ε"),
+    killing_func: symbol!(
+        "killing_func",
+        norm = |f, out| {
+            if let AtomView::Fun(f) = f {
+                **out = Atom::one()
+            }
+        }
+    ),
     ufozero: symbol!(
         "UFO::ZERO",
         norm = |_, out| {
             **out = Atom::Zero;
+        }
+    ),
+    uvaind: symbol!(
+        "uvind",
+        print = |a, opt| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+
+                    let mut out = "ᵘ".to_string();
+                    let mut first = true;
+                    for arg in f.iter() {
+                        let Ok(i) = isize::try_from(arg) else {
+                            return None;
+                        };
+
+                        if !first {
+                            out.push('.');
+                        } else {
+                            first = false;
+                        }
+                        out.push_str(&to_superscript(i));
+                    }
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    edgeaind: symbol!(
+        "edge",
+        print = |a, opt| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+
+                    let mut out = "ᵉ".to_string();
+                    let mut first = true;
+                    for arg in f.iter() {
+                        let Ok(i) = isize::try_from(arg) else {
+                            return None;
+                        };
+
+                        if !first {
+                            out.push('.');
+                        }
+                        first = false;
+
+                        out.push_str(&to_superscript(i));
+                    }
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    vertexaind: symbol!(
+        "vertex",
+        print = |a, opt| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+
+                    let mut out = "ᵛ".to_string();
+
+                    let mut first = true;
+                    for arg in f.iter() {
+                        let Ok(i) = isize::try_from(arg) else {
+                            return None;
+                        };
+
+                        if !first {
+                            out.push('.');
+                        }
+                        first = false;
+
+                        out.push_str(&to_superscript(i));
+                    }
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    dummyaind: symbol!(
+        "dummy",
+        print = |a, opt| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+
+                    let mut out = "ᵈ".to_string();
+                    let mut first = true;
+                    for arg in f.iter() {
+                        let Ok(i) = isize::try_from(arg) else {
+                            return None;
+                        };
+
+                        if !first {
+                            out.push('.');
+                        }
+                        first = false;
+
+                        out.push_str(&to_superscript(i));
+                    }
+                    Some(out)
+                }
+                _ => None,
+            }
+        }
+    ),
+    hedgeaind: symbol!(
+        "hedge",
+        print = |a, opt| {
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let AtomView::Fun(f) = a else {
+                        return None;
+                    };
+                    let SpensoPrintSettings {
+                        index_subscripts, ..
+                    } = SpensoPrintSettings::from(i);
+
+                    let mut out = "".to_string();
+                    let mut first = true;
+                    for arg in f.iter() {
+                        let Ok(i) = isize::try_from(arg) else {
+                            return None;
+                        };
+
+                        if !first {
+                            out.push('.');
+                        }
+                        first = false;
+                        if index_subscripts {
+                            out.push_str(&to_superscript(i));
+                        } else {
+                            out.push_str(&to_subscript(i));
+                        }
+                    }
+                    Some(out)
+                }
+                _ => None,
+            }
         }
     ),
     if_sigma: symbol!("if_sigma"),
@@ -309,12 +574,28 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 && ff.get_nargs() == 1
                 && let AtomView::Fun(arg) = ff.iter().next().unwrap()
             {
-                let args = arg.iter().collect_vec();
-                **out = GS
+                let mut args = vec![];
+                for a in arg.iter() {
+                    if let AtomView::Fun(a) = a
+                        && a.get_symbol().get_wildcard_level() > 0
+                    {
+                        return;
+                    }
+                    if let AtomView::Var(a) = a
+                        && a.get_symbol().get_wildcard_level() > 0
+                    {
+                        return;
+                    }
+
+                    args.push(a);
+                }
+                let expr = GS
                     ._linear
                     .f(args.as_slice())
                     .replace(GS._linear.f(&[W_.a___]))
                     .with(arg.get_symbol().f(&[W_.a___]));
+                println!(":{}->{}", f, expr);
+                **out = expr;
             }
         }
     ),
@@ -325,6 +606,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             **out = Atom::num(1) / (Atom::num(2) * a);
         }
     ),
+    expansion: symbol!("expansion"),
     rescale_star: symbol!("t⃰"),
     hfunction_lu_cut: symbol!("h_lu_cut"),
     hfunction_left_th: symbol!("h_left_th"),
@@ -339,10 +621,63 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     sign: symbol!("σ"),
     selected: symbol!("selected"),
     theta: symbol!("θ"),
-    spensocind: symbol!("spenso::cind"),
-    m_uv: symbol!("mUV"),
-    m_uv_int: symbol!("mUVI"),
-    mu_r_sq: symbol!(format!("{}::μᵣ²", vakint::NAMESPACE)),
+    m_uv: symbol!(
+        "mUV",
+        print = |a, opt| {
+            let AtomView::Var(a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
+                    if SpensoPrintSettings::from(i).is_typst() {
+                        Some("m_\"UV\"".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
+    m_uv_int: symbol!(
+        "mUVI",
+        print = |a, opt| {
+            let AtomView::Var(a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
+                    if SpensoPrintSettings::from(i).is_typst() {
+                        Some("m_\"UVI\"".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
+    mu_r_sq: symbol!(
+        "μᵣ²",
+        print = |a, opt| {
+            let AtomView::Var(a) = a else {
+                return None;
+            };
+            match opt.custom_print_mode {
+                Some(("spenso", i)) => {
+                    let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
+                    if SpensoPrintSettings::from(i).is_typst() {
+                        Some("mu_r^2".to_string())
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }
+        }
+    ),
     delta_vec: symbol!(
         "δ",
         norm = |f, out| {
@@ -366,13 +701,28 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     top: symbol!("Top"),
     num: symbol!("num"),
     den: symbol!("den"),
-    ubar: symbol!("ubar"),
-    vbar: symbol!("vbar"),
+    ubar: symbol!(
+        "ubar",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u̅") }
+    ),
+    vbar: symbol!(
+        "vbar",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v̅") }
+    ),
     dot: symbol!("dot"),
     dim: symbol!("dim"),
-    v: symbol!("v"),
-    u: symbol!("u"),
-    emr_mom: symbol!("Q"),
+    v: symbol!(
+        "v",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "v") }
+    ),
+    u: symbol!(
+        "u",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u") }
+    ),
+    emr_mom: symbol!(
+        "Q",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q") }
+    ),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
         "Q3",
@@ -394,16 +744,35 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                     }
                 }
             }
-        }
+        },
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "q³ᴰ") }
     ),
-    ose: symbol!("OSE"),
-    energy: symbol!("E"),
-    external_mom: symbol!("P"),
-    loop_mom: symbol!("K"),
-    epsilon: symbol!("ϵ"),
+    ose: symbol!(
+        "OSE",
+        print = |a, opt| { spenso_print_simple_indexed!(a, opt, "Eᵒˢ") }
+    ),
+    energy: symbol!(
+        "E",
+        print = |a, opt| { spenso_print_simple_indexed!(a, opt, "E") }
+    ),
+    external_mom: symbol!(
+        "P",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "p") }
+    ),
+    loop_mom: symbol!(
+        "K",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "k") }
+    ),
+    epsilon: symbol!(
+        "ϵ",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ") }
+    ),
     pi: Symbol::PI,
     color_wrap: symbol!("color"),
-    epsilonbar: symbol!("ϵbar"),
+    epsilonbar: symbol!(
+        "ϵbar",
+        print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "ϵ̅") }
+    ),
     coeff: symbol!("coef"),
     radius_left: symbol!("r_left"),
     radius_star_left: symbol!("r⃰_left"),
@@ -535,8 +904,7 @@ impl GammaloopSymbols {
     }
 
     pub(crate) fn energy_delta<'a>(&self, index: impl Into<AtomOrView<'a>>) -> Atom {
-        self.delta_vec
-            .f(&[self.spensocind.f(&[0]), index.into().into_owned()])
+        self.delta_vec.f(&[self.cind(0), index.into().into_owned()])
     }
 
     pub(crate) fn ose_full(

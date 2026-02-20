@@ -1,5 +1,4 @@
-use vergen::Emitter;
-use vergen_gitcl::GitclBuilder;
+use vergen_gitcl::{Emitter, GitclBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // if cfg!(feature = "python_api") {
@@ -16,15 +15,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Emitter::default().add_instructions(&git)?.emit()?;
     }
 
-    // Help Cargo know when to rerun
-    println!("cargo:rerun-if-changed=.git/HEAD");
-    println!("cargo:rerun-if-changed=.git/refs/heads");
+    // // Help Cargo know when to rerun
+    // println!("cargo:rerun-if-changed=.git/HEAD");
+    // println!("cargo:rerun-if-changed=.git/refs/heads");
 
-    #[cfg(target_os = "macos")]
-    if std::env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_some() {
-        println!("cargo:rustc-link-lib=gcc_s");
-        println!("cargo:rustc-link-lib=gcc");
-        println!("cargo:rustc-link-lib=gfortran");
-    }
+    // #[cfg(target_os = "macos")]
+    // if std::env::var_os("EXTRA_MACOS_LIBS_FOR_GNU_GCC").is_some() {
+    //     println!("cargo:rustc-link-lib=gcc_s");
+    //     println!("cargo:rustc-link-lib=gcc");
+    //     println!("cargo:rustc-link-lib=gfortran");
+    // }
     Ok(())
 }

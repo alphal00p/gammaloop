@@ -26,8 +26,6 @@ use clarabel::solver::*;
 use eyre::{Result, eyre};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
-use serde::Serialize;
-use serde_with::serde_as;
 use spenso::algebra::algebraic_traits::IsZero;
 use std::cell::RefCell;
 use std::fmt::Display;
@@ -142,6 +140,7 @@ impl OverlapStructure {
                 &FunctionMap::new(),
                 optimization_settings.clone(),
                 None,
+                false,
             )
             .ok_or_else(|| eyre!("Could not build evaluator for overlap prefactor"))?;
 
@@ -685,10 +684,8 @@ fn is_subset_of_result(subset: &[ExistingEsurfaceId], result: &OverlapStructure)
     })
 }
 
-#[serde_as]
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct EsurfacePairs {
-    #[serde_as(as = "Vec<(_,_)>")]
     data: HashMap<(ExistingEsurfaceId, ExistingEsurfaceId), LoopMomenta<F<f64>>>,
     has_pair_with: Vec<Vec<ExistingEsurfaceId>>,
 }

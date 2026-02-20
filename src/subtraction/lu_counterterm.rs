@@ -67,6 +67,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     None,
                     OptimizationSettings::default(),
+                    settings.generation.evaluator.store_atom,
                 )
                 .unwrap()
             })
@@ -81,6 +82,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     None,
                     OptimizationSettings::default(),
+                    settings.generation.evaluator.store_atom,
                 )
                 .unwrap()
             })
@@ -92,6 +94,7 @@ impl LUCounterTermEvaluators {
                 param_builder,
                 None,
                 OptimizationSettings::default(),
+                settings.generation.evaluator.store_atom,
             )
             .unwrap()
         });
@@ -111,6 +114,7 @@ impl LUCounterTermEvaluators {
                             param_builder,
                             None,
                             OptimizationSettings::default(),
+                            settings.generation.evaluator.store_atom,
                         )
                         .unwrap()
                     })
@@ -135,6 +139,7 @@ impl LUCounterTermEvaluators {
                             param_builder,
                             None,
                             OptimizationSettings::default(),
+                            settings.generation.evaluator.store_atom,
                         )
                         .unwrap()
                     })
@@ -155,6 +160,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     None,
                     OptimizationSettings::default(),
+                    settings.generation.evaluator.store_atom,
                 )
                 .unwrap()
             }))

@@ -48,8 +48,8 @@ use symbolica::{
     atom::{Atom, AtomOrView},
     graph::Graph as SymbolicaGraph,
 };
-use tracing::debug;
 use tracing::instrument;
+use tracing::{debug, info};
 use typed_index_collections::TiVec;
 
 use super::{
@@ -634,9 +634,9 @@ struct NumeratorData {
 }
 
 impl Graph {
-    pub fn dot_serialize(&self) -> String {
+    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {
         let mut out = String::new();
-        self.dot_serialize_fmt(&mut out).unwrap();
+        self.dot_serialize_fmt(&mut out, settings).unwrap();
         out
     }
 
@@ -661,8 +661,9 @@ impl Graph {
     pub fn dot_serialize_fmt(
         &self,
         writer: &mut impl std::fmt::Write,
+        settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
-        let g = DotGraph::from(self);
+        let g = self.to_dot_graph_with_settings(settings);
         g.write_fmt(writer)
     }
 
@@ -727,7 +728,7 @@ impl Graph {
 
         cut_result.permute(&mut graph)?;
 
-        let numerators = Self::generate_numerators(&graph, model);
+        let numerators = Self::generate_numerators(&graph, model)?;
 
         let initial_state_cut =
             OrientedCut::from_underlying_strict(cut_result.initial_hedges, &graph)?;
@@ -774,6 +775,12 @@ impl Graph {
             model,
             &g.loop_momentum_basis,
             initial_data.additional_params,
+        );
+
+        debug!(
+            "Updated param builder with LMB: {}\n{}",
+            g.loop_momentum_basis,
+            updated_param_builder_with_lmb.table(),
         );
 
         g.param_builder = updated_param_builder_with_lmb;
@@ -861,7 +868,7 @@ impl Graph {
         })
     }
 
-    fn generate_numerators(graph: &NumGraph, model: &Model) -> NumeratorData {
+    fn generate_numerators(graph: &NumGraph, model: &Model) -> Result<NumeratorData> {
         let mut color_edge: EdgeVec<_> = vec![Atom::num(1); graph.n_edges()].into();
         let mut spin_edge: EdgeVec<_> = vec![Atom::i(); graph.n_edges()].into();
 
@@ -884,20 +891,20 @@ impl Graph {
                 let momenta = [(Flow::Source, graph[&source]), (Flow::Sink, graph[&sink])];
                 let spin_nume = UFO.reindex_spin(&spin_slots, &momenta, prop, |i| {
                     Aind::Edge(usize::from(eid) as u16, i as u16)
-                });
+                })?;
 
                 spin_edge[eid] = spin_nume;
             }
         }
 
-        let (color_vertex, spin_vertex) = Self::generate_vertex_numerators(graph);
+        let (color_vertex, spin_vertex) = Self::generate_vertex_numerators(graph)?;
 
-        NumeratorData {
+        Ok(NumeratorData {
             color_edge,
             spin_edge,
             color_vertex,
             spin_vertex,
-        }
+        })
     }
 
     fn setup_global_prefactor_and_params<'a, A: Into<AtomOrView<'a>>, P: IntoIterator<Item = A>>(
@@ -929,10 +936,10 @@ impl Graph {
     #[allow(clippy::type_complexity)]
     fn generate_vertex_numerators(
         graph: &NumGraph,
-    ) -> (
+    ) -> Result<(
         Vec<Option<ParamTensor<OrderedStructure<Euclidean, Aind>>>>,
         Vec<Option<ParamTensor<OrderedStructure<Euclidean, Aind>>>>,
-    ) {
+    )> {
         let mut color_vertex: Vec<Option<ParamTensor<OrderedStructure<Euclidean, Aind>>>> =
             vec![None; graph.n_nodes()];
         let mut spin_vertex = color_vertex.clone();
@@ -961,21 +968,25 @@ impl Graph {
             let [mut color_structure, couplings, mut spin_structure] =
                 vertex_rule.tensors(ni.aind(1), ni.aind(0));
 
-            spin_structure.map_data_mut(|a| {
-                *a = UFO.reindex_spin(&spin_slots, &momenta, (*a).clone(), |u| ni.aind(u as u16));
-            });
+            spin_structure.map_data_ref_mut_result(|a| {
+                *a =
+                    UFO.reindex_spin(&spin_slots, &momenta, (*a).clone(), |u| ni.aind(u as u16))?;
+
+                Ok(())
+            })?;
 
             // couplings.map_data_mut(|a| *a = UFO.normalize_complex((*a).clone()));
 
-            color_structure.map_data_mut(|a| {
-                *a = UFO.reindex_color(&color_slots, (*a).clone(), |u| ni.aind(u as u16));
-            });
+            color_structure.map_data_ref_mut_result(|a| {
+                *a = UFO.reindex_color(&color_slots, (*a).clone(), |u| ni.aind(u as u16))?;
+                Ok(())
+            })?;
 
             spin_vertex[ni.0] = Some(spin_structure.contract(&couplings).unwrap());
             color_vertex[ni.0] = Some(color_structure);
         }
 
-        (color_vertex, spin_vertex)
+        Ok((color_vertex, spin_vertex))
     }
 
     fn build_underlying_graph(
@@ -1063,7 +1074,7 @@ impl Graph {
     ) -> Result<LoopMomentumBasis> {
         debug!("{}", underlying.dot(full_cut));
 
-        let mut loop_momentum_basis = if let Some(i) = full_cut.included_iter().next() {
+        let mut loop_momentum_basis = if let Some(_) = full_cut.included_iter().next() {
             // let tree = SimpleTraversalTree::depth_first_traverse(
             //     underlying,
             //     full_cut,

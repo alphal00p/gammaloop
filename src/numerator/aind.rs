@@ -15,6 +15,8 @@ use symbolica::{
 };
 use thiserror::Error;
 
+use crate::utils::GS;
+
 static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// A type that represents the name of an index in a tensor.
@@ -37,6 +39,7 @@ pub enum Aind {
     Hedge(u16, u16),
     Edge(u16, u16),
     Vertex(u16, u16),
+    UVTerm(u16, u16),
     Symbol(Symbol),
     Dummy(usize),
 }
@@ -178,6 +181,25 @@ impl std::fmt::Display for Aind {
                     write!(f, "d{}", v)
                 }
             }
+            Aind::UVTerm(i, j) => {
+                if f.sign_minus() {
+                    write!(
+                        f,
+                        "u{}.{}",
+                        to_subscript(*i as isize),
+                        to_subscript(*j as isize)
+                    )
+                } else if f.sign_plus() {
+                    write!(
+                        f,
+                        "u{}'{}",
+                        to_superscript(*i as isize),
+                        to_superscript(*j as isize)
+                    )
+                } else {
+                    write!(f, "u{}-{}", i, j)
+                }
+            }
         }
     }
 }
@@ -192,27 +214,34 @@ impl From<Aind> for Atom {
     fn from(value: Aind) -> Self {
         match value {
             Aind::Symbol(s) => Atom::var(s),
-            Aind::Dummy(i) => function!(symbol!("dummy"), i as i64),
+            Aind::Dummy(i) => function!(GS.dummyaind, i as i64),
             Aind::Normal(i) => Atom::num(i as i64),
+            Aind::UVTerm(i, j) => {
+                if j != 0 {
+                    function!(GS.uvaind, i as i64, j as i64)
+                } else {
+                    function!(GS.uvaind, i as i64)
+                }
+            }
             Aind::Edge(i, j) => {
                 if j != 0 {
-                    function!(symbol!("edge"), i as i64, j as i64)
+                    function!(GS.edgeaind, i as i64, j as i64)
                 } else {
-                    function!(symbol!("edge"), i as i64)
+                    function!(GS.edgeaind, i as i64)
                 }
             }
             Aind::Hedge(i, j) => {
                 if j != 0 {
-                    function!(symbol!("hedge"), i as i64, j as i64)
+                    function!(GS.hedgeaind, i as i64, j as i64)
                 } else {
-                    function!(symbol!("hedge"), i as i64)
+                    function!(GS.hedgeaind, i as i64)
                 }
             }
             Aind::Vertex(i, j) => {
                 if j != 0 {
-                    function!(symbol!("vertex"), i as i64, j as i64)
+                    function!(GS.vertexaind, i as i64, j as i64)
                 } else {
-                    function!(symbol!("vertex"), i as i64)
+                    function!(GS.vertexaind, i as i64)
                 }
             }
         }
@@ -321,7 +350,7 @@ impl TryFrom<AtomView<'_>> for Aind {
                             f.as_view()
                         )))
                     }
-                } else if f.get_symbol() == symbol!("vertex") {
+                } else if f.get_symbol() == GS.vertexaind {
                     if f.get_nargs() <= 2 {
                         let mut iter = f.iter();
                         let i = iter.next().unwrap();
@@ -330,6 +359,30 @@ impl TryFrom<AtomView<'_>> for Aind {
                         if let (Ok(a), Ok(b)) = (i64::try_from(i), j) {
                             if a >= 0 && b >= 0 {
                                 Ok(Aind::Vertex(a as u16, b as u16))
+                            } else {
+                                Err(AindError::NotIndex(format!("Negative index {}", a)))
+                            }
+                        } else {
+                            Err(AindError::NotIndex(format!(
+                                "Invalid index {}",
+                                f.as_view()
+                            )))
+                        }
+                    } else {
+                        Err(AindError::ParsingError(format!(
+                            "Incorrect number of arguments to vertex:{}",
+                            f.as_view()
+                        )))
+                    }
+                } else if f.get_symbol() == GS.uvaind {
+                    if f.get_nargs() <= 2 {
+                        let mut iter = f.iter();
+                        let i = iter.next().unwrap();
+                        let j = iter.next().map(i64::try_from).unwrap_or(Ok(0));
+
+                        if let (Ok(a), Ok(b)) = (i64::try_from(i), j) {
+                            if a >= 0 && b >= 0 {
+                                Ok(Aind::UVTerm(a as u16, b as u16))
                             } else {
                                 Err(AindError::NotIndex(format!("Negative index {}", a)))
                             }

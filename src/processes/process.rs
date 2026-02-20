@@ -15,10 +15,10 @@ use tracing::warn;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 use itertools::Itertools;
-use tracing::debug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use tracing::debug;
 
 use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;

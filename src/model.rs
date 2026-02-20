@@ -12,10 +12,10 @@ use eyre::eyre;
 use itertools::Itertools;
 // use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
-
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::{IndexLess, PermutedStructure};
 use tabled::settings::Modify;
 use tabled::{
@@ -48,7 +48,7 @@ use symbolica::domains::rational::{Fraction, Rational};
 
 type ExternalFunctionMap =
     HashMap<String, Box<dyn Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> + Send + Sync>, RandomState>;
-use symbolica::evaluate::FunctionMap;
+use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use symbolica::id::Replacement;
 use tracing::info;
 
@@ -62,7 +62,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use crate::utils::GS;
 
 use symbolica::printer::{AtomPrinter, PrintOptions};
-use symbolica::{function, parse, symbol};
+use symbolica::{function, get_symbol, parse, symbol};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableInputParamCard<T> {
@@ -285,7 +285,35 @@ where
     T: AsRef<str>,
 {
     fn from(s: T) -> Self {
-        UFOSymbol(symbol!(format!("UFO::{}", s.as_ref())))
+        let is_zero = s.as_ref() == "ZERO";
+        if is_zero {
+            UFOSymbol::zero()
+        } else {
+            let name = format!("UFO::{}", s.as_ref());
+            if let Some(a) = get_symbol!(&name) {
+                UFOSymbol(a)
+            } else {
+                UFOSymbol(symbol!(
+                    &name,
+                    print = |a, opt| {
+                        let AtomView::Var(a) = a else {
+                            return None;
+                        };
+                        match opt.custom_print_mode {
+                            Some(("spenso", i)) => {
+                                let SpensoPrintSettings { .. } = SpensoPrintSettings::from(i);
+                                if SpensoPrintSettings::from(i).is_typst() {
+                                    Some(format!("\"{}\"", a.get_symbol().get_stripped_name()))
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        }
+                    }
+                ))
+            }
+        }
     }
 }
 
@@ -1634,7 +1662,7 @@ impl Model {
 {n_parameters} parameters :{parameter_list}
 {n_vertices} vertices : {vertex_list}
 {n_couplings} couplings : {coupling_list}
-", 
+",
 model_name_label = "Model name",
 restriction_label = "Restriction",
 coupling_orders_label = "Coupling orders",
@@ -1962,8 +1990,11 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params)
             .unwrap()
-            .linearize(Some(1), false);
-
+            .linearize(&OptimizationSettings {
+                cpe_iterations: Some(1),
+                verbose: false,
+                ..OptimizationSettings::default()
+            });
         let mut ext: ExternalFunctionMap = HashMap::default();
         ext.insert(
             "complexconjugate".to_string(),
@@ -2018,6 +2049,27 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
     pub fn is_empty(&self) -> bool {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
+    }
+
+    pub fn apply_coupling_replacement_rules(&self, a: &Atom) -> Atom {
+        let mut reps = vec![];
+        for cpl in self.couplings.values() {
+            let [a, b] = cpl.rep_rule();
+            reps.push(Replacement::new(a.to_pattern(), b));
+        }
+
+        a.replace_multiple(&reps)
+    }
+    pub fn apply_parameter_replacement_rules(&self, a: &Atom) -> Atom {
+        let mut reps = vec![];
+        for p in self.parameters.values() {
+            let Some([a, b]) = p.rep_rule() else {
+                continue;
+            };
+            reps.push(Replacement::new(a.to_pattern(), b));
+        }
+
+        a.replace_multiple(&reps)
     }
 
     pub fn export_coupling_replacement_rules(
