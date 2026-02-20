@@ -30,7 +30,7 @@ use symbolica::{
 use linnet::half_edge::{
     HedgeGraph,
     involution::EdgeIndex,
-    subgraph::{SuBitGraph, SubGraphLike, SubSetLike},
+    subgraph::{SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 use std::fmt::Write;
 use tracing::{debug, instrument};
@@ -57,12 +57,13 @@ impl Forest {
     pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraphLike<Base = SuBitGraph>,
+        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
         OID: OrientationID,
         O: GraphOrientation,
     >(
         &mut self,
         graph: &G,
+        tree_edges: &S,
         amplitude_subgraph: &S,
         vakint: (&Vakint, &vakint::VakintSettings),
         orientations: &TiVec<OID, O>,
@@ -80,6 +81,7 @@ impl Forest {
                 0 => {
                     self.dag.nodes[n].data.root(
                         graph,
+                        tree_edges,
                         amplitude_subgraph,
                         canonize_esurface,
                         orientations,
@@ -117,6 +119,7 @@ impl Forest {
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
                     current.data.compute(
                         graph,
+                        tree_edges,
                         amplitude_subgraph,
                         canonize_esurface,
                         orientations,

@@ -109,8 +109,8 @@ impl AtomCoreExt for AtomView<'_> {
     }
 
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
-        self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a_]))
-            .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a_)]))
+        self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a___]))
+            .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a___)]))
     }
     // fn wrap_color(&self, symbol: Symbol) -> Atom {
     //     self.expand_color()

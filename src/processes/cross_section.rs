@@ -200,6 +200,7 @@ impl CsAmplitudeCTDiagram {
             left_forest
                 .compute(
                     graph,
+                    &graph.tree_edges,
                     &self.left_subgraph,
                     vakint,
                     &left_orientations,
@@ -215,6 +216,7 @@ impl CsAmplitudeCTDiagram {
             right_forest
                 .compute(
                     graph,
+                    &graph.tree_edges,
                     &self.right_subgraph,
                     vakint,
                     &right_orientations,
@@ -1275,6 +1277,7 @@ impl CrossSectionGraph {
 
                         forest.compute(
                             &self.graph,
+                            &self.graph.tree_edges,
                             &sandwich_subgraph,
                             vakint,
                             &orientations,
@@ -1405,6 +1408,7 @@ impl CrossSectionGraph {
 
             left_forest.compute(
                 &self.graph,
+                &self.graph.tree_edges,
                 &cut.left,
                 vakint_left,
                 &left_orientations,
@@ -1418,6 +1422,7 @@ impl CrossSectionGraph {
 
             right_forest.compute(
                 &self.graph,
+                &self.graph.tree_edges,
                 &cut.right,
                 vakint_right,
                 &right_orientations,

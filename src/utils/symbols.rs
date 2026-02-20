@@ -15,7 +15,7 @@ use spenso::{
     utils::{to_subscript, to_superscript},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionArgument, FunctionBuilder, Symbol},
     domains::rational::Rational,
     function,
     id::Replacement,
@@ -115,6 +115,9 @@ pub struct WildCards {
 pub struct GammaloopSymbols {
     pub integrand: Symbol,
     pub override_if: Symbol,
+    /// wrapper function for the 4d bridge denominators
+    pub tree_denom_wrapper: Symbol,
+
     pub killing_func: Symbol,
     pub is_function: Symbol,
     pub is_symbol: Symbol,
@@ -166,6 +169,7 @@ pub struct GammaloopSymbols {
     pub expansion: Symbol,
     ///For selecting a concete index.
     pub delta_vec: Symbol,
+    ///Q(<edgeid>,index___)
     pub emr_mom: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
@@ -178,6 +182,7 @@ pub struct GammaloopSymbols {
     pub nc2_1: Symbol,
     pub top: Symbol,
     pub num: Symbol,
+    ///denominator wrapper, den(<edge_id>,<momentum>,<mass>,<full_expr>) (no power and should not be multiplied in but divided!)
     pub den: Symbol,
     pub radius_left: Symbol,
     pub radius_star_left: Symbol,
@@ -219,6 +224,21 @@ impl GammaloopSymbols {
                     Symbol::IF.f([W_.a_, W_.b_, W_.c_])
                 }
             })
+    }
+
+    pub fn den<'a>(
+        &self,
+        eid: impl Into<AtomOrView<'a>>,
+        mom: impl Into<AtomOrView<'a>>,
+        mass: impl Into<AtomOrView<'a>>,
+        full_expr: impl Into<AtomOrView<'a>>,
+    ) -> Atom {
+        self.den.f(&[
+            eid.into().as_view(),
+            mom.into().as_view(),
+            mass.into().as_view(),
+            full_expr.into().as_view(),
+        ])
     }
 
     pub(crate) fn orientation_delta<O: GraphOrientation>(&self, orientation: &O) -> Atom {
@@ -428,6 +448,7 @@ macro_rules! spenso_print_simple_indexed {
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     integrand: symbol!("integrand"),
+    tree_denom_wrapper: symbol!("tree_denoms"),
     dim_epsilon: symbol!("ε"),
     killing_func: symbol!(
         "killing_func",
@@ -835,6 +856,10 @@ impl GammaloopSymbols {
             .add_arg(i)
             .add_args(&args)
             .finish()
+    }
+
+    pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        self.tree_denom_wrapper.f(&[arg.into().as_view()])
     }
 
     pub fn do_dot_product_in_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {

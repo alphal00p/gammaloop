@@ -38,6 +38,7 @@ use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
+
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
@@ -532,12 +533,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                 self.graph.name
             ));
         }
-
         self.graph
             .param_builder
             .add_external_four_mom_all_derivatives(&externals);
-
-        // self.graph.param_builder.add_external_four_mom(&externals);
 
         let pols = self.graph.param_builder.pairs.polarizations_values(
             &self.graph,

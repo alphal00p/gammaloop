@@ -142,7 +142,8 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        let ref_graph = self.as_ref();
+        let ref_graph: &HedgeGraph<E, V, H> = self.as_ref();
+        let b: SuBitGraph = ref_graph.empty_subgraph();
 
         if subgraph.is_empty() {
             let mut spinneys = AHashSet::new();
@@ -232,15 +233,14 @@ impl UltravioletGraph for Graph {
                 let m2 = d.data.mass_atom().npow(2);
                 let edge_power = edge_powers(d.data);
                 let is_power_negative = edge_power < 0;
-                let prop_den = function!(
-                    GS.den,
-                    usize::from(eid) as i64,
-                    function!(GS.emr_mom, usize::from(eid) as i64),
-                    m2,
+                let prop_den = GS.den(
+                    usize::from(eid),
+                    function!(GS.emr_mom, usize::from(eid)),
+                    &m2,
                     spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
                         .npow(2)
                         .to_dots()
-                        - m2
+                        - &m2,
                 );
                 for _i in 0..edge_power.abs() {
                     if is_power_negative {

@@ -50,7 +50,10 @@ use crate::{
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{F, FUN_LIB, GS, Length, TENSORLIB, W_, symbolica_ext::LOGPRINTOPTS},
+    utils::{
+        F, FUN_LIB, GS, Length, TENSORLIB, W_,
+        symbolica_ext::{LOGPRINTOPTS, LogPrint},
+    },
     uv::{
         UVgenerationSettings, UltravioletGraph, approx::to_vakint_integrand,
         settings::VakintSettings,
@@ -61,7 +64,7 @@ use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::{HedgePair, Orientation},
-        subgraph::{SuBitGraph, SubGraphLike, SubSetOps},
+        subgraph::{Inclusion, SuBitGraph, SubGraphLike, SubSetOps},
     },
     parser::DotGraph,
 };
@@ -482,6 +485,7 @@ impl AmplitudeGraph {
 
         forest.compute(
             &self.graph,
+            &self.graph.tree_edges,
             &self.graph.no_dummy(),
             vk,
             &orientations,
@@ -991,16 +995,23 @@ impl AmplitudeGraph {
                 })
                 .collect_vec();
 
-            let circled_orientations =
-                get_orientations_from_subgraph(&self.graph.underlying, &circled, &reverse_dangling)
-                    .into_iter()
-                    .map(|cff_graph| cff_graph.global_orientation)
-                    .filter(|a| settings.orientation_pattern.filter(a))
-                    .collect::<TiVec<SubgraphOrientationID, _>>();
+            let circled_bridgeless = circled.subtract(&self.graph.tree_edges);
+
+            let circled_orientations = get_orientations_from_subgraph(
+                &self.graph.underlying,
+                &circled_bridgeless,
+                &reverse_dangling,
+            )
+            .into_iter()
+            .map(|cff_graph| cff_graph.global_orientation)
+            .filter(|a| settings.orientation_pattern.filter(a))
+            .collect::<TiVec<SubgraphOrientationID, _>>();
+
+            let complement_bridgeless = complement.subtract(&self.graph.tree_edges);
 
             let complement_orientations = get_orientations_from_subgraph(
                 &self.graph.underlying,
-                &complement,
+                &complement_bridgeless,
                 &reverse_dangling,
             )
             .into_iter()
@@ -1016,6 +1027,7 @@ impl AmplitudeGraph {
             // println!("//Complement\n{}", self.graph.dot(&complement));
             circled_forest.compute(
                 &self.graph,
+                &self.graph.tree_edges,
                 &circled,
                 vakint_circled,
                 &circled_orientations,
@@ -1029,6 +1041,7 @@ impl AmplitudeGraph {
 
             complement_forest.compute(
                 &self.graph,
+                &self.graph.tree_edges,
                 &complement,
                 vakint_complement,
                 &complement_orientations,
@@ -1151,16 +1164,27 @@ impl AmplitudeGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let orientations: TiVec<AmplitudeOrientationID, OrientationData> = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-            .map(|a| a.data.clone())
-            .filter(|a| settings.orientation_pattern.filter(a))
-            .collect();
+        let mut bridgeless = self.graph.full_filter();
+        bridgeless.subtract_with(&self.graph.tree_edges);
+
+        let orientations: TiVec<AmplitudeOrientationID, OrientationData> =
+            get_orientations_from_subgraph(&self.graph.underlying, &bridgeless, &[])
+                .into_iter()
+                .map(|a| OrientationData {
+                    orientation: a
+                        .global_orientation
+                        .into_iter()
+                        .map(|(e, o)| {
+                            if self.graph.tree_edges.intersects(&self.graph[&e].1) {
+                                Orientation::Default
+                            } else {
+                                o
+                            }
+                        })
+                        .collect(),
+                })
+                .filter(|a| settings.orientation_pattern.filter(a))
+                .collect();
 
         let post = PostProcessingSetup {
             constraint_data: None,
@@ -1168,6 +1192,7 @@ impl AmplitudeGraph {
         };
         forest.compute(
             &self.graph,
+            &self.graph.tree_edges,
             &self.graph.no_dummy(),
             vakint,
             &orientations,
@@ -1207,10 +1232,7 @@ impl AmplitudeGraph {
             })?
             .into();
 
-        debug!(
-            "All parametric before color atom:{}",
-            scalar.printer(LOGPRINTOPTS)
-        );
+        debug!("All parametric before color atom:{}", scalar.log_print());
         scalar = scalar
             .unwrap_function(GS.color_wrap)
             .simplify_color()

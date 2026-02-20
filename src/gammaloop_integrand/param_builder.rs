@@ -1117,6 +1117,26 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
+        let arg = symbol!("arg");
+        new.add_function(
+            GS.tree_denom_wrapper,
+            "tree_denom".into(),
+            vec![arg],
+            Atom::var(arg),
+        )
+        .unwrap();
+
+        let eid = symbol!("eid");
+        let mom = symbol!("mom");
+        let mass = symbol!("mass");
+        new.add_function(
+            GS.den,
+            "den".into(),
+            vec![eid, mom, mass, arg],
+            Atom::var(arg),
+        )
+        .unwrap();
+
         for e in graph.iter_edge_ids() {
             new.add_tagged_function::<Symbol>(
                 GS.ose,

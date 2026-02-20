@@ -4,6 +4,7 @@ use crate::{
     cff::{
         expression::{GraphOrientation, OrientationID},
         generation::{ConstraintData, PostProcessingSetup, ShiftRewrite, generate_uv_cff},
+        tree,
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
@@ -620,12 +621,14 @@ impl CFFapprox {
         E,
         V,
         H,
-        S: SubGraphLike,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+        S: SubGraphLike + SubSetOps,
         SS: SubGraphLike,
         OID: OrientationID,
         O: GraphOrientation,
     >(
-        graph: &HedgeGraph<E, V, H>,
+        graph: &G,
+        tree_edges: &S,
         to_contract: &SS,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
@@ -636,19 +639,34 @@ impl CFFapprox {
     ) -> CFFapprox {
         let mut cff_sum = Atom::Zero;
 
+        let g = graph.as_ref();
+
         let mut contract_edges = Vec::new();
 
-        for (e, eid, _) in graph.iter_edges_of(to_contract) {
+        for (e, eid, _) in g.iter_edges_of(to_contract) {
             if e.is_paired() {
                 contract_edges.push(eid);
             }
         }
 
+        let bridgeless = amplitude_subgraph.subtract(tree_edges);
+
+        let comps: Vec<_> = g
+            .connected_components(&bridgeless)
+            .into_iter()
+            .map(|mut a| {
+                g.add_crown(&mut a);
+                a
+            })
+            .collect();
+
         for o in orientations {
-            cff_sum += o.orientation_thetas()
-                * generate_uv_cff(
-                    graph,
-                    amplitude_subgraph,
+            let mut cff_product = Atom::one();
+
+            for c in &comps {
+                cff_product *= generate_uv_cff(
+                    g,
+                    c,
                     canonize_esurface,
                     &contract_edges,
                     edges_in_initial_state_cut,
@@ -657,15 +675,31 @@ impl CFFapprox {
                     post_processing,
                 )
                 .unwrap()
+            }
+            cff_sum += o.orientation_thetas() * cff_product
         }
+
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(tree_edges, |_| -1));
+
         CFFapprox::Dependent {
             sign: Sign::Positive,
-            t_arg: IntegrandExpr { integrand: cff_sum },
+            t_arg: IntegrandExpr {
+                integrand: cff_sum * fourddenoms,
+            },
         }
     }
 
-    pub(crate) fn root<E, V, H, S: SubGraphLike, OID: OrientationID, O: GraphOrientation>(
-        graph: &HedgeGraph<E, V, H>,
+    pub(crate) fn root<
+        E,
+        V,
+        H,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+        S: SubGraphLike + SubSetOps,
+        OID: OrientationID,
+        O: GraphOrientation,
+    >(
+        graph: &G,
+        tree_edges: &S,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
@@ -675,7 +709,8 @@ impl CFFapprox {
     ) -> CFFapprox {
         Self::dependent(
             graph,
-            &graph.empty_subgraph::<SuBitGraph>(),
+            tree_edges,
+            &graph.as_ref().empty_subgraph::<SuBitGraph>(),
             amplitude_subgraph,
             canonize_esurface,
             orientations,
@@ -693,12 +728,13 @@ impl Approximation {
     pub(crate) fn root<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraphLike<Base = SuBitGraph>,
+        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
         OID: OrientationID,
         O: GraphOrientation,
     >(
         &mut self,
         graph: &G,
+        tree_edges: &S,
         amplitude: &S,
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
@@ -707,7 +743,8 @@ impl Approximation {
         post_processing: PostProcessingSetup<'_>,
     ) {
         self.local_3d = CFFapprox::root(
-            graph.as_ref(),
+            graph,
+            tree_edges,
             amplitude,
             canonize_esurface,
             orientations,
@@ -720,6 +757,7 @@ impl Approximation {
         self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
         self.final_integrand = self.final_integrand(
             graph,
+            tree_edges,
             amplitude,
             canonize_esurface,
             orientations,
@@ -1140,12 +1178,13 @@ impl Approximation {
     pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraphLike<Base = SuBitGraph>,
+        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
         OID: OrientationID,
         O: GraphOrientation,
     >(
         &mut self,
         graph: &G,
+        tree_edges: &S,
         amplitude: &S,
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
@@ -1168,7 +1207,8 @@ impl Approximation {
         };
 
         let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
-            graph.as_ref(),
+            graph,
+            tree_edges,
             &dependent.subgraph,
             amplitude,
             canonize_esurface,
@@ -1211,6 +1251,7 @@ impl Approximation {
 
         self.final_integrand = self.final_integrand(
             graph,
+            tree_edges,
             amplitude,
             canonize_esurface,
             orientations,
@@ -1464,12 +1505,13 @@ impl Approximation {
     pub(crate) fn final_integrand<
         G,
         H,
-        S: SubGraphLike<Base = SuBitGraph>,
+        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
         OID: OrientationID,
         O: GraphOrientation,
     >(
         &self,
         graph: &G,
+        tree_edges: &S,
         amplitude: &S,
         // orientation: &OrientationData,
         canonize_esurface: &Option<ShiftRewrite>,
@@ -1491,7 +1533,8 @@ impl Approximation {
         };
 
         let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
-            graph.as_ref(),
+            graph,
+            tree_edges,
             &self.subgraph,
             amplitude,
             canonize_esurface,
@@ -1545,14 +1588,17 @@ impl Approximation {
             .get_single_atom()
             .unwrap();
 
+        let bridgeless_reduced = reduced.subtract(tree_edges.included());
+
         let mut reps = Vec::new();
-        for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
+        // only put edges onshell if they are part of a loop
+        for (p, eid, _) in graph.as_ref().iter_edges_of(&bridgeless_reduced) {
             if p.is_paired() {
                 reps.push(GS.add_parametric_sign(eid));
             }
         }
 
-        resnum = resnum.replace_multiple(&reps);
+        resnum = resnum.replace_multiple(&reps).replace(GS.dim).with(4);
         resnum *= cff;
         resnum = resnum.wrap_color(GS.color_wrap);
 
@@ -1576,7 +1622,7 @@ impl Approximation {
                 .with(Atom::Zero)
                 .collect_factors()
                 .collect_num()
-                .typst_string() // printer(LOGPRINTOPTS)
+                .log_print() // printer(LOGPRINTOPTS)
         );
         let mut res = resnum.parse_into_net().unwrap();
         // debug!("Final Integrand Net:{}", res.dot_pretty());

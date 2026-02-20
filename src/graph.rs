@@ -50,6 +50,7 @@ pub struct Graph {
     pub name: String,
     pub group_id: Option<GroupId>,
     pub is_group_master: bool,
+    pub tree_edges: SuBitGraph,
     pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub param_builder: ParamBuilder,

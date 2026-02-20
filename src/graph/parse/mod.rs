@@ -765,10 +765,16 @@ impl Graph {
         )
         .with_context(|| format!("Failed to build lmb for  graph {}", initial_data.name))?;
 
+        let mut full_without_initials = underlying.full_filter();
+        full_without_initials.subtract_with(&initial_state_cut.left);
+        let mut tree_edges = underlying.bridges_of(&full_without_initials);
+        tree_edges.union_with(&initial_state_cut.left);
+
         let mut g = Graph {
             overall_factor: initial_data.overall_factor,
             polarizations: global_prefactor.polarizations(),
             global_prefactor,
+            tree_edges,
             name: initial_data.name,
             loop_momentum_basis,
             initial_state_cut,
