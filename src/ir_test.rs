@@ -34,6 +34,7 @@ use crate::{
         },
     },
     utils::{F, FloatLike, box_muller, f128},
+    uv::profile::logspace,
 };
 
 const SLOPE_STABILITY_POINTS: usize = 50;
@@ -48,7 +49,7 @@ pub struct IRProfileSetting {
 }
 
 impl CrossSectionGraphTerm {
-    fn enumerate_simple_colinear_limits(&self) -> Vec<IrLimit> {
+    fn enumerate_colinear_limits(&self) -> Vec<IrLimit> {
         self.raised_data
             .raised_cut_groups
             .iter()
@@ -683,14 +684,15 @@ impl IrLimit {
             - approach_settings.lambda_exp_end)
             / F(approach_settings.steps as f64);
 
-        let lambda_values: Vec<F<f64>> =
-            (0..=approach_settings.steps)
-                .map(|i| {
-                    F::from_f64(10.0f64.powf(
-                        approach_settings.lambda_exp_start.0 - lambda_exp_delta.0 * (i as f64),
-                    ))
-                })
-                .collect();
+        let lambda_values: Vec<F<f64>> = logspace(
+            approach_settings.lambda_exp_start.0,
+            approach_settings.lambda_exp_end.0,
+            approach_settings.steps,
+            10.0,
+        )
+        .into_iter()
+        .map(F::from_f64)
+        .collect();
 
         lambda_values
             .into_iter()
