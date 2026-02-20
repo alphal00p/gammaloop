@@ -2805,7 +2805,8 @@ pub(crate) fn get_n_dim_for_n_loop_momenta(
             }
             ParameterizationMode::HyperSpherical
             | ParameterizationMode::Cartesian
-            | ParameterizationMode::Spherical => {
+            | ParameterizationMode::Spherical
+            | ParameterizationMode::MomentumSpace => {
                 if force_radius {
                     3 * n_loop_momenta - 1
                 } else {
@@ -2941,6 +2942,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
             }
             (vecs, jac)
         }
+        ParameterizationMode::MomentumSpace => (x.as_chunks::<3>().0.to_vec(), one),
     }
 }
 
@@ -3034,6 +3036,12 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             }
             (xs, inv_jac)
         }
+        ParameterizationMode::MomentumSpace => (
+            moms.iter()
+                .flat_map(|mom| [mom.px.clone(), mom.py.clone(), mom.pz.clone()])
+                .collect(),
+            one,
+        ),
     }
 }
 

@@ -544,6 +544,8 @@ pub enum ParameterizationMode {
     HyperSpherical,
     #[serde(rename = "hyperspherical_flat")]
     HyperSphericalFlat,
+    #[serde(rename = "momentum_space")]
+    MomentumSpace,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
@@ -565,6 +567,7 @@ impl Display for ParameterizationMode {
             ParameterizationMode::Spherical => write!(f, "spherical"),
             ParameterizationMode::HyperSpherical => write!(f, "hyperspherical"),
             ParameterizationMode::HyperSphericalFlat => write!(f, "flat hyperspherical"),
+            ParameterizationMode::MomentumSpace => write!(f, "momentum space"),
         }
     }
 }
