@@ -1,7 +1,7 @@
 use crate::{
     cff::{
         expression::{GraphOrientation, OrientationData, OrientationID},
-        generation::{ConstraintData, ShiftRewrite},
+        generation::{ConstraintData, PostProcessingSetup, ShiftRewrite},
     },
     graph::{Edge, Graph, Vertex},
     momentum::SignOrZero,
@@ -61,7 +61,8 @@ impl Forest {
         orientations: &TiVec<OID, O>,
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
-        constraint_data: Option<ConstraintData>,
+        edges_in_initial_state_cut: &[EdgeIndex],
+        post_processing: PostProcessingSetup<'_>,
         settings: &UVgenerationSettings,
         _conjugate: bool,
     ) {
@@ -76,7 +77,8 @@ impl Forest {
                         canonize_esurface,
                         orientations,
                         cut_edges,
-                        constraint_data,
+                        edges_in_initial_state_cut,
+                        post_processing,
                     );
                 }
                 1 => {
@@ -102,7 +104,8 @@ impl Forest {
                         canonize_esurface,
                         orientations,
                         cut_edges,
-                        constraint_data,
+                        edges_in_initial_state_cut,
+                        post_processing,
                         &parent.data,
                         settings,
                     );

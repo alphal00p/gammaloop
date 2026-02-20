@@ -298,7 +298,7 @@ mod tests {
         }
 
         let cut_expression =
-            cff::generation::generate_cff_with_cuts(&hedge_graph, &None, &cuts).unwrap();
+            cff::generation::generate_cff_with_cuts(&hedge_graph, &[], &None, &cuts).unwrap();
         let cut = CutId::from(2);
         let (left, right) = cut_expression.to_atom_for_cut(cut);
 

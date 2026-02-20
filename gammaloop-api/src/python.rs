@@ -898,6 +898,7 @@ impl GammaLoopAPI {
             &subgraph,
             &None,
             &reverse_dangling,
+            &graph.get_edges_in_initial_state_cut(),
             &mut surface_cache,
         )
         .map_err(|e| {
@@ -980,6 +981,7 @@ impl GammaLoopAPI {
             &subgraph,
             &None,
             &reverse_dangling,
+            &graph.get_edges_in_initial_state_cut(),
             &mut surface_cache,
         )
         .map_err(|e| {

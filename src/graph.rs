@@ -372,6 +372,13 @@ impl Graph {
 
         result
     }
+
+    pub fn get_edges_in_initial_state_cut(&self) -> Vec<EdgeIndex> {
+        self.underlying
+            .iter_edges_of(&self.initial_state_cut)
+            .map(|(_, edge_index, _)| edge_index)
+            .collect_vec()
+    }
 }
 
 pub mod edge;

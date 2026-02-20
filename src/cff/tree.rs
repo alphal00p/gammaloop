@@ -4,7 +4,10 @@ use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
-use symbolica::atom::Atom;
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parse,
+};
 use typed_index_collections::TiVec;
 
 /// data structure for a tree
@@ -139,6 +142,12 @@ impl<T> Tree<T> {
         }
     }
 
+    pub(crate) fn map_mut(&mut self, f: impl Fn(&mut T)) {
+        for node in &mut self.nodes {
+            f(&mut node.data);
+        }
+    }
+
     #[allow(dead_code)]
     pub(crate) fn get_num_nodes(&self) -> usize {
         self.nodes.len()
@@ -209,7 +218,9 @@ where
 {
     fn to_atom_inv_impl(&self, cur_node: NodeId) -> Atom {
         let node = &self.nodes[cur_node];
-        let inv_data_esurface = Atom::num(1) / Atom::from(node.data);
+        let inv_data_esurface = (Atom::num(1) / Atom::from(node.data))
+            .replace(parse!("η_inf^-1"))
+            .with(Atom::num(0));
 
         let child_sum = node
             .children

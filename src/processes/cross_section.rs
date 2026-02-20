@@ -12,12 +12,13 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
+use rand::rand_core::le;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::{
-    algebra::algebraic_traits::IsZero,
+    algebra::{algebraic_traits::IsZero, complex::Complex},
     network::{Sequential, SmallestDegree},
     structure::concrete_index::ExpandedIndex,
 };
@@ -28,8 +29,11 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         cut_expression::SuperGraphOrientationID,
-        expression::{AmplitudeOrientationID, SubgraphOrientationID},
-        generation::{ConstraintData, get_orientations_from_subgraph},
+        expression::{AmplitudeOrientationID, CFFExpression, SubgraphOrientationID},
+        generation::{
+            ConstraintData, EsurfaceRewritingInstructions, PostProcessingSetup,
+            generate_supergraph_cff, get_orientations_from_subgraph,
+        },
     },
     define_index,
     gammaloop_integrand::{
@@ -37,14 +41,19 @@ use crate::{
         cross_section_integrand::CrossSectionIntegrandData,
     },
     graph::{
-        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
+        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+        parse::{self, complete_group_parsing},
     },
     model::ArcParticle,
     momentum_sample::SubspaceData,
     numerator::{self, symbolica_ext::AtomCoreExt},
     processes::DotExportSettings,
-    settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{F, FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives},
+    settings::{
+        GlobalSettings,
+        global::GenerationSettings,
+        runtime::{HFunctionSettings, LockedRuntimeSettings},
+    },
+    utils::{self, F, FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use eyre::{Context, eyre};
@@ -57,8 +66,9 @@ use linnet::half_edge::{
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::dual::HyperDual,
-    evaluate::{FunctionMap, OptimizationSettings},
+    create_hyperdual_from_components,
+    domains::{dual::HyperDual, float::FloatLike, rational::Rational},
+    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
     function,
     id::Replacement,
     parse, symbol,
@@ -182,6 +192,11 @@ impl CsAmplitudeCTDiagram {
             let mut left_forest = left_wood.unfold(graph, &graph.loop_momentum_basis);
             let mut right_forest = right_wood.unfold(graph, &graph.loop_momentum_basis);
 
+            let post = PostProcessingSetup {
+                constraint_data: None,
+                rewrite_esurfaces: None,
+            };
+
             left_forest.compute(
                 graph,
                 &self.left_subgraph,
@@ -189,7 +204,8 @@ impl CsAmplitudeCTDiagram {
                 &left_orientations,
                 &None,
                 &all_cut_edges,
-                None,
+                &graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 conjugate,
             );
@@ -201,7 +217,8 @@ impl CsAmplitudeCTDiagram {
                 &right_orientations,
                 &None,
                 &all_cut_edges,
-                None,
+                &graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 conjugate,
             );
@@ -790,17 +807,19 @@ impl CrossSectionGraph {
                                     .copied()
                                     .collect_vec();
 
+                                if sorted_subset == vec![CutId(3), CutId(0)] {
+                                    return None;
+                                }
+
                                 let all_sandwiches_connected =
                                     sorted_subset.windows(2).all(|sequential_cuts| {
-                                        let left_of_first_cut = &self.cuts[sequential_cuts[0]].left;
-                                        let right_of_second_cut =
-                                            &self.cuts[sequential_cuts[1]].right;
+                                        let right_of_first_cut =
+                                            &self.cuts[sequential_cuts[0]].right;
+                                        let left_of_second_cut =
+                                            &self.cuts[sequential_cuts[1]].left;
 
-                                        let sandwich = self
-                                            .graph
-                                            .full_filter()
-                                            .subtract(left_of_first_cut)
-                                            .subtract(right_of_second_cut);
+                                        let sandwich =
+                                            right_of_first_cut.intersection(left_of_second_cut);
 
                                         self.graph.is_connected(&sandwich)
                                     });
@@ -902,10 +921,18 @@ impl CrossSectionGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_cut_expression =
-            generate_cff_with_cuts(&self.graph.underlying, &shift_rewrite, &self.cuts)?;
+        let cff_cut_expression = generate_cff_with_cuts(
+            &self.graph.underlying,
+            &self.graph.get_edges_in_initial_state_cut(),
+            &shift_rewrite,
+            &self.cuts,
+        )?;
 
-        let _: () = self.derived_data.cff_expression = Some(cff_cut_expression);
+        let global_cff = generate_supergraph_cff(&self.graph)?;
+
+        self.derived_data.cff_expression = Some(cff_cut_expression);
+        self.derived_data.global_cff_expression = Some(global_cff);
+
         Ok(())
     }
 
@@ -1135,21 +1162,32 @@ impl CrossSectionGraph {
                 let reversed_dangling = reversed_dangling.into_iter().sorted().collect_vec();
                 let cut_edges = cut_edges.into_iter().sorted().collect_vec();
 
-                // build the graphs that are sandwiched between the cuts, this is done by taking the left side of the first cut, and intersect it with the right side of the second cut, etc.
+                // build the graphs that are sandwiched between the cuts, this is done by taking the right side of the first cut, and intersect it with the left side of the second cut, etc.
                 // The cuts are non-crossing and sorted from left to right, so this is well defined.
                 let graphs = [self.cuts[*cross_free_subset.first().unwrap()].left.clone()]
                     .into_iter()
                     .chain(cross_free_subset.windows(2).map(|sequential_cuts| {
-                        let left_of_first_cut = &self.cuts[sequential_cuts[0]].left;
-                        let right_of_second_cut = &self.cuts[sequential_cuts[1]].right;
+                        let right_of_first_cut = &self.cuts[sequential_cuts[0]].right;
+                        let left_of_second_cut = &self.cuts[sequential_cuts[1]].left;
 
-                        left_of_first_cut.intersection(right_of_second_cut)
+                        right_of_first_cut.intersection(left_of_second_cut)
                     }))
                     .chain([self.cuts[*cross_free_subset.last().unwrap()].right.clone()]);
 
                 // These are used to add the feynman rules of the cuts, so it is important that each edge is only added once.
                 // We therefore delete the edges that have already been added in previous cuts.
                 let mut disjoint_cut_subgraphs = Vec::<Option<SuBitGraph>>::new();
+
+                let mut cut_locations = vec![];
+                cut_locations.push((None, Some(*cross_free_subset.first().unwrap())));
+
+                cross_free_subset.windows(2).for_each(|pair| {
+                    cut_locations.push((Some(pair[0]), Some(pair[1])));
+                });
+
+                cut_locations.push((Some(*cross_free_subset.last().unwrap()), None));
+
+                let mut num_edges_cut = 0;
 
                 for cut_id in cross_free_subset.iter() {
                     let oriented_cut = &self.cuts[*cut_id].cut;
@@ -1160,6 +1198,7 @@ impl CrossSectionGraph {
                         }
                     }
 
+                    num_edges_cut += disjoint_cut_subgraph.nedges(&self.graph);
                     disjoint_cut_subgraphs.push(Some(disjoint_cut_subgraph));
                 }
 
@@ -1167,7 +1206,8 @@ impl CrossSectionGraph {
 
                 let mut product = graphs
                     .zip(disjoint_cut_subgraphs)
-                    .map(|(sandwich_subgraph, disjoint_cut_edges)| {
+                    .zip(cut_locations)
+                    .map(|((sandwich_subgraph, disjoint_cut_edges), cut_location)| {
                         // println!(
                         //     "subgraph: {}",
                         //     self.graph
@@ -1195,7 +1235,22 @@ impl CrossSectionGraph {
                             constraints: &active_constraints,
                         };
 
-                        println!("constraint_data: {:?}", constraint_data);
+                        let rewrite_esurfaces = EsurfaceRewritingInstructions {
+                            allowed_targets: &self
+                                .derived_data
+                                .global_cff_expression
+                                .as_ref()
+                                .unwrap()
+                                .surfaces,
+                            subgraph_location: cut_location,
+                            graph: &self.graph,
+                            cuts: &self.cuts,
+                        };
+
+                        let post_processing = PostProcessingSetup {
+                            constraint_data: Some(constraint_data),
+                            rewrite_esurfaces: Some(rewrite_esurfaces),
+                        };
 
                         forest.compute(
                             &self.graph,
@@ -1204,7 +1259,8 @@ impl CrossSectionGraph {
                             &orientations,
                             &canonize_esurface,
                             &cut_edges,
-                            Some(constraint_data),
+                            &self.graph.get_edges_in_initial_state_cut(),
+                            post_processing,
                             &settings.uv,
                             false,
                         );
@@ -1312,6 +1368,11 @@ impl CrossSectionGraph {
             let mut left_forest = left_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
             let mut right_forest = right_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
+            let post = PostProcessingSetup {
+                constraint_data: None,
+                rewrite_esurfaces: None,
+            };
+
             left_forest.compute(
                 &self.graph,
                 &cut.left,
@@ -1319,7 +1380,8 @@ impl CrossSectionGraph {
                 &left_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                None,
+                &self.graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 false,
             );
@@ -1331,7 +1393,8 @@ impl CrossSectionGraph {
                 &right_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                None,
+                &self.graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 true,
             );
@@ -1969,6 +2032,7 @@ impl CrossSectionGraph {
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
     pub cut_paramatric_integrand: TiVec<RaisedCutId, Vec<Atom>>,
+    pub global_cff_expression: Option<CFFExpression<SuperGraphOrientationID>>,
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
@@ -2008,6 +2072,7 @@ impl CrossSectionDerivedData {
     fn new_empty() -> Self {
         Self {
             orientations: None,
+            global_cff_expression: None,
             cff_expression: None,
             cut_paramatric_integrand: TiVec::new(),
             lmbs: None,
@@ -2095,4 +2160,72 @@ fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
     result.extend(f_parameters);
     result.extend(eta_params);
     result
+}
+
+#[test]
+fn test_symbolica_duals() {
+    create_hyperdual_from_components!(ThirdDerivative, [[0], [1], [2]]);
+    //let dual_shape_comp = ThirdDerivative::new_variable(0, 0.0);
+
+    let expr = parse!("t^-1");
+    let dual_shape = HyperDual::new(vec![vec![0], vec![1], vec![2]]);
+    let dual_shape_real = HyperDual::new(vec![vec![0], vec![1], vec![2]]);
+
+    let mut function_map = FunctionMap::default();
+
+    let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
+    function_map.add_constant(parse!("𝜋"), pi_rational.into());
+
+    let t = F(4.409081537009721);
+    let h = utils::h(&t, None, None, &HFunctionSettings::default());
+    println!("h: {}", h);
+    let dual_t = dual_shape.variable(0, Complex::new_re(t));
+    let dual_h: HyperDual<F<f64>> = utils::h_dual(
+        &dual_shape_real.variable(0, t),
+        None,
+        None,
+        &HFunctionSettings::default(),
+    );
+
+    println!("dual h: {}", dual_h);
+
+    let mut dual_h_complex = dual_shape.clone();
+    dual_h_complex
+        .values
+        .iter_mut()
+        .zip(dual_h.values.clone().iter())
+        .for_each(|(v, re_ve)| *v = Complex::new_re(*re_ve));
+
+    let evaluator = expr
+        .evaluator(
+            &function_map,
+            &vec![parse!("t"), parse!("h")],
+            OptimizationSettings::default(),
+        )
+        .unwrap();
+
+    let dual_evaluator = evaluator.clone().vectorize(&dual_shape, HashMap::new());
+
+    let mut evaluator_f64: ExpressionEvaluator<Complex<F<f64>>> = evaluator
+        .clone()
+        .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+
+    let mut dual_evaluator_f64: ExpressionEvaluator<Complex<F<f64>>> =
+        dual_evaluator.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+
+    let mut out = [Complex::new_zero(); 1];
+    let params = [Complex::new_re(t), Complex::new_re(h)];
+
+    evaluator_f64.evaluate(&params, &mut out);
+    println!("output: {}", out[0]);
+
+    let mut dual_params = dual_t.values.clone();
+    dual_params.append(&mut dual_h_complex.values);
+
+    let mut dual_out = [Complex::new_zero(); 3];
+    dual_evaluator_f64.evaluate(&dual_params, &mut dual_out);
+    println!("dual output: {:?}", dual_out);
+
+    let inv_t = dual_t.inv();
+    println!("inv t: {}", inv_t);
 }

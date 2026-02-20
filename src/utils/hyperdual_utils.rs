@@ -1,9 +1,10 @@
+use std::fmt::{Display, LowerExp};
 use std::ops::AddAssign;
 
+use crate::utils::{F, FloatLike, PrecisionUpgradable};
 use spenso::algebra::{algebraic_traits::RefZero, complex::Complex};
 use symbolica::domains::dual::{DualNumberStructure, HyperDual};
-
-use crate::utils::PrecisionUpgradable;
+use symbolica::domains::float::FloatLike as SymbolicaFloatLike;
 
 pub(crate) fn new_constant<T: Clone + RefZero>(shape: &HyperDual<T>, value: &T) -> HyperDual<T> {
     let mut new = shape.clone();
@@ -80,6 +81,23 @@ pub enum DualOrNot<T> {
     NonDual(T),
 }
 
+impl<T: LowerExp> Display for DualOrNot<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DualOrNot::Dual(dual) => write!(
+                f,
+                "[{}]",
+                dual.values
+                    .iter()
+                    .map(|v| format!("{:+16e}", v))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            DualOrNot::NonDual(value) => write!(f, "{:+16e}", value),
+        }
+    }
+}
+
 impl<T: symbolica::domains::float::FloatLike> AddAssign for DualOrNot<T> {
     fn add_assign(&mut self, rhs: Self) {
         match (self, rhs) {
@@ -107,4 +125,36 @@ impl<T: Clone> DualOrNot<T> {
             }
         }
     }
+}
+
+// this function assumes that the HyperDual has the correct shape for t-derivatives
+pub(crate) fn extract_t_derivatives_complex<T: FloatLike>(
+    dual: HyperDual<Complex<F<T>>>,
+) -> Vec<Complex<F<T>>> {
+    let mut result = Vec::with_capacity(dual.values.len());
+    let mut n_factorial = Complex::new_re(dual.values[0].re.one());
+
+    for (order, value) in dual.values.iter().enumerate() {
+        if order > 0 {
+            n_factorial = &n_factorial * Complex::new_re(value.re.from_usize(order));
+        }
+        result.push(value.clone() * &n_factorial);
+    }
+
+    result
+}
+
+// this function assumes that the HyperDual has the correct shape for t-derivatives
+pub(crate) fn extract_t_derivatives<T: FloatLike>(dual: HyperDual<F<T>>) -> Vec<F<T>> {
+    let mut result = Vec::with_capacity(dual.values.len());
+    let mut n_factorial = dual.values[0].one();
+
+    for (order, value) in dual.values.iter().enumerate() {
+        if order > 0 {
+            n_factorial = &n_factorial * value.from_usize(order);
+        }
+        result.push(value.clone() * &n_factorial);
+    }
+
+    result
 }

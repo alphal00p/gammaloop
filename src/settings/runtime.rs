@@ -139,6 +139,8 @@ pub struct GeneralSettings {
     pub additional_param_values: Vec<f64>,
     #[serde(skip_serializing_if = "is_false")]
     pub use_picobarns: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub disable_flux_factor: bool,
 }
 
 impl Default for GeneralSettings {
@@ -153,6 +155,7 @@ impl Default for GeneralSettings {
             mu_r_sq: 1000000.0,
             additional_param_values: vec![],
             use_picobarns: false,
+            disable_flux_factor: false,
         }
     }
 }

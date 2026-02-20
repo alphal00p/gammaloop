@@ -22,7 +22,10 @@ use crate::{
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
         F, FloatLike, Length, h, h_dual,
-        hyperdual_utils::{DualOrNot, new_constant, shape_for_t_derivatives},
+        hyperdual_utils::{
+            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
+            shape_for_t_derivatives,
+        },
         newton_solver::newton_iteration_and_derivative,
         serde_utils::SmartSerde,
     },
@@ -55,6 +58,7 @@ use symbolica::{
     parse,
 };
 use tracing::debug;
+use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use super::{
@@ -595,6 +599,8 @@ impl GraphTerm for CrossSectionGraphTerm {
             let representative_esurface =
                 &self.cut_esurface[self.raised_data.raised_cut_groups[raised_cut][0]];
 
+            debug!("representative esurface: {:#?}", representative_esurface);
+
             let function = |t: &F<T>| {
                 representative_esurface.compute_self_and_r_derivative(
                     t,
@@ -621,6 +627,19 @@ impl GraphTerm for CrossSectionGraphTerm {
             );
 
             for (subset_id, subset) in cross_free_subsets.iter().enumerate() {
+                debug!("\n--- Evaluating subset {} ---", subset_id);
+                debug!("subset: {:?}", subset);
+                debug!("cuts {:?}", subset);
+                for cut in subset {
+                    let edges_in_cut = self.cuts[*cut]
+                        .cut
+                        .iter_edges(&self.graph)
+                        .map(|(_, e)| e.data.name.clone())
+                        .collect_vec();
+
+                    debug!("edges in cut {}: {:?}", cut.0, edges_in_cut);
+                }
+
                 let dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
                     .clone()
                     .map(HyperDual::<F<T>>::new);
@@ -689,6 +708,10 @@ impl GraphTerm for CrossSectionGraphTerm {
                         )
                     };
 
+                debug!("tstar: {}", tstar);
+                debug!("h(tstar): {}", h_function);
+                debug!("esurface derivative at tstar: {}", esurface_derivatives);
+
                 let lu_params = LUParams { h_function, tstar };
 
                 if let Some((_channel_index, _alpha)) = &channel_id {
@@ -726,14 +749,43 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 for (i, e) in orientations.iter() {
                     if let Some(iterative) = &iterative {
+                        //if subset_id == 2 {
+                        //    println!("iterative len: {}", iterative.len());
+                        //}
+
                         result += DualOrNot::new_from_slice(
                             &complex_dual_shape,
                             iterative
-                                [i.0 * multiplicative_offset..(i.0 + 1) * multiplicative_offset]
+                                .get(i.0 * multiplicative_offset..(i.0 + 1) * multiplicative_offset)
+                                .unwrap_or_else(|| {
+                                    println!(
+                                        "raised_cut id: {}, subset id: {}",
+                                        raised_cut.0, subset_id
+                                    );
+
+                                    println!("orientation id: {}", i.0);
+
+                                    println!("multiplicative_offset: {}", multiplicative_offset);
+
+                                    println!(
+                                        "expected range: {}..{}",
+                                        i.0 * multiplicative_offset,
+                                        (i.0 + 1) * multiplicative_offset
+                                    );
+
+                                    println!("iterative evaluator len: {}", iterative.len());
+
+                                    println!("num orientations: {}", orientations.len());
+
+                                    println!("loop momenta \n: {}", momentum_sample.loop_moms());
+
+                                    panic!("result corrupted")
+                                })
                                 .as_ref(),
                         );
                     } else {
-                        self.param_builder.orientation_value(e, 1);
+                        self.param_builder
+                            .orientation_value(e, multiplicative_offset);
                         let a = T::get_parameters(
                             &mut self.param_builder,
                             (settings.general.enable_cache, settings.general.debug_cache),
@@ -760,10 +812,13 @@ impl GraphTerm for CrossSectionGraphTerm {
                     todo!();
                 };
 
+                debug!("pass 1 result {}", result);
+
                 let mut params_for_pass_two = vec![];
                 match result {
                     DualOrNot::Dual(dual_result) => {
-                        params_for_pass_two.extend_from_slice(&dual_result.values);
+                        params_for_pass_two
+                            .extend_from_slice(&extract_t_derivatives_complex(dual_result));
                     }
                     DualOrNot::NonDual(non_dual_result) => {
                         params_for_pass_two.push(non_dual_result);
@@ -772,9 +827,11 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 match esurface_derivatives {
                     DualOrNot::Dual(dual_e_surface) => {
-                        dual_e_surface.values[1..].iter().for_each(|v| {
-                            params_for_pass_two.push(Complex::new_re(v.clone()));
-                        });
+                        extract_t_derivatives(dual_e_surface)[1..]
+                            .iter()
+                            .for_each(|v| {
+                                params_for_pass_two.push(Complex::new_re(v.clone()));
+                            });
                     }
                     DualOrNot::NonDual(non_dual_e_surface) => {
                         params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
@@ -783,14 +840,20 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let pass_two_evaluator =
                     &mut self.raised_data.pass_two_evaluators[subset.len() - 1];
+
+                debug!("pass two evaluator: {}", pass_two_evaluator.exprs[0]);
                 let pass_two_result = <T as GenericEvaluatorFloat>::get_evaluator_single(
                     pass_two_evaluator,
                 )(&params_for_pass_two);
 
+                debug!("pass_two_result: {:+16e}", pass_two_result);
+
                 cut_threshold_counterterms.push(ct_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                cut_results.push(pass_two_result);
+                cut_results.push(
+                    pass_two_result, //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
+                );
             }
         }
 
@@ -805,43 +868,47 @@ impl GraphTerm for CrossSectionGraphTerm {
             all_cut_result += result + ct_result;
         }
 
-        let flux_factor = match momentum_sample.external_moms().len() {
-            1 => {
-                momentum_sample.one()
-                    / (F::from_f64(2.0)
-                        * &momentum_sample
-                            .external_moms()
-                            .first()
-                            .as_ref()
-                            .unwrap()
-                            .temporal
-                            .value)
-            }
-            2 => {
-                let mom_1 = &momentum_sample.external_moms()[ExternalIndex::from(0)];
-                let mom_2 = &momentum_sample.external_moms()[ExternalIndex::from(1)];
-                let mass_factor = self
-                    .graph
-                    .initial_state_cut
-                    .iter_edges(&self.graph)
-                    .map(|(_, e)| e.data.mass.value(model, &self.param_builder).unwrap())
-                    .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
-                        acc * &mass * &mass
-                    })
-                    .re;
+        let flux_factor = if settings.general.disable_flux_factor {
+            F::from_f64(1.0)
+        } else {
+            match momentum_sample.external_moms().len() {
+                1 => {
+                    momentum_sample.one()
+                        / (F::from_f64(2.0)
+                            * &momentum_sample
+                                .external_moms()
+                                .first()
+                                .as_ref()
+                                .unwrap()
+                                .temporal
+                                .value)
+                }
+                2 => {
+                    let mom_1 = &momentum_sample.external_moms()[ExternalIndex::from(0)];
+                    let mom_2 = &momentum_sample.external_moms()[ExternalIndex::from(1)];
+                    let mass_factor = self
+                        .graph
+                        .initial_state_cut
+                        .iter_edges(&self.graph)
+                        .map(|(_, e)| e.data.mass.value(model, &self.param_builder).unwrap())
+                        .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
+                            acc * &mass * &mass
+                        })
+                        .re;
 
-                let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+                    let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
 
-                momentum_sample.one() / f
-                    * if settings.general.use_picobarns {
-                        F::from_ff64(PICOBARN_CONVERSION)
-                    } else {
-                        F::from_f64(1.0)
-                    }
+                    momentum_sample.one() / f
+                        * if settings.general.use_picobarns {
+                            F::from_ff64(PICOBARN_CONVERSION)
+                        } else {
+                            F::from_f64(1.0)
+                        }
+                }
+                _ => unimplemented!(
+                    "Flux factor for more than 3 or more incoming particles not implemented yet"
+                ),
             }
-            _ => unimplemented!(
-                "Flux factor for more than 3 or more incoming particles not implemented yet"
-            ),
         };
 
         all_cut_result * flux_factor

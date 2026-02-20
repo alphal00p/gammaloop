@@ -22,14 +22,14 @@ use super::{
 const MAX_VERTEX_COUNT: usize = 64;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct CFFVertex {
-    vertex_set: VertexSet,
+pub struct CFFVertex {
+    pub vertex_set: VertexSet,
     pub incoming_edges: Vec<CFFEdge>,
     pub outgoing_edges: Vec<CFFEdge>,
 }
 
 impl CFFVertex {
-    fn new(id: usize) -> Self {
+    pub fn new(id: usize) -> Self {
         let vertex_set = VertexSet::from_usize(id);
 
         CFFVertex {
@@ -215,9 +215,9 @@ impl VertexSet {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct CFFEdge {
-    edge_id: EdgeIndex,
-    edge_type: CFFEdgeType,
+pub struct CFFEdge {
+    pub edge_id: EdgeIndex,
+    pub edge_type: CFFEdgeType,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -236,7 +236,7 @@ enum VertexType {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CFFGenerationGraph {
-    vertices: Vec<CFFVertex>,
+    pub vertices: Vec<CFFVertex>,
     pub global_orientation: EdgeVec<Orientation>,
 }
 
@@ -792,6 +792,7 @@ impl CFFGenerationGraph {
                 positive_energies,
                 negative_energies,
                 external_shift,
+                vertex_set: vertex.vertex_set,
             };
 
             HybridSurface::Hsurface(hsurface)
@@ -1100,7 +1101,7 @@ mod test {
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Flow, Orientation},
         nodestore::NodeStorageVec,
-        subgraph::{SuBitGraph,  SubSetOps},
+        subgraph::{SuBitGraph, SubSetOps},
     };
 
     #[test]

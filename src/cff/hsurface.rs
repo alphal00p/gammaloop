@@ -6,7 +6,7 @@ use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use symbolica::parse;
 use tracing::warn;
 use typed_index_collections::TiVec;
@@ -14,7 +14,9 @@ use typed_index_collections::TiVec;
 use super::esurface::Esurface;
 use super::esurface::ExternalShift;
 
-#[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode, Hash,
+)]
 pub struct HsurfaceID(usize);
 pub type HsurfaceCollection = TiVec<HsurfaceID, Hsurface>;
 pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;
@@ -25,6 +27,7 @@ pub struct Hsurface {
     pub positive_energies: Vec<EdgeIndex>,
     pub negative_energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
+    pub vertex_set: VertexSet,
 }
 
 impl PartialEq for Hsurface {
@@ -126,6 +129,15 @@ impl Hsurface {
     }
 }
 
+#[test]
+fn quick_test() {
+    let expr = parse!(
+        " 1/16*𝜋^-2*t⃰^3*h_lu_cut*SCALAR_COUPLING^4*(1/4*(OSE(1)+OSE(3))^-1*θ(σ(0))*θ(σ(2))*θ(σ(3))*θ(σ(4))*θ(-σ(1))*OSE(1)^-1*OSE(2)^-1+1/4*(OSE(1)+OSE(3))^-1*(OSE(2)+OSE(3))^-1*θ(σ(0))*θ(σ(3))*θ(σ(4))*θ(-σ(1))*θ(-σ(2))*OSE(1)^-1*OSE(2)^-1)*θ(σ(0))*θ(σ(3))*θ(σ(4))*OSE(3)^-1*OSE(4)^-1"
+    ).expand();
+
+    println!("{}", expr);
+}
+
 impl From<HsurfaceID> for Atom {
     fn from(value: HsurfaceID) -> Self {
         parse!(&format!("H({})", Into::<usize>::into(value)))
@@ -151,6 +163,7 @@ mod tests {
             positive_energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
             negative_energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
+            vertex_set: VertexSet::dummy(),
         };
 
         let h_surface_atom = h_surface.to_atom(&[]);
@@ -174,6 +187,7 @@ mod tests {
             positive_energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             negative_energies: vec![EdgeIndex::from(2)],
             external_shift: vec![],
+            vertex_set: VertexSet::dummy(),
         };
 
         let other = Esurface {

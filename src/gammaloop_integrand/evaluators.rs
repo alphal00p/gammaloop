@@ -27,7 +27,7 @@ use crate::{
     graph::Graph,
     momentum::Helicity,
     momentum_sample::MomentumSample,
-    utils::{F, FloatLike, f128},
+    utils::{F, FloatLike, Length, f128},
 };
 
 use super::{
@@ -59,6 +59,15 @@ impl<'a, OID: IndexLike> SingleOrAllOrientations<'a, OID> {
                     id: *id,
                 }
             }
+        }
+    }
+}
+
+impl<OID> Length for SingleOrAllOrientations<'_, OID> {
+    fn len(&self) -> usize {
+        match self {
+            SingleOrAllOrientations::Single { .. } => 1,
+            SingleOrAllOrientations::All { all, .. } => all.len(),
         }
     }
 }
@@ -364,7 +373,7 @@ impl GenericEvaluatorFloat for f128 {
     ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
         |params: &[Complex<F<f128>>]| {
             // info!("USING COMPLEX F128 MULTIPLE");
-            let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
+            let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             generic_evaluator.f128.evaluate(params, &mut out);
             out
         }

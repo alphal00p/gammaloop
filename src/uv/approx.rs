@@ -5,7 +5,7 @@ use std::hash::Hash;
 use crate::{
     cff::{
         expression::{GraphOrientation, OrientationID},
-        generation::{ConstraintData, ShiftRewrite, generate_uv_cff},
+        generation::{ConstraintData, PostProcessingSetup, ShiftRewrite, generate_uv_cff},
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
@@ -359,7 +359,8 @@ impl CFFapprox {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-        constraint_data: Option<ConstraintData>,
+        edges_in_initial_state_cut: &[EdgeIndex],
+        post_processing: PostProcessingSetup<'_>,
     ) -> CFFapprox {
         let mut cff_sum = Atom::Zero;
 
@@ -378,9 +379,10 @@ impl CFFapprox {
                     amplitude_subgraph,
                     canonize_esurface,
                     &contract_edges,
+                    edges_in_initial_state_cut,
                     o.orientation(),
                     cut_edges,
-                    constraint_data,
+                    post_processing,
                 )
                 .unwrap()
         }
@@ -396,7 +398,8 @@ impl CFFapprox {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-        constraint_data: Option<ConstraintData>,
+        edges_in_initial_state_cut: &[EdgeIndex],
+        post_processing: PostProcessingSetup<'_>,
     ) -> CFFapprox {
         Self::dependent(
             graph,
@@ -405,7 +408,8 @@ impl CFFapprox {
             canonize_esurface,
             orientations,
             cut_edges,
-            constraint_data,
+            edges_in_initial_state_cut,
+            post_processing,
         )
     }
 }
@@ -427,7 +431,8 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-        constraint_data: Option<ConstraintData>,
+        edges_in_initial_state_cut: &[EdgeIndex],
+        post_processing: PostProcessingSetup<'_>,
     ) {
         self.local_3d = CFFapprox::root(
             graph.as_ref(),
@@ -435,7 +440,8 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
-            constraint_data,
+            edges_in_initial_state_cut,
+            post_processing,
         );
         self.integrated_4d = ApproxOp::Root;
         self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
@@ -445,7 +451,8 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
-            constraint_data,
+            edges_in_initial_state_cut,
+            post_processing,
         );
     }
 
@@ -723,7 +730,8 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-        constraint_data: Option<ConstraintData>,
+        edges_in_initial_state_cut: &[EdgeIndex],
+        post_processing: PostProcessingSetup<'_>,
         dependent: &Self,
         settings: &UVgenerationSettings,
     ) {
@@ -753,7 +761,8 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
-            constraint_data,
+            edges_in_initial_state_cut,
+            post_processing,
         ) else {
             unreachable!()
         };
@@ -793,7 +802,8 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
-            constraint_data,
+            edges_in_initial_state_cut,
+            post_processing,
         );
     }
 
@@ -1048,7 +1058,8 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-        constraint_data: Option<ConstraintData>,
+        edges_in_initial_state_cut: &[EdgeIndex],
+        post_processing: PostProcessingSetup,
     ) -> Option<ParsingNet>
     where
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
@@ -1069,7 +1080,8 @@ impl Approximation {
             canonize_esurface,
             orientations,
             cut_edges,
-            constraint_data,
+            edges_in_initial_state_cut,
+            post_processing,
         ) else {
             unreachable!()
         };

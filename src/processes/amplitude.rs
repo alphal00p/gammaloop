@@ -34,7 +34,9 @@ use crate::{
         expression::{
             AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
         },
-        generation::{generate_cff_expression, get_orientations_from_subgraph},
+        generation::{
+            PostProcessingSetup, generate_cff_expression, get_orientations_from_subgraph,
+        },
     },
     gammaloop_integrand::{
         LmbMultiChannelingSetup,
@@ -443,6 +445,7 @@ impl AmplitudeGraph {
         let cff_expression = generate_cff_expression(
             &self.graph.underlying,
             &shift_rewrite,
+            &self.graph.get_edges_in_initial_state_cut(),
             &self.graph.dummy_list(),
         )?;
         self.derived_data.cff_expression = Some(cff_expression);
@@ -912,7 +915,10 @@ impl AmplitudeGraph {
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
             let vakint = self.new_vakint();
-
+            let post = PostProcessingSetup {
+                constraint_data: None,
+                rewrite_esurfaces: None,
+            };
             // println!("//Circled\n{}", self.graph.dot(&circled));
             // println!("//Complement\n{}", self.graph.dot(&complement));
             circled_forest.compute(
@@ -922,7 +928,8 @@ impl AmplitudeGraph {
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                None,
+                &self.graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 false,
             );
@@ -934,7 +941,8 @@ impl AmplitudeGraph {
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                None,
+                &self.graph.get_edges_in_initial_state_cut(),
+                post.clone(),
                 &settings.uv,
                 false,
             );
@@ -1052,7 +1060,10 @@ impl AmplitudeGraph {
             .collect();
 
         let vakint = self.new_vakint();
-
+        let post = PostProcessingSetup {
+            constraint_data: None,
+            rewrite_esurfaces: None,
+        };
         forest.compute(
             &self.graph,
             &self.graph.no_dummy(),
@@ -1060,7 +1071,8 @@ impl AmplitudeGraph {
             &orientations,
             &canonize_esurface,
             &[],
-            None,
+            &self.graph.get_edges_in_initial_state_cut(),
+            post.clone(),
             &settings.uv,
             false,
         );
