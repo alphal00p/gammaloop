@@ -12,6 +12,7 @@ use typed_index_collections::TiVec;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
     cff::esurface::Esurface,
+    gammaloop_integrand::evaluators::EvaluatorMethod,
     graph::LoopMomentumBasis,
     improve_ps::generate_default_momenta,
     momentum::RotationMethod,
@@ -124,6 +125,8 @@ pub struct GeneralSettings {
     #[serde(skip_serializing_if = "is_false")]
     pub use_ltd: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub evaluator_method: EvaluatorMethod,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pat: OrientationPattern,
     #[serde(skip_serializing_if = "is_false")]
     pub load_compiled_cff: bool,
@@ -146,6 +149,7 @@ pub struct GeneralSettings {
 impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
+            evaluator_method: EvaluatorMethod::default(),
             use_ltd: false,
             load_compiled_cff: false,
             enable_cache: false,

@@ -30,7 +30,6 @@ use crate::{
         serde_utils::SmartSerde,
     },
 };
-use ahash::{HashMap, HashMapExt};
 use bincode::Encode;
 use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
@@ -52,14 +51,11 @@ use std::{
     vec,
 };
 use symbolica::{
-    atom::AtomCore,
-    domains::{dual::HyperDual, float::Real, rational::Rational},
-    evaluate::{FunctionMap, OptimizationSettings},
+    domains::{dual::HyperDual, float::Real},
+    evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
-    parse,
 };
 use tracing::debug;
-use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use super::{
@@ -575,7 +571,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         settings: &RuntimeSettings,
         rotation: &Rotation,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Complex<F<T>> {
+    ) -> Result<Complex<F<T>>> {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter, &self.orientations);
 
@@ -759,7 +755,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let iterative = self.iterative_integrand.as_mut().map(|ev| {
                     <T as GenericEvaluatorFloat>::get_evaluator(&mut ev[raised_cut][subset_id])(
-                        &params,
+                        params.as_slice(),
                     )
                 });
 
@@ -828,7 +824,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             &complex_dual_shape,
                             &<T as GenericEvaluatorFloat>::get_evaluator(
                                 &mut self.parametric_integrand[raised_cut][subset_id],
-                            )(&a),
+                            )(a.as_slice()),
                         );
                     }
                 }
@@ -948,7 +944,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             .red()
         );
 
-        final_result
+        Ok(final_result)
     }
     fn name(&self) -> String {
         self.graph.name.clone()
@@ -990,9 +986,10 @@ impl HasIntegrand for CrossSectionIntegrand {
         _iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
-    ) -> EvaluationResult {
+    ) -> Result<EvaluationResult> {
         let result = evaluate_sample(self, model, sample, wgt, _iter, use_f128, max_eval);
-        debug!("result: {:?}", result.integrand_result);
+
+        debug!(result = ?result,"Evaluating");
 
         result
     }

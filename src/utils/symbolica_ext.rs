@@ -759,6 +759,42 @@ pub trait CallSymbol<T> {
     fn f(&self, args: T) -> Atom;
 }
 
+impl<'a> CallSymbol<AtomOrView<'a>> for Symbol {
+    fn f(&self, arg: AtomOrView<'a>) -> Atom {
+        FunctionBuilder::new(*self).add_arg(arg).finish()
+    }
+}
+
+impl<'a> CallSymbol<AtomView<'a>> for Symbol {
+    fn f(&self, arg: AtomView<'a>) -> Atom {
+        FunctionBuilder::new(*self).add_arg(arg).finish()
+    }
+}
+
+impl CallSymbol<Atom> for Symbol {
+    fn f(&self, arg: Atom) -> Atom {
+        FunctionBuilder::new(*self).add_arg(arg).finish()
+    }
+}
+
+impl CallSymbol<&Atom> for Symbol {
+    fn f(&self, arg: &Atom) -> Atom {
+        FunctionBuilder::new(*self).add_arg(arg).finish()
+    }
+}
+
+impl CallSymbol<usize> for Symbol {
+    fn f(&self, arg: usize) -> Atom {
+        FunctionBuilder::new(*self).add_arg(arg).finish()
+    }
+}
+
+impl CallSymbol<Symbol> for Symbol {
+    fn f(&self, arg: Symbol) -> Atom {
+        FunctionBuilder::new(*self).add_arg(arg).finish()
+    }
+}
+
 impl<'a, I> CallSymbol<&'a [I]> for Symbol
 where
     &'a I: Into<AtomOrView<'a>>,

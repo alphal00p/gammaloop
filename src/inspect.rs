@@ -25,7 +25,7 @@ pub fn inspect<I: HasIntegrand>(
     mut force_radius: bool,
     is_momentum_space: bool,
     use_f128: bool,
-) -> (Option<f64>, Complex<F<f64>>) {
+) -> Result<(Option<f64>, Complex<F<f64>>)> {
     if integrand.get_n_dim() as isize == pt.len() as isize - 1 {
         force_radius = true;
     }

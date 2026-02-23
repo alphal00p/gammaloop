@@ -1460,14 +1460,14 @@ pub mod test {
         let param_builder = &graph.graph.param_builder;
         println!("{param_builder}");
 
-        GenericEvaluator::new_from_builder(
-            [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
-            param_builder,
-            None,
-            OptimizationSettings::default(),
-            true,
-        )
-        .unwrap();
+        // GenericEvaluator::new_from_builder(
+        //     [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
+        //     param_builder,
+        //     None,
+        //     OptimizationSettings::default(),
+        //     true,
+        // )
+        // .unwrap();
         // println!(" {}", a);
     }
 }

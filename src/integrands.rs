@@ -16,7 +16,9 @@ use crate::{
     },
     utils,
 };
+
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
 use enum_dispatch::enum_dispatch;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -71,7 +73,7 @@ pub trait HasIntegrand {
         mut force_radius: bool,
         is_momentum_space: bool,
         use_f128: bool,
-    ) -> (Option<f64>, EvaluationResult) {
+    ) -> Result<(Option<f64>, EvaluationResult)> {
         if self.get_n_dim() as isize == pt.len() as isize - 1 {
             force_radius = true;
         }
@@ -119,7 +121,7 @@ pub trait HasIntegrand {
         };
 
         let eval_result =
-            self.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero());
+            self.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero())?;
         info!(
             target: "gammalooprs::integrands::inspect",
             "\nInput point in unit hypercube xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
@@ -140,7 +142,7 @@ pub trait HasIntegrand {
             .blue(),
         );
 
-        (jac, eval_result)
+        Ok((jac, eval_result))
     }
 
     fn create_grid(&self) -> Grid<F<f64>>;
@@ -155,7 +157,7 @@ pub trait HasIntegrand {
         iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
-    ) -> EvaluationResult;
+    ) -> Result<EvaluationResult>;
 
     fn get_n_dim(&self) -> usize;
 
@@ -214,7 +216,7 @@ impl HasIntegrand for Integrand {
         iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
-    ) -> EvaluationResult {
+    ) -> Result<EvaluationResult> {
         match self {
             Integrand::UnitSurface(integrand) => {
                 integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
@@ -365,7 +367,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
-    ) -> EvaluationResult {
+    ) -> Result<EvaluationResult> {
         let start_evaluate_sample = std::time::Instant::now();
 
         let xs = match sample {
@@ -427,12 +429,12 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             }],
         };
 
-        EvaluationResult {
+        Ok(EvaluationResult {
             integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
             integrator_weight: wgt,
             event_buffer: vec![],
             evaluation_metadata,
-        }
+        })
     }
 }
 
@@ -533,7 +535,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
         iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
-    ) -> EvaluationResult {
+    ) -> Result<EvaluationResult> {
         let start_evaluate_sample = std::time::Instant::now();
 
         let xs = match sample {
@@ -588,11 +590,11 @@ impl HasIntegrand for UnitVolumeIntegrand {
             }],
         };
 
-        EvaluationResult {
+        Ok(EvaluationResult {
             integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
             integrator_weight: wgt,
             event_buffer: vec![],
             evaluation_metadata,
-        }
+        })
     }
 }

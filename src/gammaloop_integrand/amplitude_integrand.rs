@@ -30,10 +30,10 @@ use crate::{
         esurface::{
             EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId, get_representative,
         },
-        expression::{AmplitudeOrientationID, GraphOrientation},
+        expression::AmplitudeOrientationID,
     },
     evaluation_result::EvaluationResult,
-    gammaloop_integrand::{ChannelIndex, ParamBuilder},
+    gammaloop_integrand::{ChannelIndex, ParamBuilder, evaluators::EvaluatorStack},
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
         LoopMomentumBasis,
@@ -52,16 +52,12 @@ use crate::{
     utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
 };
 
-use super::{
-    GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat, GraphTerm,
-    LmbMultiChannelingSetup, create_grid, evaluate_sample,
-};
+use super::{GammaloopIntegrand, GraphTerm, LmbMultiChannelingSetup, create_grid, evaluate_sample};
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
-    pub orientation_parametric_integrand: GenericEvaluator,
-    pub iterative_integrand_evaluator: Option<GenericEvaluator>,
+    pub original_integrand: EvaluatorStack,
     pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: SubSet<AmplitudeOrientationID>,
     pub esurfaces: EsurfaceCollection,
@@ -96,34 +92,12 @@ impl AmplitudeGraphTerm {
 
         debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
 
-        let orientation_parametric_integrand = GenericEvaluator::new_from_builder(
-            [graph.derived_data.all_mighty_integrand.clone()],
+        let original_integrand = EvaluatorStack::new(
+            graph.derived_data.all_mighty_integrand.clone(),
             &graph.graph.param_builder,
-            None,
-            OptimizationSettings::default(),
-            settings.generation.evaluator.store_atom,
-        )
-        .unwrap();
-
-        let iterative_integrand_evaluator = if settings
-            .generation
-            .evaluator
-            .iterative_orientation_optimization
-        {
-            GenericEvaluator::new_from_builder(
-                orientations.iter().map(|a| {
-                    let selected = a.select(&graph.derived_data.all_mighty_integrand);
-                    debug!(selected_expr = %selected.printer(LOGPRINTOPTS), "Iterative");
-                    selected
-                }),
-                &graph.graph.param_builder,
-                None,
-                OptimizationSettings::default(),
-                settings.generation.evaluator.store_atom,
-            )
-        } else {
-            None
-        };
+            orientations.as_slice().as_ref(),
+            settings.generation.evaluator,
+        )?;
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
 
@@ -146,8 +120,7 @@ impl AmplitudeGraphTerm {
         Ok(AmplitudeGraphTerm {
             orientation_filter: SubSet::full(orientations.len()),
             orientations,
-            iterative_integrand_evaluator,
-            orientation_parametric_integrand,
+            original_integrand,
             tropical_sampler: graph.derived_data.tropical_sampler.clone(),
             graph: graph.graph.clone(),
             multi_channeling_setup: LmbMultiChannelingSetup {
@@ -199,28 +172,14 @@ impl AmplitudeGraphTerm {
             )
         })?;
 
-        self.orientation_parametric_integrand.compile(
-            graph_path
-                .join("orientation_parametric_integrand")
-                .with_extension("cpp"),
-            format!("{}_orientation_parametric_integrand", &self.graph.name,),
-            graph_path
-                .join("orientation_parametric_integrand")
-                .with_extension("so"),
-            settings.generation.compile.export_settings(),
-        );
+        self.original_integrand.compile(
+            "orientation_parametric_integrand",
+            &graph_path,
+            settings,
+        )?;
 
         self.threshold_counterterm
             .compile(&graph_path, override_existing, settings);
-
-        if let Some(e) = self.iterative_integrand_evaluator.as_mut() {
-            e.compile(
-                graph_path.join("iterative").with_extension("cpp"),
-                format!("{}_iterative", &self.graph.name,),
-                graph_path.join("iterative").with_extension("so"),
-                settings.generation.compile.export_settings(),
-            )
-        }
 
         Ok(())
     }
@@ -238,7 +197,7 @@ impl AmplitudeGraphTerm {
         settings: &RuntimeSettings,
         rotation: &Rotation,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Complex<F<T>> {
+    ) -> Result<Complex<F<T>>> {
         let (momentum_sample, prefactor) = if let Some((channel_id, alpha)) = channel_id {
             self.multi_channeling_setup
                 .reinterpret_loop_momenta_and_compute_prefactor(
@@ -259,54 +218,20 @@ impl AmplitudeGraphTerm {
         debug!("loop_moms: {}", momentum_sample.loop_moms());
         debug!("jacobian: {:16e}", momentum_sample.jacobian());
 
-        let evaluator = &mut self.orientation_parametric_integrand;
-        let mut result = Complex::new_re(F(T::from_f64(0.)));
-
-        {
-            let a = T::get_parameters(
-                &mut self.param_builder,
-                (settings.general.enable_cache, settings.general.debug_cache),
-                &self.graph,
-                &momentum_sample,
-                hel,
-                &settings.additional_params(),
-                None,
-                None,
-                None,
-            );
-
-            let iterative = self
-                .iterative_integrand_evaluator
-                .as_mut()
-                .map(|ev| <T as GenericEvaluatorFloat>::get_evaluator(ev)(&a));
-
-            for (i, e) in orientations.iter() {
-                if let Some(iterative) = &iterative {
-                    result += &iterative[i.0]
-                } else {
-                    self.param_builder.orientation_value(e, 1);
-                    let a = T::get_parameters(
-                        &mut self.param_builder,
-                        (settings.general.enable_cache, settings.general.debug_cache),
-                        &self.graph,
-                        &momentum_sample,
-                        hel,
-                        &settings.additional_params(),
-                        None,
-                        None,
-                        None,
-                    );
-                    result += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
-                }
-            }
-
-            debug!(
-                bare_eval = format!("{result:16e}"),
-                "Original integrand value"
-            );
-        }
-        // debug!("Parameters from previous evaluation"; data = self.param_builder.clone());
-        debug!("params: \n{}", self.param_builder);
+        let input = T::get_parameters(
+            &mut self.param_builder,
+            (settings.general.enable_cache, settings.general.debug_cache),
+            &self.graph,
+            &momentum_sample,
+            hel,
+            &settings.additional_params(),
+            None,
+            None,
+            None,
+        );
+        let result = self
+            .original_integrand
+            .evaluate(input, orientations, settings)?;
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
             &momentum_sample,
@@ -334,7 +259,7 @@ impl AmplitudeGraphTerm {
 
         let diff = result - sum_of_cts;
 
-        diff * prefactor
+        Ok(diff * prefactor)
     }
 }
 
@@ -433,7 +358,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         settings: &RuntimeSettings,
         rotation: &Rotation,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Complex<F<T>> {
+    ) -> Result<Complex<F<T>>> {
         self.evaluate_impl(momentum_sample, model, settings, rotation, channel_id)
     }
 

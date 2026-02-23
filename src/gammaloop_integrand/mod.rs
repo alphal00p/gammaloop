@@ -724,7 +724,7 @@ pub trait GraphTerm {
         settings: &RuntimeSettings,
         rotation: &Rotation,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Complex<F<T>>;
+    ) -> Result<Complex<F<T>>>;
 
     fn name(&self) -> String;
 
@@ -742,7 +742,7 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
     record_rotated_results: bool,
-) -> (Vec<Complex<F<T>>>, Duration, Vec<RotatedEvaluation>) {
+) -> Result<(Vec<Complex<F<T>>>, Duration, Vec<RotatedEvaluation>)> {
     let rotations = integrand.get_rotations().cloned().collect_vec();
 
     let cache = integrand.get_settings().general.enable_cache;
@@ -766,14 +766,14 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
         .collect();
 
     let start_time = std::time::Instant::now();
-    let evaluation_results = gammaloop_samples
+    let evaluation_results: Vec<Complex<F<T>>> = gammaloop_samples
         .iter()
         .zip(rotations.iter())
         .map(|(gammaloop_sample, rotation)| {
             debug!("Evaluating rotation: {}", rotation.method);
             evaluate_single(integrand, model, gammaloop_sample, rotation)
         })
-        .collect_vec();
+        .collect::<Result<_>>()?;
 
     if cache {
         integrand.increment_loop_cache_id(rotations.len());
@@ -798,7 +798,7 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
         Vec::new()
     };
 
-    (evaluation_results, duration, rotated_results)
+    Ok((evaluation_results, duration, rotated_results))
 }
 
 fn evaluate_stability_level<T: FloatLike, I: GammaloopIntegrand>(
@@ -812,10 +812,10 @@ fn evaluate_stability_level<T: FloatLike, I: GammaloopIntegrand>(
     is_final_level: bool,
     record_rotated_results: bool,
     precision_label: &str,
-) -> Option<StabilityLevelResult> {
+) -> Result<StabilityLevelResult> {
     let before_parameterization = std::time::Instant::now();
 
-    let gammaloop_sample = parameterize::<T, I>(sample, integrand).ok()?;
+    let gammaloop_sample = parameterize::<T, I>(sample, integrand)?;
     debug!("{precision_label} parameterization succeeded");
     debug!(
         "jacobian: {:+16e}",
@@ -824,7 +824,7 @@ fn evaluate_stability_level<T: FloatLike, I: GammaloopIntegrand>(
 
     let parameterization_time = before_parameterization.elapsed();
     let (results, ltd_evaluation_time, rotated_results) =
-        evaluate_all_rotations(integrand, model, &gammaloop_sample, record_rotated_results);
+        evaluate_all_rotations(integrand, model, &gammaloop_sample, record_rotated_results)?;
 
     let max_eval = complex_from_f64::<T>(max_eval);
     let wgt = F::<T>::from_ff64(wgt);
@@ -849,7 +849,7 @@ fn evaluate_stability_level<T: FloatLike, I: GammaloopIntegrand>(
         )
     };
 
-    Some(StabilityLevelResult {
+    Ok(StabilityLevelResult {
         result: complex_to_f64(&average_result),
         stability_level_used: stability_level.precision,
         parameterization_time,
@@ -971,7 +971,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
     rotation: &Rotation,
-) -> Complex<F<T>> {
+) -> Result<Complex<F<T>>> {
     let settings = integrand.get_settings().clone();
     let zero = Complex::new_re(gammaloop_sample.get_default_sample().zero());
     let loop_cache_shift = 0;
@@ -981,7 +981,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
         GammaLoopSample::Default(sample) => integrand
             .get_terms_mut()
             .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation, None))
-            .fold(zero.clone(), |sum, term| sum + term),
+            .try_fold(zero.clone(), |sum, term| Ok(sum + term?))?,
         GammaLoopSample::MultiChanneling { .. } => {
             unimplemented!(
                 "deprecated due to annyoing borrow issues, just set each graph to the same group"
@@ -1021,7 +1021,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                                     Some((channel_index, alpha.clone())),
                                 )
                             })
-                            .fold(zero.clone(), |sum, term| sum + term)
+                            .try_fold(zero.clone(), |sum, term| Ok(sum + term?))
                     }
                     DiscreteGraphSample::Tropical(sample) => {
                         let master_graph = integrand.get_master_graph(*group_id).get_graph();
@@ -1048,14 +1048,14 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                                 product * energy.powf(&F::from_f64(2. * edge_weight))
                             });
 
-                        Complex::new_re(prefactor)
+                        Ok(Complex::new_re(prefactor)
                             * integrand
                                 .get_graph_mut(graph_id)
-                                .evaluate(sample, model, &settings, rotation, None)
+                                .evaluate(sample, model, &settings, rotation, None)?)
                     }
                 };
 
-                res += graph_term_res;
+                res += graph_term_res?;
             }
 
             res
@@ -1066,7 +1066,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
         integrand.increment_loop_cache_id(loop_cache_shift);
     }
 
-    result * gammaloop_sample.get_default_sample().jacobian()
+    Ok(result * gammaloop_sample.get_default_sample().jacobian())
 }
 
 fn create_grid_for_graph<G: GraphTerm>(
@@ -1205,7 +1205,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     _iter: usize,
     use_f128: bool,
     max_eval: Complex<F<f64>>,
-) -> EvaluationResult {
+) -> Result<EvaluationResult> {
     let start_eval = std::time::Instant::now();
     let mut stability_iterator =
         create_stability_iterator(&integrand.get_settings().stability, use_f128);
@@ -1293,11 +1293,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 record_rotated_results,
                 "ArbPrec",
             ),
-        };
-
-        let Some(result_of_level) = result_of_level else {
-            continue;
-        };
+        }?;
 
         let is_stable = result_of_level.is_stable;
         results_of_stability_levels.push(result_of_level);
@@ -1421,17 +1417,16 @@ fn evaluate_sample<I: GammaloopIntegrand>(
         } else {
             stability_level_result.result
         };
-
-        EvaluationResult {
+        Ok(EvaluationResult {
             integrand_result: nanless_result,
             integrator_weight: wgt,
             event_buffer: vec![],
             evaluation_metadata: meta_data,
-        }
+        })
     } else {
         // this happens if parameterization fails at all levels
         println!("Parameterization failed at all levels");
-        EvaluationResult {
+        Ok(EvaluationResult {
             integrand_result: Complex::new(F(0.0), F(0.0)),
             integrator_weight: wgt,
             event_buffer: vec![],
@@ -1446,6 +1441,6 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 highest_precision: Precision::Double,
                 stability_evaluations: Vec::new(),
             },
-        }
+        })
     }
 }

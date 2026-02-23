@@ -6,6 +6,7 @@ use color_eyre::Result;
 use eyre::Context;
 use rayon::ThreadPool;
 use schemars::JsonSchema;
+use symbolica::evaluate::OptimizationSettings;
 use tracing::debug;
 
 use crate::{
@@ -17,14 +18,45 @@ use serde::{Deserialize, Serialize};
 use crate::model::Model;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema, Default)]
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema, Default,
+)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub iterative_orientation_optimization: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub summed: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub summed_function_map: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub compile: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub store_atom: bool,
+    pub horner_iterations: usize,
+    pub n_cores: usize,
+    pub cpe_iterations: Option<usize>,
+    pub abort_level: usize,
+    pub max_horner_scheme_variables: usize,
+    pub max_common_pair_cache_entries: usize,
+    pub max_common_pair_distance: usize,
+    pub verbose: bool,
+}
+
+impl EvaluatorSettings {
+    pub fn optimization_settings(&self) -> OptimizationSettings {
+        OptimizationSettings {
+            horner_iterations: self.horner_iterations,
+            n_cores: self.n_cores,
+            cpe_iterations: self.cpe_iterations,
+            hot_start: None,
+            abort_check: None,
+            abort_level: self.abort_level,
+            max_horner_scheme_variables: self.max_horner_scheme_variables,
+            max_common_pair_cache_entries: self.max_common_pair_cache_entries,
+            max_common_pair_distance: self.max_common_pair_distance,
+            verbose: self.verbose,
+        }
+    }
 }
 
 #[derive(Clone, Encode, Decode)]

@@ -113,6 +113,12 @@ pub struct WildCards {
 }
 
 pub struct GammaloopSymbols {
+    pub integrand: Symbol,
+    /// Used for evaluator, orientation selection.
+    ///
+    /// Should turn `theta(sigma(1))*theta(sigma(2))*theta(-sigma(3))*...*CFF` ->
+    /// `orienation_if((1-sigma(1))*(1-sigma(2))*(1+sigma(3))*...,CFF,0)`
+    pub orientation_if: Symbol,
     pub killing_func: Symbol,
     pub is_function: Symbol,
     pub is_symbol: Symbol,
@@ -188,6 +194,20 @@ pub struct GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
+    pub fn collect_orientation_if<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        arg.into()
+            .replace(self.sign_theta(W_.a_))
+            .with(self.orientation_if.f(-Atom::var(W_.a_) + 1))
+            .replace(self.orientation_if.f(W_.a_) * self.orientation_if.f(W_.b_))
+            .repeat()
+            .with(self.orientation_if.f(W_.a_ * W_.b_))
+            .replace(self.orientation_if.f(W_.a_) * W_.a__)
+            .with(
+                self.orientation_if
+                    .f([Atom::var(W_.a_), Atom::var(W_.a__), Atom::Zero]),
+            )
+    }
+
     pub(crate) fn orientation_delta<O: GraphOrientation>(&self, orientation: &O) -> Atom {
         let args: Vec<i32> = orientation
             .orientation()
@@ -394,6 +414,7 @@ macro_rules! spenso_print_simple_indexed {
 }
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
+    integrand: symbol!("integrand"),
     dim_epsilon: symbol!("ε"),
     killing_func: symbol!(
         "killing_func",
@@ -561,6 +582,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             }
         }
     ),
+    orientation_if: symbol!("orientation_if"),
     if_sigma: symbol!("if_sigma"),
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),
@@ -785,6 +807,22 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
 });
 
 impl GammaloopSymbols {
+    pub fn integrand<O: GraphOrientation>(&self, orientation: &O) -> Atom {
+        let args = orientation
+            .orientation()
+            .iter()
+            .map(|(_, ori)| match ori {
+                Orientation::Default => Atom::num(1),
+                Orientation::Reversed => Atom::num(-1),
+                Orientation::Undirected => Atom::num(0),
+            })
+            .collect_vec();
+
+        FunctionBuilder::new(self.integrand)
+            .add_args(&args)
+            .finish()
+    }
+
     pub fn do_dot_product_in_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
 

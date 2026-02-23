@@ -13,7 +13,7 @@ use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{
         algebraic_traits::{RefOne, RefZero},
-        complex::{Complex, mul},
+        complex::Complex,
     },
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
@@ -22,7 +22,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
-    domains::{dual::HyperDual, rational::Rational},
+    domains::rational::Rational,
     evaluate::FunctionMap,
     id::Replacement,
     parse_lit, symbol,
@@ -34,12 +34,12 @@ use tracing::warn;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    graph::{FeynmanGraph, Graph, LoopMomentumBasis},
+    gammaloop_integrand::evaluators::{InputParams, SliceMut},
+    graph::{Graph, LoopMomentumBasis},
     model::Model,
     momentum::{Helicity, PolType},
-    momentum_sample::{self, ExternalFourMomenta, LoopMomenta, MomentumSample},
+    momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
-    signature,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
@@ -658,7 +658,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
         left_threshold_params: Option<&ThresholdParams<T>>,
         right_threshold_params: Option<&ThresholdParams<T>>,
         lu_params: Option<&LUParams<T>>,
-    ) -> Cow<'a, Vec<Complex<F<T>>>>;
+    ) -> InputParams<'a, T>;
 }
 
 impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
@@ -673,7 +673,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         left_threshold_params: Option<&ThresholdParams<f64>>,
         right_threshold_params: Option<&ThresholdParams<f64>>,
         lu_params: Option<&LUParams<f64>>,
-    ) -> Cow<'a, Vec<Complex<F<f64>>>> {
+    ) -> InputParams<'a, f64> {
         let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
             dual_loops.first().unwrap().px.values.len()
         } else {
@@ -736,14 +736,18 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
                 .lu_params(lu_params, &mut self.values[value_index]);
         }
 
-        Cow::Borrowed(&self.values[value_index])
+        InputParams {
+            values: SliceMut::Borrowed(&mut self.values[value_index]),
+            multiplicative_offset,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
     }
 }
 
 impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     #[allow(clippy::too_many_arguments)]
-    fn update_emr_and_get_params(
-        &mut self,
+    fn update_emr_and_get_params<'a>(
+        &'a mut self,
         _cache: (bool, bool),
         sample: &MomentumSample<f128>,
         graph: &Graph,
@@ -752,7 +756,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         left_threshold_params: Option<&ThresholdParams<f128>>,
         right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
-    ) -> Cow<'_, Vec<Complex<F<f128>>>> {
+    ) -> InputParams<'a, f128> {
         let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
             dual_loops.first().unwrap().px.values.len()
         } else {
@@ -827,14 +831,18 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
             self.pairs.lu_params(lu_params, &mut values);
         }
 
-        Cow::Owned(values)
+        InputParams {
+            values: SliceMut::Owned(values),
+            multiplicative_offset,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
     }
 }
 
 impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
     #[allow(clippy::too_many_arguments)]
-    fn update_emr_and_get_params(
-        &mut self,
+    fn update_emr_and_get_params<'a>(
+        &'a mut self,
         _cache: (bool, bool),
         sample: &MomentumSample<ArbPrec>,
         graph: &Graph,
@@ -843,7 +851,7 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
         left_threshold_params: Option<&ThresholdParams<ArbPrec>>,
         right_threshold_params: Option<&ThresholdParams<ArbPrec>>,
         lu_params: Option<&LUParams<ArbPrec>>,
-    ) -> Cow<'_, Vec<Complex<F<ArbPrec>>>> {
+    ) -> InputParams<'a, ArbPrec> {
         let multiplicative_offset = if let Some(dual_loops) = &sample.sample.dual_loop_moms {
             dual_loops.first().unwrap().px.values.len()
         } else {
@@ -921,7 +929,11 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
             self.pairs.lu_params(lu_params, &mut values);
         }
 
-        Cow::Owned(values)
+        InputParams {
+            values: SliceMut::Owned(values),
+            multiplicative_offset,
+            orientations_start: self.pairs.orientations.value_range.start,
+        }
     }
 }
 
@@ -1097,6 +1109,8 @@ impl<T: FloatLike> ParamBuilder<T> {
             parse_lit!(sqrt(x)),
         )
         .unwrap();
+
+        new.fn_map.add_conditional(GS.orientation_if);
 
         new.add_constant(GS.pi.into(), pi_rational.into());
 
