@@ -664,7 +664,7 @@ impl Esurface {
                                     panic!("inconsistent flow on virtual boundary, cannot construct esurface");
                                 }
                             }
-                            Orientation::Undirected => unreachable!(),
+                            Orientation::Undirected => (),
                         }
                     } else {
                         match orientation[edge_id] {
