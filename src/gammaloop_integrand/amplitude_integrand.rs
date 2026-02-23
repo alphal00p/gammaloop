@@ -42,7 +42,7 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
-    processes::{AmplitudeGraph, GroupDerivedData},
+    processes::{AmplitudeGraph, GroupDerivedData, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
     subtraction::{
@@ -407,6 +407,15 @@ pub struct AmplitudeIntegrandData {
 }
 
 impl AmplitudeIntegrand {
+    pub(crate) fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        // Atom::Zero.export()
+        Ok(())
+    }
+
     pub(crate) fn compile(
         &mut self,
         path: impl AsRef<Path> + Sync,
@@ -790,7 +799,7 @@ impl HasIntegrand for AmplitudeIntegrand {
         iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
-    ) -> EvaluationResult {
+    ) -> Result<EvaluationResult> {
         evaluate_sample(self, model, sample, wgt, iter, use_f128, max_eval)
     }
 

@@ -1,3 +1,4 @@
+use color_eyre::Result;
 use colored::Colorize;
 use momtrop::float::MomTropFloat;
 use spenso::algebra::complex::Complex;
@@ -70,7 +71,7 @@ pub fn inspect<I: HasIntegrand>(
     };
 
     let eval_result =
-        integrand.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero());
+        integrand.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero())?;
     let eval = eval_result.integrand_result;
 
     info!(
@@ -88,7 +89,7 @@ pub fn inspect<I: HasIntegrand>(
         format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
     );
 
-    (jac, eval)
+    Ok((jac, eval))
 }
 
 pub(crate) fn havana_sample(cont: Vec<F<f64>>, discrete_dimensions: &[usize]) -> Sample<F<f64>> {

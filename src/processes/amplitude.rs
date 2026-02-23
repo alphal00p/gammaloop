@@ -23,7 +23,7 @@ use spenso::{
     algebra::complex::Complex,
     network::{Sequential, SmallestDegree},
 };
-use tracing::{info_span, instrument};
+use tracing::{Span, info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
 
@@ -46,7 +46,7 @@ use crate::{
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
-    processes::DotExportSettings,
+    processes::{DotExportSettings, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
@@ -102,6 +102,25 @@ pub struct GroupDerivedData {
 }
 
 impl Amplitude {
+    pub fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        let p = path.as_ref().join(&self.name);
+
+        if let Some(integrand) = &mut self.integrand {
+            integrand.export_standalone(path, settings)?
+        } else {
+            Err(eyre!(
+                "Cannot warm up amplitude {} without integrand",
+                self.name
+            ))
+        }
+
+        Ok(())
+    }
+
     #[instrument(
           skip_all,
           fields(
@@ -227,12 +246,13 @@ impl Amplitude {
         )?);
         preprocess_span.pb_set_length(self.graphs.len() as u64);
         preprocess_span.pb_set_message("Preprocessing graphs");
-        preprocess_span.pb_set_finish_message("all graphs preprocessed");
 
         let preprocess_span_enter = preprocess_span.enter();
 
         thread_pool.install(|| {
+            let parent = preprocess_span.clone();
             self.graphs.par_iter_mut().try_for_each(|amplitude_graph| {
+                let _guard = parent.enter();
                 let ok = amplitude_graph.preprocess(model, settings, locked_runtime_settings);
                 preprocess_span.pb_inc(1);
 
@@ -251,7 +271,7 @@ impl Amplitude {
     #[instrument(
         skip_all,
           fields(
-              amplitude.name = %self.name,
+              amplitude.name = %self.name, indicatif.pb_show = true, indicatif.pb_msg = "Generating Evaluators",
           )
       )]
     pub fn build_integrand(
@@ -495,6 +515,7 @@ impl AmplitudeGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
+    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Generating CFF"), err)]
     pub(crate) fn generate_cff(&mut self) -> Result<()> {
         let shift_rewrite = self
             .graph
@@ -510,8 +531,7 @@ impl AmplitudeGraph {
 
         Ok(())
     }
-
-    //Stage 1
+    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "preprocessing"), err)]
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
@@ -520,26 +540,42 @@ impl AmplitudeGraph {
     ) -> Result<()> {
         let vk_settings = settings.uv.vakint.true_settings();
         let vk = (crate::utils::vakint()?, &vk_settings);
-        debug!("Generating Cff");
-        self.generate_cff()?;
-        debug!("Building Parametric Integrand");
-        self.build_parametric_integrand(settings, vk)?;
 
+        let mut step_count = 3_u64;
         if self.graph.is_group_master {
-            debug!("Building Tropical Sampler");
-            self.build_tropical_sampler(settings)?;
+            step_count += 2;
+        }
+        if settings.threshold_subtraction.enable_thresholds {
+            step_count += 1;
         }
 
-        debug!("Building Loop Momentum Bases");
-        self.build_lmbs();
+        // let preprocess_steps_span = info_span!("Preprocess steps", indicatif.pb_show = true);
+        // preprocess_steps_span.pb_set_length(step_count);
+        // preprocess_steps_span.pb_set_message("Preprocessing graphs");
+        // preprocess_steps_span.pb_set_finish_message("preprocess done");
+
+        // let preprocess_steps_enter = preprocess_steps_span.enter();
+
+        self.generate_cff()?;
+        // preprocess_steps_span.pb_inc(1);
+
+        self.build_parametric_integrand(settings, vk)?;
+        // preprocess_steps_span.pb_inc(1);
 
         if self.graph.is_group_master {
-            debug!("Building Multi-Channeling Channels");
+            self.build_tropical_sampler(settings)?;
+            // preprocess_steps_span.pb_inc(1);
+        }
+
+        self.build_lmbs();
+        // preprocess_steps_span.pb_inc(1);
+
+        if self.graph.is_group_master {
             self.build_multi_channeling_channels();
+            // preprocess_steps_span.pb_inc(1);
         }
 
         if settings.threshold_subtraction.enable_thresholds {
-            debug!("Building Threshold Counterterms");
             self.derived_data.threshold_counterterms = self
                 .build_threshold_counterterm_parametric_integrand(
                     settings,
@@ -547,11 +583,16 @@ impl AmplitudeGraph {
                     locked_runtime_settings,
                     model,
                 )?;
+            // preprocess_steps_span.pb_inc(1);
         }
+
+        // drop(preprocess_steps_enter);
+        // drop(preprocess_steps_span);
 
         Ok(())
     }
 
+    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Multi-Channeling Channels"))]
     fn build_multi_channeling_channels(&mut self) {
         let channels = self
             .graph
@@ -798,6 +839,11 @@ impl AmplitudeGraph {
         }
     }
 
+    #[instrument(
+        skip_all,
+        fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Parametric Integrand"),
+        err
+    )]
     pub(crate) fn build_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
@@ -810,10 +856,9 @@ impl AmplitudeGraph {
 
     #[instrument(
         skip_all,
-          fields(
-              graph.name = %self.graph.name,
-          )
-      )]
+        fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Threshold Counterterms"),
+        err
+    )]
     fn build_threshold_counterterm_parametric_integrand(
         &self,
         settings: &GenerationSettings,
@@ -1183,6 +1228,7 @@ impl AmplitudeGraph {
         Ok(scalar)
     }
 
+    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Loop Momentum Bases"))]
     fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
@@ -1191,6 +1237,7 @@ impl AmplitudeGraph {
         self.derived_data.lmbs = Some(lmbs)
     }
 
+    #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Tropical Sampler"), err)]
     fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
         if process_settings
             .tropical_subgraph_table
@@ -1299,7 +1346,8 @@ impl AmplitudeGraph {
           level = "info",
           skip(self, model, global_settings),
           fields(
-              graph.name = %self.graph.name
+              graph.name = %self.graph.name, indicatif.pb_show = true, indicatif.pb_msg = "generate_term_for_graph Evaluators",
+
           ),
           err
       )]

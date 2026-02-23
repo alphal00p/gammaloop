@@ -1,24 +1,23 @@
 use std::{
     path::Path,
     sync::{LazyLock, Mutex, OnceLock},
+    time::Duration,
 };
 
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
 use eyre::Context;
 use gammalooprs::utils::tracing::{LogFormat, LogStyle, LOG_GUARD};
+use indicatif::ProgressState;
 use tracing::{level_filters::LevelFilter, Event, Subscriber};
 use tracing_appender::{
     non_blocking::NonBlockingBuilder,
     rolling::{RollingFileAppender, Rotation},
 };
-use tracing_indicatif::{
-    filter::{hide_indicatif_span_fields, IndicatifFilter},
-    IndicatifLayer,
-};
+use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, IndicatifLayer};
+use tracing_subscriber::field::RecordFields;
 use tracing_subscriber::{
     filter::Filtered,
-    fmt::format::DefaultFields,
     fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
     layer::SubscriberExt,
     registry::LookupSpan,
@@ -180,6 +179,12 @@ pub fn get_stderr_log_filter() -> String {
     STDERR_LOG_SPEC.lock().unwrap().clone()
 }
 
+fn elapsed_subsec(state: &ProgressState, writer: &mut dyn std::fmt::Write) {
+    let seconds = state.elapsed().as_secs();
+    let sub_seconds = (state.elapsed().as_millis() % 1000) / 100;
+    let _ = writer.write_str(&format!("{}.{}s", seconds, sub_seconds));
+}
+
 pub(crate) fn init_tracing(
     dir: impl AsRef<Path>,
     log_file_name: Option<String>,
@@ -232,8 +237,39 @@ pub(crate) fn init_tracing(
             .with_writer(nb);
 
         let indicatif_layer = IndicatifLayer::new()
-            .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()))
-            .with_max_progress_bars(1024, None);
+            .with_span_field_formatter(IndicatifPbMsgFields::default())
+            .with_max_progress_bars(1024, None) .with_progress_style( ProgressStyle::with_template(
+                      "{color_start}{span_child_prefix}{span_fields} -- {wide_msg} {elapsed_subsec}{color_end}",
+                  )
+                  .unwrap()
+                  .with_key(
+                      "elapsed_subsec",
+                      elapsed_subsec,
+                  )
+                  .with_key(
+                      "color_start",
+                      |state: &ProgressState, writer: &mut dyn std::fmt::Write| {
+                          let elapsed = state.elapsed();
+
+                          if elapsed > Duration::from_secs(60) {
+                              // Red
+                              let _ = write!(writer, "\x1b[{}m", 1 + 30);
+                          } else if elapsed > Duration::from_secs(4) {
+                              // Yellow
+                              let _ = write!(writer, "\x1b[{}m", 3 + 30);
+                          }
+                      },
+                  )
+                  .with_key(
+                      "color_end",
+                      |state: &ProgressState, writer: &mut dyn std::fmt::Write| {
+                          if state.elapsed() > Duration::from_secs(4) {
+                              let _ =write!(writer, "\x1b[0m");
+                          }
+                      },
+                  ),
+              ).with_span_child_prefix_symbol("↳ ").with_span_child_prefix_indent(" ");
+;
 
         // Pretty status layer for stderr - only show status events
         let status_layer = fmt::layer()
@@ -305,6 +341,42 @@ impl MessageVisitor {
         } else {
             self.fields.push((f.name().to_string(), value));
         }
+    }
+}
+
+#[derive(Clone, Default)]
+struct IndicatifPbMsgFields;
+
+impl<'writer> FormatFields<'writer> for IndicatifPbMsgFields {
+    fn format_fields<R: RecordFields>(
+        &self,
+        mut writer: Writer<'writer>,
+        fields: R,
+    ) -> std::fmt::Result {
+        struct Visitor {
+            msg: Option<String>,
+        }
+
+        impl tracing::field::Visit for Visitor {
+            fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
+                if f.name() == "indicatif.pb_msg" {
+                    self.msg = Some(format!("{v:?}"));
+                }
+            }
+
+            fn record_str(&mut self, f: &tracing::field::Field, v: &str) {
+                if f.name() == "indicatif.pb_msg" {
+                    self.msg = Some(v.to_string());
+                }
+            }
+        }
+
+        let mut v = Visitor { msg: None };
+        fields.record(&mut v);
+        if let Some(msg) = v.msg {
+            write!(writer, "{msg}")?;
+        }
+        Ok(())
     }
 }
 

@@ -543,14 +543,16 @@ impl CrossSectionIntegrand {
 
             limit_data.data.push(LambdaPointEval {
                 lambda_point,
-                value: self.evaluate_sample(
-                    &symbolica_sample,
-                    model,
-                    sample.one(),
-                    0,
-                    false,
-                    Complex::new_re(F::from_f64(100.0 * self.settings.kinematics.e_cm)),
-                ),
+                value: self
+                    .evaluate_sample(
+                        &symbolica_sample,
+                        model,
+                        sample.one(),
+                        0,
+                        false,
+                        Complex::new_re(F::from_f64(100.0 * self.settings.kinematics.e_cm)),
+                    )
+                    .unwrap(),
             });
         }
 

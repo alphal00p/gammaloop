@@ -7,6 +7,7 @@ use crate::{
     settings::RuntimeSettings, settings::runtime::IntegratedPhase,
 };
 use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
+use color_eyre::Result;
 use colored::Colorize;
 // use hyperdual::Zero;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -41,7 +42,7 @@ fn compare_integration(
     phase: IntegratedPhase,
     target: Complex<F<f64>>,
     tolerance: Option<F<f64>>,
-) -> bool {
+) -> Result<bool> {
     let applied_tolerance = match tolerance {
         Some(t) => t,
         None => CENTRAL_VALUE_TOLERANCE,
@@ -67,7 +68,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
-            );
+            )?;
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.re - res.result.re)
             {
@@ -81,7 +82,7 @@ fn compare_integration(
                     .bold(),
                     target.re
                 );
-                return false;
+                return Ok(false);
             }
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(
@@ -91,7 +92,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
-            );
+            )?;
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.re - res.result.im)
             {
@@ -105,7 +106,7 @@ fn compare_integration(
                     .bold(),
                     target.im
                 );
-                return false;
+                return Ok(false);
             }
         }
         IntegratedPhase::Real => {
@@ -117,7 +118,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
-            );
+            )?;
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.im - res.result.re)
             {
@@ -131,7 +132,7 @@ fn compare_integration(
                     .bold(),
                     target.re
                 );
-                return false;
+                return Ok(false);
             }
         }
         IntegratedPhase::Imag => {
@@ -143,7 +144,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
-            );
+            )?;
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.im - res.result.im)
             {
@@ -157,11 +158,11 @@ fn compare_integration(
                     .bold(),
                     target.im
                 );
-                return false;
+                return Ok(false);
             }
         }
     }
-    true
+    Ok(true)
 }
 
 fn compare_inspect(
@@ -171,7 +172,7 @@ fn compare_inspect(
     term: &[usize],
     is_momentum_space: bool,
     target: Complex<f64>,
-) -> bool {
+) -> Result<bool> {
     let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
     let target = Complex::new(F(target.re), F(target.im));
     let mut integrand = integrand_factory(settings);
@@ -184,7 +185,7 @@ fn compare_inspect(
         false,
         is_momentum_space,
         true,
-    );
+    )?;
     if !F::approx_eq(&res.re, &target.re, &INSPECT_TOLERANCE)
         || !F::approx_eq(&res.im, &target.im, &INSPECT_TOLERANCE)
     {
@@ -195,9 +196,9 @@ fn compare_inspect(
                 .red()
                 .bold()
         );
-        return false;
+        return Ok(false);
     }
-    true
+    Ok(true)
 }
 
 fn get_h_function_test_integrand() -> HFunctionTestSettings {
@@ -246,7 +247,7 @@ mod tests_integral {
     use super::*;
 
     #[test]
-    fn unit_volume_11_momenta_hyperspherical_flat() {
+    fn unit_volume_11_momenta_hyperspherical_flat() -> Result<()> {
         let mut settings = load_default_settings();
         let mut itg = get_unit_volume_integrand();
         settings.integrator.n_start = 5 * BASE_N_START_SAMPLE;
@@ -271,11 +272,12 @@ mod tests_integral {
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
-        ));
+        )?);
+        Ok(())
     }
 
     #[test]
-    fn unit_volume_3_momenta_hyperspherical() {
+    fn unit_volume_3_momenta_hyperspherical() -> Result<()> {
         let mut settings = load_default_settings();
         let mut itg = get_unit_volume_integrand();
         settings.integrator.n_start = 5 * BASE_N_START_SAMPLE;
@@ -300,11 +302,12 @@ mod tests_integral {
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
-        ));
+        )?);
+        Ok(())
     }
 
     #[test]
-    fn unit_volume_3_momenta_spherical() {
+    fn unit_volume_3_momenta_spherical() -> Result<()> {
         let mut settings = load_default_settings();
         let mut itg = get_unit_volume_integrand();
         settings.integrator.n_start = 5 * BASE_N_START_SAMPLE;
@@ -327,11 +330,12 @@ mod tests_integral {
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
-        ));
+        )?);
+        Ok(())
     }
 
     #[test]
-    fn poly_left_right_exponential_h_function() {
+    fn poly_left_right_exponential_h_function() -> Result<()> {
         let mut settings = load_default_settings();
         let mut itg = get_h_function_test_integrand();
         settings.integrator.n_start = 5 * BASE_N_START_SAMPLE;
@@ -353,7 +357,8 @@ mod tests_integral {
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
-        ));
+        )?);
+        Ok(())
     }
 }
 
@@ -374,7 +379,7 @@ mod tests_inspect {
     // }
 
     #[test]
-    fn inspect_unit_volume() {
+    fn inspect_unit_volume() -> Result<()> {
         let mut settings = load_default_settings();
         let mut itg = get_unit_volume_integrand();
         itg.n_3d_momenta = 6;
@@ -393,7 +398,7 @@ mod tests_inspect {
             &[0],
             true,
             Complex::new(1.3793965770302298e3, 0.0)
-        ));
+        )?);
 
         itg.n_3d_momenta = 9;
         settings.kinematics.e_cm = 100.;
@@ -412,11 +417,12 @@ mod tests_inspect {
             &[0],
             true,
             Complex::new(4.792927924134406e-45, 0.0)
-        ));
+        )?);
+        Ok(())
     }
 
     #[test]
-    fn inspect_h_function_test() {
+    fn inspect_h_function_test() -> Result<()> {
         let mut settings = load_default_settings();
         let mut itg = get_h_function_test_integrand();
         settings.kinematics.e_cm = 1.;
@@ -435,7 +441,7 @@ mod tests_inspect {
             &[0],
             false,
             Complex::new(1.4016882047579115e-34, 0.0)
-        ));
+        )?);
 
         itg.h_function = HFunctionSettings {
             function: HFunction::PolyLeftRightExponential,
@@ -451,6 +457,7 @@ mod tests_inspect {
             &[0],
             false,
             Complex::new(3.112977432926161e-4, 0.0)
-        ));
+        )?);
+        Ok(())
     }
 }

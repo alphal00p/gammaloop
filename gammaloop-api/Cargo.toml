@@ -107,6 +107,7 @@ typed-index-collections = { version = "3.3.0", features = [
 ] }
 walkdir = "2.5"
 rust-embed = { version = "8.4", features = ["interpolate-folder-path"] }
+indicatif = "0.18.4"
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]
 version = "0.25"

@@ -19,7 +19,12 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::{dual::HyperDual, float::Complex as SymComplex, rational::Rational},
+    domains::{
+        dual::HyperDual,
+        float::Complex as SymComplex,
+        integer::IntegerRing,
+        rational::{Fraction, Rational},
+    },
     evaluate::{
         CompileOptions, CompiledComplexEvaluator, Dualizer, ExportSettings, ExpressionEvaluator,
         FunctionMap, OptimizationSettings,
@@ -159,6 +164,143 @@ pub struct EvaluatorStack {
 }
 
 impl EvaluatorStack {
+    #[instrument(
+        skip_all,
+          fields(
+           indicatif.pb_show = true, indicatif.pb_msg = "Generating Single Parametric Evaluator",
+          )
+      )]
+    fn new_single_parametric(
+        parametric_atom: Atom,
+        param_builder: &ParamBuilder,
+        settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        let opt_settings = settings.optimization_settings();
+
+        GenericEvaluator::new_from_builder(
+            [parametric_atom],
+            &param_builder,
+            None,
+            opt_settings.clone(),
+            settings.store_atom,
+        )
+    }
+    #[instrument(
+        skip_all,
+          fields(
+           indicatif.pb_show = true, indicatif.pb_msg = "Generating Iterative Evaluator",
+          )
+      )]
+    fn new_iterative(
+        parametric_atom: &Atom,
+        param_builder: &ParamBuilder,
+        orientations: &[EdgeVec<Orientation>],
+        settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        GenericEvaluator::new_from_builder(
+            orientations.iter().map(|a| {
+                let selected = a.select(parametric_atom);
+                debug!(selected_expr = %selected.log_print(), "Iterative");
+                selected
+            }),
+            &param_builder,
+            None,
+            settings.optimization_settings(),
+            settings.store_atom,
+        )
+    }
+
+    #[instrument(
+        skip_all,
+          fields(
+           indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Function Map Evaluator",
+          )
+      )]
+    fn new_summed_function_map(
+        parametric_atom: &Atom,
+        param_builder: &ParamBuilder,
+        orientations: &[EdgeVec<Orientation>],
+        settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        let params: Vec<Atom> = (&param_builder.pairs)
+            .into_iter()
+            .flat_map(|p| p.params.clone())
+            .collect();
+        let mut fn_map = param_builder.fn_map.clone();
+        let mut symbols = vec![];
+        let mut reps = vec![];
+        for (e, _) in &orientations[0] {
+            let symbol = symbol!(format!("σ{}", to_subscript(e.0 as isize)));
+            symbols.push(symbol);
+            reps.push(Replacement::new(GS.sign(e).to_pattern(), Atom::var(symbol)));
+        }
+
+        //I(sign(1), sign(2), sign(3),...) -> I(σ1, σ2, σ3,...)
+
+        let parametric_integrand = GS
+            .collect_orientation_if(parametric_atom)
+            .replace_multiple(&reps);
+
+        fn_map
+            .add_function(
+                GS.integrand,
+                "integrand".into(),
+                symbols,
+                parametric_integrand,
+            )
+            .map_err(|a| eyre!(a))?;
+
+        // fn_map.add_conditional(name)
+
+        let sum: Atom = orientations
+            .iter()
+            .map(|a| GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(a)))
+            .fold(Atom::Zero, |acc, n| acc + n);
+
+        GenericEvaluator::new_from_raw_params(
+            [sum],
+            &params,
+            &fn_map,
+            settings.optimization_settings(),
+            None,
+            settings.store_atom,
+        )
+    }
+
+    #[instrument(
+        skip_all,
+          fields(
+           indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Evaluator",
+          )
+      )]
+    fn new_summed(
+        parametric_atom: &Atom,
+        param_builder: &ParamBuilder,
+        orientations: &[EdgeVec<Orientation>],
+        settings: &EvaluatorSettings,
+    ) -> Result<GenericEvaluator> {
+        let sum = orientations
+            .iter()
+            .map(|a| {
+                let selected = a.select(parametric_atom);
+                debug!(selected_expr = %selected.log_print(), "Iterative");
+                selected
+            })
+            .fold(Atom::Zero, |acc, n| acc + n);
+
+        GenericEvaluator::new_from_builder(
+            [sum],
+            &param_builder,
+            None,
+            settings.optimization_settings(),
+            settings.store_atom,
+        )
+    }
+    #[instrument(
+           skip_all,
+           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Parametric Integrand"),
+           err
+       )]
     pub fn new(
         parametric_atom: Atom,
         param_builder: &ParamBuilder,
@@ -168,101 +310,40 @@ impl EvaluatorStack {
         let opt_settings = settings.optimization_settings();
 
         let iterative = if settings.iterative_orientation_optimization {
-            GenericEvaluator::new_from_builder(
-                orientations.iter().map(|a| {
-                    let selected = a.select(&parametric_atom);
-                    debug!(selected_expr = %selected.log_print(), "Iterative");
-                    selected
-                }),
-                &param_builder,
-                None,
-                opt_settings.clone(),
-                settings.store_atom,
-            )
+            Some(Self::new_iterative(
+                &parametric_atom,
+                param_builder,
+                orientations,
+                &settings,
+            )?)
         } else {
             None
         };
 
         let summed_function_map = if settings.summed_function_map {
-            let params: Vec<Atom> = (&param_builder.pairs)
-                .into_iter()
-                .flat_map(|p| p.params.clone())
-                .collect();
-            let mut fn_map = param_builder.fn_map.clone();
-            let mut symbols = vec![];
-            let mut reps = vec![];
-            for (e, _) in &orientations[0] {
-                let symbol = symbol!(format!("σ{}", to_subscript(e.0 as isize)));
-                symbols.push(symbol);
-                reps.push(Replacement::new(GS.sign(e).to_pattern(), Atom::var(symbol)));
-            }
-
-            //I(sign(1), sign(2), sign(3),...) -> I(σ1, σ2, σ3,...)
-
-            let parametric_integrand = GS
-                .collect_orientation_if(&parametric_atom)
-                .replace_multiple(&reps);
-
-            fn_map
-                .add_function(
-                    GS.integrand,
-                    "integrand".into(),
-                    symbols,
-                    parametric_integrand,
-                )
-                .map_err(|a| eyre!(a))?;
-
-            // fn_map.add_conditional(name)
-
-            let sum: Atom = orientations
-                .iter()
-                .map(|a| GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(a)))
-                .fold(Atom::Zero, |acc, n| acc + n);
-
-            GenericEvaluator::new_from_raw_params(
-                [sum],
-                &params,
-                &fn_map,
-                opt_settings.clone(),
-                None,
-                settings.store_atom,
-            )
+            Some(Self::new_summed_function_map(
+                &parametric_atom,
+                param_builder,
+                orientations,
+                &settings,
+            )?)
         } else {
             None
         };
 
         let summed = if settings.summed {
-            let sum = orientations
-                .iter()
-                .map(|a| {
-                    let selected = a.select(&parametric_atom);
-                    debug!(selected_expr = %selected.log_print(), "Iterative");
-                    selected
-                })
-                .fold(Atom::Zero, |acc, n| acc + n);
-
-            Some(
-                GenericEvaluator::new_from_builder(
-                    [sum],
-                    &param_builder,
-                    None,
-                    opt_settings.clone(),
-                    settings.store_atom,
-                )
-                .unwrap(),
-            )
+            Some(Self::new_summed(
+                &parametric_atom,
+                param_builder,
+                orientations,
+                &settings,
+            )?)
         } else {
             None
         };
 
-        let single_parametric = GenericEvaluator::new_from_builder(
-            [parametric_atom],
-            &param_builder,
-            None,
-            opt_settings.clone(),
-            settings.store_atom,
-        )
-        .unwrap();
+        let single_parametric =
+            Self::new_single_parametric(parametric_atom, param_builder, &settings)?;
 
         Ok(EvaluatorStack {
             single_parametric,
@@ -468,7 +549,7 @@ impl GenericEvaluator {
         dual_shape: Option<Vec<Vec<usize>>>,
         optimization_settings: OptimizationSettings,
         store_atom: bool,
-    ) -> Option<Self> {
+    ) -> Result<Self> {
         let params: Vec<Atom> = (&builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
@@ -491,19 +572,25 @@ impl GenericEvaluator {
         optimization_settings: OptimizationSettings,
         dual_shape: Option<Vec<Vec<usize>>>,
         store_atom: bool,
-    ) -> Option<Self> {
+    ) -> Result<Self> {
         let exprs: Vec<Atom> = atoms.into_iter().collect();
-        let mut tree = exprs
-            .iter()
-            .map(|n| {
-                n.evaluator(fn_map, params, optimization_settings.clone())
-                    .map_err(|e| format!("Failed to create evaluator for atom: {}: {}", n, e))
-                    .unwrap()
-            })
-            .reduce(|mut acc, n| {
-                acc.merge(n, optimization_settings.cpe_iterations).unwrap();
-                acc
-            })?;
+
+        let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
+        for n in exprs.iter() {
+            let eval = n
+                .evaluator(fn_map, params, optimization_settings.clone())
+                .map_err(|e| eyre!("Failed to create evaluator for atom: {}: {}", n, e))?;
+
+            tree = Some(if let Some(mut tree) = tree {
+                tree.merge(eval, optimization_settings.cpe_iterations)
+                    .map_err(|e| eyre!("Failed to merge evaluators: {}", e))?;
+                tree
+            } else {
+                eval
+            });
+        }
+
+        let mut tree = tree.ok_or_else(|| eyre!("No expressions to evaluate"))?;
 
         if let Some(dual_shape) = &dual_shape {
             let dual = HyperDual::<SymComplex<Rational>>::new(dual_shape.clone());
@@ -535,7 +622,7 @@ impl GenericEvaluator {
             arb,
         };
 
-        Some(evaluator)
+        Ok(evaluator)
     }
 }
 

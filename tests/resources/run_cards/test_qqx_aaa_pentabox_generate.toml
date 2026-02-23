@@ -1,8 +1,9 @@
+#:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
+
 commands = [
   # Import model
   "import model sm-default",
   # Set some global settings (equivalent to setting them below this commands block, but done interactively here.
-  "set global kv global.generation.evaluator.iterative_orientation_optimization=true",
   # "set global kv global.display_directive='gammalooprs=debug,debug'",
   # "set global kv global.log_style.full_line_source=true global.log_style.include_fields=true",
   # Comment out the block of commands below if you want to skip re-generation
@@ -13,10 +14,8 @@ commands = [
   # "import graphs ./qqx_aaa_pentabox/qqx_aaa_pentabox.dot -p qqx_aaa -i pentabox",
   # The version below imports a dot graph where the user has explicitly written what they wish the numerator expression to be
   # "import graphs ./qqx_aaa_pentagon/qqx_aaa_pentagon_delocalized_numerator.dot -p qqx_aaa -i pentagon_user_numerator",
-  "save dot",
-  "save state -o",
+  # "save dot",,
   "generate",
-  "save state -o",
   ## # GENERATION: END ###
   # Add user params for the localized numerator dot file with custom user symbols
   # "set process -p qqx_aaa -i pentagon_user_numerator kv general.additional_param_values=[1.0,1.0,1.0]",
@@ -33,8 +32,10 @@ commands = [
   # This target is a rough target I got from a low-stat run on my end
   "integrate --process qqx_aaa -i pentabox --n-cores 10 --restart",
   ## # INTEGRATION: end ###
-  "quit -o",
 ]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
 
 ## ##
 # Naive default spherical parameterisation
@@ -192,7 +193,9 @@ panic_on_fail = true
 disable_tropical_generation = false
 
 [cli_settings.global.generation.evaluator]
-iterative_orientation_optimization = true
+iterative_orientation_optimization = false
+summed = false
+summed_function_map = true
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true

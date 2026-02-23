@@ -489,7 +489,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
             let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
                 &mut iterative_evaluator.borrow_mut(),
-            )(&params);
+            )(params.as_slice());
 
             let mut result = Complex::new_re(self.rstar_sample.zero());
 
@@ -521,7 +521,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 );
                 let result = <T as GenericEvaluatorFloat>::get_evaluator(
                     &mut parametric_evaluator.borrow_mut(),
-                )(&params);
+                )(params.as_slice());
                 local_ct += &result[0];
                 integrated_ct += &result[1];
             }

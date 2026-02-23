@@ -12,15 +12,14 @@ use tracing::debug;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     settings::{GlobalSettings, runtime::LockedRuntimeSettings},
+    utils::serde_utils::{IsDefault, is_false, is_usize},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(
-    Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema, Default,
-)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub iterative_orientation_optimization: bool,
@@ -32,14 +31,45 @@ pub struct EvaluatorSettings {
     pub compile: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub store_atom: bool,
+    #[serde(default, skip_serializing_if = "is_usize::<10>")]
     pub horner_iterations: usize,
+    #[serde(default, skip_serializing_if = "is_usize::<10>")]
     pub n_cores: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub cpe_iterations: Option<usize>,
+    #[serde(default, skip_serializing_if = "is_usize::<10>")]
     pub abort_level: usize,
+
+    #[serde(default, skip_serializing_if = "is_usize::<10>")]
     pub max_horner_scheme_variables: usize,
+
+    #[serde(default, skip_serializing_if = "is_usize::<10>")]
     pub max_common_pair_cache_entries: usize,
+
+    #[serde(default, skip_serializing_if = "is_usize::<10>")]
     pub max_common_pair_distance: usize,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
+}
+
+impl Default for EvaluatorSettings {
+    fn default() -> Self {
+        Self {
+            iterative_orientation_optimization: true,
+            summed: false,
+            summed_function_map: false,
+            compile: false,
+            store_atom: false,
+            horner_iterations: 10,
+            n_cores: 1,
+            cpe_iterations: None,
+            abort_level: 0,
+            max_horner_scheme_variables: 500,
+            max_common_pair_cache_entries: 1_000_000,
+            max_common_pair_distance: 1000,
+            verbose: false,
+        }
+    }
 }
 
 impl EvaluatorSettings {
@@ -78,6 +108,10 @@ pub struct DotExportSettings {
     pub do_gamma_algebra: bool,
     pub do_color_algebra: bool,
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+pub struct StandaloneExportSettings {}
 
 #[cfg(feature = "python_api")]
 #[cfg_attr(feature = "python_api", pyo3::pymethods)]
@@ -239,6 +273,20 @@ impl ProcessList {
 
         for p in self.processes.iter() {
             p.export_dot(&path, settings)?;
+        }
+        Ok(())
+    }
+
+    pub fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        let path = path.as_ref().join("processes");
+        fs::create_dir_all(&path)?;
+
+        for p in self.processes.iter() {
+            p.export_standalone(&path, settings)?;
         }
         Ok(())
     }

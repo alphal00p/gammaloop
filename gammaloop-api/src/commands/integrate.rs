@@ -185,7 +185,7 @@ impl Integrate {
             target,
             integration_state,
             Some(workspace_path.clone()),
-        );
+        )?;
 
         fs::write(&result_path, serde_json::to_string(&result)?)?;
 

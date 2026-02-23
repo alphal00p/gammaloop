@@ -7,7 +7,7 @@
 
 use bincode::Decode;
 use bincode::Encode;
-use color_eyre::Report;
+use color_eyre::{Report, Result};
 use colored::Colorize;
 use itertools::Itertools;
 use itertools::izip;
@@ -270,7 +270,7 @@ pub fn havana_integrate<T>(
     target: Option<Complex<F<f64>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
-) -> IntegrationResult
+) -> Result<IntegrationResult>
 where
     T: Fn(&RuntimeSettings) -> UserData,
 {
@@ -352,37 +352,41 @@ where
 
         let grids = repeat_n(integration_state.grid.clone_without_samples(), cores);
 
-        let core_results: Vec<CoreResult> = pool.install(|| {
+        let core_results: Vec<Result<CoreResult>> = pool.install(|| {
             user_data
                 .integrand
                 .par_iter_mut()
                 .enumerate()
                 .zip(grids)
                 .zip(n_points_per_core)
-                .map(|(((core_id, integrand), mut grid), n_points)| {
-                    let mut rng = MonteCarloRng::new(
-                        settings.integrator.seed + integration_state.iter as u64,
-                        0,
-                    );
+                .map(
+                    |(((core_id, integrand), mut grid), n_points)| -> Result<CoreResult> {
+                        let mut rng = MonteCarloRng::new(
+                            settings.integrator.seed + integration_state.iter as u64,
+                            0,
+                        );
 
-                    for _ in 0..(target_points_per_core * core_id) {
-                        let mut sample = Sample::new();
-                        grid.sample(&mut rng, &mut sample);
-                    }
-
-                    let samples = (0..n_points)
-                        .map(|_| {
+                        for _ in 0..(target_points_per_core * core_id) {
                             let mut sample = Sample::new();
                             grid.sample(&mut rng, &mut sample);
-                            sample
-                        })
-                        .collect_vec();
+                        }
 
-                    let mut core_accumulator = ComplexAccumulator::new();
+                        let samples = (0..n_points)
+                            .map(|_| {
+                                let mut sample = Sample::new();
+                                grid.sample(&mut rng, &mut sample);
+                                sample
+                            })
+                            .collect_vec();
 
-                    let results = samples
-                        .iter()
-                        .map(|s| {
+                        let mut core_accumulator = ComplexAccumulator::new();
+
+                        let mut results = Vec::new();
+                        for s in samples.iter() {
+                            if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                                break;
+                            }
+
                             let result = integrand.evaluate_sample(
                                 s,
                                 model,
@@ -390,7 +394,7 @@ where
                                 integration_state.iter,
                                 false,
                                 current_max_evals,
-                            );
+                            )?;
 
                             core_accumulator.add_sample(
                                 result.integrand_result,
@@ -408,22 +412,22 @@ where
                                 println!("Error adding training sample to grid: {}", err);
                             };
 
-                            result
+                            results.push(result);
+                        }
+
+                        let evaluation_statistics =
+                            StatisticsCounter::from_evaluation_results(&results);
+
+                        Ok(CoreResult {
+                            stats: evaluation_statistics,
+                            integral: core_accumulator,
+                            grid,
                         })
-                        .take_while(|_| !INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)) // make sure ctrl+c does it's job
-                        .collect_vec();
-
-                    let evaluation_statistics =
-                        StatisticsCounter::from_evaluation_results(&results);
-
-                    CoreResult {
-                        stats: evaluation_statistics,
-                        integral: core_accumulator,
-                        grid,
-                    }
-                })
+                    },
+                )
                 .collect()
         });
+        let core_results: Vec<CoreResult> = core_results.into_iter().collect::<Result<_>>()?;
 
         if is_interrupted() {
             warn!("{}", "Integration iterrupted by user".yellow());
@@ -529,7 +533,7 @@ where
 
     integration_state.display_orientation_results(settings);
 
-    IntegrationResult {
+    Ok(IntegrationResult {
         neval: integration_state.integral.re.processed_samples,
         real_zero: integration_state.integral.re.num_zero_evaluations,
         im_zero: integration_state.integral.im.num_zero_evaluations,
@@ -543,7 +547,7 @@ where
         ),
         real_chisq: integration_state.integral.re.chi_sq,
         im_chisq: integration_state.integral.im.chi_sq,
-    }
+    })
 }
 
 /// Batch integrate function used for distributed runs, used by the worker nodes.
@@ -552,7 +556,7 @@ pub(crate) fn batch_integrate(
     integrand: &mut Integrand,
     model: &Model,
     input: BatchIntegrateInput,
-) -> BatchResult {
+) -> Result<BatchResult> {
     let samples = match input.samples {
         SampleInput::SampleList { samples } => samples,
         SampleInput::Grid {
@@ -580,7 +584,7 @@ pub(crate) fn batch_integrate(
         input.num_cores,
         input.iter,
         input.max_eval,
-    );
+    )?;
 
     let integrand_output = generate_integrand_output(
         integrand,
@@ -596,11 +600,11 @@ pub(crate) fn batch_integrate(
         input.settings,
     );
 
-    BatchResult {
+    Ok(BatchResult {
         statistics: metadata_statistics,
         integrand_data: integrand_output,
         event_data: event_output,
-    }
+    })
 }
 
 /// Map the evaluation result on to the right output specified by the user.
@@ -686,7 +690,7 @@ fn evaluate_sample_list(
     num_cores: usize,
     iter: usize,
     max_eval: Complex<F<f64>>,
-) -> (Vec<EvaluationResult>, StatisticsCounter) {
+) -> Result<(Vec<EvaluationResult>, StatisticsCounter)> {
     // todo!()
     let list_size = samples.len();
     let nvec_per_core = (list_size - 1) / num_cores + 1;
@@ -697,9 +701,7 @@ fn evaluate_sample_list(
         .collect_vec()
         .into_par_iter();
 
-    let mut evaluation_results_per_core = Vec::with_capacity(num_cores);
-
-    sample_chunks
+    let evaluation_results_per_core: Vec<Result<Vec<EvaluationResult>>> = sample_chunks
         .zip(integrands)
         .map(|(chunk, mut integrand)| {
             chunk
@@ -714,9 +716,12 @@ fn evaluate_sample_list(
                         max_eval,
                     )
                 })
-                .collect_vec()
+                .collect::<Result<Vec<_>>>()
         })
-        .collect_into_vec(&mut evaluation_results_per_core);
+        .collect();
+    let evaluation_results_per_core: Vec<Vec<EvaluationResult>> = evaluation_results_per_core
+        .into_iter()
+        .collect::<Result<_>>()?;
 
     let evaluation_results = evaluation_results_per_core
         .into_iter()
@@ -725,7 +730,7 @@ fn evaluate_sample_list(
 
     let meta_data_statistics = StatisticsCounter::from_evaluation_results(&evaluation_results);
 
-    (evaluation_results, meta_data_statistics)
+    Ok((evaluation_results, meta_data_statistics))
 }
 
 /// Different ways of passing samples to the batch_integrate function

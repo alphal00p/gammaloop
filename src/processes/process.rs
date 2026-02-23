@@ -24,6 +24,7 @@ use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
 use crate::processes::DotExportSettings;
 
+use crate::processes::StandaloneExportSettings;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     feyngen::NumeratorAwareGraphGroupingOption,
@@ -564,6 +565,80 @@ impl Process {
         integrand_name: impl AsRef<str>,
     ) -> Result<&mut GLIntegrand> {
         self.collection.get_integrand_mut(integrand_name)
+    }
+
+    pub(crate) fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        match &self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
+                for (amp_name, amp) in a {
+                    // Create a folder for each amplitude
+                    let amp_path = path.join(&amp.name);
+                    fs::create_dir_all(&amp_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for amplitude {}",
+                            amp_path.display()
+                        )
+                    })?;
+
+                    amp.export_standalone(&amp_path, settings)?;
+                }
+            }
+            ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
+                for (xs_name, cs) in cs {
+                    // Create a folder for each cross section
+                    let cs_path = path.join(&cs.name);
+                    fs::create_dir_all(&cs_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for cross section {}",
+                            cs_path.display()
+                        )
+                    })?;
+
+                    if settings.combine_diagrams {
+                        // Save all graphs combined in one file
+                        let mut dot = File::create_new(
+                            cs_path.join(format!("{}_graphs.dot", xs_name.clone())),
+                        )
+                        .with_context(|| {
+                            format!(
+                                "Trying to create file to export amplitude graph {}",
+                                cs_path
+                                    .join(format!("{}_graphs.dot", xs_name.clone()))
+                                    .display()
+                            )
+                        })?;
+                        for graph in cs.supergraphs.iter() {
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
+                        }
+                    } else {
+                        // Save each supergraph in its own file
+                        for graph in cs.supergraphs.iter() {
+                            let mut dot = File::create_new(
+                                cs_path.join(format!("{}.dot", graph.graph.name)),
+                            )
+                            .with_context(|| {
+                                format!(
+                                    "Trying to create file to export cross section graph {}",
+                                    cs_path.join(format!("{}.dot", graph.graph.name)).display()
+                                )
+                            })?;
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn export_dot(

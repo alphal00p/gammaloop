@@ -56,6 +56,7 @@ pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
     max_terms: None,
     custom_print_mode: None,
     hide_namespace: Some("gammalooprs"),
+    ..PrintOptions::new()
 };
 
 pub trait IsNeg {

@@ -66,7 +66,7 @@ impl Inspect {
             self.force_radius,
             self.momentum_space,
             self.use_f128,
-        );
+        )?;
         let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
             info!("Jacobian for this point: {:+.16e}", jac);
             if jac == 0. {
@@ -136,7 +136,7 @@ impl<'a> BatchedInspect<'a> {
                 false,
                 self.momentum_space,
                 self.use_f128,
-            );
+            )?;
             let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
                 jac_res.push(jac);
                 if jac == 0. {

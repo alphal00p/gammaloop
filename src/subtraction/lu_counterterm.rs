@@ -448,8 +448,9 @@ impl LUCounterTerm {
                         Some(lu_cut_params),
                     );
 
-                    let iterative_result =
-                        <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
+                    let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
+                        iterative_evaluator,
+                    )(params.as_slice());
 
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
                     for (i, _e) in orientations.iter() {
@@ -480,7 +481,7 @@ impl LUCounterTerm {
 
                         let result = <T as GenericEvaluatorFloat>::get_evaluator(
                             parametric_evaluator,
-                        )(&params);
+                        )(params.as_slice());
 
                         result_of_this_ct += &result[0];
                     }
@@ -518,8 +519,9 @@ impl LUCounterTerm {
                         Some(lu_cut_params),
                     );
 
-                    let iterative_result =
-                        <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
+                    let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
+                        iterative_evaluator,
+                    )(params.as_slice());
 
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
                     for (i, _e) in orientations.iter() {
@@ -556,7 +558,7 @@ impl LUCounterTerm {
 
                         let result = <T as GenericEvaluatorFloat>::get_evaluator(
                             parametric_evaluator,
-                        )(&params);
+                        )(params.as_slice());
 
                         result_of_this_ct += &result[0];
                     }
@@ -611,8 +613,9 @@ impl LUCounterTerm {
                     Some(lu_cut_params),
                 );
 
-                let iterative_result =
-                    <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
+                let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
+                    iterative_evaluator,
+                )(params.as_slice());
 
                 let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
 
@@ -648,8 +651,9 @@ impl LUCounterTerm {
                         Some(lu_cut_params),
                     );
 
-                    let result =
-                        <T as GenericEvaluatorFloat>::get_evaluator(parametric_evaluator)(&params);
+                    let result = <T as GenericEvaluatorFloat>::get_evaluator(parametric_evaluator)(
+                        params.as_slice(),
+                    );
 
                     result_of_this_ct += &result[0];
                 }

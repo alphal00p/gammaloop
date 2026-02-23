@@ -155,25 +155,13 @@ python_stubgen = ["pyo3-stub-gen", "python_api"]
 # use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]
 
 [patch.crates-io]
+graphica = { path = "../../symbolica/lib/graphica" }
 idenso = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
-# symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
-# symbolica = { path = "../symbolica" }
-# linnet = "0.10.0"
-linnet = { path = "../../linnet" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "2310298c35eb9f0eab23b428426482bd2d15be97" }
 spenso = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
 spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
 spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdccd3f5190dc14c12fe98b786af4c612" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# symbolica = { version = "1.2.1", default-features = false, features = [
-#    "serde",
-#    "bincode",
-# ] }
-# spenso-macros = { path = "../spenso/spenso-macros" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
-# symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-# symbolica={git="https://github.com/benruijl/symbolica",rev="af3f1b2043b270401920e4ff76d938217d995fc3"}
 vakint = { git = "https://github.com/alphal00p/vakint", rev = "bf91ee57aa62604c7ae3fb919203bf6f09544470" }
-# linnet = { git = "https://github.com/alphal00p/linnet", rev = "d8c02a0a7b96ac8d46a8770097c354535cd4baff" }
 # spenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
 # spenso={path="../../spenso/spenso"}
 # idenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }

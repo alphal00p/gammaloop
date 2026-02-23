@@ -11,6 +11,7 @@ use crate::integrate::UserData;
 use crate::model::Model;
 use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
+use crate::processes::StandaloneExportSettings;
 use crate::settings::GlobalSettings;
 use crate::utils::{
     ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
@@ -63,6 +64,17 @@ pub enum GLIntegrand {
 }
 
 impl GLIntegrand {
+    pub fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        match self {
+            Self::Amplitude(a) => a.export_standalone(path, settings),
+            Self::CrossSection(a) => a.export_standalone(path, settings),
+        }
+    }
+
     pub fn warm_up(&mut self, model: &Model) -> Result<()> {
         match self {
             Self::Amplitude(a) => a.warm_up(model),
@@ -981,7 +993,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
         GammaLoopSample::Default(sample) => integrand
             .get_terms_mut()
             .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation, None))
-            .try_fold(zero.clone(), |sum, term| Ok(sum + term?))?,
+            .try_fold(zero.clone(), |sum, term| term.map(|value| sum + value))?,
         GammaLoopSample::MultiChanneling { .. } => {
             unimplemented!(
                 "deprecated due to annyoing borrow issues, just set each graph to the same group"

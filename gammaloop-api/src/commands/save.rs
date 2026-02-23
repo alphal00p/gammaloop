@@ -37,6 +37,10 @@ pub enum Save {
                value_parser = clap::builder::BoolishValueParser::new(),)]
         do_color_algebra: Option<bool>,
     },
+    Standalone {
+        #[arg(value_hint = clap::ValueHint::FilePath)]
+        path: Option<PathBuf>,
+    },
     State(SaveState),
     /// regenerate the schema files
     Schema {},

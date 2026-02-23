@@ -14,6 +14,7 @@ use crate::utils::F;
 use crate::utils::FloatLike;
 use crate::utils::f128;
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -122,7 +123,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
         iter: usize,
         use_f128: bool,
         _max_eval: Complex<F<f64>>,
-    ) -> EvaluationResult {
+    ) -> Result<EvaluationResult> {
         let start_evaluate_sample = std::time::Instant::now();
 
         let xs = match sample {
@@ -201,11 +202,11 @@ impl HasIntegrand for HFunctionTestIntegrand {
             }],
         };
 
-        EvaluationResult {
+        Ok(EvaluationResult {
             integrand_result: integration_result,
             integrator_weight: wgt,
             event_buffer: vec![],
             evaluation_metadata,
-        }
+        })
     }
 }

@@ -1249,6 +1249,7 @@ dependencies = [
  "git-version",
  "idenso",
  "include_dir",
+ "indicatif 0.18.4",
  "itertools 0.14.0",
  "json5",
  "linnet",
@@ -1544,9 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "graphica"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f32bec01b43c1a68289108ac4c3b71ed76296f871f3dbf3922d3f498cf6e7215"
+version = "1.2.0"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -1964,6 +1963,7 @@ dependencies = [
 [[package]]
 name = "linnet"
 version = "0.17.0"
+source = "git+https://github.com/alphal00p/linnet?rev=2310298c35eb9f0eab23b428426482bd2d15be97#2310298c35eb9f0eab23b428426482bd2d15be97"
 dependencies = [
  "ahash",
  "bincode",

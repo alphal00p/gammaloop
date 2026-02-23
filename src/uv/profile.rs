@@ -155,11 +155,11 @@ impl UVProfileable for Amplitude {
                     &settings,
                     profile_settings,
                     base_seed,
-                );
+                )?;
                 profile_span.pb_inc(1);
-                res
+                Ok(res)
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         drop(_profile_span_enter);
         drop(profile_span);
@@ -618,7 +618,7 @@ impl UVSamplingResult {
         settings: &RuntimeSettings,
         profile_settings: &ProfileSettings,
         base_seed: u64,
-    ) -> Self
+    ) -> Result<Self>
     where
         I: HasIntegrand + Clone + Send,
     {
@@ -664,7 +664,7 @@ impl UVSamplingResult {
                     settings,
                     profile_settings,
                     base_seed,
-                );
+                )?;
 
                 if profile_settings.analyse_analytically {
                     let orientation_limits: Vec<(
@@ -698,14 +698,14 @@ impl UVSamplingResult {
                     }
                 }
                 lmb_span.pb_inc(1);
-                res
+                Ok(res)
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
 
         drop(_lmb_span_enter);
         drop(lmb_span);
 
-        Self { per_lmb }
+        Ok(Self { per_lmb })
     }
 }
 
@@ -727,7 +727,7 @@ impl LMBResult {
         settings: &RuntimeSettings,
         profile_settings: &ProfileSettings,
         base_seed: u64,
-    ) -> Self
+    ) -> Result<Self>
     where
         I: HasIntegrand + Clone + Send,
     {
@@ -777,18 +777,18 @@ impl LMBResult {
                         model,
                         settings,
                         profile_settings,
-                    );
+                    )?;
                     subset_span.pb_inc(1);
-                    (ls, res)
+                    Ok((ls, res))
                 },
             )
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
         let per_subsets = per_subsets_vec.into_iter().collect();
 
         drop(_subset_span_enter);
         drop(subset_span);
 
-        LMBResult { lmb, per_subsets }
+        Ok(LMBResult { lmb, per_subsets })
     }
 }
 
@@ -811,7 +811,7 @@ impl SubSetResult {
         model: &Model,
         settings: &RuntimeSettings,
         profile_settings: &ProfileSettings,
-    ) -> Self
+    ) -> Result<Self>
     where
         I: HasIntegrand + Clone + Send,
     {
@@ -861,22 +861,22 @@ impl SubSetResult {
                     false,
                     true,
                     profile_settings.use_f128,
-                );
+                )?;
 
-                InspectResult {
+                Ok(InspectResult {
                     result: inspect_res_eval,
                     prefactor,
                     jacobian: inspect_res_jac.expect("missing inspect jacobian"),
-                }
+                })
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
         let analytic = None;
 
-        SubSetResult {
+        Ok(SubSetResult {
             inspect: inspect_results,
             initial_dod,
             analytic,
-        }
+        })
     }
 
     pub fn analyse_inspect(&self, scales: &[f64]) -> Option<InspectAnalysis> {

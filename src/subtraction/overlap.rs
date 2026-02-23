@@ -141,8 +141,7 @@ impl OverlapStructure {
                 optimization_settings.clone(),
                 None,
                 false,
-            )
-            .ok_or_else(|| eyre!("Could not build evaluator for overlap prefactor"))?;
+            )?;
 
             group.prefactor_evaluator = Some(RefCell::new(evalautor));
         }
