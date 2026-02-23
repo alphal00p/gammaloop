@@ -717,9 +717,21 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let lu_params = LUParams { h_function, tstar };
 
-                if let Some((_channel_index, _alpha)) = &channel_id {
-                    todo!("implement multichanneling prefactor over duals");
-                }
+                let prefactor =
+                    Complex::new_re(if let Some((_channel_index, _alpha)) = &channel_id {
+                        if matches!(lu_params.tstar, DualOrNot::Dual(_)) {
+                            panic!("multi channeling with duals not supported yet");
+                        }
+
+                        self.multi_channeling_setup.compute_prefactor_impl(
+                            *_channel_index,
+                            &rescaled_momenta,
+                            model,
+                            _alpha,
+                        )
+                    } else {
+                        F::from_f64(1.0)
+                    });
 
                 let params = T::get_parameters(
                     &mut self.param_builder,
@@ -854,7 +866,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
                 cut_results.push(
-                    pass_two_result, //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
+                    pass_two_result * prefactor, //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
                 );
             }
         }

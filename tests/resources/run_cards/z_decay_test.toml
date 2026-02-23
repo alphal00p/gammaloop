@@ -1,5 +1,5 @@
 commands = [
-"import model models/ufo/sm",
+"import model sm",
 "generate xs z > d d~",
 ]
 
@@ -17,7 +17,7 @@ helicities = [1]
 iterative_orientation_optimization = false
 compile = false
 
-[cli_settings.global.generation]
+[cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = false
 
 
