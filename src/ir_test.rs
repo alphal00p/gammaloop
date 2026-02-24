@@ -4,11 +4,11 @@ use color_eyre::eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use linreg::linear_regression_of;
+use nalgebra::DVector;
 use rand::Rng;
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    domains::float::{FloatLike as SymFloatLike, Real},
+    domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     numerical_integration::{MonteCarloRng, Sample},
 };
 
@@ -33,6 +33,9 @@ use crate::{
     },
     utils::{F, FloatLike, box_muller, f128},
     uv::profile::logspace,
+};
+use varpro::{
+    prelude::SeparableModelBuilder, problem::SeparableProblemBuilder, solvers::levmar::LevMarSolver,
 };
 
 const SLOPE_STABILITY_POINTS: usize = 50;
@@ -340,9 +343,11 @@ impl CrossSectionIntegrand {
             });
         }
 
-        let slope = limit_data.extract_power();
+        let slope = limit_data.extract_power()?;
+        println!("slope: {:?}", slope);
+        todo!();
 
-        Ok(println!("slope: {}", slope))
+        Ok(())
     }
 }
 
@@ -780,9 +785,141 @@ struct LimitData<T: FloatLike> {
 }
 
 impl<T: FloatLike> LimitData<T> {
-    fn extract_power(&self) -> f64 {
-        todo!()
+    fn extract_power(&self) -> Result<PowerLawFit> {
+        let x = self
+            .data
+            .iter()
+            .map(|point_eval| point_eval.lambda_point.lambda.to_f64())
+            .collect_vec();
+
+        let y = self
+            .data
+            .iter()
+            .map(|point_eval| point_eval.value.integrand_result.re.to_f64())
+            .collect_vec();
+
+        println!("x: {:?}", x);
+        println!("y: {:?}", y);
+
+        fit_power_law(x, y)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct PowerLawFit {
+    exponent: f64,
+    coefficient: f64,
+    r_squared: f64,
+}
+
+// using varpro fit  y =  a x^p + c
+fn fit_power_law(x: Vec<f64>, y: Vec<f64>) -> Result<PowerLawFit> {
+    if x.len() != y.len() {
+        return Err(eyre!(
+            "fit_power_law requires x and y to have the same length"
+        ));
+    }
+    if x.len() < 2 {
+        return Err(eyre!("fit_power_law requires at least two observations"));
+    }
+    if x.iter().any(|value| !value.is_finite() || *value <= 0.0) {
+        return Err(eyre!(
+            "fit_power_law requires strictly positive, finite x values"
+        ));
+    }
+    if y.iter().any(|value| !value.is_finite()) {
+        return Err(eyre!("fit_power_law requires finite y values"));
+    }
+
+    let x_data = DVector::from_vec(x.clone());
+    let y_data = DVector::from_vec(y.clone());
+
+    let initial_exponent = {
+        let mut log_x = Vec::new();
+        let mut log_y_shifted = Vec::new();
+        let min_y = y.iter().copied().fold(f64::INFINITY, f64::min);
+        let y_shift = if min_y <= 0.0 { 1.0 - min_y } else { 0.0 };
+        for (xv, yv) in x.iter().zip(y.iter()) {
+            let shifted = yv + y_shift;
+            if shifted > 0.0 {
+                log_x.push(xv.ln());
+                log_y_shifted.push(shifted.ln());
+            }
+        }
+
+        if log_x.len() >= 2 {
+            let mean_x = log_x.iter().sum::<f64>() / log_x.len() as f64;
+            let mean_y = log_y_shifted.iter().sum::<f64>() / log_y_shifted.len() as f64;
+            let covariance = log_x
+                .iter()
+                .zip(log_y_shifted.iter())
+                .map(|(xv, yv)| (xv - mean_x) * (yv - mean_y))
+                .sum::<f64>();
+            let variance = log_x.iter().map(|xv| (xv - mean_x).powi(2)).sum::<f64>();
+            if variance > 0.0 {
+                covariance / variance
+            } else {
+                -1.0
+            }
+        } else {
+            -1.0
+        }
+    };
+
+    let model = SeparableModelBuilder::new(["p"])
+        .initial_parameters(vec![initial_exponent])
+        .independent_variable(x_data)
+        .function(["p"], |x: &DVector<f64>, p: f64| x.map(|xv| xv.powf(p)))
+        .partial_deriv("p", |x: &DVector<f64>, p: f64| {
+            x.map(|xv| xv.powf(p) * xv.ln())
+        })
+        .invariant_function(|x: &DVector<f64>| DVector::from_element(x.len(), 1.0))
+        .build()
+        .map_err(|error| eyre!("could not build varpro model for power-law fit: {error}"))?;
+
+    let problem = SeparableProblemBuilder::new(model)
+        .observations(y_data)
+        .build()
+        .map_err(|error| eyre!("could not build varpro problem for power-law fit: {error}"))?;
+
+    let fit_result = LevMarSolver::default()
+        .solve(problem)
+        .map_err(|error| eyre!("varpro solve failed for power-law fit: {:?}", error))?;
+
+    if !fit_result.minimization_report.termination.was_successful() {
+        return Err(eyre!(
+            "varpro did not terminate successfully in power-law fit"
+        ));
+    }
+
+    let exponent = fit_result.nonlinear_parameters()[0];
+    let coefficients = fit_result
+        .linear_coefficients()
+        .ok_or_else(|| eyre!("varpro did not return linear coefficients"))?;
+    let coefficient = coefficients[0];
+    let constant_offset = coefficients[1];
+
+    let mean_y = y.iter().sum::<f64>() / y.len() as f64;
+    let ss_tot = y.iter().map(|yv| (yv - mean_y).powi(2)).sum::<f64>();
+    let ss_res = x
+        .iter()
+        .zip(y.iter())
+        .map(|(xv, yv)| {
+            let prediction = coefficient * xv.powf(&exponent) + constant_offset;
+            (yv - prediction).powi(2)
+        })
+        .sum::<f64>();
+    let r_squared = if ss_tot > 0.0 {
+        1.0 - ss_res / ss_tot
+    } else {
+        1.0
+    };
+
+    Ok(PowerLawFit {
+        exponent,
+        coefficient,
+        r_squared,
+    })
 }
 
 #[cfg(test)]
@@ -871,5 +1008,24 @@ mod tests {
             IrLimit::parse_limit(invalid_limit_str2).is_err(),
             "Expected error for unmatched brackets"
         );
+    }
+
+    #[test]
+    fn fit_power_law_recovers_known_parameters() {
+        let exponent = -1.75;
+        let coefficient = 3.2;
+        let offset = 0.6;
+
+        let x = vec![0.2, 0.35, 0.5, 0.8, 1.1, 1.7, 2.4, 3.3];
+        let y = x
+            .iter()
+            .map(|xv| coefficient * xv.powf(&exponent) + offset)
+            .collect::<Vec<_>>();
+
+        let fit = fit_power_law(x, y).expect("power-law fit should succeed");
+
+        assert!((fit.exponent - exponent).abs() < 1e-3);
+        assert!((fit.coefficient - coefficient).abs() < 1e-3);
+        assert!(fit.r_squared > 0.999_999);
     }
 }
