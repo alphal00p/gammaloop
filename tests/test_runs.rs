@@ -768,7 +768,9 @@ fn scalar_sunrise() -> Result<()> {
     // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-4.359e-3");
 
     cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    let res = profile_cmd
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-2.474e-3");
@@ -820,7 +822,9 @@ fn scalar_mercedes() -> Result<()> {
 
     // from Kaapo: m=1 muv=5 5.89551e-06 m=2 muv=5 	3.35645e-06	 m=3 muv=5 1.87120e-06
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    let res = profile_cmd
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
@@ -881,7 +885,9 @@ fn scalar_basketball() -> Result<()> {
 
     // from Kaapo: m=1 muv=5 1.47240e-03 m=2 muv=5 	7.15184e-04	 m=3 muv=5 2.27485e-04
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    let res = profile_cmd
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
@@ -947,7 +953,9 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
 
     // from Kaapo: m=1 muv=5 2.90078e-06 m=2 muv=5 	1.59168e-06	 m=3 muv=5 6.86001e-07
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    let res = profile_cmd
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
 
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
