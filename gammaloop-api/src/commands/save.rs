@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use clap::{Args, Subcommand};
 use color_eyre::{eyre::eyre, owo_colors::OwoColorize, Result};
 use gammalooprs::{
-    processes::DotExportSettings,
+    processes::{DotExportSettings, StandaloneExportMode, StandaloneExportSettings},
     settings::RuntimeSettings,
     utils::serde_utils::{SmartSerde, SHOWDEFAULTS},
 };
@@ -40,6 +40,10 @@ pub enum Save {
     Standalone {
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: Option<PathBuf>,
+        #[arg(long, default_value_t = false, conflicts_with = "rust")]
+        python: bool,
+        #[arg(long, default_value_t = false, conflicts_with = "python")]
+        rust: bool,
     },
     State(SaveState),
     /// regenerate the schema files
@@ -110,6 +114,16 @@ impl Save {
                 default_runtime_settings,
                 global_settings,
             ),
+            Save::Standalone { path, python, rust } => {
+                let target_dir = path.unwrap_or(global_settings.state_folder.clone());
+                let mode = match (python, rust) {
+                    (true, false) => StandaloneExportMode::Python,
+                    (false, true) | (false, false) => StandaloneExportMode::Rust,
+                    (true, true) => unreachable!("clap enforces mutual exclusivity"),
+                };
+                let settings = StandaloneExportSettings { mode };
+                state.process_list.export_standalone(&target_dir, &settings)
+            }
 
             Save::Schema {} => write_schemas(),
         }

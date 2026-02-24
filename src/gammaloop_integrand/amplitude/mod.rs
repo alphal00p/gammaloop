@@ -1,5 +1,6 @@
 use std::{
-    fs::{self},
+    fs::{self, File},
+    io::Cursor,
     path::Path,
 };
 
@@ -7,7 +8,7 @@ use bincode_trait_derive::{Decode, Encode};
 
 use color_eyre::Result;
 
-use eyre::Context;
+use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -15,11 +16,13 @@ use linnet::half_edge::{
 };
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use serde::Serialize;
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::AtomCore,
-    evaluate::OptimizationSettings,
+    atom::{Atom, AtomCore},
+    evaluate::{FunctionMap, OptimizationSettings},
     numerical_integration::{Grid, Sample},
+    state::{HasStateMap, State, StateMap},
 };
 use tracing::{debug, info, instrument, warn};
 use typed_index_collections::TiVec;
@@ -42,14 +45,18 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
-    processes::{AmplitudeGraph, GroupDerivedData, StandaloneExportSettings},
+    processes::{AmplitudeGraph, GroupDerivedData, StandaloneExportMode, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
     subtraction::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
-    utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
+    utils::{
+        W_,
+        serde_utils::SmartSerde,
+        symbolica_ext::{LOGPRINTOPTS, LogPrint},
+    },
 };
 
 use super::{GammaloopIntegrand, GraphTerm, LmbMultiChannelingSetup, create_grid, evaluate_sample};
@@ -93,10 +100,10 @@ impl AmplitudeGraphTerm {
         debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
 
         let original_integrand = EvaluatorStack::new(
-            graph.derived_data.all_mighty_integrand.clone(),
+            &graph.derived_data.all_mighty_integrand,
             &graph.graph.param_builder,
             orientations.as_slice().as_ref(),
-            settings.generation.evaluator,
+            &settings.generation.evaluator,
         )?;
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
@@ -406,16 +413,10 @@ pub struct AmplitudeIntegrandData {
     pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
 }
 
-impl AmplitudeIntegrand {
-    pub(crate) fn export_standalone(
-        &self,
-        path: impl AsRef<Path>,
-        settings: &StandaloneExportSettings,
-    ) -> Result<()> {
-        // Atom::Zero.export()
-        Ok(())
-    }
+pub mod export;
+pub mod load;
 
+impl AmplitudeIntegrand {
     pub(crate) fn compile(
         &mut self,
         path: impl AsRef<Path> + Sync,

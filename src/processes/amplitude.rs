@@ -40,7 +40,7 @@ use crate::{
     },
     gammaloop_integrand::{
         LmbMultiChannelingSetup,
-        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
+        amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
@@ -107,15 +107,13 @@ impl Amplitude {
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
-        let p = path.as_ref().join(&self.name);
-
-        if let Some(integrand) = &mut self.integrand {
+        if let Some(integrand) = &self.integrand {
             integrand.export_standalone(path, settings)?
         } else {
-            Err(eyre!(
+            return Err(eyre!(
                 "Cannot warm up amplitude {} without integrand",
                 self.name
-            ))
+            ));
         }
 
         Ok(())
@@ -1346,7 +1344,7 @@ impl AmplitudeGraph {
           level = "info",
           skip(self, model, global_settings),
           fields(
-              graph.name = %self.graph.name, indicatif.pb_show = true, indicatif.pb_msg = "generate_term_for_graph Evaluators",
+              graph.name = %self.graph.name, indicatif.pb_show = true, indicatif.pb_msg = format!("Generating Evaluators for {}", self.graph.name)
 
           ),
           err

@@ -7,6 +7,7 @@ use std::{
 use bincode::{Decode, Encode};
 use idenso::color::CS;
 
+use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
@@ -21,7 +22,7 @@ use spenso::{
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Indeterminate, Symbol},
     domains::rational::Rational,
     evaluate::FunctionMap,
     id::Replacement,
@@ -34,12 +35,16 @@ use tracing::warn;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    gammaloop_integrand::evaluators::{InputParams, SliceMut},
+    gammaloop_integrand::{
+        amplitude::export::atom_to_bytes_for_mode,
+        evaluators::{InputParams, SliceMut},
+    },
     graph::{Graph, LoopMomentumBasis},
     model::Model,
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
+    processes::StandaloneExportSettings,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
@@ -116,6 +121,7 @@ pub struct GammaLoopPairs {
     idenso_vars: ParamValuePairs,
     mu_r_sq: ParamValuePairs,
     orientations: ParamValuePairs,
+    override_if: ParamValuePairs,
     pub model_parameters: ParamValuePairs,
     external_energies: ParamValuePairs,
     external_spatial: ParamValuePairs,
@@ -141,7 +147,7 @@ pub struct GammaLoopPairs {
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 25>;
+    type IntoIter = std::array::IntoIter<Self::Item, 26>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -169,6 +175,7 @@ impl IntoIterator for GammaLoopPairs {
             self.radius_right,
             self.radius_star_right,
             self.orientations,
+            self.override_if,
             self.additional_params,
         ]
         .into_iter()
@@ -177,7 +184,7 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 25>;
+    type IntoIter = std::array::IntoIter<Self::Item, 26>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -205,6 +212,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.radius_right,
             &self.radius_star_right,
             &self.orientations,
+            &self.override_if,
             &self.additional_params,
         ]
         .into_iter()
@@ -213,7 +221,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 25>;
+    type IntoIter = std::array::IntoIter<Self::Item, 26>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -241,6 +249,7 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.radius_right,
             &mut self.radius_star_right,
             &mut self.orientations,
+            &mut self.override_if,
             &mut self.additional_params,
         ]
         .into_iter()
@@ -269,6 +278,9 @@ impl GammaLoopPairs {
         self.external_spatial.validate();
         debug!("Validating polarizations");
         self.polarizations.validate();
+        debug!("Validating orientations");
+        self.orientations.validate();
+        self.override_if.validate();
         debug!("Validating emr_spatial");
         self.loop_moms_spatial.validate();
         debug!("Validating tstar");
@@ -397,10 +409,9 @@ impl GammaLoopPairs {
 
         for i in graph.iter_edge_ids() {
             params.push(GS.sign(i));
-            params.push(GS.sign_theta(GS.sign(i)));
-            params.push(GS.sign_theta(-GS.sign(i)));
         }
 
+        self.override_if.params = vec![Atom::var(GS.override_if)];
         self.orientations.params = params;
     }
 
@@ -619,11 +630,40 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub pairs: GammaLoopPairs,
     pub polarization_cache: ParamCache<T>,
 
-    pub reps: Vec<(Atom, Atom)>,
+    pub reps: Vec<FnMapEntry>,
     // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
     // pub eager_function_map: HashMap<Symbol, EvaluationFn<Atom, Complex<F<T>>>>,
     // pub eager_fn_map:
     pub fn_map: FunctionMap,
+}
+
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct FnMapEntry {
+    pub lhs: Atom,
+    pub rhs: Atom,
+    pub args: Vec<Indeterminate>,
+    pub tags: Vec<Atom>,
+}
+
+impl FnMapEntry {
+    pub fn to_bytes(
+        &self,
+        settings: &StandaloneExportSettings,
+    ) -> Result<(Vec<u8>, Vec<u8>, Vec<Vec<u8>>, Vec<Vec<u8>>)> {
+        Ok((
+            atom_to_bytes_for_mode(&self.lhs, settings.mode)?,
+            atom_to_bytes_for_mode(&self.rhs, settings.mode)?,
+            self.tags
+                .iter()
+                .map(|t| atom_to_bytes_for_mode(t, settings.mode))
+                .collect::<Result<Vec<_>>>()?,
+            self.args
+                .iter()
+                .map(|t| atom_to_bytes_for_mode(&Atom::from(t.clone()), settings.mode))
+                .collect::<Result<Vec<_>>>()?,
+        ))
+    }
 }
 
 impl<T: FloatLike> Default for ParamBuilder<T> {
@@ -739,6 +779,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Borrowed(&mut self.values[value_index]),
             multiplicative_offset,
+            override_pos: self.pairs.override_if.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -834,6 +875,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
+            override_pos: self.pairs.override_if.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -932,6 +974,7 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
+            override_pos: self.pairs.override_if.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -961,21 +1004,26 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.pairs.validate();
     }
 
-    pub fn add_tagged_function(
+    pub fn add_tagged_function<A: Into<Indeterminate> + Clone>(
         &mut self,
         name: Symbol,
         tags: Vec<Atom>,
         rename: String,
-        args: Vec<Symbol>,
+        args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
-        self.reps.push((
-            FunctionBuilder::new(name)
+        let args = args.into_iter().map(|a| a.into()).collect_vec();
+        let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
+
+        self.reps.push(FnMapEntry {
+            lhs: FunctionBuilder::new(name)
                 .add_args(&tags)
-                .add_args(&args)
+                .add_args(&atom_args)
                 .finish(),
-            body.clone(),
-        ));
+            rhs: body.clone(),
+            tags: tags.clone(),
+            args: args.clone().into_iter().map(|a| a.into()).collect(),
+        });
 
         self.fn_map
             .add_tagged_function(name, tags, rename, args, body)
@@ -983,20 +1031,22 @@ impl<T: FloatLike> ParamBuilder<T> {
         // body.evaluate(coeff_map, const_map, function_map)
     }
 
-    pub fn add_function(
+    pub fn add_function<A: Into<Indeterminate> + Clone>(
         &mut self,
         name: Symbol,
         rename: String,
-        args: Vec<Symbol>,
+        args: Vec<A>,
         body: Atom,
     ) -> Result<(), String> {
-        self.reps.push((
-            FunctionBuilder::new(name)
-                // .add_args()
-                .add_args(&args)
-                .finish(),
-            body.clone(),
-        ));
+        let args = args.into_iter().map(|a| a.into()).collect_vec();
+        let atom_args = args.iter().map(|a| Atom::from(a.clone())).collect_vec();
+        self.reps.push(FnMapEntry {
+            lhs: FunctionBuilder::new(name).add_args(&atom_args).finish(),
+            rhs: body.clone(),
+            tags: vec![],
+            args: args.clone().into_iter().map(|a| a.into()).collect(),
+        });
+
         self.fn_map.add_function(name, rename, args, body)
     }
 
@@ -1029,6 +1079,13 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
 
     pub fn add_constant(&mut self, key: Atom, value: symbolica::domains::float::Complex<Rational>) {
+        self.reps.push(FnMapEntry {
+            lhs: key.clone(),
+            rhs: Atom::num(value.clone()),
+            tags: vec![],
+            args: vec![],
+        });
+
         self.fn_map.add_constant(key, value)
     }
 
@@ -1064,7 +1121,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
         for e in graph.iter_edge_ids() {
-            new.add_tagged_function(
+            new.add_tagged_function::<Symbol>(
                 GS.ose,
                 vec![Atom::num(e.0 as i64)],
                 format!("OSE{e}"),
@@ -1076,8 +1133,14 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
             if !lmb.loop_edges.contains(&edge_id) {
-                for i in 0..4 {
-                    new.add_tagged_function(
+                let start = if signature.internal.iter().any(|sign| sign.is_sign()) {
+                    //has loop mom->is a non-tree edge -> energy is OSE-> no need for Q(0) rep
+                    1
+                } else {
+                    0
+                };
+                for i in start..4 {
+                    new.add_tagged_function::<Symbol>(
                         GS.emr_mom,
                         vec![
                             Atom::num(edge_id.0 as i64),
@@ -1110,7 +1173,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         )
         .unwrap();
 
-        new.fn_map.add_conditional(GS.orientation_if);
+        // new.fn_map.add_conditional(GS.orientation_if);
 
         new.add_constant(GS.pi.into(), pi_rational.into());
 
@@ -1227,28 +1290,30 @@ impl<T: FloatLike> ParamBuilder<T> {
                 Orientation::Default => {
                     self.values[value_index][o_start] = one.clone();
                     o_start += multiplicative_offset;
-                    self.values[value_index][o_start] = one.clone();
-                    o_start += multiplicative_offset;
-                    self.values[value_index][o_start] = zero.clone();
-                    o_start += multiplicative_offset;
                 }
                 Orientation::Reversed => {
                     self.values[value_index][o_start] = minusone.clone();
-                    o_start += multiplicative_offset;
-                    self.values[value_index][o_start] = zero.clone();
-                    o_start += multiplicative_offset;
-                    self.values[value_index][o_start] = one.clone();
                     o_start += multiplicative_offset;
                 }
                 Orientation::Undirected => {
                     self.values[value_index][o_start] = zero.clone();
                     o_start += multiplicative_offset;
-                    self.values[value_index][o_start] = zero.clone();
-                    o_start += multiplicative_offset;
-                    self.values[value_index][o_start] = zero.clone();
-                    o_start += multiplicative_offset;
                 }
             }
+        }
+    }
+
+    pub(crate) fn set_override_if(&mut self, over_ride: bool, multiplicative_offset: usize) {
+        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let one = zero.ref_one();
+
+        let o_start = self.pairs.override_if.value_range.start * multiplicative_offset;
+        let value_index = multiplicative_offset - 1;
+
+        if over_ride {
+            self.values[value_index][o_start] = zero;
+        } else {
+            self.values[value_index][o_start] = one;
         }
     }
 
@@ -1506,7 +1571,7 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub fn table(&self) -> Table {
         let mut table = tabled::builder::Builder::new();
 
-        for (lhs, rhs) in &self.reps {
+        for FnMapEntry { lhs, rhs, .. } in &self.reps {
             table.push_record(vec![
                 lhs.printer(LOGPRINTOPTS).to_string(),
                 rhs.printer(LOGPRINTOPTS).to_string(),
@@ -1531,7 +1596,7 @@ impl<T: FloatLike> StatusRenderable for ParamBuilder<T> {
     fn status_json(&self) -> serde_json::Value {
         let mut map = serde_json::Map::new();
 
-        for (lhs, rhs) in &self.reps {
+        for FnMapEntry { lhs, rhs, .. } in &self.reps {
             map.insert(lhs.to_canonical_string(), rhs.to_canonical_string().into());
         }
 

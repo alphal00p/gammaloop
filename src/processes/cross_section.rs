@@ -2150,6 +2150,7 @@ fn build_derivative_structure(order: u8) -> GenericEvaluator {
         [expression_to_derive],
         &params,
         &FunctionMap::default(),
+        vec![],
         OptimizationSettings::default(),
         None,
         true,

@@ -34,7 +34,7 @@ use std::time::Duration;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use tracing::debug;
 use typed_index_collections::TiVec;
-pub mod amplitude_integrand;
+pub mod amplitude;
 pub mod cache_debugging;
 pub mod cross_section_integrand;
 pub mod gammaloop_sample;
@@ -59,7 +59,7 @@ pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAn
 #[trait_decode(trait = GammaLoopContext)]
 #[enum_dispatch(HasIntegrand)]
 pub enum GLIntegrand {
-    Amplitude(amplitude_integrand::AmplitudeIntegrand),
+    Amplitude(amplitude::AmplitudeIntegrand),
     CrossSection(cross_section_integrand::CrossSectionIntegrand),
 }
 

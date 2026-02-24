@@ -114,11 +114,7 @@ pub struct WildCards {
 
 pub struct GammaloopSymbols {
     pub integrand: Symbol,
-    /// Used for evaluator, orientation selection.
-    ///
-    /// Should turn `theta(sigma(1))*theta(sigma(2))*theta(-sigma(3))*...*CFF` ->
-    /// `orienation_if((1-sigma(1))*(1-sigma(2))*(1+sigma(3))*...,CFF,0)`
-    pub orientation_if: Symbol,
+    pub override_if: Symbol,
     pub killing_func: Symbol,
     pub is_function: Symbol,
     pub is_symbol: Symbol,
@@ -197,15 +193,20 @@ impl GammaloopSymbols {
     pub fn collect_orientation_if<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         arg.into()
             .replace(self.sign_theta(W_.a_))
-            .with(self.orientation_if.f(-Atom::var(W_.a_) + 1))
-            .replace(self.orientation_if.f(W_.a_) * self.orientation_if.f(W_.b_))
+            .with(Symbol::IF.f(Atom::var(W_.a_) + 1))
+            .replace(Symbol::IF.f(W_.a_) * Symbol::IF.f(W_.b_))
             .repeat()
-            .with(self.orientation_if.f(W_.a_ * W_.b_))
-            .replace(self.orientation_if.f(W_.a_) * W_.a__)
-            .with(
-                self.orientation_if
-                    .f([Atom::var(W_.a_), Atom::var(W_.a__), Atom::Zero]),
-            )
+            .with(Symbol::IF.f(W_.a_ * W_.b_))
+            .replace(Symbol::IF.f(W_.a_) * W_.b___)
+            .with(Symbol::IF.f([
+                Atom::var(W_.a_) + Atom::var(self.override_if),
+                Atom::var(W_.b___),
+                Atom::Zero,
+            ]))
+            .replace(Symbol::IF.f([Atom::var(W_.a_), Atom::Zero]))
+            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            .replace(Symbol::IF.f([Atom::var(W_.a_)]))
+            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
     }
 
     pub(crate) fn orientation_delta<O: GraphOrientation>(&self, orientation: &O) -> Atom {
@@ -582,7 +583,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             }
         }
     ),
-    orientation_if: symbol!("orientation_if"),
+    override_if: symbol!("override_if"),
     if_sigma: symbol!("if_sigma"),
     is_function: symbol!("is_function"),
     is_symbol: symbol!("is_symbol"),

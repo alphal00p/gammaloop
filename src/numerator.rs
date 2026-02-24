@@ -1168,7 +1168,7 @@ impl Numerator<PolyContracted> {
 
         for (v, k) in self.state.coef_map.clone().iter().enumerate() {
             fn_map
-                .add_tagged_function(
+                .add_tagged_function::<Symbol>(
                     GS.coeff,
                     vec![Atom::num(v as i64)],
                     format!("coef{v}"),

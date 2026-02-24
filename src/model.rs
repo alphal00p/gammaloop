@@ -1923,7 +1923,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
             expr.push(function!(key));
 
             fn_map
-                .add_function(
+                .add_function::<Symbol>(
                     key,
                     c.name.namespaceless_string().into(),
                     vec![],
@@ -1952,7 +1952,7 @@ n_couplings = format!("{}", self.couplings.len()).green(),
                     expr.push(key.clone());
                     if let Some(body) = p.expression.clone() {
                         fn_map
-                            .add_function(
+                            .add_function::<Symbol>(
                                 n.0.0,
                                 p.name.namespaceless_string().into(),
                                 vec![],

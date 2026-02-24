@@ -234,6 +234,7 @@
           bacon
           gfortran
           gcc
+          rust-script
           uv
           ghostscript
           graphviz

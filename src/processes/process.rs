@@ -604,37 +604,11 @@ impl Process {
                         )
                     })?;
 
-                    if settings.combine_diagrams {
-                        // Save all graphs combined in one file
-                        let mut dot = File::create_new(
-                            cs_path.join(format!("{}_graphs.dot", xs_name.clone())),
-                        )
-                        .with_context(|| {
-                            format!(
-                                "Trying to create file to export amplitude graph {}",
-                                cs_path
-                                    .join(format!("{}_graphs.dot", xs_name.clone()))
-                                    .display()
-                            )
-                        })?;
-                        for graph in cs.supergraphs.iter() {
-                            graph.graph.dot_serialize_io(&mut dot, settings)?;
-                        }
-                    } else {
-                        // Save each supergraph in its own file
-                        for graph in cs.supergraphs.iter() {
-                            let mut dot = File::create_new(
-                                cs_path.join(format!("{}.dot", graph.graph.name)),
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Trying to create file to export cross section graph {}",
-                                    cs_path.join(format!("{}.dot", graph.graph.name)).display()
-                                )
-                            })?;
-                            graph.graph.dot_serialize_io(&mut dot, settings)?;
-                        }
-                    }
+                    let _ = (xs_name, cs);
+                    warn!(
+                        "Standalone evaluator export is currently implemented for amplitudes only; skipping cross section output in {}",
+                        cs_path.display()
+                    );
                 }
             }
         }

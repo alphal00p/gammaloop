@@ -138,6 +138,7 @@ impl OverlapStructure {
                 [atom],
                 &params,
                 &FunctionMap::new(),
+                vec![],
                 optimization_settings.clone(),
                 None,
                 false,

@@ -111,7 +111,21 @@ pub struct DotExportSettings {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-pub struct StandaloneExportSettings {}
+pub struct StandaloneExportSettings {
+    #[serde(default)]
+    pub mode: StandaloneExportMode,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum StandaloneExportMode {
+    #[default]
+    Rust,
+    Python,
+}
 
 #[cfg(feature = "python_api")]
 #[cfg_attr(feature = "python_api", pyo3::pymethods)]
@@ -132,6 +146,14 @@ impl Default for DotExportSettings {
             do_color_algebra: true,
             combine_diagrams: false,
             with_uv: false,
+        }
+    }
+}
+
+impl Default for StandaloneExportSettings {
+    fn default() -> Self {
+        Self {
+            mode: StandaloneExportMode::Rust,
         }
     }
 }

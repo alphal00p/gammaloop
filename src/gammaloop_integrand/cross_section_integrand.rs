@@ -17,7 +17,10 @@ use crate::{
     model::Model,
     momentum::{Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
-    processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData},
+    processes::{
+        CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData,
+        StandaloneExportSettings,
+    },
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
@@ -92,6 +95,14 @@ pub struct CrossSectionIntegrandData {
 }
 
 impl CrossSectionIntegrand {
+    pub(crate) fn export_standalone(
+        &self,
+        _path: impl AsRef<Path>,
+        _settings: &StandaloneExportSettings,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;

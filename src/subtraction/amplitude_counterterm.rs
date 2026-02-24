@@ -31,7 +31,7 @@ use crate::{
         overlap::{OverlapGroup, OverlapStructure},
     },
     utils::{
-        F, FloatLike,
+        F, FloatLike, GS,
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };
@@ -66,8 +66,8 @@ impl AmplitudeCountertermAtom {
         let parametric = RefCell::new(
             GenericEvaluator::new_from_builder(
                 [
-                    self.parametric_local.clone(),
-                    self.parametric_integrated.clone(),
+                    GS.collect_orientation_if(&self.parametric_local),
+                    GS.collect_orientation_if(&self.parametric_integrated),
                 ],
                 param_builder,
                 None,

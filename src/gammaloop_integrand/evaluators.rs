@@ -1,4 +1,4 @@
-use std::{mem::transmute, path::Path};
+use std::{mem::transmute, ops::Neg, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -18,7 +18,7 @@ use spenso::{
     utils::to_subscript,
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, FunctionBuilder, Indeterminate},
     domains::{
         dual::HyperDual,
         float::Complex as SymComplex,
@@ -38,7 +38,7 @@ use typed_index_collections::TiVec;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    gammaloop_integrand::param_builder::LUParams,
+    gammaloop_integrand::param_builder::{FnMapEntry, LUParams},
     graph::Graph,
     momentum::Helicity,
     momentum_sample::MomentumSample,
@@ -171,14 +171,14 @@ impl EvaluatorStack {
           )
       )]
     fn new_single_parametric(
-        parametric_atom: Atom,
+        parametric_atom: &Atom,
         param_builder: &ParamBuilder,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let opt_settings = settings.optimization_settings();
 
         GenericEvaluator::new_from_builder(
-            [parametric_atom],
+            [GS.collect_orientation_if(parametric_atom)],
             &param_builder,
             None,
             opt_settings.clone(),
@@ -227,26 +227,32 @@ impl EvaluatorStack {
             .flat_map(|p| p.params.clone())
             .collect();
         let mut fn_map = param_builder.fn_map.clone();
-        let mut symbols = vec![];
-        let mut reps = vec![];
+        let mut args = vec![];
+
+        let mut lhs = FunctionBuilder::new(GS.integrand);
         for (e, _) in &orientations[0] {
-            let symbol = symbol!(format!("σ{}", to_subscript(e.0 as isize)));
-            symbols.push(symbol);
-            reps.push(Replacement::new(GS.sign(e).to_pattern(), Atom::var(symbol)));
+            lhs = lhs.add_arg(GS.sign(e));
+            args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
         }
 
         //I(sign(1), sign(2), sign(3),...) -> I(σ1, σ2, σ3,...)
 
         let parametric_integrand = GS
             .collect_orientation_if(parametric_atom)
-            .replace_multiple(&reps);
-
+            .replace(GS.override_if)
+            .with(Atom::Zero);
+        let entries = vec![FnMapEntry {
+            lhs: lhs.finish(),
+            rhs: parametric_integrand.clone(),
+            tags: vec![],
+            args: args.clone().into_iter().map(|a| a.into()).collect(),
+        }];
         fn_map
             .add_function(
                 GS.integrand,
                 "integrand".into(),
-                symbols,
-                parametric_integrand,
+                args,
+                parametric_integrand.clone(),
             )
             .map_err(|a| eyre!(a))?;
 
@@ -261,6 +267,7 @@ impl EvaluatorStack {
             [sum],
             &params,
             &fn_map,
+            entries,
             settings.optimization_settings(),
             None,
             settings.store_atom,
@@ -282,7 +289,8 @@ impl EvaluatorStack {
         let sum = orientations
             .iter()
             .map(|a| {
-                let selected = a.select(parametric_atom);
+                let selected =
+                    GS.collect_orientation_if(a.orientation_thetas() * a.select(parametric_atom));
                 debug!(selected_expr = %selected.log_print(), "Iterative");
                 selected
             })
@@ -302,19 +310,17 @@ impl EvaluatorStack {
            err
        )]
     pub fn new(
-        parametric_atom: Atom,
+        parametric_atom: &Atom,
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
-        settings: EvaluatorSettings,
+        settings: &EvaluatorSettings,
     ) -> Result<Self> {
-        let opt_settings = settings.optimization_settings();
-
         let iterative = if settings.iterative_orientation_optimization {
             Some(Self::new_iterative(
-                &parametric_atom,
+                parametric_atom,
                 param_builder,
                 orientations,
-                &settings,
+                settings,
             )?)
         } else {
             None
@@ -322,10 +328,10 @@ impl EvaluatorStack {
 
         let summed_function_map = if settings.summed_function_map {
             Some(Self::new_summed_function_map(
-                &parametric_atom,
+                parametric_atom,
                 param_builder,
                 orientations,
-                &settings,
+                settings,
             )?)
         } else {
             None
@@ -333,17 +339,17 @@ impl EvaluatorStack {
 
         let summed = if settings.summed {
             Some(Self::new_summed(
-                &parametric_atom,
+                parametric_atom,
                 param_builder,
                 orientations,
-                &settings,
+                settings,
             )?)
         } else {
             None
         };
 
         let single_parametric =
-            Self::new_single_parametric(parametric_atom, param_builder, &settings)?;
+            Self::new_single_parametric(parametric_atom, param_builder, settings)?;
 
         Ok(EvaluatorStack {
             single_parametric,
@@ -351,6 +357,24 @@ impl EvaluatorStack {
             summed_function_map,
             summed,
         })
+    }
+
+    fn evaluate_parametric<'a, T: FloatLike, OID: IndexLike>(
+        &'a mut self,
+        mut input: InputParams<'a, T>,
+        orientations: SingleOrAllOrientations<'a, OID>,
+    ) -> Complex<F<T>>
+    where
+        usize: From<OID>,
+    {
+        let mut result = Complex::new_re(F(T::from_f64(0.)));
+        for (_, e) in orientations.iter() {
+            input.set_orientation_values(e);
+            result += <T as GenericEvaluatorFloat>::get_evaluator_single(
+                &mut self.single_parametric,
+            )(input.as_slice())
+        }
+        result
     }
 
     pub fn evaluate<'a, T: FloatLike, OID: IndexLike>(
@@ -365,12 +389,7 @@ impl EvaluatorStack {
         let mut result = Complex::new_re(F(T::from_f64(0.)));
         match settings.general.evaluator_method {
             EvaluatorMethod::SingleParametric => {
-                for (_, e) in orientations.iter() {
-                    input.set_orientation_values(e);
-                    result += <T as GenericEvaluatorFloat>::get_evaluator_single(
-                        &mut self.single_parametric,
-                    )(input.as_slice())
-                }
+                return Ok(self.evaluate_parametric(input, orientations));
             }
             EvaluatorMethod::Iterative => {
                 let Some(iterative) = &mut self.iterative else {
@@ -504,6 +523,7 @@ impl EvaluatorStack {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
     pub exprs: Option<Vec<Atom>>,
+    pub fn_map_entries: Vec<FnMapEntry>,
     pub exprs_len: usize,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
     pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
@@ -559,6 +579,7 @@ impl GenericEvaluator {
             atoms,
             &params,
             &builder.fn_map,
+            builder.reps.clone(),
             optimization_settings,
             dual_shape,
             store_atom,
@@ -569,6 +590,7 @@ impl GenericEvaluator {
         atoms: I,
         params: &[Atom],
         fn_map: &FunctionMap,
+        fn_map_entries: Vec<FnMapEntry>,
         optimization_settings: OptimizationSettings,
         dual_shape: Option<Vec<Vec<usize>>>,
         store_atom: bool,
@@ -579,7 +601,7 @@ impl GenericEvaluator {
         for n in exprs.iter() {
             let eval = n
                 .evaluator(fn_map, params, optimization_settings.clone())
-                .map_err(|e| eyre!("Failed to create evaluator for atom: {}: {}", n, e))?;
+                .map_err(|e| eyre!("Failed to create evaluator for atom: {:120}\n: {}", n, e))?;
 
             tree = Some(if let Some(mut tree) = tree {
                 tree.merge(eval, optimization_settings.cpe_iterations)
@@ -613,6 +635,7 @@ impl GenericEvaluator {
 
         let evaluator = GenericEvaluator {
             exprs_len: exprs.len(),
+            fn_map_entries,
             exprs: if store_atom { Some(exprs) } else { None },
             rational: Some(rational),
             f64_compiled: None,
@@ -634,47 +657,53 @@ pub enum SliceMut<'a, T: FloatLike> {
 pub struct InputParams<'a, T: FloatLike> {
     pub values: SliceMut<'a, T>,
     pub orientations_start: usize,
+    pub override_pos: usize,
     pub multiplicative_offset: usize,
 }
 
 impl<'a, T: FloatLike> InputParams<'a, T> {
-    pub(crate) fn set_orientation_values<O: GraphOrientation>(&mut self, orientation: &O) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
-        let one = zero.ref_one();
+    pub(crate) fn set_orientation_values_impl<A: Clone + Neg<Output = A>, O: GraphOrientation>(
+        values: &mut [A],
+        one: A,
+        zero: A,
+        mult_offset: usize,
+        start: usize,
+        orientation: &O,
+    ) {
         let minusone = -(one.clone());
-        let multiplicative_offset = self.multiplicative_offset;
-
-        let mut o_start = self.orientations_start * multiplicative_offset;
-        let values = self.as_mut();
+        let mut o_start = start * mult_offset;
 
         for (_, i) in orientation.orientation() {
             match i {
                 Orientation::Default => {
                     values[o_start] = one.clone();
-                    o_start += multiplicative_offset;
-                    values[o_start] = one.clone();
-                    o_start += multiplicative_offset;
-                    values[o_start] = zero.clone();
-                    o_start += multiplicative_offset;
+                    o_start += mult_offset;
                 }
                 Orientation::Reversed => {
                     values[o_start] = minusone.clone();
-                    o_start += multiplicative_offset;
-                    values[o_start] = zero.clone();
-                    o_start += multiplicative_offset;
-                    values[o_start] = one.clone();
-                    o_start += multiplicative_offset;
+                    o_start += mult_offset;
                 }
                 Orientation::Undirected => {
                     values[o_start] = zero.clone();
-                    o_start += multiplicative_offset;
-                    values[o_start] = zero.clone();
-                    o_start += multiplicative_offset;
-                    values[o_start] = zero.clone();
-                    o_start += multiplicative_offset;
+                    o_start += mult_offset;
                 }
             }
         }
+    }
+
+    pub(crate) fn set_orientation_values<O: GraphOrientation>(&mut self, orientation: &O) {
+        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let one = zero.ref_one();
+        let mult_offset = self.multiplicative_offset;
+        let start = self.orientations_start;
+        Self::set_orientation_values_impl(
+            self.as_mut(),
+            one,
+            zero,
+            mult_offset,
+            start,
+            orientation,
+        );
     }
     pub fn as_mut(&mut self) -> &mut [Complex<F<T>>] {
         match &mut self.values {
