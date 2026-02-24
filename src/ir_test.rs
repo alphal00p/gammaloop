@@ -1,5 +1,3 @@
-#![allow(dead_code, unused_imports, unused_variables, unreachable_code)]
-
 use std::fmt::Display;
 
 use color_eyre::eyre::Result;
@@ -41,8 +39,8 @@ const SLOPE_STABILITY_POINTS: usize = 50;
 
 /// The range is from 10^start to 10^end.
 pub struct IRProfileSetting {
-    pub lambda_exp_start: F<f64>,
-    pub lambda_exp_end: F<f64>,
+    pub lambda_exp_start: f64,
+    pub lambda_exp_end: f64,
     pub steps: usize,
     pub seed: u64,
     pub select_limits_and_graphs: Option<String>,
@@ -99,7 +97,7 @@ pub struct SingleLimitReport {
 }
 
 impl CrossSectionIntegrand {
-    pub(crate) fn test_ir(
+    pub fn test_ir(
         &mut self,
         ir_profile_settings: &IRProfileSetting,
         model: &Model,
@@ -114,7 +112,7 @@ impl CrossSectionIntegrand {
             }),
         });
 
-        self.warm_up(model);
+        self.warm_up(model)?;
 
         let mut rng = MonteCarloRng::new(ir_profile_settings.seed, 0);
 
@@ -141,7 +139,7 @@ impl CrossSectionIntegrand {
                     &limit,
                     &mut rng,
                     ir_profile_settings,
-                    &model,
+                    model,
                 )?;
             }
         }
@@ -173,7 +171,7 @@ impl CrossSectionIntegrand {
                 }
 
                 let ir_limits = parts
-                    .map(|limit_str| IrLimit::parse_limit(limit_str))
+                    .map(IrLimit::parse_limit)
                     .collect::<Result<Vec<_>, _>>()?;
 
                 if ir_limits.is_empty() {
@@ -284,7 +282,7 @@ impl CrossSectionIntegrand {
                 .collect();
 
             for (loop_id, momentum) in non_limit_momenta.iter() {
-                loop_moms[*loop_id] = momentum.clone();
+                loop_moms[*loop_id] = *momentum;
             }
 
             for tagged_momenta in &lambda_point.momenta {
@@ -297,7 +295,7 @@ impl CrossSectionIntegrand {
                         unreachable!("corrupted lmb and ir limit: {}", ir_limit);
                     });
 
-                loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum.clone();
+                loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum;
             }
 
             let sample_in_cmb = MomentumSample::new(
@@ -321,7 +319,11 @@ impl CrossSectionIntegrand {
                 .flat_map(|mom| [mom.px, mom.py, mom.pz])
                 .collect_vec();
 
-            let symbolica_sample = Sample::Continuous(F(1.0), sample_flattened);
+            let symbolica_sample = Sample::Discrete(
+                F(1.0),
+                graph_id,
+                Some(Box::new(Sample::Continuous(F(1.0), sample_flattened))),
+            );
 
             loop_mom_id += 1;
 
@@ -692,13 +694,9 @@ impl IrLimit {
     ) -> Vec<LambdaPoint<f64>> {
         let momentum_builders = self.get_momentum_builders(rng);
 
-        let lambda_exp_delta = (approach_settings.lambda_exp_start
-            - approach_settings.lambda_exp_end)
-            / F(approach_settings.steps as f64);
-
         let lambda_values: Vec<F<f64>> = logspace(
-            approach_settings.lambda_exp_start.0,
-            approach_settings.lambda_exp_end.0,
+            approach_settings.lambda_exp_start,
+            approach_settings.lambda_exp_end,
             approach_settings.steps,
             10.0,
         )

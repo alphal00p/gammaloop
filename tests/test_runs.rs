@@ -701,7 +701,9 @@ fn scalar_bubble() -> Result<()> {
     // from Kaapo: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
 
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    let res = profile_cmd
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.03838e-02)), 1));
@@ -753,7 +755,9 @@ fn scalar_sunrise() -> Result<()> {
     });
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
-    let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
+    let res = profile_cmd
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(

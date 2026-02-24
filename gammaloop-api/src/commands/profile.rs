@@ -6,9 +6,13 @@ use crate::{
 };
 use color_eyre::Result;
 use eyre::eyre;
-use gammalooprs::uv::{
-    profile::{ProfileSettings, UVProfileable},
-    UVProfileAnalysis,
+use gammalooprs::{
+    gammaloop_integrand::GLIntegrand,
+    ir_test::{IRProfileSetting, IrLimitTestReport},
+    uv::{
+        profile::{ProfileSettings, UVProfileable},
+        UVProfileAnalysis,
+    },
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -20,6 +24,8 @@ use clap::{Args, Subcommand};
 pub enum Profile {
     /// Ultraviolet profile analysis
     UltraViolet(#[command(flatten)] UltraVioletProfile),
+    /// Infrared profile analysis
+    InfraRed(#[command(flatten)] InfraRedProfile),
 }
 
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -60,6 +66,41 @@ pub struct UltraVioletProfile {
     pub output_file: Option<PathBuf>,
 }
 
+#[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
+pub struct InfraRedProfile {
+    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    pub process: Option<ProcessRef>,
+
+    /// The name of the process to inspect
+    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    pub integrand_name: Option<String>,
+
+    /// Number of scaling points to sample
+    #[arg(long = "n-points", default_value_t = 20)]
+    pub n_points: usize,
+
+    /// Minimum scaling factor
+    #[arg(long = "min-scaling", default_value_t = 3.0)]
+    pub min_scale_exponent: f64,
+
+    /// Maximum scaling factor
+    #[arg(long = "max-scaling", default_value_t = 5.0)]
+    pub max_scale_exponent: f64,
+
+    /// Random seed for momentum sampling
+    #[arg(long = "seed")]
+    pub seed: Option<u64>,
+
+    /// Output file for results (optional)
+    #[arg(short = 'o', long = "output")]
+    pub output_file: Option<PathBuf>,
+
+    /// restrict test to particular graphs or limits
+    #[arg(short = 's', long = "select")]
+    pub select: Option<String>,
+}
+
 impl Default for UltraVioletProfile {
     fn default() -> Self {
         Self {
@@ -76,13 +117,27 @@ impl Default for UltraVioletProfile {
     }
 }
 
+pub enum ProfileResult {
+    UltraViolet(UVProfileAnalysis),
+    InfraRed(IrLimitTestReport),
+}
+
+impl ProfileResult {
+    pub fn unwrap_uv(self) -> UVProfileAnalysis {
+        match self {
+            ProfileResult::UltraViolet(uv_analyis) => uv_analyis,
+            _ => panic!("result does not contain uv profilel analysis data"),
+        }
+    }
+}
+
 impl Profile {
     #[instrument(skip_all)]
     pub fn run(
         &self,
         state: &mut State,
         _global_cli_settings: &CLISettings,
-    ) -> Result<UVProfileAnalysis> {
+    ) -> Result<ProfileResult> {
         match self {
             Profile::UltraViolet(UltraVioletProfile {
                 process,
@@ -136,7 +191,41 @@ impl Profile {
                     profile_res.write_profile_data(file)?
                 }
 
-                Ok(profile_res)
+                Ok(ProfileResult::UltraViolet(profile_res))
+            }
+            Profile::InfraRed(InfraRedProfile {
+                process,
+                integrand_name,
+                n_points,
+                min_scale_exponent,
+                max_scale_exponent,
+                seed,
+                output_file,
+                select,
+            }) => {
+                let ir_profile_settings = IRProfileSetting {
+                    lambda_exp_start: *min_scale_exponent,
+                    lambda_exp_end: *max_scale_exponent,
+                    steps: *n_points,
+                    seed: seed.unwrap_or(420),
+                    select_limits_and_graphs: select.clone(),
+                };
+
+                let cross_section = state
+                    .process_list
+                    .get_cross_section_mut_ref(process.as_ref(), integrand_name.as_ref())?;
+
+                let profile_result = match cross_section.integrand.as_mut().ok_or(eyre!(
+                    "Integrand {} has not yet been generated",
+                    cross_section.name
+                ))? {
+                    GLIntegrand::CrossSection(cross_section_integrand) => {
+                        cross_section_integrand.test_ir(&ir_profile_settings, &state.model)?
+                    }
+                    _ => unreachable!(),
+                };
+
+                Ok(ProfileResult::InfraRed(profile_result))
             }
         }
     }

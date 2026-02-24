@@ -210,6 +210,11 @@ pub trait ProcessListExt {
         process: Option<&ProcessRef>,
         integrand_name: Option<&String>,
     ) -> Result<&mut Amplitude>;
+    fn get_cross_section_mut_ref(
+        &mut self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<&mut CrossSection>;
 }
 
 impl ProcessListExt for ProcessList {
@@ -248,6 +253,30 @@ impl ProcessListExt for ProcessList {
             }
             ProcessCollection::CrossSections(_) => Err(eyre!(
                 "Process '{}' does not contain amplitudes",
+                process.definition.folder_name
+            )),
+        }
+    }
+
+    fn get_cross_section_mut_ref(
+        &mut self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<&mut CrossSection> {
+        let (process_id, integrand_name) = self.find_integrand_ref(process, integrand_name)?;
+        let process = &mut self.processes[process_id];
+        match &mut process.collection {
+            ProcessCollection::CrossSections(crosssections) => {
+                crosssections.get_mut(&integrand_name).ok_or_else(|| {
+                    eyre!(
+                        "No cross section named '{}' in process '{}'",
+                        integrand_name,
+                        process.definition.folder_name
+                    )
+                })
+            }
+            ProcessCollection::Amplitudes(_) => Err(eyre!(
+                "Process '{}' does not contain crosssections",
                 process.definition.folder_name
             )),
         }
