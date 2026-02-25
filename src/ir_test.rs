@@ -13,6 +13,7 @@ use symbolica::{
     domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     numerical_integration::{MonteCarloRng, Sample},
 };
+use tabled::{builder::Builder, settings::Style};
 
 use crate::{
     DependentMomentaConstructor, disable,
@@ -135,7 +136,34 @@ impl Display for IrLimitTestReport {
             self.results_per_graph.len()
         )?;
 
+        let mut graph_summary_table = Builder::new();
+        graph_summary_table.push_record(["graph", "status", "passed", "total"]);
+
         for graph_report in &self.results_per_graph {
+            let graph_status = if graph_report.all_limits_passed {
+                "PASS".green().bold().to_string()
+            } else {
+                "FAIL".red().bold().to_string()
+            };
+
+            let passed_limits = graph_report
+                .single_limit_reports
+                .iter()
+                .filter(|report| report.passed)
+                .count();
+
+            graph_summary_table.push_record([
+                graph_report.graph_name.clone(),
+                graph_status,
+                passed_limits.to_string(),
+                graph_report.single_limit_reports.len().to_string(),
+            ]);
+        }
+
+        writeln!(f, "{}", graph_summary_table.build().with(Style::rounded()))?;
+
+        for graph_report in &self.results_per_graph {
+            writeln!(f)?;
             writeln!(f, "{graph_report}")?;
         }
 
@@ -166,9 +194,38 @@ impl Display for GraphIRLimitReport {
             self.single_limit_reports.len()
         )?;
 
+        let mut limit_table = Builder::new();
+        limit_table.push_record([
+            "status",
+            "limit",
+            "scaling",
+            "p",
+            "coefficient",
+            "const_offset",
+            "r_squared",
+            "n_soft",
+        ]);
+
         for report in &self.single_limit_reports {
-            writeln!(f, "    {report}")?;
+            let status = if report.passed {
+                "PASS".green().bold().to_string()
+            } else {
+                "FAIL".red().bold().to_string()
+            };
+
+            limit_table.push_record([
+                status,
+                report.limit_name.clone(),
+                format!("{:+.4}", report.scaling),
+                format!("{:+.4}", report.power_law_fit.exponent),
+                format!("{:+.4e}", report.power_law_fit.coefficient),
+                format!("{:+.4e}", report.power_law_fit.constant_offset),
+                format!("{:.4}", report.power_law_fit.r_squared),
+                report.num_soft.to_string(),
+            ]);
         }
+
+        write!(f, "{}", limit_table.build().with(Style::rounded()))?;
 
         Ok(())
     }
@@ -184,11 +241,13 @@ impl Display for SingleLimitReport {
 
         write!(
             f,
-            "{} {} | scaling={:+.4} | p={:+.4} | R²={:.4} | n_soft={}",
+            "{} {} | scaling={:+.4} | p={:+.4} | coeff={:+.4e} | const={:+.4e} | R²={:.4} | n_soft={}",
             status,
             self.limit_name,
             self.scaling,
             self.power_law_fit.exponent,
+            self.power_law_fit.coefficient,
+            self.power_law_fit.constant_offset,
             self.power_law_fit.r_squared,
             self.num_soft
         )
@@ -1309,6 +1368,6 @@ mod tests {
             90.61788940429688,
         ];
 
-        fit_power_law(x, y).is_ok();
+        let _ = fit_power_law(x, y).is_ok();
     }
 }

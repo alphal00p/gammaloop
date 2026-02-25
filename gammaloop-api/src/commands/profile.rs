@@ -81,11 +81,11 @@ pub struct InfraRedProfile {
     pub n_points: usize,
 
     /// Minimum scaling factor
-    #[arg(long = "min-scaling", default_value_t = -3.0)]
+    #[arg(long = "min-scaling", default_value_t = -2.0)]
     pub min_scale_exponent: f64,
 
     /// Maximum scaling factor
-    #[arg(long = "max-scaling", default_value_t = -5.0)]
+    #[arg(long = "max-scaling", default_value_t = -3.0)]
     pub max_scale_exponent: f64,
 
     /// Random seed for momentum sampling
