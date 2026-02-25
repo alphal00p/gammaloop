@@ -56,6 +56,8 @@ impl CrossSectionGraphTerm {
         let loop_count = self.graph.loop_momentum_basis.loop_edges.len();
 
         for cuts_in_group in self.raised_data.raised_cut_groups.iter() {
+            let mut limits_of_cut: HashSet<IrLimit> = HashSet::new();
+
             let representative_cut_esurface = &self.cut_esurface[*cuts_in_group.first().unwrap()];
             let massless_edges_in_cut = representative_cut_esurface
                 .energies
@@ -74,7 +76,7 @@ impl CrossSectionGraphTerm {
                 for subset in subsets {
                     let ir_limit =
                         IrLimit::new_pure_colinear(subset.into_iter().copied().collect());
-                    limits.insert(ir_limit);
+                    limits_of_cut.insert(ir_limit);
                 }
             }
 
@@ -86,8 +88,12 @@ impl CrossSectionGraphTerm {
                     .collect_vec();
                 for subset in subsets {
                     let ir_limit = IrLimit::new_pure_soft(subset.into_iter().copied().collect());
-                    limits.insert(ir_limit);
+                    limits_of_cut.insert(ir_limit);
                 }
+            }
+
+            for limit in limits_of_cut.drain() {
+                limits.insert(limit);
             }
         }
 
@@ -543,7 +549,7 @@ impl CrossSectionIntegrand {
 
         let num_soft = ir_limit.num_soft();
         let scaling = slope.exponent + ((num_soft * 3) as f64);
-        let passed = scaling > -1.0;
+        let passed = scaling > 0.0;
 
         let result = SingleLimitReport {
             limit_name: format!("{}", ir_limit),
