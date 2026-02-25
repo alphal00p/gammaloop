@@ -225,6 +225,7 @@ impl Profile {
                     _ => unreachable!(),
                 };
 
+                info!("\n{}", profile_result);
                 Ok(ProfileResult::InfraRed(profile_result))
             }
         }

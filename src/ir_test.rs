@@ -1,6 +1,8 @@
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display};
 
 use color_eyre::eyre::Result;
+use colored::Colorize;
+use dot_parser::ast::Graph;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
@@ -38,8 +40,6 @@ use varpro::{
     prelude::SeparableModelBuilder, problem::SeparableProblemBuilder, solvers::levmar::LevMarSolver,
 };
 
-const SLOPE_STABILITY_POINTS: usize = 50;
-
 /// The range is from 10^start to 10^end.
 pub struct IRProfileSetting {
     pub lambda_exp_start: f64,
@@ -50,33 +50,47 @@ pub struct IRProfileSetting {
 }
 
 impl CrossSectionGraphTerm {
-    fn enumerate_colinear_limits(&self) -> Vec<IrLimit> {
-        self.raised_data
-            .raised_cut_groups
-            .iter()
-            .flat_map(|cuts_in_group| {
-                let representative_cut_esurface =
-                    &self.cut_esurface[*cuts_in_group.first().unwrap()];
-                let massless_edges_in_cut = representative_cut_esurface
-                    .energies
+    fn enumerate_ir_limits(&self) -> Vec<IrLimit> {
+        let mut limits: HashSet<IrLimit> = HashSet::new();
+        let loop_count = self.graph.loop_momentum_basis.loop_edges.len();
+
+        for cuts_in_group in self.raised_data.raised_cut_groups.iter() {
+            let representative_cut_esurface = &self.cut_esurface[*cuts_in_group.first().unwrap()];
+            let massless_edges_in_cut = representative_cut_esurface
+                .energies
+                .iter()
+                .filter(|edge_id| self.graph[**edge_id].particle.is_massless())
+                .copied()
+                .collect_vec();
+
+            if massless_edges_in_cut.len() >= 2 {
+                let subsets = massless_edges_in_cut
                     .iter()
-                    .filter(|edge_id| self.graph[**edge_id].particle.is_massless())
-                    .copied()
+                    .powerset()
+                    .filter(|subset| subset.len() >= 2 && subset.len() < loop_count)
                     .collect_vec();
 
-                if massless_edges_in_cut.len() < 2 {
-                    Vec::new()
-                } else {
-                    let subsets = massless_edges_in_cut
-                        .iter()
-                        .powerset()
-                        .filter(|subset| subset.len() >= 2)
-                        .collect_vec();
-
-                    todo!()
+                for subset in subsets {
+                    let ir_limit =
+                        IrLimit::new_pure_colinear(subset.into_iter().copied().collect());
+                    limits.insert(ir_limit);
                 }
-            })
-            .collect()
+            }
+
+            if massless_edges_in_cut.len() >= 1 {
+                let subsets = massless_edges_in_cut
+                    .iter()
+                    .powerset()
+                    .filter(|subset| subset.len() >= 1 && subset.len() < loop_count)
+                    .collect_vec();
+                for subset in subsets {
+                    let ir_limit = IrLimit::new_pure_soft(subset.into_iter().copied().collect());
+                    limits.insert(ir_limit);
+                }
+            }
+        }
+
+        limits.into_iter().sorted().collect()
     }
 }
 
@@ -93,10 +107,92 @@ pub struct GraphIRLimitReport {
 
 pub struct SingleLimitReport {
     pub limit_name: String,
-    pub exponent_real: F<f64>,
-    pub exponent_imaginary: F<f64>,
     pub passed: bool,
-    pub highest_precision_reached: Precision,
+    pub power_law_fit: PowerLawFit,
+    pub scaling: f64,
+    num_soft: usize,
+}
+
+impl Display for IrLimitTestReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let overall_status = if self.all_passed {
+            "PASS".green().bold()
+        } else {
+            "FAIL".red().bold()
+        };
+
+        let passed_graphs = self
+            .results_per_graph
+            .iter()
+            .filter(|graph_report| graph_report.all_limits_passed)
+            .count();
+
+        writeln!(
+            f,
+            "IR limit tests: {} ({}/{})",
+            overall_status,
+            passed_graphs,
+            self.results_per_graph.len()
+        )?;
+
+        for graph_report in &self.results_per_graph {
+            writeln!(f, "{graph_report}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Display for GraphIRLimitReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let graph_status = if self.all_limits_passed {
+            "PASS".green().bold()
+        } else {
+            "FAIL".red().bold()
+        };
+
+        let passed_limits = self
+            .single_limit_reports
+            .iter()
+            .filter(|report| report.passed)
+            .count();
+
+        writeln!(
+            f,
+            "  {} {} ({}/{})",
+            graph_status,
+            self.graph_name.bold(),
+            passed_limits,
+            self.single_limit_reports.len()
+        )?;
+
+        for report in &self.single_limit_reports {
+            writeln!(f, "    {report}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Display for SingleLimitReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let status = if self.passed {
+            "PASS".green().bold()
+        } else {
+            "FAIL".red().bold()
+        };
+
+        write!(
+            f,
+            "{} {} | scaling={:+.4} | p={:+.4} | R²={:.4} | n_soft={}",
+            status,
+            self.limit_name,
+            self.scaling,
+            self.power_law_fit.exponent,
+            self.power_law_fit.r_squared,
+            self.num_soft
+        )
+    }
 }
 
 impl CrossSectionIntegrand {
@@ -123,10 +219,21 @@ impl CrossSectionIntegrand {
             if let Some(select_limits_and_graphs) = &ir_profile_settings.select_limits_and_graphs {
                 self.parse_select_limits_and_graphs(select_limits_and_graphs)?
             } else {
-                todo!("enumerate limits automatically")
+                self.enumerate_ir_limits()
             };
 
+        let mut result = IrLimitTestReport {
+            all_passed: false,
+            results_per_graph: Vec::new(),
+        };
+
         for (graph_name, limits) in limits_to_check {
+            let mut graph_report = GraphIRLimitReport {
+                graph_name: graph_name.clone(),
+                all_limits_passed: false,
+                single_limit_reports: Vec::new(),
+            };
+
             let graph_id = self
                 .data
                 .graph_terms
@@ -137,17 +244,43 @@ impl CrossSectionIntegrand {
                 .0;
 
             for limit in limits {
-                self.test_single_ir_limit_impl(
+                let single_limit_report = self.test_single_ir_limit_impl(
                     graph_id,
                     &limit,
                     &mut rng,
                     ir_profile_settings,
                     model,
                 )?;
+
+                graph_report.single_limit_reports.push(single_limit_report);
             }
+
+            graph_report.all_limits_passed = graph_report
+                .single_limit_reports
+                .iter()
+                .all(|report| report.passed);
+
+            result.results_per_graph.push(graph_report);
         }
 
-        Ok(todo!())
+        result.all_passed = result
+            .results_per_graph
+            .iter()
+            .all(|graph_report| graph_report.all_limits_passed);
+
+        Ok(result)
+    }
+
+    fn enumerate_ir_limits(&self) -> Vec<(String, Vec<IrLimit>)> {
+        self.data
+            .graph_terms
+            .iter()
+            .map(|term| {
+                let graph_name = term.graph.name.clone();
+                let limits = term.enumerate_ir_limits();
+                (graph_name, limits)
+            })
+            .collect()
     }
 
     fn parse_select_limits_and_graphs(&self, input: &str) -> Result<Vec<(String, Vec<IrLimit>)>> {
@@ -196,7 +329,7 @@ impl CrossSectionIntegrand {
         rng: &mut MonteCarloRng,
         approach_settings: &IRProfileSetting,
         model: &Model,
-    ) -> Result<()> {
+    ) -> Result<SingleLimitReport> {
         let edges_in_limit = ir_limit.get_all_edges()?;
 
         // find cut that for that as all edges of the limit
@@ -298,7 +431,11 @@ impl CrossSectionIntegrand {
                         unreachable!("corrupted lmb and ir limit: {}", ir_limit);
                     });
 
-                loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum;
+                if edges_to_flip.contains(&edge_id) {
+                    loop_moms[LoopIndex(loop_id)] = -tagged_momenta.momentum;
+                } else {
+                    loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum
+                };
             }
 
             let sample_in_cmb = MomentumSample::new(
@@ -344,10 +481,20 @@ impl CrossSectionIntegrand {
         }
 
         let slope = limit_data.extract_power()?;
-        println!("slope: {:?}", slope);
-        todo!();
 
-        Ok(())
+        let num_soft = ir_limit.num_soft();
+        let scaling = slope.exponent + ((num_soft * 3) as f64);
+        let passed = scaling > -1.0;
+
+        let result = SingleLimitReport {
+            limit_name: format!("{}", ir_limit),
+            num_soft: ir_limit.num_soft(),
+            scaling,
+            passed,
+            power_law_fit: slope,
+        };
+
+        Ok(result)
     }
 }
 
@@ -427,6 +574,35 @@ impl IrLimit {
 
         self.colinear.sort();
         self.soft.sort();
+    }
+
+    fn new_pure_colinear(colinear_edges: Vec<EdgeIndex>) -> Self {
+        let colinear = vec![colinear_edges.into_iter().map(HardOrSoft::Hard).collect()];
+
+        let mut result = IrLimit {
+            colinear,
+            soft: Vec::new(),
+        };
+        result.canonize();
+        result
+    }
+
+    fn new_pure_soft(soft_edges: Vec<EdgeIndex>) -> Self {
+        let mut result = IrLimit {
+            colinear: Vec::new(),
+            soft: soft_edges,
+        };
+        result.canonize();
+        result
+    }
+
+    fn num_soft(&self) -> usize {
+        self.colinear
+            .iter()
+            .flatten()
+            .filter(|edge| matches!(edge, HardOrSoft::Soft(_)))
+            .count()
+            + self.soft.len()
     }
 
     fn check_min_colinear_size(&self) -> bool {
@@ -798,9 +974,6 @@ impl<T: FloatLike> LimitData<T> {
             .map(|point_eval| point_eval.value.integrand_result.re.to_f64())
             .collect_vec();
 
-        println!("x: {:?}", x);
-        println!("y: {:?}", y);
-
         fit_power_law(x, y)
     }
 }
@@ -809,6 +982,7 @@ impl<T: FloatLike> LimitData<T> {
 pub struct PowerLawFit {
     exponent: f64,
     coefficient: f64,
+    constant_offset: f64,
     r_squared: f64,
 }
 
@@ -831,7 +1005,16 @@ fn fit_power_law(x: Vec<f64>, y: Vec<f64>) -> Result<PowerLawFit> {
         return Err(eyre!("fit_power_law requires finite y values"));
     }
 
-    let x_data = DVector::from_vec(x.clone());
+    let x_scale = (x.iter().map(|value| value.ln()).sum::<f64>() / x.len() as f64).exp();
+    if !x_scale.is_finite() || x_scale <= 0.0 {
+        return Err(eyre!(
+            "fit_power_law could not determine a valid x rescaling factor"
+        ));
+    }
+
+    let x_normalized = x.iter().map(|value| value / x_scale).collect::<Vec<_>>();
+
+    let x_data = DVector::from_vec(x_normalized.clone());
     let y_data = DVector::from_vec(y.clone());
 
     let initial_exponent = {
@@ -866,12 +1049,38 @@ fn fit_power_law(x: Vec<f64>, y: Vec<f64>) -> Result<PowerLawFit> {
         }
     };
 
+    const LARGE_FINITE_GUARD: f64 = 1.0e200;
+
     let model = SeparableModelBuilder::new(["p"])
         .initial_parameters(vec![initial_exponent])
         .independent_variable(x_data)
-        .function(["p"], |x: &DVector<f64>, p: f64| x.map(|xv| xv.powf(p)))
+        .function(["p"], |x: &DVector<f64>, p: f64| {
+            x.map(|xv| {
+                let value = xv.powf(p);
+                if value.is_finite() {
+                    value
+                } else if value.is_nan() {
+                    LARGE_FINITE_GUARD
+                } else if value.is_sign_negative() {
+                    -LARGE_FINITE_GUARD
+                } else {
+                    LARGE_FINITE_GUARD
+                }
+            })
+        })
         .partial_deriv("p", |x: &DVector<f64>, p: f64| {
-            x.map(|xv| xv.powf(p) * xv.ln())
+            x.map(|xv| {
+                let deriv = xv.powf(p) * xv.ln();
+                if deriv.is_finite() {
+                    deriv
+                } else if deriv.is_nan() {
+                    LARGE_FINITE_GUARD
+                } else if deriv.is_sign_negative() {
+                    -LARGE_FINITE_GUARD
+                } else {
+                    LARGE_FINITE_GUARD
+                }
+            })
         })
         .invariant_function(|x: &DVector<f64>| DVector::from_element(x.len(), 1.0))
         .build()
@@ -882,9 +1091,11 @@ fn fit_power_law(x: Vec<f64>, y: Vec<f64>) -> Result<PowerLawFit> {
         .build()
         .map_err(|error| eyre!("could not build varpro problem for power-law fit: {error}"))?;
 
-    let fit_result = LevMarSolver::default()
-        .solve(problem)
-        .map_err(|error| eyre!("varpro solve failed for power-law fit: {:?}", error))?;
+    let fit_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        LevMarSolver::default().solve(problem)
+    }))
+    .map_err(|_| eyre!("varpro/nalgebra panicked while solving power-law fit"))?
+    .map_err(|error| eyre!("varpro solve failed for power-law fit: {:?}", error))?;
 
     if !fit_result.minimization_report.termination.was_successful() {
         return Err(eyre!(
@@ -896,8 +1107,28 @@ fn fit_power_law(x: Vec<f64>, y: Vec<f64>) -> Result<PowerLawFit> {
     let coefficients = fit_result
         .linear_coefficients()
         .ok_or_else(|| eyre!("varpro did not return linear coefficients"))?;
-    let coefficient = coefficients[0];
+    let coefficient_normalized = coefficients[0];
     let constant_offset = coefficients[1];
+
+    let exponent = if exponent.is_finite() {
+        exponent
+    } else {
+        return Err(eyre!("power-law fit returned non-finite exponent"));
+    };
+
+    let coefficient_scale = x_scale.powf(-exponent);
+    if !coefficient_scale.is_finite() {
+        return Err(eyre!(
+            "power-law fit produced non-finite coefficient rescaling"
+        ));
+    }
+
+    let coefficient = coefficient_normalized * coefficient_scale;
+    if !coefficient.is_finite() || !constant_offset.is_finite() {
+        return Err(eyre!(
+            "power-law fit returned non-finite linear coefficients"
+        ));
+    }
 
     let mean_y = y.iter().sum::<f64>() / y.len() as f64;
     let ss_tot = y.iter().map(|yv| (yv - mean_y).powi(2)).sum::<f64>();
@@ -918,6 +1149,7 @@ fn fit_power_law(x: Vec<f64>, y: Vec<f64>) -> Result<PowerLawFit> {
     Ok(PowerLawFit {
         exponent,
         coefficient,
+        constant_offset,
         r_squared,
     })
 }
@@ -1027,5 +1259,56 @@ mod tests {
         assert!((fit.exponent - exponent).abs() < 1e-3);
         assert!((fit.coefficient - coefficient).abs() < 1e-3);
         assert!(fit.r_squared > 0.999_999);
+    }
+
+    #[test]
+    fn fit_power_law_on_panicking_data() {
+        let x = vec![
+            0.001,
+            0.0007847599703514615,
+            0.0006158482110660267,
+            0.0004832930238571752,
+            0.000379269019073225,
+            0.00029763514416313193,
+            0.00023357214690901214,
+            0.00018329807108324357,
+            0.0001438449888287663,
+            0.00011288378916846895,
+            8.858667904100833e-5,
+            6.951927961775606e-5,
+            5.4555947811685143e-5,
+            4.281332398719396e-5,
+            3.359818286283781e-5,
+            2.6366508987303556e-5,
+            2.06913808111479e-5,
+            1.6237767391887242e-5,
+            1.2742749857031348e-5,
+            1e-5,
+        ];
+
+        let y = vec![
+            0.002950535397303611,
+            0.004802153664059006,
+            0.007811787818354787,
+            0.012702615924354177,
+            0.020646917328122072,
+            0.033559978182893246,
+            0.05451887019444257,
+            0.08857211912982166,
+            0.14386785496026278,
+            0.2341369427740574,
+            0.378563791513443,
+            0.6228243708610535,
+            1.0381001830101013,
+            1.609904408454895,
+            2.4859671592712402,
+            4.144830703735352,
+            7.431371688842773,
+            8.509048461914063,
+            -28.14263916015625,
+            90.61788940429688,
+        ];
+
+        fit_power_law(x, y).is_ok();
     }
 }
