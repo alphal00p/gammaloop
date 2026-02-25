@@ -207,6 +207,17 @@ pub enum EdgeMass {
     Evaluator(Arc<Mutex<ExpressionEvaluator<Complex<F<f64>>>>>),
 }
 
+impl PartialEq for EdgeMass {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (EdgeMass::Zero, EdgeMass::Zero) => true,
+            (EdgeMass::Value(a), EdgeMass::Value(b)) => a == b,
+            (EdgeMass::ModelVar(a), EdgeMass::ModelVar(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
 impl EdgeMass {
     pub fn from_atom(atom: Atom, model: &Model, paramb: &ParamBuilder) -> Result<Self> {
         if atom.is_zero() {

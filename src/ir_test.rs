@@ -14,6 +14,7 @@ use symbolica::{
     numerical_integration::{MonteCarloRng, Sample},
 };
 use tabled::{builder::Builder, settings::Style};
+use tracing::{debug, warn};
 
 use crate::{
     DependentMomentaConstructor, disable,
@@ -70,7 +71,11 @@ impl CrossSectionGraphTerm {
                 let subsets = massless_edges_in_cut
                     .iter()
                     .powerset()
-                    .filter(|subset| subset.len() >= 2 && subset.len() < loop_count)
+                    .filter(|subset| {
+                        subset.len() >= 2
+                            && subset.len() <= loop_count
+                            && subset.len() < representative_cut_esurface.energies.len()
+                    })
                     .collect_vec();
 
                 for subset in subsets {
@@ -84,7 +89,11 @@ impl CrossSectionGraphTerm {
                 let subsets = massless_edges_in_cut
                     .iter()
                     .powerset()
-                    .filter(|subset| subset.len() >= 1 && subset.len() < loop_count)
+                    .filter(|subset| {
+                        subset.len() >= 1
+                            && subset.len() <= loop_count
+                            && subset.len() < representative_cut_esurface.energies.len()
+                    })
                     .collect_vec();
                 for subset in subsets {
                     let ir_limit = IrLimit::new_pure_soft(subset.into_iter().copied().collect());
@@ -1039,7 +1048,15 @@ impl<T: FloatLike> LimitData<T> {
             .map(|point_eval| point_eval.value.integrand_result.re.to_f64())
             .collect_vec();
 
-        fit_power_law(x, y)
+        let result = fit_power_law(x.clone(), y.clone())?;
+
+        if result.r_squared < 0.9 {
+            warn!("low r^2 value found for input data");
+            warn!("x: {:?}", x);
+            warn!("y: {:?}", y);
+        }
+
+        Ok(result)
     }
 }
 
