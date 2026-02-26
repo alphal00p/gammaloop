@@ -1063,9 +1063,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
-            if !lmb.loop_edges.contains(&edge_id)
-                && signature.internal.iter().any(|sign| sign.is_sign())
-            {
+            if !lmb.loop_edges.contains(&edge_id) {
                 for i in 0..4 {
                     new.add_tagged_function(
                         GS.emr_mom,

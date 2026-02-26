@@ -33,7 +33,7 @@ use crate::{
 use ahash::{HashMap, HashMapExt};
 use bincode::Encode;
 use bincode_trait_derive::Decode;
-use color_eyre::Result;
+use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
 use itertools::Itertools;
@@ -925,7 +925,18 @@ impl GraphTerm for CrossSectionGraphTerm {
             }
         };
 
-        all_cut_result * flux_factor
+        let final_result = all_cut_result * flux_factor;
+
+        debug!(
+            "{}",
+            format!(
+                "final result for graph: {}, {:+16e}",
+                self.graph.name, final_result
+            )
+            .red()
+        );
+
+        final_result
     }
     fn name(&self) -> String {
         self.graph.name.clone()
