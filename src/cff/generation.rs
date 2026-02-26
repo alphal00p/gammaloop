@@ -10,7 +10,7 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
         tree::Tree,
     },
-    graph::{Graph, get_cff_inverse_energy_product_impl},
+    graph::{self, Graph, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
 };
 use ahash::HashSet;
@@ -542,7 +542,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
 
     let mut tree = generate_tree_for_orientation.map(forget_graphs);
 
-    post_process(&mut tree, orientation, &surface_cache, setup);
+    post_process(&mut tree, orientation, subgraph, &surface_cache, setup);
 
     let surface_cache_to_use = setup
         .rewrite_esurfaces
@@ -569,9 +569,10 @@ pub struct EsurfaceRewritingInstructions<'a> {
     pub subgraph_location: (Option<CutId>, Option<CutId>),
 }
 
-fn post_process(
+fn post_process<S: SubGraphLike>(
     tree: &mut Tree<HybridSurfaceID>,
     orientation: &EdgeVec<Orientation>,
+    subgraph: &S,
     surface_cache: &SurfaceCache,
     setup: PostProcessingSetup<'_>,
 ) {
@@ -778,7 +779,15 @@ fn post_process(
                         .allowed_targets
                         .esurface_cache
                         .position(|allowed_esurface| allowed_esurface == &new_esurface)
-                        .expect("constructed esurface not in allowed targets");
+                        .unwrap_or_else(|| {
+                            println!("for graph: {}", rewrite_esurfaces.graph.name.clone());
+                            println!("dot: \n {}", rewrite_esurfaces.graph.debug_dot());
+                            println!("subgraph: \n {}", rewrite_esurfaces.graph.dot(subgraph));
+
+                            println!("from hsurface: {:?}", hsurface);
+                            println!("constructed esurface: {:?}", new_esurface);
+                            panic!("constructed esurface not in allowed targets");
+                        });
 
                     let new_id = HybridSurfaceID::Esurface(new_esurface_id);
                     id_map.insert(*appearing_id, new_id);

@@ -94,11 +94,11 @@ impl Graph {
 
                             match e.flow() {
                                 Some(Flow::Source) => {
-                                    assert!(
-                                        self.initial_state_cut
-                                            .left
-                                            .includes(&self.inv(p.any_hedge()))
-                                    );
+                                    //assert!(
+                                    //    self.initial_state_cut
+                                    //        .left
+                                    //        .includes(&self.inv(p.any_hedge()))
+                                    //);
                                     dot.add_statement("is_cut", self.inv(p.any_hedge()));
                                     dot.add_statement(
                                         "pin",

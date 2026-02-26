@@ -1252,21 +1252,25 @@ impl CrossSectionGraph {
                             constraints: &active_constraints,
                         };
 
-                        let rewrite_esurfaces = EsurfaceRewritingInstructions {
-                            allowed_targets: &self
-                                .derived_data
-                                .global_cff_expression
-                                .as_ref()
-                                .unwrap()
-                                .surfaces,
-                            subgraph_location: cut_location,
-                            graph: &self.graph,
-                            cuts: &self.cuts,
+                        let rewrite_esurfaces = if cross_free_subset.len() > 1 {
+                            Some(EsurfaceRewritingInstructions {
+                                allowed_targets: &self
+                                    .derived_data
+                                    .global_cff_expression
+                                    .as_ref()
+                                    .unwrap()
+                                    .surfaces,
+                                subgraph_location: cut_location,
+                                graph: &self.graph,
+                                cuts: &self.cuts,
+                            })
+                        } else {
+                            None
                         };
 
                         let post_processing = PostProcessingSetup {
                             constraint_data: Some(constraint_data),
-                            rewrite_esurfaces: Some(rewrite_esurfaces),
+                            rewrite_esurfaces,
                         };
 
                         forest.compute(
