@@ -224,6 +224,7 @@ impl AmplitudeGraphTerm {
 
         debug!("loop_moms: {}", momentum_sample.loop_moms());
         debug!("jacobian: {:16e}", momentum_sample.jacobian());
+        debug!("Og paramBuilder: \n{}", self.param_builder.table());
 
         let input = T::get_parameters(
             &mut self.param_builder,
@@ -236,10 +237,11 @@ impl AmplitudeGraphTerm {
             None,
             None,
         );
+
         let result = self
             .original_integrand
             .evaluate(input, orientations, settings)?;
-
+        debug!("parambuilder 244: {}", self.param_builder);
         let sum_of_cts = self.threshold_counterterm.evaluate(
             &momentum_sample,
             &self.graph,

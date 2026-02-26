@@ -21,6 +21,9 @@
     "Typst": {
       "language_servers": ["tinymist"],
     },
+    "Rust": {
+      "language_servers": ["rust-analyzer", "rscls"],
+    },
   },
   "lsp": {
     "yaml-language-server": {

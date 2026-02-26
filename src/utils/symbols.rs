@@ -190,7 +190,11 @@ pub struct GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    pub fn collect_orientation_if<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+    pub fn collect_orientation_if<'a>(
+        &self,
+        arg: impl Into<AtomOrView<'a>>,
+        with_override: bool,
+    ) -> Atom {
         arg.into()
             .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.f(Atom::var(W_.a_) + 1))
@@ -198,15 +202,23 @@ impl GammaloopSymbols {
             .repeat()
             .with(Symbol::IF.f(W_.a_ * W_.b_))
             .replace(Symbol::IF.f(W_.a_) * W_.b___)
-            .with(Symbol::IF.f([
-                Atom::var(W_.a_) + Atom::var(self.override_if),
-                Atom::var(W_.b___),
-                Atom::Zero,
-            ]))
+            .with(Symbol::IF.f([Atom::var(W_.a_), Atom::var(W_.b___), Atom::Zero]))
             .replace(Symbol::IF.f([Atom::var(W_.a_), Atom::Zero]))
             .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.f([Atom::var(W_.a_)]))
             .with(Symbol::IF.f([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
+            .replace(Symbol::IF.f([W_.a_, W_.b_, W_.c_]))
+            .with({
+                if with_override {
+                    Symbol::IF.f([
+                        Atom::var(W_.a_) + self.override_if,
+                        Atom::var(W_.b_),
+                        Atom::var(W_.c_),
+                    ])
+                } else {
+                    Symbol::IF.f([W_.a_, W_.b_, W_.c_])
+                }
+            })
     }
 
     pub(crate) fn orientation_delta<O: GraphOrientation>(&self, orientation: &O) -> Atom {

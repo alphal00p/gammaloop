@@ -38,7 +38,10 @@ use typed_index_collections::TiVec;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    gammaloop_integrand::param_builder::{FnMapEntry, LUParams},
+    gammaloop_integrand::{
+        amplitude::load::set_override_if,
+        param_builder::{FnMapEntry, LUParams},
+    },
     graph::Graph,
     momentum::Helicity,
     momentum_sample::MomentumSample,
@@ -178,7 +181,7 @@ impl EvaluatorStack {
         let opt_settings = settings.optimization_settings();
 
         GenericEvaluator::new_from_builder(
-            [GS.collect_orientation_if(parametric_atom)],
+            [GS.collect_orientation_if(parametric_atom, false)],
             &param_builder,
             None,
             opt_settings.clone(),
@@ -237,10 +240,7 @@ impl EvaluatorStack {
 
         //I(sign(1), sign(2), sign(3),...) -> I(σ1, σ2, σ3,...)
 
-        let parametric_integrand = GS
-            .collect_orientation_if(parametric_atom)
-            .replace(GS.override_if)
-            .with(Atom::Zero);
+        let parametric_integrand = GS.collect_orientation_if(parametric_atom, false);
         let entries = vec![FnMapEntry {
             lhs: lhs.finish(),
             rhs: parametric_integrand.clone(),
@@ -260,7 +260,10 @@ impl EvaluatorStack {
 
         let sum: Atom = orientations
             .iter()
-            .map(|a| GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(a)))
+            .map(|a| {
+                GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(a), true)
+                // GS.integrand(a)
+            })
             .fold(Atom::Zero, |acc, n| acc + n);
 
         GenericEvaluator::new_from_raw_params(
@@ -289,8 +292,10 @@ impl EvaluatorStack {
         let sum = orientations
             .iter()
             .map(|a| {
-                let selected =
-                    GS.collect_orientation_if(a.orientation_thetas() * a.select(parametric_atom));
+                let selected = GS.collect_orientation_if(
+                    a.orientation_thetas() * a.select(parametric_atom),
+                    true,
+                );
                 debug!(selected_expr = %selected.log_print(), "Iterative");
                 selected
             })
@@ -377,6 +382,15 @@ impl EvaluatorStack {
         result
     }
 
+    #[instrument(
+        name = "evaluate",
+        level = "info",
+        skip(self, input, orientations, settings),
+        fields(
+            num_orientations = orientations.len(),
+            method = ?settings.general.evaluator_method,
+        )
+    )]
     pub fn evaluate<'a, T: FloatLike, OID: IndexLike>(
         &'a mut self,
         mut input: InputParams<'a, T>,
@@ -386,6 +400,7 @@ impl EvaluatorStack {
     where
         usize: From<OID>,
     {
+        // debug!()
         let mut result = Complex::new_re(F(T::from_f64(0.)));
         match settings.general.evaluator_method {
             EvaluatorMethod::SingleParametric => {
@@ -418,7 +433,15 @@ impl EvaluatorStack {
                         "Summed function map evaluator not available. Regenerate with summed_function_map set to true."
                     ));
                 };
+
                 if orientations.is_all() {
+                    input.override_if(true);
+                    if let Some(exprs) = &summed_function_map.exprs {
+                        for e in exprs {
+                            debug!(expr=%e.log_print(),"Summed evaluator");
+                        }
+                    }
+
                     result = <T as GenericEvaluatorFloat>::get_evaluator_single(
                         summed_function_map,
                     )(input.as_slice());
@@ -438,6 +461,7 @@ impl EvaluatorStack {
                     ));
                 };
                 if orientations.is_all() {
+                    input.override_if(true);
                     result = <T as GenericEvaluatorFloat>::get_evaluator_single(summed)(
                         input.as_slice(),
                     );
@@ -451,6 +475,8 @@ impl EvaluatorStack {
                 }
             }
         }
+
+        debug!(result = %result, mode =?settings.general.evaluator_method,"Evaluation result");
         Ok(result)
     }
 
@@ -673,7 +699,8 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
         let minusone = -(one.clone());
         let mut o_start = start * mult_offset;
 
-        for (_, i) in orientation.orientation() {
+        for (eid, i) in orientation.orientation() {
+            // debug!("Setting orientation input for edge {}: {:?}", eid, i);
             match i {
                 Orientation::Default => {
                     values[o_start] = one.clone();
@@ -703,6 +730,21 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
             mult_offset,
             start,
             orientation,
+        );
+    }
+
+    pub(crate) fn override_if(&mut self, over_ride: bool) {
+        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let one = zero.ref_one();
+        let multiplicative_offset = self.multiplicative_offset;
+        let start = self.override_pos;
+        set_override_if(
+            self.as_mut(),
+            one,
+            zero,
+            over_ride,
+            start,
+            multiplicative_offset,
         );
     }
     pub fn as_mut(&mut self) -> &mut [Complex<F<T>>] {

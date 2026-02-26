@@ -4,34 +4,35 @@ commands = [
   # Import model
   "import model sm-default",
   # Set some global settings (equivalent to setting them below this commands block, but done interactively here.
-  # "set global kv global.display_directive='gammalooprs=debug,debug'",
-  # "set global kv global.log_style.full_line_source=true global.log_style.include_fields=true",
+  ## #"set global kv global.display_directive='gammalooprs=debug,debug'",
   # Comment out the block of commands below if you want to skip re-generation
   ## # GENERATION: START ###
   "reset processes",
   # The version below imports a dot graph where gammaloop will be responsible of building the numerator
-  "import graphs ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot -p qqx_aaa -i pentabox",
-  # "import graphs ./qqx_aaa_pentabox/qqx_aaa_pentabox.dot -p qqx_aaa -i pentabox",
+  "import graphs ./tests/resources/graphs/qqx_aaa_pentagon_dario.dot -p qqx_aaa -i pentagon_dario",
   # The version below imports a dot graph where the user has explicitly written what they wish the numerator expression to be
   # "import graphs ./qqx_aaa_pentagon/qqx_aaa_pentagon_delocalized_numerator.dot -p qqx_aaa -i pentagon_user_numerator",
-  # "save dot",,
+  # "save dot",
+  # "save state -o",
   "generate",
+  "save standalone --rust --json",
+  # "save state -o",
   ## # GENERATION: END ###
   # Add user params for the localized numerator dot file with custom user symbols
   # "set process -p qqx_aaa -i pentagon_user_numerator kv general.additional_param_values=[1.0,1.0,1.0]",
   ## # INSPECTION: START ###
   # inspection in momentum space is onlu possible for invertible parameterisations (i.e not tropical sampling)
-  # "set process -p qqx_aaa -i pentabox kv sampling={\"type\":\"default\",\"mode\":\"spherical\",\"mapping\":\"linear\",\"b\":10.0}",
-  ## #"inspect --process qqx_aaa -i pentabox -m -p 1.0 2.0 3.0",
+  "inspect --process qqx_aaa -i pentagon_dario -m -p 1.0 2.0 3.0",
   ## # INSPECTION: END ###
   ## # INTEGRATION: START ###
   # This does a default simple sampling with spherical parameterisation. Uncomment the two lines below if you instead want to rely on the
   # default_runtime_settings specified below and which were used to give starting values to the integrand below
-  "set process -p qqx_aaa -i pentabox kv integrator.n_start=600000 integrator.n_max=60000000",
-  # "set process -p qqx_aaa -i pentagon_dario kv sampling={\"type\":\"default\",\"mode\":\"spherical\",\"mapping\":\"linear\",\"b\":10.0}",
-  # This target is a rough target I got from a low-stat run on my end
-  "integrate --process qqx_aaa -i pentabox --n-cores 10 --restart",
+  # "set process -p qqx_aaa -i pentagon_dario kv integrator.n_start=600000 integrator.n_max=60000000 integrator.continuous_dim_learning_rate=0.5",
+  # # "set process -p qqx_aaa -i pentagon_dario kv sampling={\"type\":\"default\",\"mode\":\"spherical\",\"mapping\":\"linear\",\"b\":10.0}",
+  # # This target is a rough target I got from a low-stat run on my end
+  # "integrate --process qqx_aaa -i pentagon_dario --n-cores 10 --target -1.462523612 3.0995380301910 --restart",
   ## # INTEGRATION: end ###
+  "quit -o",
 ]
 
 ## ##
@@ -61,12 +62,12 @@ commands = [
 
 ## ##
 # Multi-channeling over loop-momentum bases, with discrete importance sampling over them
-## ##
-[default_runtime_settings.sampling]
-type = "discrete_graph_sampling"
+# ## ##
+# [default_runtime_settings.sampling]
+# type = "discrete_graph_sampling"
 
-[default_runtime_settings.sampling.sampling_type]
-subtype = "discrete_multi_channeling"
+# [default_runtime_settings.sampling.sampling_type]
+# subtype = "discrete_multi_channeling"
 
 ## ##
 # Multi-channeling over loop-momentum bases, and evaluation of only one CFF orientation per sample, with discrete importance sampling over both discrete dimensions
@@ -76,6 +77,10 @@ subtype = "discrete_multi_channeling"
 # sample_orientations = true
 # [default_runtime_settings.sampling.sampling_type]
 # subtype = "discrete_multi_channeling"
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+# evaluator_method = "SingleParametric"
 
 [default_runtime_settings.kinematics]
 e_cm = 1.0
@@ -190,9 +195,9 @@ panic_on_fail = true
 disable_tropical_generation = false
 
 [cli_settings.global.generation.evaluator]
-iterative_orientation_optimization = false
-summed = false
-summed_function_map = false
+iterative_orientation_optimization = true
+summed_function_map = true
+store_atom = true
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
@@ -202,3 +207,13 @@ feyngen = 1
 generate = 1
 compile = 1
 integrate = 1
+
+[cli_settings.global]
+logfile_directive = "off,gammalooprs[orientation_parametric_expr]=debug,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"  # ,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "debug"  # ,gammalooprs[final_integrand]=debug"
+
+[cli_settings.global.log_style]
+log_format = "Min"
+short_timestamp = false
+full_line_source = false
+include_fields = true

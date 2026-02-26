@@ -309,30 +309,6 @@ impl tracing::field::Visit for MessageVisitor {
     fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
         self.record_value(f, format!("{v:?}"));
     }
-
-    fn record_str(&mut self, f: &tracing::field::Field, v: &str) {
-        self.record_value(f, v.to_string());
-    }
-
-    fn record_bool(&mut self, f: &tracing::field::Field, v: bool) {
-        self.record_value(f, v.to_string());
-    }
-
-    fn record_i64(&mut self, f: &tracing::field::Field, v: i64) {
-        self.record_value(f, v.to_string());
-    }
-
-    fn record_u64(&mut self, f: &tracing::field::Field, v: u64) {
-        self.record_value(f, v.to_string());
-    }
-
-    fn record_f64(&mut self, f: &tracing::field::Field, v: f64) {
-        self.record_value(f, v.to_string());
-    }
-
-    fn record_error(&mut self, f: &tracing::field::Field, v: &(dyn std::error::Error + 'static)) {
-        self.record_value(f, v.to_string());
-    }
 }
 impl MessageVisitor {
     fn record_value(&mut self, f: &tracing::field::Field, value: String) {

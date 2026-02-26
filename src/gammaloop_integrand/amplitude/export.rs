@@ -10,8 +10,9 @@ use linnet::half_edge::involution::Orientation;
 use rand::Rng;
 use serde::Serialize;
 use symbolica::{
-    atom::Atom,
+    atom::{Atom, AtomCore},
     evaluate::OptimizationSettings,
+    printer::PrintOptions,
     state::{HasStateMap, State, StateMap},
 };
 
@@ -31,11 +32,11 @@ use crate::{
     },
     momentum::ThreeMomentum,
     momentum_sample::{self, LoopMomenta, MomentumSample},
-    processes::{StandaloneExportMode, StandaloneExportSettings},
+    processes::{StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings},
     utils::F,
 };
-const STANDALONE_RUST_FILE: &str = "standalone_evaluators_rust.bin";
-const STANDALONE_PYTHON_FILE: &str = "standalone_evaluators_python.bin";
+
+const STANDALONE_DATA_FILE: &str = "standalone_evaluators";
 const STANDALONE_RUST_SCRIPT_FILE: &str = "standalone_evaluators_rust.rs";
 const STANDALONE_PYTHON_DIR: &str = "standalone_evaluators_python";
 const STANDALONE_PYTHON_SCRIPT_FILE: &str = "standalone.py";
@@ -115,10 +116,9 @@ pub(crate) fn atom_to_bytes_for_mode(atom: &Atom, mode: StandaloneExportMode) ->
     }
 }
 
-fn export_generic_evaluator(
+fn export_generic_evaluator<T: ExportAtomTo>(
     evaluator: &GenericEvaluator,
-    settings: &StandaloneExportSettings,
-) -> Result<StandaloneGenericEvaluatorArchive> {
+) -> Result<StandaloneGenericEvaluatorArchive<T>> {
     let exprs = evaluator
         .exprs
         .as_ref()
@@ -126,13 +126,13 @@ fn export_generic_evaluator(
             eyre!("Standalone export requires stored evaluator atoms (`store_atom=true`)")
         })?
         .iter()
-        .map(|a| atom_to_bytes_for_mode(a, settings.mode))
+        .map(|a| T::export_atom_to(a))
         .collect::<Result<Vec<_>>>()?;
 
     let additional_fn_map_entries = evaluator
         .fn_map_entries
         .iter()
-        .map(|e| e.to_bytes(settings))
+        .map(|e| e.archive())
         .collect::<Result<_>>()?;
 
     Ok(StandaloneGenericEvaluatorArchive {
@@ -236,13 +236,143 @@ if __name__ == "__main__":
 "#
 }
 
-fn standalone_rust_script(data_file: &str) -> String {
+fn standalone_rust_script() -> String {
     let mut script = include_str!("load.rs").to_string();
     if let Some(rest) = script.strip_prefix("//#!/usr/bin/env -S rust-script\n") {
         script = format!("#!/usr/bin/env -S rust-script\n{rest}");
     }
 
     script
+}
+
+pub trait CreateArchive<T, S> {
+    fn create_archive(&self, state: S) -> Result<StandaloneEvaluatorArchive<S, T>>;
+}
+
+pub trait ExportAtomTo: Sized {
+    fn export_atom_to(atom: &Atom) -> Result<Self>;
+}
+
+impl ExportAtomTo for Vec<u8> {
+    fn export_atom_to(atom: &Atom) -> Result<Self> {
+        atom_to_bytes(atom)
+    }
+}
+
+impl ExportAtomTo for String {
+    fn export_atom_to(atom: &Atom) -> Result<Self> {
+        Ok(atom.printer(PrintOptions::file()).to_string())
+    }
+}
+
+impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
+    fn create_archive(&self, symbolica_state: S) -> Result<StandaloneEvaluatorArchive<S, T>> {
+        let sample_inputs = self.representative_input()?;
+
+        let graph_terms = self
+            .data
+            .graph_terms
+            .iter()
+            .zip(sample_inputs)
+            .map(
+                |(term, (representative_input, mult_offset, start, override_pos))| {
+                    let param_builder_params = (&term.param_builder.pairs)
+                        .into_iter()
+                        .flat_map(|pair| pair.params.iter())
+                        .map(|a| T::export_atom_to(a))
+                        .collect::<Result<Vec<_>>>()?;
+
+                    let orientations: Vec<Vec<_>> = term
+                        .orientations
+                        .iter()
+                        .map(|a| {
+                            a.iter()
+                                .map(|(a, o)| match o {
+                                    Orientation::Default => 1i8,
+                                    Orientation::Reversed => -1i8,
+                                    Orientation::Undirected => 0,
+                                })
+                                .collect()
+                        })
+                        .collect();
+
+                    let fn_map_entries = term
+                        .param_builder
+                        .reps
+                        .iter()
+                        .map(|entry| entry.archive())
+                        .collect::<Result<Vec<_>>>()?;
+
+                    let original_integrand = StandaloneEvaluatorStackArchive {
+                        start,
+                        mult_offset,
+                        override_pos,
+                        representative_input: representative_input.clone(),
+                        single_parametric: export_generic_evaluator(
+                            &term.original_integrand.single_parametric,
+                        )?,
+                        iterative: term
+                            .original_integrand
+                            .iterative
+                            .as_ref()
+                            .map(export_generic_evaluator)
+                            .transpose()?,
+                        summed_function_map: term
+                            .original_integrand
+                            .summed_function_map
+                            .as_ref()
+                            .map(export_generic_evaluator)
+                            .transpose()?,
+                        summed: term
+                            .original_integrand
+                            .summed
+                            .as_ref()
+                            .map(export_generic_evaluator)
+                            .transpose()?,
+                    };
+
+                    let threshold_counterterms = term
+                        .threshold_counterterm
+                        .evaluators
+                        .iter()
+                        .map(|counterterm| {
+                            let single_parametric =
+                                export_generic_evaluator(&counterterm.parametric.borrow())?;
+                            let iterative = counterterm
+                                .iterative
+                                .as_ref()
+                                .map(|ev| export_generic_evaluator(&ev.borrow()))
+                                .transpose()?;
+                            Ok(StandaloneEvaluatorStackArchive {
+                                start,
+                                override_pos,
+                                mult_offset,
+                                representative_input: representative_input.clone(),
+                                single_parametric,
+                                iterative,
+                                summed: None,
+                                summed_function_map: None,
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+
+                    Ok(StandaloneGraphTermArchive {
+                        graph_name: term.graph.name.clone(),
+                        orientations,
+                        param_builder_params,
+                        fn_map_entries,
+                        original_integrand,
+                        threshold_counterterms,
+                    })
+                },
+            )
+            .collect::<Result<Vec<_>>>()?;
+        Ok(StandaloneEvaluatorArchive {
+            version: STANDALONE_EVALUATORS_VERSION,
+            symbolica_state,
+            graph_terms,
+        })
+    }
 }
 
 impl AmplitudeIntegrand {
@@ -313,6 +443,8 @@ impl AmplitudeIntegrand {
         Ok(inputs)
     }
 
+    // pub(crate) fn create_archive<
+
     pub(crate) fn export_standalone(
         &self,
         path: impl AsRef<Path>,
@@ -322,148 +454,48 @@ impl AmplitudeIntegrand {
         State::export(&mut symbolica_state)
             .with_context(|| "Failed to export Symbolica state for standalone evaluators")?;
 
-        let sample_inputs = self.representative_input()?;
+        let mut standalone_path = path.as_ref().join(STANDALONE_DATA_FILE);
 
-        let graph_terms = self
-            .data
-            .graph_terms
-            .iter()
-            .zip(sample_inputs)
-            .map(
-                |(term, (representative_input, mult_offset, start, override_pos))| {
-                    let param_builder_params = (&term.param_builder.pairs)
-                        .into_iter()
-                        .flat_map(|pair| pair.params.iter())
-                        .map(|a| atom_to_bytes_for_mode(a, settings.mode))
-                        .collect::<Result<Vec<_>>>()?;
+        match settings.format {
+            StandaloneDataFormat::Binary => {
+                let standalone: StandaloneEvaluatorArchive<Vec<u8>, Vec<u8>> =
+                    self.create_archive(symbolica_state)?;
+                let binary = bincode::encode_to_vec(&standalone, bincode::config::standard())?;
+                standalone_path.add_extension("bin");
+                fs::write(&standalone_path, binary).with_context(|| {
+                    format!(
+                        "Failed writing standalone evaluator binary to {}",
+                        standalone_path.display()
+                    )
+                })?;
+            }
+            StandaloneDataFormat::Json => {
+                let standalone: StandaloneEvaluatorArchive<(), String> = self.create_archive(())?;
+                let json = serde_json::to_vec_pretty(&standalone)?;
+                standalone_path.add_extension("json");
+                fs::write(&standalone_path, json).with_context(|| {
+                    format!(
+                        "Failed writing standalone evaluator JSON to {}",
+                        standalone_path.display()
+                    )
+                })?
+            }
+        }
 
-                    let orientations: Vec<Vec<_>> = term
-                        .orientations
-                        .iter()
-                        .map(|a| {
-                            a.iter()
-                                .map(|(a, o)| match o {
-                                    Orientation::Default => 1i8,
-                                    Orientation::Reversed => -1i8,
-                                    Orientation::Undirected => 0,
-                                })
-                                .collect()
-                        })
-                        .collect();
-
-                    let fn_map_entries = term
-                        .param_builder
-                        .reps
-                        .iter()
-                        .map(|entry| entry.to_bytes(settings))
-                        .collect::<Result<Vec<_>>>()?;
-
-                    let original_integrand = StandaloneEvaluatorStackArchive {
-                        start,
-                        mult_offset,
-                        override_pos,
-                        representative_input: representative_input.clone(),
-                        single_parametric: export_generic_evaluator(
-                            &term.original_integrand.single_parametric,
-                            settings,
-                        )?,
-                        iterative: term
-                            .original_integrand
-                            .iterative
-                            .as_ref()
-                            .map(|ev| export_generic_evaluator(ev, settings))
-                            .transpose()?,
-                        summed_function_map: term
-                            .original_integrand
-                            .summed_function_map
-                            .as_ref()
-                            .map(|ev| export_generic_evaluator(ev, settings))
-                            .transpose()?,
-                        summed: term
-                            .original_integrand
-                            .summed
-                            .as_ref()
-                            .map(|ev| export_generic_evaluator(ev, settings))
-                            .transpose()?,
-                    };
-
-                    let threshold_counterterms = term
-                        .threshold_counterterm
-                        .evaluators
-                        .iter()
-                        .map(|counterterm| {
-                            let single_parametric = export_generic_evaluator(
-                                &counterterm.parametric.borrow(),
-                                settings,
-                            )?;
-                            let iterative = counterterm
-                                .iterative
-                                .as_ref()
-                                .map(|ev| export_generic_evaluator(&ev.borrow(), settings))
-                                .transpose()?;
-                            Ok(StandaloneEvaluatorStackArchive {
-                                start,
-                                override_pos,
-                                mult_offset,
-                                representative_input: representative_input.clone(),
-                                single_parametric,
-                                iterative,
-                                summed: None,
-                                summed_function_map: None,
-                            })
-                        })
-                        .collect::<Result<Vec<_>>>()?;
-
-                    Ok(StandaloneGraphTermArchive {
-                        graph_name: term.graph.name.clone(),
-                        orientations,
-                        param_builder_params,
-                        fn_map_entries,
-                        original_integrand,
-                        threshold_counterterms,
-                    })
-                },
-            )
-            .collect::<Result<Vec<_>>>()?;
-
-        let standalone = StandaloneEvaluatorArchive {
-            version: STANDALONE_EVALUATORS_VERSION,
-            mode: match settings.mode {
-                StandaloneExportMode::Rust => STANDALONE_MODE_RUST,
-                StandaloneExportMode::Python => STANDALONE_MODE_PYTHON,
-            },
-            symbolica_state,
-            graph_terms,
-        };
-
-        let standalone_path = path.as_ref().join(match settings.mode {
-            StandaloneExportMode::Rust => STANDALONE_RUST_FILE,
-            StandaloneExportMode::Python => STANDALONE_PYTHON_FILE,
-        });
-        let binary = bincode::encode_to_vec(&standalone, bincode::config::standard())?;
-        fs::write(&standalone_path, binary).with_context(|| {
-            format!(
-                "Failed writing standalone evaluator binary to {}",
-                standalone_path.display()
-            )
-        })?;
-
-        if settings.mode == StandaloneExportMode::Rust {
-            let script = standalone_rust_script(
-                standalone_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or(STANDALONE_RUST_FILE),
-            );
-            let script_path = path.as_ref().join(STANDALONE_RUST_SCRIPT_FILE);
-            fs::write(&script_path, script).with_context(|| {
-                format!(
-                    "Failed writing standalone rust-script loader to {}",
-                    script_path.display()
-                )
-            })?;
-        } else {
-            self.export_standalone_python_directory(path.as_ref(), &standalone)?;
+        match settings.mode {
+            StandaloneExportMode::Python => {
+                return Err(eyre!("Python Export mode not implemented"));
+            }
+            StandaloneExportMode::Rust => {
+                let script = standalone_rust_script();
+                let script_path = path.as_ref().join(STANDALONE_RUST_SCRIPT_FILE);
+                fs::write(&script_path, script).with_context(|| {
+                    format!(
+                        "Failed writing standalone rust-script loader to {}",
+                        script_path.display()
+                    )
+                })?;
+            }
         }
 
         Ok(())

@@ -3,7 +3,9 @@ use std::{fs, path::PathBuf};
 use clap::{Args, Subcommand};
 use color_eyre::{eyre::eyre, owo_colors::OwoColorize, Result};
 use gammalooprs::{
-    processes::{DotExportSettings, StandaloneExportMode, StandaloneExportSettings},
+    processes::{
+        DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+    },
     settings::RuntimeSettings,
     utils::serde_utils::{SmartSerde, SHOWDEFAULTS},
 };
@@ -44,6 +46,10 @@ pub enum Save {
         python: bool,
         #[arg(long, default_value_t = false, conflicts_with = "python")]
         rust: bool,
+        #[arg(long, default_value_t = false, conflicts_with = "json")]
+        binary: bool,
+        #[arg(long, default_value_t = false, conflicts_with = "binary")]
+        json: bool,
     },
     State(SaveState),
     /// regenerate the schema files
@@ -114,14 +120,26 @@ impl Save {
                 default_runtime_settings,
                 global_settings,
             ),
-            Save::Standalone { path, python, rust } => {
+            Save::Standalone {
+                path,
+                python,
+                rust,
+                json,
+                binary,
+            } => {
                 let target_dir = path.unwrap_or(global_settings.state_folder.clone());
                 let mode = match (python, rust) {
                     (true, false) => StandaloneExportMode::Python,
                     (false, true) | (false, false) => StandaloneExportMode::Rust,
                     (true, true) => unreachable!("clap enforces mutual exclusivity"),
                 };
-                let settings = StandaloneExportSettings { mode };
+
+                let format = match (json, binary) {
+                    (true, false) => StandaloneDataFormat::Json,
+                    (false, true) | (false, false) => StandaloneDataFormat::Binary,
+                    (true, true) => unreachable!("clap enforces mutual exclusivity"),
+                };
+                let settings = StandaloneExportSettings { mode, format };
                 state.process_list.export_standalone(&target_dir, &settings)
             }
 

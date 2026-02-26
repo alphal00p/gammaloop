@@ -28,7 +28,7 @@ use symbolica::{
     id::Replacement,
     parse_lit, symbol,
 };
-use tabled::{Table, settings::Style};
+use tabled::{Table, derive::display::debug, settings::Style};
 use tracing::debug;
 use tracing::warn;
 
@@ -36,7 +36,7 @@ use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
     gammaloop_integrand::{
-        amplitude::export::atom_to_bytes_for_mode,
+        amplitude::export::{ExportAtomTo, atom_to_bytes_for_mode},
         evaluators::{InputParams, SliceMut},
     },
     graph::{Graph, LoopMomentumBasis},
@@ -647,20 +647,17 @@ pub struct FnMapEntry {
 }
 
 impl FnMapEntry {
-    pub fn to_bytes(
-        &self,
-        settings: &StandaloneExportSettings,
-    ) -> Result<(Vec<u8>, Vec<u8>, Vec<Vec<u8>>, Vec<Vec<u8>>)> {
+    pub fn archive<T: ExportAtomTo>(&self) -> Result<(T, T, Vec<T>, Vec<T>)> {
         Ok((
-            atom_to_bytes_for_mode(&self.lhs, settings.mode)?,
-            atom_to_bytes_for_mode(&self.rhs, settings.mode)?,
+            T::export_atom_to(&self.lhs)?,
+            T::export_atom_to(&self.rhs)?,
             self.tags
                 .iter()
-                .map(|t| atom_to_bytes_for_mode(t, settings.mode))
+                .map(|t| T::export_atom_to(t))
                 .collect::<Result<Vec<_>>>()?,
             self.args
                 .iter()
-                .map(|t| atom_to_bytes_for_mode(&Atom::from(t.clone()), settings.mode))
+                .map(|t| T::export_atom_to(&Atom::from(t.clone())))
                 .collect::<Result<Vec<_>>>()?,
         ))
     }
@@ -1285,7 +1282,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         let mut o_start = self.pairs.orientations.value_range.start * multiplicative_offset;
         let value_index = multiplicative_offset - 1;
 
-        for (_, i) in orientation.orientation() {
+        for (eid, i) in orientation.orientation() {
+            // debug!("Setting orientation for edge {}: {:?}", eid, i);
             match i {
                 Orientation::Default => {
                     self.values[value_index][o_start] = one.clone();
@@ -1403,6 +1401,10 @@ impl<T: FloatLike> ParamBuilder<T> {
                     self.pairs.polarizations.value_range.start * multiplicative_offset;
 
                 for pol_value in &computed_pols {
+                    // debug!(
+                    //     "Setting polarization value at cache_id={}: {}, polarization_index={}, polarization_start={}",
+                    //     cache_id, pol_value, value_index, polarization_start
+                    // );
                     self.values[value_index][polarization_start] = pol_value.clone();
                     polarization_start += multiplicative_offset;
                 }
@@ -1427,6 +1429,10 @@ impl<T: FloatLike> ParamBuilder<T> {
             self.pairs.polarizations.value_range.start * multiplicative_offset;
 
         for pol_value in pols {
+            // debug!(
+            //     "Setting polarization value at cache_id={}: {}, polarization_index={}, polarization_start={}",
+            //     cache_id, pol_value, value_index, polarization_start
+            // );
             self.values[value_index][polarization_start] = pol_value.clone();
             polarization_start += multiplicative_offset;
         }

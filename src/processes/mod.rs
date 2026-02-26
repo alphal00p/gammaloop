@@ -114,6 +114,8 @@ pub struct DotExportSettings {
 pub struct StandaloneExportSettings {
     #[serde(default)]
     pub mode: StandaloneExportMode,
+    #[serde(default)]
+    pub format: StandaloneDataFormat,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
@@ -125,6 +127,17 @@ pub enum StandaloneExportMode {
     #[default]
     Rust,
     Python,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum StandaloneDataFormat {
+    #[default]
+    Binary,
+    Json,
 }
 
 #[cfg(feature = "python_api")]
@@ -153,6 +166,7 @@ impl Default for DotExportSettings {
 impl Default for StandaloneExportSettings {
     fn default() -> Self {
         Self {
+            format: StandaloneDataFormat::Binary,
             mode: StandaloneExportMode::Rust,
         }
     }

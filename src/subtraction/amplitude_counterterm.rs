@@ -8,7 +8,7 @@ use symbolica::{
     domains::float::{FloatLike as SymFloatLike, Real},
     evaluate::OptimizationSettings,
 };
-use tracing::debug;
+use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -56,6 +56,10 @@ pub struct AmplitudeCountertermAtom {
 }
 
 impl AmplitudeCountertermAtom {
+    #[instrument(
+           skip_all,
+           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Threshold CT Evaluator"),
+       )]
     pub(crate) fn to_evaluator(
         &self,
         param_builder: &ParamBuilder,
@@ -66,8 +70,8 @@ impl AmplitudeCountertermAtom {
         let parametric = RefCell::new(
             GenericEvaluator::new_from_builder(
                 [
-                    GS.collect_orientation_if(&self.parametric_local),
-                    GS.collect_orientation_if(&self.parametric_integrated),
+                    GS.collect_orientation_if(&self.parametric_local, false),
+                    GS.collect_orientation_if(&self.parametric_integrated, false),
                 ],
                 param_builder,
                 None,
