@@ -9,7 +9,7 @@ use crate::utils::{
 use bincode_trait_derive::{Decode, Encode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use vakint::{EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions};
+use vakint::{EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions, AlphaLoopOptions};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -32,6 +32,22 @@ impl Default for MATADSettings {
             susbstitute_masters: true,
             substitute_hpls: true,
             direct_numerical_substition: true,
+        }
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct AlphaLoopSettings {
+    #[serde(skip_serializing_if = "is_true")]
+    pub susbstitute_masters: bool,
+}
+
+impl Default for AlphaLoopSettings {
+    fn default() -> Self {
+        Self {
+            susbstitute_masters: true,
         }
     }
 }
@@ -95,6 +111,8 @@ pub struct VakintSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub matad: MATADSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub alphaloop: AlphaLoopSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub fmft: FMFTSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub pysecdec: PySecDecSettings,
@@ -123,7 +141,9 @@ impl VakintSettings {
                 self.evaluation_methods
                     .iter()
                     .map(|a| match a.as_str() {
-                        "alphaloop" => EvaluationMethod::AlphaLoop,
+                        "alphaloop" => EvaluationMethod::AlphaLoop(AlphaLoopOptions {
+                            susbstitute_masters: self.alphaloop.susbstitute_masters,
+                        }),
                         "matad" => EvaluationMethod::MATAD(MATADOptions {
                             expand_masters: self.matad.expand_masters,
                             susbstitute_masters: self.matad.susbstitute_masters,
@@ -175,6 +195,7 @@ impl Default for VakintSettings {
                 "fmft".to_string(),
             ],
             matad: MATADSettings::default(),
+            alphaloop: AlphaLoopSettings::default(),
             fmft: FMFTSettings::default(),
             pysecdec: PySecDecSettings::default(),
             run_time_decimal_precision: 100,

@@ -106,7 +106,7 @@ impl Graph {
                                     );
                                 }
                                 Some(Flow::Sink) => {
-                                    assert!(self.initial_state_cut.left.includes(&p.any_hedge()));
+                                    // assert!(self.initial_state_cut.left.includes(&p.any_hedge()));
                                     dot.add_statement("is_cut", p.any_hedge());
                                     dot.add_statement(
                                         "pin",

@@ -212,7 +212,9 @@ spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "1ac24e7bdc
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica={git="https://github.com/benruijl/symbolica",rev="af3f1b2043b270401920e4ff76d938217d995fc3"}
 # vakint = {path="../../vakint"}
-vakint={git="https://github.com/alphal00p/vakint",rev="10ffd4e8559696b1dc79b21ef3e700caac663aa8"}
+#vakint={git="https://github.com/alphal00p/vakint",rev="10ffd4e8559696b1dc79b21ef3e700caac663aa8"}
+vakint={git="https://github.com/alphal00p/vakint",rev="bf91ee57aa62604c7ae3fb919203bf6f09544470"}
+
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
