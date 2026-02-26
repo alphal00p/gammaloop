@@ -126,7 +126,10 @@ impl Integrate {
                 let workspace_settings: RuntimeSettings =
                     RuntimeSettings::from_file(path_to_workspace_settings, "workspace settings")?;
                 // force the settings to be the same as the ones used in the previous integration
-                *gloop_integrand.get_mut_settings() = workspace_settings.clone();
+                if *gloop_integrand.get_mut_settings() != workspace_settings.clone() {
+                    warn!("settings have changed with respect to workspace, reverting changes")
+                        * gloop_integrand.get_mut_settings() = workspace_settings.clone();
+                }
 
                 print_integral_result(
                     &state.integral.re,
