@@ -171,10 +171,7 @@ pub struct ParseHedge {
 impl ParseHedge {
     pub(crate) fn parse<'a>() -> impl FnMut((Hedge, &'a DotHedgeData)) -> Result<Self> {
         |(_, h)| {
-            let hedge_id = h
-                .statement
-                .as_ref()
-                .and_then(|s| s.parse::<usize>().ok());
+            let hedge_id = h.statement.as_ref().and_then(|s| s.parse::<usize>().ok());
             Ok(ParseHedge { hedge_id })
         }
     }
@@ -182,14 +179,12 @@ impl ParseHedge {
 
 impl From<&NumHedgeData> for DotHedgeData {
     fn from(value: &NumHedgeData) -> Self {
-        
         DotHedgeData::from(Some(value.node_order.to_string()))
     }
 }
 
 impl From<&ParseHedge> for DotHedgeData {
     fn from(value: &ParseHedge) -> Self {
-        
         DotHedgeData::from(value.hedge_id.map(|i| i.to_string()))
     }
 }

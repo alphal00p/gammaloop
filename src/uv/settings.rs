@@ -9,7 +9,7 @@ use crate::utils::{
 use bincode_trait_derive::{Decode, Encode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use vakint::{EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions, AlphaLoopOptions};
+use vakint::{AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]

@@ -5,8 +5,8 @@ use idenso::color::ColorSimplifier;
 use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
-use tracing::warn;
 use schemars::JsonSchema;
+use tracing::warn;
 
 use spenso::network::library::{DummyLibrary, TensorLibraryData};
 use spenso::network::parsing::{ParseSettings, ShadowedStructure};

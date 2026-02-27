@@ -45,7 +45,6 @@ use symbolica::state::StateMap;
 use utils::F;
 use utils::FloatLike;
 
-
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";

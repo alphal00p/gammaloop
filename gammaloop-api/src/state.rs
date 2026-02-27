@@ -42,6 +42,7 @@ use gammalooprs::{
 };
 
 use crate::{
+    command_parser::split_command_line,
     commands::{save::SaveState, Commands},
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
@@ -430,10 +431,18 @@ impl CommandHistory {
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
         use crate::Repl;
+        use clap::error::ErrorKind;
         use clap::Parser;
 
-        let args: Vec<&str> = raw_string.split_whitespace().collect();
-        let cli = Repl::try_parse_from(std::iter::once("gammaloop").chain(args.iter().copied()))?;
+        let args = split_command_line(raw_string).map_err(|_| {
+            clap::Error::raw(
+                ErrorKind::InvalidValue,
+                "Could not parse command: unmatched quotes or trailing escape",
+            )
+        })?;
+        let cli = Repl::try_parse_from(
+            std::iter::once("gammaloop").chain(args.iter().map(String::as_str)),
+        )?;
 
         Ok(Self::new_with_raw(cli.command, raw_string.into()))
     }
@@ -1052,6 +1061,7 @@ mod tests {
     };
 
     use crate::commands::{
+        display::Display,
         save::SaveState,
         set::{Set, SetArgs},
     };
@@ -1193,6 +1203,34 @@ mod tests {
         }
         // Reset flag
         set_serialize_commands_as_strings(false);
+    }
+
+    #[test]
+    fn command_history_parses_multiline_set_string() {
+        let raw = "set process -p epem_a_tth -i LO string '[integrator]\nn_start = 1000\n'";
+        let cmd = CommandHistory::from_raw_string(raw).unwrap();
+        assert_eq!(cmd.raw_string.as_deref(), Some(raw));
+
+        match cmd.command {
+            Commands::Set(Set::Process { input, .. }) => match input {
+                SetArgs::String { string } => {
+                    assert_eq!(string, "[integrator]\nn_start = 1000\n");
+                }
+                other => panic!("Expected string set input, got {other:?}"),
+            },
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn command_history_parses_hash_process_refs() {
+        let cmd = CommandHistory::from_raw_string("display integrands -p #12").unwrap();
+        match cmd.command {
+            Commands::Display(Display::Integrands { process }) => {
+                assert_eq!(process, Some(ProcessRef::Id(12)));
+            }
+            other => panic!("Expected display integrands command, got {other:?}"),
+        }
     }
 }
 

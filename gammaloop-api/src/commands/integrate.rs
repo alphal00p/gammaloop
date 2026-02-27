@@ -127,8 +127,11 @@ impl Integrate {
                     RuntimeSettings::from_file(path_to_workspace_settings, "workspace settings")?;
                 // force the settings to be the same as the ones used in the previous integration
                 if *gloop_integrand.get_mut_settings() != workspace_settings.clone() {
-                    warn!("settings have changed with respect to integration workspace in {}, reverting changes", workspace_path.display());
-                        *gloop_integrand.get_mut_settings() = workspace_settings.clone();
+                    warn!(
+                        "settings have changed with respect to integration workspace in {}, reverting changes",
+                        workspace_path.display()
+                    );
+                    *gloop_integrand.get_mut_settings() = workspace_settings.clone();
                 }
 
                 print_integral_result(
@@ -147,7 +150,10 @@ impl Integrate {
                     target.map(|c| c.im),
                 );
                 info!("");
-                warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                warn!(
+                    "Any changes to the settings will be ignored, integrate with the {} option for changes to take effect",
+                    "--restart".blue()
+                );
                 info!("{}", "Resuming integration".yellow());
 
                 Some(state)

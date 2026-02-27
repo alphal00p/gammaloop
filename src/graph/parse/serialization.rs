@@ -56,71 +56,69 @@ impl Graph {
     pub fn to_split_dotgraph(&self) -> DotGraph {
         let global_data = self.global_data();
 
-        let mut graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> = if self
-            .initial_state_cut
-            .is_empty()
-        {
-            self.underlying.map_data_ref(
-                |_, _, v| v.into(),
-                |_, _, p, e| {
-                    if let HedgePair::Unpaired { flow, .. } = p {
-                        e.map(|e| {
-                            let mut dot: DotEdgeData = e.into();
-                            match flow {
-                                Flow::Source => {
-                                    dot.add_statement("pin", "x:@+right".to_string());
-                                }
-                                Flow::Sink => {
-                                    dot.add_statement("pin", "x:@-left".to_string());
-                                }
-                            }
-                            dot
-                        })
-                    } else {
-                        e.map(|e| e.into())
-                    }
-                },
-                |_, d| d.into(),
-            )
-        } else {
-            self.initial_state_cut
-                .clone()
-                .to_owned_graph_ref(&self.underlying)
-                .map(
+        let mut graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> =
+            if self.initial_state_cut.is_empty() {
+                self.underlying.map_data_ref(
                     |_, _, v| v.into(),
-                    |_, _, p, _, e| {
-                        e.map(|e| {
-                            let mut dot: DotEdgeData = (*e.edge_data()).into();
-
-                            match e.flow() {
-                                Some(Flow::Source) => {
-                                    //assert!(
-                                    //    self.initial_state_cut
-                                    //        .left
-                                    //        .includes(&self.inv(p.any_hedge()))
-                                    //);
-                                    dot.add_statement("is_cut", self.inv(p.any_hedge()));
-                                    dot.add_statement(
-                                        "pin",
-                                        format!("x:@+right,y:@edge{}", e.index),
-                                    );
+                    |_, _, p, e| {
+                        if let HedgePair::Unpaired { flow, .. } = p {
+                            e.map(|e| {
+                                let mut dot: DotEdgeData = e.into();
+                                match flow {
+                                    Flow::Source => {
+                                        dot.add_statement("pin", "x:@+right".to_string());
+                                    }
+                                    Flow::Sink => {
+                                        dot.add_statement("pin", "x:@-left".to_string());
+                                    }
                                 }
-                                Some(Flow::Sink) => {
-                                    // assert!(self.initial_state_cut.left.includes(&p.any_hedge()));
-                                    dot.add_statement("is_cut", p.any_hedge());
-                                    dot.add_statement(
-                                        "pin",
-                                        format!("x:@-left,y:@edge{}", e.index),
-                                    );
-                                }
-                                None => {}
-                            }
-                            dot
-                        })
+                                dot
+                            })
+                        } else {
+                            e.map(|e| e.into())
+                        }
                     },
                     |_, d| d.into(),
                 )
-        };
+            } else {
+                self.initial_state_cut
+                    .clone()
+                    .to_owned_graph_ref(&self.underlying)
+                    .map(
+                        |_, _, v| v.into(),
+                        |_, _, p, _, e| {
+                            e.map(|e| {
+                                let mut dot: DotEdgeData = (*e.edge_data()).into();
+
+                                match e.flow() {
+                                    Some(Flow::Source) => {
+                                        //assert!(
+                                        //    self.initial_state_cut
+                                        //        .left
+                                        //        .includes(&self.inv(p.any_hedge()))
+                                        //);
+                                        dot.add_statement("is_cut", self.inv(p.any_hedge()));
+                                        dot.add_statement(
+                                            "pin",
+                                            format!("x:@+right,y:@edge{}", e.index),
+                                        );
+                                    }
+                                    Some(Flow::Sink) => {
+                                        // assert!(self.initial_state_cut.left.includes(&p.any_hedge()));
+                                        dot.add_statement("is_cut", p.any_hedge());
+                                        dot.add_statement(
+                                            "pin",
+                                            format!("x:@-left,y:@edge{}", e.index),
+                                        );
+                                    }
+                                    None => {}
+                                }
+                                dot
+                            })
+                        },
+                        |_, d| d.into(),
+                    )
+            };
 
         // self.normal_emr_replacement(subgraph, lmb, rep_args, filter_pair)
         for (_, i, _) in self.iter_edges() {

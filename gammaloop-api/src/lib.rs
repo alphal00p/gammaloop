@@ -59,6 +59,7 @@ use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
 
 // use tracing::LogLevel;
+mod command_parser;
 #[cfg(feature = "python_api")]
 pub mod python;
 pub mod repl;

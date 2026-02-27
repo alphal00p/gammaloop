@@ -171,14 +171,16 @@ impl Commands {
                     _ = r.run(state, global_cli_settings)?;
                 }
 
-                Commands::Display(l) => l.run(state)?,
+                Commands::Display(l) => {
+                    l.run(state, global_cli_settings, default_runtime_settings)?;
+                }
                 Commands::Run(r) => {
                     return r.run(
                         state,
                         global_cli_settings,
                         default_runtime_settings,
                         run_history,
-                    )
+                    );
                 }
                 Commands::Reset(r) => r.run(state)?,
                 Commands::Batch {

@@ -119,23 +119,30 @@ impl Set {
             }
             Self::Process { input, process } => {
                 let process_id = state.resolve_process_ref(process.process.as_ref())?;
+                let default_runtime_template =
+                    matches!(input, SetArgs::Defaults).then(|| default_runtime_settings.clone());
+                let apply_runtime_settings = |settings: &mut RuntimeSettings| -> Result<()> {
+                    if let Some(template) = default_runtime_template.as_ref() {
+                        *settings = template.clone();
+                    } else {
+                        let fig = Figment::from(Serialized::defaults(&settings));
+                        *settings = input.merge_figment(fig)?.extract()?;
+                    }
+                    Ok(())
+                };
 
                 if let Some(name) = &process.integrand_name {
                     let integrand = state.process_list.get_integrand_mut(process_id, name)?;
 
                     let settings = integrand.get_mut_settings();
-                    let fig = Figment::from(Serialized::defaults(&settings));
-
-                    *settings = input.merge_figment(fig)?.extract()?;
+                    apply_runtime_settings(settings)?;
                 } else {
                     match &mut state.process_list.processes[process_id].collection {
                         ProcessCollection::Amplitudes(a) => {
                             for (_, amp) in a.iter_mut() {
                                 if let Some(a) = &mut amp.integrand {
                                     let settings = a.get_mut_settings();
-                                    let fig = Figment::from(Serialized::defaults(&settings));
-
-                                    *settings = input.merge_figment(fig)?.extract()?;
+                                    apply_runtime_settings(settings)?;
                                 };
                             }
                         }
@@ -143,9 +150,7 @@ impl Set {
                             for (_, xs) in a.iter_mut() {
                                 if let Some(a) = &mut xs.integrand {
                                     let settings = a.get_mut_settings();
-                                    let fig = Figment::from(Serialized::defaults(&settings));
-
-                                    *settings = input.merge_figment(fig)?.extract()?;
+                                    apply_runtime_settings(settings)?;
                                 };
                             }
                             // a[name].preprocess(&self.model, &global_settings.generation)?;
@@ -158,7 +163,7 @@ impl Set {
     }
 }
 
-// Shared input forms for global & default-runtime
+// Shared input forms for set commands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum SetArgs {
     /// Load from a settings file
@@ -167,12 +172,21 @@ pub enum SetArgs {
         file: PathBuf,
     },
 
+    /// Load settings from TOML content passed as a CLI string
+    String {
+        #[arg(value_name = "TOML")]
+        string: String,
+    },
+
     /// Set one or more dotted key-paths
     Kv {
         /// Any number of KEY=VALUE pairs
         #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
+
+    /// Sync process runtime settings from the current default runtime settings
+    Defaults,
 
     /// Use the stored settings file
     Stored,
@@ -216,6 +230,7 @@ impl SetArgs {
                     )),
                 }
             }
+            SetArgs::String { string } => Ok(fig.merge(figment::providers::Toml::string(string))),
             SetArgs::Kv { pairs } => {
                 let mut figment = Figment::new();
 
@@ -225,7 +240,8 @@ impl SetArgs {
 
                 Ok(fig.merge(figment))
             }
-            _ => Ok(fig),
+            SetArgs::Stored => Ok(fig),
+            SetArgs::Defaults => Err(eyre!("'defaults' is only supported for 'set process'")),
         }
     }
 }
@@ -269,13 +285,268 @@ fn yaml_to_json(v: Y) -> Result<J> {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
+    use clap::Parser;
+    use figment::{providers::Serialized, Figment};
     use gammalooprs::utils::F;
+    use serde::{Deserialize, Serialize};
     use spenso::algebra::complex::Complex;
+
+    use crate::{state::ProcessRef, Repl};
+
+    use super::{super::Commands, Set, SetArgs};
 
     #[test]
     fn serialize_complex() {
         let s = Complex::new(F(1.), F(-2.));
         let j = serde_json::to_string(&s).unwrap();
         assert_eq!(j, r#"{"re":1.0,"im":-2.0}"#.to_string());
+    }
+
+    #[test]
+    fn parse_set_process_defaults() {
+        let cmd = Set::from_str("set process -p epem_a_tth -i LO defaults").unwrap();
+
+        match cmd {
+            Set::Process { input, process } => {
+                assert_eq!(input, SetArgs::Defaults);
+                assert_eq!(
+                    process.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(process.integrand_name, Some("LO".to_string()));
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn defaults_is_rejected_outside_set_process() {
+        let err = SetArgs::Defaults.merge_figment(Figment::new()).unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("'defaults' is only supported for 'set process'"));
+    }
+
+    #[test]
+    fn parse_set_process_string() {
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "set",
+            "process",
+            "-p",
+            "epem_a_tth",
+            "-i",
+            "LO",
+            "string",
+            "alpha = 2",
+        ])
+        .unwrap();
+
+        let cmd = match repl.command {
+            Commands::Set(set) => set,
+            other => panic!("Expected set command, got {other:?}"),
+        };
+
+        match cmd {
+            Set::Process { input, process } => {
+                assert_eq!(
+                    input,
+                    SetArgs::String {
+                        string: "alpha = 2".to_string()
+                    }
+                );
+                assert_eq!(
+                    process.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(process.integrand_name, Some("LO".to_string()));
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_process_string_multiline() {
+        let multiline = "alpha = 2\nbeta = true\n";
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "set",
+            "process",
+            "-p",
+            "epem_a_tth",
+            "-i",
+            "LO",
+            "string",
+            multiline,
+        ])
+        .unwrap();
+
+        let cmd = match repl.command {
+            Commands::Set(set) => set,
+            other => panic!("Expected set command, got {other:?}"),
+        };
+
+        match cmd {
+            Set::Process { input, .. } => {
+                assert_eq!(
+                    input,
+                    SetArgs::String {
+                        string: multiline.to_string()
+                    }
+                );
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct MergeFixture {
+        alpha: u64,
+        beta: bool,
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct CompileSettingsFixture {
+        inline_asm: bool,
+        optimization_level: String,
+        fast_math: bool,
+        unsafe_math: bool,
+        custom: Vec<String>,
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct NCoresFixture {
+        feyngen: u64,
+        generate: u64,
+        compile: u64,
+        integrate: u64,
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct GenerationFixture {
+        compile: CompileSettingsFixture,
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct GlobalFixture {
+        generation: GenerationFixture,
+        n_cores: NCoresFixture,
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct CliSettingsFixture {
+        global: GlobalFixture,
+    }
+
+    #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+    struct RunLikeFixture {
+        cli_settings: CliSettingsFixture,
+    }
+
+    #[test]
+    fn string_toml_merges_like_file_toml() {
+        let defaults = MergeFixture {
+            alpha: 1,
+            beta: false,
+        };
+        let toml = "alpha = 123\nbeta = true\n";
+
+        let tmp_name = format!(
+            "gammaloop_set_args_test_{}_{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let file_path = std::env::temp_dir().join(tmp_name);
+        std::fs::write(&file_path, toml).unwrap();
+
+        let base_a = Figment::from(Serialized::defaults(&defaults));
+        let via_file: MergeFixture = SetArgs::File {
+            file: file_path.clone(),
+        }
+        .merge_figment(base_a)
+        .unwrap()
+        .extract()
+        .unwrap();
+
+        let base_b = Figment::from(Serialized::defaults(&defaults));
+        let via_string: MergeFixture = SetArgs::String {
+            string: toml.to_string(),
+        }
+        .merge_figment(base_b)
+        .unwrap()
+        .extract()
+        .unwrap();
+
+        let _ = std::fs::remove_file(file_path);
+        assert_eq!(via_string, via_file);
+    }
+
+    #[test]
+    fn string_toml_supports_multiline_nested_tables() {
+        let defaults = RunLikeFixture {
+            cli_settings: CliSettingsFixture {
+                global: GlobalFixture {
+                    generation: GenerationFixture {
+                        compile: CompileSettingsFixture {
+                            inline_asm: false,
+                            optimization_level: "O0".to_string(),
+                            fast_math: false,
+                            unsafe_math: false,
+                            custom: vec!["-g".to_string()],
+                        },
+                    },
+                    n_cores: NCoresFixture {
+                        feyngen: 1,
+                        generate: 1,
+                        compile: 1,
+                        integrate: 1,
+                    },
+                },
+            },
+        };
+
+        let multiline = r#"
+[cli_settings.global.generation.compile]
+inline_asm = true
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 1
+compile = 10
+integrate = 10
+"#;
+
+        let base = Figment::from(Serialized::defaults(&defaults));
+        let merged: RunLikeFixture = SetArgs::String {
+            string: multiline.to_string(),
+        }
+        .merge_figment(base)
+        .unwrap()
+        .extract()
+        .unwrap();
+
+        assert!(merged.cli_settings.global.generation.compile.inline_asm);
+        assert_eq!(
+            merged
+                .cli_settings
+                .global
+                .generation
+                .compile
+                .optimization_level,
+            "O3"
+        );
+        assert_eq!(merged.cli_settings.global.n_cores.feyngen, 10);
+        assert_eq!(merged.cli_settings.global.n_cores.generate, 1);
+        assert_eq!(merged.cli_settings.global.n_cores.compile, 10);
+        assert_eq!(merged.cli_settings.global.n_cores.integrate, 10);
     }
 }

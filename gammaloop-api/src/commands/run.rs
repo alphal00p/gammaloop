@@ -34,12 +34,7 @@ impl Run {
         run_history: &mut RunHistory,
     ) -> Result<ControlFlow<SaveState>> {
         let mut a: ControlFlow<SaveState> = ControlFlow::Continue(());
-        if let Some(mut new_run_history) = self
-            .path
-            .as_ref()
-            .map(RunHistory::load)
-            .transpose()?
-        {
+        if let Some(mut new_run_history) = self.path.as_ref().map(RunHistory::load).transpose()? {
             let res = new_run_history.run(state, global_settings, default_runtime_settings);
 
             run_history.merge(new_run_history);

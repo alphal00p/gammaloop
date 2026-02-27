@@ -3,8 +3,10 @@ use std::{ffi::OsString, marker::PhantomData, path::Path};
 use clap::Parser;
 use console::style;
 
-use reedline::{Prompt, Reedline, Signal, Span};
+use reedline::{Prompt, Reedline, Signal, Span, ValidationResult};
 use shlex::Shlex;
+
+use crate::command_parser::split_command_line;
 
 mod builder {
     use std::marker::PhantomData;
@@ -16,7 +18,7 @@ mod builder {
         KeyModifiers, MenuBuilder, Prompt, Reedline, ReedlineEvent, ReedlineMenu,
     };
 
-    use crate::repl::{ClapEditor, ReedCompleter};
+    use crate::repl::{ClapEditor, ReedCompleter, ShellLikeValidator};
 
     pub struct ClapEditorBuilder<C: Parser + Send + Sync + 'static> {
         prompt: Box<dyn Prompt>,
@@ -79,6 +81,7 @@ mod builder {
                 .with_hinter(Box::new(
                     DefaultHinter::default().with_style(Style::new().italic().fg(Color::DarkGray)),
                 ))
+                .with_validator(Box::new(ShellLikeValidator))
                 .with_edit_mode(self.edit_mode);
             let rl = (self.hook)(rl);
             ClapEditor {
@@ -100,6 +103,18 @@ pub struct ClapEditor<C: Parser + Send + Sync + 'static> {
 
 struct ReedCompleter<C: Parser + Send + Sync + 'static> {
     c_phantom: PhantomData<C>,
+}
+
+struct ShellLikeValidator;
+
+impl reedline::Validator for ShellLikeValidator {
+    fn validate(&self, line: &str) -> ValidationResult {
+        if split_command_line(line).is_ok() {
+            ValidationResult::Complete
+        } else {
+            ValidationResult::Incomplete
+        }
+    }
 }
 
 impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C> {
@@ -494,15 +509,15 @@ impl<C: Parser + Send + Sync + 'static> ClapEditor<C> {
 
         // _ = self.rl.add_history_entry(line.as_str());
 
-        match shlex::split(&line) {
-            Some(split) => {
+        match split_command_line(&line) {
+            Ok(split) => {
                 match C::try_parse_from(std::iter::once("").chain(split.iter().map(String::as_str)))
                 {
                     Ok(c) => ReadCommandOutput::Command(c, line),
                     Err(e) => ReadCommandOutput::ClapError(e),
                 }
             }
-            None => ReadCommandOutput::ShlexError,
+            Err(_) => ReadCommandOutput::ShlexError,
         }
     }
 

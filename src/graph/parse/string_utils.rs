@@ -41,10 +41,11 @@ where
         // let mut opts = PrintOptions::file();
         // opts.hide_namespace = Some("gammalooprs");
         self.to_canonically_ordered_string(CanonicalOrderingSettings {
-                include_namespace: true,
-                include_attributes: false,
-                hide_namespace: Some("gammalooprs")
-            }).to_string()
+            include_namespace: true,
+            include_attributes: false,
+            hide_namespace: Some("gammalooprs"),
+        })
+        .to_string()
         //.printer(opts))
     }
 }
