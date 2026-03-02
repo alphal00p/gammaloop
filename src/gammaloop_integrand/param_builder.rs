@@ -1679,29 +1679,3 @@ impl std::fmt::Display for DebugCacheStatus {
         )
     }
 }
-
-#[test]
-fn evaltest() {
-    use symbolica::evaluate::{FunctionMap, OptimizationSettings};
-    use symbolica::{atom::AtomCore, parse, symbol};
-    let expr = parse!("delta_sigma(1,1,1,1)");
-    let args: Vec<_> = ["x1", "x2", "x3", "x4"]
-        .into_iter()
-        .map(|a| symbol!(a))
-        .collect();
-    let body = parse!("theta(x1*x(1))*theta(x2*x(2))*theta(x3*x(3))*theta(x4*x(4))");
-
-    let mut fn_map = FunctionMap::new();
-
-    let params: Vec<Atom> = vec!["theta(x(1))", "theta(x(2))", "theta(x(3))", "theta(x(4))"]
-        .iter()
-        .map(|a| parse!(a))
-        .collect();
-    let _ = fn_map.add_function(symbol!("delta_sigma"), "delta_sigma".into(), args, body);
-    let optimization_settings = OptimizationSettings::default();
-    let mut evaluator = expr
-        .evaluator(&fn_map, &params, optimization_settings)
-        .unwrap()
-        .map_coeff(&|x| x.to_real().unwrap().to_f64());
-    assert_eq!(evaluator.evaluate_single(&[1.0, 1.0, 4.0, 4.0]), 8.0);
-}

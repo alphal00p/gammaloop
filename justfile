@@ -106,12 +106,12 @@ test-release TEST_NAME="":
     fi
 
 # Run tests in release mode with full parallelism
-test-release-fast TEST_NAME="":
+test-fast TEST_NAME="":
     #!/usr/bin/env bash
     if [ -n "{{ TEST_NAME }}" ]; then
-        cargo nextest run {{ TEST_NAME }} --release --profile ci --test-threads 0
+        cargo nextest r {{ TEST_NAME }} --cargo-profile dev-optim
     else
-        cargo nextest run --release --profile ci --test-threads 0
+        cargo nextest  r --cargo-profile dev-optim
     fi
 
 # Build cargo dependencies via Nix (useful for caching) - uses release mode

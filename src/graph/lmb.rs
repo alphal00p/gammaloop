@@ -13,6 +13,7 @@ use linnet::half_edge::{
     tree::{SimpleTraversalTree, TTRoot},
 };
 use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::sub;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     function,
@@ -366,17 +367,11 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     }
 
     fn lmb_of<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> LoopMomentumBasis {
-        if let Some(i) = subgraph.included_iter().next() {
-            let tree =
-                SimpleTraversalTree::depth_first_traverse(self, subgraph, &self.node_id(i), None)
-                    .unwrap();
-
-            let external = self.full_crown(subgraph);
-            // println!("lmb");
-            // println!("{}", tree.dot(self));
-            self.lmb_impl(subgraph.included(), &tree.tree_subgraph, external)
-        } else {
+        if subgraph.is_empty() {
             self.empty_lmb()
+        } else {
+            let external = self.full_crown(subgraph);
+            self.lmb_impl(subgraph.included(), subgraph.included(), external)
         }
     }
 

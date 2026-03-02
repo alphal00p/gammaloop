@@ -211,9 +211,9 @@ impl GammaloopSymbols {
             .with({
                 if with_override {
                     Symbol::IF.f([
-                        Atom::var(W_.a_) + self.override_if,
+                        Atom::var(self.override_if),
                         Atom::var(W_.b_),
-                        Atom::var(W_.c_),
+                        Symbol::IF.f([W_.a_, W_.b_, W_.c_]),
                     ])
                 } else {
                     Symbol::IF.f([W_.a_, W_.b_, W_.c_])
@@ -820,7 +820,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
 });
 
 impl GammaloopSymbols {
-    pub fn integrand<O: GraphOrientation>(&self, orientation: &O) -> Atom {
+    pub fn integrand<O: GraphOrientation>(&self, i: usize, orientation: &O) -> Atom {
         let args = orientation
             .orientation()
             .iter()
@@ -832,6 +832,7 @@ impl GammaloopSymbols {
             .collect_vec();
 
         FunctionBuilder::new(self.integrand)
+            .add_arg(i)
             .add_args(&args)
             .finish()
     }

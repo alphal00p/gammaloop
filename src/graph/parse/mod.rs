@@ -740,7 +740,13 @@ impl Graph {
             &initial_state_cut,
             &graph,
             model,
-        )?;
+        )
+        .with_context(|| {
+            format!(
+                "Failed to setup_global_prefactor_and_params  for graph {}",
+                initial_data.name
+            )
+        })?;
 
         let underlying = Self::build_underlying_graph(
             graph,
@@ -748,14 +754,16 @@ impl Graph {
             &numerators,
             model,
             &param_builder,
-        )?;
+        )
+        .with_context(|| format!("Failed to build underlying graph {}", initial_data.name))?;
 
         let loop_momentum_basis = Self::setup_loop_momentum_basis(
             &underlying,
             &cut_result.full_cut,
             &cut_result.lmb_ids,
             &cut_result.xs_ext_id,
-        )?;
+        )
+        .with_context(|| format!("Failed to build lmb for  graph {}", initial_data.name))?;
 
         let mut g = Graph {
             overall_factor: initial_data.overall_factor,

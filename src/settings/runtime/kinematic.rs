@@ -23,7 +23,7 @@ use crate::{
 };
 use color_eyre::{Result, Section};
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -232,7 +232,7 @@ impl Externals {
 
     #[inline(never)]
     // #[comemo::memoize]
-    pub(crate) fn get_dependent_externals<T: FloatLike>(
+    pub fn get_dependent_externals<T: FloatLike>(
         &self,
         dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> Result<ExternalFourMomenta<F<T>>>

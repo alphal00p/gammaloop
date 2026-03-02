@@ -2,7 +2,6 @@ use std::{collections::HashSet, fmt::Display};
 
 use color_eyre::eyre::Result;
 use colored::Colorize;
-use dot_parser::ast::Graph;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
@@ -14,19 +13,18 @@ use symbolica::{
     numerical_integration::{MonteCarloRng, Sample},
 };
 use tabled::{builder::Builder, settings::Style};
-use tracing::{debug, warn};
+use tracing::warn;
 
 use crate::{
-    DependentMomentaConstructor, disable,
+    DependentMomentaConstructor,
     evaluation_result::EvaluationResult,
     gammaloop_integrand::{
-        GammaloopIntegrand, GraphTerm,
+        GammaloopIntegrand,
         cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
-    graph::FeynmanGraph,
     integrands::HasIntegrand,
     model::Model,
-    momentum::{Rotation, RotationMethod, ThreeMomentum},
+    momentum::ThreeMomentum,
     momentum_sample::{LoopIndex, LoopMomenta, MomentumSample},
     settings::{
         RuntimeSettings, SamplingSettings,
@@ -35,7 +33,7 @@ use crate::{
             ParameterizationMode, ParameterizationSettings, Precision,
         },
     },
-    utils::{F, FloatLike, box_muller, f128},
+    utils::{F, FloatLike, box_muller},
     uv::profile::logspace,
 };
 use varpro::{

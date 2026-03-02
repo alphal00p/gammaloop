@@ -13,7 +13,7 @@ repository = "https://github.com/alphal00p/gammaloop"
 build = "build.rs"
 
 [workspace]
-members = ["gammaloop-api"]
+members = ["gammaloop-api", "integration-tests"]
 
 [lib]
 # required-features = ["python_api"]
@@ -133,7 +133,6 @@ optional = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-gammaloop_api = { package = "gammaloop-api", path = "./gammaloop-api" }
 # oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
 
 [build-dependencies]
@@ -156,7 +155,7 @@ python_stubgen = ["pyo3-stub-gen", "python_api"]
 
 [patch.crates-io]
 graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "36ff03edc6e47675daf636e57700e6b56e551759" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
 linnet = { git = "https://github.com/alphal00p/linnet", rev = "406272c24bcb5bde5551d7d29620459e0671c82e" }
 # graphica = { path = "../../symbolica/lib/graphica" }
 # vakint={git="https://github.com/alphal00p/vakint",rev="10ffd4e8559696b1dc79b21ef3e700caac663aa8"}
@@ -164,9 +163,9 @@ linnet = { git = "https://github.com/alphal00p/linnet", rev = "406272c24bcb5bde5
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
 numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "36ff03edc6e47675daf636e57700e6b56e551759" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "36ff03edc6e47675daf636e57700e6b56e551759" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "36ff03edc6e47675daf636e57700e6b56e551759" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
 # numerica = { path = "../../symbolica/lib/numerica" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # symbolica = { version = "1.2.1", default-features = false, features = [

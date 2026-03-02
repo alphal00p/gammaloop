@@ -1,0 +1,50 @@
+#:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
+commands = [
+    #    "set global kv display_directive=gammalooprs=info,info",
+    "import model sm-default",
+    "import graphs ./tests/resources/graphs/trees/qqx_aaa.dot",
+    "generate",
+    #"inspect --process-id 0 --name default",
+]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    "dependent",
+    [
+        1.0,
+        0.0,
+        0.0,
+        1.0,
+    ],
+    [
+        1.0,
+        0.0,
+        0.0,
+        -1.0,
+    ],
+    [
+        0.9903067841547669,
+        0.3734458315384239,
+        0.6393671561700484,
+        -0.657613394982612,
+    ],
+    [
+        0.2053558277500182,
+        -0.1412408546154445,
+        -0.0869119059139323,
+        0.121112995127698,
+    ],
+]
+helicities = [1, 1, -1, -1, -1]
+
+[default_runtime_settings.stability]
+check_on_norm = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[cli_settings.global.generation.evaluator]
+compile = false

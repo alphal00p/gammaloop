@@ -315,7 +315,7 @@ impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
                             .original_integrand
                             .iterative
                             .as_ref()
-                            .map(export_generic_evaluator)
+                            .map(|(eval, len)| export_generic_evaluator(eval))
                             .transpose()?,
                         summed_function_map: term
                             .original_integrand
@@ -336,22 +336,30 @@ impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
                         .evaluators
                         .iter()
                         .map(|counterterm| {
-                            let single_parametric =
-                                export_generic_evaluator(&counterterm.parametric.borrow())?;
-                            let iterative = counterterm
-                                .iterative
-                                .as_ref()
-                                .map(|ev| export_generic_evaluator(&ev.borrow()))
-                                .transpose()?;
+                            let evaluator_stack = counterterm.evaluator_stack.borrow();
                             Ok(StandaloneEvaluatorStackArchive {
                                 start,
                                 override_pos,
                                 mult_offset,
                                 representative_input: representative_input.clone(),
-                                single_parametric,
-                                iterative,
-                                summed: None,
-                                summed_function_map: None,
+                                single_parametric: export_generic_evaluator(
+                                    &evaluator_stack.single_parametric,
+                                )?,
+                                iterative: evaluator_stack
+                                    .iterative
+                                    .as_ref()
+                                    .map(|(eval, len)| export_generic_evaluator(eval))
+                                    .transpose()?,
+                                summed_function_map: evaluator_stack
+                                    .summed_function_map
+                                    .as_ref()
+                                    .map(export_generic_evaluator)
+                                    .transpose()?,
+                                summed: evaluator_stack
+                                    .summed
+                                    .as_ref()
+                                    .map(export_generic_evaluator)
+                                    .transpose()?,
                             })
                         })
                         .collect::<Result<Vec<_>>>()?;

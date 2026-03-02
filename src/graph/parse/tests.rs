@@ -10,6 +10,7 @@ use spenso::{
         parsing::{ParseSettings, ShadowedStructure},
         store::NetworkStore,
     },
+    shadowing::symbolica_utils::AtomCoreExt,
     structure::{HasName, PermutedStructure},
     tensors::symbolic::SymbolicTensor,
 };
@@ -303,20 +304,20 @@ fn xs_parsing() {
       overall_factor = "1";
       overall_factor_evaluated = "1";
       projector = "1";
-      a[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
-      b[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
-      c[dod=0 int_id=V_4_SCALAR_0000 num="UFO::SCALAR_COUPLING"];
-      d[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
-      e[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
+      a[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
+      b[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
+      c[dod="0" int_id="V_4_SCALAR_0000" num="UFO::SCALAR_COUPLING"];
+      d[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
+      e[dod="0" int_id="V_3_SCALAR_000" num="UFO::SCALAR_COUPLING"];
 
-      c:10	-> a:0	 [id=0 dir=none source=3 sink=2  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num="1" particle="scalar_0"];
-      b:2	-> c:3	 [id=1 dir=none source=1 sink=0  dod=-2 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e1 num="1" particle="scalar_0"];
-      b:4	-> e:5	 [id=2 dir=none source=2 sink=0  dod=-2 is_dummy=false lmb_rep="-1*K(0,a___)+K(2,a___)" name=e2 num="1" particle="scalar_0"];
-      c:6	-> d:7	 [id=3 dir=none source=1 sink=0  dod=-2 is_dummy=false lmb_rep="-1*K(1,a___)+-1*P(0,a___)+K(0,a___)" name=e3 num="1" particle="scalar_0"];
-      c:8	-> e:9	 [id=4 dir=none source=2 sink=1  dod=-2 is_dummy=false lmb_id=1 lmb_rep="K(1,a___)" name=e4 num="1" particle="scalar_0"];
-      a:15	-> b:1	 [id=5 dir=none source=0 sink=0  dod=-2 is_dummy=false lmb_id=2 lmb_rep="K(2,a___)" name=e5 num="1" particle="scalar_0"];
-      d:11	-> a:12	 [id=6 dir=none source=1 sink=1  dod=-2 is_dummy=false lmb_rep="-1*P(0,a___)+K(2,a___)" name=e6 num="1" particle="scalar_0"];
-      d:13	-> e:14	 [id=7 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*K(1,a___)+-1*K(2,a___)+K(0,a___)" name=e7 num="1" particle="scalar_0"];
+      c:10	-> a:0	 [id=0 dir=none source=3 sink=2  dod="-2" is_cut="0" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1" particle="scalar_0"];
+      b:2	-> c:3	 [id=1 dir=none source=1 sink=0  dod="-2" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e1" num="1" particle="scalar_0"];
+      b:4	-> e:5	 [id=2 dir=none source=2 sink=0  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+K(2,a___)+P(0,a___)" name="e2" num="1" particle="scalar_0"];
+      c:6	-> d:7	 [id=3 dir=none source=1 sink=0  dod="-2" is_dummy="false" lmb_rep="-1*K(1,a___)+-1*P(0,a___)+K(0,a___)" name="e3" num="1" particle="scalar_0"];
+      c:8	-> e:9	 [id=4 dir=none source=2 sink=1  dod="-2" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="1" particle="scalar_0"];
+      a:15	-> b:1	 [id=5 dir=none source=0 sink=0  dod="-2" is_dummy="false" lmb_rep="K(2,a___)+P(0,a___)" name="e5" num="1" particle="scalar_0"];
+      d:11	-> a:12	 [id=6 dir=none source=1 sink=1  dod="-2" is_dummy="false" lmb_id="2" lmb_rep="K(2,a___)" name="e6" num="1" particle="scalar_0"];
+      d:13	-> e:14	 [id=7 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(1,a___)+-1*K(2,a___)+-1*P(0,a___)+K(0,a___)" name="e7" num="1" particle="scalar_0"];
     }
     "#);
 
@@ -514,12 +515,12 @@ fn polarizations() {
     )
     .unwrap();
 
-    insta::assert_snapshot!(gs[0].global_prefactor.projector,@"u(0,bis(4,hedge(0)))");
-    insta::assert_snapshot!(gs[1].global_prefactor.projector,@"ubar(0,bis(4,hedge(0)))");
-    insta::assert_snapshot!(gs[2].global_prefactor.projector,@"vbar(0,bis(4,hedge(0)))");
-    insta::assert_snapshot!(gs[3].global_prefactor.projector,@"v(0,bis(4,hedge(0)))");
-    insta::assert_snapshot!(gs[4].global_prefactor.projector,@"vbar(0,bis(4,hedge(0)))");
-    insta::assert_snapshot!(gs[5].global_prefactor.projector,@"v(0,bis(4,hedge(0)))");
+    insta::assert_snapshot!(gs[0].global_prefactor.projector.to_bare_ordered_string(),@"u(0,bis(4,hedge(0)))");
+    insta::assert_snapshot!(gs[1].global_prefactor.projector.to_bare_ordered_string(),@"ubar(0,bis(4,hedge(0)))");
+    insta::assert_snapshot!(gs[2].global_prefactor.projector.to_bare_ordered_string(),@"vbar(0,bis(4,hedge(0)))");
+    insta::assert_snapshot!(gs[3].global_prefactor.projector.to_bare_ordered_string(),@"v(0,bis(4,hedge(0)))");
+    insta::assert_snapshot!(gs[4].global_prefactor.projector.to_bare_ordered_string(),@"vbar(0,bis(4,hedge(0)))");
+    insta::assert_snapshot!(gs[5].global_prefactor.projector.to_bare_ordered_string(),@"v(0,bis(4,hedge(0)))");
 }
 
 #[test]
@@ -612,7 +613,7 @@ fn propagators() {
     )
     .unwrap();
 
-    insta::assert_snapshot!(gs[0].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"-1*g(coad(8,hedge(0)),coad(8,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(1)))");
+    insta::assert_snapshot!(gs[0].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"g(coad(8,hedge(0)),coad(8,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(1)))");
     insta::assert_snapshot!(gs[1].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"Q(0,mink(4,edge(0,1)))*g(cof(3,hedge(0)),dind(cof(3,hedge(1))))*gamma(bis(4,hedge(1)),bis(4,hedge(0)),mink(4,edge(0,1)))");
     insta::assert_snapshot!(gs[2].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"-1*g(mink(4,hedge(0)),mink(4,hedge(1)))+MZ^(-2)*Q(0,mink(4,hedge(0)))*Q(0,mink(4,hedge(1)))");
 }
@@ -643,19 +644,20 @@ fn vertex_normalization() {
     assert_snapshot!(g.debug_dot(),@r#"
     digraph GL1{
       num = "1";
-      overall_factor = "(gammalooprs::{}::AutG(1))^(-1)*gammalooprs::{}::AntiFermionSpinSumSign(1)*gammalooprs::{}::ExternalFermionOrderingSign(1)*gammalooprs::{}::InternalFermionLoopSign(-1)";
-      projector = "gammalooprs::{}::ϵ(0,spenso::{}::mink(4,gammalooprs::{}::hedge(1)))*gammalooprs::{}::ϵbar(0,spenso::{}::mink(4,gammalooprs::{}::hedge(0)))";
-      0[dod=0 int_id=V_117 num="UFO::{}::GC_22*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(2)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(4))))*spenso::{}::projm(spenso::{}::bis(4,gammalooprs::{}::hedge(4)),spenso::{}::bis(4,gammalooprs::{}::hedge(2)))"];
-      1[dod=0 int_id=V_82 num="UFO::{}::GC_16*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(8)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(3))))*spenso::{}::projp(spenso::{}::bis(4,gammalooprs::{}::hedge(3)),spenso::{}::bis(4,gammalooprs::{}::hedge(8)))"];
-      2[dod=0 int_id=V_71 num="UFO::{}::GC_1*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(5)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(9))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(9)),spenso::{}::bis(4,gammalooprs::{}::hedge(5)),spenso::{}::mink(4,gammalooprs::{}::hedge(0)))"];
-      3[dod=1 int_id=V_11 num="(-1*gammalooprs::{}::Q(5,spenso::{}::mink(4,gammalooprs::{}::hedge(1)))+gammalooprs::{}::Q(4,spenso::{}::mink(4,gammalooprs::{}::hedge(1))))*UFO::{}::GC_3"];
+      overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+      overall_factor_evaluated = "-1";
+      projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+      0[dod="0" int_id="V_117" num="UFO::GC_22*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::projm(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(2)))"];
+      1[dod="0" int_id="V_82" num="UFO::GC_16*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::projp(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(8)))"];
+      2[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(5)),spenso::mink(4,hedge(0)))"];
+      3[dod="1" int_id="V_11" num="(-1*Q(4,spenso::mink(4,hedge(1)))+Q(1,spenso::mink(4,hedge(1))))*UFO::GC_3"];
 
-      2:1	-> 3:0	 [id=0 dir=none source=2 sink=0  dod=-2 is_cut=0 is_dummy=false lmb_rep="gammalooprs::{}::P(0,gammalooprs::{}::a___)" name=e0 num="1" particle="a"];
-      1:8	-> 2:9	 [id=1 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)+gammalooprs::{}::P(0,gammalooprs::{}::a___)" name=e1 num="gammalooprs::{}::Q(1,spenso::{}::mink(4,gammalooprs::{}::edge(1,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(9)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(8))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::bis(4,gammalooprs::{}::hedge(9)),spenso::{}::mink(4,gammalooprs::{}::edge(1,1)))" particle="d~"];
-      0:2	-> 1:3	 [id=2 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_id=0 lmb_rep="gammalooprs::{}::K(0,gammalooprs::{}::a___)" name=e2 num="(UFO::{}::MC*spenso::{symmetric,scalar,real}::g(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::hedge(3)))+gammalooprs::{}::Q(2,spenso::{}::mink(4,gammalooprs::{}::edge(2,1)))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::hedge(3)),spenso::{}::mink(4,gammalooprs::{}::edge(2,1))))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(3)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(2))))" particle="c~"];
-      0:4	-> 2:5	 [id=3 source=0 sink=1  dod=-1 is_dummy=false lmb_id=1 lmb_rep="gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e3 num="gammalooprs::{}::Q(3,spenso::{}::mink(4,gammalooprs::{}::edge(3,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(4)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(5))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(5)),spenso::{}::bis(4,gammalooprs::{}::hedge(4)),spenso::{}::mink(4,gammalooprs::{}::edge(3,1)))" particle="d"];
-      0:6	-> 3:7	 [id=4 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e4 num="1" particle="G+"];
-      1:10	-> 3:11	 [id=5 dir=none source=2 sink=1  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::P(0,gammalooprs::{}::a___)+gammalooprs::{}::K(0,gammalooprs::{}::a___)+gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e5 num="1" particle="G-"];
+      2:1	-> 3:0	 [id=0 dir=none source=2 sink=0  dod="-2" is_cut="0" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1" particle="a"];
+      1:10	-> 3:11	 [id=1 dir=none source=2 sink=1  dod="-2" is_dummy="false" lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e1" num="1" particle="G-"];
+      0:2	-> 1:3	 [id=2 dir=back source=1 sink=0  dod="-1" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="(-1*Q(2,spenso::mink(4,edge(2,1)))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3)),spenso::mink(4,edge(2,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(2))))" particle="c~"];
+      0:4	-> 2:5	 [id=3 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" num="Q(3,spenso::mink(4,edge(3,1)))*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(3,1)))" particle="d"];
+      0:6	-> 3:7	 [id=4 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="1" particle="G+"];
+      1:8	-> 2:9	 [id=5 dir=back source=1 sink=0  dod="-1" is_dummy="false" lmb_rep="K(0,a___)+K(1,a___)+P(0,a___)" name="e5" num="-1*Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(9)),spenso::mink(4,edge(5,1)))" particle="d~"];
     }
     "#);
 }
@@ -682,18 +684,19 @@ fn validate_verterx() {
     digraph GL1{
       num = "1";
       overall_factor = "1";
-      projector = "gammalooprs::{}::ϵ(0,spenso::{}::mink(4,gammalooprs::{}::hedge(0)))*gammalooprs::{}::ϵbar(0,spenso::{}::mink(4,gammalooprs::{}::hedge(1)))";
-      0[dod=0 int_id=V_82 num="UFO::{}::GC_16*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(4)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(2))))*spenso::{}::projp(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::hedge(4)))"];
-      1[dod=0 int_id=V_117 num="UFO::{}::GC_22*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(3)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(8))))*spenso::{}::projm(spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::bis(4,gammalooprs::{}::hedge(3)))"];
-      2[dod=0 int_id=V_71 num="UFO::{}::GC_1*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(9)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(5))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(5)),spenso::{}::bis(4,gammalooprs::{}::hedge(9)),spenso::{}::mink(4,gammalooprs::{}::hedge(1)))"];
-      3[dod=1 int_id=V_11 num="(-1*gammalooprs::{}::Q(5,spenso::{}::mink(4,gammalooprs::{}::hedge(0)))+gammalooprs::{}::Q(4,spenso::{}::mink(4,gammalooprs::{}::hedge(0))))*UFO::{}::GC_3"];
+      overall_factor_evaluated = "1";
+      projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵbar(0,spenso::mink(4,hedge(1)))";
+      0[dod="0" int_id="V_82" num="UFO::GC_16*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(2))))*spenso::projp(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(4)))"];
+      1[dod="0" int_id="V_117" num="UFO::GC_22*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::projm(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(3)))"];
+      2[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(1)))"];
+      3[dod="1" int_id="V_11" num="(-1*Q(5,spenso::mink(4,hedge(0)))+Q(4,spenso::mink(4,hedge(0))))*UFO::GC_3"];
 
-      2:1	-> 3:0	 [id=0 dir=none source=2 sink=0  dod=-2 is_cut=0 is_dummy=false lmb_rep="gammalooprs::{}::P(0,gammalooprs::{}::a___)" name=e0 num="1" particle="a"];
-      1:8	-> 2:9	 [id=1 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)+gammalooprs::{}::P(0,gammalooprs::{}::a___)" name=e1 num="gammalooprs::{}::Q(1,spenso::{}::mink(4,gammalooprs::{}::edge(1,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(8)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(9))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(9)),spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::mink(4,gammalooprs::{}::edge(1,1)))" particle="d"];
-      0:2	-> 1:3	 [id=2 source=0 sink=1  dod=-1 is_dummy=false lmb_id=0 lmb_rep="gammalooprs::{}::K(0,gammalooprs::{}::a___)" name=e2 num="(-1*UFO::{}::MC*spenso::{symmetric,scalar,real}::g(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::hedge(3)))+gammalooprs::{}::Q(2,spenso::{}::mink(4,gammalooprs::{}::edge(2,1)))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(3)),spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::mink(4,gammalooprs::{}::edge(2,1))))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(2)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(3))))" particle="c"];
-      0:4	-> 2:5	 [id=3 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_id=1 lmb_rep="gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e3 num="gammalooprs::{}::Q(3,spenso::{}::mink(4,gammalooprs::{}::edge(3,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(5)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(4))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(4)),spenso::{}::bis(4,gammalooprs::{}::hedge(5)),spenso::{}::mink(4,gammalooprs::{}::edge(3,1)))" particle="d~"];
-      0:6	-> 3:7	 [id=4 dir=none source=2 sink=1  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e4 num="1" particle="G-"];
-      1:10	-> 3:11	 [id=5 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::P(0,gammalooprs::{}::a___)+gammalooprs::{}::K(0,gammalooprs::{}::a___)+gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e5 num="1" particle="G+"];
+      2:1	-> 3:0	 [id=0 dir=none source=2 sink=0  dod="-2" is_cut="0" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1" particle="a"];
+      1:8	-> 2:9	 [id=1 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="K(0,a___)+K(1,a___)+P(0,a___)" name="e1" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(1,1)))" particle="d"];
+      0:2	-> 1:3	 [id=2 source=0 sink=1  dod="-1" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="(Q(2,spenso::mink(4,edge(2,1)))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(2,1)))+UFO::MC*spenso::g(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))" particle="c"];
+      0:4	-> 2:5	 [id=3 dir=back source=1 sink=0  dod="-1" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" num="-1*Q(3,spenso::mink(4,edge(3,1)))*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(3,1)))" particle="d~"];
+      0:6	-> 3:7	 [id=4 dir=none source=2 sink=1  dod="-2" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="1" particle="G-"];
+      1:10	-> 3:11	 [id=5 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e5" num="1" particle="G+"];
     }
     "#);
 }
@@ -724,19 +727,20 @@ fn test_ufo() {
     assert_snapshot!(g.debug_dot(),@r#"
     digraph GL0{
       num = "1";
-      overall_factor = "(gammalooprs::{}::AutG(1))^(-1)*gammalooprs::{}::AntiFermionSpinSumSign(1)*gammalooprs::{}::ExternalFermionOrderingSign(1)*gammalooprs::{}::InternalFermionLoopSign(-1)";
-      projector = "gammalooprs::{}::ϵ(0,spenso::{}::mink(4,gammalooprs::{}::hedge(1)))*gammalooprs::{}::ϵbar(0,spenso::{}::mink(4,gammalooprs::{}::hedge(0)))";
-      0[dod=0 int_id=V_79 num="((-2*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::vertex(0,1)),spenso::{}::mink(4,gammalooprs::{}::hedge(4)))*spenso::{}::projp(spenso::{}::bis(4,gammalooprs::{}::vertex(0,1)),spenso::{}::bis(4,gammalooprs::{}::hedge(6)))+spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::vertex(0,1)),spenso::{}::mink(4,gammalooprs::{}::hedge(4)))*spenso::{}::projm(spenso::{}::bis(4,gammalooprs::{}::vertex(0,1)),spenso::{}::bis(4,gammalooprs::{}::hedge(6))))*UFO::{}::GC_58+UFO::{}::GC_50*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::vertex(0,1)),spenso::{}::mink(4,gammalooprs::{}::hedge(4)))*spenso::{}::projm(spenso::{}::bis(4,gammalooprs::{}::vertex(0,1)),spenso::{}::bis(4,gammalooprs::{}::hedge(6))))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(6)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(2))))"];
-      1[dod=0 int_id=V_79 num="((-2*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::bis(4,gammalooprs::{}::vertex(1,1)),spenso::{}::mink(4,gammalooprs::{}::hedge(5)))*spenso::{}::projp(spenso::{}::bis(4,gammalooprs::{}::vertex(1,1)),spenso::{}::bis(4,gammalooprs::{}::hedge(3)))+spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::bis(4,gammalooprs::{}::vertex(1,1)),spenso::{}::mink(4,gammalooprs::{}::hedge(5)))*spenso::{}::projm(spenso::{}::bis(4,gammalooprs::{}::vertex(1,1)),spenso::{}::bis(4,gammalooprs::{}::hedge(3))))*UFO::{}::GC_58+UFO::{}::GC_50*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::bis(4,gammalooprs::{}::vertex(1,1)),spenso::{}::mink(4,gammalooprs::{}::hedge(5)))*spenso::{}::projm(spenso::{}::bis(4,gammalooprs::{}::vertex(1,1)),spenso::{}::bis(4,gammalooprs::{}::hedge(3))))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(3)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(8))))"];
-      2[dod=0 int_id=V_71 num="UFO::{}::GC_1*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(9)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(10))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(10)),spenso::{}::bis(4,gammalooprs::{}::hedge(9)),spenso::{}::mink(4,gammalooprs::{}::hedge(0)))"];
-      3[dod=0 int_id=V_71 num="UFO::{}::GC_1*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(11)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(7))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(7)),spenso::{}::bis(4,gammalooprs::{}::hedge(11)),spenso::{}::mink(4,gammalooprs::{}::hedge(1)))"];
+      overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+      overall_factor_evaluated = "-1";
+      projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+      0[dod="0" int_id="V_79" num="((-2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projp(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6)))+spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6))))*UFO::GC_58+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6))))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(2))))"];
+      1[dod="0" int_id="V_79" num="((-2*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projp(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3)))+spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3))))*UFO::GC_58+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3))))*spenso::g(spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(8))))"];
+      2[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(0)))"];
+      3[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(11)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(11)),spenso::mink(4,hedge(1)))"];
 
-      2:1	-> 3:0	 [id=0 dir=none source=2 sink=2  dod=-2 is_cut=0 is_dummy=false lmb_rep="gammalooprs::{}::P(0,gammalooprs::{}::a___)" name=e0 num="1" particle="a"];
-      1:8	-> 2:9	 [id=1 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="gammalooprs::{}::K(0,gammalooprs::{}::a___)+gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e1 num="gammalooprs::{}::Q(1,spenso::{}::mink(4,gammalooprs::{}::edge(1,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(8)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(9))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(9)),spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::mink(4,gammalooprs::{}::edge(1,1)))" particle="d"];
-      0:2	-> 1:3	 [id=2 source=0 sink=1  dod=-1 is_dummy=false lmb_id=0 lmb_rep="gammalooprs::{}::K(0,gammalooprs::{}::a___)" name=e2 num="gammalooprs::{}::Q(2,spenso::{}::mink(4,gammalooprs::{}::edge(2,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(2)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(3))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(3)),spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::mink(4,gammalooprs::{}::edge(2,1)))" particle="d"];
-      0:4	-> 1:5	 [id=3 dir=none source=2 sink=2  dod=0 is_dummy=false lmb_id=1 lmb_rep="gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e3 num="-1*spenso::{symmetric,scalar,real}::g(spenso::{}::mink(4,gammalooprs::{}::hedge(4)),spenso::{}::mink(4,gammalooprs::{}::hedge(5)))+UFO::{}::MZ^(-2)*gammalooprs::{}::Q(3,spenso::{}::mink(4,gammalooprs::{}::hedge(4)))*gammalooprs::{}::Q(3,spenso::{}::mink(4,gammalooprs::{}::hedge(5)))" particle="Z"];
-      0:6	-> 3:7	 [id=4 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e4 num="gammalooprs::{}::Q(4,spenso::{}::mink(4,gammalooprs::{}::edge(4,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(7)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(6))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(6)),spenso::{}::bis(4,gammalooprs::{}::hedge(7)),spenso::{}::mink(4,gammalooprs::{}::edge(4,1)))" particle="d~"];
-      2:10	-> 3:11	 [id=5 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-1*gammalooprs::{}::P(0,gammalooprs::{}::a___)+gammalooprs::{}::K(0,gammalooprs::{}::a___)+gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e5 num="gammalooprs::{}::Q(5,spenso::{}::mink(4,gammalooprs::{}::edge(5,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(10)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(11))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(11)),spenso::{}::bis(4,gammalooprs::{}::hedge(10)),spenso::{}::mink(4,gammalooprs::{}::edge(5,1)))" particle="d"];
+      2:1	-> 3:0	 [id=0 dir=none source=2 sink=2  dod="-2" is_cut="0" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1" particle="a"];
+      2:10	-> 3:11	 [id=1 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="-1*K(1,a___)+-1*P(0,a___)" name="e1" num="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::cof(3,hedge(10)),spenso::dind(spenso::cof(3,hedge(11))))*spenso::gamma(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(10)),spenso::mink(4,edge(1,1)))" particle="d"];
+      0:2	-> 1:3	 [id=2 source=0 sink=1  dod="-1" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(3))))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(2,1)))" particle="d"];
+      0:4	-> 1:5	 [id=3 dir=none source=2 sink=2  dod="0" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e3" num="-1*spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))+Q(3,spenso::mink(4,hedge(4)))*Q(3,spenso::mink(4,hedge(5)))*UFO::MZ^(-2)" particle="Z"];
+      0:6	-> 3:7	 [id=4 dir=back source=1 sink=0  dod="-1" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e4" num="-1*Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(6))))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(4,1)))" particle="d~"];
+      1:8	-> 2:9	 [id=5 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="-1*K(1,a___)" name="e5" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(9))))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(5,1)))" particle="d"];
     }
     "#);
 }
@@ -813,23 +817,24 @@ fn test_pols_tree() {
     digraph qqx_aaa_tree_1{
       num = "1";
       overall_factor = "1";
-      projector = "gammalooprs::{}::u(1,spenso::{}::bis(4,gammalooprs::{}::hedge(1)))*gammalooprs::{}::vbar(2,spenso::{}::bis(4,gammalooprs::{}::hedge(2)))*gammalooprs::{}::ϵbar(0,spenso::{}::mink(4,gammalooprs::{}::hedge(0)))*gammalooprs::{}::ϵbar(3,spenso::{}::mink(4,gammalooprs::{}::hedge(3)))*gammalooprs::{}::ϵbar(4,spenso::{}::mink(4,gammalooprs::{}::hedge(4)))";
-      v1[dod=0 int_id=V_71 num="UFO::{}::GC_1*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(1)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(5))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(5)),spenso::{}::bis(4,gammalooprs::{}::hedge(1)),spenso::{}::mink(4,gammalooprs::{}::hedge(3)))"];
-      v2[dod=0 int_id=V_71 num="UFO::{}::GC_1*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(6)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(7))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(7)),spenso::{}::bis(4,gammalooprs::{}::hedge(6)),spenso::{}::mink(4,gammalooprs::{}::hedge(4)))"];
-      v3[dod=0 int_id=V_71 num="UFO::{}::GC_1*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(8)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(2))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(2)),spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::mink(4,gammalooprs::{}::hedge(0)))"];
+      overall_factor_evaluated = "1";
+      projector = "u(1,spenso::bis(4,hedge(1)))*vbar(2,spenso::bis(4,hedge(2)))*ϵbar(0,spenso::mink(4,hedge(0)))*ϵbar(3,spenso::mink(4,hedge(3)))*ϵbar(4,spenso::mink(4,hedge(4)))";
+      v1[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(3)))"];
+      v2[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,hedge(4)))"];
+      v3[dod="0" int_id="V_71" num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(2))))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(8)),spenso::mink(4,hedge(0)))"];
 
       ext0	 [style=invis];
-      v3:0	-> ext0	 [id=0 dir=none source=2 dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::P(3,gammalooprs::{}::a___)+-1*gammalooprs::{}::P(4,gammalooprs::{}::a___)+gammalooprs::{}::P(1,gammalooprs::{}::a___)+gammalooprs::{}::P(2,gammalooprs::{}::a___)" name=e0 num="1𝑖" particle="a"];
+      v3:0	-> ext0	 [id=0 dir=none source=2 dod="-2" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="a"];
       ext1	 [style=invis];
-      ext1	-> v1:1	 [id=1 sink=1 dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::P(1,gammalooprs::{}::a___)" name=e1 num="1𝑖" particle="d"];
+      ext1	-> v1:1	 [id=1 sink=1 dod="-2" is_dummy="false" lmb_rep="P(1,a___)" name="e1" num="1𝑖" particle="d"];
       ext2	 [style=invis];
-      ext2	-> v3:2	 [id=2 dir=back sink=0 dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::P(2,gammalooprs::{}::a___)" name=e2 num="1𝑖" particle="d~"];
+      ext2	-> v3:2	 [id=2 dir=back sink=0 dod="-2" is_dummy="false" lmb_rep="P(2,a___)" name="e2" num="1𝑖" particle="d~"];
       ext3	 [style=invis];
-      v1:3	-> ext3	 [id=3 dir=none source=2 dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::P(3,gammalooprs::{}::a___)" name=e3 num="1𝑖" particle="a"];
+      v1:3	-> ext3	 [id=3 dir=none source=2 dod="-2" is_dummy="false" lmb_rep="P(3,a___)" name="e3" num="1𝑖" particle="a"];
       ext4	 [style=invis];
-      v2:4	-> ext4	 [id=4 dir=none source=2 dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::P(4,gammalooprs::{}::a___)" name=e4 num="1𝑖" particle="a"];
-      v1:5	-> v2:6	 [id=5 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-1*gammalooprs::{}::P(3,gammalooprs::{}::a___)+gammalooprs::{}::P(1,gammalooprs::{}::a___)" name=e5 num="gammalooprs::{}::Q(5,spenso::{}::mink(4,gammalooprs::{}::edge(5,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(5)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(6))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(6)),spenso::{}::bis(4,gammalooprs::{}::hedge(5)),spenso::{}::mink(4,gammalooprs::{}::edge(5,1)))" particle="d"];
-      v2:7	-> v3:8	 [id=6 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-1*gammalooprs::{}::P(3,gammalooprs::{}::a___)+-1*gammalooprs::{}::P(4,gammalooprs::{}::a___)+gammalooprs::{}::P(1,gammalooprs::{}::a___)" name=e6 num="gammalooprs::{}::Q(6,spenso::{}::mink(4,gammalooprs::{}::edge(6,1)))*spenso::{symmetric,scalar,real}::g(spenso::{}::cof(3,gammalooprs::{}::hedge(7)),spenso::{}::dind(spenso::{}::cof(3,gammalooprs::{}::hedge(8))))*spenso::{}::gamma(spenso::{}::bis(4,gammalooprs::{}::hedge(8)),spenso::{}::bis(4,gammalooprs::{}::hedge(7)),spenso::{}::mink(4,gammalooprs::{}::edge(6,1)))" particle="d"];
+      v2:4	-> ext4	 [id=4 dir=none source=2 dod="-2" is_dummy="false" lmb_rep="-1*P(0,a___)+-1*P(3,a___)+P(1,a___)+P(2,a___)" name="e4" num="1𝑖" particle="a"];
+      v1:5	-> v2:6	 [id=5 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="-1*P(3,a___)+P(1,a___)" name="e5" num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(6))))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(5,1)))" particle="d"];
+      v2:7	-> v3:8	 [id=6 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="-1*P(2,a___)+P(0,a___)" name="e6" num="Q(6,spenso::mink(4,edge(6,1)))*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(8))))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(6,1)))" particle="d"];
     }
     "#);
 }
@@ -1050,23 +1055,24 @@ fn parse_lmbsetting_crossection() {
     assert_snapshot!(g.debug_dot(),@r#"
     digraph G{
       num = "1/2";
-      overall_factor = "2*gammalooprs::{}::x";
-      projector = "spenso::{scalar,real}::t";
-      A[dod=0 num="1"];
-      B[dod=0 num="1"];
-      C[dod=0 num="1"];
-      D[dod=0 num="1"];
-      E[dod=0 num="1"];
+      overall_factor = "2*x";
+      overall_factor_evaluated = "2*x";
+      projector = "spenso::t";
+      A[dod="0" num="1"];
+      B[dod="0" num="1"];
+      C[dod="0" num="1"];
+      D[dod="0" num="1"];
+      E[dod="0" num="1"];
 
-      B:3	-> C:0	 [id=0 dir=none source=1 sink=3  dod=-2 is_cut=0 is_dummy=false lmb_rep="gammalooprs::{}::P(0,gammalooprs::{}::a___)" name=e0 num="1" particle="scalar_0"];
-      B:2	-> A:1	 [id=1 dir=none source=0 sink=3  dod=-2 is_cut=1 is_dummy=false lmb_rep="gammalooprs::{}::P(1,gammalooprs::{}::a___)" name=e1 num="1" particle="scalar_0"];
-      E:14	-> C:15	 [id=2 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e2 num="1" particle="scalar_0"];
-      C:4	-> A:5	 [id=3 dir=none source=0 sink=1  dod=-2 is_dummy=false lmb_id=2 lmb_rep="gammalooprs::{}::K(2,gammalooprs::{}::a___)" name=e3 num="gammalooprs::{}::P(3,spenso::{}::mink(4,0))" particle="scalar_0"];
-      C:6	-> D:7	 [id=4 dir=none source=1 sink=1  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(2,gammalooprs::{}::a___)+gammalooprs::{}::P(0,gammalooprs::{}::a___)" name=e4 num="1" particle="scalar_0"];
-      D:8	-> B:9	 [id=5 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+gammalooprs::{}::P(0,gammalooprs::{}::a___)+gammalooprs::{}::P(1,gammalooprs::{}::a___)" name=e5 num="1" particle="scalar_0"];
-      E:10	-> A:11	 [id=6 dir=none source=0 sink=2  dod=-2 is_dummy=false lmb_id=1 lmb_rep="gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e6 num="1" particle="scalar_0"];
-      E:12	-> B:13	 [id=7 dir=none source=1 sink=3  dod=-2 is_dummy=false lmb_id=0 lmb_rep="gammalooprs::{}::K(0,gammalooprs::{}::a___)" name=e7 num="1" particle="scalar_0"];
-      A:17	-> D:16	 [id=8 dir=none source=0 sink=0  dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::K(1,gammalooprs::{}::a___)+gammalooprs::{}::K(2,gammalooprs::{}::a___)+gammalooprs::{}::P(1,gammalooprs::{}::a___)" name=e8 num="gammalooprs::{}::P(0,spenso::{}::mink(4,0))" particle="scalar_0"];
+      B:3	-> C:0	 [id=0 dir=none source=1 sink=3  dod="-2" is_cut="0" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1" particle="scalar_0"];
+      B:2	-> A:1	 [id=1 dir=none source=0 sink=3  dod="-2" is_cut="1" is_dummy="false" lmb_rep="P(1,a___)" name="e1" num="1" particle="scalar_0"];
+      A:17	-> D:16	 [id=2 dir=none source=0 sink=0  dod="-2" is_dummy="false" lmb_rep="K(1,a___)+K(2,a___)+P(1,a___)" name="e2" num="P(0,spenso::mink(4,0))" particle="scalar_0"];
+      C:4	-> A:5	 [id=3 dir=none source=0 sink=1  dod="-2" is_dummy="false" lmb_id="2" lmb_rep="K(2,a___)" name="e3" num="P(3,spenso::mink(4,0))" particle="scalar_0"];
+      C:6	-> D:7	 [id=4 dir=none source=1 sink=1  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)+P(0,a___)" name="e4" num="1" particle="scalar_0"];
+      D:8	-> B:9	 [id=5 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" num="1" particle="scalar_0"];
+      E:10	-> A:11	 [id=6 dir=none source=0 sink=2  dod="-2" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e6" num="1" particle="scalar_0"];
+      E:12	-> B:13	 [id=7 dir=none source=1 sink=3  dod="-2" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e7" num="1" particle="scalar_0"];
+      E:14	-> C:15	 [id=8 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e8" num="1" particle="scalar_0"];
     }
     "#);
 }
@@ -1141,29 +1147,30 @@ fn parse_lmbsetting() {
     assert_snapshot!(g.debug_dot(),@r#"
     digraph G{
       num = "1";
-      overall_factor = "2*gammalooprs::{}::x";
+      overall_factor = "2*x";
+      overall_factor_evaluated = "2*x";
       projector = "1";
-      A[dod=0 num="1"];
-      B[dod=0 num="1"];
-      C[dod=0 num="1"];
-      D[dod=0 num="1"];
-      E[dod=0 num="1"];
+      A[dod="0" num="1"];
+      B[dod="0" num="1"];
+      C[dod="0" num="1"];
+      D[dod="0" num="1"];
+      E[dod="0" num="1"];
 
-      A:0	-> D:1	 [id=0 dir=none source=0 sink=0  dod=-2 is_dummy=false lmb_id=2 lmb_rep="gammalooprs::{}::K(2,gammalooprs::{}::a___)" name=e0 num="gammalooprs::{}::P(0,spenso::{}::mink(4,0))" particle="scalar_0"];
+      A:0	-> D:1	 [id=0 dir=none source=0 sink=0  dod="-2" is_dummy="false" lmb_rep="K(1,a___)+K(2,a___)+P(2,a___)" name="e0" num="P(0,spenso::mink(4,0))" particle="scalar_0"];
       ext1	 [style=invis];
-      B:2	-> ext1	 [id=1 dir=none source=0 dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::P(1,gammalooprs::{}::a___)+gammalooprs::{}::P(2,gammalooprs::{}::a___)+gammalooprs::{}::P(3,gammalooprs::{}::a___)" name=e1 num="1𝑖" particle="scalar_0"];
+      B:2	-> ext1	 [id=1 dir=none source=0 dod="-2" is_dummy="false" lmb_rep="P(0,a___)" name="e1" num="1𝑖" particle="scalar_0"];
       ext2	 [style=invis];
-      B:3	-> ext2	 [id=2 dir=none source=1 dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::P(1,gammalooprs::{}::a___)" name=e2 num="1𝑖" particle="scalar_0"];
-      C:4	-> A:5	 [id=3 dir=none source=0 sink=1  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)+-1*gammalooprs::{}::P(2,gammalooprs::{}::a___)+gammalooprs::{}::K(2,gammalooprs::{}::a___)" name=e3 num="gammalooprs::{}::P(3,spenso::{}::mink(4,0))" particle="scalar_0"];
-      C:6	-> D:7	 [id=4 dir=none source=1 sink=1  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(2,gammalooprs::{}::a___)+gammalooprs::{}::P(2,gammalooprs::{}::a___)+gammalooprs::{}::P(3,gammalooprs::{}::a___)" name=e4 num="1" particle="scalar_0"];
-      D:8	-> B:9	 [id=5 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+gammalooprs::{}::P(2,gammalooprs::{}::a___)+gammalooprs::{}::P(3,gammalooprs::{}::a___)" name=e5 num="1" particle="scalar_0"];
-      E:10	-> A:11	 [id=6 dir=none source=0 sink=2  dod=-2 is_dummy=false lmb_id=1 lmb_rep="gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e6 num="1" particle="scalar_0"];
-      E:12	-> B:13	 [id=7 dir=none source=1 sink=3  dod=-2 is_dummy=false lmb_id=0 lmb_rep="gammalooprs::{}::K(0,gammalooprs::{}::a___)" name=e7 num="1" particle="scalar_0"];
-      E:14	-> C:15	 [id=8 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*gammalooprs::{}::K(0,gammalooprs::{}::a___)+-1*gammalooprs::{}::K(1,gammalooprs::{}::a___)" name=e8 num="1" particle="scalar_0"];
+      B:3	-> ext2	 [id=2 dir=none source=1 dod="-2" is_dummy="false" lmb_rep="P(1,a___)" name="e2" num="1𝑖" particle="scalar_0"];
+      C:4	-> A:5	 [id=3 dir=none source=0 sink=1  dod="-2" is_dummy="false" lmb_id="2" lmb_rep="K(2,a___)" name="e3" num="P(3,spenso::mink(4,0))" particle="scalar_0"];
+      C:6	-> D:7	 [id=4 dir=none source=1 sink=1  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)+-1*P(2,a___)+P(0,a___)+P(1,a___)" name="e4" num="1" particle="scalar_0"];
+      D:8	-> B:9	 [id=5 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name="e5" num="1" particle="scalar_0"];
+      E:10	-> A:11	 [id=6 dir=none source=0 sink=2  dod="-2" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e6" num="1" particle="scalar_0"];
+      E:12	-> B:13	 [id=7 dir=none source=1 sink=3  dod="-2" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e7" num="1" particle="scalar_0"];
+      E:14	-> C:15	 [id=8 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*K(1,a___)" name="e8" num="1" particle="scalar_0"];
       ext9	 [style=invis];
-      ext9	-> A:16	 [id=9 dir=none sink=3 dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::P(2,gammalooprs::{}::a___)" name=e9 num="1𝑖" particle="scalar_0"];
+      ext9	-> A:16	 [id=9 dir=none sink=3 dod="-2" is_dummy="false" lmb_rep="P(2,a___)" name="e9" num="1𝑖" particle="scalar_0"];
       ext10	 [style=invis];
-      ext10	-> C:17	 [id=10 dir=none sink=3 dod=-2 is_dummy=false lmb_rep="gammalooprs::{}::P(3,gammalooprs::{}::a___)" name=e10 num="1𝑖" particle="scalar_0"];
+      ext10	-> C:17	 [id=10 dir=none sink=3 dod="-2" is_dummy="false" lmb_rep="-1*P(2,a___)+P(0,a___)+P(1,a___)" name="e10" num="1𝑖" particle="scalar_0"];
     }
     "#);
 

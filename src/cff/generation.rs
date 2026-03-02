@@ -2,15 +2,15 @@ use std::collections::HashMap;
 
 use crate::{
     cff::{
-        cff_graph::{CFFEdge, CFFEdgeType, CFFVertex, VertexSet},
+        cff_graph::{CFFEdge, CFFEdgeType, CFFVertex},
         cut_expression::CFFCutsExpression,
-        esurface::{self, add_external_shifts, remove_zeros_duplicates},
+        esurface::remove_zeros_duplicates,
         expression::OrientationData,
         hsurface::{Hsurface, HsurfaceID},
         surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
         tree::Tree,
     },
-    graph::{self, Graph, get_cff_inverse_energy_product_impl},
+    graph::{Graph, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
 };
 use ahash::HashSet;
@@ -22,7 +22,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
     involution::{EdgeVec, HedgePair},
-    subgraph::{self, OrientedCut, SubGraphLike, SubSetOps},
+    subgraph::{OrientedCut, SubGraphLike, SubSetOps},
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
@@ -1359,9 +1359,8 @@ mod tests_cff {
 
             tree.horner_scheme();
             tree.common_subexpression_elimination();
-
-            let tree_double = tree.map_coeff(&|c| (&c.re).into());
-            tree_double.linearize(&OptimizationSettings::default())
+            tree.linearize(&OptimizationSettings::default())
+                .map_coeff(&|c| (&c.re).into())
         }
     }
 

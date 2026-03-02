@@ -7,10 +7,10 @@
 //! rand = "0.9"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "05628bbb27d365eaa5f769663a04da42908ef957", features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", features = ["bincode", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "05628bbb27d365eaa5f769663a04da42908ef957" }
-//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "05628bbb27d365eaa5f769663a04da42908ef957" }
+//! numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+//! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! ```
 
 use std::{
@@ -22,7 +22,7 @@ use std::{
 };
 
 use bincode_trait_derive::{Decode, Encode};
-use eyre::{Context, Result, eyre};
+use eyre::{eyre, Context, Result};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -32,7 +32,9 @@ use symbolica::{
         integer::IntegerRing,
         rational::{Fraction, Rational},
     },
-    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
+    evaluate::{
+        CompileOptions, ExportSettings, ExpressionEvaluator, FunctionMap, OptimizationSettings,
+    },
     id::{MatchSettings, Replacement},
     parse_lit,
     state::{State, StateMap},
@@ -74,6 +76,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
         let mut graph_terms = Vec::new();
 
         for graph in self.graph_terms {
+            let graph_name = graph.graph_name.as_str();
             let params = graph
                 .param_builder_params
                 .iter()
@@ -84,29 +87,43 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 println!("Loaded param builder param: {}", p);
             }
             let replacements = parse_fn_map_entries(&graph.fn_map_entries, &state_map)?;
+            let timed_build = |label: &str,
+                               payload: StandaloneGenericEvaluatorArchive<A>,
+                               iterate: bool|
+             -> Result<(
+                Vec<Atom>,
+                Vec<Replacement>,
+                ExpressionEvaluator<Complex<f64>>,
+                Vec<Complex<f64>>,
+            )> {
+                let started = Instant::now();
+                let evaluator =
+                    build_evaluator(payload, &params, replacements.clone(), &state_map, iterate)?;
+                println!(
+                    "[timing] build_evaluator {}::{} took {:?}",
+                    graph_name,
+                    label,
+                    started.elapsed()
+                );
+                Ok(evaluator)
+            };
 
-            let (exprs, all_reps, single, result) = build_evaluator(
+            let (exprs, all_reps, single, result) = timed_build(
+                "original.parametric",
                 graph.original_integrand.single_parametric,
-                &params,
-                replacements.clone(),
-                &state_map,
                 false,
             )?;
 
             let iterative = graph
                 .original_integrand
                 .iterative
-                .map(|payload| {
-                    build_evaluator(payload, &params, replacements.clone(), &state_map, true)
-                })
+                .map(|payload| timed_build("original.iterative", payload, true))
                 .transpose()?;
 
             let summed = graph
                 .original_integrand
                 .summed
-                .map(|payload| {
-                    build_evaluator(payload, &params, replacements.clone(), &state_map, false)
-                })
+                .map(|payload| timed_build("original.summed", payload, false))
                 .transpose()?;
 
             let mut fnmap_integrand = None;
@@ -119,7 +136,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                         &parse_fn_map_entries(&payload.additional_fn_map_entries, &state_map)?[0];
                     fnmap_integrand = Some(rhs.clone());
                     // parse_lit!(gammaloop::integrand(1,1,1,1,1,-1,1,-1,-1,-1,1,-1,-1))
-                    build_evaluator(payload, &params, replacements.clone(), &state_map, false)
+                    timed_build("original.summed_fnmap", payload, false)
                 })
                 .transpose()?;
 
@@ -144,18 +161,14 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 summed_fnmap,
             };
             let mut threshold_counterterms = Vec::new();
-            for ct in graph.threshold_counterterms {
-                let parametric = build_evaluator(
-                    ct.single_parametric,
-                    &params,
-                    replacements.clone(),
-                    &state_map,
-                    false,
-                )?;
+            for (ct_idx, ct) in graph.threshold_counterterms.into_iter().enumerate() {
+                let ct_parametric_label = format!("ct[{ct_idx}].parametric");
+                let parametric = timed_build(&ct_parametric_label, ct.single_parametric, false)?;
                 let iterative = ct
                     .iterative
                     .map(|payload| {
-                        build_evaluator(payload, &params, replacements.clone(), &state_map, true)
+                        let ct_iterative_label = format!("ct[{ct_idx}].iterative");
+                        timed_build(&ct_iterative_label, payload, true)
                     })
                     .transpose()?;
                 let ct_evaluator = LoadedStandaloneEvaluatorStack {
@@ -547,6 +560,7 @@ impl LoadedStandaloneEvaluatorStack {
         &mut self,
         rng: &mut R,
         n_samples: usize,
+        compile: bool,
     ) -> Option<(Duration, Duration)> {
         let samples: Vec<_> = (0..n_samples)
             .into_iter()
@@ -558,17 +572,130 @@ impl LoadedStandaloneEvaluatorStack {
 
         let mut sum = Duration::ZERO;
         let mut max = Duration::ZERO;
-        for s in &samples {
-            let instant = Instant::now();
-            eval.evaluate(s, result);
-            let duration = instant.elapsed();
-            if max < duration {
-                max = duration;
-            }
-            sum += duration;
-        }
+        if compile {
+            let compile_started = Instant::now();
+            let e = eval
+                .export_cpp::<Complex<f64>>(
+                    "bench_summed.cpp",
+                    "bench_summed",
+                    ExportSettings {
+                        include_header: true,
+                        inline_asm: symbolica::evaluate::InlineASM::AArch64,
+                        custom_header: None,
+                    },
+                )
+                .unwrap()
+                .compile(
+                    "bench_summed.so",
+                    CompileOptions {
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            println!(
+                "[timing] benchmark_summed compile took {:?}",
+                compile_started.elapsed()
+            );
 
+            let mut eval = e.load().unwrap();
+
+            for s in &samples {
+                let instant = Instant::now();
+                eval.evaluate(s, result);
+                let duration = instant.elapsed();
+                if max < duration {
+                    max = duration;
+                }
+                sum += duration;
+            }
+        } else {
+            for s in &samples {
+                let instant = Instant::now();
+                eval.evaluate(s, result);
+                let duration = instant.elapsed();
+                if max < duration {
+                    max = duration;
+                }
+                sum += duration;
+            }
+        }
         Some((sum / (n_samples as u32), max))
+    }
+
+    fn benchmark_iterative<R: Rng + ?Sized>(
+        &mut self,
+        rng: &mut R,
+        n_samples: usize,
+        compile: bool,
+    ) -> Option<(Duration, Duration, Complex<f64>)> {
+        let samples: Vec<_> = (0..n_samples)
+            .into_iter()
+            .map(|_| self.scramble_input(rng))
+            .collect();
+        let Some((e, r, eval, result)) = &mut self.iterative else {
+            return None;
+        };
+
+        let mut sum = Duration::ZERO;
+        let mut max = Duration::ZERO;
+        let mut orientation_sum = Complex::new(0.0, 0.0);
+        if compile {
+            let compile_started = Instant::now();
+            let e = eval
+                .export_cpp::<Complex<f64>>(
+                    "bench_summed.cpp",
+                    "bench_summed",
+                    ExportSettings {
+                        include_header: true,
+                        inline_asm: symbolica::evaluate::InlineASM::AArch64,
+                        custom_header: None,
+                    },
+                )
+                .unwrap()
+                .compile(
+                    "bench_summed.so",
+                    CompileOptions {
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            println!(
+                "[timing] benchmark_iterative compile took {:?}",
+                compile_started.elapsed()
+            );
+
+            let mut eval = e.load().unwrap();
+
+            for s in &samples {
+                let instant = Instant::now();
+                eval.evaluate(s, result);
+                orientation_sum = Complex::new(0.0, 0.0);
+                for r in result.iter() {
+                    orientation_sum += Complex::new(0.0, 0.0);
+                }
+                let duration = instant.elapsed();
+                if max < duration {
+                    max = duration;
+                }
+                sum += duration;
+            }
+        } else {
+            let mut orientation_sum = Complex::new(0.0, 0.0);
+            for s in &samples {
+                let instant = Instant::now();
+                eval.evaluate(s, result);
+                orientation_sum = Complex::new(0.0, 0.0);
+                for r in result.iter() {
+                    orientation_sum += Complex::new(0.0, 0.0);
+                }
+                let duration = instant.elapsed();
+                if max < duration {
+                    max = duration;
+                }
+                sum += duration;
+            }
+        }
+        Some((sum / (n_samples as u32), max, orientation_sum))
     }
 
     fn benchmark_parametric<R: Rng + ?Sized>(
@@ -776,6 +903,14 @@ fn main() -> Result<()> {
     // for (i, o) in orientations.iter().enumerate() {
     //     println!("{:?}", o);
     // }
+    //
+    if let Some((exprs, all_reps, single, result)) =
+        &loaded.graph_terms[0].original_integrand.summed_fnmap
+    {
+        for t in single.export_instructions().0 {
+            println!("{t}");
+        }
+    }
 
     if let Some((samples, average, max)) = loaded.graph_terms[0]
         .original_integrand
@@ -806,9 +941,4 @@ fn main() -> Result<()> {
     }
     println!("Loaded {} graph evaluator sets", loaded.graph_terms.len());
     Ok(())
-}
-
-#[test]
-fn parsing() {
-    parse_lit!((if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(8)),-1/32*((1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9)))+1/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))))/(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))+1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))))/((gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(7))*(1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(9)),-1/32*((1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7)))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))))/((-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(7))*(1-gammalooprs::σ(8))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(6)),-1/32*((1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7)))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(8))*(1+gammalooprs::σ(9)),-1/32/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(6))*(1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9)))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(6))*(1-gammalooprs::σ(7))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(8))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8)))+1/((gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))+1/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(8))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(7)),-1/32*((1/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8)))+1/((-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))+1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1-gammalooprs::σ(7))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(8))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8)))+1/((gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))+1/((-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(8))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(7)),-1/32*((1/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8)))+1/((-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))+1/((-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(7))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(8)),-1/32*((1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9)))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9)))+1/((-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))))/(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))+1/((-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))))/((-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(7))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(8))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7)))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(8))*(1+gammalooprs::σ(9)),-1/32/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(8)),-1/32/((gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1-gammalooprs::σ(8))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(7)),-1/32*((1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6)))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(8))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5)),-1/32/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(6))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(9)),-1/32/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*(-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(8))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6)),-1/32/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(7))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(8))*(1+gammalooprs::σ(9)),-1/32/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(9)),-1/32/((-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(6))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(8)),-1/32/((gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(6))*(1-gammalooprs::σ(8))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(7)),-1/32/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8)))+1/((-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))+1/((-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6)))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))))/((-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(8)),-1/32*((1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7)))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))))/((gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(8)),-1/32*((1/((-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8)))+1/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))+1/((gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(8))))/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(6))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(5))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(8)),-1/32*((1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8)))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))))/(gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/((-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(6))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(8))*(1+gammalooprs::σ(9)),-1/32*((1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7)))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(9))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(7))*(1-gammalooprs::σ(8))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(6))*(1+gammalooprs::σ(9)),-1/32*((1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(2)*gammalooprs::OSE(2)-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9)))+1/((-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/(-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))+1/((gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(5)+gammalooprs::OSE(6))*(-gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)-gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/((gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::OSE(5)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0)+if((1-gammalooprs::σ(5))*(1-gammalooprs::σ(6))*(1-gammalooprs::σ(9))*(1+gammalooprs::σ(0))*(1+gammalooprs::σ(1))*(1+gammalooprs::σ(2))*(1+gammalooprs::σ(3))*(1+gammalooprs::σ(4))*(1+gammalooprs::σ(7))*(1+gammalooprs::σ(8)),-1/32*((1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7)))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)-gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::OSE(6)+gammalooprs::OSE(8))))/(gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(5)+gammalooprs::OSE(8))+1/((gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(6)+gammalooprs::OSE(7))*(gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(5)+gammalooprs::OSE(7))*(-gammalooprs::σ(0)*gammalooprs::OSE(0)+gammalooprs::σ(2)*gammalooprs::OSE(2)+gammalooprs::σ(3)*gammalooprs::OSE(3)+gammalooprs::OSE(7)+gammalooprs::OSE(9))))/((gammalooprs::σ(1)*gammalooprs::OSE(1)+gammalooprs::OSE(8)+gammalooprs::OSE(9))*gammalooprs::OSE(5)*gammalooprs::OSE(6)*gammalooprs::OSE(7)*gammalooprs::OSE(8)*gammalooprs::OSE(9)),0))/𝜋^3);
 }

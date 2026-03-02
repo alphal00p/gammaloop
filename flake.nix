@@ -207,10 +207,6 @@
           tdf
           cargo-flamegraph
           yaml-language-server
-          zellij
-          vim
-          helix
-          jujutsu
           just
           dot-language-server
           cargo-insta

@@ -18,7 +18,7 @@ use spenso::{
     utils::to_subscript,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Indeterminate},
+    atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
     domains::{
         dual::HyperDual,
         float::Complex as SymComplex,
@@ -47,7 +47,10 @@ use crate::{
     momentum_sample::MomentumSample,
     processes::EvaluatorSettings,
     settings::{GlobalSettings, RuntimeSettings},
-    utils::{ArbPrec, F, FloatLike, GS, Length, f128, symbolica_ext::LogPrint},
+    utils::{
+        ArbPrec, F, FloatLike, GS, Length, W_, f128,
+        symbolica_ext::{CallSymbol, LogPrint},
+    },
 };
 
 use super::{
@@ -160,7 +163,7 @@ impl Default for EvaluatorMethod {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
     pub single_parametric: GenericEvaluator,
-    pub iterative: Option<GenericEvaluator>,
+    pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
     pub summed_function_map: Option<GenericEvaluator>,
     pub summed: Option<GenericEvaluator>,
@@ -173,15 +176,17 @@ impl EvaluatorStack {
            indicatif.pb_show = true, indicatif.pb_msg = "Generating Single Parametric Evaluator",
           )
       )]
-    fn new_single_parametric(
-        parametric_atom: &Atom,
+    fn new_single_parametric<A: AtomCore>(
+        parametric_atom: &[A],
         param_builder: &ParamBuilder,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let opt_settings = settings.optimization_settings();
 
         GenericEvaluator::new_from_builder(
-            [GS.collect_orientation_if(parametric_atom, false)],
+            parametric_atom
+                .iter()
+                .map(|atom| GS.collect_orientation_if(atom.as_atom_view(), false)),
             &param_builder,
             None,
             opt_settings.clone(),
@@ -194,23 +199,33 @@ impl EvaluatorStack {
            indicatif.pb_show = true, indicatif.pb_msg = "Generating Iterative Evaluator",
           )
       )]
-    fn new_iterative(
-        parametric_atom: &Atom,
+    fn new_iterative<A: AtomCore>(
+        parametric_atom: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         settings: &EvaluatorSettings,
-    ) -> Result<GenericEvaluator> {
-        GenericEvaluator::new_from_builder(
-            orientations.iter().map(|a| {
-                let selected = a.select(parametric_atom);
-                debug!(selected_expr = %selected.log_print(), "Iterative");
-                selected
-            }),
-            &param_builder,
-            None,
-            settings.optimization_settings(),
-            settings.store_atom,
-        )
+    ) -> Result<(GenericEvaluator, usize)> {
+        // let  n_orientations=;
+
+        Ok((
+            GenericEvaluator::new_from_builder(
+                parametric_atom
+                    .iter()
+                    .map(|atom| {
+                        orientations.iter().map(|a| {
+                            let selected = a.select(atom.as_atom_view());
+                            debug!(selected_expr = %selected.log_print(), "Iterative");
+                            selected
+                        })
+                    })
+                    .flatten(),
+                &param_builder,
+                None,
+                settings.optimization_settings(),
+                settings.store_atom,
+            )?,
+            orientations.len(),
+        ))
     }
 
     #[instrument(
@@ -219,8 +234,8 @@ impl EvaluatorStack {
            indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Function Map Evaluator",
           )
       )]
-    fn new_summed_function_map(
-        parametric_atom: &Atom,
+    fn new_summed_function_map<A: AtomCore>(
+        atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         settings: &EvaluatorSettings,
@@ -230,44 +245,63 @@ impl EvaluatorStack {
             .flat_map(|p| p.params.clone())
             .collect();
         let mut fn_map = param_builder.fn_map.clone();
-        let mut args = vec![];
-
-        let mut lhs = FunctionBuilder::new(GS.integrand);
-        for (e, _) in &orientations[0] {
-            lhs = lhs.add_arg(GS.sign(e));
-            args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
-        }
 
         //I(sign(1), sign(2), sign(3),...) -> I(σ1, σ2, σ3,...)
 
-        let parametric_integrand = GS.collect_orientation_if(parametric_atom, false);
-        let entries = vec![FnMapEntry {
-            lhs: lhs.finish(),
-            rhs: parametric_integrand.clone(),
-            tags: vec![],
-            args: args.clone().into_iter().map(|a| a.into()).collect(),
-        }];
-        fn_map
-            .add_function(
-                GS.integrand,
-                "integrand".into(),
-                args,
-                parametric_integrand.clone(),
-            )
-            .map_err(|a| eyre!(a))?;
+        let entries: Vec<FnMapEntry> = atoms
+            .iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let mut args = vec![];
+                let mut lhs = FunctionBuilder::new(GS.integrand);
+                lhs = lhs.add_arg(i);
+                for (e, _) in &orientations[0] {
+                    lhs = lhs.add_arg(GS.sign(e));
+                    args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
+                }
+                let param_integrand = GS.collect_orientation_if(a.as_atom_view(), false);
+                fn_map
+                    .add_tagged_function(
+                        GS.integrand,
+                        vec![Atom::num(i)],
+                        "integrand".into(),
+                        args.clone(),
+                        param_integrand.clone(),
+                    )
+                    .map_err(|a| eyre!(a))?;
+                Ok(FnMapEntry {
+                    lhs: lhs.finish(),
+                    rhs: param_integrand.clone(),
+                    tags: vec![Atom::num(i)],
+                    args: args.into_iter().map(|a| a.into()).collect(),
+                })
+            })
+            .collect::<Result<_>>()?;
 
         // fn_map.add_conditional(name)
 
-        let sum: Atom = orientations
-            .iter()
-            .map(|a| {
-                GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(a), true)
-                // GS.integrand(a)
-            })
-            .fold(Atom::Zero, |acc, n| acc + n);
+        let sum = (0..entries.len()).map(|i| {
+            orientations
+                .iter()
+                .map(|a| {
+                    GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(i, a), true)
+                    // GS.integrand(a)
+                })
+                .fold(Atom::Zero, |acc, n| acc + n)
+                .replace(
+                    Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
+                        + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+                )
+                .repeat()
+                .with(Symbol::IF.f([
+                    Atom::var(GS.override_if),
+                    Atom::var(W_.b_) + Atom::var(W_.d_),
+                    Atom::var(W_.c_) + Atom::var(W_.e_),
+                ]))
+        });
 
         GenericEvaluator::new_from_raw_params(
-            [sum],
+            sum,
             &params,
             &fn_map,
             entries,
@@ -283,26 +317,38 @@ impl EvaluatorStack {
            indicatif.pb_show = true, indicatif.pb_msg = "Generating Summed Evaluator",
           )
       )]
-    fn new_summed(
-        parametric_atom: &Atom,
+    fn new_summed<A: AtomCore>(
+        atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
-        let sum = orientations
-            .iter()
-            .map(|a| {
-                let selected = GS.collect_orientation_if(
-                    a.orientation_thetas() * a.select(parametric_atom),
-                    true,
-                );
-                debug!(selected_expr = %selected.log_print(), "Iterative");
-                selected
-            })
-            .fold(Atom::Zero, |acc, n| acc + n);
+        let sum = atoms.iter().map(|atom| {
+            orientations
+                .iter()
+                .map(|a| {
+                    let selected = GS.collect_orientation_if(
+                        a.orientation_thetas() * a.select(atom.as_atom_view()),
+                        true,
+                    );
+                    debug!(selected_expr = %selected.log_print(), "Iterative");
+                    selected
+                })
+                .fold(Atom::Zero, |acc, n| acc + n)
+                .replace(
+                    Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
+                        + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+                )
+                .repeat()
+                .with(Symbol::IF.f([
+                    Atom::var(GS.override_if),
+                    Atom::var(W_.b_) + Atom::var(W_.d_),
+                    Atom::var(W_.c_) + Atom::var(W_.e_),
+                ]))
+        });
 
         GenericEvaluator::new_from_builder(
-            [sum],
+            sum,
             &param_builder,
             None,
             settings.optimization_settings(),
@@ -311,18 +357,18 @@ impl EvaluatorStack {
     }
     #[instrument(
            skip_all,
-           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Parametric Integrand"),
+           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
            err
        )]
-    pub fn new(
-        parametric_atom: &Atom,
+    pub fn new<A: AtomCore>(
+        atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
         let iterative = if settings.iterative_orientation_optimization {
             Some(Self::new_iterative(
-                parametric_atom,
+                atoms,
                 param_builder,
                 orientations,
                 settings,
@@ -333,7 +379,7 @@ impl EvaluatorStack {
 
         let summed_function_map = if settings.summed_function_map {
             Some(Self::new_summed_function_map(
-                parametric_atom,
+                atoms,
                 param_builder,
                 orientations,
                 settings,
@@ -344,7 +390,7 @@ impl EvaluatorStack {
 
         let summed = if settings.summed {
             Some(Self::new_summed(
-                parametric_atom,
+                atoms,
                 param_builder,
                 orientations,
                 settings,
@@ -353,8 +399,7 @@ impl EvaluatorStack {
             None
         };
 
-        let single_parametric =
-            Self::new_single_parametric(parametric_atom, param_builder, settings)?;
+        let single_parametric = Self::new_single_parametric(atoms, param_builder, settings)?;
 
         Ok(EvaluatorStack {
             single_parametric,
@@ -368,20 +413,172 @@ impl EvaluatorStack {
         &'a mut self,
         mut input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
-    ) -> Complex<F<T>>
+    ) -> Vec<Complex<F<T>>>
     where
         usize: From<OID>,
     {
-        let mut result = Complex::new_re(F(T::from_f64(0.)));
+        let mut result: Option<Vec<Complex<F<T>>>> = None;
         for (_, e) in orientations.iter() {
             input.set_orientation_values(e);
-            result += <T as GenericEvaluatorFloat>::get_evaluator_single(
-                &mut self.single_parametric,
-            )(input.as_slice())
+            let output = <T as GenericEvaluatorFloat>::get_evaluator(&mut self.single_parametric)(
+                input.as_slice(),
+            );
+            if let Some(result) = &mut result {
+                for (r, v) in result.iter_mut().zip(output) {
+                    *r += v;
+                }
+            } else {
+                result = Some(output)
+            }
         }
-        result
+        result.unwrap()
     }
 
+    fn evaluate_iterative<'a, T: FloatLike, OID: IndexLike>(
+        &'a mut self,
+        mut input: InputParams<'a, T>,
+        orientations: SingleOrAllOrientations<'a, OID>,
+    ) -> Result<Vec<Complex<F<T>>>>
+    where
+        usize: From<OID>,
+    {
+        let Some((iterative, len)) = &mut self.iterative else {
+            return Err(eyre!(
+                "Iterative evaluator not available. Regenerate with iterative set to true."
+            ));
+        };
+
+        let mut result = vec![];
+        if orientations.is_all() {
+            let mut push = 0;
+            let mut val = None;
+            for r in <T as GenericEvaluatorFloat>::get_evaluator(iterative)(input.as_slice()) {
+                push += 1;
+                if let Some(mut value) = val.take() {
+                    value += r;
+                    if push == *len {
+                        push = 0;
+                        result.push(value);
+                    } else {
+                        val = Some(value)
+                    }
+                } else {
+                    val = Some(r);
+                }
+            }
+            Ok(result)
+        } else {
+            for (_, e) in orientations.iter() {
+                input.set_orientation_values(e);
+
+                let mut val = None;
+                for (i, r) in
+                    <T as GenericEvaluatorFloat>::get_evaluator(iterative)(input.as_slice())
+                        .into_iter()
+                        .enumerate()
+                {
+                    if let Some(mut value) = val.take() {
+                        value += r;
+                        if i % *len == 0 {
+                            let pos = i / (*len);
+                            if result.len() >= pos {
+                                result.push(value);
+                            } else {
+                                result[pos] += value;
+                            }
+                            val = None;
+                        } else {
+                            val = Some(value)
+                        }
+                    } else {
+                        val = Some(r);
+                    }
+                }
+            }
+            Ok(result)
+        }
+    }
+
+    fn evaluate_summed_fnmap<'a, T: FloatLike, OID: IndexLike>(
+        &'a mut self,
+        mut input: InputParams<'a, T>,
+        orientations: SingleOrAllOrientations<'a, OID>,
+    ) -> Result<Vec<Complex<F<T>>>>
+    where
+        usize: From<OID>,
+    {
+        let Some(summed_function_map) = &mut self.summed_function_map else {
+            return Err(eyre!(
+                "Summed function map evaluator not available. Regenerate with summed_function_map set to true."
+            ));
+        };
+
+        if orientations.is_all() {
+            input.override_if(true);
+            // if let Some(exprs) = &summed_function_map.exprs {
+            //     for e in exprs {
+            //         debug!(expr=%e.log_print(),"Summed evaluator");
+            //     }
+            // }
+
+            Ok(<T as GenericEvaluatorFloat>::get_evaluator(
+                summed_function_map,
+            )(input.as_slice()))
+        } else {
+            let mut result: Option<Vec<Complex<F<T>>>> = None;
+            for (_, e) in orientations.iter() {
+                input.set_orientation_values(e);
+                let output = <T as GenericEvaluatorFloat>::get_evaluator(summed_function_map)(
+                    input.as_slice(),
+                );
+                if let Some(result) = &mut result {
+                    for (r, v) in result.iter_mut().zip(output) {
+                        *r += v;
+                    }
+                } else {
+                    result = Some(output)
+                }
+            }
+            Ok(result.unwrap())
+        }
+    }
+
+    fn evaluate_summed<'a, T: FloatLike, OID: IndexLike>(
+        &'a mut self,
+        mut input: InputParams<'a, T>,
+        orientations: SingleOrAllOrientations<'a, OID>,
+    ) -> Result<Vec<Complex<F<T>>>>
+    where
+        usize: From<OID>,
+    {
+        let Some(summed) = &mut self.summed else {
+            return Err(eyre!(
+                "Summed evaluator not available. Regenerate with summed set to true."
+            ));
+        };
+
+        if orientations.is_all() {
+            input.override_if(true);
+
+            Ok(<T as GenericEvaluatorFloat>::get_evaluator(summed)(
+                input.as_slice(),
+            ))
+        } else {
+            let mut result: Option<Vec<Complex<F<T>>>> = None;
+            for (_, e) in orientations.iter() {
+                input.set_orientation_values(e);
+                let output = <T as GenericEvaluatorFloat>::get_evaluator(summed)(input.as_slice());
+                if let Some(result) = &mut result {
+                    for (r, v) in result.iter_mut().zip(output) {
+                        *r += v;
+                    }
+                } else {
+                    result = Some(output)
+                }
+            }
+            Ok(result.unwrap())
+        }
+    }
     #[instrument(
         name = "evaluate",
         level = "info",
@@ -393,91 +590,19 @@ impl EvaluatorStack {
     )]
     pub fn evaluate<'a, T: FloatLike, OID: IndexLike>(
         &'a mut self,
-        mut input: InputParams<'a, T>,
+        input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
         settings: &RuntimeSettings,
-    ) -> Result<Complex<F<T>>>
+    ) -> Result<Vec<Complex<F<T>>>>
     where
         usize: From<OID>,
     {
-        // debug!()
-        let mut result = Complex::new_re(F(T::from_f64(0.)));
         match settings.general.evaluator_method {
-            EvaluatorMethod::SingleParametric => {
-                return Ok(self.evaluate_parametric(input, orientations));
-            }
-            EvaluatorMethod::Iterative => {
-                let Some(iterative) = &mut self.iterative else {
-                    return Err(eyre!(
-                        "Iterative evaluator not available. Regenerate with iterative set to true."
-                    ));
-                };
-                if orientations.is_all() {
-                    result =
-                        <T as GenericEvaluatorFloat>::get_evaluator(iterative)(input.as_slice())
-                            .into_iter()
-                            .reduce(|acc, a| acc + a)
-                            .ok_or(eyre!("Empty iterative"))?;
-                } else {
-                    for (_, e) in orientations.iter() {
-                        input.set_orientation_values(e);
-                        result += <T as GenericEvaluatorFloat>::get_evaluator_single(iterative)(
-                            input.as_slice(),
-                        )
-                    }
-                }
-            }
-            EvaluatorMethod::SummedFunctionMap => {
-                let Some(summed_function_map) = &mut self.summed_function_map else {
-                    return Err(eyre!(
-                        "Summed function map evaluator not available. Regenerate with summed_function_map set to true."
-                    ));
-                };
-
-                if orientations.is_all() {
-                    input.override_if(true);
-                    if let Some(exprs) = &summed_function_map.exprs {
-                        for e in exprs {
-                            debug!(expr=%e.log_print(),"Summed evaluator");
-                        }
-                    }
-
-                    result = <T as GenericEvaluatorFloat>::get_evaluator_single(
-                        summed_function_map,
-                    )(input.as_slice());
-                } else {
-                    for (_, e) in orientations.iter() {
-                        input.set_orientation_values(e);
-                        result += <T as GenericEvaluatorFloat>::get_evaluator_single(
-                            summed_function_map,
-                        )(input.as_slice())
-                    }
-                }
-            }
-            EvaluatorMethod::Summed => {
-                let Some(summed) = &mut self.summed else {
-                    return Err(eyre!(
-                        "Summed evaluator not available. Regenerate with summed set to true."
-                    ));
-                };
-                if orientations.is_all() {
-                    input.override_if(true);
-                    result = <T as GenericEvaluatorFloat>::get_evaluator_single(summed)(
-                        input.as_slice(),
-                    );
-                } else {
-                    for (_, e) in orientations.iter() {
-                        input.set_orientation_values(e);
-                        result += <T as GenericEvaluatorFloat>::get_evaluator_single(summed)(
-                            input.as_slice(),
-                        )
-                    }
-                }
-            }
+            EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(input, orientations)),
+            EvaluatorMethod::Iterative => self.evaluate_iterative(input, orientations),
+            EvaluatorMethod::SummedFunctionMap => self.evaluate_summed_fnmap(input, orientations),
+            EvaluatorMethod::Summed => self.evaluate_summed(input, orientations),
         }
-
-        debug!(result = %result, mode =?settings.general.evaluator_method,"Evaluation result");
-        Ok(result)
     }
 
     #[instrument(
@@ -499,11 +624,11 @@ impl EvaluatorStack {
         self.single_parametric.compile(
             path.as_ref().join(name).with_extension("cpp"),
             name,
-            path.as_ref().join("name").with_extension("so"),
+            path.as_ref().join(name).with_extension("so"),
             settings.generation.compile.export_settings(),
         );
 
-        if let Some(iterative) = &mut self.iterative {
+        if let Some((iterative, _)) = &mut self.iterative {
             iterative.compile(
                 path.as_ref()
                     .join(format!("{}_iterative", name))
@@ -983,5 +1108,51 @@ impl GenericEvaluatorFloat for ArbPrec {
             right_threshold_params,
             lu_params,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use symbolica::atom::Symbol;
+
+    use crate::utils::{W_, symbolica_ext::CallSymbol};
+
+    use super::*;
+
+    #[test]
+    fn test_function_map_summed() {
+        fn integer_to_orientation(i: isize) -> Orientation {
+            match i {
+                1 => Orientation::Default,
+                -1 => Orientation::Reversed,
+                0 => Orientation::Undirected,
+                _ => panic!("Invalid orientation index"),
+            }
+        }
+
+        let a = [
+            EdgeVec::from_iter([1, -1, 1, 1].into_iter().map(integer_to_orientation)),
+            EdgeVec::from_iter([1, -1, -1, 1].into_iter().map(integer_to_orientation)),
+            EdgeVec::from_iter([-1, -1, 1, 1].into_iter().map(integer_to_orientation)),
+        ]
+        .iter()
+        .map(|a| {
+            GS.collect_orientation_if(a.orientation_thetas() * GS.integrand(1, a), true)
+
+            // GS.integrand(a)
+        })
+        .fold(Atom::Zero, |acc, n| acc + n)
+        .replace(
+            Symbol::IF.f([GS.override_if, W_.b_, W_.c_])
+                + Symbol::IF.f([GS.override_if, W_.d_, W_.e_]),
+        )
+        .repeat()
+        .with(Symbol::IF.f([
+            Atom::var(GS.override_if),
+            Atom::var(W_.b_) + Atom::var(W_.d_),
+            Atom::var(W_.c_) + Atom::var(W_.e_),
+        ]));
+
+        println!("{:100}", a);
     }
 }

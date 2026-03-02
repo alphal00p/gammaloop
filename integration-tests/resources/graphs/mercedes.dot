@@ -1,0 +1,13 @@
+digraph mercedes{
+    node [num = "1" ]
+    edge [particle=scalar_1]
+    e        [style=invis]
+    e -> v2:1
+    v1:0 -> e
+    v1 -> v2;
+    v2 -> v3;
+    v3 -> v1;
+    v1 -> v4;
+    v2 -> v4;
+    v3 -> v4;
+}

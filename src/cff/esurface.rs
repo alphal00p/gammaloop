@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::owo_colors::colors::Default;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;

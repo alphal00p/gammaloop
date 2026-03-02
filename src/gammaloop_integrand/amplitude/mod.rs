@@ -1,6 +1,5 @@
 use std::{
-    fs::{self, File},
-    io::Cursor,
+    fs::{self},
     path::Path,
 };
 
@@ -8,7 +7,7 @@ use bincode_trait_derive::{Decode, Encode};
 
 use color_eyre::Result;
 
-use eyre::{Context, eyre};
+use eyre::Context;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -16,13 +15,12 @@ use linnet::half_edge::{
 };
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
-use serde::Serialize;
+
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::{Atom, AtomCore},
-    evaluate::{FunctionMap, OptimizationSettings},
+    atom::AtomCore,
+    evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
-    state::{HasStateMap, State, StateMap},
 };
 use tracing::{debug, info, instrument, warn};
 use typed_index_collections::TiVec;
@@ -45,18 +43,14 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
-    processes::{AmplitudeGraph, GroupDerivedData, StandaloneExportMode, StandaloneExportSettings},
+    processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
     subtraction::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
-    utils::{
-        W_,
-        serde_utils::SmartSerde,
-        symbolica_ext::{LOGPRINTOPTS, LogPrint},
-    },
+    utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
 };
 
 use super::{GammaloopIntegrand, GraphTerm, LmbMultiChannelingSetup, create_grid, evaluate_sample};
@@ -100,7 +94,7 @@ impl AmplitudeGraphTerm {
         debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
 
         let original_integrand = EvaluatorStack::new(
-            &graph.derived_data.all_mighty_integrand,
+            &[&graph.derived_data.all_mighty_integrand],
             &graph.graph.param_builder,
             orientations.as_slice().as_ref(),
             &settings.generation.evaluator,
@@ -112,14 +106,7 @@ impl AmplitudeGraphTerm {
             .derived_data
             .threshold_counterterms
             .iter()
-            .map(|ct| {
-                ct.to_evaluator(
-                    &graph.graph.param_builder,
-                    &orientations,
-                    settings,
-                    OptimizationSettings::default(),
-                )
-            })
+            .map(|ct| ct.to_evaluator(&graph.graph.param_builder, &orientations, settings))
             .collect();
 
         threshold_counterterm.esurface_map = esurface_map;
@@ -224,7 +211,7 @@ impl AmplitudeGraphTerm {
 
         debug!("loop_moms: {}", momentum_sample.loop_moms());
         debug!("jacobian: {:16e}", momentum_sample.jacobian());
-        debug!("Og paramBuilder: \n{}", self.param_builder.table());
+        // debug!("Og paramBuilder: \n{}", self.param_builder.table());
 
         let input = T::get_parameters(
             &mut self.param_builder,
@@ -240,8 +227,10 @@ impl AmplitudeGraphTerm {
 
         let result = self
             .original_integrand
-            .evaluate(input, orientations, settings)?;
-        debug!("parambuilder 244: {}", self.param_builder);
+            .evaluate(input, orientations, settings)?
+            .pop()
+            .unwrap();
+        // debug!("parambuilder 244: {}", self.param_builder);
         let sum_of_cts = self.threshold_counterterm.evaluate(
             &momentum_sample,
             &self.graph,

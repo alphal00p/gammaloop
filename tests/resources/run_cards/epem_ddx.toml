@@ -1,8 +1,0 @@
-commands = [
-    "import model sm-default",
-   "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{1}}] --numerator-grouping only_detect_zeroes --clear-existing-processes ",
-]
-
-[cli_settings.global]
-logfile_directive = "off,gammalooprs[from_symbolica_graph]=debug"
-display_directive = "off,gammalooprs[from_symbolica_graph]=debug"

@@ -421,7 +421,7 @@ mod test {
         dot,
         gammaloop_integrand::param_builder::ParamBuilderGraph,
         graph::{Graph, parse::IntoGraph},
-        initialisation::test_initialise,
+        initialisation::{initialise, test_initialise},
         numerator::aind::Aind,
         processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
@@ -433,170 +433,8 @@ mod test {
     };
 
     #[test]
-    fn two_photons() {
-        // let _ = env_logger::Builder::new()
-        //     .filter(None, LevelFilter::Debug)
-        //     .write_style(WriteStyle::Always)
-        //     .is_test(true)
-        //     .try_init();
-        // let _ = env_logger::builder().is_test(true).try_init();
-
-        let model = crate::utils::test_utils::load_generic_model("sm");
-
-        let graph: Graph = dot!(
-        digraph physical_1L_6photons_0 {
-            edge[dod=-1000]
-            node[dod=-1000]
-            ext    [style=invis]
-            ext -> v1 [particle=a id=1];
-            v2 -> ext [particle=a id=0];
-            v1 -> v2 [pdg=1];
-            v2 -> v1 [pdg=1];
-        })
-        .unwrap();
-        println!("{}", graph.dot_serialize(&DotExportSettings::default()));
-        let reps = graph.get_ose_replacements();
-        for r in reps {
-            println!("{r}")
-        }
-        // return;
-
-        let mut amp: Amplitude = Amplitude::from_graph_list("name", vec![graph.clone()]).unwrap();
-
-        let mut settings = RuntimeSettings::default();
-
-        settings.kinematics = KinematicsSettings::random(&graph, 42);
-        let default_runtime_settings = RuntimeSettings::default();
-        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
-        // amp.add_graph(graph).unwrap();
-        // Amplitude::new(name)
-
-        let proc_set = GenerationSettings::default();
-
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(1)
-            .build()
-            .unwrap();
-
-        amp.preprocess(&model, &proc_set, &locked_runtime_settings, &thread_pool)
-            .unwrap();
-        amp.build_integrand(
-            &model,
-            &GlobalSettings::default(),
-            (&RuntimeSettings::default()).into(),
-            &thread_pool,
-        )
-        .unwrap();
-
-        // println!("{}", a.factor());
-
-        //     let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
-        //     let mut settings = Settings::default();
-        //     for g in graphs {
-        //         settings.kinematics = KinematicsSettings::random(&g, 42);
-        //         amp.add_graph(g).unwrap();
-        //         // Amplitude::new(name)
-        //     }
-
-        //     let proc_set = ProcessSettings::default();
-
-        //     amp.preprocess(&model, &proc_set).unwrap();
-
-        //     let integrand = amp.generate_integrand(settings, &model);
-        // }
-    }
-
-    #[test]
-    fn six_photons() {
-        // let _ = env_logger::Builder::new()
-        //     .filter(None, LevelFilter::Debug)
-        //     .write_style(WriteStyle::Always)
-        //     .is_test(true)
-        //     .try_init();
-        // let _ = env_logger::builder().is_test(true).try_init();
-
-        let model = crate::utils::test_utils::load_generic_model("sm");
-
-        let graph: Graph = dot!(
-        digraph physical_1L_6photons_0 {
-            ext    [style=invis]
-            ext -> v7 [particle=a];
-            ext -> v8 [particle=a];
-            v9 -> ext [particle=a];
-            v10 -> ext [particle=a];
-            v11 -> ext [particle=a];
-            v12 -> ext [particle=a];
-            v7 -> v8 [pdg=6];
-            v8 -> v9 [pdg=6];
-            v9 -> v10 [pdg=6];
-            v10 -> v11 [pdg=6];
-            v11 -> v12 [pdg=6];
-            v12 -> v7 [pdg=6];
-        })
-        .unwrap();
-        println!("{}", graph.dot_serialize(&DotExportSettings::default()));
-        let reps = graph.get_ose_replacements();
-        for r in reps {
-            println!("{r}")
-        }
-        // return;
-
-        let mut amp: Amplitude = Amplitude::from_graph_list("name", vec![graph.clone()]).unwrap();
-
-        let mut settings = RuntimeSettings::default();
-
-        settings.kinematics = KinematicsSettings::random(&graph, 42);
-        // amp.add_graph(graph).unwrap();
-        // Amplitude::new(name)
-
-        let proc_set = GenerationSettings::default();
-
-        // amp.graphs[0].generate_cff().unwrap();
-        // let a = amp.graphs[0].build_all_orientations_integrand_atom();
-        // println!("{:>}", a);
-        // debug!("Generating Cff");
-        // amp.graphs[0].generate_cff().unwrap();
-        // debug!("Building Evaluator");
-        // amp.graphs[0].build_evaluator(&model);
-
-        let thread_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(1)
-            .build()
-            .unwrap();
-
-        let default_runtime_settings = RuntimeSettings::default();
-        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
-
-        amp.preprocess(&model, &proc_set, &locked_runtime_settings, &thread_pool)
-            .unwrap();
-        amp.build_integrand(
-            &model,
-            &GlobalSettings::default(),
-            (&RuntimeSettings::default()).into(),
-            &thread_pool,
-        )
-        .unwrap();
-
-        // println!("{}", a.factor());
-
-        //     let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
-        //     let mut settings = Settings::default();
-        //     for g in graphs {
-        //         settings.kinematics = KinematicsSettings::random(&g, 42);
-        //         amp.add_graph(g).unwrap();
-        //         // Amplitude::new(name)
-        //     }
-
-        //     let proc_set = ProcessSettings::default();
-
-        //     amp.preprocess(&model, &proc_set).unwrap();
-
-        //     let integrand = amp.generate_integrand(settings, &model);
-        // }
-    }
-
-    #[test]
     fn evaluate_pols() {
+        initialise().unwrap();
         let model = crate::utils::test_utils::load_generic_model("sm");
 
         let graphs: Vec<Graph> = dot!(
@@ -646,6 +484,7 @@ mod test {
 
     #[test]
     fn pols() {
+        initialise().unwrap();
         let mut graphs: Vec<Graph> = dot!(
             digraph bxatobx{
                 graph [
@@ -653,18 +492,8 @@ mod test {
                 ]
                 ext    [style=invis]
                 ext -> A:1   [particle=a id=1]
-                ext -> A:2    [particle="b~" id=2]
-                A:0  -> ext  [particle="b~" id=0]
-            }
-
-            digraph bxatobx2{
-                graph [
-                    num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                ]
-                ext    [style=invis]
-                ext -> A:1   [particle=a id=1]
-                ext -> A:2    [particle="b" id=2 dir=back]
-                A:0  -> ext  [particle="b" id=0 dir=back]
+                ext -> A:2    [dir=back particle="b~" id=2]
+                A:0  -> ext  [dir=back particle="b~" id=0]
             }
 
             digraph batob{
@@ -684,7 +513,7 @@ mod test {
                 ext    [style=invis]
                 ext -> A:1   [particle=a id=1]
                 ext -> A:2    [particle="b" id=2]
-                ext -> A:0  [pdg=-5 id=0]
+                ext -> A:0  [dir=back pdg=-5 id=0]
             }
 
             digraph bbato{
@@ -694,7 +523,7 @@ mod test {
                 ext    [style=invis]
                 A:1 -> ext  [particle=a id=1]
                 ext -> A:2    [particle="b" id=2]
-                ext -> A:0  [pdg=-5 id=0]
+                ext -> A:0  [dir=back pdg=-5 id=0]
             }
 
         )
@@ -791,12 +620,13 @@ mod test {
     }
     #[test]
     fn tree() {
+        initialise().unwrap();
         let mut graphs: Vec<Graph> = dot!(
             digraph qqx_aaa_tree_1 {
                         num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
                         ext    [style=invis]
                         ext -> v1:1 [particle="d" id=1];
-                        ext -> v3:2 [particle="d~" id=2];
+                        ext -> v3:2 [dir=back particle="d~" id=2];
                         v1:3 -> ext [particle="a" id=3];
                         v2:4 -> ext [particle="a" id=4];
                         v3:0 -> ext [particle="a" id=0];
@@ -807,7 +637,7 @@ mod test {
             digraph qqx_aaa_tree_1 {
                         ext    [style=invis]
                         ext -> v1:1 [particle="d" id=1];
-                        ext -> v3:2 [particle="d~" id=2];
+                        ext -> v3:2 [dir=back particle="d~" id=2];
                         v1:3 -> ext [particle="a" id=3];
                         v2:4 -> ext [particle="a" id=4];
                         v3:0 -> ext [particle="a" id=0];
@@ -820,14 +650,13 @@ mod test {
             digraph qqx_aaa_tree_1_glob {
             ext [style=invis];
             ext -> v1:1 [particle="d", id=1];
-            ext -> v3:2 [particle="d~", id=2];
+            ext -> v3:2 [dir=back particle="d~", id=2];
             v1:3 -> ext [particle="a", id=3];
             v2:4 -> ext [particle="a", id=4];
             v3:0 -> ext [particle="a", id=0];
             v1 -> v2 [particle="d", id=5];
             v2 -> v3 [particle="d", id=6];
-            num="1𝑖/27
-                *ee^3
+            num=" UFO::GC_1^3
                 *spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(5))))
                 *spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(3)))
 
@@ -923,7 +752,7 @@ mod test {
         node [num="1", dod="-100"];
         ext [style=invis];
         ext -> vl1:1 [particle="d", id=1];
-        ext -> vl2:2 [particle="d~", id=2];
+        ext -> vl2:2 [dir=back particle="d~", id=2];
         v1:3 -> ext [id=3];
         v1:4 -> ext [id=4];
         v1:0 -> ext [id=0];

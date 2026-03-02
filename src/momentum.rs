@@ -55,7 +55,9 @@ use symbolica::{parse, symbol};
 use crate::{
     GammaLoopContext,
     settings::runtime::RotationSetting,
-    utils::{ApproxEq, F, FloatLike, RefDefault, hyperdual_utils::new_constant},
+    utils::{
+        ApproxEq, F, FloatLike, RefDefault, hyperdual_utils::new_constant, representations::GR,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
@@ -1398,7 +1400,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub(crate) fn bispinor_u(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Bispinor {}.new_rep(4).cast()]);
+        let structure = IndexLess::new(vec![GR.bis.new_rep(4)]);
 
         Polarization {
             tensor: DenseTensor {
@@ -1410,7 +1412,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub(crate) fn bispinor_v(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Bispinor {}.new_rep(4).cast()]);
+        let structure = IndexLess::new(vec![GR.bis.new_rep(4)]);
 
         Polarization {
             tensor: DenseTensor {
@@ -2859,9 +2861,9 @@ impl Rotation {
                     ..OptimizationSettings::default()
                 });
 
-        let i = Bispinor {}.new_slot(4, 1);
+        let i = GR.bis.new_slot(4, 1);
 
-        let j = Bispinor {}.new_slot(4, 3);
+        let j = GR.bis.new_slot(4, 3);
 
         let shadow: NamedStructure<String, ()> =
             PermutedStructure::from_iter([i.cast::<LibraryRep>()])
@@ -3074,8 +3076,8 @@ impl RotationMethod {
 
     pub(crate) fn bispinor_tensor(
         &self,
-        i: Slot<Bispinor>,
-        j: Slot<Bispinor>,
+        i: Slot<LibraryRep>,
+        j: Slot<LibraryRep>,
     ) -> DataTensor<Complex<f64>, OrderedStructure> {
         let structure = PermutedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
         let zero = 0.; // F::new_zero();
@@ -3387,85 +3389,85 @@ mod tests {
         let mom = FourMomentum::from_args(F(2.), F(0.), F(0.), F(-2.));
 
         assert_eq!(
-            [Complex::new_zero(), Complex::new_re(F(1.))],
+            [Complex::new_zero(), Complex::new_re(F(-1.))],
             mom.xi(Sign::Positive)
         );
 
         assert_eq!(
-            [Complex::new_re(F(-1.)), Complex::new_re(F(0.))],
+            [Complex::new_re(F(1.)), Complex::new_re(F(0.))],
             mom.xi(Sign::Negative)
         );
 
         let u_p = mom.u(Sign::Positive);
         let u_p_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_u([F(0.), F(0.), F(0.), F(2.)]).cast();
+            Polarization::bispinor_u([F(0.), F(0.), F(0.), F(-2.)]).cast();
 
         u_p.approx_eq_res(&u_p_target, &F(0.001))
-            .wrap_err("u+((2,0,0,-2)) does not match target: (0,0,0,2)")
+            .wrap_err("u+((2,0,0,-2)) does not match target: (0,0,0,-2)")
             .unwrap();
 
         let mut u_p_bar_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_u([F(0.), F(2.), F(0.), F(0.)]).cast();
+            Polarization::bispinor_u([F(0.), F(-2.), F(0.), F(0.)]).cast();
 
         u_p_bar_target.pol_type = PolType::UBar;
 
         u_p.bar()
             .approx_eq_res(&u_p_bar_target, &F(0.001))
-            .wrap_err("u+bar((2,0,0,-2)) does not match target: (0,2,0,0)")
+            .wrap_err("u+bar((2,0,0,-2)) does not match target: (0,-2,0,0)")
             .unwrap();
 
         let u_m = mom.u(Sign::Negative);
         let u_m_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_u([F(-2.), F(0.), F(0.), F(0.)]).cast();
+            Polarization::bispinor_u([F(2.), F(0.), F(0.), F(0.)]).cast();
 
         u_m.approx_eq_res(&u_m_target, &F(0.001))
-            .wrap_err("u-((2,0,0,-2)) does not match target: (-2,0,0,0)")
+            .wrap_err("u-((2,0,0,-2)) does not match target: (2,0,0,0)")
             .unwrap();
 
         let mut u_m_bar_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_u([F(0.), F(0.), F(-2.), F(0.)]).cast();
+            Polarization::bispinor_u([F(0.), F(0.), F(2.), F(0.)]).cast();
 
         u_m_bar_target.pol_type = PolType::UBar;
 
         u_m.bar()
             .approx_eq_res(&u_m_bar_target, &F(0.001))
-            .wrap_err("u-bar((2,0,0,-2)) does not match target: (0,0,-2,0)")
+            .wrap_err("u-bar((2,0,0,-2)) does not match target: (0,0,2,0)")
             .unwrap();
 
         let v_p = mom.v(Sign::Positive);
         let v_p_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_v([F(2.), F(0.), F(0.), F(0.)]).cast();
+            Polarization::bispinor_v([F(-2.), F(0.), F(0.), F(0.)]).cast();
 
         v_p.approx_eq_res(&v_p_target, &F(0.001))
-            .wrap_err("v+((2,0,0,-2)) does not match target: (2,0,0,0)")
+            .wrap_err("v+((2,0,0,-2)) does not match target: (-2,0,0,0)")
             .unwrap();
 
         let mut v_p_bar_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_v([F(0.), F(0.), F(2.), F(0.)]).cast();
+            Polarization::bispinor_v([F(0.), F(0.), F(-2.), F(0.)]).cast();
 
         v_p_bar_target.pol_type = PolType::VBar;
 
         v_p.bar()
             .approx_eq_res(&v_p_bar_target, &F(0.001))
-            .wrap_err("v+bar((2,0,0,-2)) does not match target: (0,0,2,0)")
+            .wrap_err("v+bar((2,0,0,-2)) does not match target: (0,0,-2,0)")
             .unwrap();
 
         let v_m = mom.v(Sign::Negative);
         let v_m_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_v([F(0.), F(0.), F(0.), F(-2.)]).cast();
+            Polarization::bispinor_v([F(0.), F(0.), F(0.), F(2.)]).cast();
 
         v_m.approx_eq_res(&v_m_target, &F(0.001))
-            .wrap_err("v-((2,0,0,-2)) does not match target: (0,0,0,-2)")
+            .wrap_err("v-((2,0,0,-2)) does not match target: (0,0,0,2)")
             .unwrap();
 
         let mut v_m_bar_target: Polarization<Complex<F<_>>> =
-            Polarization::bispinor_v([F(0.), F(-2.), F(0.), F(0.)]).cast();
+            Polarization::bispinor_v([F(0.), F(2.), F(0.), F(0.)]).cast();
 
         v_m_bar_target.pol_type = PolType::VBar;
 
         v_m.bar()
             .approx_eq_res(&v_m_bar_target, &F(0.001))
-            .wrap_err("v-bar((2,0,0,-2)) does not match target: (0,-2,0,0)")
+            .wrap_err("v-bar((2,0,0,-2)) does not match target: (0,2,0,0)")
             .unwrap();
     }
 
@@ -3828,11 +3830,11 @@ mod tests {
 
     //     let nud = nu.dual();
 
-    //     let i = PhysReps::new_slot(Bispinor {}.into(), 4, 2);
+    //     let i = PhysReps::new_slot(GR.bis.into(), 4, 2);
 
-    //     let j = PhysReps::new_slot(Bispinor {}.into(), 4, 3);
+    //     let j = PhysReps::new_slot(GR.bis.into(), 4, 3);
 
-    //     let k = PhysReps::new_slot(Bispinor {}.into(), 4, 4);
+    //     let k = PhysReps::new_slot(GR.bis.into(), 4, 4);
 
     //     let zero = Atom::num(0);
     //     let theta_x = parse!("theta_x").unwrap();

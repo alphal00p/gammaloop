@@ -14,7 +14,7 @@ use idenso::color::{CS, ColorSimplifier};
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
-    function, parse, parse_lit, symbol,
+    parse, parse_lit,
 };
 
 #[test]
@@ -905,6 +905,6 @@ fn finit_part_ghlo() {
     println!("ren part: {:>}", a);
     insta::assert_snapshot!(
         align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"-1/2*ca*dot(P(0),P(0),mink(4))*gs^2*ε^(-1)"
+        .to_bare_ordered_string(),@"-1𝑖/2*ca*dot(P(0),P(0),mink(4))*gs^2*ε^(-1)*𝜋^2"
     );
 }

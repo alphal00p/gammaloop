@@ -421,10 +421,13 @@ mod tests {
     };
     use symbolica::{atom::AtomCore, parse_lit};
 
+    use crate::initialisation::initialise;
+
     use super::*;
 
     #[test]
     fn test_structure_parsing() {
+        initialise().unwrap();
         let expr = parse_lit!(gamma(
             spenso::mink(4, edge(1, 1)),
             spenso::mink(4, edge(1)),

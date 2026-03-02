@@ -6,8 +6,9 @@ use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use symbolica::{
     atom::Atom,
     domains::float::{FloatLike as SymFloatLike, Real},
-    evaluate::OptimizationSettings,
 };
+
+use color_eyre::Result;
 use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
 
@@ -15,11 +16,11 @@ use crate::{
     GammaLoopContext,
     cff::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId},
-        expression::{AmplitudeOrientationID, GraphOrientation},
+        expression::AmplitudeOrientationID,
     },
     gammaloop_integrand::{
-        GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
-        evaluators::SingleOrAllOrientations,
+        ParamBuilder, ThresholdParams,
+        evaluators::{EvaluatorStack, SingleOrAllOrientations},
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
     model::Model,
@@ -31,7 +32,7 @@ use crate::{
         overlap::{OverlapGroup, OverlapStructure},
     },
     utils::{
-        F, FloatLike, GS,
+        F, FloatLike,
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };
@@ -65,46 +66,17 @@ impl AmplitudeCountertermAtom {
         param_builder: &ParamBuilder,
         orientations: &TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
-        optimiation_settings: OptimizationSettings,
     ) -> AmplitudeCountertermEvaluator {
-        let parametric = RefCell::new(
-            GenericEvaluator::new_from_builder(
-                [
-                    GS.collect_orientation_if(&self.parametric_local, false),
-                    GS.collect_orientation_if(&self.parametric_integrated, false),
-                ],
-                param_builder,
-                None,
-                optimiation_settings.clone(),
-                global_settings.generation.evaluator.store_atom,
-            )
-            .unwrap(),
-        );
-
-        let iterative = if global_settings
-            .generation
-            .evaluator
-            .iterative_orientation_optimization
-        {
-            Some(RefCell::new(
-                GenericEvaluator::new_from_builder(
-                    orientations
-                        .iter()
-                        .map(|or| or.select(&self.parametric_local + &self.parametric_integrated)),
+        AmplitudeCountertermEvaluator {
+            evaluator_stack: RefCell::new(
+                EvaluatorStack::new(
+                    &[&self.parametric_local, &self.parametric_integrated],
                     param_builder,
-                    None,
-                    optimiation_settings,
-                    global_settings.generation.evaluator.store_atom,
+                    orientations.as_slice().as_ref(),
+                    &global_settings.generation.evaluator,
                 )
                 .unwrap(),
-            ))
-        } else {
-            None
-        };
-
-        AmplitudeCountertermEvaluator {
-            parametric,
-            iterative,
+            ),
         }
     }
 }
@@ -112,8 +84,7 @@ impl AmplitudeCountertermAtom {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermEvaluator {
-    pub parametric: RefCell<GenericEvaluator>,
-    pub iterative: Option<RefCell<GenericEvaluator>>,
+    pub evaluator_stack: RefCell<EvaluatorStack>,
 }
 
 impl AmplitudeCountertermData {
@@ -131,32 +102,12 @@ impl AmplitudeCountertermData {
         path: impl AsRef<Path>,
         _override_existing: bool,
         settings: &GlobalSettings,
-    ) {
+    ) -> Result<()> {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
-            e.parametric.borrow_mut().compile(
-                path.as_ref()
-                    .join(format!("esurface_{}", i.0))
-                    .with_extension("cpp"),
-                format!("esurface_{}", i.0),
-                path.as_ref()
-                    .join(format!("esurface_{}", i.0))
-                    .with_extension("so"),
-                settings.generation.compile.export_settings(),
-            );
-
-            if let Some(iterative) = e.iterative.as_mut() {
-                iterative.borrow_mut().compile(
-                    path.as_ref()
-                        .join(format!("iterative_esurface_{}", i.0))
-                        .with_extension("cpp"),
-                    format!("iterative_esurface_{}", i.0),
-                    path.as_ref()
-                        .join(format!("iterative_esurface_{}", i.0))
-                        .with_extension("so"),
-                    settings.generation.compile.export_settings(),
-                );
-            }
+            let mut evaluator_stack = e.evaluator_stack.borrow_mut();
+            evaluator_stack.compile(format!("esurface_{}", i.0), path.as_ref(), settings)?;
         }
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -475,67 +426,36 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             h_function,
         };
 
-        let iterative_evaluator = ct_builder.evaluators[esurface_id].iterative.as_ref();
-        let parametric_evaluator = &ct_builder.evaluators[esurface_id].parametric;
+        let params = T::get_parameters(
+            param_builder,
+            (false, false),
+            ct_builder.graph,
+            &self.rstar_sample,
+            ct_builder.settings.kinematics.externals.get_helicities(),
+            &ct_builder.settings.additional_params(),
+            Some(&threshold_params),
+            None,
+            None,
+        );
 
-        let final_result = if let Some(iterative_evaluator) = iterative_evaluator {
-            let params = T::get_parameters(
-                param_builder,
-                (false, false),
-                ct_builder.graph,
-                &self.rstar_sample,
-                ct_builder.settings.kinematics.externals.get_helicities(),
-                &ct_builder.settings.additional_params(),
-                Some(&threshold_params),
-                None,
-                None,
-            );
+        let results = ct_builder.evaluators[esurface_id]
+            .evaluator_stack
+            .borrow_mut()
+            .evaluate(params, orientations, ct_builder.settings)
+            .expect("Amplitude counterterm evaluator stack failed");
 
-            let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
-                &mut iterative_evaluator.borrow_mut(),
-            )(params.as_slice());
-
-            let mut result = Complex::new_re(self.rstar_sample.zero());
-
-            debug!(
-                "viewing local and integrated ct seperately is not yet available in iterative mode"
-            );
-
-            for (i, _e) in orientations.iter() {
-                result += &iterative_result[i.0];
-            }
-            result * prefactor
-        } else {
-            let mut local_ct = Complex::new_re(F::from_f64(0.0));
-            let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
-
-            for (_i, orientation) in orientations.iter() {
-                param_builder.orientation_value(orientation, 1);
-
-                let params = T::get_parameters(
-                    param_builder,
-                    (false, false),
-                    ct_builder.graph,
-                    &self.rstar_sample,
-                    ct_builder.settings.kinematics.externals.get_helicities(),
-                    &ct_builder.settings.additional_params(),
-                    Some(&threshold_params),
-                    None,
-                    None,
-                );
-                let result = <T as GenericEvaluatorFloat>::get_evaluator(
-                    &mut parametric_evaluator.borrow_mut(),
-                )(params.as_slice());
-                local_ct += &result[0];
-                integrated_ct += &result[1];
-            }
-
+        let final_result = if results.len() >= 2 {
             debug!(
                 "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
-                local_ct, integrated_ct, prefactor
+                results[0], results[1], prefactor
             );
-
-            (local_ct + integrated_ct) * prefactor
+            (&results[0] + &results[1]) * prefactor
+        } else {
+            let mut total_ct = Complex::new_re(self.rstar_sample.zero());
+            for value in results.iter() {
+                total_ct += value;
+            }
+            total_ct * prefactor
         };
 
         debug!(
