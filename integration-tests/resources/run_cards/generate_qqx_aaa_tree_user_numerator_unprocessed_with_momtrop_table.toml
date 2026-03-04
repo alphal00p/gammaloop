@@ -1,10 +1,10 @@
 commands = [
-    "set default-runtime kv subtraction.disable_threshold_subtraction=false",
-    "set global kv global.generation.threshold_subtraction.enable_thresholds=true",
-    "import model sm-default",
-    "import graphs ./tests/resources/graphs/qqx_aaa_tree_user_numerator_unprocessed.dot",
-    "generate",
-    "quit -o",
+  "set default-runtime kv subtraction.disable_threshold_subtraction=false",
+  "set global kv global.generation.threshold_subtraction.enable_thresholds=true",
+  "import model sm-default",
+  "import graphs ./integration-tests/resources/graphs/qqx_aaa_tree_user_numerator_unprocessed.dot",
+  "generate",
+  "quit -o",
 ]
 
 [default_runtime_settings.general]
@@ -19,31 +19,31 @@ type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
-    "dependent",
-    [
-        1.0,
-        0.0,
-        0.0,
-        1.0,
-    ],
-    [
-        1.0,
-        0.0,
-        0.0,
-        -1.0,
-    ],
-    [
-        0.9903067841547669,
-        0.3734458315384239,
-        0.6393671561700484,
-        -0.657613394982612,
-    ],
-    [
-        0.2053558277500182,
-        -0.1412408546154445,
-        -0.0869119059139323,
-        0.121112995127698,
-    ],
+  "dependent",
+  [
+    1.0,
+    0.0,
+    0.0,
+    1.0,
+  ],
+  [
+    1.0,
+    0.0,
+    0.0,
+    -1.0,
+  ],
+  [
+    0.9903067841547669,
+    0.3734458315384239,
+    0.6393671561700484,
+    -0.657613394982612,
+  ],
+  [
+    0.2053558277500182,
+    -0.1412408546154445,
+    -0.0869119059139323,
+    0.121112995127698,
+  ],
 ]
 helicities = [1, 1, -1, -1, -1]
 

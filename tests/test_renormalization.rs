@@ -77,8 +77,11 @@ fn finite_part_ghost_3loop() {
     test_initialise().unwrap();
 
     let model = load_generic_model("sm");
-    let g: Vec<Graph> =
-        Graph::from_path("./tests/resources/graphs/rqft_ghost_3l.dot", &model).unwrap();
+    let g: Vec<Graph> = Graph::from_path(
+        "./integration-tests/resources/graphs/rqft_ghost_3l.dot",
+        &model,
+    )
+    .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 

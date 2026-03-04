@@ -1,8 +1,8 @@
 commands = [
-    "import model sm-default", 
-    "import graphs ./tests/resources/graphs/physical_2L_6photons.dot",
-    "set model MT={re:1500.0,im:0.0}",
-    "set model aEWM1={re:128.93,im:0.0}",
+  "import model sm-default",
+  "import graphs ./integration-tests/resources/graphs/physical_2L_6photons.dot",
+  "set model MT={re:1500.0,im:0.0}",
+  "set model aEWM1={re:128.93,im:0.0}",
 ]
 
 [default_runtime_settings.general]
@@ -18,45 +18,45 @@ type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
-    [
+  [
     500.0,
     0.0,
     -300.0,
     400.0,
-],
-    [
+  ],
+  [
     500.0,
     0.0,
     300.0,
     -400.0,
-],
-    [
+  ],
+  [
     88.55133305450298,
     -22.10069028768998,
     40.08035319168533,
     -75.80543095693663,
-],
-    [
+  ],
+  [
     328.3294192270985,
     -103.8496118834563,
     -301.9337553895401,
     76.49492138716589,
-],
-    [
+  ],
+  [
     152.3581094674306,
     -105.8809596665922,
     -97.7096383269757,
     49.54838522679282,
-],
-    "dependent",
+  ],
+  "dependent",
 ]
 helicities = [
-    -1,
-    -1,
-    -1,
-    -1,
-    -1,
-    -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
+  -1,
 ]
 
 [default_runtime_settings.integrator]
@@ -70,7 +70,6 @@ max_prob_ratio = 100.0
 [default_runtime_settings.stability]
 check_on_norm = true
 rotation_axis = []
-
 
 [[default_runtime_settings.stability.levels]]
 precision = "Double"
@@ -87,22 +86,15 @@ escalate_for_large_weight_threshold = -1.0
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true
 
-[cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = false
-
-[cli_settings.global.generation.evaluator]
-iterative_orientation_optimization = true
-compile = true
-
 [default_runtime_settings.sampling]
 type = "default"
 mode = "spherical"
 mapping = "linear"
 b = 10.0
 
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
 
-
-
-
-
-
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = true
+compile = true

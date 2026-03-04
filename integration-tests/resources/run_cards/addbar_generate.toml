@@ -1,9 +1,8 @@
 commands = [
-    "import model sm-default",
-    "import graphs ./tests/resources/graphs/addbar.dot",
-    "generate"
+  "import model sm-default",
+  "import graphs ./integration-tests/resources/graphs/addbar.dot",
+  "generate"
 ]
-
 
 [cli_settings.global]
 logfile_directive = "off,gammalooprs=debug"

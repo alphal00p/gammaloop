@@ -1,11 +1,11 @@
 #:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
-commands = [
-    "import model scalars-default",
-    "import graphs ./tests/resources/graphs/grouped_subtraction/no_group.dot",
-    "import graphs ./tests/resources/graphs/grouped_subtraction/group.dot",
-    "generate",
-]
 
+commands = [
+  "import model scalars-default",
+  "import graphs ./integration-tests/resources/graphs/grouped_subtraction/no_group.dot",
+  "import graphs ./integration-tests/resources/graphs/grouped_subtraction/group.dot",
+  "generate",
+]
 
 [default_runtime_settings.general]
 m_uv = 1.0
@@ -19,25 +19,25 @@ type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
-    "dependent",
-    [
-        -0.29166666667,
-        0.0,
-        0.0,
-        -0.4061164310337068,
-    ],
-    [
-        0.70833333333,
-        0.0,
-        0.0,
-        0.4061164310337068,
-    ],
-    [
-        0.3200,
-        0.0,
-        0.0,
-        0.6400,
-    ],
+  "dependent",
+  [
+    -0.29166666667,
+    0.0,
+    0.0,
+    -0.4061164310337068,
+  ],
+  [
+    0.70833333333,
+    0.0,
+    0.0,
+    0.4061164310337068,
+  ],
+  [
+    0.3200,
+    0.0,
+    0.0,
+    0.6400,
+  ],
 ]
 helicities = [1, 1, 1, 1]
 
@@ -54,6 +54,7 @@ train_on_avg = false
 show_max_wgt_info = true
 max_prob_ratio = 0.01
 seed = 69
+
 [default_runtime_settings.stability]
 check_on_norm = true
 

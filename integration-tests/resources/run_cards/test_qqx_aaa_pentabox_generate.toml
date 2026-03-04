@@ -10,7 +10,7 @@ commands = [
   ## # GENERATION: START ###
   "reset processes",
   # The version below imports a dot graph where gammaloop will be responsible of building the numerator
-  "import graphs ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot -p qqx_aaa -i pentabox",
+  "import graphs ./integration-tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot -p qqx_aaa -i pentabox",
   # "import graphs ./qqx_aaa_pentabox/qqx_aaa_pentabox.dot -p qqx_aaa -i pentabox",
   # The version below imports a dot graph where the user has explicitly written what they wish the numerator expression to be
   # "import graphs ./qqx_aaa_pentagon/qqx_aaa_pentagon_delocalized_numerator.dot -p qqx_aaa -i pentagon_user_numerator",

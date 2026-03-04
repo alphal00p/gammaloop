@@ -9,7 +9,7 @@ commands = [
   ## # GENERATION: START ###
   "reset processes",
   # The version below imports a dot graph where gammaloop will be responsible of building the numerator
-  "import graphs ./tests/resources/graphs/qqx_aaa_pentagon_dario.dot -p qqx_aaa -i pentagon_dario",
+  "import graphs ./integration-tests/resources/graphs/qqx_aaa_pentagon_dario.dot -p qqx_aaa -i pentagon_dario",
   # The version below imports a dot graph where the user has explicitly written what they wish the numerator expression to be
   # "import graphs ./qqx_aaa_pentagon/qqx_aaa_pentagon_delocalized_numerator.dot -p qqx_aaa -i pentagon_user_numerator",
   # "save dot",

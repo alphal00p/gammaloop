@@ -1,13 +1,11 @@
 commands = [
-    "import model scalar_gravity-default.json",
-    "import graphs ./tests/resources/graphs/v_diag.dot",
-    "generate"
+  "import model scalar_gravity-default.json",
+  "import graphs ./integration-tests/resources/graphs/v_diag.dot",
+  "generate"
 ]
 
-
 [cli_settings.global]
-display_directive = "off,info,gammalooprs[generate_term_for_graph]=debug"#,gammalooprs[final_integrand]=debug"
-
+display_directive = "off,info,gammalooprs[generate_term_for_graph]=debug"  # ,gammalooprs[final_integrand]=debug"
 
 [default_runtime_settings.kinematics]
 e_cm = 1000.0
@@ -17,29 +15,29 @@ type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [
-    [
+  [
     500.0,
     0.0,
     -300.0,
     400.0,
-],
-    [
+  ],
+  [
     328.3294192270985,
     -103.8496118834563,
     -301.9337553895401,
     76.49492138716589,
-],
-    [
+  ],
+  [
     152.3581094674306,
     -105.8809596665922,
     -97.7096383269757,
     49.54838522679282,
-],
-    "dependent",
+  ],
+  "dependent",
 ]
 helicities = [
-    -1,
-    -1,
-    -1,
-    -1,
+  -1,
+  -1,
+  -1,
+  -1,
 ]
