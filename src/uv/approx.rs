@@ -643,24 +643,17 @@ impl CFFapprox {
             }
         }
 
-        let bridgeless = amplitude_subgraph.subtract(tree_edges);
-
-        let comps: Vec<_> = g
-            .connected_components(&bridgeless)
-            .into_iter()
-            .map(|mut a| {
-                g.add_crown(&mut a);
-                a
-            })
-            .collect();
+        for (e, eid, _) in g.iter_edges_of(tree_edges) {
+            if e.is_paired() {
+                contract_edges.push(eid);
+            }
+        }
 
         for o in orientations {
-            let mut cff_product = Atom::one();
-
-            for c in &comps {
-                cff_product *= generate_uv_cff(
+            cff_sum += o.orientation_thetas()
+                * generate_uv_cff(
                     g,
-                    c,
+                    amplitude_subgraph,
                     canonize_esurface,
                     &contract_edges,
                     edges_in_initial_state_cut,
@@ -669,8 +662,6 @@ impl CFFapprox {
                     post_processing,
                 )
                 .unwrap()
-            }
-            cff_sum += o.orientation_thetas() * cff_product
         }
 
         let fourddenoms = GS.wrap_tree_denoms(graph.denominator(tree_edges, |_| -1));
@@ -1001,7 +992,7 @@ impl Approximation {
         // apply metric
         res = res
             .replace(vakint::symbols::S.p.f(&[W_.i_, W_.j_]))
-            .when(W_.j_.filter(|r| r.to_atom().is_integer()))
+            .when(W_.j_.filter_single(|r| r.is_integer()))
             .with(vakint::symbols::S.p.f(&[
                 Atom::var(W_.i_),
                 mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.j_)])]),
@@ -1011,7 +1002,7 @@ impl Approximation {
                     .p
                     .f(&[Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
             )
-            .when(W_.j_.filter(|r| r.to_atom().is_integer()))
+            .when(W_.j_.filter_single(|r| r.is_integer()))
             .with(vakint::symbols::S.p.f(&[
                 Atom::var(W_.i_),
                 mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.j_)])]),
@@ -1026,7 +1017,7 @@ impl Approximation {
                 vakint::symbols::S.dot_dummy_ind(W_.x_),
                 W_.y_
             ))
-            .when(W_.x_.filter(|r| r.to_atom().is_integer()))
+            .when(W_.x_.filter_single(|r| r.is_integer()))
             .with(function!(
                 vk_metric,
                 mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.x_)])]),
@@ -1037,7 +1028,7 @@ impl Approximation {
                 W_.x_,
                 vakint::symbols::S.dot_dummy_ind(W_.y_)
             ))
-            .when(W_.y_.filter(|r| r.to_atom().is_integer()))
+            .when(W_.y_.filter_single(|r| r.is_integer()))
             .with(function!(
                 vk_metric,
                 mink.to_symbolic([GS.uvaind.f(&[Atom::num(topo_order), Atom::var(W_.y_)])]),
