@@ -34,7 +34,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-
+gammaloop_state_integration_workspace/
 
 examples/amplitude_computation/GL_*
 gammaloop_state/

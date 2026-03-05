@@ -18,6 +18,9 @@ helicities = [1,1]
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = true
 compile = true
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+check_esurface_at_generation = true
 #[cli_settings.global.generation.orientation_pattern]
 #pat = "orientation_delta(1,1,1,-1,1,-1,1)"
 

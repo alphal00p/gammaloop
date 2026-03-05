@@ -23,7 +23,7 @@ use crate::{
 };
 use color_eyre::{Result, Section};
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]

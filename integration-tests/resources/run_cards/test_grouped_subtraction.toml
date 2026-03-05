@@ -61,7 +61,7 @@ check_on_norm = true
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
 
-[cli_settings.global.generation]
+[cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 
 [cli_settings.global.generation.evaluator]

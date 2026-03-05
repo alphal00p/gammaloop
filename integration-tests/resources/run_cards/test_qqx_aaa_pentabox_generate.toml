@@ -200,7 +200,7 @@ summed = false
 summed_function_map = true
 
 [cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = false
+enable_thresholds = true
 check_esurface_at_generation = true
 
 [cli_settings.global.n_cores]
