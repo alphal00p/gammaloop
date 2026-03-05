@@ -25,7 +25,7 @@ pub fn inspect<I: HasIntegrand>(
     discrete_dimensions: &[usize],
     mut force_radius: bool,
     is_momentum_space: bool,
-    use_f128: bool,
+    use_arb_prec: bool,
 ) -> Result<(Option<f64>, Complex<F<f64>>)> {
     if integrand.get_n_dim() as isize == pt.len() as isize - 1 {
         force_radius = true;
@@ -71,7 +71,7 @@ pub fn inspect<I: HasIntegrand>(
     };
 
     let eval_result =
-        integrand.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero())?;
+        integrand.evaluate_sample(&sample, model, F(0.), 1, use_arb_prec, Complex::new_zero())?;
     let eval = eval_result.integrand_result;
 
     info!(
