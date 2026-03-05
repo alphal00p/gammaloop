@@ -2,9 +2,9 @@ name: Hedge Numerator CI
 
 on:
   push:
-    branches: ["hedge_numerator"]
+    branches: ["hedge_numerator", "main"]
   pull_request:
-    branches: ["hedge_numerator"]
+    branches: ["hedge_numerator", "main"]
 
 env:
   CARGO_TERM_COLOR: always
