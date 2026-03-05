@@ -74,6 +74,7 @@
             pkgs.gcc
             pkgs.git
             pkgs.python313
+            pkgs.gnum4
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             pkgs.darwin.cctools
