@@ -83,7 +83,7 @@ jobs:
           echo "Starting dependency build at $(date)"
           time nix build .#cargoArtifacts --print-build-logs
           echo "Dependencies built at $(date)"
-          time nix build .#packages.default --print-build-logs
+          time nix build .#default --print-build-logs
           echo "Main package built at $(date)"
 
   clippy:
