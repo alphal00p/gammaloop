@@ -11,9 +11,9 @@ use linnet::half_edge::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::{
-        algebraic_traits::RefOne,
-        complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
-    };
+    algebraic_traits::RefOne,
+    complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
+};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
     domains::{

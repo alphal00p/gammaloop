@@ -48,8 +48,8 @@ use symbolica::{
     atom::{Atom, AtomOrView},
     graph::Graph as SymbolicaGraph,
 };
-use tracing::instrument;
 use tracing::debug;
+use tracing::instrument;
 use typed_index_collections::TiVec;
 
 use super::{

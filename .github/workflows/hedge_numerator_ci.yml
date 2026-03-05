@@ -126,8 +126,9 @@ jobs:
 
       - name: Run clippy
         run: |
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           echo "Starting clippy at $(date)"
-          time nix build .#checks.gammaloop-clippy --print-build-logs
+          time nix build ".#checks.${system}.gammaloop-clippy" --print-build-logs
           echo "Clippy completed at $(date)"
 
   fmt:
@@ -170,7 +171,8 @@ jobs:
 
       - name: Check formatting
         run: |
-          nix build .#checks.gammaloop-fmt --print-build-logs
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          nix build ".#checks.${system}.gammaloop-fmt" --print-build-logs
 
   test:
     if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success'
@@ -231,12 +233,13 @@ jobs:
 
       - name: Run nextest (partition ${{ matrix.partition }})
         run: |
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           echo "Starting nextest partition ${{ matrix.partition }} at $(date)"
           echo "Available disk space:"
           df -h
           echo "Available memory:"
           free -h || vm_stat
-          time nix build .#checks.gammaloop-nextest-partition-${{ matrix.partition }} --print-build-logs
+          time nix build ".#checks.${system}.gammaloop-nextest-partition-${{ matrix.partition }}" --print-build-logs
           echo "Nextest partition ${{ matrix.partition }} completed at $(date)"
         timeout-minutes: 120
 
@@ -295,11 +298,13 @@ jobs:
 
       - name: Run security audit
         run: |
-          nix build .#checks.gammaloop-audit --print-build-logs
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          nix build ".#checks.${system}.gammaloop-audit" --print-build-logs
 
       - name: Run license check
         run: |
-          nix build .#checks.gammaloop-deny --print-build-logs
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          nix build ".#checks.${system}.gammaloop-deny" --print-build-logs
 
   docs:
     if: needs.build-deps.result == 'success'
@@ -339,7 +344,8 @@ jobs:
 
       - name: Build documentation
         run: |
-          nix build .#checks.gammaloop-doc --print-build-logs
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          nix build ".#checks.${system}.gammaloop-doc" --print-build-logs
 
   coverage:
     if: needs.build-deps.result == 'success'
@@ -379,7 +385,8 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          nix build .#packages.gammaloop-llvm-coverage --print-build-logs
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          nix build ".#packages.${system}.gammaloop-llvm-coverage" --print-build-logs
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
