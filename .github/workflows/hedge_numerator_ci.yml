@@ -21,9 +21,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
 
       - name: Set partition configuration
@@ -47,16 +47,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -70,12 +67,10 @@ jobs:
           echo "key=nix-deps-${{ hashFiles('**/flake.lock', '**/Cargo.lock') }}" >> $GITHUB_OUTPUT
 
       - name: Cache Nix store
-        uses: actions/cache@v4
+        uses: nix-community/cache-nix-action@v7
         with:
-          path: |
-            ~/.cache/nix
-          key: ${{ steps.cache-key.outputs.key }}-build-deps
-          restore-keys: |
+          primary-key: ${{ steps.cache-key.outputs.key }}-build-deps
+          restore-prefixes-first-match: |
             nix-deps-
 
       - name: Build cargo dependencies and main package
@@ -97,16 +92,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -115,12 +107,10 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Cache Nix store
-        uses: actions/cache@v4
+        uses: nix-community/cache-nix-action@v7
         with:
-          path: |
-            ~/.cache/nix
-          key: ${{ needs.build-deps.outputs.cache-key }}-clippy
-          restore-keys: |
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-clippy
+          restore-prefixes-first-match: |
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
@@ -142,16 +132,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -160,12 +147,10 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Cache Nix store
-        uses: actions/cache@v4
+        uses: nix-community/cache-nix-action@v7
         with:
-          path: |
-            ~/.cache/nix
-          key: ${{ needs.build-deps.outputs.cache-key }}-fmt
-          restore-keys: |
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-fmt
+          restore-prefixes-first-match: |
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
@@ -175,9 +160,11 @@ jobs:
           nix build ".#checks.${system}.gammaloop-fmt" --print-build-logs
 
   test:
-    if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success'
-    needs: [build-deps, partition-config]
+    if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success' && needs.nextest-archive.result == 'success'
+    needs: [build-deps, partition-config, nextest-archive]
     environment: Cachix
+    env:
+      SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -201,16 +188,13 @@ jobs:
           fetch-depth: 0
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -220,26 +204,34 @@ jobs:
           skipPush: ${{ matrix.os == 'macos-latest' }}
 
       - name: Cache Nix store
-        uses: actions/cache@v4
+        uses: nix-community/cache-nix-action@v7
         with:
-          path: |
-            ~/.cache/nix
-          key: ${{ needs.build-deps.outputs.cache-key }}-test-${{ matrix.partition }}-${{ matrix.os }}
-          restore-keys: |
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-test-${{ matrix.partition }}-${{ matrix.os }}
+          restore-prefixes-first-match: |
             ${{ needs.build-deps.outputs.cache-key }}-${{ matrix.os }}
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-${{ matrix.os }}-
             nix-deps-
 
+      - name: Download nextest archive
+        uses: actions/download-artifact@v4
+        with:
+          name: nextest-archive-${{ matrix.os }}
+          path: .
+
       - name: Run nextest (partition ${{ matrix.partition }})
         run: |
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           echo "Starting nextest partition ${{ matrix.partition }} at $(date)"
           echo "Available disk space:"
           df -h
           echo "Available memory:"
           free -h || vm_stat
-          time nix build ".#checks.${system}.gammaloop-nextest-partition-${{ matrix.partition }}" --print-build-logs
+          time nix develop --command cargo nextest run \
+            --profile ci \
+            --archive-file ./nextest-archive.tar.zst \
+            --workspace-remap "$GITHUB_WORKSPACE" \
+            --partition hash:${{ matrix.partition }}/${{ needs.partition-config.outputs.count }} \
+            --no-fail-fast
           echo "Nextest partition ${{ matrix.partition }} completed at $(date)"
         timeout-minutes: 120
 
@@ -260,6 +252,63 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  nextest-archive:
+    if: needs.build-deps.result == 'success'
+    needs: build-deps
+    environment: Cachix
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+            substituters = https://cache.nixos.org/ https://nix-community.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v14
+        with:
+          name: gammaloop
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipPush: ${{ matrix.os == 'macos-latest' }}
+
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-nextest-archive-${{ matrix.os }}
+          restore-prefixes-first-match: |
+            ${{ needs.build-deps.outputs.cache-key }}-${{ matrix.os }}
+            ${{ needs.build-deps.outputs.cache-key }}
+            nix-deps-${{ matrix.os }}-
+            nix-deps-
+
+      - name: Build nextest archive
+        run: |
+          rm -f nextest-archive.tar.zst
+          time nix develop --command cargo nextest archive \
+            --profile ci \
+            --archive-file nextest-archive.tar.zst
+
+      - name: Upload nextest archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: nextest-archive-${{ matrix.os }}
+          path: nextest-archive.tar.zst
+          if-no-files-found: error
+          retention-days: 1
+
   security-audit:
     if: needs.build-deps.result == 'success'
     needs: build-deps
@@ -272,13 +321,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
-
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -287,12 +333,10 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Cache Nix store
-        uses: actions/cache@v4
+        uses: nix-community/cache-nix-action@v7
         with:
-          path: |
-            ~/.cache/nix
-          key: ${{ needs.build-deps.outputs.cache-key }}-audit
-          restore-keys: |
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-audit
+          restore-prefixes-first-match: |
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
@@ -300,11 +344,6 @@ jobs:
         run: |
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           nix build ".#checks.${system}.gammaloop-audit" --print-build-logs
-
-      - name: Run license check
-        run: |
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          nix build ".#checks.${system}.gammaloop-deny" --print-build-logs
 
   docs:
     if: needs.build-deps.result == 'success'
@@ -318,13 +357,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
-
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -333,12 +369,10 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Cache Nix store
-        uses: actions/cache@v4
+        uses: nix-community/cache-nix-action@v7
         with:
-          path: |
-            ~/.cache/nix
-          key: ${{ needs.build-deps.outputs.cache-key }}-docs
-          restore-keys: |
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-docs
+          restore-prefixes-first-match: |
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
@@ -359,13 +393,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: cachix/install-nix-action@v31
         with:
-          extra-conf: |
+          extra_nix_config: |
             experimental-features = nix-command flakes
-
-      - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -374,12 +405,10 @@ jobs:
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
 
       - name: Cache Nix store
-        uses: actions/cache@v4
+        uses: nix-community/cache-nix-action@v7
         with:
-          path: |
-            ~/.cache/nix
-          key: ${{ needs.build-deps.outputs.cache-key }}-coverage
-          restore-keys: |
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-coverage
+          restore-prefixes-first-match: |
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 

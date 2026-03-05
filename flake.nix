@@ -174,7 +174,10 @@
           };
 
           gammaloop-deny = craneLib.cargoDeny {
-            inherit src;
+            src = builtins.path {
+              path = ./.;
+              name = "source";
+            };
           };
 
           gammaloop-nextest = craneLib.cargoNextest (ciArgs

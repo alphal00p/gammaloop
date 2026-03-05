@@ -35,7 +35,7 @@ share/python-wheels/
 MANIFEST
 
 gammaloop_state_integration_workspace/
-
+result/
 examples/amplitude_computation/GL_*
 gammaloop_state/
 examples/**/gammaloop_state/
