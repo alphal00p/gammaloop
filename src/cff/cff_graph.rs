@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::cff::hsurface::Hsurface;
+use crate::{cff::hsurface::Hsurface, graph::Graph};
 use ahash::{HashMap, HashSet, HashSetExt};
 
 use color_eyre::Result;
@@ -9,7 +9,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{ModifySubSet, SuBitGraph, SubGraphLike},
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike},
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -825,6 +825,88 @@ impl CFFGenerationGraph {
             (Some(children), surface)
         } else {
             (None, surface)
+        }
+    }
+
+    // this function is used to set the orientation. Note that if called twice the edges may also be flipped twice, so the caller needs to be careful to only call this function once per graph
+    pub(crate) fn apply_orientation(&mut self, orientation: EdgeVec<Orientation>) -> Result<()> {
+        for (edge_id, &edge_orientation) in orientation.iter() {
+            if edge_orientation == Orientation::Reversed {
+                for vertex in self.vertices.iter_mut() {
+                    if let Some(edge) = vertex
+                        .outgoing_edges
+                        .iter()
+                        .find(|edge| edge.edge_id == edge_id)
+                        .cloned()
+                    {
+                        vertex.outgoing_edges.retain(|e| e.edge_id != edge_id);
+                        vertex.incoming_edges.push(edge);
+                    } else if let Some(edge) = vertex
+                        .incoming_edges
+                        .iter()
+                        .find(|edge| edge.edge_id == edge_id)
+                        .cloned()
+                    {
+                        vertex.incoming_edges.retain(|e| e.edge_id != edge_id);
+                        vertex.outgoing_edges.push(edge);
+                    }
+                }
+            }
+        }
+
+        self.global_orientation = orientation;
+        Ok(())
+    }
+
+    pub(crate) fn new_from_graph(graph: &Graph) -> Self {
+        let mut vertices = (0..graph.n_nodes()).map(CFFVertex::new).collect_vec();
+        let global_orientation = graph.new_edgevec(|_, _, _| Orientation::Default);
+
+        for (hedge_pair, edge_id, edge_data) in graph.iter_edges() {
+            if edge_data.data.is_dummy {
+                continue; // skip dummy edges
+            }
+
+            match hedge_pair {
+                HedgePair::Unpaired { hedge, flow } => {
+                    let vertex = Into::<usize>::into(graph.node_id(hedge));
+                    let edge_type = CFFEdgeType::External;
+                    let edge = CFFEdge { edge_id, edge_type };
+                    match flow {
+                        Flow::Source => {
+                            vertices[vertex].outgoing_edges.push(edge);
+                        }
+                        Flow::Sink => {
+                            vertices[vertex].incoming_edges.push(edge);
+                        }
+                    }
+                }
+                HedgePair::Paired { source, sink } => {
+                    let mut edge_subgraph: SuBitGraph = graph.empty_subgraph();
+                    edge_subgraph.add(source);
+                    edge_subgraph.add(sink);
+
+                    let is_is_cut_edge = graph.initial_state_cut.intersects(&edge_subgraph);
+
+                    let source_vertex = Into::<usize>::into(graph.node_id(source));
+                    let sink_vertex = Into::<usize>::into(graph.node_id(sink));
+                    let edge_type = if is_is_cut_edge {
+                        CFFEdgeType::External
+                    } else {
+                        CFFEdgeType::Virtual
+                    };
+                    let edge = CFFEdge { edge_id, edge_type };
+
+                    vertices[source_vertex].outgoing_edges.push(edge);
+                    vertices[sink_vertex].incoming_edges.push(edge);
+                }
+                HedgePair::Split { .. } => unreachable!(),
+            }
+        }
+
+        Self {
+            vertices,
+            global_orientation,
         }
     }
 
