@@ -1085,6 +1085,9 @@
         "check_on_norm": {
           "type": "boolean"
         },
+        "escalate_if_exact_zero": {
+          "type": "boolean"
+        },
         "loop_momenta_norm_escalation_factor": {
           "type": "number",
           "format": "double"

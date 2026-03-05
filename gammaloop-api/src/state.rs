@@ -757,7 +757,7 @@ impl State {
                 None => {
                     return Err(eyre!(
                         "Either process ID or process name must be provided when importing graphs"
-                    ))
+                    ));
                 }
             };
             if let Some(existing_proc) = self
@@ -1231,6 +1231,41 @@ mod tests {
             }
             other => panic!("Expected display integrands command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn run_history_parses_triple_quoted_set_kv_command() {
+        let toml = r#"
+commands = [
+    """set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[1.0,2.0,3.0,4.0],[5.0,6.0,-7.0,-8.0]],"helicities":[1,1]}}'""",
+]
+
+[default_runtime_settings.general]
+use_picobarns = true
+"#;
+
+        let run_history: RunHistory = toml::from_str(toml).unwrap();
+        assert_eq!(run_history.commands.len(), 1);
+
+        let expected_cmd = r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[1.0,2.0,3.0,4.0],[5.0,6.0,-7.0,-8.0]],"helicities":[1,1]}}'"#;
+        let command_history = &run_history.commands[0];
+        assert_eq!(command_history.raw_string.as_deref(), Some(expected_cmd));
+
+        match &command_history.command {
+            Commands::Set(Set::DefaultRuntime {
+                input: SetArgs::Kv { pairs },
+            }) => {
+                assert_eq!(pairs.len(), 1);
+                assert_eq!(pairs[0].key, "kinematics.externals");
+                assert_eq!(
+                    pairs[0].value,
+                    r#"{"type":"constant","data":{"momenta":[[1.0,2.0,3.0,4.0],[5.0,6.0,-7.0,-8.0]],"helicities":[1,1]}}"#
+                );
+            }
+            other => panic!("Expected set default-runtime kv command, got {other:?}"),
+        }
+
+        assert!(run_history.default_runtime_settings.general.use_picobarns);
     }
 }
 

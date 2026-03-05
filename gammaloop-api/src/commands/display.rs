@@ -7,16 +7,16 @@ use tabled::{builder::Builder, settings::Style};
 use tracing::info;
 
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use gammalooprs::processes::{Amplitude, CrossSection, Process, ProcessCollection};
 use gammalooprs::settings::RuntimeSettings;
 use gammalooprs::utils::serde_utils::SHOWDEFAULTS;
 use std::sync::atomic::Ordering;
 
 use crate::{
+    CLISettings,
     commands::generate::ProcessArgs,
     state::{ProcessRef, State},
-    CLISettings,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -48,36 +48,23 @@ pub enum Display {
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum DisplaySettingsTarget {
     Global {
-        #[command(subcommand)]
-        query: Option<DisplaySettingsQuery>,
+        /// Optional dotted path to a specific setting
+        #[arg(value_name = "PATH")]
+        path: Option<String>,
     },
     #[command(alias = "defaults")]
     DefaultRuntime {
-        #[command(subcommand)]
-        query: Option<DisplaySettingsQuery>,
+        /// Optional dotted path to a specific setting
+        #[arg(value_name = "PATH")]
+        path: Option<String>,
     },
     Process {
         #[command(flatten)]
         process: ProcessArgs,
-        #[command(subcommand)]
-        query: Option<DisplaySettingsQuery>,
-    },
-}
-
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
-pub enum DisplaySettingsQuery {
-    Key {
+        /// Optional dotted path to a specific setting
         #[arg(value_name = "PATH")]
         path: Option<String>,
     },
-}
-
-impl DisplaySettingsQuery {
-    fn key_path(&self) -> Option<&str> {
-        match self {
-            Self::Key { path } => path.as_deref(),
-        }
-    }
 }
 
 impl Display {
@@ -363,21 +350,21 @@ impl DisplaySettingsTarget {
         default_runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
         match self {
-            DisplaySettingsTarget::Global { query } => {
+            DisplaySettingsTarget::Global { path } => {
                 let root = serialize_settings_with_defaults(
                     global_settings,
                     "global settings for display",
                 )?;
-                render_settings_table("global settings", &root, query.as_ref())?;
+                render_settings_table("global settings", &root, path.as_deref())?;
             }
-            DisplaySettingsTarget::DefaultRuntime { query } => {
+            DisplaySettingsTarget::DefaultRuntime { path } => {
                 let root = serialize_settings_with_defaults(
                     default_runtime_settings,
                     "default runtime settings for display",
                 )?;
-                render_settings_table("default runtime settings", &root, query.as_ref())?;
+                render_settings_table("default runtime settings", &root, path.as_deref())?;
             }
-            DisplaySettingsTarget::Process { process, query } => {
+            DisplaySettingsTarget::Process { process, path } => {
                 let process_id = state.resolve_process_ref(process.process.as_ref())?;
                 let process_ref = &state.process_list.processes[process_id];
                 if let Some(name) = &process.integrand_name {
@@ -394,7 +381,7 @@ impl DisplaySettingsTarget {
                             name
                         ),
                         &settings,
-                        query.as_ref(),
+                        path.as_deref(),
                     )?;
                 } else {
                     for integrand_name in process_ref.get_integrand_names() {
@@ -413,7 +400,7 @@ impl DisplaySettingsTarget {
                                 integrand_name
                             ),
                             &settings,
-                            query.as_ref(),
+                            path.as_deref(),
                         )?;
                     }
                 }
@@ -423,12 +410,7 @@ impl DisplaySettingsTarget {
     }
 }
 
-fn render_settings_table(
-    title: &str,
-    root: &JsonValue,
-    query: Option<&DisplaySettingsQuery>,
-) -> Result<()> {
-    let key_path = query.and_then(DisplaySettingsQuery::key_path);
+fn render_settings_table(title: &str, root: &JsonValue, key_path: Option<&str>) -> Result<()> {
     let key_path = key_path.map(str::trim).filter(|path| !path.is_empty());
     let selected = if let Some(path) = key_path {
         value_at_path(root, path)?
@@ -466,7 +448,7 @@ fn render_settings_table(
     let mut table = builder.build();
     table.with(Style::rounded());
     if let Some(path) = key_path {
-        info!("{title} (key: {path}):");
+        info!("{title} (path: {path}):");
     } else {
         info!("{title}:");
     }
@@ -571,16 +553,16 @@ mod test {
     use clap::Parser;
     use serde_json::json;
 
-    use crate::{commands::Commands, state::ProcessRef, CLISettings, Repl};
+    use crate::{CLISettings, Repl, commands::Commands, state::ProcessRef};
     use gammalooprs::settings::RuntimeSettings;
 
     use super::{
-        format_bytes, serialize_settings_with_defaults, value_at_path, Display,
-        DisplaySettingsQuery, DisplaySettingsTarget,
+        Display, DisplaySettingsTarget, format_bytes, serialize_settings_with_defaults,
+        value_at_path,
     };
 
     #[test]
-    fn parse_display_settings_process_with_key_path() {
+    fn parse_display_settings_process_with_path() {
         let repl = Repl::try_parse_from([
             "gammaloop",
             "display",
@@ -590,25 +572,19 @@ mod test {
             "epem_a_tth",
             "-i",
             "LO",
-            "key",
             "integrator.n_max",
         ])
         .unwrap();
 
         match repl.command {
             Commands::Display(Display::Settings { target }) => match target {
-                DisplaySettingsTarget::Process { process, query } => {
+                DisplaySettingsTarget::Process { process, path } => {
                     assert_eq!(
                         process.process,
                         Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
                     );
                     assert_eq!(process.integrand_name, Some("LO".to_string()));
-                    assert_eq!(
-                        query,
-                        Some(DisplaySettingsQuery::Key {
-                            path: Some("integrator.n_max".to_string())
-                        })
-                    );
+                    assert_eq!(path.as_deref(), Some("integrator.n_max"));
                 }
                 other => panic!("Expected process target, got {other:?}"),
             },
@@ -617,7 +593,7 @@ mod test {
     }
 
     #[test]
-    fn parse_display_settings_process_key_without_path() {
+    fn parse_display_settings_process_without_path() {
         let repl = Repl::try_parse_from([
             "gammaloop",
             "display",
@@ -627,14 +603,13 @@ mod test {
             "epem_a_tth",
             "-i",
             "LO",
-            "key",
         ])
         .unwrap();
 
         match repl.command {
             Commands::Display(Display::Settings { target }) => match target {
-                DisplaySettingsTarget::Process { query, .. } => {
-                    assert_eq!(query, Some(DisplaySettingsQuery::Key { path: None }));
+                DisplaySettingsTarget::Process { path, .. } => {
+                    assert_eq!(path, None);
                 }
                 other => panic!("Expected process target, got {other:?}"),
             },
@@ -648,8 +623,8 @@ mod test {
 
         match repl.command {
             Commands::Display(Display::Settings { target }) => match target {
-                DisplaySettingsTarget::Global { query } => {
-                    assert_eq!(query, None);
+                DisplaySettingsTarget::Global { path } => {
+                    assert_eq!(path, None);
                 }
                 other => panic!("Expected global target, got {other:?}"),
             },
@@ -664,20 +639,14 @@ mod test {
             "display",
             "settings",
             "defaults",
-            "key",
             "integrator.n_start",
         ])
         .unwrap();
 
         match repl.command {
             Commands::Display(Display::Settings { target }) => match target {
-                DisplaySettingsTarget::DefaultRuntime { query } => {
-                    assert_eq!(
-                        query,
-                        Some(DisplaySettingsQuery::Key {
-                            path: Some("integrator.n_start".to_string())
-                        })
-                    );
+                DisplaySettingsTarget::DefaultRuntime { path } => {
+                    assert_eq!(path.as_deref(), Some("integrator.n_start"));
                 }
                 other => panic!("Expected default runtime target, got {other:?}"),
             },

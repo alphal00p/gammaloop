@@ -3,7 +3,7 @@ use std::str::FromStr;
 use color_eyre::Result;
 
 use gammaloop_api::commands::Commands;
-use gammaloop_integration_tests::{clean_test, get_test_cli, get_tests_workspace_path};
+use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
 use symbolica::{atom::AtomCore, printer::CanonicalOrderingSettings};
 use vakint::{NumericalEvaluationResult, vakint_symbol};
 

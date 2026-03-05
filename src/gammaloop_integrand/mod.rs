@@ -193,7 +193,7 @@ fn complex_to_f64<T: FloatLike>(value: &Complex<F<T>>) -> Complex<F<f64>> {
 
 #[inline]
 fn stability_check<T: FloatLike>(
-    _settings: &RuntimeSettings,
+    settings: &RuntimeSettings,
     results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<T>>,
@@ -227,7 +227,10 @@ fn stability_check<T: FloatLike>(
     let mut unstable_reason = None;
     let mut unstable_sample = None;
     for (index, error) in errors.enumerate() {
-        if !is_final_level && error.re == F::<T>::from_f64(0.0) && error.im == F::<T>::from_f64(0.0)
+        if !is_final_level
+            && settings.stability.escalate_if_exact_zero
+            && error.re == F::<T>::from_f64(0.0)
+            && error.im == F::<T>::from_f64(0.0)
         {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
@@ -294,7 +297,7 @@ fn stability_check<T: FloatLike>(
 
 #[inline]
 fn stability_check_on_norm<T: FloatLike>(
-    _settings: &RuntimeSettings,
+    settings: &RuntimeSettings,
     results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<T>>,
@@ -311,18 +314,21 @@ fn stability_check_on_norm<T: FloatLike>(
 
     let errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
-
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            F::<T>::from_f64(0.0) // true zero is fishy -> upgrade to next precision
+            (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
         } else {
-            ((res - average.clone()) / average.clone()).abs()
+            (((res - average.clone()) / average.clone()).abs(), false)
         }
     });
 
     let mut unstable_reason = None;
     let mut unstable_sample = None;
-    for (index, error) in errors.enumerate() {
-        if !is_final_level && error == F::<T>::from_f64(0.0) {
+    for (index, (error, result_is_exact_zero)) in errors.enumerate() {
+        if !is_final_level
+            && error == F::<T>::from_f64(0.0)
+            && result_is_exact_zero
+            && settings.stability.escalate_if_exact_zero
+        {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
             break;

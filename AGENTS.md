@@ -34,6 +34,8 @@
   just fmt
   just clippy
   ```
+- If running into a linking issue complaining about missing `__emul...` symbol, then it may be a macos specific issue, that can be fixed by 
+  building with the following environment variable change `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` (see impact of this in file `build.rs`.
 
 ## Coding Style & Naming Conventions
 - Rust: use `rustfmt` formatting and address `clippy` warnings before merging.
