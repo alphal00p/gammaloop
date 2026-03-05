@@ -129,15 +129,6 @@ impl Hsurface {
     }
 }
 
-#[test]
-fn quick_test() {
-    let expr = parse!(
-        " 1/16*𝜋^-2*t⃰^3*h_lu_cut*SCALAR_COUPLING^4*(1/4*(OSE(1)+OSE(3))^-1*θ(σ(0))*θ(σ(2))*θ(σ(3))*θ(σ(4))*θ(-σ(1))*OSE(1)^-1*OSE(2)^-1+1/4*(OSE(1)+OSE(3))^-1*(OSE(2)+OSE(3))^-1*θ(σ(0))*θ(σ(3))*θ(σ(4))*θ(-σ(1))*θ(-σ(2))*OSE(1)^-1*OSE(2)^-1)*θ(σ(0))*θ(σ(3))*θ(σ(4))*OSE(3)^-1*OSE(4)^-1"
-    ).expand();
-
-    println!("{}", expr);
-}
-
 impl From<HsurfaceID> for Atom {
     fn from(value: HsurfaceID) -> Self {
         parse!(&format!("H({})", Into::<usize>::into(value)))
