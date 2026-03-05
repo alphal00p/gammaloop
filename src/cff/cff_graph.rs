@@ -272,12 +272,17 @@ impl CFFGenerationGraph {
         let left_vertex = self.get_vertex(left);
         let right_vertex = self.get_vertex(right);
 
-        left_vertex.outgoing_edges.iter().any(|outgoing_edge| {
-            right_vertex
-                .incoming_edges
-                .iter()
-                .any(|right_incoming| right_incoming.edge_id == outgoing_edge.edge_id)
-        })
+        left_vertex
+            .outgoing_edges
+            .iter()
+            .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+            .any(|outgoing_edge| {
+                right_vertex
+                    .incoming_edges
+                    .iter()
+                    .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+                    .any(|right_incoming| right_incoming.edge_id == outgoing_edge.edge_id)
+            })
     }
 
     fn are_adjacent(&self, vertex_1: &VertexSet, vertex_2: &VertexSet) -> bool {
@@ -368,7 +373,11 @@ impl CFFGenerationGraph {
     }
 
     fn get_directed_neighbours(&self, vertex: &VertexSet) -> Vec<&CFFVertex> {
-        let outgoing_of_vertex = self.get_vertex(vertex).outgoing_edges.iter();
+        let outgoing_of_vertex = self
+            .get_vertex(vertex)
+            .outgoing_edges
+            .iter()
+            .filter(|edge| edge.edge_type == CFFEdgeType::Virtual);
 
         outgoing_of_vertex
             .filter_map(|edge| {
