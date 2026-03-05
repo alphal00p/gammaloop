@@ -498,7 +498,7 @@ impl<const N: u32> SymFloatLike for VarFloat<N> {
     }
 
     fn get_epsilon(&self) -> f64 {
-        2.0f64.powi(-(N as i32))
+        2.0f64.powi(1 - (N as i32))
     }
 
     fn fixed_precision(&self) -> bool {
@@ -670,6 +670,10 @@ impl FloatLike for f128 {
             Externals::Constant { f_128_cache, .. } => f_128_cache.as_ref(),
         }
     }
+
+    fn epsilon(&self) -> Self {
+        self.machine_epsilon()
+    }
 }
 
 impl FloatLike for ArbPrec {
@@ -731,9 +735,17 @@ impl FloatLike for ArbPrec {
     ) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>> {
         None
     }
+
+    fn epsilon(&self) -> Self {
+        self.machine_epsilon()
+    }
 }
 
 impl<const N: u32> VarFloat<N> {
+    fn machine_epsilon(&self) -> Self {
+        self.from_i64(2).pow((N - 1) as u64).inv()
+    }
+
     fn one() -> Self {
         VarFloat {
             float: rug::Float::with_val(N, 1.0),
@@ -915,9 +927,7 @@ pub trait FloatLike:
         }
     }
 
-    fn epsilon(&self) -> Self {
-        Self::from_f64(f64::EPSILON)
-    }
+    fn epsilon(&self) -> Self;
 
     fn less_than_epsilon(&self) -> bool {
         self < &self.epsilon()
@@ -1729,6 +1739,10 @@ impl FloatLike for f64 {
         match externals {
             Externals::Constant { f_64_cache, .. } => f_64_cache.as_ref(),
         }
+    }
+
+    fn epsilon(&self) -> Self {
+        f64::EPSILON
     }
 }
 impl From<F<f64>> for f64 {

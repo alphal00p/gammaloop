@@ -166,8 +166,6 @@ pub(crate) fn generate_supergraph_cff(
 
     let representative_cff_graph = orientations.first().ok_or(eyre!("no orientations"))?;
 
-    println!("representative cff graph: {:?}", representative_cff_graph);
-
     let incoming_nodes_pairs = graph
         .iter_edges_of(&graph.initial_state_cut.right)
         .map(|(pair, edge_id, _)| match pair {
@@ -267,7 +265,6 @@ pub(crate) fn generate_supergraph_cff(
                 result.surfaces.esurface_cache.push(esurface);
             }
         }
-        println!("esurfaces: {:#?}", result.surfaces.esurface_cache);
         Ok(result)
     }
 }

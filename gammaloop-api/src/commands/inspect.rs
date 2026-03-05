@@ -27,8 +27,8 @@ pub struct Inspect {
     pub point: Vec<f64>,
 
     /// Evaluate in f128 precision
-    #[arg(short = 'f', long = "use_f128")]
-    pub use_f128: bool,
+    #[arg(short = 'f', long = "use_arb_prec")]
+    pub use_arb_prec: bool,
 
     /// Force the radius in the parameterisation
     #[arg(long)]
@@ -65,7 +65,7 @@ impl Inspect {
             &self.discrete_dim,
             self.force_radius,
             self.momentum_space,
-            self.use_f128,
+            self.use_arb_prec,
         )?;
         let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
             info!("Jacobian for this point: {:+.16e}", jac);
@@ -90,7 +90,7 @@ impl Inspect {
 pub struct BatchedInspect<'a> {
     pub process_id: Option<usize>,
     pub integrand_name: Option<String>,
-    pub use_f128: bool,
+    pub use_arb_prec: bool,
     pub momentum_space: bool,
     pub points: ArrayBase<ViewRepr<&'a f64>, ndarray::Dim<[usize; 2]>>,
     pub discrete_dims: ArrayBase<ViewRepr<&'a usize>, ndarray::Dim<[usize; 2]>>,
@@ -135,7 +135,7 @@ impl<'a> BatchedInspect<'a> {
                 &discrete_dim,
                 false,
                 self.momentum_space,
-                self.use_f128,
+                self.use_arb_prec,
             )?;
             let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
                 jac_res.push(jac);

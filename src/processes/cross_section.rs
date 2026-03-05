@@ -910,7 +910,7 @@ impl CrossSectionGraph {
     pub(crate) fn update_surface_cache(&mut self) {
         let esurface_cache = &mut self
             .derived_data
-            .cff_expression
+            .global_cff_expression
             .as_mut()
             .unwrap()
             .surfaces
@@ -1239,7 +1239,16 @@ impl CrossSectionGraph {
                             &reversed_dangling,
                         )
                         .into_iter()
-                        .map(|cff_graph| cff_graph.global_orientation)
+                        .filter_map(|cff_graph| {
+                            if settings
+                                .orientation_pattern
+                                .alt_filter(&cff_graph.global_orientation)
+                            {
+                                Some(cff_graph.global_orientation)
+                            } else {
+                                None
+                            }
+                        })
                         .collect::<TiVec<SubgraphOrientationID, _>>();
 
                         let wood = self.graph.wood(&sandwich_subgraph);

@@ -789,10 +789,10 @@ impl HasIntegrand for AmplitudeIntegrand {
         model: &Model,
         wgt: F<f64>,
         iter: usize,
-        use_f128: bool,
+        use_arb_prec: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<EvaluationResult> {
-        evaluate_sample(self, model, sample, wgt, iter, use_f128, max_eval)
+        evaluate_sample(self, model, sample, wgt, iter, use_arb_prec, max_eval)
     }
 
     fn get_n_dim(&self) -> usize {

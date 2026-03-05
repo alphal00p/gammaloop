@@ -642,9 +642,16 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &guess,
                 function,
                 &F::from_f64(1.0),
-                20,
+                2000,
                 &F::from_f64(settings.kinematics.e_cm),
             );
+
+            debug!(
+                "tolerance for newton solver: {}",
+                F::from_f64(settings.kinematics.e_cm) * guess.epsilon()
+            );
+
+            debug!("solution: {:?}", solution);
 
             for (subset_id, subset) in cross_free_subsets.iter().enumerate() {
                 debug!("\n--- Evaluating subset {} ---", subset_id);
@@ -774,7 +781,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let mut result = complex_dual_shape
                     .clone()
-                    .map(|dual| DualOrNot::Dual(dual))
+                    .map(DualOrNot::Dual)
                     .unwrap_or(DualOrNot::NonDual(Complex::new_re(momentum_sample.zero())));
 
                 let multiplicative_offset = subset.len();
@@ -812,8 +819,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                                     println!("loop momenta \n: {}", momentum_sample.loop_moms());
 
                                     panic!("result corrupted")
-                                })
-                                .as_ref(),
+                                }),
                         );
                     } else {
                         self.param_builder
@@ -915,8 +921,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                                 .value)
                 }
                 2 => {
-                    let mom_1 = &momentum_sample.external_moms()[ExternalIndex::from(0)];
-                    let mom_2 = &momentum_sample.external_moms()[ExternalIndex::from(1)];
+                    let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
+                    let mom_2 = &(momentum_sample.external_moms()[ExternalIndex::from(1)]);
                     let mass_factor = self
                         .graph
                         .initial_state_cut

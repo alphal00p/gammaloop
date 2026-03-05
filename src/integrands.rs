@@ -72,7 +72,7 @@ pub trait HasIntegrand {
         discrete_dimensions: &[usize],
         mut force_radius: bool,
         is_momentum_space: bool,
-        use_f128: bool,
+        use_arb_prec: bool,
     ) -> Result<(Option<f64>, EvaluationResult)> {
         if self.get_n_dim() as isize == pt.len() as isize - 1 {
             force_radius = true;
@@ -121,7 +121,7 @@ pub trait HasIntegrand {
         };
 
         let eval_result =
-            self.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero())?;
+            self.evaluate_sample(&sample, model, F(0.), 1, use_arb_prec, Complex::new_zero())?;
         info!(
             target: "gammalooprs::integrands::inspect",
             "\nInput point in unit hypercube xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
@@ -155,7 +155,7 @@ pub trait HasIntegrand {
         model: &Model,
         wgt: F<f64>,
         iter: usize,
-        use_f128: bool,
+        use_arb_prec: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<EvaluationResult>;
 
@@ -214,24 +214,24 @@ impl HasIntegrand for Integrand {
         model: &Model,
         wgt: F<f64>,
         iter: usize,
-        use_f128: bool,
+        use_arb_prec: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<EvaluationResult> {
         match self {
             Integrand::UnitSurface(integrand) => {
-                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
             }
             Integrand::UnitVolume(integrand) => {
-                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
             }
             Integrand::HFunctionTest(integrand) => {
-                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
             }
             // Integrand::GammaLoopIntegrand(integrand) => {
             //     integrand.evaluate_sample(sample,model, wgt, iter, use_f128, max_eval)
             // }
             Integrand::GLIntegrand(integrand) => {
-                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
             }
         }
     }
@@ -365,7 +365,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         model: &Model,
         wgt: F<f64>,
         iter: usize,
-        use_f128: bool,
+        use_arb_prec: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<EvaluationResult> {
         let start_evaluate_sample = std::time::Instant::now();
@@ -533,7 +533,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
         model: &Model,
         wgt: F<f64>,
         iter: usize,
-        use_f128: bool,
+        use_arb_prec: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<EvaluationResult> {
         let start_evaluate_sample = std::time::Instant::now();

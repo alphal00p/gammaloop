@@ -74,7 +74,7 @@ impl<'a, OID: IndexLike> SingleOrAllOrientations<'a, OID> {
         let SingleOrAllOrientations::All { filter, .. } = self else {
             return false;
         };
-        filter.is_full()
+        (**filter).is_full()
     }
     pub fn iter(&self) -> SingleOrAllOrientationsIterator<'_, OID> {
         match self {

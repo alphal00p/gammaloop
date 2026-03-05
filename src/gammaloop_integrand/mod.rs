@@ -158,19 +158,19 @@ pub enum IntegrandType {
 
 fn create_stability_iterator(
     settings: &StabilitySettings,
-    use_f128: bool,
+    use_arb_prec: bool,
 ) -> Vec<StabilityLevelSetting> {
-    if use_f128 {
+    if use_arb_prec {
         // overwrite the stability settings if use_f128 is enabled, but attempt to use user defined settings for f128
-        if let Some(f128_settings_position) =
-            settings.levels.iter().position(|stability_level_setting| {
-                stability_level_setting.precision == Precision::Quad
-            })
+        if let Some(f128_settings_position) = settings
+            .levels
+            .iter()
+            .position(|stability_level_setting| stability_level_setting.precision == Precision::Arb)
         {
             vec![settings.levels[f128_settings_position]]
         } else {
             vec![StabilityLevelSetting {
-                precision: Precision::Quad,
+                precision: Precision::Arb,
                 required_precision_for_re: 1e-5,
                 required_precision_for_im: 1e-5,
                 escalate_for_large_weight_threshold: -1.,
@@ -1215,12 +1215,12 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     sample: &Sample<F<f64>>,
     wgt: F<f64>,
     _iter: usize,
-    use_f128: bool,
+    use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
 ) -> Result<EvaluationResult> {
     let start_eval = std::time::Instant::now();
     let mut stability_iterator =
-        create_stability_iterator(&integrand.get_settings().stability, use_f128);
+        create_stability_iterator(&integrand.get_settings().stability, use_arb_prec);
     let escalation_factor = integrand
         .get_settings()
         .stability
