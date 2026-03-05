@@ -122,6 +122,8 @@
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
         };
 
+      ciPartitionCount = 6;
+
       craneLibLLvmTools =
         craneLib.overrideToolchain
         (fenix.packages.${system}.stable.withComponents [
@@ -135,40 +137,53 @@
       gammaloop = craneLib.buildPackage (commonArgs
         // {
           inherit cargoArtifacts;
+          doCheck = false;
         });
+
+      partitionedNextestChecks = lib.listToAttrs (map (partition: {
+          name = "gammaloop-nextest-partition-${toString partition}";
+          value = craneLib.cargoNextest (ciArgs
+            // {
+              inherit cargoArtifacts;
+              cargoNextestExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail";
+            });
+        })
+        (lib.range 1 ciPartitionCount));
     in {
-      checks = {
-        inherit gammaloop;
+      checks =
+        {
+          inherit gammaloop;
 
-        gammaloop-clippy = craneLib.cargoClippy (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-          });
+          gammaloop-clippy = craneLib.cargoClippy (ciArgs
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+            });
 
-        gammaloop-doc = craneLib.cargoDoc (ciArgs
-          // {
-            inherit cargoArtifacts;
-          });
+          gammaloop-doc = craneLib.cargoDoc (ciArgs
+            // {
+              inherit cargoArtifacts;
+            });
 
-        gammaloop-fmt = craneLib.cargoFmt {
-          inherit src;
-        };
+          gammaloop-fmt = craneLib.cargoFmt {
+            inherit src;
+          };
 
-        gammaloop-audit = craneLib.cargoAudit {
-          inherit src advisory-db;
-        };
+          gammaloop-audit = craneLib.cargoAudit {
+            inherit src advisory-db;
+          };
 
-        gammaloop-deny = craneLib.cargoDeny {
-          inherit src;
-        };
+          gammaloop-deny = craneLib.cargoDeny {
+            inherit src;
+          };
 
-        gammaloop-nextest = craneLib.cargoNextest (ciArgs
-          // {
-            inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail";
-          });
-      };
+          gammaloop-nextest = craneLib.cargoNextest (ciArgs
+            // {
+              inherit cargoArtifacts;
+              cargoNextestExtraArgs = "--profile ci --no-fail-fast --final-status-level fail";
+            });
+        }
+        // partitionedNextestChecks;
 
       packages =
         {
@@ -184,6 +199,10 @@
 
       apps.default = flake-utils.lib.mkApp {
         drv = gammaloop;
+      };
+
+      ci = {
+        partitionCount = toString ciPartitionCount;
       };
 
       devShells.default = craneLib.devShell {

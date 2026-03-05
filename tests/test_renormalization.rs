@@ -7,7 +7,7 @@ use gammalooprs::{
     utils::{W_, test_utils::load_generic_model},
     uv::{
         UVgenerationSettings,
-        settings::{MATADSettings, VakintSettings},
+        settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
     },
 };
 use idenso::color::{CS, ColorSimplifier};
@@ -105,6 +105,9 @@ fn finite_part_ghost_3loop() {
                 susbstitute_masters: true,
                 substitute_hpls: false,
                 direct_numerical_substition: false,
+            },
+            alphaloop: AlphaLoopSettings {
+                susbstitute_masters: false,
             },
             ..Default::default()
         },

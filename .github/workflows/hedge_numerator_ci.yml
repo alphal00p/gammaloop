@@ -9,10 +9,32 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Configure partition count here - change this to scale parallelism
-  PARTITION_COUNT: 6
 
 jobs:
+  partition-config:
+    runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.partitions.outputs.count }}
+      list: ${{ steps.partitions.outputs.list }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      - name: Set partition configuration
+        id: partitions
+        run: |
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          count="$(nix eval --raw .#ci.${system}.partitionCount)"
+          list=$(seq 1 "$count" | paste -sd, -)
+          echo "count=$count" >> $GITHUB_OUTPUT
+          echo "list=[$list]" >> $GITHUB_OUTPUT
+
   build-deps:
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -61,7 +83,7 @@ jobs:
           echo "Starting dependency build at $(date)"
           time nix build .#cargoArtifacts --print-build-logs
           echo "Dependencies built at $(date)"
-          time nix build --print-build-logs
+          time nix build .#packages.default --print-build-logs
           echo "Main package built at $(date)"
 
   clippy:
@@ -151,14 +173,15 @@ jobs:
           nix build .#checks.gammaloop-fmt --print-build-logs
 
   test:
-    if: always()
-    needs: build-deps
+    if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success'
+    needs: [build-deps, partition-config]
     environment: Cachix
     strategy:
+      fail-fast: false
       max-parallel: 3
       matrix:
         # Use multiple runners for test partitioning
-        partition: [1, 2, 3, 4, 5, 6]
+        partition: ${{ fromJSON(needs.partition-config.outputs.list) }}
         os: [ubuntu-latest]
         include:
           # Also test on macOS for one partition to ensure cross-platform compatibility
@@ -225,27 +248,17 @@ jobs:
           echo "Doctests completed at $(date)"
         timeout-minutes: 60
 
-      - name: Generate test report
-        if: always()
-        run: |
-          nix develop --command cargo nextest run \
-            --partition hash:${{ matrix.partition }}/${{ env.PARTITION_COUNT }} \
-            --reporter junit \
-            --output-file nextest-report-${{ matrix.partition }}.xml \
-            --test-threads 1 || true
-
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.os }}-${{ matrix.partition }}
-          path: |
-            nextest-report-*.xml
-            target/nextest/default/junit.xml
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: ignore
           retention-days: 7
 
   security-audit:
-    if: always()
+    if: needs.build-deps.result == 'success'
     needs: build-deps
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -289,7 +302,7 @@ jobs:
           nix build .#checks.gammaloop-deny --print-build-logs
 
   docs:
-    if: always()
+    if: needs.build-deps.result == 'success'
     needs: build-deps
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -329,7 +342,7 @@ jobs:
           nix build .#checks.gammaloop-doc --print-build-logs
 
   coverage:
-    if: always()
+    if: needs.build-deps.result == 'success'
     needs: build-deps
     runs-on: ubuntu-latest
     timeout-minutes: 150
