@@ -577,7 +577,7 @@ impl Process {
                 let p = path.as_ref().join("amplitudes");
                 let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
                 fs::create_dir_all(&path)?;
-                for (amp_name, amp) in a {
+                for (_amp_name, amp) in a {
                     // Create a folder for each amplitude
                     let amp_path = path.join(&amp.name);
                     fs::create_dir_all(&amp_path).with_context(|| {

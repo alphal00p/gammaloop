@@ -168,7 +168,7 @@ impl StatisticsCounter {
                     Precision::Double => accumulator.num_double_precision_evals += 1,
                     Precision::Quad => accumulator.num_quadruple_precision_evals += 1,
                     Precision::Arb => accumulator.num_arb_precision_evals += 1,
-                    _ => (),
+                    // _ => (),
                 }
 
                 if data_entry.evaluation_metadata.is_nan {

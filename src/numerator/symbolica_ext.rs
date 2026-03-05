@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use idenso::{
-    color::{CS, ColorSimplifier, SelectiveExpand},
+    color::{CS, ColorSimplifier},
     representations::{ColorAdjoint, ColorFundamental},
 };
 use spenso::{

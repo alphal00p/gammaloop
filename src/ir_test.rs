@@ -30,7 +30,7 @@ use crate::{
         RuntimeSettings, SamplingSettings,
         runtime::{
             DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, ParameterizationMapping,
-            ParameterizationMode, ParameterizationSettings, Precision,
+            ParameterizationMode, ParameterizationSettings,
         },
     },
     utils::{F, FloatLike, box_muller},

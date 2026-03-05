@@ -28,7 +28,7 @@ use symbolica::{
     id::Replacement,
     parse_lit, symbol,
 };
-use tabled::{Table, derive::display::debug, settings::Style};
+use tabled::{Table, settings::Style};
 use tracing::debug;
 use tracing::warn;
 
@@ -36,7 +36,7 @@ use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
     gammaloop_integrand::{
-        amplitude::export::{ExportAtomTo, atom_to_bytes_for_mode},
+        amplitude::export::ExportAtomTo,
         evaluators::{InputParams, SliceMut},
     },
     graph::{Graph, LoopMomentumBasis},
@@ -44,7 +44,6 @@ use crate::{
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
-    processes::StandaloneExportSettings,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
@@ -1240,7 +1239,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (value_index, values) in self.values.iter_mut().enumerate() {
             let multiplicative_offset = value_index + 1;
             let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
-            let value_index = multiplicative_offset - 1;
+            let _value_index = multiplicative_offset - 1;
             for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
                 if let Some(value) = cpl.value {
                     values[pos] = value.map(F::from_f64);
@@ -1302,7 +1301,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         let mut o_start = self.pairs.orientations.value_range.start * multiplicative_offset;
         let value_index = multiplicative_offset - 1;
 
-        for (eid, i) in orientation.orientation() {
+        for (_eid, i) in orientation.orientation() {
             // debug!("Setting orientation for edge {}: {:?}", eid, i);
             match i {
                 Orientation::Default => {

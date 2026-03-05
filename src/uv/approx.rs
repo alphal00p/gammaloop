@@ -3,8 +3,7 @@
 use crate::{
     cff::{
         expression::{GraphOrientation, OrientationID},
-        generation::{ConstraintData, PostProcessingSetup, ShiftRewrite, generate_uv_cff},
-        tree,
+        generation::{PostProcessingSetup, ShiftRewrite, generate_uv_cff},
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
@@ -18,10 +17,7 @@ use crate::{
 use ahash::AHashSet;
 use color_eyre::Result;
 use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
-use std::{
-    collections::{BTreeSet, HashSet},
-    hash::Hash,
-};
+use std::{collections::HashSet, hash::Hash};
 use tracing::debug;
 
 use spenso::{
@@ -29,7 +25,6 @@ use spenso::{
         library::{TensorLibraryData, symbolic::ETS},
         parsing::SPENSO_TAG,
     },
-    shadowing::symbolica_utils::SpensoPrintSettings,
     structure::{
         representation::{Minkowski, RepName},
         slot::{DummyAind, IsAbstractSlot, Slot},
@@ -40,7 +35,6 @@ use symbolica::{
     function,
     id::{MatchSettings, Replacement},
     parse, parse_lit,
-    printer::PrintOptions,
     solve::SolveError,
     symbol,
 };
@@ -352,7 +346,7 @@ pub(crate) fn to_vakint_integrand<
     )
     .unwrap();
 
-    for (i, t) in a.0.iter_mut().enumerate() {
+    for (_i, t) in a.0.iter_mut().enumerate() {
         debug!(integral=%t.integral,"Starting integral");
 
         let mut graph = HedgeGraphBuilder::new();
@@ -451,7 +445,7 @@ pub(crate) fn to_vakint_integrand<
                     graph.node_id(sink).0
                 ),
                 &e.data.mom,
-                &e.data.mass.npow(2).replace(GS.m_uv).with(GS.m_uv_int),
+                &e.data.mass.pow(2).replace(GS.m_uv).with(GS.m_uv_int),
                 e.data.power
             )
         }
@@ -557,7 +551,7 @@ pub(crate) fn to_vakint_integrand<
         //     term
         // );
 
-        t.numerator *= parse!(&settings.additional_normalization).npow(nloops);
+        t.numerator *= parse!(&settings.additional_normalization).pow(nloops);
 
         t.numerator = t.numerator.simplify_metrics().to_dots();
         t.integral = t
@@ -938,7 +932,7 @@ impl Approximation {
         if soft_ct {
             let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
             let mut b = Atom::Zero;
-            let dod_pow = Atom::var(GS.rescale).npow(self.dod);
+            let dod_pow = Atom::var(GS.rescale).pow(self.dod);
             for (pow, mut i) in coeffs {
                 if pow == dod_pow {
                     // set the masses in the t=dod term to 0
@@ -1079,11 +1073,11 @@ impl Approximation {
             // println!("Coeff: {}", p.printer(LOGPRINTOPTS));
             if pole_part {
                 if power < 0 {
-                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
+                    pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
                 }
             } else {
                 if power >= 0 {
-                    pole_stripped += p * Atom::var(GS.dim_epsilon).npow(power);
+                    pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
                 }
             }
         }
@@ -1109,7 +1103,7 @@ impl Approximation {
                 res *= Atom::num((3, 16))
                     / (GS.emr_vec_index(*l, mink.to_atom()) * GS.emr_vec_index(*l, mink.to_atom())
                         + GS.m_uv_int * GS.m_uv_int)
-                        .npow((5, 2));
+                        .pow((5, 2));
             }
         }
 
@@ -1406,23 +1400,23 @@ impl Approximation {
         //     .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
 
         atomarg = (atomarg
-            * Atom::var(GS.rescale).npow(3 * uv_graph.n_loops(&self.subgraph) as i64))
+            * Atom::var(GS.rescale).pow(3 * uv_graph.n_loops(&self.subgraph) as i64))
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
-        // .replace(Atom::var(GS.rescale).npow(2).sqrt()) //.npow((1, 2)))
+        // .replace(Atom::var(GS.rescale).pow(2).sqrt()) //.pow((1, 2)))
         // .with(GS.rescale)
-        // .replace((Atom::var(GS.rescale).npow(-2) * W_.a___).npow((1, 2))) //.npow((1, 2)))
+        // .replace((Atom::var(GS.rescale).pow(-2) * W_.a___).pow((1, 2))) //.pow((1, 2)))
         // .repeat()
         // .with((Atom::var(W_.a___)).sqrt() / GS.rescale)
-        // .replace((Atom::var(GS.rescale).npow(2) * W_.a___).npow((-1, 2))) //.npow((1, 2)))
+        // .replace((Atom::var(GS.rescale).pow(2) * W_.a___).pow((-1, 2))) //.pow((1, 2)))
         // .repeat()
-        // .with((Atom::var(W_.a___)).npow((-1, 2)) / GS.rescale)
-        // .replace((Atom::var(GS.rescale).npow(-2) * W_.a___).npow((-1, 2))) //.npow((1, 2)))
+        // .with((Atom::var(W_.a___)).pow((-1, 2)) / GS.rescale)
+        // .replace((Atom::var(GS.rescale).pow(-2) * W_.a___).pow((-1, 2))) //.pow((1, 2)))
         // .repeat()
-        // .with((Atom::var(W_.a___)).npow((-1, 2)) * GS.rescale)
-        // .replace((Atom::var(GS.rescale).npow(2) * W_.a___).npow((1, 2))) //.npow((1, 2)))
+        // .with((Atom::var(W_.a___)).pow((-1, 2)) * GS.rescale)
+        // .replace((Atom::var(GS.rescale).pow(2) * W_.a___).pow((1, 2))) //.pow((1, 2)))
         // .repeat()
-        // .with((Atom::var(W_.a___)).npow((1, 2)) * GS.rescale);
+        // .with((Atom::var(W_.a___)).pow((1, 2)) * GS.rescale);
 
         // println!("atomarg:{:>}", atomarg.expand());
 
@@ -1448,7 +1442,7 @@ impl Approximation {
                 // .with(Atom::Zero)
                 // .replace(parse_lit!(UFO::mass_scalar_1))
                 // .with(Atom::Zero)
-                .replace((Atom::var(GS.rescale).npow(-2) * W_.a_).npow((1, 2))) //.npow((1, 2)))
+                .replace((Atom::var(GS.rescale).pow(-2) * W_.a_).pow((1, 2))) //.pow((1, 2)))
                 .repeat()
                 .with((Atom::var(W_.a_)).sqrt() / GS.rescale)
                 .collect_factors()
@@ -1472,7 +1466,7 @@ impl Approximation {
         if soft_ct {
             let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
             let mut b = Atom::Zero;
-            let dod_pow = Atom::var(GS.rescale).npow(self.dod);
+            let dod_pow = Atom::var(GS.rescale).pow(self.dod);
             for (pow, mut i) in coeffs {
                 if pow == dod_pow {
                     // FIXME: how to do this _only_ for the subgraph masses? the numerator is still

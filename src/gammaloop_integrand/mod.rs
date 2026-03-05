@@ -210,7 +210,7 @@ fn stability_check<T: FloatLike>(
         .fold(results[0].clone(), |acc, x| acc + x)
         / F::<T>::from_f64(results.len() as f64);
 
-    let mut errors = results.iter().map(|res| {
+    let errors = results.iter().map(|res| {
         let error_re = if IsZero::is_zero(&res.re) && IsZero::is_zero(&average.re) {
             F::<T>::from_f64(0.0)
         } else {
@@ -309,7 +309,7 @@ fn stability_check_on_norm<T: FloatLike>(
         acc + x.norm_squared().sqrt()
     }) / F::<T>::from_f64(results.len() as f64);
 
-    let mut errors = results.iter().map(|res| {
+    let errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
 
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
@@ -425,7 +425,7 @@ impl LmbMultiChannelingSetup {
 
         BareMomentumSample {
             loop_moms: new_loop_moms,
-            dual_loop_moms: momentum_sample.dual_loop_moms.clone().map(|dlm| todo!()),
+            dual_loop_moms: momentum_sample.dual_loop_moms.clone().map(|_dlm| todo!()),
             loop_mom_cache_id,
             loop_mom_base_cache_id: momentum_sample.loop_mom_base_cache_id,
             external_mom_cache_id: momentum_sample.external_mom_cache_id,

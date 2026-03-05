@@ -1,7 +1,7 @@
 use crate::{
     cff::{
         expression::{GraphOrientation, OrientationData, OrientationID},
-        generation::{ConstraintData, PostProcessingSetup, ShiftRewrite},
+        generation::{PostProcessingSetup, ShiftRewrite},
     },
     graph::{Edge, Graph, LMBext, Vertex},
     momentum::SignOrZero,
@@ -17,7 +17,6 @@ use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use spenso::{
     network::{Network, store::TensorScalarStoreMapping},
-    shadowing::symbolica_utils::AtomCoreExt as _,
     structure::abstract_index::AIND_SYMBOLS,
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
@@ -36,7 +35,7 @@ use std::fmt::Write;
 use tracing::{debug, instrument};
 
 use typed_index_collections::TiVec;
-use vakint::{Vakint, vakint_symbol};
+use vakint::Vakint;
 
 use super::{
     UVgenerationSettings, UltravioletGraph,
@@ -252,7 +251,7 @@ impl Forest {
 
         // for (power, p) in pole_stripped.terms() {
         //     if power < 0 {
-        //         sum += p * Atom::var(GS.dim_epsilon).npow(power);
+        //         sum += p * Atom::var(GS.dim_epsilon).pow(power);
         //     }
         // }
         Ok(sum.replace_multiple(&replacements))

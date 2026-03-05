@@ -589,26 +589,26 @@ fn nested_bubble_soft_ct() {
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).npow(2);
+        let m2 = parse!(higgs.mass.name).pow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
             num: Atom::num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).pow(2).to_dots() - m2,
         }
     }
 
     fn scalar_edge_with_p(eid: i32, ind: impl Into<AbstractIndex>) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).npow(2);
+        let m2 = parse!(higgs.mass.name).pow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -1,
             particle: higgs,
             num: spenso_lor_atom(eid, ind, GS.dim),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).pow(2).to_dots() - m2,
         }
     }
 
@@ -661,7 +661,7 @@ fn nested_bubble_soft_ct() {
     println!("{:>}", result);
 
     let t = symbol!("t");
-    let series = Atom::var(t).npow(4)
+    let series = Atom::var(t).pow(4)
         * result
             .replace(parse!("K(3)"))
             .with(parse!("t*K(3)"))
@@ -673,7 +673,7 @@ fn nested_bubble_soft_ct() {
 
     let s = series
         .replace(t)
-        .with(Atom::var(t).npow(-1))
+        .with(Atom::var(t).pow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {:>}", s);
@@ -793,26 +793,26 @@ fn nested_bubble_scalar_quad() {
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).npow(2);
+        let m2 = parse!(higgs.mass.name).pow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
             num: Atom::num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).pow(2).to_dots() - m2,
         }
     }
 
     fn scalar_edge_with_p(eid: i32, ind: impl Into<AbstractIndex>) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).npow(2);
+        let m2 = parse!(higgs.mass.name).pow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -1,
             particle: higgs,
             num: spenso_lor_atom(eid, ind, GS.dim),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).pow(2).to_dots() - m2,
         }
     }
 
@@ -865,7 +865,7 @@ fn nested_bubble_scalar_quad() {
     println!("{:>}", result);
 
     let t = symbol!("t");
-    let series = Atom::var(t).npow(4)
+    let series = Atom::var(t).pow(4)
         * result
             .replace(parse!("K(3)"))
             .with(parse!("t*K(3)"))
@@ -877,7 +877,7 @@ fn nested_bubble_scalar_quad() {
 
     let s = series
         .replace(t)
-        .with(Atom::var(t).npow(-1))
+        .with(Atom::var(t).pow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {:>}", s);
@@ -983,13 +983,13 @@ fn nested_bubble_scalar() {
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).npow(2);
+        let m2 = parse!(higgs.mass.name).pow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
             num: Atom::num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).pow(2).to_dots() - m2,
         }
     }
 
@@ -1049,7 +1049,7 @@ fn nested_bubble_scalar() {
     println!("RESULT {:>}", result);
 
     let t = symbol!("t");
-    let series = Atom::var(t).npow(4)
+    let series = Atom::var(t).pow(4)
         * result
             .replace(parse!("K(3)"))
             .with(parse!("t*K(3)"))
@@ -1059,7 +1059,7 @@ fn nested_bubble_scalar() {
 
     let s = series
         .replace(t)
-        .with(Atom::var(t).npow(-1))
+        .with(Atom::var(t).pow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {}", s);
@@ -1139,13 +1139,13 @@ fn disconnect_forest_scalar() {
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).npow(2);
+        let m2 = parse!(higgs.mass.name).pow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
             num: Atom::num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).pow(2).to_dots() - m2,
         }
     }
 
@@ -1790,7 +1790,7 @@ fn quick_test() {
         .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
         .derivative(GS.rescale)
         .replace(function!(Symbol::DERIVATIVE, W_.x___, W_.x_))
-        .with(Atom::var(W_.x_).npow(-1) / 2)
+        .with(Atom::var(W_.x_).pow(-1) / 2)
         .replace(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
         .with(function!(GS.ose, edge_id, W_.x___));
 

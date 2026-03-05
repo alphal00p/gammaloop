@@ -27,7 +27,7 @@ use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::{EdgeIndex, SignOrZero};
 use linnet::half_edge::subgraph::subset::SubSet;
-use linnet::half_edge::subgraph::{Cycle, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use linnet::half_edge::tree::SimpleTraversalTree;
 use rand::Rng;
 use rayon::prelude::*;

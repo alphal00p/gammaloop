@@ -46,9 +46,8 @@ use symbolica::domains::float::Real;
 use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::{Fraction, Rational};
 
-type ExternalFunctionMap =
-    HashMap<String, Box<dyn Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> + Send + Sync>, RandomState>;
-use symbolica::evaluate::{FunctionMap, OptimizationSettings};
+type ExternalFunctionMap = HashMap<String, Box<dyn ExternalFunction<Complex<F<f64>>>>, RandomState>;
+use symbolica::evaluate::{ExternalFunction, FunctionMap, OptimizationSettings};
 use symbolica::id::Replacement;
 use tracing::info;
 

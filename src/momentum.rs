@@ -49,7 +49,6 @@ use symbolica::{
     poly::{Exponent, polynomial::MultivariatePolynomial},
 };
 
-use idenso::representations::Bispinor;
 use symbolica::{parse, symbol};
 
 use crate::{

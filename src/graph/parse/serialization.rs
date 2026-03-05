@@ -3,7 +3,7 @@ use linnet::{
     half_edge::{
         HedgeGraph,
         involution::{Flow, HedgePair},
-        subgraph::{Inclusion, SubSetLike},
+        subgraph::SubSetLike,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
 };

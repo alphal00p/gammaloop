@@ -49,7 +49,7 @@ use symbolica::{
     graph::Graph as SymbolicaGraph,
 };
 use tracing::instrument;
-use tracing::{debug, info};
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{

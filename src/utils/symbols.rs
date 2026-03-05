@@ -15,7 +15,7 @@ use spenso::{
     utils::{to_subscript, to_superscript},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionArgument, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::rational::Rational,
     function,
     id::Replacement,
@@ -453,7 +453,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     killing_func: symbol!(
         "killing_func",
         norm = |f, out| {
-            if let AtomView::Fun(f) = f {
+            if let AtomView::Fun(_f) = f {
                 **out = Atom::one()
             }
         }
@@ -468,7 +468,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
         "uvind",
         print = |a, opt| {
             match opt.custom_print_mode {
-                Some(("spenso", i)) => {
+                Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -497,7 +497,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
         "edge",
         print = |a, opt| {
             match opt.custom_print_mode {
-                Some(("spenso", i)) => {
+                Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -526,7 +526,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
         "vertex",
         print = |a, opt| {
             match opt.custom_print_mode {
-                Some(("spenso", i)) => {
+                Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -556,7 +556,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
         "dummy",
         print = |a, opt| {
             match opt.custom_print_mode {
-                Some(("spenso", i)) => {
+                Some(("spenso", _i)) => {
                     let AtomView::Fun(f) = a else {
                         return None;
                     };
@@ -680,7 +680,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     m_uv: symbol!(
         "mUV",
         print = |a, opt| {
-            let AtomView::Var(a) = a else {
+            let AtomView::Var(_a) = a else {
                 return None;
             };
             match opt.custom_print_mode {
@@ -699,7 +699,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     m_uv_int: symbol!(
         "mUVI",
         print = |a, opt| {
-            let AtomView::Var(a) = a else {
+            let AtomView::Var(_a) = a else {
                 return None;
             };
             match opt.custom_print_mode {
@@ -718,7 +718,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     mu_r_sq: symbol!(
         "μᵣ²",
         print = |a, opt| {
-            let AtomView::Var(a) = a else {
+            let AtomView::Var(_a) = a else {
                 return None;
             };
             match opt.custom_print_mode {
@@ -896,25 +896,25 @@ impl GammaloopSymbols {
 
         let a = a.replace(pat).with(rhs);
 
-        let pat = function!(self.emr_vec, W_.a_, mink).npow(2);
+        let pat = function!(self.emr_vec, W_.a_, mink).pow(2);
         let rhs = function!(
             self.emr_mom,
             W_.a_,
             Atom::from(ExpandedIndex::from_iter([1]))
         )
-        .npow(2)
+        .pow(2)
             + function!(
                 self.emr_mom,
                 W_.a_,
                 Atom::from(ExpandedIndex::from_iter([2]))
             )
-            .npow(2)
+            .pow(2)
             + function!(
                 self.emr_mom,
                 W_.a_,
                 Atom::from(ExpandedIndex::from_iter([3]))
             )
-            .npow(2);
+            .pow(2);
         // * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([1])))
         // + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([2])))
         //     * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([2])))
@@ -1003,7 +1003,7 @@ impl GammaloopSymbols {
             self.emr_vec_index(e, mink.as_view()) * self.emr_vec_index(e, mink.as_view())
         };
 
-        let ose = function!(self.ose, eidc, GS.emr_vec(e), m2, (m2 - q3q3)).npow((1, 2));
+        let ose = function!(self.ose, eidc, GS.emr_vec(e), m2, (m2 - q3q3)).pow((1, 2));
 
         if let Some(index) = index {
             ose * self.energy_delta(index)

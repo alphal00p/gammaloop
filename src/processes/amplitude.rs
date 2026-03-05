@@ -23,7 +23,7 @@ use spenso::{
     algebra::complex::Complex,
     network::{Sequential, SmallestDegree},
 };
-use tracing::{Span, info_span, instrument};
+use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
 
@@ -543,38 +543,18 @@ impl AmplitudeGraph {
         let vk_settings = settings.uv.vakint.true_settings();
         let vk = (crate::utils::vakint()?, &vk_settings);
 
-        let mut step_count = 3_u64;
-        if self.graph.is_group_master {
-            step_count += 2;
-        }
-        if settings.threshold_subtraction.enable_thresholds {
-            step_count += 1;
-        }
-
-        // let preprocess_steps_span = info_span!("Preprocess steps", indicatif.pb_show = true);
-        // preprocess_steps_span.pb_set_length(step_count);
-        // preprocess_steps_span.pb_set_message("Preprocessing graphs");
-        // preprocess_steps_span.pb_set_finish_message("preprocess done");
-
-        // let preprocess_steps_enter = preprocess_steps_span.enter();
-
         self.generate_cff()?;
-        // preprocess_steps_span.pb_inc(1);
 
         self.build_parametric_integrand(settings, vk)?;
-        // preprocess_steps_span.pb_inc(1);
 
         if self.graph.is_group_master {
             self.build_tropical_sampler(settings)?;
-            // preprocess_steps_span.pb_inc(1);
         }
 
         self.build_lmbs();
-        // preprocess_steps_span.pb_inc(1);
 
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
-            // preprocess_steps_span.pb_inc(1);
         }
 
         if settings.threshold_subtraction.enable_thresholds {
@@ -585,11 +565,7 @@ impl AmplitudeGraph {
                     locked_runtime_settings,
                     model,
                 )?;
-            // preprocess_steps_span.pb_inc(1);
         }
-
-        // drop(preprocess_steps_enter);
-        // drop(preprocess_steps_span);
 
         Ok(())
     }
@@ -657,7 +633,7 @@ impl AmplitudeGraph {
 
     fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
         // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
-        let factors_of_pi = (Atom::var(GS.pi) * 2).npow(3 * self.graph.get_loop_number() as i64);
+        let factors_of_pi = (Atom::var(GS.pi) * 2).pow(3 * self.graph.get_loop_number() as i64);
 
         // debug!("result: {}", result);
         cff_atom / factors_of_pi
@@ -676,7 +652,7 @@ impl AmplitudeGraph {
 
     pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(
         &self,
-        model: &Model,
+        _model: &Model,
         component: &S,
         evaluate_numerically: bool,
         vakint: &Vakint,
@@ -1096,7 +1072,7 @@ impl AmplitudeGraph {
             let loop_3 = self.graph.get_loop_number() as i64 * 3;
 
             let grad_eta = Atom::var(GS.deta_left_th);
-            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
             let i = Atom::i();
 
             let radius = Atom::var(GS.radius_left);
@@ -1108,7 +1084,7 @@ impl AmplitudeGraph {
             let delta_r_plus = &radius - &radius_star;
             let delta_r_minus = -&radius - &radius_star;
 
-            let jacobian_ratio = (&radius_star / &radius).npow(loop_3 - 1);
+            let jacobian_ratio = (&radius_star / &radius).pow(loop_3 - 1);
 
             let local_prefactor = &jacobian_ratio / &factors_of_pi / &grad_eta
                 * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);

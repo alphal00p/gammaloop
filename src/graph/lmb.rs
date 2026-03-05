@@ -10,10 +10,9 @@ use linnet::half_edge::{
         Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
         cycle::SignedCycle,
     },
-    tree::{SimpleTraversalTree, TTRoot},
+    tree::SimpleTraversalTree,
 };
 use serde::{Deserialize, Serialize};
-use spenso::algebra::complex::sub;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     function,

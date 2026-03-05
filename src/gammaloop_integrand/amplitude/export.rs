@@ -3,17 +3,14 @@ use std::{
     path::Path,
 };
 
-use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{Context, eyre};
 use linnet::half_edge::involution::Orientation;
 use rand::Rng;
-use serde::Serialize;
 use symbolica::{
     atom::{Atom, AtomCore},
-    evaluate::OptimizationSettings,
     printer::PrintOptions,
-    state::{HasStateMap, State, StateMap},
+    state::State,
 };
 
 use crate::{
@@ -22,76 +19,20 @@ use crate::{
         amplitude::{
             AmplitudeIntegrand,
             load::{
-                STANDALONE_EVALUATORS_VERSION, STANDALONE_MODE_RUST, StandaloneEvaluatorArchive,
+                STANDALONE_EVALUATORS_VERSION, StandaloneEvaluatorArchive,
                 StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
                 StandaloneGraphTermArchive,
             },
         },
-        evaluators::InputParams,
-        param_builder::FnMapEntry,
     },
     momentum::ThreeMomentum,
-    momentum_sample::{self, LoopMomenta, MomentumSample},
+    momentum_sample::{LoopMomenta, MomentumSample},
     processes::{StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings},
     utils::F,
 };
 
 const STANDALONE_DATA_FILE: &str = "standalone_evaluators";
 const STANDALONE_RUST_SCRIPT_FILE: &str = "standalone_evaluators_rust.rs";
-const STANDALONE_PYTHON_DIR: &str = "standalone_evaluators_python";
-const STANDALONE_PYTHON_SCRIPT_FILE: &str = "standalone.py";
-const STANDALONE_PYTHON_MANIFEST_FILE: &str = "manifest.json";
-const STANDALONE_MODE_PYTHON: u8 = 1;
-
-#[derive(Serialize)]
-struct PythonStandaloneManifest {
-    graphs: Vec<PythonStandaloneGraphManifest>,
-}
-
-#[derive(Serialize)]
-struct PythonStandaloneGraphManifest {
-    graph_name: String,
-    params: Vec<String>,
-    replacements: Vec<PythonReplacementManifest>,
-    original_integrand: PythonEvaluatorStackManifest,
-    threshold_counterterms: Vec<PythonCountertermManifest>,
-}
-
-#[derive(Serialize)]
-struct PythonCountertermManifest {
-    parametric: PythonEvaluatorManifest,
-    iterative: Option<PythonEvaluatorManifest>,
-}
-
-#[derive(Serialize)]
-struct PythonEvaluatorStackManifest {
-    single_parametric: PythonEvaluatorManifest,
-    iterative: Option<PythonEvaluatorManifest>,
-    summed_function_map: Option<PythonEvaluatorManifest>,
-    summed: Option<PythonEvaluatorManifest>,
-}
-
-#[derive(Serialize)]
-struct PythonEvaluatorManifest {
-    exprs: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct PythonReplacementManifest {
-    lhs: String,
-    rhs: String,
-}
-
-#[derive(Clone, Copy)]
-struct StandaloneStateMapContext<'a> {
-    state_map: &'a StateMap,
-}
-
-impl HasStateMap for StandaloneStateMapContext<'_> {
-    fn get_state_map(&self) -> &StateMap {
-        self.state_map
-    }
-}
 
 fn atom_to_bytes(atom: &Atom) -> Result<Vec<u8>> {
     let mut out = Vec::new();
@@ -99,21 +40,6 @@ fn atom_to_bytes(atom: &Atom) -> Result<Vec<u8>> {
         .write(&mut out)
         .with_context(|| "Failed to write atom to standalone binary stream")?;
     Ok(out)
-}
-
-fn atom_to_export_bytes(atom: &Atom) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
-    atom.as_view()
-        .export(&mut out)
-        .with_context(|| "Failed to export atom to standalone binary stream")?;
-    Ok(out)
-}
-
-pub(crate) fn atom_to_bytes_for_mode(atom: &Atom, mode: StandaloneExportMode) -> Result<Vec<u8>> {
-    match mode {
-        StandaloneExportMode::Rust => atom_to_bytes(atom),
-        StandaloneExportMode::Python => atom_to_export_bytes(atom),
-    }
 }
 
 fn export_generic_evaluator<T: ExportAtomTo>(
@@ -149,13 +75,6 @@ fn save_atom_export(atom: &Atom, path: &Path) -> Result<()> {
         .export(&mut file)
         .with_context(|| format!("Failed to export atom to {}", path.display()))?;
     Ok(())
-}
-
-fn python_eval_manifest(
-    payload: &StandaloneGenericEvaluatorArchive,
-    exprs: Vec<String>,
-) -> PythonEvaluatorManifest {
-    PythonEvaluatorManifest { exprs }
 }
 
 fn standalone_python_script() -> &'static str {

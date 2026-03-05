@@ -10,13 +10,10 @@ use linnet::half_edge::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spenso::{
-    algebra::{
+use spenso::algebra::{
         algebraic_traits::RefOne,
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
-    },
-    utils::to_subscript,
-};
+    };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
     domains::{
@@ -29,8 +26,6 @@ use symbolica::{
         CompileOptions, CompiledComplexEvaluator, Dualizer, ExportSettings, ExpressionEvaluator,
         FunctionMap, OptimizationSettings,
     },
-    id::Replacement,
-    symbol,
 };
 use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
@@ -825,7 +820,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
         let minusone = -(one.clone());
         let mut o_start = start * mult_offset;
 
-        for (eid, i) in orientation.orientation() {
+        for (_eid, i) in orientation.orientation() {
             // debug!("Setting orientation input for edge {}: {:?}", eid, i);
             match i {
                 Orientation::Default => {

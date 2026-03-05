@@ -1,18 +1,15 @@
 use std::sync::atomic::AtomicUsize;
 
 use linnet::half_edge::subgraph::subset::SubSet;
-use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps};
+use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetLike, SubSetOps};
 use linnet::half_edge::{NodeIndex, involution::HedgePair};
 use spenso::network::library::TensorLibraryData;
 use spenso::shadowing::symbolica_utils::AtomCoreExt;
-use symbolica::atom::AtomCore;
-use symbolica::atom::{Atom, AtomView};
-use symbolica::symbol;
+use symbolica::atom::Atom;
 use tracing::debug;
 use tracing::instrument;
 
 use crate::graph::Graph;
-use crate::numerator::symbolica_ext::AtomCoreExt as _;
 
 use super::{AppliedFeynmanRule, Numerator, UnInit};
 
@@ -100,7 +97,7 @@ impl Numerator<UnInit> {
         }
         let not_ignored = subgraph.subtract(ignore);
 
-        for (p, eid, e) in graph.underlying.iter_edges_of(&not_ignored) {
+        for (p, _eid, e) in graph.underlying.iter_edges_of(&not_ignored) {
             if let HedgePair::Paired { source, sink } = p {
                 let source_n = graph.node_id(source);
                 if !seen[source_n] {

@@ -22,7 +22,7 @@ use std::{
 };
 
 use bincode_trait_derive::{Decode, Encode};
-use eyre::{eyre, Context, Result};
+use eyre::{Context, Result, eyre};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -382,7 +382,7 @@ fn build_evaluator<A: ImportWithMap>(
         n_cores: 10,
         ..Default::default()
     };
-    let mut exprs = payload
+    let exprs = payload
         .exprs
         .iter()
         .map(|b| b.import_with_map(state_map))
@@ -566,7 +566,7 @@ impl LoadedStandaloneEvaluatorStack {
             .into_iter()
             .map(|_| self.scramble_input(rng))
             .collect();
-        let Some((e, r, eval, result)) = &mut self.summed else {
+        let Some((_e, _r, eval, result)) = &mut self.summed else {
             return None;
         };
 
@@ -632,7 +632,7 @@ impl LoadedStandaloneEvaluatorStack {
             .into_iter()
             .map(|_| self.scramble_input(rng))
             .collect();
-        let Some((e, r, eval, result)) = &mut self.iterative else {
+        let Some((_e, _r, eval, result)) = &mut self.iterative else {
             return None;
         };
 
@@ -670,7 +670,7 @@ impl LoadedStandaloneEvaluatorStack {
                 let instant = Instant::now();
                 eval.evaluate(s, result);
                 orientation_sum = Complex::new(0.0, 0.0);
-                for r in result.iter() {
+                for _r in result.iter() {
                     orientation_sum += Complex::new(0.0, 0.0);
                 }
                 let duration = instant.elapsed();
@@ -680,12 +680,12 @@ impl LoadedStandaloneEvaluatorStack {
                 sum += duration;
             }
         } else {
-            let mut orientation_sum = Complex::new(0.0, 0.0);
+            let mut orientation_sum;
             for s in &samples {
                 let instant = Instant::now();
                 eval.evaluate(s, result);
                 orientation_sum = Complex::new(0.0, 0.0);
-                for r in result.iter() {
+                for _r in result.iter() {
                     orientation_sum += Complex::new(0.0, 0.0);
                 }
                 let duration = instant.elapsed();
@@ -762,7 +762,7 @@ impl LoadedStandaloneEvaluatorStack {
             .into_iter()
             .map(|_| self.scramble_input(rng))
             .collect();
-        let Some((e, r, eval, result)) = &mut self.summed_fnmap else {
+        let Some((_e, _r, eval, result)) = &mut self.summed_fnmap else {
             return None;
         };
 
@@ -793,7 +793,7 @@ impl LoadedStandaloneEvaluatorStack {
     fn scramble_input_with_orientation<R: Rng + ?Sized>(
         &self,
         orientation: &[i8],
-        rng: &mut R,
+        _rng: &mut R,
     ) -> Vec<Complex<f64>> {
         let mut new_input = self.representative_input.clone();
         // for n in &mut new_input {
@@ -818,7 +818,7 @@ impl LoadedStandaloneEvaluatorStack {
         new_input
     }
 
-    fn scramble_input<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec<Complex<f64>> {
+    fn scramble_input<R: Rng + ?Sized>(&self, _rng: &mut R) -> Vec<Complex<f64>> {
         let mut new_input = self.representative_input.clone();
         // for n in &mut new_input {
         //     *n = *n * rng.random_range(0.8..1.2);
@@ -890,21 +890,21 @@ fn main() -> Result<()> {
 
     let orientations = loaded.graph_terms[0].orientations.clone();
 
-    let (result_per_orientation, samples, average, max) = loaded.graph_terms[0]
+    let (_result_per_orientation, _samples, average, max) = loaded.graph_terms[0]
         .original_integrand
         .benchmark_parametric(&orientations, &mut rng, 1000);
 
-    let (exprs, all_reps, single, result) = &loaded.graph_terms[0].original_integrand.parametric;
+    let (exprs, _all_reps, _single, result) = &loaded.graph_terms[0].original_integrand.parametric;
 
     println!(" average {average:?} max {max:?}");
-    for (e, value) in exprs.iter().zip(result) {
+    for (_e, value) in exprs.iter().zip(result) {
         println!("for Last value {value},");
     }
     // for (i, o) in orientations.iter().enumerate() {
     //     println!("{:?}", o);
     // }
     //
-    if let Some((exprs, all_reps, single, result)) =
+    if let Some((_exprs, _all_reps, single, _result)) =
         &loaded.graph_terms[0].original_integrand.summed_fnmap
     {
         for t in single.export_instructions().0 {
@@ -912,7 +912,7 @@ fn main() -> Result<()> {
         }
     }
 
-    if let Some((samples, average, max)) = loaded.graph_terms[0]
+    if let Some((_samples, average, max)) = loaded.graph_terms[0]
         .original_integrand
         .benchmark_summed_fnmap(&mut rng, 1000)
     {
@@ -924,7 +924,7 @@ fn main() -> Result<()> {
         //     println!("{:>20} = {:<}", p.to_string(), v);
         // }
 
-        if let Some((e, r, _, res)) = &loaded.graph_terms[0].original_integrand.summed_fnmap {
+        if let Some((e, _r, _, res)) = &loaded.graph_terms[0].original_integrand.summed_fnmap {
             // println!(
             //     "{:120}",
             //     parse_lit!(gammalooprs::integrand(

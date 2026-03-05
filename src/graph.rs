@@ -17,7 +17,6 @@ use linnet::{
 };
 use tracing::debug;
 
-use color_eyre::Result;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
 use symbolica::atom::Atom;

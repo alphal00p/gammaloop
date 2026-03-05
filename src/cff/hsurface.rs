@@ -6,7 +6,7 @@ use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::Atom;
 use symbolica::parse;
 use tracing::warn;
 use typed_index_collections::TiVec;

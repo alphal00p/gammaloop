@@ -12,13 +12,12 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
-use rand::rand_core::le;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::{
-    algebra::{algebraic_traits::IsZero, complex::Complex},
+    algebra::algebraic_traits::IsZero,
     network::{Sequential, SmallestDegree},
     structure::concrete_index::ExpandedIndex,
 };
@@ -41,19 +40,14 @@ use crate::{
         cross_section_integrand::CrossSectionIntegrandData,
     },
     graph::{
-        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
-        parse::{self, complete_group_parsing},
+        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
     },
     model::ArcParticle,
     momentum_sample::SubspaceData,
-    numerator::{self, symbolica_ext::AtomCoreExt},
+    numerator::symbolica_ext::AtomCoreExt,
     processes::DotExportSettings,
-    settings::{
-        GlobalSettings,
-        global::GenerationSettings,
-        runtime::{HFunctionSettings, LockedRuntimeSettings},
-    },
-    utils::{self, F, FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives},
+    settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
+    utils::{FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use eyre::{Context, eyre};
@@ -66,9 +60,7 @@ use linnet::half_edge::{
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
-    create_hyperdual_from_components,
-    domains::{dual::HyperDual, float::FloatLike, rational::Rational},
-    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
+    evaluate::{FunctionMap, OptimizationSettings},
     function,
     id::Replacement,
     parse, symbol,
@@ -316,12 +308,12 @@ impl CrossSection {
         }
     }
 
-    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>, model: &Model) -> Result<Self> {
+    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>, _model: &Model) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
         cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
         // println!("group structure: {:?}", cross_section.graph_group_structure);
 
-        for mut cross_section_graph in graphs {
+        for cross_section_graph in graphs {
             // cross_section_graph.param_builder =  ParamBuilder::new(&cross_section_graph, model);
             cross_section.add_supergraph(cross_section_graph)?;
         }
@@ -1508,10 +1500,10 @@ impl CrossSectionGraph {
 
         let loop_3 = loop_number as i64 * 3;
         let grad_eta = Atom::var(GS.deta_lu_cut);
-        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3 - 1); // multiply with 2pi from energy conservation delta
+        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3 - 1); // multiply with 2pi from energy conservation delta
 
         let tstar = Atom::var(GS.rescale_star);
-        let tsrat_pow = tstar.npow(loop_3);
+        let tsrat_pow = tstar.pow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);
         tsrat_pow * hfunction / factors_of_pi / grad_eta
     }
@@ -1521,10 +1513,10 @@ impl CrossSectionGraph {
             - self.graph.initial_state_cut.nedges(&self.graph);
 
         let loop_3 = loop_number as i64 * 3;
-        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3 - 1); // multiply with 2pi from energy conservation delta
+        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3 - 1); // multiply with 2pi from energy conservation delta
 
         let tstar = Atom::var(GS.rescale_star);
-        let tsrat_pow = tstar.npow(loop_3);
+        let tsrat_pow = tstar.pow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);
         tsrat_pow * hfunction / factors_of_pi
     }
@@ -1574,7 +1566,7 @@ impl CrossSectionGraph {
         let i = if is_on_right { -Atom::i() } else { Atom::i() };
         let pi = Atom::var(GS.pi);
 
-        let jacobian_ratio = (&radius_star / &radius).npow(subspace_loop_count as i64 * 3 - 1);
+        let jacobian_ratio = (&radius_star / &radius).pow(subspace_loop_count as i64 * 3 - 1);
 
         let local_prefactor = (&uv_damp_plus / (&radius - &radius_star)
             + &uv_damp_minus / (-&radius - &radius_star))
@@ -2135,8 +2127,8 @@ fn build_derivative_structure(order: u8) -> GenericEvaluator {
         .with(0);
 
     let mut expression_to_derive = function!(f, GS.rescale)
-        * expansion.npow(-order)
-        * (GS.rescale - GS.rescale_star).npow(order);
+        * expansion.pow(-order)
+        * (GS.rescale - GS.rescale_star).pow(order);
 
     for _ in 1..order {
         expression_to_derive = expression_to_derive.derivative(GS.rescale);

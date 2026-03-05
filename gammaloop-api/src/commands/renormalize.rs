@@ -95,7 +95,7 @@ impl Renormalize {
                     .replace(CS.nc)
                     .with(CS.ca)
                     .replace(parse!("UFO::aS"))
-                    .with(parse!("gs").npow(2) / (Atom::var(Symbol::PI) * 4))
+                    .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
                     / 8)
                 .expand_num()
             }

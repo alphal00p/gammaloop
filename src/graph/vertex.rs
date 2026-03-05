@@ -4,18 +4,12 @@ use linnet::{
     parser::DotVertexData,
 };
 
-use spenso::network::library::TensorLibraryData;
-use symbolica::{
-    atom::{Atom, AtomView},
-    symbol,
-};
+use symbolica::atom::Atom;
 
 use crate::{
     GammaLoopContext,
     feyngen::diagram_generator::NodeColorWithVertexRule,
     model::{ArcParticle, ArcVertexRule, Model},
-    numerator::symbolica_ext::AtomCoreExt,
-    utils::W_,
 };
 use color_eyre::Result;
 use eyre::{Context, eyre};

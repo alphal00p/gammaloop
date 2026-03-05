@@ -12,7 +12,6 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use derive_more::{From, Into};
 use eyre::eyre;
-use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::nodestore::NodeStorageOps;
@@ -22,7 +21,7 @@ use linnet::half_edge::subgraph::{
 };
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
-use symbolica::domains::dual::{DualNumberStructure, HyperDual};
+use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::FloatLike as SymFloatLike;
 use tabled::settings::Style;
 

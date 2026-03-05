@@ -578,7 +578,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         momentum_sample: &MomentumSample<T>,
         model: &Model,
         settings: &RuntimeSettings,
-        rotation: &Rotation,
+        _rotation: &Rotation,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<Complex<F<T>>> {
         let orientations =

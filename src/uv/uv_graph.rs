@@ -60,7 +60,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let ref_graph = self.as_ref();
-        let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
+        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
         let all_subcycles: Vec<_> =
             Cycle::all_sum_powerset_filter_map(&ref_graph.cycle_basis_of(subgraph).0, &Some)
                 .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
@@ -114,7 +114,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
                     .replace(function!(GS.emr_mom, e, W_.x___))
                     .with(function!(GS.emr_mom, e, W_.x___) / expansion);
 
-                expr /= Atom::var(expansion).npow(3);
+                expr /= Atom::var(expansion).pow(3);
             }
 
             let series = expr.series(expansion, Atom::Zero, 0.into(), true).unwrap();
@@ -143,7 +143,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let ref_graph: &HedgeGraph<E, V, H> = self.as_ref();
-        let b: SuBitGraph = ref_graph.empty_subgraph();
+        let _b: SuBitGraph = ref_graph.empty_subgraph();
 
         if subgraph.is_empty() {
             let mut spinneys = AHashSet::new();
@@ -151,7 +151,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             return spinneys;
         }
 
-        let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
+        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
         let all_subcycles: Vec<_> =
             Cycle::all_sum_powerset_filter_map(&ref_graph.cycle_basis_of(subgraph).0, &Some)
                 .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
@@ -230,7 +230,7 @@ impl UltravioletGraph for Graph {
 
         for (pair, eid, d) in self.underlying.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
-                let m2 = d.data.mass_atom().npow(2);
+                let m2 = d.data.mass_atom().pow(2);
                 let edge_power = edge_powers(d.data);
                 let is_power_negative = edge_power < 0;
                 let prop_den = GS.den(
@@ -238,7 +238,7 @@ impl UltravioletGraph for Graph {
                     function!(GS.emr_mom, usize::from(eid)),
                     &m2,
                     spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
-                        .npow(2)
+                        .pow(2)
                         .to_dots()
                         - &m2,
                 );

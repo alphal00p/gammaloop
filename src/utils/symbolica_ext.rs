@@ -912,7 +912,7 @@ pub trait LogPrint {
 
 impl<A: AtomCore> LogPrint for A {
     fn log_print(&self) -> String {
-        let mut settings = SpensoPrintSettings::compact().nice_symbolica();
+        let settings = SpensoPrintSettings::compact().nice_symbolica();
         // settings.hide_all_namespaces = false;
         self.printer(settings).to_string()
     }
