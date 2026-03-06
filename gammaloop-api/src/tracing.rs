@@ -277,11 +277,11 @@ pub(crate) fn init_tracing(
             .event_format(StatusFmt)
             .with_writer(indicatif_layer.get_stderr_writer());
 
-        tracing_subscriber::registry()
+        _ = tracing_subscriber::registry()
             .with(Filtered::new(json, file_filter_layer))
             .with(Filtered::new(status_layer, stderr_filter_layer))
             .with(indicatif_layer.with_filter(IndicatifFilter::new(false)))
-            .init();
+            .try_init();
 
         FilterHandles {
             file_handle,

@@ -136,10 +136,10 @@ pub fn init_test_tracing() -> reload::Handle<EnvFilter, Registry> {
                 .with_writer(std::io::stderr)
                 .with_filter(test_status_filter);
 
-            tracing_subscriber::registry()
+            _ = tracing_subscriber::registry()
                 .with(filter_layer)
                 .with(status_layer)
-                .init();
+                .try_init();
 
             handle
         })
@@ -166,10 +166,10 @@ pub fn init_bench_tracing() -> reload::Handle<EnvFilter, Registry> {
                 .with_writer(std::io::stderr)
                 .with_filter(bench_status_filter);
 
-            tracing_subscriber::registry()
+            _ = tracing_subscriber::registry()
                 .with(filter_layer)
                 .with(status_layer)
-                .init();
+                .try_init();
 
             handle
         })
