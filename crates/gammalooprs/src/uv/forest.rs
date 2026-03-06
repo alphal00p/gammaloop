@@ -1,47 +1,46 @@
 use crate::{
-    cff::{
-        expression::{GraphOrientation, OrientationData, OrientationID},
-        generation::{PostProcessingSetup, ShiftRewrite},
-    },
-    graph::{Edge, Graph, LMBext, Vertex},
-    momentum::SignOrZero,
-    numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
-    utils::{
-        GS, W_, ose_atom_from_index,
-        symbolica_ext::{CallSymbol, LogPrint},
-    },
-    uv::approx::CFFapprox,
+    graph::{Graph, LMBext, cuts::CutSet},
+    utils::{GS, W_, ose_atom_from_index, symbolica_ext::LogPrint},
+    uv::approx::{CFFapprox, CutStructure},
 };
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
-use spenso::{
-    network::{Network, store::TensorScalarStoreMapping},
-    structure::abstract_index::AIND_SYMBOLS,
-    tensors::{data::StorageTensor, parametric::ParamOrConcrete},
-};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
-    id::Replacement,
 };
 
-use linnet::half_edge::{
-    HedgeGraph,
-    involution::EdgeIndex,
-    subgraph::{SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
-};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use std::fmt::Write;
 use tracing::{debug, instrument};
 
-use typed_index_collections::TiVec;
 use vakint::Vakint;
 
 use super::{
-    UVgenerationSettings, UltravioletGraph,
+    UVgenerationSettings,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
+
+pub struct CutForests {
+    pub cuts: CutStructure,
+    pub forests: Vec<Forest>,
+}
+
+impl CutForests {
+    pub(crate) fn compute(
+        &mut self,
+        graph: &Graph,
+        vakint: (&Vakint, &vakint::VakintSettings),
+        settings: &UVgenerationSettings,
+    ) -> Result<()> {
+        for (forest, cuts) in &mut self.forests.iter_mut().zip(self.cuts.cuts.iter()) {
+            forest.compute(graph, vakint, &cuts, settings)?;
+        }
+        Ok(())
+    }
+}
 
 pub struct Forest {
     pub dag: DAG<Approximation, DagNode, ()>,
@@ -53,41 +52,19 @@ impl Forest {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn compute<
-        H,
-        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
-        OID: OrientationID,
-        O: GraphOrientation,
-    >(
+    pub(crate) fn compute(
         &mut self,
-        graph: &G,
-        tree_edges: &S,
-        amplitude_subgraph: &S,
+        graph: &Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
-        orientations: &TiVec<OID, O>,
-        canonize_esurface: &Option<ShiftRewrite>,
-        cut_edges: &[EdgeIndex],
-        edges_in_initial_state_cut: &[EdgeIndex],
-        post_processing: PostProcessingSetup<'_>,
+        cut_data: &CutSet,
         settings: &UVgenerationSettings,
-        _conjugate: bool,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
 
         for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
                 0 => {
-                    self.dag.nodes[n].data.root(
-                        graph,
-                        tree_edges,
-                        amplitude_subgraph,
-                        canonize_esurface,
-                        orientations,
-                        cut_edges,
-                        edges_in_initial_state_cut,
-                        post_processing,
-                    );
+                    self.dag.nodes[n].data.root(graph, cut_data, settings);
                 }
                 1 => {
                     // debug!("")
@@ -106,7 +83,6 @@ impl Forest {
                         current.data.compute_integrated(
                             graph,
                             vakint,
-                            amplitude_subgraph,
                             &parent.data,
                             i,
                             settings,
@@ -116,18 +92,9 @@ impl Forest {
                         continue;
                     }
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
-                    current.data.compute(
-                        graph,
-                        tree_edges,
-                        amplitude_subgraph,
-                        canonize_esurface,
-                        orientations,
-                        cut_edges,
-                        edges_in_initial_state_cut,
-                        post_processing,
-                        &parent.data,
-                        settings,
-                    );
+                    current
+                        .data
+                        .compute(graph, cut_data, &parent.data, settings);
                 }
                 _ => {
                     unimplemented!("Union not implemented");
@@ -263,8 +230,8 @@ impl Forest {
         cut_edges: Option<&SuBitGraph>,
         graph: &Graph,
         add_sigma: bool,
-    ) -> ParsingNet {
-        let mut sum: Option<ParsingNet> = None;
+    ) -> Atom {
+        let mut sum = Atom::Zero;
 
         for (_, n) in &self.dag.nodes {
             let mut net = n.data.final_integrand.clone().unwrap();
@@ -279,114 +246,31 @@ impl Forest {
                         .expr(&graph.full_filter())
                 );
                 net = net
-                    * Network::from_scalar(function!(
+                    * function!(
                         GS.if_sigma,
                         n.data
                             .simple_approx
                             .as_ref()
                             .unwrap()
                             .expr(&graph.full_filter())
-                    ))
+                    )
             };
 
-            let Some(s) = &mut sum else {
-                sum = Some(net);
-                continue;
-            };
-
-            *s += net;
+            sum += net;
         }
 
-        let Some(mut s) = sum else {
-            return ParsingNet::zero();
-        };
         if let Some(cut) = cut_edges {
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in graph.iter_edges_of(cut) {
-                s *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
-                    .wrap_color(GS.color_wrap)
-                    .parse_into_net()
-                    .unwrap();
+                sum *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
+                    .wrap_color(GS.color_wrap);
             }
         }
         for (_, edge_index, _) in graph.iter_edges() {
-            s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
+            sum = sum.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
         }
-        s
+        sum
     }
-
-    pub(crate) fn _local_expr(
-        &self,
-        orientation: &OrientationData,
-        cut_edges: Option<&SuBitGraph>,
-        graph: &Graph,
-    ) -> ParsingNet {
-        let mut sum: Option<ParsingNet> = None;
-
-        for (_, n) in &self.dag.nodes {
-            let net = n.data.final_integrand.as_ref().unwrap().map_ref(
-                |a| orientation.select(a),
-                |a| match a {
-                    ParamOrConcrete::Param(a) => {
-                        ParamOrConcrete::Param(a.map_data_ref_self(|a| orientation.select(a)))
-                    }
-                    a => a.clone(),
-                },
-            );
-            let Some(s) = &mut sum else {
-                sum = Some(net);
-                continue;
-            };
-            *s += net;
-        }
-
-        let Some(mut s) = sum else {
-            return ParsingNet::zero();
-        };
-        if let Some(cut) = cut_edges {
-            // add Feynman rules of cut edges
-            for (_p, edge_index, d) in graph.iter_edges_of(cut) {
-                let edge_id = usize::from(edge_index) as i64;
-
-                // do not set the cut momenta generated in the amplitude to their OSE values
-                // yet in order to do 4d scaling tests
-                let temp_orientation = orientation.clone();
-
-                s *= d
-                    .data
-                    .num
-                    .wrap_color(GS.color_wrap)
-                    .parse_into_net()
-                    .unwrap();
-                s = s.replace_multiple(&[
-                    Replacement::new(
-                        function!(GS.emr_mom, edge_id, AIND_SYMBOLS.cind.f(&[Atom::Zero]))
-                            .to_pattern(),
-                        SignOrZero::from(temp_orientation.orientation[edge_index])
-                            * function!(GS.ose, edge_id),
-                    ),
-                    // Replacement::new(
-                    //     function!(GS.color_wrap, W_.a___).to_pattern(),
-                    //     Atom::var(W_.a___),
-                    // ),
-                ]);
-            }
-        }
-        s
-    }
-
-    // pub(crate) fn simple_expr(
-    //     &self,
-    //     graph: &UVGraph,
-    //     amplitude: &InternalSubGraph,
-    // ) -> Option<SerializableAtom> {
-    //     let mut sum = Atom::num(0).into();
-    //     for (_, n) in &self.dag.nodes {
-    //         sum = sum + n.data.simple_expr(graph, amplitude)?;
-    //     }
-
-    //     Some(sum)
-    // }
 
     pub(crate) fn graphs(&self, graph: &Graph) -> String {
         let mut out = String::new();
@@ -409,20 +293,4 @@ impl Forest {
 
         out
     }
-
-    // pub(crate) fn show_structure(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<String> {
-    //     let mut out = String::new();
-
-    //     out.push_str(
-    //         &self
-    //             .simple_expr(graph, amplitude)?
-    //             .0
-    //             .printer(PrintOptions {
-    //                 terms_on_new_line: true,
-    //                 ..Default::default()
-    //             })
-    //             .to_string(),
-    //     );
-    //     Some(out)
-    // }
 }

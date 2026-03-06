@@ -1,13 +1,10 @@
 #![allow(dead_code)]
 
 use crate::{
-    cff::{
-        expression::{GraphOrientation, OrientationID},
-        generation::{PostProcessingSetup, ShiftRewrite, generate_uv_cff},
-    },
-    graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
+    cff::{CutCFF, expression::GraphOrientation},
+    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
-    numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
+    numerator::{aind::Aind, symbolica_ext::AtomCoreExt},
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LOGPRINTOPTS, LogPrint, TypstFormat},
@@ -16,6 +13,7 @@ use crate::{
 };
 use ahash::AHashSet;
 use color_eyre::Result;
+use eyre::eyre;
 use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use std::{collections::HashSet, hash::Hash};
 use tracing::debug;
@@ -42,14 +40,13 @@ use symbolica::{
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     builder::HedgeGraphBuilder,
-    involution::{EdgeIndex, HedgePair},
+    involution::HedgePair,
     subgraph::{
         Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps,
     },
 };
 
 use tracing::{info, instrument};
-use typed_index_collections::TiVec;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -591,7 +588,7 @@ pub struct Approximation {
     pub dod: i32,
     pub lmb: LoopMomentumBasis,
     pub local_3d: CFFapprox, //3d denoms
-    pub final_integrand: Option<ParsingNet>,
+    pub final_integrand: Option<Atom>,
     pub integrated_4d: ApproxOp, //4d
     pub integrated_pole_part: ApproxOp,
     pub simple_approx: Option<SimpleApprox>,
@@ -603,6 +600,10 @@ pub enum CFFapprox {
     Dependent { sign: Sign, t_arg: IntegrandExpr },
 }
 
+pub struct CutStructure {
+    pub cuts: Vec<CutSet>,
+}
+
 impl CFFapprox {
     pub(crate) fn expr(&self) -> Option<(Atom, Sign)> {
         match self {
@@ -611,107 +612,32 @@ impl CFFapprox {
         }
     }
 
-    pub(crate) fn dependent<
-        E,
-        V,
-        H,
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-        S: SubGraphLike + SubSetOps,
-        SS: SubGraphLike,
-        OID: OrientationID,
-        O: GraphOrientation,
-    >(
-        graph: &G,
-        tree_edges: &S,
-        to_contract: &SS,
-        amplitude_subgraph: &S,
-        canonize_esurface: &Option<ShiftRewrite>,
-        orientations: &TiVec<OID, O>,
-        cut_edges: &[EdgeIndex],
-        edges_in_initial_state_cut: &[EdgeIndex],
-        post_processing: PostProcessingSetup<'_>,
-    ) -> CFFapprox {
-        let mut cff_sum = Atom::Zero;
+    pub(crate) fn dependent(
+        graph: &Graph,
+        to_contract: &SuBitGraph,
+        cuts: &CutSet,
+        _settings: &UVgenerationSettings,
+    ) -> Result<CFFapprox> {
+        let cff = graph
+            .cff(&to_contract.union(&graph.tree_edges), cuts)?
+            .expression_with_selectors();
 
-        let g = graph.as_ref();
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(&graph.tree_edges, |_| -1));
 
-        let mut contract_edges = Vec::new();
-
-        for (e, eid, _) in g.iter_edges_of(to_contract) {
-            if e.is_paired() {
-                contract_edges.push(eid);
-            }
-        }
-
-        let bridgeless = amplitude_subgraph.subtract(tree_edges);
-
-        let comps: Vec<_> = g
-            .connected_components(&bridgeless)
-            .into_iter()
-            .map(|mut a| {
-                g.add_crown(&mut a);
-                a
-            })
-            .collect();
-
-        for o in orientations {
-            let mut cff_product = Atom::one();
-
-            for c in &comps {
-                cff_product *= generate_uv_cff(
-                    g,
-                    c,
-                    canonize_esurface,
-                    &contract_edges,
-                    edges_in_initial_state_cut,
-                    o.orientation(),
-                    cut_edges,
-                    post_processing,
-                )
-                .unwrap()
-            }
-            cff_sum += o.orientation_thetas() * cff_product
-        }
-
-        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(tree_edges, |_| -1));
-
-        CFFapprox::Dependent {
+        Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
             t_arg: IntegrandExpr {
                 integrand: cff_sum * fourddenoms,
             },
-        }
+        })
     }
 
-    pub(crate) fn root<
-        E,
-        V,
-        H,
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-        S: SubGraphLike + SubSetOps,
-        OID: OrientationID,
-        O: GraphOrientation,
-    >(
-        graph: &G,
-        tree_edges: &S,
-        amplitude_subgraph: &S,
-        canonize_esurface: &Option<ShiftRewrite>,
-        orientations: &TiVec<OID, O>,
-        cut_edges: &[EdgeIndex],
-        edges_in_initial_state_cut: &[EdgeIndex],
-        post_processing: PostProcessingSetup<'_>,
-    ) -> CFFapprox {
-        Self::dependent(
-            graph,
-            tree_edges,
-            &graph.as_ref().empty_subgraph::<SuBitGraph>(),
-            amplitude_subgraph,
-            canonize_esurface,
-            orientations,
-            cut_edges,
-            edges_in_initial_state_cut,
-            post_processing,
-        )
+    pub(crate) fn root(
+        graph: &Graph,
+        cuts: &CutSet,
+        settings: &UVgenerationSettings,
+    ) -> Result<CFFapprox> {
+        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts, settings)
     }
 }
 impl Approximation {
@@ -719,46 +645,18 @@ impl Approximation {
         graph.dot_lmb_of(&self.subgraph, &self.lmb)
     }
 
-    pub(crate) fn root<
-        H,
-        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
-        OID: OrientationID,
-        O: GraphOrientation,
-    >(
+    pub(crate) fn root(
         &mut self,
-        graph: &G,
-        tree_edges: &S,
-        amplitude: &S,
-        canonize_esurface: &Option<ShiftRewrite>,
-        orientations: &TiVec<OID, O>,
-        cut_edges: &[EdgeIndex],
-        edges_in_initial_state_cut: &[EdgeIndex],
-        post_processing: PostProcessingSetup<'_>,
-    ) {
-        self.local_3d = CFFapprox::root(
-            graph,
-            tree_edges,
-            amplitude,
-            canonize_esurface,
-            orientations,
-            cut_edges,
-            edges_in_initial_state_cut,
-            post_processing,
-        );
+        graph: &Graph,
+        cuts: &CutSet,
+        settings: &UVgenerationSettings,
+    ) -> Result<()> {
+        self.local_3d = CFFapprox::root(graph, cuts, settings)?;
         self.integrated_4d = ApproxOp::Root;
         self.integrated_pole_part = ApproxOp::Root;
         self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
-        self.final_integrand = self.final_integrand(
-            graph,
-            tree_edges,
-            amplitude,
-            canonize_esurface,
-            orientations,
-            cut_edges,
-            edges_in_initial_state_cut,
-            post_processing,
-        );
+        self.final_integrand = Some(self.final_integrand(graph, cuts, settings)?);
+        Ok(())
     }
 
     pub(crate) fn new<G, E, V, H>(
@@ -783,18 +681,11 @@ impl Approximation {
         }
     }
 
-    pub(crate) fn integrated_4d<
-        E: UVE,
-        V,
-        H,
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-        S: SubGraphLike,
-    >(
+    pub(crate) fn integrated_4d(
         &self,
         dependent: &Self,
         vakint: (&Vakint, &vakint::VakintSettings),
-        uv_graph: &G,
-        amplitude_subgraph: &S,
+        uv_graph: &Graph,
         topo_order: usize,
         settings: &UVgenerationSettings,
         pole_part: bool,
@@ -856,7 +747,7 @@ impl Approximation {
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        let n_loops = uv_graph.n_loops(amplitude_subgraph);
+        let n_loops = uv_graph.n_loops(&graph.full_filter());
 
         let mut atomarg = t_arg * inner_t;
 
@@ -1131,63 +1022,30 @@ impl Approximation {
         })
     }
 
-    pub(crate) fn compute_integrated<
-        E: UVE,
-        V,
-        H,
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-        S: SubGraphLike,
-    >(
+    pub(crate) fn compute_integrated(
         &mut self,
-        graph: &G,
+        graph: &Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
-        amplitude_subgraph: &S,
         dependent: &Self,
         topo_order: usize,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        self.integrated_4d = self.integrated_4d(
-            dependent,
-            vakint,
-            graph,
-            amplitude_subgraph,
-            topo_order,
-            settings,
-            false,
-        )?;
-        self.integrated_pole_part = self.integrated_4d(
-            dependent,
-            vakint,
-            graph,
-            amplitude_subgraph,
-            topo_order,
-            settings,
-            true,
-        )?;
+        self.integrated_4d =
+            self.integrated_4d(dependent, vakint, graph, topo_order, settings, false)?;
+        self.integrated_pole_part =
+            self.integrated_4d(dependent, vakint, graph, topo_order, settings, true)?;
         Ok(())
     }
 
     /// Computes the 3d approximation of the UV
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn compute<
-        H,
-        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
-        OID: OrientationID,
-        O: GraphOrientation,
-    >(
+    pub(crate) fn compute(
         &mut self,
-        graph: &G,
-        tree_edges: &S,
-        amplitude: &S,
-        canonize_esurface: &Option<ShiftRewrite>,
-        orientations: &TiVec<OID, O>,
-        cut_edges: &[EdgeIndex],
-        edges_in_initial_state_cut: &[EdgeIndex],
-        post_processing: PostProcessingSetup<'_>,
+        graph: &Graph,
+        cuts: &CutSet,
         dependent: &Self,
         settings: &UVgenerationSettings,
-    ) {
+    ) -> Result<()> {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
         };
@@ -1200,17 +1058,9 @@ impl Approximation {
                 .unwrap_or((Atom::num(0), Sign::Positive))
         };
 
-        let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
-            graph,
-            tree_edges,
-            &dependent.subgraph,
-            amplitude,
-            canonize_esurface,
-            orientations,
-            cut_edges,
-            edges_in_initial_state_cut,
-            post_processing,
-        ) else {
+        let CFFapprox::Dependent { t_arg, .. } =
+            CFFapprox::dependent(graph, &dependent.subgraph.filter, cuts, settings)?
+        else {
             unreachable!()
         };
 
@@ -1243,16 +1093,8 @@ impl Approximation {
             },
         };
 
-        self.final_integrand = self.final_integrand(
-            graph,
-            tree_edges,
-            amplitude,
-            canonize_esurface,
-            orientations,
-            cut_edges,
-            edges_in_initial_state_cut,
-            post_processing,
-        );
+        self.final_integrand = Some(self.final_integrand(graph, cuts, settings)?);
+        Ok(())
     }
 
     #[instrument(skip_all)]
@@ -1496,28 +1338,16 @@ impl Approximation {
     }
 
     #[instrument(skip_all)]
-    pub(crate) fn final_integrand<
-        G,
-        H,
-        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
-        OID: OrientationID,
-        O: GraphOrientation,
-    >(
+    pub(crate) fn final_integrand(
         &self,
-        graph: &G,
-        tree_edges: &S,
-        amplitude: &S,
-        // orientation: &OrientationData,
-        canonize_esurface: &Option<ShiftRewrite>,
-        orientations: &TiVec<OID, O>,
-        cut_edges: &[EdgeIndex],
-        edges_in_initial_state_cut: &[EdgeIndex],
-        post_processing: PostProcessingSetup,
-    ) -> Option<ParsingNet>
-    where
-        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-    {
-        let (t, s) = self.local_3d.expr()?;
+        graph: &Graph,
+        cutset: &CutSet,
+        settings: &UVgenerationSettings,
+    ) -> Result<Atom> {
+        let (t, s) = self
+            .local_3d
+            .expr()
+            .ok_or(eyre!("Local3d not yet computed"))?;
         let (t_int, _) = if let ApproxOp::Root = self.integrated_4d {
             (Atom::num(0), Sign::Positive)
         } else {
@@ -1526,17 +1356,9 @@ impl Approximation {
                 .unwrap_or((Atom::num(0), Sign::Positive))
         };
 
-        let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
-            graph,
-            tree_edges,
-            &self.subgraph,
-            amplitude,
-            canonize_esurface,
-            orientations,
-            cut_edges,
-            edges_in_initial_state_cut,
-            post_processing,
-        ) else {
+        let CFFapprox::Dependent { t_arg, .. } =
+            CFFapprox::dependent(graph, &self.subgraph.filter, cutset, settings)?
+        else {
             unreachable!()
         };
 
@@ -1554,7 +1376,7 @@ impl Approximation {
             "Integrated 4d finite part: {:#}",
             finite.printer(LOGPRINTOPTS)
         );
-        let reduced = amplitude.included().subtract(self.subgraph.included());
+        let reduced = graph.full_filter().subtract(self.subgraph.included());
 
         // let concrete_red = graph.as_ref().concretize(&reduced).map(
         //     |_, _, v| v.clone(),
@@ -1582,7 +1404,7 @@ impl Approximation {
             .get_single_atom()
             .unwrap();
 
-        let bridgeless_reduced = reduced.subtract(tree_edges.included());
+        let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
 
         let mut reps = Vec::new();
         // only put edges onshell if they are part of a loop
@@ -1601,7 +1423,7 @@ impl Approximation {
             self.simple_approx
                 .as_ref()
                 .unwrap()
-                .expr(amplitude.included()),
+                .expr(&graph.full_filter()),
             self.dod,
             // orientations
             //     .first()
@@ -1618,37 +1440,9 @@ impl Approximation {
                 .collect_num()
                 .log_print() // printer(LOGPRINTOPTS)
         );
-        let mut res = resnum.parse_into_net().unwrap();
-        // debug!("Final Integrand Net:{}", res.dot_pretty());
-        res = res.replace_multiple(&reps);
-
-        // .contract(())
-        // .unwrap()
-        // .state
-        // .tensor
-        // .scalar()
-        // .expect("Expected a scalar value when contracting integrand tensor network");
-
-        // res = res
-        //     .replace(function!(
-        //         GS.emr_vec,
-        //         W_.a_,
-        //         function!(AIND_SYMBOLS.cind, 0)
-        //     ))
-        //     .with(Atom::Zero)
-        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 1)))
-        //     .with(Atom::Zero)
-        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 2)))
-        //     .with(Atom::Zero)
-        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 3)))
-        //     .with(Atom::Zero)
-        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 0)))
-        //     .with(function!(GS.ose, W_.a_))
-        //     .replace(function!(GS.emr_vec, W_.a__))
-        //     .with(function!(GS.emr_mom, W_.a__));
 
         // debug!("final_cff {res:>}");
-        Some(res)
+        Ok(resnum.replace_multiple(&reps))
     }
 
     // pub(crate) fn simple_expr(

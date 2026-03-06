@@ -480,10 +480,9 @@ pub(crate) fn generate_cff_expression<E, V, H>(
 
 impl Graph {
     pub(crate) fn generate_cff(
-        &self,
+        &mut self,
         contract_edges: &[EdgeIndex],
         canonize_esurface: &Option<ShiftRewrite>,
-        surface_cache: &mut SurfaceCache,
     ) -> Result<CFFExpression<SuperGraphOrientationID>> {
         let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
         for edge in contract_edges {
@@ -528,7 +527,7 @@ impl Graph {
 
         generate_cff_from_orientations(
             oriented_acyclic_graphs,
-            surface_cache,
+            &mut self.surface_cache,
             &edges_in_initial_state_cut,
             canonize_esurface,
         )

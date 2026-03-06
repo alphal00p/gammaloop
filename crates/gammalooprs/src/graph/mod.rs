@@ -24,17 +24,17 @@ use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
+    cff::generation::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
-    momentum::sample::ExternalIndex,
-    momentum::{Dep, ExternalMomenta, PolDef},
+    momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::{GlobalPrefactor, ParsingNet, symbolica_ext::AtomCoreExt},
-    settings::runtime::kinematic::Externals,
-    settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
+    settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, GS, Length, ose_atom_from_index},
 };
 
+pub mod cuts;
 pub mod global;
 
 #[derive(Clone, Copy, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Default)]
@@ -54,6 +54,7 @@ pub struct Graph {
     pub loop_momentum_basis: LoopMomentumBasis,
     pub param_builder: ParamBuilder,
     pub global_prefactor: GlobalPrefactor,
+    pub surface_cache: SurfaceCache,
     /// The cross section initial state cut
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
