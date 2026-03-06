@@ -495,6 +495,16 @@ impl RunHistory {
         global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<SaveState>> {
+        // A run card can carry runtime/global defaults that should be active before
+        // executing any command (e.g. before `set process ... defaults`).
+        if self.cli_settings.global != GlobalSettings::default() {
+            global_settings.global = self.cli_settings.global.clone();
+            global_settings.sync_settings()?;
+        }
+        if self.default_runtime_settings != RuntimeSettings::default() {
+            *default_runtime_settings = self.default_runtime_settings.clone();
+        }
+
         for command_history in self.commands.clone() {
             info!(
                 "Running command: {}",
@@ -1056,7 +1066,7 @@ mod tests {
     use gammalooprs::{
         improve_ps::PhaseSpaceImprovementSettings,
         momentum::{Dep, ExternalMomenta, SignOrZero},
-        settings::{runtime::kinematic::Externals, KinematicsSettings},
+        settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
         utils::serde_utils::SHOWDEFAULTS,
     };
 
@@ -1102,6 +1112,33 @@ mod tests {
         run_history.to_file("test_path.toml", true).unwrap();
         let deserialized_from_file = RunHistory::from_file("test_path.toml", " ").unwrap();
         assert_eq!(run_history, deserialized_from_file);
+    }
+
+    #[test]
+    fn run_history_applies_default_runtime_before_commands() {
+        let mut run_history = RunHistory::default();
+        run_history.default_runtime_settings = toml::from_str(
+            r#"
+[sampling]
+type = "discrete_graph_sampling"
+[sampling.sampling_type]
+subtype = "tropical"
+"#,
+        )
+        .unwrap();
+
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        let mut default_runtime_settings = RuntimeSettings::default();
+
+        let _ = run_history
+            .run(&mut state, &mut cli_settings, &mut default_runtime_settings)
+            .unwrap();
+
+        assert_eq!(
+            default_runtime_settings.sampling,
+            run_history.default_runtime_settings.sampling
+        );
     }
 
     #[test]
