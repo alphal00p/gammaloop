@@ -7,16 +7,16 @@ use tabled::{builder::Builder, settings::Style};
 use tracing::info;
 
 use color_eyre::Result;
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use gammalooprs::processes::{Amplitude, CrossSection, Process, ProcessCollection};
 use gammalooprs::settings::RuntimeSettings;
 use gammalooprs::utils::serde_utils::SHOWDEFAULTS;
 use std::sync::atomic::Ordering;
 
 use crate::{
-    CLISettings,
     commands::generate::ProcessArgs,
     state::{ProcessRef, State},
+    CLISettings,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -553,12 +553,12 @@ mod test {
     use clap::Parser;
     use serde_json::json;
 
-    use crate::{CLISettings, Repl, commands::Commands, state::ProcessRef};
+    use crate::{commands::Commands, state::ProcessRef, CLISettings, Repl};
     use gammalooprs::settings::RuntimeSettings;
 
     use super::{
-        Display, DisplaySettingsTarget, format_bytes, serialize_settings_with_defaults,
-        value_at_path,
+        format_bytes, serialize_settings_with_defaults, value_at_path, Display,
+        DisplaySettingsTarget,
     };
 
     #[test]

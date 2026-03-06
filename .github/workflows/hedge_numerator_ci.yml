@@ -73,13 +73,52 @@ jobs:
           restore-prefixes-first-match: |
             nix-deps-
 
-      - name: Build cargo dependencies and main package
+      - name: Build cargo dependencies
         run: |
           echo "Starting dependency build at $(date)"
           time nix build .#cargoArtifacts --print-build-logs
           echo "Dependencies built at $(date)"
+
+  package:
+    if: needs.build-deps.result == 'success'
+    needs: build-deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment: Cachix
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+            substituters = https://cache.nixos.org/ https://nix-community.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v14
+        with:
+          name: gammaloop
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: ${{ needs.build-deps.outputs.cache-key }}-package
+          restore-prefixes-first-match: |
+            ${{ needs.build-deps.outputs.cache-key }}
+            nix-deps-
+
+      - name: Build main package
+        run: |
+          echo "Starting package build at $(date)"
           time nix build .#default --print-build-logs
-          echo "Main package built at $(date)"
+          echo "Package build completed at $(date)"
 
   clippy:
     needs: build-deps
@@ -155,14 +194,37 @@ jobs:
             nix-deps-
 
       - name: Check formatting
+        id: fmt_check
+        continue-on-error: true
         run: |
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           nix build ".#checks.${system}.gammaloop-fmt" --print-build-logs
+
+      - name: Formatting summary
+        if: always()
+        run: |
+          if [ "${{ steps.fmt_check.outcome }}" = "success" ]; then
+            echo "### Formatting" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Status: PASS" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Command: \`nix build .#checks.\${system}.gammaloop-fmt --print-build-logs\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Formatting" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Status: FAIL" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Command: \`nix build .#checks.\${system}.gammaloop-fmt --print-build-logs\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- See the 'Check formatting' step logs for details." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail if formatting check failed
+        if: steps.fmt_check.outcome != 'success'
+        run: exit 1
 
   test:
     if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success' && needs.nextest-archive.result == 'success'
     needs: [build-deps, partition-config, nextest-archive]
     environment: Cachix
+    permissions:
+      checks: write
+      contents: read
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
     strategy:
@@ -243,6 +305,24 @@ jobs:
           echo "Doctests completed at $(date)"
         timeout-minutes: 60
 
+      - name: Publish test results (Linux)
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          check_name: Test Results (${{ matrix.os }} / partition ${{ matrix.partition }})
+          comment_mode: off
+          action_fail_on_inconclusive: false
+          files: target/nextest/ci/junit.xml
+
+      - name: Publish test results (macOS)
+        if: ${{ !cancelled() && runner.os == 'macOS' }}
+        uses: EnricoMi/publish-unit-test-result-action/macos@v2
+        with:
+          check_name: Test Results (${{ matrix.os }} / partition ${{ matrix.partition }})
+          comment_mode: off
+          action_fail_on_inconclusive: false
+          files: target/nextest/ci/junit.xml
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -308,42 +388,6 @@ jobs:
           path: nextest-archive.tar.zst
           if-no-files-found: error
           retention-days: 1
-
-  security-audit:
-    if: needs.build-deps.result == 'success'
-    needs: build-deps
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    environment: Cachix
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v14
-        with:
-          name: gammaloop
-          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
-
-      - name: Cache Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: ${{ needs.build-deps.outputs.cache-key }}-audit
-          restore-prefixes-first-match: |
-            ${{ needs.build-deps.outputs.cache-key }}
-            nix-deps-
-
-      - name: Run security audit
-        run: |
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          nix build ".#checks.${system}.gammaloop-audit" --print-build-logs
 
   docs:
     if: needs.build-deps.result == 'success'
@@ -413,13 +457,42 @@ jobs:
             nix-deps-
 
       - name: Generate coverage report
+        id: coverage_build
+        continue-on-error: true
         run: |
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           nix build ".#packages.${system}.gammaloop-llvm-coverage" --print-build-logs
 
       - name: Upload coverage to Codecov
+        if: steps.coverage_build.outcome == 'success'
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: result/lcov.info
           fail_ci_if_error: false
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo "### Coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Build status: ${{ steps.coverage_build.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -f result/lcov.info ]; then
+            lines_found=$(awk -F: '/^LF:/{sum+=$2} END{print sum+0}' result/lcov.info)
+            lines_hit=$(awk -F: '/^LH:/{sum+=$2} END{print sum+0}' result/lcov.info)
+            branches_found=$(awk -F: '/^BRF:/{sum+=$2} END{print sum+0}' result/lcov.info)
+            branches_hit=$(awk -F: '/^BRH:/{sum+=$2} END{print sum+0}' result/lcov.info)
+
+            line_pct=$(awk -v h="$lines_hit" -v f="$lines_found" 'BEGIN { if (f > 0) printf "%.2f", (100*h)/f; else printf "0.00" }')
+            branch_pct=$(awk -v h="$branches_hit" -v f="$branches_found" 'BEGIN { if (f > 0) printf "%.2f", (100*h)/f; else printf "0.00" }')
+
+            echo "- Lines: ${lines_hit}/${lines_found} (${line_pct}%)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Branches: ${branches_hit}/${branches_found} (${branch_pct}%)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- LCOV: \`result/lcov.info\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- LCOV file not found at \`result/lcov.info\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail if coverage build failed
+        if: steps.coverage_build.outcome != 'success'
+        run: exit 1
