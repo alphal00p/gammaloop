@@ -121,18 +121,10 @@
       ciPartitionCount = 6;
 
       licensePreCheck = ''
-        licenseFile=""
-        if [ -r /tmp/symbolica_license ]; then
-          licenseFile=/tmp/symbolica_license
-        elif [ -r /private/tmp/symbolica_license ]; then
-          licenseFile=/private/tmp/symbolica_license
-        fi
-
-        if [ -z "$licenseFile" ]; then
-          echo "Missing Symbolica license file at /tmp/symbolica_license (or /private/tmp/symbolica_license on macOS)" >&2
+        if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
+          echo "Missing SYMBOLICA_LICENSE environment variable" >&2
           exit 1
         fi
-        export SYMBOLICA_LICENSE="$(cat "$licenseFile")"
       '';
 
       # Source trimming for per-crate derivations, following crane workspace pattern.
@@ -184,6 +176,7 @@
             // {
               inherit cargoArtifacts;
               preCheck = licensePreCheck;
+              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
               partitions = 1;
               partitionType = "count";
               cargoNextestPartitionsExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail --no-tests=pass";
@@ -217,6 +210,7 @@
             // {
               inherit cargoArtifacts;
               preCheck = licensePreCheck;
+              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
               partitions = 1;
               partitionType = "count";
               cargoNextestPartitionsExtraArgs = "--profile ci --no-fail-fast --final-status-level fail --no-tests=pass";

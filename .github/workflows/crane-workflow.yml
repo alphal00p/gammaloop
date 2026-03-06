@@ -371,11 +371,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare Symbolica license file
-        run: |
-          install -m 600 /dev/null /tmp/symbolica_license
-          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
-
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
@@ -384,7 +379,6 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-            extra-sandbox-paths = /tmp/symbolica_license
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -410,8 +404,7 @@ jobs:
           echo "Available memory:"
           free -h || vm_stat
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          time nix build \
-            --option extra-sandbox-paths /tmp/symbolica_license \
+          time nix build --impure \
             ".#checks.${system}.gammaloop-nextest-partition-${{ matrix.partition }}" \
             --print-build-logs
           echo "Nextest partition ${{ matrix.partition }} completed at $(date)"
@@ -440,11 +433,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare Symbolica license file
-        run: |
-          install -m 600 /dev/null /tmp/symbolica_license
-          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
-
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
@@ -453,7 +441,6 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-            extra-sandbox-paths = /tmp/symbolica_license
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -480,8 +467,7 @@ jobs:
           echo "Available memory:"
           vm_stat
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          time nix build \
-            --option extra-sandbox-paths /private/tmp/symbolica_license \
+          time nix build --impure \
             ".#checks.${system}.gammaloop-nextest-partition-1" \
             --print-build-logs
           echo "Nextest partition 1 completed at $(date)"
