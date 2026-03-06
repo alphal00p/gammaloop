@@ -371,6 +371,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare Symbolica license file
+        run: |
+          install -m 600 /dev/null /tmp/symbolica_license
+          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
@@ -386,11 +391,6 @@ jobs:
         with:
           name: gammaloop
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
-
-      - name: Prepare Symbolica license file
-        run: |
-          install -m 600 /dev/null /tmp/symbolica_license
-          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
@@ -437,6 +437,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare Symbolica license file
+        run: |
+          install -m 600 /dev/null /tmp/symbolica_license
+          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
@@ -453,11 +458,6 @@ jobs:
           name: gammaloop
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
           skipPush: true
-
-      - name: Prepare Symbolica license file
-        run: |
-          install -m 600 /dev/null /tmp/symbolica_license
-          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
