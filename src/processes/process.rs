@@ -654,15 +654,16 @@ impl Process {
                     } else {
                         // Save each graph in its own file
                         for graph in amp.graphs.iter() {
-                            let mut dot = File::create_new(
-                                amp_path.join(format!("{}.dot", graph.graph.name)),
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Trying to create file to export amplitude graph {}",
-                                    amp_path.join(format!("{}.dot", graph.graph.name)).display()
-                                )
-                            })?;
+                            let mut dot =
+                                File::create(amp_path.join(format!("{}.dot", graph.graph.name)))
+                                    .with_context(|| {
+                                        format!(
+                                            "Trying to create file to export amplitude graph {}",
+                                            amp_path
+                                                .join(format!("{}.dot", graph.graph.name))
+                                                .display()
+                                        )
+                                    })?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     }

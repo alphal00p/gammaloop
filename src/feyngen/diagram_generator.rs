@@ -4044,6 +4044,8 @@ impl ProcessDefinition {
                             && vetoed_graphs.contains(&graph_name) {
                                 return Ok(())
                             }
+                        let mut canonized_graph_global_data =
+                            canonical_graph.gammaloop_graph.global_data.clone();
                         let mut bare_graph = Graph::from_parsed(canonical_graph.gammaloop_graph,model)?;
                         bare_graph.name = graph_name.clone();
 
@@ -4053,13 +4055,17 @@ impl ProcessDefinition {
                         // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
                         // of antiparticles as well, but I prefer to leave this a post-re-processing option instead.
                         let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
-                            Graph::from_symbolica_graph(
+                            let mut canonized_fermion_flow_graph = ParseGraph::from_symbolica_graph(
                                 model,
-                                graph_name,
+                                graph_name.clone(),
                                 &canonical_graph.graph_with_canonized_flow,
                                 bare_graph.overall_factor.clone(),
                                 &external_connections,
-                            )?
+                            )?;
+                            // Preserve global prefactors/projectors/params from the original parsed graph.
+                            canonized_graph_global_data.name = graph_name;
+                            canonized_fermion_flow_graph.global_data = canonized_graph_global_data;
+                            Graph::from_parsed(canonized_fermion_flow_graph, model)?
                         } else {
                             bare_graph.clone()
                         };
