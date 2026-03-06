@@ -120,6 +120,14 @@
 
       ciPartitionCount = 6;
 
+      licensePreCheck = ''
+        if [ ! -r /tmp/symbolica_license ]; then
+          echo "Missing Symbolica license file at /tmp/symbolica_license" >&2
+          exit 1
+        fi
+        export SYMBOLICA_LICENSE="$(cat /tmp/symbolica_license)"
+      '';
+
       # Source trimming for per-crate derivations, following crane workspace pattern.
       # Keep both workspace crates + shared assets because build scripts and embedded data
       # need access at build time.
@@ -168,6 +176,7 @@
           value = craneLib.cargoNextest (ciArgs
             // {
               inherit cargoArtifacts;
+              preCheck = licensePreCheck;
               partitions = 1;
               partitionType = "count";
               cargoNextestPartitionsExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail --no-tests=pass";
@@ -200,6 +209,7 @@
           gammaloop-nextest = craneLib.cargoNextest (ciArgs
             // {
               inherit cargoArtifacts;
+              preCheck = licensePreCheck;
               partitions = 1;
               partitionType = "count";
               cargoNextestPartitionsExtraArgs = "--profile ci --no-fail-fast --final-status-level fail --no-tests=pass";

@@ -9,6 +9,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
 
 jobs:
   partition-config:
@@ -356,8 +357,6 @@ jobs:
     environment: Cachix
     permissions:
       contents: read
-    env:
-      SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
     strategy:
       fail-fast: false
       max-parallel: 3
@@ -380,12 +379,18 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+            extra-sandbox-paths = /tmp/symbolica_license
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
           name: gammaloop
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+
+      - name: Prepare Symbolica license file
+        run: |
+          install -m 600 /dev/null /tmp/symbolica_license
+          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
@@ -423,8 +428,6 @@ jobs:
     environment: Cachix
     permissions:
       contents: read
-    env:
-      SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
     runs-on: macos-latest
     timeout-minutes: 180
 
@@ -442,6 +445,7 @@ jobs:
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+            extra-sandbox-paths = /tmp/symbolica_license
 
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
@@ -449,6 +453,11 @@ jobs:
           name: gammaloop
           authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
           skipPush: true
+
+      - name: Prepare Symbolica license file
+        run: |
+          install -m 600 /dev/null /tmp/symbolica_license
+          printf '%s' "${SYMBOLICA_LICENSE}" > /tmp/symbolica_license
 
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7

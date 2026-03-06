@@ -4,6 +4,7 @@ on: [push, pull_request, merge_group]
 
 env:
   CARGO_TERM_COLOR: always
+  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
 
 permissions:
   contents: read
