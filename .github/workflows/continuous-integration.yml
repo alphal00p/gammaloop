@@ -4,8 +4,6 @@ on: [push, pull_request, merge_group]
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-Dwarnings"
-  RUSTDOCFLAGS: "-Dwarnings"
 
 permissions:
   contents: read

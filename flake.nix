@@ -130,6 +130,7 @@
             ./Cargo.toml
             ./Cargo.lock
             ./assets
+            (craneLib.fileset.commonCargoSources ./tests)
             (craneLib.fileset.commonCargoSources ./crates/gammalooprs)
             (craneLib.fileset.commonCargoSources ./crates/gammaloop-api)
             (craneLib.fileset.commonCargoSources crate)
