@@ -13,6 +13,7 @@ use gammalooprs::{
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
+use tracing::warn;
 
 use crate::{
     commands::generate::ProcessArgs,
@@ -104,7 +105,11 @@ impl Set {
                 state.model_parameters.apply_to_model(&mut state.model)?;
             }
             Set::BaseDir { path } => {
-                global_settings.state_folder = path.clone();
+                warn!(
+                    "Ignoring base-dir change request to '{}': state folder is fixed for the current session ('{}')",
+                    path.display(),
+                    global_settings.state_folder.display()
+                );
             }
             Self::Global { input } => {
                 let fig = Figment::from(Serialized::defaults(&global_settings));

@@ -1997,9 +1997,6 @@
             "$ref": "#/$defs/StabilityLevelSetting"
           }
         },
-        "rotate_numerator": {
-          "type": "boolean"
-        },
         "recording": {
           "$ref": "#/$defs/StabilityRecordingSettings"
         },

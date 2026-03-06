@@ -785,17 +785,6 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    // pub(crate) fn numerator_sample(
-    //     &self,
-    //     settings: &RuntimeSettings,
-    // ) -> (&BareMomentumSample<T>, Option<Uuid>) {
-    //     if settings.stability.rotate_numerator {
-    //         (self.possibly_rotated_sample(), self.uuid())
-    //     } else {
-    //         (&self.sample, self.uuid())
-    //     }
-    // }
-
     // pub(crate) fn uuid(&self) -> Option<Uuid> {
     //     if self.rotated_sample.is_some() {
     //         None

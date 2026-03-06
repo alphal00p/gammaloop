@@ -379,8 +379,6 @@ mod tests {
 pub struct StabilitySettings {
     #[serde(skip_serializing_if = "is_default_rotation_axis")]
     pub rotation_axis: Vec<RotationSetting>,
-    #[serde(skip_serializing_if = "is_false")]
-    pub rotate_numerator: bool,
     #[serde(skip_serializing_if = "is_default_stability_levels")]
     pub levels: Vec<StabilityLevelSetting>,
     #[serde(skip_serializing_if = "is_true")]
@@ -398,7 +396,6 @@ impl Default for StabilitySettings {
         Self {
             rotation_axis: _default_rotation_axis(),
             levels: _default_stability_levels(),
-            rotate_numerator: true,
             check_on_norm: true,
             escalate_if_exact_zero: false,
             loop_momenta_norm_escalation_factor: -1.0,

@@ -34,6 +34,7 @@ use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
     graph::Graph,
+    integrands::evaluation::EvaluationMetaData,
     integrands::process::{
         amplitude::load::set_override_if,
         param_builder::{FnMapEntry, LUParams},
@@ -94,6 +95,42 @@ impl<OID> Length for SingleOrAllOrientations<'_, OID> {
             SingleOrAllOrientations::All { all, .. } => all.len(),
         }
     }
+}
+
+pub(crate) fn evaluate_evaluator_single<T: FloatLike + GenericEvaluatorFloat>(
+    generic_evaluator: &mut GenericEvaluator,
+    params: &[Complex<F<T>>],
+    evaluation_metadata: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+) -> Complex<F<T>> {
+    if !record_primary_timing {
+        return <T as GenericEvaluatorFloat>::get_evaluator_single(generic_evaluator)(params);
+    }
+
+    let start = std::time::Instant::now();
+    let result = <T as GenericEvaluatorFloat>::get_evaluator_single(generic_evaluator)(params);
+    evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
+        .evaluator_evaluation_time
+        .saturating_add(start.elapsed());
+    result
+}
+
+pub(crate) fn evaluate_evaluator<T: FloatLike + GenericEvaluatorFloat>(
+    generic_evaluator: &mut GenericEvaluator,
+    params: &[Complex<F<T>>],
+    evaluation_metadata: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+) -> Vec<Complex<F<T>>> {
+    if !record_primary_timing {
+        return <T as GenericEvaluatorFloat>::get_evaluator(generic_evaluator)(params);
+    }
+
+    let start = std::time::Instant::now();
+    let result = <T as GenericEvaluatorFloat>::get_evaluator(generic_evaluator)(params);
+    evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
+        .evaluator_evaluation_time
+        .saturating_add(start.elapsed());
+    result
 }
 
 #[derive(Clone)]
@@ -409,6 +446,8 @@ impl EvaluatorStack {
         &'a mut self,
         mut input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Vec<Complex<F<T>>>
     where
         usize: From<OID>,
@@ -416,8 +455,11 @@ impl EvaluatorStack {
         let mut result: Option<Vec<Complex<F<T>>>> = None;
         for (_, e) in orientations.iter() {
             input.set_orientation_values(e);
-            let output = <T as GenericEvaluatorFloat>::get_evaluator(&mut self.single_parametric)(
+            let output = evaluate_evaluator(
+                &mut self.single_parametric,
                 input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
             );
             if let Some(result) = &mut result {
                 for (r, v) in result.iter_mut().zip(output) {
@@ -434,6 +476,8 @@ impl EvaluatorStack {
         &'a mut self,
         mut input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<Complex<F<T>>>>
     where
         usize: From<OID>,
@@ -448,7 +492,12 @@ impl EvaluatorStack {
         if orientations.is_all() {
             let mut push = 0;
             let mut val = None;
-            for r in <T as GenericEvaluatorFloat>::get_evaluator(iterative)(input.as_slice()) {
+            for r in evaluate_evaluator(
+                iterative,
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
+            ) {
                 push += 1;
                 if let Some(mut value) = val.take() {
                     value += r;
@@ -468,10 +517,14 @@ impl EvaluatorStack {
                 input.set_orientation_values(e);
 
                 let mut val = None;
-                for (i, r) in
-                    <T as GenericEvaluatorFloat>::get_evaluator(iterative)(input.as_slice())
-                        .into_iter()
-                        .enumerate()
+                for (i, r) in evaluate_evaluator(
+                    iterative,
+                    input.as_slice(),
+                    evaluation_metadata,
+                    record_primary_timing,
+                )
+                .into_iter()
+                .enumerate()
                 {
                     if let Some(mut value) = val.take() {
                         value += r;
@@ -499,6 +552,8 @@ impl EvaluatorStack {
         &'a mut self,
         mut input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<Complex<F<T>>>>
     where
         usize: From<OID>,
@@ -517,15 +572,21 @@ impl EvaluatorStack {
             //     }
             // }
 
-            Ok(<T as GenericEvaluatorFloat>::get_evaluator(
+            Ok(evaluate_evaluator(
                 summed_function_map,
-            )(input.as_slice()))
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
+            ))
         } else {
             let mut result: Option<Vec<Complex<F<T>>>> = None;
             for (_, e) in orientations.iter() {
                 input.set_orientation_values(e);
-                let output = <T as GenericEvaluatorFloat>::get_evaluator(summed_function_map)(
+                let output = evaluate_evaluator(
+                    summed_function_map,
                     input.as_slice(),
+                    evaluation_metadata,
+                    record_primary_timing,
                 );
                 if let Some(result) = &mut result {
                     for (r, v) in result.iter_mut().zip(output) {
@@ -543,6 +604,8 @@ impl EvaluatorStack {
         &'a mut self,
         mut input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<Complex<F<T>>>>
     where
         usize: From<OID>,
@@ -556,14 +619,22 @@ impl EvaluatorStack {
         if orientations.is_all() {
             input.override_if(true);
 
-            Ok(<T as GenericEvaluatorFloat>::get_evaluator(summed)(
+            Ok(evaluate_evaluator(
+                summed,
                 input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
             ))
         } else {
             let mut result: Option<Vec<Complex<F<T>>>> = None;
             for (_, e) in orientations.iter() {
                 input.set_orientation_values(e);
-                let output = <T as GenericEvaluatorFloat>::get_evaluator(summed)(input.as_slice());
+                let output = evaluate_evaluator(
+                    summed,
+                    input.as_slice(),
+                    evaluation_metadata,
+                    record_primary_timing,
+                );
                 if let Some(result) = &mut result {
                     for (r, v) in result.iter_mut().zip(output) {
                         *r += v;
@@ -578,7 +649,14 @@ impl EvaluatorStack {
     #[instrument(
         name = "evaluate",
         level = "info",
-        skip(self, input, orientations, settings),
+        skip(
+            self,
+            input,
+            orientations,
+            settings,
+            evaluation_metadata,
+            record_primary_timing
+        ),
         fields(
             num_orientations = orientations.len(),
             method = ?settings.general.evaluator_method,
@@ -589,15 +667,37 @@ impl EvaluatorStack {
         input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
         settings: &RuntimeSettings,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Result<Vec<Complex<F<T>>>>
     where
         usize: From<OID>,
     {
         match settings.general.evaluator_method {
-            EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(input, orientations)),
-            EvaluatorMethod::Iterative => self.evaluate_iterative(input, orientations),
-            EvaluatorMethod::SummedFunctionMap => self.evaluate_summed_fnmap(input, orientations),
-            EvaluatorMethod::Summed => self.evaluate_summed(input, orientations),
+            EvaluatorMethod::SingleParametric => Ok(self.evaluate_parametric(
+                input,
+                orientations,
+                evaluation_metadata,
+                record_primary_timing,
+            )),
+            EvaluatorMethod::Iterative => self.evaluate_iterative(
+                input,
+                orientations,
+                evaluation_metadata,
+                record_primary_timing,
+            ),
+            EvaluatorMethod::SummedFunctionMap => self.evaluate_summed_fnmap(
+                input,
+                orientations,
+                evaluation_metadata,
+                record_primary_timing,
+            ),
+            EvaluatorMethod::Summed => self.evaluate_summed(
+                input,
+                orientations,
+                evaluation_metadata,
+                record_primary_timing,
+            ),
         }
     }
 

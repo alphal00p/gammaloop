@@ -382,7 +382,8 @@ pub struct StabilityLevelResult {
     pub result: Complex<F<f64>>,
     pub stability_level_used: Precision,
     pub parameterization_time: Duration,
-    pub ltd_evaluation_time: Duration,
+    pub integrand_evaluation_time: Duration,
+    pub evaluator_evaluation_time: Duration,
     pub is_stable: bool,
     pub instability_reason: Option<StabilityFailureReason>,
     pub rotated_results: Vec<RotatedEvaluation>,
@@ -740,6 +741,8 @@ pub trait GraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<Complex<F<T>>>;
 
@@ -758,8 +761,10 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
+    evaluation_metadata: &mut EvaluationMetaData,
+    is_primary_stability_level: bool,
     record_rotated_results: bool,
-) -> Result<(Vec<Complex<F<T>>>, Duration, Vec<RotatedEvaluation>)> {
+) -> Result<(Vec<Complex<F<T>>>, Vec<RotatedEvaluation>)> {
     let rotations = integrand.get_rotations().cloned().collect_vec();
 
     let cache = integrand.get_settings().general.enable_cache;
@@ -782,15 +787,34 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
         })
         .collect();
 
-    let start_time = std::time::Instant::now();
-    let evaluation_results: Vec<Complex<F<T>>> = gammaloop_samples
+    let primary_rotation_index = rotations
         .iter()
-        .zip(rotations.iter())
-        .map(|(gammaloop_sample, rotation)| {
-            debug!("Evaluating rotation: {}", rotation.method);
-            evaluate_single(integrand, model, gammaloop_sample, rotation)
-        })
-        .collect::<Result<_>>()?;
+        .position(Rotation::is_identity)
+        .unwrap_or(0);
+    let mut original_call_timed = false;
+    let mut evaluation_results: Vec<Complex<F<T>>> = Vec::with_capacity(gammaloop_samples.len());
+    for (rotation_index, (gammaloop_sample, rotation)) in
+        gammaloop_samples.iter().zip(rotations.iter()).enumerate()
+    {
+        debug!("Evaluating rotation: {}", rotation.method);
+        let record_primary_timing = is_primary_stability_level
+            && !original_call_timed
+            && rotation_index == primary_rotation_index;
+
+        let result = evaluate_single(
+            integrand,
+            model,
+            gammaloop_sample,
+            rotation,
+            evaluation_metadata,
+            record_primary_timing,
+        )?;
+
+        if record_primary_timing {
+            original_call_timed = true;
+        }
+        evaluation_results.push(result);
+    }
 
     if cache {
         integrand.increment_loop_cache_id(rotations.len());
@@ -799,8 +823,6 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
         // for subsequent sample points with the same base external momenta
         integrand.revert_to_base_external_cache_id();
     }
-
-    let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
 
     let rotated_results = if record_rotated_results {
         rotations
@@ -815,7 +837,7 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
         Vec::new()
     };
 
-    Ok((evaluation_results, duration, rotated_results))
+    Ok((evaluation_results, rotated_results))
 }
 
 fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
@@ -827,6 +849,8 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     wgt: F<f64>,
     check_on_norm: bool,
     is_final_level: bool,
+    is_primary_stability_level: bool,
+    evaluation_metadata: &mut EvaluationMetaData,
     record_rotated_results: bool,
     precision_label: &str,
 ) -> Result<StabilityLevelResult> {
@@ -840,8 +864,16 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     );
 
     let parameterization_time = before_parameterization.elapsed();
-    let (results, ltd_evaluation_time, rotated_results) =
-        evaluate_all_rotations(integrand, model, &gammaloop_sample, record_rotated_results)?;
+    let integrand_time_before = evaluation_metadata.integrand_evaluation_time;
+    let evaluator_time_before = evaluation_metadata.evaluator_evaluation_time;
+    let (results, rotated_results) = evaluate_all_rotations(
+        integrand,
+        model,
+        &gammaloop_sample,
+        evaluation_metadata,
+        is_primary_stability_level,
+        record_rotated_results,
+    )?;
 
     let max_eval = complex_from_f64::<T>(max_eval);
     let wgt = F::<T>::from_ff64(wgt);
@@ -870,7 +902,12 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
         result: complex_to_f64(&average_result),
         stability_level_used: stability_level.precision,
         parameterization_time,
-        ltd_evaluation_time,
+        integrand_evaluation_time: evaluation_metadata
+            .integrand_evaluation_time
+            .saturating_sub(integrand_time_before),
+        evaluator_evaluation_time: evaluation_metadata
+            .evaluator_evaluation_time
+            .saturating_sub(evaluator_time_before),
         is_stable,
         instability_reason,
         rotated_results,
@@ -988,102 +1025,151 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
     rotation: &Rotation,
+    evaluation_metadata: &mut EvaluationMetaData,
+    record_primary_timing: bool,
 ) -> Result<Complex<F<T>>> {
     let settings = integrand.get_settings().clone();
     let zero = Complex::new_re(gammaloop_sample.get_default_sample().zero());
     let loop_cache_shift = 0;
     let cache = integrand.get_settings().general.enable_cache;
 
-    let result = match &gammaloop_sample {
-        GammaLoopSample::Default(sample) => integrand
-            .get_terms_mut()
-            .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation, None))
-            .try_fold(zero.clone(), |sum, term| term.map(|value| sum + value))?,
-        GammaLoopSample::MultiChanneling { .. } => {
-            unimplemented!(
-                "deprecated due to annyoing borrow issues, just set each graph to the same group"
-            );
-        }
-        GammaLoopSample::DiscreteGraph { group_id, sample } => {
-            let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
-
-            let mut res = zero.clone();
-
-            for graph_id in group.into_iter() {
-                let graph_term_res = match sample {
-                    DiscreteGraphSample::Default(sample) => integrand
-                        .get_graph_mut(graph_id)
-                        .evaluate(sample, model, &settings, rotation, None),
-                    DiscreteGraphSample::DiscreteMultiChanneling {
-                        alpha,
-                        channel_id,
-                        sample,
-                    } => integrand.get_graph_mut(graph_id).evaluate(
+    let start_integrand_timing = if record_primary_timing {
+        Some(std::time::Instant::now())
+    } else {
+        None
+    };
+    let result = (|| -> Result<Complex<F<T>>> {
+        let result = match &gammaloop_sample {
+            GammaLoopSample::Default(sample) => integrand
+                .get_terms_mut()
+                .map(|term: &mut I::G| {
+                    term.evaluate(
                         sample,
                         model,
                         &settings,
                         rotation,
-                        Some((*channel_id, alpha.clone())),
-                    ),
-                    DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                        let num_channels = integrand.get_master_graph(*group_id).get_num_channels();
-                        (0..num_channels)
-                            .map(ChannelIndex::from)
-                            .map(|channel_index| {
-                                integrand.get_graph_mut(graph_id).evaluate(
+                        evaluation_metadata,
+                        record_primary_timing,
+                        None,
+                    )
+                })
+                .try_fold(zero.clone(), |sum, term| term.map(|value| sum + value))?,
+            GammaLoopSample::MultiChanneling { .. } => {
+                unimplemented!(
+                    "deprecated due to annyoing borrow issues, just set each graph to the same group"
+                );
+            }
+            GammaLoopSample::DiscreteGraph { group_id, sample } => {
+                let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
+
+                let mut res = zero.clone();
+
+                for graph_id in group.into_iter() {
+                    let graph_term_res = match sample {
+                        DiscreteGraphSample::Default(sample) => {
+                            integrand.get_graph_mut(graph_id).evaluate(
+                                sample,
+                                model,
+                                &settings,
+                                rotation,
+                                evaluation_metadata,
+                                record_primary_timing,
+                                None,
+                            )
+                        }
+                        DiscreteGraphSample::DiscreteMultiChanneling {
+                            alpha,
+                            channel_id,
+                            sample,
+                        } => integrand.get_graph_mut(graph_id).evaluate(
+                            sample,
+                            model,
+                            &settings,
+                            rotation,
+                            evaluation_metadata,
+                            record_primary_timing,
+                            Some((*channel_id, alpha.clone())),
+                        ),
+                        DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                            let num_channels =
+                                integrand.get_master_graph(*group_id).get_num_channels();
+                            (0..num_channels)
+                                .map(ChannelIndex::from)
+                                .map(|channel_index| {
+                                    integrand.get_graph_mut(graph_id).evaluate(
+                                        sample,
+                                        model,
+                                        &settings,
+                                        rotation,
+                                        evaluation_metadata,
+                                        record_primary_timing,
+                                        Some((channel_index, alpha.clone())),
+                                    )
+                                })
+                                .try_fold(zero.clone(), |sum, term| Ok(sum + term?))
+                        }
+                        DiscreteGraphSample::Tropical(sample) => {
+                            let master_graph = integrand.get_master_graph(*group_id).get_graph();
+
+                            let energy_cache = master_graph.get_energy_cache(
+                                model,
+                                sample.loop_moms(),
+                                sample.external_moms(),
+                                &master_graph.loop_momentum_basis,
+                            );
+
+                            let prefactor = master_graph
+                                .iter_loop_edges()
+                                .map(|(_, edge_index, _)| edge_index)
+                                .zip(
+                                    integrand
+                                        .get_master_graph(*group_id)
+                                        .get_tropical_sampler()
+                                        .iter_edge_weights(),
+                                )
+                                .fold(sample.one(), |product, (edge_id, weight)| {
+                                    let energy = &energy_cache[edge_id];
+                                    let edge_weight = weight;
+                                    product * energy.powf(&F::from_f64(2. * edge_weight))
+                                });
+
+                            Ok(Complex::new_re(prefactor)
+                                * integrand.get_graph_mut(graph_id).evaluate(
                                     sample,
                                     model,
                                     &settings,
                                     rotation,
-                                    Some((channel_index, alpha.clone())),
-                                )
-                            })
-                            .try_fold(zero.clone(), |sum, term| Ok(sum + term?))
-                    }
-                    DiscreteGraphSample::Tropical(sample) => {
-                        let master_graph = integrand.get_master_graph(*group_id).get_graph();
+                                    evaluation_metadata,
+                                    record_primary_timing,
+                                    None,
+                                )?)
+                        }
+                    };
 
-                        let energy_cache = master_graph.get_energy_cache(
-                            model,
-                            sample.loop_moms(),
-                            sample.external_moms(),
-                            &master_graph.loop_momentum_basis,
-                        );
+                    res += graph_term_res?;
+                }
 
-                        let prefactor = master_graph
-                            .iter_loop_edges()
-                            .map(|(_, edge_index, _)| edge_index)
-                            .zip(
-                                integrand
-                                    .get_master_graph(*group_id)
-                                    .get_tropical_sampler()
-                                    .iter_edge_weights(),
-                            )
-                            .fold(sample.one(), |product, (edge_id, weight)| {
-                                let energy = &energy_cache[edge_id];
-                                let edge_weight = weight;
-                                product * energy.powf(&F::from_f64(2. * edge_weight))
-                            });
-
-                        Ok(Complex::new_re(prefactor)
-                            * integrand
-                                .get_graph_mut(graph_id)
-                                .evaluate(sample, model, &settings, rotation, None)?)
-                    }
-                };
-
-                res += graph_term_res?;
+                res
             }
+        };
 
-            res
+        if cache {
+            integrand.increment_loop_cache_id(loop_cache_shift);
         }
-    };
 
-    if cache {
-        integrand.increment_loop_cache_id(loop_cache_shift);
+        Ok(result * gammaloop_sample.get_default_sample().jacobian())
+    })();
+    if record_primary_timing {
+        evaluation_metadata.integrand_evaluation_time = evaluation_metadata
+            .integrand_evaluation_time
+            .saturating_add(
+                start_integrand_timing
+                    .expect("integrand timing start should exist")
+                    .elapsed(),
+            );
     }
 
-    Ok(result * gammaloop_sample.get_default_sample().jacobian())
+    result
 }
 
 fn create_grid_for_graph<G: GraphTerm>(
@@ -1224,6 +1310,7 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
     max_eval: Complex<F<f64>>,
 ) -> Result<EvaluationResult> {
     let start_eval = std::time::Instant::now();
+    let mut evaluation_metadata = EvaluationMetaData::new_empty();
     let mut stability_iterator =
         create_stability_iterator(&integrand.get_settings().stability, use_arb_prec);
     let escalation_factor = integrand
@@ -1273,6 +1360,7 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
             .recording
             .map(|recording| recording.record_rotated_results)
             .unwrap_or(false);
+        let is_primary_stability_level = level_index == 0;
         let result_of_level = match stability_level.precision {
             Precision::Double => evaluate_stability_level::<f64, I>(
                 integrand,
@@ -1283,6 +1371,8 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                 wgt,
                 integrand.get_settings().stability.check_on_norm,
                 is_final_level,
+                is_primary_stability_level,
+                &mut evaluation_metadata,
                 record_rotated_results,
                 "f64",
             ),
@@ -1295,6 +1385,8 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                 wgt,
                 integrand.get_settings().stability.check_on_norm,
                 is_final_level,
+                is_primary_stability_level,
+                &mut evaluation_metadata,
                 record_rotated_results,
                 "f128",
             ),
@@ -1307,6 +1399,8 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                 wgt,
                 integrand.get_settings().stability.check_on_norm,
                 is_final_level,
+                is_primary_stability_level,
+                &mut evaluation_metadata,
                 record_rotated_results,
                 "ArbPrec",
             ),
@@ -1389,7 +1483,8 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                         precision: level.stability_level_used,
                         result: level.result,
                         parameterization_time: level.parameterization_time,
-                        ltd_evaluation_time: level.ltd_evaluation_time,
+                        integrand_evaluation_time: level.integrand_evaluation_time,
+                        evaluator_evaluation_time: level.evaluator_evaluation_time,
                         is_stable: level.is_stable,
                         instability_reason: level.instability_reason,
                         rotated_results: level.rotated_results.clone(),
@@ -1403,7 +1498,8 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                     precision: level.stability_level_used,
                     result: level.result,
                     parameterization_time: level.parameterization_time,
-                    ltd_evaluation_time: level.ltd_evaluation_time,
+                    integrand_evaluation_time: level.integrand_evaluation_time,
+                    evaluator_evaluation_time: level.evaluator_evaluation_time,
                     is_stable: level.is_stable,
                     instability_reason: level.instability_reason,
                     rotated_results: level.rotated_results.clone(),
@@ -1413,17 +1509,14 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
             Vec::new()
         };
 
-        let meta_data = EvaluationMetaData {
-            total_timing: start_eval.elapsed(),
-            rep3d_evaluation_time: stability_level_result.ltd_evaluation_time,
-            highest_precision: stability_level_result.stability_level_used,
-            parameterization_time: stability_level_result.parameterization_time,
-            relative_instability_error: Complex::new_zero(),
-            is_nan,
-            final_is_stable: stability_level_result.is_stable,
-            loop_momenta_escalation,
-            stability_evaluations,
-        };
+        evaluation_metadata.total_timing = start_eval.elapsed();
+        evaluation_metadata.highest_precision = stability_level_result.stability_level_used;
+        evaluation_metadata.parameterization_time = stability_level_result.parameterization_time;
+        evaluation_metadata.relative_instability_error = Complex::new_zero();
+        evaluation_metadata.is_nan = is_nan;
+        evaluation_metadata.final_is_stable = stability_level_result.is_stable;
+        evaluation_metadata.loop_momenta_escalation = loop_momenta_escalation;
+        evaluation_metadata.stability_evaluations = stability_evaluations;
 
         let nanless_result = if re_is_nan && !im_is_nan {
             Complex::new(F(0.0), stability_level_result.result.im)
@@ -1438,7 +1531,7 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
             integrand_result: nanless_result,
             integrator_weight: wgt,
             event_buffer: vec![],
-            evaluation_metadata: meta_data,
+            evaluation_metadata,
         })
     } else {
         // this happens if parameterization fails at all levels
@@ -1449,7 +1542,8 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
             event_buffer: vec![],
             evaluation_metadata: EvaluationMetaData {
                 total_timing: Duration::ZERO,
-                rep3d_evaluation_time: Duration::ZERO,
+                integrand_evaluation_time: Duration::ZERO,
+                evaluator_evaluation_time: Duration::ZERO,
                 parameterization_time: Duration::ZERO,
                 relative_instability_error: Complex::new(F(0.0), F(0.0)),
                 is_nan: true,

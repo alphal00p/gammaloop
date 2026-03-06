@@ -30,6 +30,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use std::fmt::{Display, Formatter};
+use std::time::Duration;
 use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 #[allow(unused_imports)]
@@ -417,7 +418,8 @@ impl HasIntegrand for UnitSurfaceIntegrand {
 
         let evaluation_metadata = EvaluationMetaData {
             total_timing: start_evaluate_sample.elapsed(),
-            rep3d_evaluation_time: evaluation_time,
+            integrand_evaluation_time: evaluation_time,
+            evaluator_evaluation_time: Duration::ZERO,
             parameterization_time,
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
@@ -428,7 +430,8 @@ impl HasIntegrand for UnitSurfaceIntegrand {
                 precision: Precision::Double,
                 result: Complex::new(itg_wgt, F(0.)) * jac,
                 parameterization_time,
-                ltd_evaluation_time: evaluation_time,
+                integrand_evaluation_time: evaluation_time,
+                evaluator_evaluation_time: Duration::ZERO,
                 is_stable: !is_nan,
                 instability_reason: None,
                 rotated_results: Vec::new(),
@@ -578,7 +581,8 @@ impl HasIntegrand for UnitVolumeIntegrand {
 
         let evaluation_metadata = EvaluationMetaData {
             total_timing: start_evaluate_sample.elapsed(),
-            rep3d_evaluation_time: evaluation_time,
+            integrand_evaluation_time: evaluation_time,
+            evaluator_evaluation_time: Duration::ZERO,
             parameterization_time,
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
@@ -589,7 +593,8 @@ impl HasIntegrand for UnitVolumeIntegrand {
                 precision: Precision::Double,
                 result: Complex::new(itg_wgt, F(0.)) * jac,
                 parameterization_time,
-                ltd_evaluation_time: evaluation_time,
+                integrand_evaluation_time: evaluation_time,
+                evaluator_evaluation_time: Duration::ZERO,
                 is_stable: !is_nan,
                 instability_reason: None,
                 rotated_results: Vec::new(),

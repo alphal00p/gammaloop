@@ -19,9 +19,10 @@ use crate::{
         expression::AmplitudeOrientationID,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
+    integrands::evaluation::EvaluationMetaData,
     integrands::process::{
         ParamBuilder, ThresholdParams,
-        evaluators::{EvaluatorStack, SingleOrAllOrientations},
+        evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
     },
     model::Model,
     momentum::Rotation,
@@ -121,6 +122,8 @@ impl AmplitudeCountertermData {
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
         orientation: SingleOrAllOrientations<'_, AmplitudeOrientationID>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Complex<F<T>> {
         debug!("start evaluate threshold counterterm");
         let existing_esurfaces = self
@@ -154,10 +157,12 @@ impl AmplitudeCountertermData {
                 let single_result = overlap_builder
                     .new_esurface_builder(*existing_esurface_id)
                     .map(|esurface_builder| {
-                        esurface_builder
-                            .solve_rstar()
-                            .rstar_samples()
-                            .evaluate(param_builder, orientation)
+                        esurface_builder.solve_rstar().rstar_samples().evaluate(
+                            param_builder,
+                            orientation,
+                            evaluation_metadata,
+                            record_primary_timing,
+                        )
                     })
                     .unwrap_or_else(|| Complex::new_re(momentum_sample.zero()));
 
@@ -374,6 +379,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         self,
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'a, AmplitudeOrientationID>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Complex<F<T>> {
         let esurface_ct_builder = &self.rstar_solution.esurface_ct_builder;
         let ct_builder = esurface_ct_builder.overlap_builder.counterterm_builder;
@@ -386,7 +393,12 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .map(|c| Complex::new(F::from_ff64(c.re), F::from_ff64(c.im)))
             .collect::<Vec<_>>();
 
-        let prefactor = self.evaluate_multichanneling_prefactor(&self.rstar_sample, model_params);
+        let prefactor = self.evaluate_multichanneling_prefactor(
+            &self.rstar_sample,
+            model_params,
+            evaluation_metadata,
+            record_primary_timing,
+        );
 
         let radius = self
             .rstar_solution
@@ -441,7 +453,13 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let results = ct_builder.evaluators[esurface_id]
             .evaluator_stack
             .borrow_mut()
-            .evaluate(params, orientations, ct_builder.settings)
+            .evaluate(
+                params,
+                orientations,
+                ct_builder.settings,
+                evaluation_metadata,
+                record_primary_timing,
+            )
             .expect("Amplitude counterterm evaluator stack failed");
 
         let final_result = if results.len() >= 2 {
@@ -470,6 +488,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         &self,
         momentum_sample: &MomentumSample<T>,
         model_params: Vec<Complex<F<T>>>,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
     ) -> Complex<F<T>> {
         let overlap_builder = self.rstar_solution.esurface_ct_builder.overlap_builder;
         let overlap = overlap_builder.counterterm_builder.overlap_structure;
@@ -497,6 +517,11 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .as_ref()
             .unwrap();
 
-        T::get_evaluator_single(&mut evaluator.borrow_mut())(&params)
+        evaluate_evaluator_single(
+            &mut evaluator.borrow_mut(),
+            &params,
+            evaluation_metadata,
+            record_primary_timing,
+        )
     }
 }

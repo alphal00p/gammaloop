@@ -184,7 +184,8 @@ impl HasIntegrand for HFunctionTestIntegrand {
 
         let evaluation_metadata = EvaluationMetaData {
             total_timing: start_evaluate_sample.elapsed(),
-            rep3d_evaluation_time: evaluation_timing,
+            integrand_evaluation_time: evaluation_timing,
+            evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: parameterization_timing,
             relative_instability_error: Complex::new_zero(),
             highest_precision: precision,
@@ -195,7 +196,8 @@ impl HasIntegrand for HFunctionTestIntegrand {
                 precision,
                 result: integration_result,
                 parameterization_time: parameterization_timing,
-                ltd_evaluation_time: evaluation_timing,
+                integrand_evaluation_time: evaluation_timing,
+                evaluator_evaluation_time: Duration::ZERO,
                 is_stable: !is_nan,
                 instability_reason: None,
                 rotated_results: Vec::new(),

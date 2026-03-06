@@ -38,7 +38,7 @@ use crate::{
         LoopMomentumBasis,
     },
     integrands::HasIntegrand,
-    integrands::evaluation::EvaluationResult,
+    integrands::evaluation::{EvaluationMetaData, EvaluationResult},
     integrands::process::{ChannelIndex, ParamBuilder, evaluators::EvaluatorStack},
     model::Model,
     momentum::sample::{ExternalIndex, MomentumSample},
@@ -192,6 +192,8 @@ impl AmplitudeGraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<Complex<F<T>>> {
         let (momentum_sample, prefactor) = if let Some((channel_id, alpha)) = channel_id {
@@ -229,7 +231,13 @@ impl AmplitudeGraphTerm {
 
         let result = self
             .original_integrand
-            .evaluate(input, orientations, settings)?
+            .evaluate(
+                input,
+                orientations,
+                settings,
+                evaluation_metadata,
+                record_primary_timing,
+            )?
             .pop()
             .unwrap();
         // debug!("parambuilder 244: {}", self.param_builder);
@@ -242,6 +250,8 @@ impl AmplitudeGraphTerm {
             settings,
             &mut self.param_builder,
             orientations,
+            evaluation_metadata,
+            record_primary_timing,
         );
 
         debug!(
@@ -357,9 +367,19 @@ impl GraphTerm for AmplitudeGraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<Complex<F<T>>> {
-        self.evaluate_impl(momentum_sample, model, settings, rotation, channel_id)
+        self.evaluate_impl(
+            momentum_sample,
+            model,
+            settings,
+            rotation,
+            evaluation_metadata,
+            record_primary_timing,
+            channel_id,
+        )
     }
 
     fn get_num_orientations(&self) -> usize {

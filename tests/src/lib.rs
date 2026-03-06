@@ -5,9 +5,9 @@
 use color_eyre::Result;
 
 use gammaloop_api::{
-    commands::{save::SaveState, Commands},
-    state::{RunHistory, State, SyncSettings},
     CLISettings,
+    commands::{Commands, save::SaveState},
+    state::{RunHistory, State, SyncSettings},
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};

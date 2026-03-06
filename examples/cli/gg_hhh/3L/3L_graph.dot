@@ -1,0 +1,30 @@
+digraph pentaboxbox {
+  num = "1";
+  overall_factor = "-1";
+  overall_factor_evaluated = "-1";
+  projector = "1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0))) * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1))) * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))";
+
+  ext0   [style=invis];
+  ext1   [style=invis];
+  ext2   [style=invis];
+  ext3   [style=invis];
+  ext4   [style=invis];
+
+  ext0	-> 0:0	 [id=0 particle="g"];
+  ext1	-> 1:1	 [id=1 particle="g"];
+  2:2	-> ext2	 [id=2 particle="H"];
+  3:3	-> ext3	 [id=3 particle="H"];
+  4:4	-> ext4  [id=4 particle="H"];
+
+  0	-> 1	 [id=5 lmb_id=0 particle="t"];
+  1	-> 5	 [id=6 particle="t"];
+  5	-> 6	 [id=7 particle="t"];
+  6	-> 2	 [id=8 particle="t"];
+  2	-> 3	 [id=9 particle="t"];
+  3	-> 4	 [id=10 particle="t"];
+  4	-> 7	 [id=11 particle="t"];
+  7	-> 8	 [id=12 particle="t"];
+  8	-> 0	 [id=13 particle="t"];
+  8	-> 5	 [id=14 lmb_id=1 particle="g"];
+  7	-> 6	 [id=15 lmb_id=2 particle="g"];
+}

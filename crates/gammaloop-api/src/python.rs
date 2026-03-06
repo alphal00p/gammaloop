@@ -384,6 +384,8 @@ impl GammaLoopAPI {
             dry_run: false,
             // Path to the state folder
             state_folder,
+            // Python API takes an explicit state folder argument.
+            state_folder_explicitly_set: true,
             // Path to the model file
             model_file: None,
             // Skip saving state on exit

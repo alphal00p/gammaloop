@@ -10,9 +10,11 @@ use crate::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
     },
     integrands::HasIntegrand,
-    integrands::evaluation::EvaluationResult,
+    integrands::evaluation::{EvaluationMetaData, EvaluationResult},
     integrands::process::{
-        ChannelIndex, GenericEvaluatorFloat, ParamBuilder, param_builder::LUParams,
+        ChannelIndex, ParamBuilder,
+        evaluators::{evaluate_evaluator, evaluate_evaluator_single},
+        param_builder::LUParams,
     },
     model::Model,
     momentum::sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
@@ -579,6 +581,8 @@ impl GraphTerm for CrossSectionGraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         _rotation: &Rotation,
+        evaluation_metadata: &mut EvaluationMetaData,
+        record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<Complex<F<T>>> {
         let orientations =
@@ -770,8 +774,11 @@ impl GraphTerm for CrossSectionGraphTerm {
                 );
 
                 let iterative = self.iterative_integrand.as_mut().map(|ev| {
-                    <T as GenericEvaluatorFloat>::get_evaluator(&mut ev[raised_cut][subset_id])(
+                    evaluate_evaluator(
+                        &mut ev[raised_cut][subset_id],
                         params.as_slice(),
+                        evaluation_metadata,
+                        record_primary_timing,
                     )
                 });
 
@@ -837,9 +844,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                         );
                         result += DualOrNot::new_from_slice(
                             &complex_dual_shape,
-                            &<T as GenericEvaluatorFloat>::get_evaluator(
+                            &evaluate_evaluator(
                                 &mut self.parametric_integrand[raised_cut][subset_id],
-                            )(a.as_slice()),
+                                a.as_slice(),
+                                evaluation_metadata,
+                                record_primary_timing,
+                            ),
                         );
                     }
                 }
@@ -879,9 +889,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let pass_two_evaluator =
                     &mut self.raised_data.pass_two_evaluators[subset.len() - 1];
 
-                let pass_two_result = <T as GenericEvaluatorFloat>::get_evaluator_single(
+                let pass_two_result = evaluate_evaluator_single(
                     pass_two_evaluator,
-                )(&params_for_pass_two);
+                    &params_for_pass_two,
+                    evaluation_metadata,
+                    record_primary_timing,
+                );
 
                 debug!("pass_two_result: {:+16e}", pass_two_result);
 

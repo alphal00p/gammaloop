@@ -38,6 +38,8 @@ gammaloop_state_integration_workspace/
 result/
 examples/amplitude_computation/GL_*
 gammaloop_state/
+examples/cli/epem
+examples/**/state/
 examples/**/gammaloop_state/
 integration-tests/workspace/
 crates/integration-tests/workspace/

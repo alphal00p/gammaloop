@@ -53,7 +53,8 @@ pub struct StabilityEvaluation {
     pub precision: Precision,
     pub result: Complex<F<f64>>,
     pub parameterization_time: Duration,
-    pub ltd_evaluation_time: Duration,
+    pub integrand_evaluation_time: Duration,
+    pub evaluator_evaluation_time: Duration,
     pub is_stable: bool,
     pub instability_reason: Option<StabilityFailureReason>,
     pub rotated_results: Vec<RotatedEvaluation>,
@@ -69,7 +70,8 @@ pub struct LoopMomentaEscalationMetrics {
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationMetaData {
     pub total_timing: Duration,
-    pub rep3d_evaluation_time: Duration,
+    pub integrand_evaluation_time: Duration,
+    pub evaluator_evaluation_time: Duration,
     pub parameterization_time: Duration,
     pub relative_instability_error: Complex<F<f64>>,
     pub highest_precision: Precision,
@@ -102,9 +104,10 @@ impl Display for EvaluationMetaData {
         };
         write!(
             f,
-            "EvaluationMetaData {{ total_timing: {:?},\t rep3d_evaluation_time: {:?},\t parameterization_time: {:?},\t relative_instability_error: {:?},\t highest_precision: {:?},\t is_nan: {},\t final_is_stable: {},\t loop_momenta_escalation: {:?},\t stability_evaluations: {} }}",
+            "EvaluationMetaData {{ total_timing: {:?},\t integrand_evaluation_time: {:?},\t evaluator_evaluation_time: {:?},\t parameterization_time: {:?},\t relative_instability_error: {:?},\t highest_precision: {:?},\t is_nan: {},\t final_is_stable: {},\t loop_momenta_escalation: {:?},\t stability_evaluations: {} }}",
             self.total_timing,
-            self.rep3d_evaluation_time,
+            self.integrand_evaluation_time,
+            self.evaluator_evaluation_time,
             self.parameterization_time,
             self.relative_instability_error,
             self.highest_precision,
@@ -120,7 +123,8 @@ impl EvaluationMetaData {
     pub(crate) fn new_empty() -> Self {
         Self {
             total_timing: Duration::ZERO,
-            rep3d_evaluation_time: Duration::ZERO,
+            integrand_evaluation_time: Duration::ZERO,
+            evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
@@ -136,7 +140,8 @@ impl EvaluationMetaData {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct StatisticsCounter {
     pub num_evals: usize,
-    sum_rep3d_evaluation_time: Duration,
+    sum_integrand_evaluation_time: Duration,
+    sum_evaluator_evaluation_time: Duration,
     sum_parameterization_time: Duration,
     sum_total_evaluation_time: Duration,
     sum_relative_instability_error: (F<f64>, F<f64>),
@@ -152,8 +157,10 @@ impl StatisticsCounter {
         data.iter().fold(
             StatisticsCounter::new_empty(),
             |mut accumulator, data_entry| {
-                accumulator.sum_rep3d_evaluation_time +=
-                    data_entry.evaluation_metadata.rep3d_evaluation_time;
+                accumulator.sum_integrand_evaluation_time +=
+                    data_entry.evaluation_metadata.integrand_evaluation_time;
+                accumulator.sum_evaluator_evaluation_time +=
+                    data_entry.evaluation_metadata.evaluator_evaluation_time;
                 accumulator.sum_parameterization_time +=
                     data_entry.evaluation_metadata.parameterization_time;
                 accumulator.sum_relative_instability_error.0 +=
@@ -183,8 +190,10 @@ impl StatisticsCounter {
     /// Merge two statistics counters into a single one, but keeping the original ones unchanged
     pub(crate) fn merged(&self, other: &Self) -> Self {
         Self {
-            sum_rep3d_evaluation_time: self.sum_rep3d_evaluation_time
-                + other.sum_rep3d_evaluation_time,
+            sum_integrand_evaluation_time: self.sum_integrand_evaluation_time
+                + other.sum_integrand_evaluation_time,
+            sum_evaluator_evaluation_time: self.sum_evaluator_evaluation_time
+                + other.sum_evaluator_evaluation_time,
             sum_parameterization_time: self.sum_parameterization_time
                 + other.sum_parameterization_time,
             sum_relative_instability_error: (
@@ -205,7 +214,8 @@ impl StatisticsCounter {
 
     pub(crate) fn new_empty() -> Self {
         Self {
-            sum_rep3d_evaluation_time: Duration::ZERO,
+            sum_integrand_evaluation_time: Duration::ZERO,
+            sum_evaluator_evaluation_time: Duration::ZERO,
             sum_parameterization_time: Duration::ZERO,
             sum_relative_instability_error: (F(0.0), F(0.0)),
             sum_total_evaluation_time: Duration::ZERO,
@@ -233,11 +243,18 @@ impl StatisticsCounter {
         Duration::from_secs_f64(avg_total_timing)
     }
 
-    /// Compute the average time spent in a single evaluation of the three-dimensional representation.
-    /// Note that a single evaluation contains at least two evaluations of the three-dimensional representation.
-    pub(crate) fn get_avg_rep3d_timing(&self) -> Duration {
-        let avg_rep3d_timing = self.sum_rep3d_evaluation_time.as_secs_f64() / self.num_evals as f64;
-        Duration::from_secs_f64(avg_rep3d_timing)
+    /// Compute the average time spent in the original integrand evaluation call.
+    pub(crate) fn get_avg_integrand_timing(&self) -> Duration {
+        let avg_integrand_timing =
+            self.sum_integrand_evaluation_time.as_secs_f64() / self.num_evals as f64;
+        Duration::from_secs_f64(avg_integrand_timing)
+    }
+
+    /// Compute the average time spent inside Symbolica evaluator function calls.
+    pub(crate) fn get_avg_evaluator_timing(&self) -> Duration {
+        let avg_evaluator_timing =
+            self.sum_evaluator_evaluation_time.as_secs_f64() / self.num_evals as f64;
+        Duration::from_secs_f64(avg_evaluator_timing)
     }
 
     /// Compute the average time spent in the parameterization of the integrand. Especaially useful for monitoring the performance of tropical sampling.
@@ -276,19 +293,22 @@ impl StatisticsCounter {
 
     #[allow(clippy::format_in_format_args)]
     pub(crate) fn display_status(&self) {
-        let time_ltd_formatted = format_evaluation_time(self.get_avg_rep3d_timing());
+        let time_integrand_formatted = format_evaluation_time(self.get_avg_integrand_timing());
+        let time_evaluators_formatted = format_evaluation_time(self.get_avg_evaluator_timing());
         let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());
         let total_time = format_evaluation_time(self.get_avg_total_timing());
 
         info!(
-            "|  {}  | {} {} | {} {} | {} {}",
+            "|  {}  | {} {} | {} {} | {} {} | {} {}",
             format!("{:-7}", "timing").blue().bold(),
             format!("{:-7}", "total:"),
             format!("{:-9}", total_time).green(),
             format!("{:-7}", "param:"),
             format!("{:-9}", param_time_formatted).green(),
-            format!("{:-7}", "ltd:"),
-            format!("{:-9}", time_ltd_formatted).green(),
+            format!("{:-7}", "itg:"),
+            format!("{:-9}", time_integrand_formatted).green(),
+            format!("{:-11}", "evaluators:"),
+            format!("{:-9}", time_evaluators_formatted).green(),
         );
 
         info!(

@@ -66,25 +66,19 @@ impl Integrate {
         state: &mut State,
         global_cli_settings: &CLISettings,
     ) -> Result<IntegrationResult> {
-        let state_name: String = global_cli_settings
+        let default_workspace_path = global_cli_settings
             .state_folder
-            .file_stem()
-            .unwrap()
-            .to_string_lossy()
-            .into_owned();
+            .join("integration_workspace");
         let workspace_path = if let Some(p) = self.workspace_path.clone() {
             p
         } else {
-            PathBuf::from(format!("./{}_integration_workspace", state_name))
+            default_workspace_path.clone()
         };
 
         let result_path = if let Some(p) = self.result_path.clone() {
             p
         } else {
-            PathBuf::from(format!(
-                "./{}_integration_workspace/integration_result.json",
-                state_name
-            ))
+            default_workspace_path.join("integration_result.json")
         };
 
         let target = self.target.clone().map(|t| Complex::new(F(t[0]), F(t[1])));

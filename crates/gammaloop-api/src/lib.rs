@@ -17,6 +17,7 @@ cli,no_pyo3."
 use ::tracing::debug;
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
+use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser};
 use commands::save::SaveState;
 use commands::Commands;
@@ -94,6 +95,10 @@ pub struct OneShot {
     /// Path to the state folder
     #[arg(short = 's', long, default_value = "./gammaloop_state", value_hint = clap::ValueHint::DirPath)]
     pub state_folder: PathBuf,
+
+    /// Internal flag indicating whether `state_folder` was explicitly set on CLI.
+    #[arg(skip = false)]
+    state_folder_explicitly_set: bool,
 
     /// Path to the model file
     #[arg(short = 'm', long, value_hint = clap::ValueHint::FilePath)]
@@ -186,6 +191,7 @@ impl OneShot {
         OneShot {
             run_history: None,
             state_folder,
+            state_folder_explicitly_set: false,
             dry_run: false,
             model_file: None,
             no_save_state: true,
@@ -238,6 +244,9 @@ impl OneShot {
 
         let cli = <OneShot as FromArgMatches>::from_arg_matches(&matches)
             .map_err(|e| e.format(&mut cmd))?;
+        let mut cli = cli;
+        cli.state_folder_explicitly_set =
+            matches.value_source("state_folder") == Some(ValueSource::CommandLine);
 
         let input_string = OneShot::subcmd_input_string(&argv, &cmd, &matches).unwrap_or_default();
         Ok(Parsed {
@@ -245,6 +254,19 @@ impl OneShot {
             matches,
             cli,
         })
+    }
+
+    fn resolve_initial_state_folder(&self) -> Result<PathBuf> {
+        if self.state_folder_explicitly_set {
+            return Ok(self.state_folder.clone());
+        }
+
+        if let Some(run_path) = self.run_history.as_ref() {
+            let run_history = RunHistory::load(run_path)?;
+            return Ok(run_history.cli_settings.state_folder.clone());
+        }
+
+        Ok(self.state_folder.clone())
     }
 
     pub fn load(&mut self) -> Result<(State, RunHistory, CLISettings, RuntimeSettings)> {
@@ -304,7 +326,9 @@ impl OneShot {
                 let state = State::new(self.state_folder.clone(), self.trace_logs_filename.clone());
 
                 if let Some(run) = self.run_history.as_ref() {
-                    let run_history = RunHistory::load(run)?;
+                    let mut run_history = RunHistory::load(run)?;
+                    // Freeze state folder for the whole session.
+                    run_history.cli_settings.state_folder = self.state_folder.clone();
                     let mut global = run_history.cli_settings.clone();
                     global.override_with(self);
                     let default_runtime = run_history.default_runtime_settings.clone();
@@ -331,6 +355,8 @@ impl OneShot {
         };
         initialise()?;
 
+        self.state_folder = self.resolve_initial_state_folder()?;
+
         let (mut state, mut run_history, mut cli_settings, mut default_runtime_settings) =
             self.load()?;
 
@@ -338,6 +364,8 @@ impl OneShot {
 
         if let Some(run) = self.run_history.as_ref() {
             let mut run = RunHistory::load(run)?;
+            // Never switch state folder while executing commands in one session.
+            run.cli_settings.state_folder = cli_settings.state_folder.clone();
             run_history.merge(run.clone());
             match run.run(&mut state, &mut cli_settings, &mut default_runtime_settings)? {
                 ControlFlow::Break(a) => {
@@ -519,4 +547,56 @@ pub fn write_schemas() -> Result<()> {
         .wrap_err("Could not write runhistory schema")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use tempfile::tempdir;
+
+    use super::{CLISettings, OneShot, RunHistory};
+
+    fn write_run_card(path: &PathBuf, state_folder: &str) {
+        let run_history = RunHistory {
+            cli_settings: CLISettings {
+                state_folder: state_folder.into(),
+                ..CLISettings::default()
+            },
+            ..RunHistory::default()
+        };
+        fs::write(path, toml::to_string_pretty(&run_history).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn resolve_initial_state_folder_prefers_explicit_cli_value() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        write_run_card(&run_path, "./from_run_card");
+
+        let mut one_shot = OneShot::new_test("./from_cli".into());
+        one_shot.run_history = Some(run_path);
+        one_shot.state_folder_explicitly_set = true;
+
+        assert_eq!(
+            one_shot.resolve_initial_state_folder().unwrap(),
+            PathBuf::from("./from_cli")
+        );
+    }
+
+    #[test]
+    fn resolve_initial_state_folder_uses_run_card_when_cli_not_explicit() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        write_run_card(&run_path, "./from_run_card");
+
+        let mut one_shot = OneShot::new_test("./from_cli_default".into());
+        one_shot.run_history = Some(run_path);
+        one_shot.state_folder_explicitly_set = false;
+
+        assert_eq!(
+            one_shot.resolve_initial_state_folder().unwrap(),
+            PathBuf::from("./from_run_card")
+        );
+    }
 }
