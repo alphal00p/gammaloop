@@ -133,6 +133,11 @@
         ]);
 
       cargoArtifacts = craneLib.buildDepsOnly ciArgs;
+      cargoArtifactsNextest = craneLib.buildDepsOnly (ciArgs
+        // {
+          pname = "gammaloop-cargo-artifacts-nextest";
+          cargoBuildCommand = "cargo test --workspace --all-targets --profile release --no-run";
+        });
 
       gammaloop = craneLib.buildPackage (commonArgs
         // {
@@ -144,7 +149,7 @@
         // {
           pname = "gammaloop-nextest-archive";
           version = "0.1.0";
-          inherit cargoArtifacts;
+          cargoArtifacts = cargoArtifactsNextest;
           doCheck = false;
 
           nativeBuildInputs = ciArgs.nativeBuildInputs ++ [pkgs.cargo-nextest];
@@ -167,7 +172,7 @@
           name = "gammaloop-nextest-partition-${toString partition}";
           value = craneLib.cargoNextest (ciArgs
             // {
-              inherit cargoArtifacts;
+              cargoArtifacts = cargoArtifactsNextest;
               cargoNextestExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail";
             });
         })
@@ -205,7 +210,7 @@
 
           gammaloop-nextest = craneLib.cargoNextest (ciArgs
             // {
-              inherit cargoArtifacts;
+              cargoArtifacts = cargoArtifactsNextest;
               cargoNextestExtraArgs = "--profile ci --no-fail-fast --final-status-level fail";
             });
         }
@@ -215,6 +220,7 @@
         {
           default = gammaloop;
           inherit cargoArtifacts;
+          inherit cargoArtifactsNextest;
           inherit gammaloop-nextest-archive;
         }
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {

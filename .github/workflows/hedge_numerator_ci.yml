@@ -76,7 +76,52 @@ jobs:
       - name: Build cargo dependencies
         run: |
           echo "Starting dependency build at $(date)"
-          time nix build .#cargoArtifacts --print-build-logs
+          time nix build .#cargoArtifacts .#cargoArtifactsNextest --print-build-logs
+          echo "Dependencies built at $(date)"
+
+  build-deps-macos:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    environment: Cachix
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+            substituters = https://cache.nixos.org/ https://nix-community.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v14
+        with:
+          name: gammaloop
+          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
+          skipPush: true
+
+      - name: Generate cache key
+        id: cache-key
+        run: |
+          echo "key=nix-deps-${{ hashFiles('**/flake.lock', '**/Cargo.lock') }}" >> $GITHUB_OUTPUT
+
+      - name: Cache Nix store
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: ${{ steps.cache-key.outputs.key }}-build-deps-macos
+          restore-prefixes-first-match: |
+            nix-deps-
+
+      - name: Build cargo dependencies (macOS)
+        run: |
+          echo "Starting dependency build at $(date)"
+          time nix build .#cargoArtifacts .#cargoArtifactsNextest --print-build-logs
           echo "Dependencies built at $(date)"
 
   package:
@@ -160,7 +205,8 @@ jobs:
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
           echo "Starting clippy at $(date)"
           set -o pipefail
-          time nix build ".#checks.${system}.gammaloop-clippy" --print-build-logs 2>&1 | tee clippy.log
+          time nix build ".#checks.${system}.gammaloop-clippy" --print-build-logs 2>&1 | tee clippy.raw.log
+          perl -pe 's/\e\[[0-9;]*[A-Za-z]//g' clippy.raw.log > clippy.log
           echo "Clippy completed at $(date)"
 
       - name: Clippy summary
@@ -170,8 +216,8 @@ jobs:
           warning_count=0
           diag_count=0
           if [ -f clippy.log ]; then
-            error_count=$(rg -N "^(error(\\[[^]]+\\])?:)" clippy.log | wc -l | tr -d ' ')
-            warning_count=$(rg -N "^warning:" clippy.log | wc -l | tr -d ' ')
+            error_count=$(rg -N "^[[:space:]]*error(\\[[^]]+\\])?:[[:space:]]*" clippy.log | wc -l | tr -d ' ')
+            warning_count=$(rg -N "^[[:space:]]*warning:[[:space:]]*" clippy.log | wc -l | tr -d ' ')
             awk '
               function flush_diag() {
                 if (diag_level != "") {
@@ -194,15 +240,15 @@ jobs:
                 diag_loc = ""
               }
               {
-                if ($0 ~ /^(error(\[[^]]+\])?:|warning:)/) {
+                if ($0 ~ /^[[:space:]]*(error(\[[^]]+\])?:|warning:)/) {
                   flush_diag()
-                  if ($0 ~ /^error/) {
+                  if ($0 ~ /^[[:space:]]*error/) {
                     diag_level = "error"
                   } else {
                     diag_level = "warning"
                   }
                   diag_msg = $0
-                  sub(/^(error(\[[^]]+\])?:|warning:)[[:space:]]*/, "", diag_msg)
+                  sub(/^[[:space:]]*(error(\[[^]]+\])?:|warning:)[[:space:]]*/, "", diag_msg)
                   next
                 }
                 if (diag_level != "" && diag_loc == "" && $0 ~ /^[[:space:]]*-->[[:space:]]+/) {
@@ -356,8 +402,8 @@ jobs:
           retention-days: 1
 
   nextest-archive-macos:
-    if: needs.build-deps.result == 'success'
-    needs: build-deps
+    if: needs.build-deps-macos.result == 'success'
+    needs: build-deps-macos
     environment: Cachix
     runs-on: macos-latest
     timeout-minutes: 180
@@ -385,10 +431,10 @@ jobs:
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
         with:
-          primary-key: ${{ needs.build-deps.outputs.cache-key }}-nextest-archive-macos-latest
+          primary-key: ${{ needs.build-deps-macos.outputs.cache-key }}-nextest-archive-macos-latest
           restore-prefixes-first-match: |
-            ${{ needs.build-deps.outputs.cache-key }}-macos-latest
-            ${{ needs.build-deps.outputs.cache-key }}
+            ${{ needs.build-deps-macos.outputs.cache-key }}-macos-latest
+            ${{ needs.build-deps-macos.outputs.cache-key }}
             nix-deps-macos-latest-
             nix-deps-
 
@@ -485,6 +531,24 @@ jobs:
           echo "Doctests completed at $(date)"
         timeout-minutes: 60
 
+      - name: Normalize JUnit report
+        if: always()
+        run: |
+          mkdir -p target/nextest/ci
+          if [ -f target/nextest/ci/junit.xml ]; then
+            exit 0
+          fi
+          report_path="$(find . -path '*/target/nextest/ci/junit.xml' -print -quit || true)"
+          if [ -n "${report_path}" ]; then
+            cp "${report_path}" target/nextest/ci/junit.xml
+            exit 0
+          fi
+          echo "::warning::No JUnit report found; writing a placeholder report."
+          cat > target/nextest/ci/junit.xml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites tests="0" failures="0" errors="0" skipped="0" time="0"></testsuites>
+          XML
+
       - name: Publish test results
         if: ${{ !cancelled() }}
         uses: EnricoMi/publish-unit-test-result-action@v2
@@ -504,8 +568,8 @@ jobs:
           retention-days: 7
 
   test-macos:
-    if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success' && needs.nextest-archive-macos.result == 'success'
-    needs: [build-deps, partition-config, nextest-archive-macos]
+    if: needs.build-deps-macos.result == 'success' && needs.partition-config.result == 'success' && needs.nextest-archive-macos.result == 'success'
+    needs: [build-deps-macos, partition-config, nextest-archive-macos]
     environment: Cachix
     permissions:
       checks: write
@@ -540,10 +604,10 @@ jobs:
       - name: Cache Nix store
         uses: nix-community/cache-nix-action@v7
         with:
-          primary-key: ${{ needs.build-deps.outputs.cache-key }}-test-1-macos-latest
+          primary-key: ${{ needs.build-deps-macos.outputs.cache-key }}-test-1-macos-latest
           restore-prefixes-first-match: |
-            ${{ needs.build-deps.outputs.cache-key }}-macos-latest
-            ${{ needs.build-deps.outputs.cache-key }}
+            ${{ needs.build-deps-macos.outputs.cache-key }}-macos-latest
+            ${{ needs.build-deps-macos.outputs.cache-key }}
             nix-deps-macos-latest-
             nix-deps-
 
@@ -575,6 +639,24 @@ jobs:
           time nix develop --command cargo test --doc --verbose
           echo "Doctests completed at $(date)"
         timeout-minutes: 60
+
+      - name: Normalize JUnit report
+        if: always()
+        run: |
+          mkdir -p target/nextest/ci
+          if [ -f target/nextest/ci/junit.xml ]; then
+            exit 0
+          fi
+          report_path="$(find . -path '*/target/nextest/ci/junit.xml' -print -quit || true)"
+          if [ -n "${report_path}" ]; then
+            cp "${report_path}" target/nextest/ci/junit.xml
+            exit 0
+          fi
+          echo "::warning::No JUnit report found; writing a placeholder report."
+          cat > target/nextest/ci/junit.xml <<'XML'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <testsuites tests="0" failures="0" errors="0" skipped="0" time="0"></testsuites>
+          XML
 
       - name: Publish test results
         if: ${{ !cancelled() }}
