@@ -7,6 +7,9 @@
 - `examples/` includes command cards and notebooks for end-to-end runs.
 - `bin/` provides scripts like `compile.sh`, `run_tests.sh`, and the `gammaloop` entrypoints after build.
 - `assets/`, `models/`, and `benches/` store schemas/data, model files, and benchmarks.
+- Architecture docs live in `docs/architecture/`:
+  - `docs/architecture/architecture-current.md` for implemented architecture.
+  - `docs/architecture/architecture-ideas.md` for roadmap/proposals.
 
 ## Build, Test, and Development Commands
 - Build from source (full deps + binaries):

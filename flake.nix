@@ -285,7 +285,6 @@
           gcc
           rust-script
           uv
-          ghostscript
           graphviz
           mupdf
           tinymist
