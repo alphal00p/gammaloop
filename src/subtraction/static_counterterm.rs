@@ -24,7 +24,7 @@ use crate::{
         expression::CFFLimit,
     },
     debug_info::DEBUG_LOGGER,
-    gammaloop_integrand::DefaultSample,
+    integrands::process::DefaultSample,
     graph::{Graph, LoopMomentumBasis},
     momentum::{FourMomentum, ThreeMomentum},
     numerator::NumeratorState,

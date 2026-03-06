@@ -1,3 +1,5 @@
+pub mod improvement;
+
 use bincode_trait_derive::{Decode, Encode};
 use eyre::eyre;
 use schemars::JsonSchema;
@@ -10,12 +12,12 @@ use typed_index_collections::TiVec;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
     graph::Graph,
-    improve_ps::{PhaseSpaceImprovementSettings, improve_ps},
+    momentum::sample::{ExternalFourMomenta, ExternalIndex},
+    momentum::signature::ExternalSignature,
     momentum::{
         self, Dep, ExternalMomenta, FourMomentum, Helicity, Polarization, Rotatable, SignOrZero,
     },
-    momentum_sample::{ExternalFourMomenta, ExternalIndex},
-    signature::ExternalSignature,
+    settings::runtime::kinematic::improvement::{PhaseSpaceImprovementSettings, improve_ps},
     utils::{
         F, FloatLike, f128,
         serde_utils::{IsDefault, is_float},

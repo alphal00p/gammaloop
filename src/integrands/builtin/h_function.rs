@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use crate::evaluation_result::EvaluationResult;
-use crate::evaluation_result::{EvaluationMetaData, StabilityEvaluation};
+use crate::integrands::evaluation::EvaluationResult;
+use crate::integrands::evaluation::{EvaluationMetaData, StabilityEvaluation};
 use crate::integrands::*;
 use crate::model::Model;
 use crate::settings::RuntimeSettings;

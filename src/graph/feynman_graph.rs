@@ -24,12 +24,12 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::generation::ShiftRewrite,
-    gammaloop_integrand::param_builder::{ParamBuilderGraph, SplitPolarizations},
+    integrands::process::param_builder::{ParamBuilderGraph, SplitPolarizations},
     model::{ArcParticle, Model},
     momentum::{PolDef, SignOrZero},
-    momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
+    momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     numerator::graph::ReversibleEdge,
-    signature::{ExternalSignature, SignatureLike},
+    momentum::signature::{ExternalSignature, SignatureLike},
     utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
     uv::uv_graph::UVE,
 };

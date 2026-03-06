@@ -1,9 +1,15 @@
-use crate::evaluation_result::{EvaluationMetaData, EvaluationResult, StabilityEvaluation};
+pub mod builtin;
+pub mod evaluation;
+pub mod inspect;
+pub mod process;
+
+use crate::integrands::evaluation::{EvaluationMetaData, EvaluationResult, StabilityEvaluation};
 use colored::Colorize;
-// use crate::gammaloop_integrand::GammaLoopIntegrand;
-use crate::gammaloop_integrand::GLIntegrand;
-use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
-use crate::inspect::havana_sample;
+// use crate::integrands::process::ProcessIntegrandImpl;
+use crate::integrands::builtin::h_function::{HFunctionTestIntegrand, HFunctionTestSettings};
+use crate::integrands::inspect::havana_sample;
+use crate::integrands::process::ProcessIntegrand;
+use crate::integrands::process::{amplitude, cross_section_integrand};
 use crate::model::Model;
 use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
@@ -183,8 +189,8 @@ pub enum Integrand {
     UnitSurface(UnitSurfaceIntegrand),
     UnitVolume(UnitVolumeIntegrand),
     HFunctionTest(HFunctionTestIntegrand),
-    // GammaLoopIntegrand(GammaLoopIntegrand),
-    GLIntegrand(GLIntegrand),
+    // ProcessIntegrandImpl(ProcessIntegrandImpl),
+    ProcessIntegrand(ProcessIntegrand),
 }
 
 impl HasIntegrand for Integrand {
@@ -193,8 +199,8 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(_) => "UnitSurface".to_string(),
             Integrand::UnitVolume(_) => "UnitVolume".to_string(),
             Integrand::HFunctionTest(_) => "HFunctionTest".to_string(),
-            // Integrand::GammaLoopIntegrand(_) => "GammaLoopIntegrand".to_string(),
-            Integrand::GLIntegrand(i) => i.name(),
+            // Integrand::ProcessIntegrandImpl(_) => "ProcessIntegrandImpl".to_string(),
+            Integrand::ProcessIntegrand(i) => i.name(),
         }
     }
 
@@ -203,8 +209,8 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.create_grid(),
             Integrand::UnitVolume(integrand) => integrand.create_grid(),
             Integrand::HFunctionTest(integrand) => integrand.create_grid(),
-            // Integrand::GammaLoopIntegrand(integrand) => integrand.create_grid(),
-            Integrand::GLIntegrand(integrand) => integrand.create_grid(),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.create_grid(),
+            Integrand::ProcessIntegrand(integrand) => integrand.create_grid(),
         }
     }
 
@@ -227,10 +233,10 @@ impl HasIntegrand for Integrand {
             Integrand::HFunctionTest(integrand) => {
                 integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
             }
-            // Integrand::GammaLoopIntegrand(integrand) => {
+            // Integrand::ProcessIntegrandImpl(integrand) => {
             //     integrand.evaluate_sample(sample,model, wgt, iter, use_f128, max_eval)
             // }
-            Integrand::GLIntegrand(integrand) => {
+            Integrand::ProcessIntegrand(integrand) => {
                 integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
             }
         }
@@ -241,8 +247,8 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.get_n_dim(),
             Integrand::UnitVolume(integrand) => integrand.get_n_dim(),
             Integrand::HFunctionTest(integrand) => integrand.get_n_dim(),
-            // Integrand::GammaLoopIntegrand(integrand) => integrand.get_n_dim(),
-            Integrand::GLIntegrand(integrand) => integrand.get_n_dim(),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.get_n_dim(),
+            Integrand::ProcessIntegrand(integrand) => integrand.get_n_dim(),
         }
     }
 
@@ -251,8 +257,8 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.get_integrator_settings(),
             Integrand::UnitVolume(integrand) => integrand.get_integrator_settings(),
             Integrand::HFunctionTest(integrand) => integrand.get_integrator_settings(),
-            // Integrand::GammaLoopIntegrand(integrand) => integrand.get_integrator_settings(),
-            Integrand::GLIntegrand(integrand) => integrand.get_integrator_settings(),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.get_integrator_settings(),
+            Integrand::ProcessIntegrand(integrand) => integrand.get_integrator_settings(),
         }
     }
 
@@ -261,8 +267,8 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.merge_results(other, iter),
             Integrand::UnitVolume(integrand) => integrand.merge_results(other, iter),
             Integrand::HFunctionTest(integrand) => integrand.merge_results(other, iter),
-            // Integrand::GammaLoopIntegrand(integrand) => integrand.merge_results(other, iter),
-            Integrand::GLIntegrand(integrand) => integrand.merge_results(other, iter),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.merge_results(other, iter),
+            Integrand::ProcessIntegrand(integrand) => integrand.merge_results(other, iter),
         }
     }
 }

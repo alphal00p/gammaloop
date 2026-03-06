@@ -17,15 +17,15 @@ use tracing::warn;
 
 use crate::{
     DependentMomentaConstructor,
-    evaluation_result::EvaluationResult,
-    gammaloop_integrand::{
-        GammaloopIntegrand,
+    integrands::evaluation::EvaluationResult,
+    integrands::process::{
+        ProcessIntegrandImpl,
         cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
     integrands::HasIntegrand,
     model::Model,
     momentum::ThreeMomentum,
-    momentum_sample::{LoopIndex, LoopMomenta, MomentumSample},
+    momentum::sample::{LoopIndex, LoopMomenta, MomentumSample},
     settings::{
         RuntimeSettings, SamplingSettings,
         runtime::{

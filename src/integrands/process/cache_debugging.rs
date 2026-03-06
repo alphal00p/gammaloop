@@ -5,7 +5,7 @@
 
 use tracing::{debug, info, warn};
 
-use crate::gammaloop_integrand::GammaloopIntegrand;
+use crate::integrands::process::ProcessIntegrandImpl;
 
 /// Check if cache debug mode is enabled via environment variable
 pub fn is_debug_cache_enabled() -> bool {
@@ -15,7 +15,7 @@ pub fn is_debug_cache_enabled() -> bool {
 }
 
 /// Simple cache health check
-pub fn quick_cache_check<I: GammaloopIntegrand>(integrand: &I, context: &str) -> bool {
+pub fn quick_cache_check<I: ProcessIntegrandImpl>(integrand: &I, context: &str) -> bool {
     let validation = integrand.validate_cache_consistency();
     let stats = integrand.get_cache_stats();
 
@@ -48,7 +48,7 @@ pub fn quick_cache_check<I: GammaloopIntegrand>(integrand: &I, context: &str) ->
 }
 
 /// Validate cache state before critical operations
-pub fn validate_before_operation<I: GammaloopIntegrand>(
+pub fn validate_before_operation<I: ProcessIntegrandImpl>(
     integrand: &I,
     operation: &str,
 ) -> Result<(), String> {
@@ -63,7 +63,7 @@ pub fn validate_before_operation<I: GammaloopIntegrand>(
 }
 
 /// Debug cache state with detailed output (only when debug enabled)
-pub fn debug_cache_state<I: GammaloopIntegrand>(integrand: &I, context: &str) {
+pub fn debug_cache_state<I: ProcessIntegrandImpl>(integrand: &I, context: &str) {
     if !is_debug_cache_enabled() {
         return;
     }
@@ -97,7 +97,7 @@ pub fn debug_cache_state<I: GammaloopIntegrand>(integrand: &I, context: &str) {
 }
 
 /// Monitor cache during Monte Carlo iterations
-pub fn monte_carlo_cache_monitor<I: GammaloopIntegrand>(
+pub fn monte_carlo_cache_monitor<I: ProcessIntegrandImpl>(
     integrand: &I,
     iteration: usize,
     check_interval: usize,
@@ -117,7 +117,7 @@ pub fn monte_carlo_cache_monitor<I: GammaloopIntegrand>(
 }
 
 /// Warn if cache efficiency falls below threshold
-pub fn warn_cache_efficiency<I: GammaloopIntegrand>(
+pub fn warn_cache_efficiency<I: ProcessIntegrandImpl>(
     integrand: &I,
     min_efficiency: f64,
     context: String,

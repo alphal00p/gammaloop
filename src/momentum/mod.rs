@@ -1,5 +1,8 @@
 #![allow(dead_code)]
 
+pub mod sample;
+pub mod signature;
+
 use std::{
     borrow::Borrow,
     fmt::{Display, LowerExp},

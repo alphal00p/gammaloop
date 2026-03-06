@@ -33,13 +33,13 @@ use typed_index_collections::TiVec;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    gammaloop_integrand::{
+    integrands::process::{
         amplitude::load::set_override_if,
         param_builder::{FnMapEntry, LUParams},
     },
     graph::Graph,
     momentum::Helicity,
-    momentum_sample::MomentumSample,
+    momentum::sample::MomentumSample,
     processes::EvaluatorSettings,
     settings::{GlobalSettings, RuntimeSettings},
     utils::{

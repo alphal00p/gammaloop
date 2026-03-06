@@ -1,16 +1,16 @@
 use std::fs;
 use std::path::Path;
 
-use crate::evaluation_result::{
+use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
+use crate::integrands::Integrand;
+use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, LoopMomentaEscalationMetrics, RotatedEvaluation,
     StabilityEvaluation, StabilityFailureReason,
 };
-use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
-use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::model::Model;
 use crate::momentum::Rotation;
-use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
+use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::processes::StandaloneExportSettings;
 use crate::settings::GlobalSettings;
 use crate::utils::{
@@ -38,7 +38,7 @@ pub mod amplitude;
 pub mod cache_debugging;
 pub mod cross_section_integrand;
 pub mod gammaloop_sample;
-use crate::observables::EventManager;
+pub mod ir;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
@@ -47,7 +47,6 @@ use crate::{
     settings::runtime::StabilitySettings,
 };
 use color_eyre::Result;
-use tracing::instrument;
 
 pub mod evaluators;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
@@ -58,12 +57,12 @@ pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAn
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 #[enum_dispatch(HasIntegrand)]
-pub enum GLIntegrand {
+pub enum ProcessIntegrand {
     Amplitude(amplitude::AmplitudeIntegrand),
     CrossSection(cross_section_integrand::CrossSectionIntegrand),
 }
 
-impl GLIntegrand {
+impl ProcessIntegrand {
     pub fn export_standalone(
         &self,
         path: impl AsRef<Path>,
@@ -95,8 +94,8 @@ impl GLIntegrand {
             r?;
         }
         match self {
-            GLIntegrand::Amplitude(integrand) => integrand.save(path, override_existing),
-            GLIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
+            ProcessIntegrand::Amplitude(integrand) => integrand.save(path, override_existing),
+            ProcessIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
         }
     }
 
@@ -119,10 +118,10 @@ impl GLIntegrand {
             r?;
         }
         match self {
-            GLIntegrand::Amplitude(integrand) => {
+            ProcessIntegrand::Amplitude(integrand) => {
                 integrand.compile(path, override_existing, settings, thread_pool)
             }
-            GLIntegrand::CrossSection(integrand) => {
+            ProcessIntegrand::CrossSection(integrand) => {
                 integrand.compile(path, override_existing, settings, thread_pool)
             }
         }
@@ -130,22 +129,22 @@ impl GLIntegrand {
 
     pub fn get_settings(&self) -> &RuntimeSettings {
         match self {
-            GLIntegrand::Amplitude(integrand) => &integrand.settings,
-            GLIntegrand::CrossSection(integrand) => &integrand.settings,
+            ProcessIntegrand::Amplitude(integrand) => &integrand.settings,
+            ProcessIntegrand::CrossSection(integrand) => &integrand.settings,
         }
     }
 
     /// Used to create the use_data_generator closure for havana_integrate
     pub fn user_data_generator(&self, num_cores: usize, _settings: &RuntimeSettings) -> UserData {
         UserData {
-            integrand: vec![Integrand::GLIntegrand(self.clone()); num_cores],
+            integrand: vec![Integrand::ProcessIntegrand(self.clone()); num_cores],
         }
     }
 
     pub fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
-            GLIntegrand::Amplitude(integrand) => &mut integrand.settings,
-            GLIntegrand::CrossSection(integrand) => &mut integrand.settings,
+            ProcessIntegrand::Amplitude(integrand) => &mut integrand.settings,
+            ProcessIntegrand::CrossSection(integrand) => &mut integrand.settings,
         }
     }
 }
@@ -535,7 +534,7 @@ impl LmbMultiChannelingSetup {
     }
 }
 
-pub trait GammaloopIntegrand {
+pub trait ProcessIntegrandImpl {
     type G: GraphTerm;
 
     fn warm_up(&mut self, model: &Model) -> Result<()>;
@@ -715,7 +714,7 @@ pub trait GammaloopIntegrand {
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
 }
 
-fn get_global_dimension_if_exists<I: GammaloopIntegrand>(integrand: &I) -> Option<usize> {
+fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Option<usize> {
     if integrand
         .get_settings()
         .sampling
@@ -755,7 +754,7 @@ pub trait GraphTerm {
     fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
 }
 
-fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
+fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
@@ -819,7 +818,7 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     Ok((evaluation_results, duration, rotated_results))
 }
 
-fn evaluate_stability_level<T: FloatLike, I: GammaloopIntegrand>(
+fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
     sample: &Sample<F<f64>>,
@@ -984,7 +983,7 @@ macro_rules! warn_cache_efficiency {
     };
 }
 
-fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
+fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
@@ -1179,7 +1178,7 @@ fn create_default_continous_grid<G: GraphTerm>(
     ))
 }
 
-fn create_grid<I: GammaloopIntegrand>(integrand: &I) -> Grid<F<f64>> {
+fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
     let settings = integrand.get_settings();
     match &settings.sampling {
         SamplingSettings::Default(_) => Grid::Continuous(ContinuousGrid::new(
@@ -1215,7 +1214,7 @@ fn create_grid<I: GammaloopIntegrand>(integrand: &I) -> Grid<F<f64>> {
     }
 }
 
-fn evaluate_sample<I: GammaloopIntegrand>(
+fn evaluate_sample<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
     sample: &Sample<F<f64>>,

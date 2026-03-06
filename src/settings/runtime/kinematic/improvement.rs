@@ -2,9 +2,9 @@ use std::iter;
 
 use crate::{
     momentum::{Dep, Energy, ExternalMomenta, FourMomentum, SignOrZero, ThreeMomentum},
-    momentum_sample::ExternalIndex,
+    momentum::sample::ExternalIndex,
     settings::runtime::kinematic::Externals,
-    signature::SignatureLike,
+    momentum::signature::SignatureLike,
     utils::{F, FloatLike, newton_solver::newton_iteration_and_derivative},
 };
 
@@ -688,8 +688,8 @@ mod tests {
         initialisation::test_initialise,
         model::Model,
         momentum::{FourMomentum, SignOrZero},
-        momentum_sample::ExternalIndex,
-        signature::SignatureLike,
+        momentum::sample::ExternalIndex,
+        momentum::signature::SignatureLike,
         utils::{F, FloatLike, f128, test_utils::load_generic_model},
     };
 

@@ -86,8 +86,11 @@ pip-delete-this-directory.txt
 TEST_OUTPUT*/
 
 
-# General ignored directory
+# Local scratch and ad-hoc workspaces
+.local/
 ignore/
+.ignore/
+/~/
 
 src/test_resources/gammaloop_models/*.dat
 
@@ -230,8 +233,6 @@ src/test_resources/qqddg/
 TMP_COMPILED/
 # My own process outputs
 process_outputs
-ignore/
-.ignore/
 # the default log file
 log.glog/
 !.jj/repo/config.toml

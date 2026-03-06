@@ -419,7 +419,7 @@ mod test {
 
     use crate::{
         dot,
-        gammaloop_integrand::param_builder::ParamBuilderGraph,
+        integrands::process::param_builder::ParamBuilderGraph,
         graph::{Graph, parse::IntoGraph},
         initialisation::{initialise, test_initialise},
         numerator::aind::Aind,

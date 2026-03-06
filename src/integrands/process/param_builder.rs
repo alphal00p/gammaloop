@@ -35,14 +35,14 @@ use tracing::warn;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    gammaloop_integrand::{
+    integrands::process::{
         amplitude::export::ExportAtomTo,
         evaluators::{InputParams, SliceMut},
     },
     graph::{Graph, LoopMomentumBasis},
     model::Model,
     momentum::{Helicity, PolType},
-    momentum_sample::{ExternalFourMomenta, MomentumSample},
+    momentum::sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
     utils::{
         ArbPrec, F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128,

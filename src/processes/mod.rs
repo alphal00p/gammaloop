@@ -289,7 +289,7 @@ impl ProcessList {
         &self,
         process_id: usize,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&crate::gammaloop_integrand::GLIntegrand> {
+    ) -> Result<&crate::integrands::process::ProcessIntegrand> {
         let process = &self.processes[process_id];
         process.get_integrand(integrand_name)
     }
@@ -298,7 +298,7 @@ impl ProcessList {
         &mut self,
         process_id: usize,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&mut crate::gammaloop_integrand::GLIntegrand> {
+    ) -> Result<&mut crate::integrands::process::ProcessIntegrand> {
         let process = &mut self.processes[process_id];
         process.get_integrand_mut(integrand_name)
     }
@@ -422,7 +422,7 @@ mod tests {
             },
             runtime::LockedRuntimeSettings,
         },
-        signature::LoopExtSignature,
+        momentum::signature::LoopExtSignature,
         utils::test_utils::load_generic_model,
     };
 

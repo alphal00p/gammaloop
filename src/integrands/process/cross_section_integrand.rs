@@ -6,8 +6,8 @@ use crate::{
         esurface::Esurface,
         expression::GraphOrientation,
     },
-    evaluation_result::EvaluationResult,
-    gammaloop_integrand::{
+    integrands::evaluation::EvaluationResult,
+    integrands::process::{
         ChannelIndex, GenericEvaluatorFloat, ParamBuilder, param_builder::LUParams,
     },
     graph::{
@@ -16,7 +16,7 @@ use crate::{
     integrands::HasIntegrand,
     model::Model,
     momentum::{Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum},
-    momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
+    momentum::sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     processes::{
         CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData,
         StandaloneExportSettings,
@@ -63,7 +63,7 @@ use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{
-    GammaloopIntegrand, GenericEvaluator, GraphTerm, LmbMultiChannelingSetup, create_grid,
+    ProcessIntegrandImpl, GenericEvaluator, GraphTerm, LmbMultiChannelingSetup, create_grid,
     evaluate_sample,
 };
 
@@ -145,7 +145,7 @@ impl CrossSectionIntegrand {
     }
 }
 
-impl GammaloopIntegrand for CrossSectionIntegrand {
+impl ProcessIntegrandImpl for CrossSectionIntegrand {
     type G = CrossSectionGraphTerm;
 
     fn external_cache_id(&self) -> usize {

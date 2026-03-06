@@ -27,7 +27,7 @@ use crate::{
         parse::{IntoGraph, complete_group_parsing, string_utils::ToOrderedSimple},
     },
     initialisation::test_initialise,
-    momentum_sample::LoopIndex,
+    momentum::sample::LoopIndex,
     numerator::{Numerator, UnInit, aind::Aind},
     processes::DotExportSettings,
     utils::test_utils::load_generic_model,

@@ -34,7 +34,7 @@ use crate::{
     initialize_reps,
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
-    momentum_sample::{LoopMomenta, MomentumSample},
+    momentum::sample::{LoopMomenta, MomentumSample},
     numerator::{aind::Aind, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
     tests_from_pytest::{
         load_amplitude_output, load_generic_model, sample_generator, test_export_settings,
@@ -92,7 +92,7 @@ fn trees() {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     let lmb = &graph.bare_graph.loop_momentum_basis;
-    let sample: crate::momentum_sample::MomentumSample<f64> = sample_generator(
+    let sample: crate::momentum::sample::MomentumSample<f64> = sample_generator(
         3,
         &graph.bare_graph,
         Some(vec![

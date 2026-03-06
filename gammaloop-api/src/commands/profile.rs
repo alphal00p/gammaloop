@@ -7,8 +7,8 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use gammalooprs::{
-    gammaloop_integrand::GLIntegrand,
-    ir_test::{IRProfileSetting, IrLimitTestReport},
+    integrands::process::ProcessIntegrand,
+    integrands::process::ir::{IRProfileSetting, IrLimitTestReport},
     uv::{
         profile::{ProfileSettings, UVProfileable},
         UVProfileAnalysis,
@@ -219,7 +219,7 @@ impl Profile {
                     "Integrand {} has not yet been generated",
                     cross_section.name
                 ))? {
-                    GLIntegrand::CrossSection(cross_section_integrand) => {
+                    ProcessIntegrand::CrossSection(cross_section_integrand) => {
                         cross_section_integrand.test_ir(&ir_profile_settings, &state.model)?
                     }
                     _ => unreachable!(),

@@ -5,14 +5,14 @@ use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::GroupEsurfaceId;
 use crate::cff::esurface::get_representative;
-use crate::gammaloop_integrand::GenericEvaluator;
+use crate::integrands::process::GenericEvaluator;
 use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
 use crate::momentum::ThreeMomentum;
-use crate::momentum_sample::ExternalFourMomenta;
-use crate::momentum_sample::LoopMomenta;
+use crate::momentum::sample::ExternalFourMomenta;
+use crate::momentum::sample::LoopMomenta;
 use crate::settings::RuntimeSettings;
-use crate::signature::LoopExtSignature;
+use crate::momentum::signature::LoopExtSignature;
 use crate::utils::F;
 use crate::utils::GS;
 use crate::utils::compute_shift_part;
@@ -868,7 +868,7 @@ mod tests {
         graph::LoopMomentumBasis,
         momentum::FourMomentum,
         settings::RuntimeSettings,
-        signature::LoopExtSignature,
+        momentum::signature::LoopExtSignature,
         utils::dummy_hedge_graph,
     };
 

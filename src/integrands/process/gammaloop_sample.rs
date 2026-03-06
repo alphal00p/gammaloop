@@ -1,7 +1,7 @@
-use crate::gammaloop_integrand::GraphTerm;
 use crate::graph::GroupId;
+use crate::integrands::process::GraphTerm;
+use crate::momentum::sample::MomentumSample;
 use crate::momentum::{Rotation, ThreeMomentum};
-use crate::momentum_sample::MomentumSample;
 
 use crate::utils::{self, F, FloatLike, global_parameterize};
 use crate::{
@@ -15,7 +15,7 @@ use itertools::Itertools;
 use momtrop::vector::Vector;
 use symbolica::numerical_integration::Sample;
 
-use super::{ChannelIndex, GammaloopIntegrand};
+use super::{ChannelIndex, ProcessIntegrandImpl};
 
 // discrete dimensions, continious dimensions
 fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
@@ -362,7 +362,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 }
 
 #[inline]
-pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
+pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     sample_point: &Sample<F<f64>>,
     integrand: &mut I,
 ) -> Result<GammaLoopSample<T>> {

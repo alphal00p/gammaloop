@@ -10,10 +10,10 @@ use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
-use crate::inspect::inspect;
+use crate::integrands::inspect::inspect;
 use crate::model::Model;
 use crate::momentum::ThreeMomentum;
-use crate::momentum_sample::{ExternalIndex, LoopIndex};
+use crate::momentum::sample::{ExternalIndex, LoopIndex};
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
@@ -38,7 +38,7 @@ use crate::{
     processes::{CrossSection, CutId},
     settings::RuntimeSettings,
     settings::global::GenerationSettings,
-    signature::LoopExtSignature,
+    momentum::signature::LoopExtSignature,
     utils::test_utils::load_generic_model,
 };
 use spenso::network::library::TensorLibraryData;

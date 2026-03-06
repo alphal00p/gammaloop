@@ -26,7 +26,7 @@ use crate::define_index;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 
 use crate::momentum::ThreeMomentum;
-use crate::momentum_sample::{
+use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
 use crate::processes::CrossSectionCut;

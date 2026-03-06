@@ -14,8 +14,8 @@ use symbolica::{
 };
 
 use crate::{
-    gammaloop_integrand::{
-        GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat,
+    integrands::process::{
+        ProcessIntegrandImpl, GenericEvaluator, GenericEvaluatorFloat,
         amplitude::{
             AmplitudeIntegrand,
             load::{
@@ -26,7 +26,7 @@ use crate::{
         },
     },
     momentum::ThreeMomentum,
-    momentum_sample::{LoopMomenta, MomentumSample},
+    momentum::sample::{LoopMomenta, MomentumSample},
     processes::{StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings},
     utils::F,
 };

@@ -18,13 +18,13 @@ use crate::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
         expression::GraphOrientation,
     },
-    gammaloop_integrand::{
+    integrands::process::{
         GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
         evaluators::SingleOrAllOrientations, param_builder::LUParams,
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     momentum::Rotation,
-    momentum_sample::{LoopMomenta, MomentumSample, SubspaceData},
+    momentum::sample::{LoopMomenta, MomentumSample, SubspaceData},
     processes::{
         CutId, IteratedCtCollection, LUCounterTermData, LeftThresholdId, RightThresholdId,
     },

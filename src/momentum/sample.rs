@@ -1,10 +1,10 @@
 use std::fmt::Display;
 
-use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
+use crate::integrands::process::evaluators::SingleOrAllOrientations;
 use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
-use crate::signature::LoopSignature;
+use crate::momentum::signature::LoopSignature;
 use crate::utils::hyperdual_utils::new_constant;
 use crate::utils::{F, FloatLike, Length, PrecisionUpgradable};
 use crate::{DependentMomentaConstructor, define_index, settings::runtime::kinematic::Externals};

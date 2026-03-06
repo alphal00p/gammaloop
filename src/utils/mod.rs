@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use crate::gammaloop_integrand::GenericEvaluatorFloat;
+use crate::integrands::process::GenericEvaluatorFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
-use crate::momentum_sample::{
+use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopMomenta, SubspaceData,
 };
 use crate::numerator::aind::Aind;
@@ -11,7 +11,7 @@ use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::SamplingSettings;
 use crate::settings::runtime::kinematic::Externals;
 use crate::settings::runtime::{ParameterizationMapping, ParameterizationMode};
-use crate::signature::{ExternalSignature, LoopSignature};
+use crate::momentum::signature::{ExternalSignature, LoopSignature};
 use crate::utils::hyperdual_utils::new_constant;
 
 use bincode::{Decode, Encode};

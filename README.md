@@ -256,6 +256,9 @@ Examples:
 # Use custom state folder
 ./bin/gammaloop -s /path/to/custom_state
 
+# Recommended for local experimentation (keeps repo root clean)
+./bin/gammaloop -s .local/scratch/my_run/gammaloop_state
+
 # Override existing state files without prompting
 ./bin/gammaloop -o
 
@@ -360,6 +363,9 @@ Settings are hierarchically managed through:
 
 # Start new project with custom state folder
 ./bin/gammaloop -s my_project
+
+# Start an isolated local scratch run
+./bin/gammaloop -s .local/scratch/my_project/gammaloop_state
 
 # Create and run custom command file
 cat > my_commands.toml << EOF

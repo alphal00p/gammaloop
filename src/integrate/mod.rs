@@ -21,8 +21,8 @@ use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAc
 
 use crate::INTERRUPTED;
 use crate::Integrand;
-use crate::evaluation_result::EvaluationResult;
-use crate::evaluation_result::StatisticsCounter;
+use crate::integrands::evaluation::EvaluationResult;
+use crate::integrands::evaluation::StatisticsCounter;
 use crate::integrands::HasIntegrand;
 use crate::model::Model;
 use crate::observables::Event;

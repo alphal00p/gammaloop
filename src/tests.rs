@@ -3,7 +3,7 @@ use crate::integrands::IntegrandSettings;
 use crate::model::Model;
 use crate::utils::{self, ApproxEq, F};
 use crate::{
-    h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
+    integrands::builtin::h_function::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
     settings::RuntimeSettings, settings::runtime::IntegratedPhase,
 };
 use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
@@ -14,7 +14,7 @@ use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Complex as SymComplex;
 
-use crate::inspect::inspect;
+use crate::integrands::inspect::inspect;
 use crate::integrate::{UserData, havana_integrate};
 
 const CENTRAL_VALUE_TOLERANCE: F<f64> = F(2.0e-2);

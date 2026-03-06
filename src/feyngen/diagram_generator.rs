@@ -63,7 +63,7 @@ use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
-use crate::momentum_sample::LoopIndex;
+use crate::momentum::sample::LoopIndex;
 use crate::numerator::ParamParsingNet;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;

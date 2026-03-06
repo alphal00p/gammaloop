@@ -6,20 +6,20 @@ use crate::cff::esurface::{
 use crate::cff::expression;
 use crate::cff::generation::generate_cff_expression;
 use crate::cff::hsurface::HsurfaceCollection;
-use crate::gammaloop_integrand::{DefaultSample, GammaLoopIntegrand};
+use crate::integrands::process::{DefaultSample, ProcessIntegrandImpl};
 
 use crate::model::{LorentzStructure, Model};
 use crate::momentum::{
     Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, Signature, ThreeMomentum,
 };
-use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample};
+use crate::momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample};
 use crate::numerator::{
     ContractionSettings, EvaluatorOptions, Evaluators, GammaAlgebraMode, GlobalPrefactor, Gloopoly,
     IterativeOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluateFloat,
     NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings, NumeratorState, PolySplit,
     PythonState, UnInit,
 };
-use crate::signature::ExternalSignature;
+use crate::momentum::signature::ExternalSignature;
 use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::tests::load_default_settings;
 use crate::utils::{self, dummy_hedge_graph, f128, F};

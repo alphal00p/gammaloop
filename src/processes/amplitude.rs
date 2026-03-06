@@ -38,17 +38,17 @@ use crate::{
             PostProcessingSetup, generate_cff_expression, get_orientations_from_subgraph,
         },
     },
-    gammaloop_integrand::{
+    integrands::process::{
         LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
-    momentum_sample::ExternalIndex,
+    momentum::sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
-    signature::SignatureLike,
+    momentum::signature::SignatureLike,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{
         F, FUN_LIB, GS, Length, TENSORLIB, W_,
@@ -77,7 +77,7 @@ use typed_index_collections::{TiVec, ti_vec};
 
 use crate::{
     cff::esurface::EsurfaceID,
-    gammaloop_integrand::GLIntegrand,
+    integrands::process::ProcessIntegrand,
     graph::{FeynmanGraph, Graph},
     model::Model,
     settings::global::GenerationSettings,
@@ -89,7 +89,7 @@ use crate::graph::parse::complete_group_parsing;
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Amplitude {
     pub name: String,
-    pub integrand: Option<GLIntegrand>,
+    pub integrand: Option<ProcessIntegrand>,
     pub graphs: Vec<AmplitudeGraph>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     pub external_particles: Vec<ArcParticle>,
@@ -152,7 +152,7 @@ impl Amplitude {
 
         if path.as_ref().join("integrand").exists() {
             let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
-            amp.integrand = Some(GLIntegrand::Amplitude(integrand));
+            amp.integrand = Some(ProcessIntegrand::Amplitude(integrand));
         }
 
         Ok(amp)
@@ -333,7 +333,7 @@ impl Amplitude {
                 group_derived_data: self.group_derived_data.clone(),
             },
         };
-        self.integrand = Some(GLIntegrand::Amplitude(amplitude_integrand));
+        self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
         Ok(())
     }
 
@@ -683,7 +683,7 @@ impl AmplitudeGraph {
             let mut complex_params: HashMap<String, symbolica::domains::float::Complex<f64>> =
                 HashMap::default();
             for params in param_builder.pairs.into_iter() {
-                let ps: crate::gammaloop_integrand::ParamValuePairs = params;
+                let ps: crate::integrands::process::ParamValuePairs = params;
                 for (p_name, p_value) in
                     ps.params
                         .iter()
@@ -1474,7 +1474,7 @@ pub mod test {
 
     use crate::{
         dot,
-        gammaloop_integrand::GenericEvaluator,
+        integrands::process::GenericEvaluator,
         graph::parse::IntoGraph,
         initialisation::test_initialise,
         processes::AmplitudeGraph,

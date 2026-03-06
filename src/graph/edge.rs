@@ -24,10 +24,10 @@ use symbolica::{
 
 use crate::{
     feyngen::diagram_generator::EdgeColor,
-    gammaloop_integrand::ParamBuilder,
+    integrands::process::ParamBuilder,
     model::{ArcParticle, Model, UFOSymbol},
     momentum::Helicity,
-    momentum_sample::LoopIndex,
+    momentum::sample::LoopIndex,
     numerator::aind::{Aind, NewAind},
     utils::{F, FloatLike, GS},
     uv::uv_graph::UVE,

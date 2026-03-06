@@ -57,7 +57,7 @@ impl Inspect {
 
         let settings = integrand.get_settings().clone();
 
-        let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
+        let (inspect_res_jac, inspect_res_eval) = gammalooprs::integrands::inspect::inspect(
             &settings,
             integrand,
             &state.model,
@@ -127,7 +127,7 @@ impl<'a> BatchedInspect<'a> {
             let pt = point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
             let discrete_dim = discrete_dim.iter().copied().collect::<Vec<usize>>();
 
-            let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
+            let (inspect_res_jac, inspect_res_eval) = gammalooprs::integrands::inspect::inspect(
                 &settings,
                 integrand,
                 &state.model,

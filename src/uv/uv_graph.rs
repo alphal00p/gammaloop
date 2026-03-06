@@ -17,9 +17,9 @@ use symbolica::{
 };
 
 use crate::{
-    gammaloop_integrand::param_builder::ParamBuilderGraph,
+    integrands::process::param_builder::ParamBuilderGraph,
     graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
-    momentum_sample::LoopIndex,
+    momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     utils::{GS, W_, symbolica_ext::CallSymbol},
 };

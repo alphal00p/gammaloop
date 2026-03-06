@@ -33,8 +33,8 @@ use crate::{
         },
         expression::AmplitudeOrientationID,
     },
-    evaluation_result::EvaluationResult,
-    gammaloop_integrand::{ChannelIndex, ParamBuilder, evaluators::EvaluatorStack},
+    integrands::evaluation::EvaluationResult,
+    integrands::process::{ChannelIndex, ParamBuilder, evaluators::EvaluatorStack},
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
         LoopMomentumBasis,
@@ -42,10 +42,10 @@ use crate::{
     integrands::HasIntegrand,
     model::Model,
     momentum::{Rotation, RotationMethod},
-    momentum_sample::{ExternalIndex, MomentumSample},
+    momentum::sample::{ExternalIndex, MomentumSample},
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
-    signature::SignatureLike,
+    momentum::signature::SignatureLike,
     subtraction::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
@@ -53,7 +53,7 @@ use crate::{
     utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
 };
 
-use super::{GammaloopIntegrand, GraphTerm, LmbMultiChannelingSetup, create_grid, evaluate_sample};
+use super::{ProcessIntegrandImpl, GraphTerm, LmbMultiChannelingSetup, create_grid, evaluate_sample};
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -507,7 +507,7 @@ impl AmplitudeIntegrand {
     }
 }
 
-impl GammaloopIntegrand for AmplitudeIntegrand {
+impl ProcessIntegrandImpl for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
 
     fn external_cache_id(&self) -> usize {

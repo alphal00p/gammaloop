@@ -10,7 +10,7 @@ This document proposes architecture improvements beyond the current implementati
 - Impact: reduces coupling, improves testability, and makes Python/CLI behavior easier to keep equivalent.
 
 ### P1: Replace manual cache-ID protocol with typed cache sessions
-- Problem: `GammaloopIntegrand` cache semantics rely on manual counter updates and conventions spread across many methods.
+- Problem: `ProcessIntegrandImpl` cache semantics rely on manual counter updates and conventions spread across many methods.
 - Improvement: introduce a `CacheSession` / `ExternalConfigEpoch` abstraction that centralizes increment/revert semantics and can be validated at compile-time boundaries.
 - Impact: fewer cache-invalidations bugs and cleaner evaluation code.
 

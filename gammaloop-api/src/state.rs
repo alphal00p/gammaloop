@@ -1182,7 +1182,7 @@ mod tests {
     use std::fs;
 
     use gammalooprs::{
-        improve_ps::PhaseSpaceImprovementSettings,
+        settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
         utils::serde_utils::SHOWDEFAULTS,

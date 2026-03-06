@@ -30,6 +30,7 @@ Domain Layer (`gammalooprs`)
 
 Infrastructure
   -> filesystem persistence (`gammaloop_state/`)
+  -> optional local scratch persistence (`.local/scratch/...`)
   -> Symbolica state import/export
   -> tracing/logging
 ```
@@ -51,18 +52,18 @@ The command model is stateful by design: commands mutate a long-lived `State` th
 
 ### 3. Domain Core (gammalooprs)
 - Root module wiring: `src/lib.rs`.
-- Model and parameters: `src/model.rs`.
-- Graph domain: `src/graph.rs` and submodules.
+- Model and parameters: `src/model/mod.rs`.
+- Graph domain: `src/graph/mod.rs` and submodules.
 - Process orchestration: `src/processes/mod.rs`, `src/processes/process.rs`.
 - Amplitude and cross-section pipelines:
   - `src/processes/amplitude.rs`
   - `src/processes/cross_section.rs`
 - Integrand abstraction and implementations:
-  - `src/integrands.rs`
-  - `src/gammaloop_integrand/mod.rs`
-  - `src/gammaloop_integrand/amplitude/mod.rs`
-  - `src/gammaloop_integrand/cross_section_integrand.rs`
-- Integration engine: `src/integrate.rs`.
+  - `src/integrands/mod.rs`
+  - `src/integrands/process/mod.rs`
+  - `src/integrands/process/amplitude/mod.rs`
+  - `src/integrands/process/cross_section_integrand.rs`
+- Integration engine: `src/integrate/mod.rs`.
 - Global/runtime settings: `src/settings/mod.rs`, `src/settings/global.rs`, `src/settings/runtime.rs`.
 
 ## Lifecycle and Data Flow
@@ -77,12 +78,12 @@ The command model is stateful by design: commands mutate a long-lived `State` th
 1. `generate` command builds `ProcessDefinition` (from syntax or graph import).
 2. `State::generate_integrand(s)` creates a generation thread pool.
 3. `ProcessList::preprocess` delegates to amplitude/cross-section preprocessors.
-4. `ProcessList::generate_integrands` builds `GLIntegrand` instances from preprocessed graphs.
+4. `ProcessList::generate_integrands` builds `ProcessIntegrand` instances from preprocessed graphs.
 5. Optional compile/export steps persist compiled evaluators and DOT/standalone outputs.
 
 ### 3. Evaluation and Integration Flow
 1. Commands (`inspect`, `evaluate`, `integrate`) resolve process + integrand references.
-2. Integrand is warmed up (`GLIntegrand::warm_up`) to initialize rotations and caches.
+2. Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize rotations and caches.
 3. Sampling path parameterizes points and evaluates graph terms.
 4. Stability checks may escalate precision (`f64 -> f128 -> arbitrary`) and rotate kinematics.
 5. `havana_integrate` runs iterative Monte Carlo updates and writes integration artifacts.
@@ -97,6 +98,8 @@ Primary persisted state lives under `gammaloop_state/` (default):
 - `default_runtime_settings.toml`
 - `cli_settings.toml`
 - `logs/`
+
+For local experimentation, prefer an isolated path such as `.local/scratch/<run>/gammaloop_state` to keep repository root output minimal.
 
 The persistence model is file-system based and intentionally human-editable for settings/run cards, mixed with binary artifacts for performance-heavy data.
 
@@ -129,5 +132,5 @@ Testing is organized into layers:
 ## Architectural Strengths
 - Clear separation between application shell (`gammaloop-api`) and domain core (`gammalooprs`).
 - Rich, serializable settings model with schema generation hooks.
-- Strong process abstraction (`Process`, `ProcessCollection`, `GLIntegrand`) that supports amplitude and cross-section workflows.
+- Strong process abstraction (`Process`, `ProcessCollection`, `ProcessIntegrand`) that supports amplitude and cross-section workflows.
 - Robust stability pipeline with multi-precision escalation and rotation checks.

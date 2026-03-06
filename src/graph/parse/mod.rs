@@ -5,10 +5,10 @@ use crate::{
         GenerationType,
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     },
-    gammaloop_integrand::ParamBuilder,
+    integrands::process::ParamBuilder,
     graph::{GraphGroup, GroupId, LoopMomentumBasis, edge::EdgeExtraData},
     model::Model,
-    momentum_sample::LoopIndex,
+    momentum::sample::LoopIndex,
     numerator::{
         GlobalPrefactor,
         aind::{Aind, NewAind},

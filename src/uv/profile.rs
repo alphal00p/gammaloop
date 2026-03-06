@@ -9,12 +9,12 @@ use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
 use crate::cff::expression::{GraphOrientation, OrientationData};
-use crate::evaluation_result::EvaluationResult;
+use crate::integrands::evaluation::EvaluationResult;
 use crate::graph::Graph;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::model::Model;
 use crate::momentum::ThreeMomentum;
-use crate::momentum_sample::{ExternalIndex, LoopIndex};
+use crate::momentum::sample::{ExternalIndex, LoopIndex};
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::RuntimeSettings;
 use crate::utils::F;

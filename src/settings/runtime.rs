@@ -12,13 +12,13 @@ use typed_index_collections::TiVec;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
     cff::esurface::Esurface,
-    gammaloop_integrand::evaluators::EvaluatorMethod,
+    integrands::process::evaluators::EvaluatorMethod,
     graph::LoopMomentumBasis,
-    improve_ps::generate_default_momenta,
+    settings::runtime::kinematic::improvement::generate_default_momenta,
     momentum::RotationMethod,
-    momentum_sample::ExternalIndex,
+    momentum::sample::ExternalIndex,
     settings::runtime::kinematic::Externals,
-    signature::SignatureLike,
+    momentum::signature::SignatureLike,
     utils::{
         ApproxEq, F, format_uncertainty,
         serde_utils::{

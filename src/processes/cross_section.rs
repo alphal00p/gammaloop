@@ -35,7 +35,7 @@ use crate::{
         },
     },
     define_index,
-    gammaloop_integrand::{
+    integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup,
         cross_section_integrand::CrossSectionIntegrandData,
     },
@@ -43,7 +43,7 @@ use crate::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
     },
     model::ArcParticle,
-    momentum_sample::SubspaceData,
+    momentum::sample::SubspaceData,
     numerator::symbolica_ext::AtomCoreExt,
     processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
@@ -74,8 +74,8 @@ use crate::{
         esurface::{Esurface, EsurfaceID},
         generation::generate_cff_with_cuts,
     },
-    gammaloop_integrand::{
-        GLIntegrand,
+    integrands::process::{
+        ProcessIntegrand,
         cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
     graph::{ExternalConnection, FeynmanGraph, Graph},
@@ -262,7 +262,7 @@ use derive_more::{From, Into};
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSection {
     pub name: String,
-    pub integrand: Option<GLIntegrand>,
+    pub integrand: Option<ProcessIntegrand>,
     pub supergraphs: Vec<CrossSectionGraph>,
     pub external_particles: Vec<ArcParticle>,
     pub external_connections: Vec<ExternalConnection>,
@@ -411,7 +411,7 @@ impl CrossSection {
             },
         };
 
-        self.integrand = Some(GLIntegrand::CrossSection(cross_section_integrand));
+        self.integrand = Some(ProcessIntegrand::CrossSection(cross_section_integrand));
         Ok(())
     }
 
@@ -479,7 +479,7 @@ impl CrossSection {
 
         if path.as_ref().join("integrand").exists() {
             let integrand = CrossSectionIntegrand::load(path.as_ref().join("integrand"), context)?;
-            cs.integrand = Some(GLIntegrand::CrossSection(integrand));
+            cs.integrand = Some(ProcessIntegrand::CrossSection(integrand));
         }
 
         Ok(cs)

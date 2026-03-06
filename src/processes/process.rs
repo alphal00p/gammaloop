@@ -28,7 +28,7 @@ use crate::processes::StandaloneExportSettings;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     feyngen::NumeratorAwareGraphGroupingOption,
-    gammaloop_integrand::GLIntegrand,
+    integrands::process::ProcessIntegrand,
     numerator::GlobalPrefactor,
     settings::{GlobalSettings, runtime::LockedRuntimeSettings},
 };
@@ -588,7 +588,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&GLIntegrand> {
+    pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&ProcessIntegrand> {
         self.collection.get_integrand(integrand_name)
     }
 
@@ -599,7 +599,7 @@ impl Process {
     pub fn get_integrand_mut(
         &mut self,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&mut GLIntegrand> {
+    ) -> Result<&mut ProcessIntegrand> {
         self.collection.get_integrand_mut(integrand_name)
     }
 
@@ -839,7 +839,7 @@ impl ProcessCollection {
         }
     }
 
-    fn get_integrand(&self, name: impl AsRef<str>) -> Result<&GLIntegrand> {
+    fn get_integrand(&self, name: impl AsRef<str>) -> Result<&ProcessIntegrand> {
         let res = match self {
             Self::Amplitudes(amplitudes) => {
                 if amplitudes.contains_key(name.as_ref()) {
@@ -906,7 +906,7 @@ impl ProcessCollection {
         Ok(integrand_name)
     }
 
-    fn get_integrand_mut(&mut self, name: impl AsRef<str>) -> Result<&mut GLIntegrand> {
+    fn get_integrand_mut(&mut self, name: impl AsRef<str>) -> Result<&mut ProcessIntegrand> {
         let res = match self {
             Self::Amplitudes(amplitudes) => {
                 if amplitudes.contains_key(name.as_ref()) {

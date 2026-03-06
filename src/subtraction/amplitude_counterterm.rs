@@ -18,14 +18,14 @@ use crate::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId},
         expression::AmplitudeOrientationID,
     },
-    gammaloop_integrand::{
+    integrands::process::{
         ParamBuilder, ThresholdParams,
         evaluators::{EvaluatorStack, SingleOrAllOrientations},
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
     model::Model,
     momentum::Rotation,
-    momentum_sample::{LoopMomenta, MomentumSample},
+    momentum::sample::{LoopMomenta, MomentumSample},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,

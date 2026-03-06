@@ -72,6 +72,8 @@
   - Not enabled by default - opt in with `--features python_abi`
 
 ## Agent Instructions
+- API stability is currently a non-goal for internal development: prioritize maintainability and structure over preserving external-facing module paths.
+- Breaking Rust/Python API changes are acceptable when they simplify architecture; document major moves in the change description.
 
 ## Configuration & State Tips
 - CLI runs create a `gammaloop_state/` directory by default; keep it out of commits unless intentionally sharing a reproducible state.

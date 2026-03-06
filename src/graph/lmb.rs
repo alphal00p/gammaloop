@@ -25,8 +25,8 @@ use typed_index_collections::TiVec;
 
 use crate::{
     momentum::SignOrZero,
-    momentum_sample::{ExternalIndex, LoopIndex},
-    signature::{LoopExtSignature, SignatureLike},
+    momentum::sample::{ExternalIndex, LoopIndex},
+    momentum::signature::{LoopExtSignature, SignatureLike},
     utils::{GS, W_, symbolica_ext::CallSymbol},
 };
 

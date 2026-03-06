@@ -26,10 +26,10 @@ use typed_index_collections::TiVec;
 use crate::{
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
-    gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
-    improve_ps::PhaseSpaceImprovementSettings,
+    integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
+    settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
     momentum::{Dep, ExternalMomenta, PolDef},
-    momentum_sample::ExternalIndex,
+    momentum::sample::ExternalIndex,
     numerator::{GlobalPrefactor, ParsingNet, symbolica_ext::AtomCoreExt},
     settings::runtime::kinematic::Externals,
     utils::{F, GS, Length, ose_atom_from_index},

@@ -109,7 +109,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use crate::{
-        improve_ps::PhaseSpaceImprovementSettings,
+        settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::{
             GlobalSettings, RuntimeSettings, SamplingSettings,
