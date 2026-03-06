@@ -73,8 +73,6 @@ pub enum Externals {
     },
     // add different type of pdfs here when needed
 }
-#[comemo::track]
-impl Externals {}
 
 impl Rotatable for Externals {
     fn rotate(&self, rotation: &momentum::Rotation) -> Self {
