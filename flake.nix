@@ -121,11 +121,18 @@
       ciPartitionCount = 6;
 
       licensePreCheck = ''
-        if [ ! -r /tmp/symbolica_license ]; then
-          echo "Missing Symbolica license file at /tmp/symbolica_license" >&2
+        licenseFile=""
+        if [ -r /tmp/symbolica_license ]; then
+          licenseFile=/tmp/symbolica_license
+        elif [ -r /private/tmp/symbolica_license ]; then
+          licenseFile=/private/tmp/symbolica_license
+        fi
+
+        if [ -z "$licenseFile" ]; then
+          echo "Missing Symbolica license file at /tmp/symbolica_license (or /private/tmp/symbolica_license on macOS)" >&2
           exit 1
         fi
-        export SYMBOLICA_LICENSE="$(cat /tmp/symbolica_license)"
+        export SYMBOLICA_LICENSE="$(cat "$licenseFile")"
       '';
 
       # Source trimming for per-crate derivations, following crane workspace pattern.
