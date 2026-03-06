@@ -200,7 +200,7 @@ impl Profile {
                 min_scale_exponent,
                 max_scale_exponent,
                 seed,
-                output_file,
+                output_file: _,
                 select,
             }) => {
                 let ir_profile_settings = IRProfileSetting {

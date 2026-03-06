@@ -672,7 +672,7 @@ fn test_grouped_subtraction() -> Result<()> {
 
 #[test]
 fn v_diag() -> Result<()> {
-    let mut cli = get_test_cli(
+    let cli = get_test_cli(
         Some("v_diag.toml".into()),
         get_tests_workspace_path().join("v_diag"),
         Some("v_diag".to_string()),

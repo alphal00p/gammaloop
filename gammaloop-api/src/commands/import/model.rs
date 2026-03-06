@@ -38,9 +38,9 @@ pub struct ImportModel {
 
 #[cfg(not(feature = "ufo_support"))]
 pub(crate) fn load_ufo_model(
-    path: &Path,
-    restriction_name: Option<String>,
-    simplify_model: bool,
+    _path: &Path,
+    _restriction_name: Option<String>,
+    _simplify_model: bool,
 ) -> Result<(Model, InputParamCard<F<f64>>)> {
     Err(eyre!(
         "UFO support not enabled in gammaloop. Please recompile with the `ufo_support` feature."

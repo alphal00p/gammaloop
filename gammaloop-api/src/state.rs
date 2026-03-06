@@ -970,7 +970,7 @@ impl State {
 
         let now = Instant::now();
         for _ in 0..samples {
-            integrand.evaluate_sample(
+            let _ = integrand.evaluate_sample(
                 &Sample::Continuous(
                     F(1.),
                     (0..integrand.get_n_dim())

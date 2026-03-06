@@ -4,7 +4,7 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::Amplitude,
-    utils::{W_, test_utils::load_generic_model},
+    utils::test_utils::load_generic_model,
     uv::{
         UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
@@ -592,7 +592,7 @@ fn finite_part_ghost_3loop() {
 #[test]
 fn finite_part_ghost_2loop() {
     test_initialise().unwrap();
-    let mut g: Vec<Graph> = dot!(digraph d1 {//0
+    let g: Vec<Graph> = dot!(digraph d1 {//0
       overall_factor= "+1"
       num = "spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))"
       in1 [style=invis];
