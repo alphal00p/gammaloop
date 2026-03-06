@@ -40,7 +40,7 @@ default_runtime_settings:
 commands:
 #   - Import:
 #       Model:
-#         path: ../../src/test_resources/gammaloop_models/sm.yaml
+#         path: ../../crates/gammalooprs/src/test_resources/gammaloop_models/sm.yaml
 
 #   - Import:
 #       Amplitude:

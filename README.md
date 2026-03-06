@@ -92,7 +92,7 @@ just build-cli
 just build-api
 ```
 `just build-cli` builds the CLI, and `just build-api` builds/installs the Python API via `maturin develop` (in your active Python environment).
-The Python package source is located in `./gammaloop-api/python/gammaloop`.
+The Python package source is located in `./crates/gammaloop-api/python/gammaloop`.
 
 *Note:* Alternatively, the dependencies can be built within a python virtual environment as follows:
 

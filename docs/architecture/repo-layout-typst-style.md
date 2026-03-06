@@ -1,19 +1,17 @@
-# Proposed Typst-Style Repository Layout
+# Typst-Style Repository Layout
 
-This document proposes an incremental migration toward a `typst/typst`-style workspace layout with a `crates/` directory and a cleaner top-level.
+This document tracks the `typst/typst`-style workspace direction with a `crates/` directory and a cleaner top-level.
 
 ## Target Top-Level Shape
 
 ```text
 .
 ├── crates/
-│   ├── gammalooprs/          # current root crate (`src/`)
-│   ├── gammaloop-api/        # current `gammaloop-api/`
-│   └── integration-tests/    # current `integration-tests/`
+│   ├── gammalooprs/          # former top-level crate (`src/`)
+│   ├── gammaloop-api/
+├── tests/                    # integration-test crate + fixtures
 ├── docs/
-├── tests/                    # repo-level tests + fixtures
-├── assets/
-├── models/
+├── assets/                   # includes `assets/models/`
 ├── examples/
 ├── tools/                    # helper scripts (new)
 ├── Cargo.toml                # workspace root only
@@ -21,13 +19,12 @@ This document proposes an incremental migration toward a `typst/typst`-style wor
 └── justfile
 ```
 
-## Incremental Migration Plan
+## Migration Status
 
-1. Move all Rust crates under `crates/` while keeping package names unchanged.
-2. Turn root `Cargo.toml` into a workspace manifest and keep shared lint/profile config there.
-3. Keep integration fixtures in `tests/` and crate-specific fixtures under each crate.
-4. Move ad-hoc scripts into `tools/` and reserve root for project entry points.
-5. Keep local run outputs under `.local/scratch/` and avoid creating new top-level working directories.
+1. Rust crates are under `crates/`, with integration tests promoted to top-level `tests/`.
+2. Root `Cargo.toml` is now a workspace manifest.
+3. Integration fixtures live under `tests/resources/`.
+4. Local run outputs should stay outside the top-level (for example `.local/scratch/`).
 
 ## Module Foldering Strategy Inside `gammalooprs`
 

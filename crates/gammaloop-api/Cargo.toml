@@ -1,0 +1,124 @@
+[package]
+name = "gammaloop-api"
+version = "0.1.0"
+edition = "2021"
+authors = [
+    "Valentin Hirschi <valentin.hirschi@gmail.com>",
+    "Mathijs Fraaije <mathijsfraaije@gmail.com>",
+    "Lucien Huber <mail@lcnbr.ch>",
+]
+license = "MIT OR Apache-2.0"
+categories = ["science"]
+description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
+keywords = ["loop", "cross-section", "perturbative", "physics"]
+repository = "https://github.com/alphal00p/gammaloop"
+build = "build.rs"
+
+[lib]
+name = "_gammaloop"
+path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "gammaloop"
+path = "src/cli.rs"
+bench = false
+required-features = ["cli"]
+
+[features]
+# Keep Python optional unless explicitly enabled.
+default = ["cli"]
+ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
+python_api = [
+    "ufo_support",
+    "gammalooprs/python_api",
+    "dep:numpy",
+    "dep:pyo3-build-config",
+]
+python_abi = ["python_api", "pyo3/abi3", "pyo3/abi3-py37"]
+pyo3-extension-module = ["dep:pyo3", "pyo3/extension-module", "gammalooprs/pyo3-extension-module"]
+python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
+cli = []
+no_pyo3 = []
+
+[dependencies]
+include_dir = "0.7"
+pyo3-stub-gen = { version = "0.13", optional = true, default-features = false }
+spenso = { version = "0.6", features = ["shadowing"] }
+idenso = "0.3"
+clap = "4.5.47"
+# clap-repl = "0.3.2"
+color-eyre = "0.6.5"
+colored = "3.0.0"
+console = "0.16.0"
+dirs = "6.0.0"
+eyre = { version = "0.6.12" }
+gammalooprs = { path = "../gammalooprs", version = "0.3.3" }
+schemars = "1.0.4"
+serde = "1.0.219"
+tracing-subscriber = { version = "0.3.19", features = [
+    "env-filter",
+    "fmt",
+    "time",
+    "json",
+] }
+tracing = "0.1.41"
+#symbolica = { version = "0.18.0", default-features = false }
+symbolica = { version = "1", default-features = false, features = [
+    "serde",
+    "bincode",
+
+] }
+smartstring = { version = "*", features = ["serde"] }
+bincode-trait-derive = { version = "0.1.1" }
+bincode = { version = "2.0.0", features = ["serde"] }
+serde_json = "1"
+toml = "0.9.5"
+rand = { version = "0.9", features = ["small_rng"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing-appender = "0.2.3"
+serde_yaml = "*"
+thiserror = "2.0.16"
+figment = { version = "0.10.19", features = ["json", "toml"] }
+reedline = "0.42.0"
+shlex = "1.3.0"
+nu-ansi-term = "0.50.1"
+# clap_complete = { version = "4.5.57", features = ["unstable-dynamic"] }
+regex = "1.11.2"
+ahash = { version = "0.8.8", features = ["serde"] }
+tracing-indicatif = "0.3.13"
+itertools = "0.14"
+git-version = "0.3"
+json5 = "0.4.1"
+tabled = { version = "0.20.0", features = ["ansi"] }
+numpy = { version = "0.25.0", optional = true }
+ndarray = { version = "0.16" }
+rayon = "1.5"
+linnet = { version = "0.17", features = [
+    "drawing",
+    "serde",
+    "bincode",
+    "symbolica",
+] }
+typed-index-collections = { version = "3.3.0", features = [
+    "serde",
+    "serde-alloc",
+    "bincode",
+] }
+walkdir = "2.5"
+rust-embed = { version = "8.4", features = ["interpolate-folder-path"] }
+indicatif = "0.18.4"
+# PyO3: optional for embedding. Auto-init at runtime.
+[dependencies.pyo3]
+version = "0.25"
+optional = true
+# Stable ABI features are now feature-gated via python_abi feature
+features = ["auto-initialize", "eyre"]
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[build-dependencies]
+walkdir = "2.5"
+pyo3-build-config = { version = "0.25", optional = true }
+vergen-gitcl = { version = "9", default-features = false }

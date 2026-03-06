@@ -40,6 +40,8 @@ examples/amplitude_computation/GL_*
 gammaloop_state/
 examples/**/gammaloop_state/
 integration-tests/workspace/
+crates/integration-tests/workspace/
+tests/workspace/
 benches/**/tests_gammaloop_state/
 out.yaml
 outmap.yaml
@@ -93,20 +95,28 @@ ignore/
 /~/
 
 src/test_resources/gammaloop_models/*.dat
+crates/gammalooprs/src/test_resources/gammaloop_models/*.dat
 
 src/test_resources/trees
+crates/gammalooprs/src/test_resources/trees
 
 GL_OUTPUT*
 
 src/test_resources/TEST_AMPLITUDE_*
+crates/gammalooprs/src/test_resources/TEST_AMPLITUDE_*
 # Sadly this does not work because the exclusion above is for an entire directory
 !src/test_resources/TEST_AMPLITUDE_*/GL_OUTPUT/output_metadata.yaml
 !src/test_resources/TEST_AMPLITUDE_*/GL_OUTPUT/sources/amplitudes/*/amplitude.yaml
+!crates/gammalooprs/src/test_resources/TEST_AMPLITUDE_*/GL_OUTPUT/output_metadata.yaml
+!crates/gammalooprs/src/test_resources/TEST_AMPLITUDE_*/GL_OUTPUT/sources/amplitudes/*/amplitude.yaml
 
 src/test_resources/TEST_CROSS_SECTION_*
+crates/gammalooprs/src/test_resources/TEST_CROSS_SECTION_*
 # Sadly this does not work because the exclusion above is for an entire directory
 !src/test_resources/TEST_CROSS_SECTION_*/GL_OUTPUT/output_metadata.yaml
 !src/test_resources/TEST_CROSS_SECTION_*/GL_OUTPUT/sources/cross_sections/*/cross_section.yaml
+!crates/gammalooprs/src/test_resources/TEST_CROSS_SECTION_*/GL_OUTPUT/output_metadata.yaml
+!crates/gammalooprs/src/test_resources/TEST_CROSS_SECTION_*/GL_OUTPUT/sources/cross_sections/*/cross_section.yaml
 
 # Unit test / coverage reports
 htmlcov/
@@ -132,6 +142,12 @@ python/gammaloop/dependencies/dependency_build.log
 python/gammaloop/dependencies/venv/
 python/gammaloop/dependencies/symbolica/
 python/gammaloop/dependencies/test_quad_math/
+crates/gammaloop-api/python/gammaloop/dependencies/LOCK
+crates/gammaloop-api/python/gammaloop/dependencies/INSTALLED
+crates/gammaloop-api/python/gammaloop/dependencies/dependency_build.log
+crates/gammaloop-api/python/gammaloop/dependencies/venv/
+crates/gammaloop-api/python/gammaloop/dependencies/symbolica/
+crates/gammaloop-api/python/gammaloop/dependencies/test_quad_math/
 
 # Translations
 *.mo
@@ -221,6 +237,7 @@ default.nix
 
 # Ignore the local test resources
 src/test_resources/qqddg/
+crates/gammalooprs/src/test_resources/qqddg/
 
 
 # Ignore the local compiled numerators

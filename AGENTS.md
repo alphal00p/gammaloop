@@ -1,12 +1,12 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/` holds the core Rust implementation and CLI support code.
-- `gammaloop-api/` is the workspace member for the Rust API + Python bindings (`gammaloop-api/src` and `gammaloop-api/python/gammaloop`).
-- `tests/` contains Rust integration tests and shared fixtures in `tests/resources/`.
+- `crates/gammalooprs/src/` holds the core Rust implementation.
+- `crates/gammaloop-api/` is the workspace member for the Rust API + Python bindings (`crates/gammaloop-api/src` and `crates/gammaloop-api/python/gammaloop`).
+- `tests/` contains the integration-test crate and shared fixtures in `tests/resources/`.
 - `examples/` includes command cards and notebooks for end-to-end runs.
 - `bin/` provides scripts like `compile.sh`, `run_tests.sh`, and the `gammaloop` entrypoints after build.
-- `assets/`, `models/`, and `benches/` store schemas/data, model files, and benchmarks.
+- `assets/` stores schemas/data and model files (`assets/models/`); Rust benches live under `crates/gammalooprs/benches/`.
 - Architecture docs live in `docs/architecture/`:
   - `docs/architecture/architecture-current.md` for implemented architecture.
   - `docs/architecture/architecture-ideas.md` for roadmap/proposals.

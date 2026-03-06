@@ -4,8 +4,8 @@
 This document describes the current, implemented architecture of this repository.
 
 The workspace is organized around two main Rust crates:
-- `gammalooprs` (root crate): core physics/domain logic, graph processing, integrand construction, evaluation, and integration.
-- `gammaloop-api` (workspace member): CLI, REPL, Python bindings, command parsing, and persisted state orchestration.
+- `gammalooprs` (`crates/gammalooprs`): core physics/domain logic, graph processing, integrand construction, evaluation, and integration.
+- `gammaloop-api` (`crates/gammaloop-api`): CLI, REPL, Python bindings, command parsing, and persisted state orchestration.
 
 ## High-Level Architecture
 At a high level, gammaLoop uses a layered architecture with a stateful application shell.
@@ -38,33 +38,33 @@ Infrastructure
 ## Main Components
 
 ### 1. Entry Points and Interfaces
-- CLI entry point: `gammaloop-api/src/cli.rs`.
-- Main app orchestration: `gammaloop-api/src/lib.rs` (`OneShot::load`, `OneShot::run`).
-- Python module entry: `gammaloop-api/src/python.rs` (`#[pymodule] fn _gammaloop`).
-- Python package shim: `gammaloop-api/python/gammaloop/__init__.py`.
+- CLI entry point: `crates/gammaloop-api/src/cli.rs`.
+- Main app orchestration: `crates/gammaloop-api/src/lib.rs` (`OneShot::load`, `OneShot::run`).
+- Python module entry: `crates/gammaloop-api/src/python.rs` (`#[pymodule] fn _gammaloop`).
+- Python package shim: `crates/gammaloop-api/python/gammaloop/__init__.py`.
 
 ### 2. Application State and Command Model
-- Central mutable app state: `gammaloop-api/src/state.rs` (`State`).
+- Central mutable app state: `crates/gammaloop-api/src/state.rs` (`State`).
 - Command history and run cards: `CommandHistory`, `RunHistory`.
-- Command dispatch: `gammaloop-api/src/commands/mod.rs` with concrete subcommands in `commands/*`.
+- Command dispatch: `crates/gammaloop-api/src/commands/mod.rs` with concrete subcommands in `commands/*`.
 
 The command model is stateful by design: commands mutate a long-lived `State` that can be saved and resumed.
 
 ### 3. Domain Core (gammalooprs)
-- Root module wiring: `src/lib.rs`.
-- Model and parameters: `src/model/mod.rs`.
-- Graph domain: `src/graph/mod.rs` and submodules.
-- Process orchestration: `src/processes/mod.rs`, `src/processes/process.rs`.
+- Root module wiring: `crates/gammalooprs/src/lib.rs`.
+- Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
+- Graph domain: `crates/gammalooprs/src/graph/mod.rs` and submodules.
+- Process orchestration: `crates/gammalooprs/src/processes/mod.rs`, `crates/gammalooprs/src/processes/process.rs`.
 - Amplitude and cross-section pipelines:
-  - `src/processes/amplitude.rs`
-  - `src/processes/cross_section.rs`
+  - `crates/gammalooprs/src/processes/amplitude.rs`
+  - `crates/gammalooprs/src/processes/cross_section.rs`
 - Integrand abstraction and implementations:
-  - `src/integrands/mod.rs`
-  - `src/integrands/process/mod.rs`
-  - `src/integrands/process/amplitude/mod.rs`
-  - `src/integrands/process/cross_section_integrand.rs`
-- Integration engine: `src/integrate/mod.rs`.
-- Global/runtime settings: `src/settings/mod.rs`, `src/settings/global.rs`, `src/settings/runtime.rs`.
+  - `crates/gammalooprs/src/integrands/mod.rs`
+  - `crates/gammalooprs/src/integrands/process/mod.rs`
+  - `crates/gammalooprs/src/integrands/process/amplitude/mod.rs`
+  - `crates/gammalooprs/src/integrands/process/cross_section_integrand.rs`
+- Integration engine: `crates/gammalooprs/src/integrate/mod.rs`.
+- Global/runtime settings: `crates/gammalooprs/src/settings/mod.rs`, `crates/gammalooprs/src/settings/global.rs`, `crates/gammalooprs/src/settings/runtime.rs`.
 
 ## Lifecycle and Data Flow
 
@@ -124,9 +124,9 @@ Concurrency is explicit and use-case scoped:
 
 ## Testing Architecture
 Testing is organized into layers:
-- Unit tests in modules across `src/`.
-- Integration test crate: `integration-tests/` with reusable harness (`integration-tests/src/lib.rs`).
-- Additional Rust integration tests in `tests/`.
+- Unit tests in modules across `crates/gammalooprs/src/`.
+- Integration test crate: `tests/` with reusable harness (`tests/src/lib.rs`).
+- Additional Rust integration tests in `crates/gammalooprs/tests/`.
 - Snapshot-heavy coverage for symbolic outputs and numerics.
 
 ## Architectural Strengths

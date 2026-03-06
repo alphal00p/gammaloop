@@ -51,7 +51,7 @@ build-backend = "maturin"
 
 [tool.maturin]
 features = ["python_abi"]
-python-source = "gammaloop-api/python"
+python-source = "crates/gammaloop-api/python"
 module-name = "gammaloop._gammaloop"
 sdist-include = ["LICENSE.md", "README.md"]
 
