@@ -1,0 +1,14 @@
+digraph fourLoopA{
+    node [num = "1" ]
+    edge [particle=scalar_1]
+    e        [style=invis]
+    e -> v2:1 [id=0]
+    v1:0 -> e [id=1]
+    v1 -> v2 [id=2]
+    v1 -> v2 [id=3]
+    v2 -> v3 [id=4]
+    v3 -> v1 [id=5]
+    v1 -> v4 [id=6]
+    v2 -> v4 [id=7]
+    v3 -> v4 [id=8]
+}

@@ -1,0 +1,36 @@
+---
+source: src/graph/lmb.rs
+expression: "g.dot_lmb_of(&g.full_filter(), &g.loop_momentum_basis)"
+---
+digraph {
+  node	 [shape=circle,height=0.1,label=""];
+  overlap = "scale";
+  layout = "neato";
+  start=2;
+  0	 [label=""];
+  1	 [label=""];
+  4	 [label=""];
+  2	 [label=""];
+  5	 [label=""];
+  3	 [label=""];
+  0:0:s	-> 1:1:s	 [id=0  color="red:blue;0.5" label="-Q(1)-Q(2)-Q(3)+Q(12)"];
+  0:2:s	-> 4:3:s	 [id=1  color="red:blue;0.5" label="Q(1)"];
+  ext2	 [style=invis];
+  0:4:s	-> ext2	 [id=2 color="red" label="Q(2)"];
+  ext3	 [style=invis];
+  0:5:s	-> ext3	 [id=3 color="red" label="Q(3)"];
+  1:6:s	-> 2:7:s	 [id=4  color="red:blue;0.5" label="Q(11)"];
+  1:8:s	-> 4:9:s	 [id=5  color="red:blue;0.5" label="-Q(1)-Q(2)-Q(3)-Q(6)-Q(7)-Q(11)+Q(12)"];
+  1:10:s	-> 5:11:s	 [id=6  color="red:blue;0.5" label="Q(6)"];
+  ext7	 [style=invis];
+  1:12:s	-> ext7	 [id=7 color="red" label="Q(7)"];
+  2:13:s	-> 3:14:s	 [id=8  color="red:blue;0.5" label="Q(8)"];
+  2:15:s	-> 3:16:s	 [id=9  color="red:blue;0.5" label="Q(9)"];
+  2:17:s	-> 3:18:s	 [id=10  color="red:blue;0.5" label="-Q(8)-Q(9)+Q(11)"];
+  ext11	 [style=invis];
+  3:19:s	-> ext11	 [id=11 color="red" label="Q(11)"];
+  5:20:s	-> 0:21:s	 [id=12  color="red:blue;0.5" label="Q(12)"];
+  5:22:s	-> 4:23:s	 [id=13  color="red:blue;0.5" label="Q(2)+Q(3)+Q(6)+Q(7)+Q(11)-Q(12)"];
+  ext14	 [style=invis];
+  5:24:s	-> ext14	 [id=14 color="red" label="-Q(2)-Q(3)-Q(7)-Q(11)"];
+}

@@ -1,0 +1,558 @@
+use crate::graph::GroupId;
+use crate::integrands::process::GraphTerm;
+use crate::momentum::sample::MomentumSample;
+use crate::momentum::{Rotation, ThreeMomentum};
+
+use crate::utils::{self, F, FloatLike, global_parameterize};
+use crate::{
+    DependentMomentaConstructor, settings::runtime::DiscreteGraphSamplingType,
+    settings::runtime::ParameterizationSettings, settings::runtime::SamplingSettings,
+    settings::runtime::kinematic::KinematicsSettings,
+};
+use color_eyre::Result;
+use eyre::eyre;
+use itertools::Itertools;
+use momtrop::vector::Vector;
+use symbolica::numerical_integration::Sample;
+
+use super::{ChannelIndex, ProcessIntegrandImpl};
+
+// discrete dimensions, continious dimensions
+fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
+    let discrete_dimensions = Vec::new();
+    unwrap_sample_impl(discrete_dimensions, sample)
+}
+
+fn unwrap_sample_impl<T: FloatLike>(
+    mut discrete_dimensions: Vec<usize>,
+    sample: &Sample<F<f64>>,
+) -> (Vec<usize>, Vec<F<T>>) {
+    match sample {
+        Sample::Continuous(_, xs) => {
+            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            (discrete_dimensions, xs)
+        }
+        Sample::Uniform(_, discrete, xs) => {
+            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            (discrete.clone(), xs)
+        }
+        Sample::Discrete(_, index, sample) => {
+            discrete_dimensions.push(*index);
+            unwrap_sample_impl(
+                discrete_dimensions,
+                sample.as_ref().expect("invalid sample structure"),
+            )
+        }
+    }
+}
+
+/// Sample whose structure depends on the sampling settings, and enforces these settings.
+#[derive(Debug, Clone)]
+pub enum GammaLoopSample<T: FloatLike> {
+    Default(MomentumSample<T>),
+    MultiChanneling {
+        alpha: F<T>,
+        sample: MomentumSample<T>,
+    },
+    DiscreteGraph {
+        group_id: GroupId,
+        sample: DiscreteGraphSample<T>,
+    },
+}
+
+impl<T: FloatLike> GammaLoopSample<T> {
+    pub(crate) fn rotate(
+        &self,
+        rotation: &Rotation,
+        loop_mom_cache_id: usize,
+        external_mom_cache_id: usize,
+    ) -> Self {
+        if rotation.is_identity() {
+            return self.clone();
+        }
+
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.rotate(
+                rotation,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            )),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: alpha.clone(),
+
+                    sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
+                sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
+            },
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn zero(&self) -> F<T> {
+        match self {
+            GammaLoopSample::Default(sample) => sample.zero(),
+            GammaLoopSample::MultiChanneling { sample, .. } => sample.zero(),
+            GammaLoopSample::DiscreteGraph { sample, .. } => sample.zero(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn one(&self) -> F<T> {
+        match self {
+            GammaLoopSample::Default(sample) => sample.one(),
+            GammaLoopSample::MultiChanneling { sample, .. } => sample.one(),
+            GammaLoopSample::DiscreteGraph { sample, .. } => sample.one(),
+        }
+    }
+
+    /// Cast the sample to a different precision
+    #[allow(dead_code)]
+    #[inline]
+    fn cast_sample<T2: FloatLike>(&self) -> GammaLoopSample<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.cast_sample()),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: alpha.clone().into(),
+                    sample: sample.cast_sample(),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
+                sample: sample.cast_sample(),
+            },
+        }
+    }
+
+    #[allow(unused)]
+    fn higher_precision(&self) -> GammaLoopSample<T::Higher>
+    where
+        T::Lower: FloatLike + Default,
+        T::Higher: FloatLike + Default,
+    {
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.higher_precision()),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: alpha.higher(),
+                    sample: sample.higher_precision(),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
+                sample: sample.higher_precision(),
+            },
+        }
+    }
+
+    #[allow(dead_code)]
+    fn lower_precision(&self) -> GammaLoopSample<T::Lower>
+    where
+        T::Lower: FloatLike + Default,
+        T::Higher: FloatLike + Default,
+    {
+        match self {
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.lower_precision()),
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: alpha.lower(),
+                    sample: sample.lower_precision(),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
+                sample: sample.lower_precision(),
+            },
+        }
+    }
+
+    /// Retrieve the default sample which is contained in all types
+    #[inline]
+    pub(crate) fn get_default_sample(&self) -> &MomentumSample<T> {
+        match self {
+            GammaLoopSample::Default(sample) => sample,
+            GammaLoopSample::MultiChanneling { sample, .. } => sample,
+            GammaLoopSample::DiscreteGraph { sample, .. } => sample.get_default_sample(),
+        }
+    }
+}
+
+/// This sample is used when importance sampling over graphs is used.
+#[derive(Debug, Clone)]
+pub enum DiscreteGraphSample<T: FloatLike> {
+    Default(MomentumSample<T>),
+    MultiChanneling {
+        alpha: F<T>,
+        sample: MomentumSample<T>,
+    },
+    /// This variant is equivalent to Default, but needs to be handled differently in the evaluation.
+    Tropical(MomentumSample<T>),
+    DiscreteMultiChanneling {
+        alpha: F<T>,
+        channel_id: ChannelIndex,
+        sample: MomentumSample<T>,
+    },
+}
+
+impl<T: FloatLike> DiscreteGraphSample<T> {
+    #[allow(dead_code)]
+    pub(crate) fn zero(&self) -> F<T> {
+        match self {
+            DiscreteGraphSample::Default(sample) => sample.zero(),
+            DiscreteGraphSample::MultiChanneling { sample, .. } => sample.zero(),
+            DiscreteGraphSample::Tropical(sample) => sample.zero(),
+            DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample.zero(),
+        }
+    }
+
+    pub(crate) fn one(&self) -> F<T> {
+        match self {
+            DiscreteGraphSample::Default(sample) => sample.one(),
+            DiscreteGraphSample::MultiChanneling { sample, .. } => sample.one(),
+            DiscreteGraphSample::Tropical(sample) => sample.one(),
+            DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample.one(),
+        }
+    }
+
+    /// Rotation for stability checks
+    #[inline]
+    fn rotate(
+        &self,
+        rotation: &Rotation,
+        loop_mom_cache_id: usize,
+        external_mom_cache_id: usize,
+    ) -> Self {
+        match self {
+            DiscreteGraphSample::Default(sample) => DiscreteGraphSample::Default(sample.rotate(
+                rotation,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            )),
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: alpha.clone(),
+                    sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => DiscreteGraphSample::Tropical(sample.rotate(
+                rotation,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            )),
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: alpha.clone(),
+                channel_id: *channel_id,
+                sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
+            },
+        }
+    }
+
+    /// Cast the sample to a different precision
+    #[inline]
+    fn cast_sample<T2: FloatLike>(&self) -> DiscreteGraphSample<T2>
+    where
+        F<T2>: From<F<T>>,
+    {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.cast_sample())
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: Into::<F<T2>>::into(alpha.clone()),
+                    sample: sample.cast_sample(),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.cast_sample())
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: F::<T2>::from(alpha.clone()),
+                channel_id: *channel_id,
+                sample: sample.cast_sample(),
+            },
+        }
+    }
+
+    fn higher_precision(&self) -> DiscreteGraphSample<T::Higher>
+    where
+        T::Higher: FloatLike + Default,
+        T::Lower: FloatLike + Default,
+    {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.higher_precision())
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: alpha.higher(),
+                    sample: sample.higher_precision(),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.higher_precision())
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: alpha.higher(),
+                channel_id: *channel_id,
+                sample: sample.higher_precision(),
+            },
+        }
+    }
+
+    fn lower_precision(&self) -> DiscreteGraphSample<T::Lower>
+    where
+        T::Higher: FloatLike + Default,
+        T::Lower: FloatLike + Default,
+    {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.lower_precision())
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: alpha.lower(),
+                    sample: sample.lower_precision(),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.lower_precision())
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: alpha.lower(),
+                channel_id: *channel_id,
+                sample: sample.lower_precision(),
+            },
+        }
+    }
+
+    /// Retrieve the default sample which is contained in all types
+    #[inline]
+    fn get_default_sample(&self) -> &MomentumSample<T> {
+        match self {
+            DiscreteGraphSample::Default(sample) => sample,
+            DiscreteGraphSample::MultiChanneling { sample, .. } => sample,
+            DiscreteGraphSample::Tropical(sample) => sample,
+            DiscreteGraphSample::DiscreteMultiChanneling { sample, .. } => sample,
+        }
+    }
+}
+
+#[inline]
+pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
+    sample_point: &Sample<F<f64>>,
+    integrand: &mut I,
+) -> Result<GammaLoopSample<T>> {
+    let (discrete_indices, xs) = unwrap_sample(sample_point);
+    let settings = integrand.get_settings();
+    let loop_mom_cache_id = integrand.loop_cache_id();
+    let external_mom_cache_id = integrand.external_cache_id();
+    let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
+
+    match &settings.sampling {
+        SamplingSettings::Default(parameterization_settings) => {
+            Ok(GammaLoopSample::Default(default_parametrize(
+                &xs,
+                dependent_momenta_constructor,
+                parameterization_settings,
+                &settings.kinematics,
+                None,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            )))
+        }
+        SamplingSettings::MultiChanneling(multichanneling_settings) => {
+            Ok(GammaLoopSample::MultiChanneling {
+                alpha: F::from_f64(multichanneling_settings.alpha),
+                sample: default_parametrize(
+                    &xs,
+                    dependent_momenta_constructor,
+                    &multichanneling_settings.parameterization_settings,
+                    &settings.kinematics,
+                    None,
+                    loop_mom_cache_id,
+                    external_mom_cache_id,
+                ),
+            })
+        }
+        SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
+            let group_id = GroupId(discrete_indices[0]);
+            let orientation_id = if discrete_graph_settings.sample_orientations {
+                Some(discrete_indices[1])
+            } else {
+                None
+            };
+
+            match &discrete_graph_settings.sampling_type {
+                DiscreteGraphSamplingType::Default(parameterization_settings) => {
+                    Ok(GammaLoopSample::DiscreteGraph {
+                        group_id,
+                        sample: DiscreteGraphSample::Default(default_parametrize(
+                            &xs,
+                            dependent_momenta_constructor,
+                            parameterization_settings,
+                            &settings.kinematics,
+                            orientation_id,
+                            loop_mom_cache_id,
+                            external_mom_cache_id,
+                        )),
+                    })
+                }
+                DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
+                    Ok(GammaLoopSample::DiscreteGraph {
+                        group_id,
+                        sample: DiscreteGraphSample::MultiChanneling {
+                            alpha: F::from_f64(multichanneling_settings.alpha),
+                            sample: default_parametrize(
+                                &xs,
+                                dependent_momenta_constructor,
+                                &multichanneling_settings.parameterization_settings,
+                                &settings.kinematics,
+                                orientation_id,
+                                loop_mom_cache_id,
+                                external_mom_cache_id,
+                            ),
+                        },
+                    })
+                }
+                DiscreteGraphSamplingType::TropicalSampling(tropical_sampling_settings) => {
+                    let graph = integrand.get_master_graph(group_id);
+                    let externals = &settings
+                        .kinematics
+                        .externals
+                        .get_dependent_externals(dependent_momenta_constructor)?;
+
+                    let sampler = graph.get_tropical_sampler();
+
+                    let edge_data = graph
+                        .get_graph()
+                        .iter_loop_edges()
+                        .map(|(_, edge_id, _edge)| {
+                            let mass_re = graph.get_real_mass_vector()[edge_id].map(F::from_ff64);
+
+                            let shift = utils::compute_shift_part(
+                                &graph.get_graph().loop_momentum_basis.edge_signatures[edge_id]
+                                    .external,
+                                externals,
+                            )
+                            .spatial;
+
+                            let shift_momtrop = Vector::from_array([shift.px, shift.py, shift.pz]);
+
+                            (mass_re, shift_momtrop)
+                        })
+                        .collect_vec();
+
+                    let sampling_result_result = sampler.generate_sample_from_x_space_point(
+                        &xs,
+                        edge_data,
+                        &tropical_sampling_settings.into_tropical_sampling_settings(),
+                        None,
+                    );
+
+                    let sampling_result = match sampling_result_result {
+                        Ok(sampling_result) => sampling_result,
+                        Err(_) => {
+                            return Err(eyre!("tropical sampling failed"));
+                        }
+                    };
+
+                    let loop_moms = sampling_result
+                        .loop_momenta
+                        .into_iter()
+                        .map(Into::<ThreeMomentum<F<T>>>::into)
+                        .collect();
+
+                    let default_sample = MomentumSample::new(
+                        loop_moms,
+                        loop_mom_cache_id,
+                        &settings.kinematics.externals,
+                        external_mom_cache_id,
+                        sampling_result.jacobian,
+                        dependent_momenta_constructor,
+                        orientation_id,
+                    )?;
+                    Ok(GammaLoopSample::DiscreteGraph {
+                        group_id,
+                        sample: DiscreteGraphSample::Tropical(default_sample),
+                    })
+                }
+                DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
+                    let channel_id = *discrete_indices.last().expect("invalid_sample_structure");
+
+                    Ok(GammaLoopSample::DiscreteGraph {
+                        group_id,
+                        sample: DiscreteGraphSample::DiscreteMultiChanneling {
+                            alpha: F::from_f64(multichanneling_settings.alpha),
+                            channel_id: channel_id.into(),
+                            sample: default_parametrize(
+                                &xs,
+                                dependent_momenta_constructor,
+                                &multichanneling_settings.parameterization_settings,
+                                &settings.kinematics,
+                                orientation_id,
+                                loop_mom_cache_id,
+                                external_mom_cache_id,
+                            ),
+                        },
+                    })
+                }
+            }
+        }
+    }
+}
+
+/// Default parametrize is basically everything except tropical sampling.
+#[inline]
+fn default_parametrize<T: FloatLike>(
+    xs: &[F<T>],
+    dependent_momenta_constructor: DependentMomentaConstructor,
+    parameterization_settings: &ParameterizationSettings,
+    kinematics: &KinematicsSettings,
+    orientation: Option<usize>,
+    loop_mom_cache_id: usize,
+    external_mom_cache_id: usize,
+) -> MomentumSample<T> {
+    let externals = &kinematics.externals;
+
+    let (loop_moms_vec, param_jacobian) =
+        global_parameterize(xs, F::from_f64(kinematics.e_cm), parameterization_settings);
+
+    let loop_moms = loop_moms_vec.into_iter().map(ThreeMomentum::from).collect();
+
+    let jacobian = param_jacobian;
+    // info!("Default parametrize with ext cache id:{external_mom_cache_id}");
+    MomentumSample::new(
+        loop_moms,
+        loop_mom_cache_id,
+        externals,
+        external_mom_cache_id,
+        jacobian,
+        dependent_momenta_constructor,
+        orientation,
+    )
+    .unwrap()
+}

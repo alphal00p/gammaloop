@@ -1,0 +1,541 @@
+pub mod diagram_generator;
+
+use ahash::{AHashMap, HashMap};
+use bincode_trait_derive::Decode;
+use bincode_trait_derive::Encode;
+use diagram_generator::EdgeColor;
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+
+use rayon::iter::IntoParallelRefMutIterator;
+use rayon::iter::ParallelIterator;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
+use std::ops::RangeInclusive;
+use std::{fmt, str::FromStr};
+use symbolica::atom::Atom;
+use symbolica::graph::Graph as SymbolicaGraph;
+use thiserror::Error;
+
+use crate::model::Model;
+
+#[derive(Error, Debug)]
+pub enum FeynGenError {
+    #[error("{0}")]
+    GenericError(String),
+    #[error("Invalid loop momentum basis | {0}")]
+    LoopMomentumBasisError(String),
+    #[error("Could not convert symbolica graph symmetry factor to an integer: {0}")]
+    SymmetryFactorError(String),
+    #[error("Could not numerically evaluate numerator: {0}")]
+    NumeratorEvaluationError(String),
+    #[error(transparent)]
+    Eyre(#[from] color_eyre::Report),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode)]
+
+pub struct GraphGroupingOptions {
+    pub numerical_sample_seed: u16,
+    pub number_of_numerical_samples: usize,
+    pub differentiate_particle_masses_only: bool,
+    pub fully_numerical_substitution_when_comparing_numerators: bool,
+    pub test_canonized_numerator: bool,
+    pub symmetric_polarizations: bool,
+}
+
+impl Default for GraphGroupingOptions {
+    fn default() -> Self {
+        Self {
+            numerical_sample_seed: 3,
+            number_of_numerical_samples: 5,
+            differentiate_particle_masses_only: true,
+            fully_numerical_substitution_when_comparing_numerators: false,
+            test_canonized_numerator: false,
+            symmetric_polarizations: false,
+        }
+    }
+}
+
+impl fmt::Display for GraphGroupingOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "differentiate_masses_only={}, test_canonized_numerator={}, #samples={}, seed={}, fully_numerical_substitution={}, symmetric_polarizations={}",
+            self.numerical_sample_seed,
+            self.number_of_numerical_samples,
+            self.differentiate_particle_masses_only,
+            self.test_canonized_numerator,
+            self.fully_numerical_substitution_when_comparing_numerators,
+            self.symmetric_polarizations
+        )
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode)]
+pub enum NumeratorAwareGraphGroupingOption {
+    NoGrouping,
+    OnlyDetectZeroes,
+    GroupIdenticalGraphUpToSign(GraphGroupingOptions),
+    GroupIdenticalGraphUpToScalarRescaling(GraphGroupingOptions),
+}
+
+impl fmt::Display for NumeratorAwareGraphGroupingOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::NoGrouping => "no grouping",
+                Self::OnlyDetectZeroes => "only detect zero numerators",
+                Self::GroupIdenticalGraphUpToSign(_opts) => "up to a sign",
+                Self::GroupIdenticalGraphUpToScalarRescaling(_opts) => {
+                    "up to a scalar rescaling"
+                }
+            }
+        )
+    }
+}
+
+impl NumeratorAwareGraphGroupingOption {
+    pub(crate) fn get_options(&self) -> Option<&GraphGroupingOptions> {
+        match self {
+            Self::NoGrouping => None,
+            Self::OnlyDetectZeroes => None,
+            Self::GroupIdenticalGraphUpToSign(opts) => Some(opts),
+            Self::GroupIdenticalGraphUpToScalarRescaling(opts) => Some(opts),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn description(&self) -> String {
+        format!(
+            "{}{}",
+            self,
+            self.get_options().map_or("".into(), |o| format!("({})", o))
+        )
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode, Copy)]
+pub enum GenerationType {
+    Amplitude,
+    CrossSection,
+}
+
+impl fmt::Display for GenerationType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Amplitude => "Amplitude",
+                Self::CrossSection => "Cross-section",
+            }
+        )
+    }
+}
+
+impl FromStr for GenerationType {
+    type Err = FeynGenError;
+
+    fn from_str(s: &str) -> Result<Self, FeynGenError> {
+        match s {
+            "amplitude" => Ok(Self::Amplitude),
+            "cross_section" => Ok(Self::CrossSection),
+            _ => Err(FeynGenError::GenericError(format!(
+                "Invalid generation type: {}",
+                s
+            ))),
+        }
+    }
+}
+
+pub(crate) fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
+    graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+    model: &Model,
+) -> AHashMap<SmartString<LazyCompact>, usize> {
+    let mut coupling_orders = AHashMap::default();
+    for node in graph.nodes() {
+        for (k, v) in node.data.coupling_orders(model) {
+            *coupling_orders.entry(k).or_insert(0) += v;
+        }
+    }
+    coupling_orders
+}
+
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct FeynGenFilters(pub Vec<FeynGenFilter>);
+
+impl FeynGenFilters {
+    pub(crate) fn get_max_bridge(&self) -> Option<usize> {
+        self.0.iter().find_map(|f| match f {
+            FeynGenFilter::MaxNumberOfBridges(n) => Some(*n),
+            _ => None,
+        })
+    }
+
+    pub(crate) fn get_blob_range(&self) -> Option<&RangeInclusive<usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::BlobRange(v) = f {
+                Some(v)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub(crate) fn get_spectator_range(&self) -> Option<&RangeInclusive<usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::SpectatorRange(v) = f {
+                Some(v)
+            } else {
+                None
+            }
+        })
+    }
+
+    #[allow(dead_code)]
+    pub fn allow_tadpoles(&self) -> bool {
+        !self
+            .0
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_)))
+    }
+
+    pub(crate) fn filter_cross_section_tadpoles(&self) -> bool {
+        self.0.iter().any(|f| {
+            matches!(
+                f,
+                FeynGenFilter::SewedFilter(SewedFilterOptions {
+                    filter_tadpoles: true,
+                    ..
+                })
+            )
+        })
+    }
+
+    pub(crate) fn get_particle_vetos(&self) -> Option<&[i64]> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::ParticleVeto(v) = f {
+                Some(v.as_slice())
+            } else {
+                None
+            }
+        })
+    }
+
+    pub(crate) fn get_coupling_orders(&self) -> Option<&HashMap<String, (usize, Option<usize>)>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::CouplingOrders(o) = f {
+                Some(o)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub(crate) fn get_perturbative_orders(&self) -> Option<&HashMap<String, usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::PerturbativeOrders(o) = f {
+                Some(o)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub(crate) fn get_loop_count_range(&self) -> Option<(usize, usize)> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::LoopCountRange(o) = f {
+                Some(*o)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub(crate) fn get_fermion_loop_count_range(&self) -> Option<(usize, usize)> {
+        self.0.iter().find_map(|f: &FeynGenFilter| {
+            if let FeynGenFilter::FermionLoopCountRange(o) = f {
+                Some(*o)
+            } else {
+                None
+            }
+        })
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn apply_filters<
+        NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone,
+    >(
+        &self,
+        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, Atom)>,
+        model: &Model,
+        pool: &rayon::ThreadPool,
+        progress_bar_style: &ProgressStyle,
+    ) -> Result<(), FeynGenError> {
+        for filter in self.0.iter() {
+            match filter {
+                FeynGenFilter::CouplingOrders(orders) => {
+                    let bar = ProgressBar::new(graphs.len() as u64);
+                    bar.set_style(progress_bar_style.clone());
+                    bar.set_message("Applying coupling orders constraints...");
+                    pool.install(|| {
+                        *graphs = graphs
+                            .par_iter_mut()
+                            .progress_with(bar.clone())
+                            .filter(|(g, _)| {
+                                let graph_coupling_orders = get_coupling_orders(g, model);
+
+                                // if a {
+                                //     info!(
+                                //         "Coupling orders constraints satisfied for graph {}",
+                                //         g.to_dot()
+                                //     );
+                                //     info!("{:?}", graph_coupling_orders);
+                                // }
+                                orders.iter().all(|(k, (v_min, v_max))| {
+                                    graph_coupling_orders
+                                        .get(&SmartString::from(k))
+                                        .map_or(0 == *v_min, |o| {
+                                            *o >= *v_min && (*v_max).is_none_or(|max| *o <= max)
+                                        })
+                                })
+                            })
+                            .map(|(g, sf)| (g.clone(), sf.clone()))
+                            .collect::<Vec<_>>()
+                    });
+                    bar.finish_and_clear();
+                }
+                FeynGenFilter::LoopCountRange((loop_count_min, loop_count_max)) => {
+                    graphs.retain(|(g, _)| {
+                        g.num_loops() >= *loop_count_min && g.num_loops() <= *loop_count_max
+                    });
+                }
+                FeynGenFilter::PerturbativeOrders(_)
+                | FeynGenFilter::MaxNumberOfBridges(_)
+                | FeynGenFilter::SelfEnergyFilter(_)
+                | FeynGenFilter::TadpolesFilter(_)
+                | FeynGenFilter::ZeroSnailsFilter(_)
+                | FeynGenFilter::FermionLoopCountRange(_)
+                | FeynGenFilter::SewedFilter(_)
+                | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
+                | FeynGenFilter::BlobRange(_)
+                | FeynGenFilter::SpectatorRange(_)
+                | FeynGenFilter::VertexVeto(_)
+                | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct SelfEnergyFilterOptions {
+    pub veto_self_energy_of_massive_lines: bool,
+    pub veto_self_energy_of_massless_lines: bool,
+    pub veto_only_scaleless_self_energy: bool,
+}
+
+impl Default for SelfEnergyFilterOptions {
+    fn default() -> Self {
+        Self {
+            veto_self_energy_of_massive_lines: true,
+            veto_self_energy_of_massless_lines: true,
+            veto_only_scaleless_self_energy: false,
+        }
+    }
+}
+
+impl fmt::Display for SelfEnergyFilterOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut descr = vec![];
+        if self.veto_self_energy_of_massive_lines && !self.veto_self_energy_of_massless_lines {
+            descr.push("only massive legs")
+        } else if !self.veto_self_energy_of_massive_lines && self.veto_self_energy_of_massless_lines
+        {
+            descr.push("only massless legs")
+        };
+        if self.veto_only_scaleless_self_energy {
+            descr.push("only scaleless self-energies")
+        };
+        write!(f, "{}", descr.join(" | "))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct SnailFilterOptions {
+    pub veto_snails_attached_to_massive_lines: bool,
+    pub veto_snails_attached_to_massless_lines: bool,
+    pub veto_only_scaleless_snails: bool,
+}
+
+impl Default for SnailFilterOptions {
+    fn default() -> Self {
+        Self {
+            veto_snails_attached_to_massive_lines: false,
+            veto_snails_attached_to_massless_lines: true,
+            veto_only_scaleless_snails: false,
+        }
+    }
+}
+
+impl fmt::Display for SnailFilterOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut descr = vec![];
+        if self.veto_snails_attached_to_massive_lines
+            && !self.veto_snails_attached_to_massless_lines
+        {
+            descr.push("only attached to massive legs")
+        } else if !self.veto_snails_attached_to_massive_lines
+            && self.veto_snails_attached_to_massless_lines
+        {
+            descr.push("only attached to massless legs")
+        };
+        if self.veto_only_scaleless_snails {
+            descr.push("only scaleless snails")
+        };
+        write!(f, "{}", descr.join(" | "))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct TadpolesFilterOptions {
+    pub veto_tadpoles_attached_to_massive_lines: bool,
+    pub veto_tadpoles_attached_to_massless_lines: bool,
+    pub veto_only_scaleless_tadpoles: bool,
+}
+
+impl Default for TadpolesFilterOptions {
+    fn default() -> Self {
+        Self {
+            veto_tadpoles_attached_to_massive_lines: true,
+            veto_tadpoles_attached_to_massless_lines: true,
+            veto_only_scaleless_tadpoles: false,
+        }
+    }
+}
+
+impl fmt::Display for TadpolesFilterOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut descr = vec![];
+        if self.veto_tadpoles_attached_to_massive_lines
+            && !self.veto_tadpoles_attached_to_massless_lines
+        {
+            descr.push("only attached to massive legs")
+        } else if !self.veto_tadpoles_attached_to_massive_lines
+            && self.veto_tadpoles_attached_to_massless_lines
+        {
+            descr.push("only attached to massless legs")
+        };
+        if self.veto_only_scaleless_tadpoles {
+            descr.push("only scaleless tadpoles")
+        };
+        write!(f, "{}", descr.join(" | "))
+    }
+}
+
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct SewedFilterOptions {
+    pub filter_tadpoles: bool,
+}
+
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum FeynGenFilter {
+    SelfEnergyFilter(SelfEnergyFilterOptions),
+    TadpolesFilter(TadpolesFilterOptions),
+    ZeroSnailsFilter(SnailFilterOptions),
+    SewedFilter(SewedFilterOptions),
+    /// A list of vetoed pdgs
+    ParticleVeto(Vec<i64>),
+    VertexVeto(Vec<String>),
+    MaxNumberOfBridges(usize),
+    /// A map between the coupling order name and a range of orders, inclusive, with an optional upper bound
+    CouplingOrders(HashMap<String, (usize, Option<usize>)>),
+    /// A range of loop counts, inclusive
+    LoopCountRange((usize, usize)),
+    /// A range of blob counts, inclusive
+    BlobRange(RangeInclusive<usize>),
+    SpectatorRange(RangeInclusive<usize>),
+    PerturbativeOrders(HashMap<String, usize>),
+    FermionLoopCountRange((usize, usize)),
+    FactorizedLoopTopologiesCountRange((usize, usize)),
+}
+
+impl fmt::Display for FeynGenFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::SelfEnergyFilter(opts) => format!("NoExternalSelfEnergy({})", opts),
+                Self::ParticleVeto(pdgs) => format!(
+                    "ParticleVeto({})",
+                    pdgs.iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>()
+                        .join("|")
+                ),
+                Self::VertexVeto(vetos) => format!(
+                    "VertexVeto({})",
+                    vetos
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>()
+                        .join("|")
+                ),
+                Self::SpectatorRange(r) => format!("SpectatorRange({:?})", r),
+                Self::BlobRange(r) => format!("BlobRange({:?})", r),
+                Self::MaxNumberOfBridges(n) => format!("MaxNumberOfBridges({})", n),
+                Self::TadpolesFilter(opts) => format!("NoTadpoles({})", opts),
+                Self::ZeroSnailsFilter(opts) => format!("NoZeroSnails({})", opts),
+                Self::CouplingOrders(orders) => format!(
+                    "CouplingOrders({})",
+                    orders
+                        .iter()
+                        .map(|(k, (v_min, v_max_opt))| {
+                            if let Some(v_max) = v_max_opt {
+                                if v_min == v_max {
+                                    format!("{}=={}", k, v_min)
+                                } else {
+                                    format!("{}=[{}..{}]", k, v_min, v_max)
+                                }
+                            } else {
+                                format!("{}>={}", k, v_min)
+                            }
+                        })
+                        .collect::<Vec<String>>()
+                        .join("|")
+                ),
+                Self::PerturbativeOrders(orders) => format!(
+                    "PerturbativeOrders({})",
+                    orders
+                        .iter()
+                        .map(|(k, v)| format!("{}={}", k, v))
+                        .collect::<Vec<String>>()
+                        .join("|")
+                ),
+                Self::LoopCountRange((loop_count_min, loop_count_max)) =>
+                    format!("LoopCountRange({{{},{}}})", loop_count_min, loop_count_max),
+                Self::FermionLoopCountRange((loop_count_min, loop_count_max)) => format!(
+                    "FermionLoopCountRange({{{},{}}})",
+                    loop_count_min, loop_count_max
+                ),
+                Self::FactorizedLoopTopologiesCountRange((loop_count_min, loop_count_max)) =>
+                    format!(
+                        "NFactorizableLoopRange({{{},{}}})",
+                        loop_count_min, loop_count_max
+                    ),
+                Self::SewedFilter(SewedFilterOptions { filter_tadpoles }) => format!(
+                    "SewedCrossSectionFilter(filter_tadpoles={{{}}})",
+                    filter_tadpoles
+                ),
+            }
+        )
+    }
+}
+
+#[cfg(test)]
+pub mod test;

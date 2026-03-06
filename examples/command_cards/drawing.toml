@@ -1,0 +1,16 @@
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/HEAD/assets/schemas/runhistory.json
+commands = [
+    "import model sm-default",
+    "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{3}} QCD] --numerator-grouping only_detect_zeroes --clear-existing-processes --only-diagrams ",
+    "! rm -rf ./test ",
+    "save dot test",
+    "! just -f test/justfile draw steps=5000 ",
+    "quit -o"
+]
+
+[cli_settings]
+state_folder = "./gammaloop_state"
+
+[cli_settings.global]
+logfile_directive = "debug,symbolica=off"
+display_directive = "gammalooprs=info"

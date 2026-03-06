@@ -1,0 +1,323 @@
+use bincode_trait_derive::{Decode, Encode};
+use linnet::half_edge::involution::EdgeIndex;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView},
+    evaluate::{CompileOptions, ExportSettings, InlineASM},
+    function,
+};
+use tracing::debug;
+
+use crate::{
+    GammaLoopContext,
+    cff::expression::GraphOrientation,
+    processes::EvaluatorSettings,
+    utils::{
+        GS, W_,
+        serde_utils::{IsDefault, is_false, is_float, is_true, is_usize},
+        symbolica_ext::StringSerializedAtom,
+    },
+    uv::UVgenerationSettings,
+};
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+#[derive(Default)]
+pub struct GenerationSettings {
+    // Generation Time settings
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub evaluator: EvaluatorSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub feyngen: FeyGenSettings,
+
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub orientation_pattern: OrientationPattern,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub compile: GammaloopCompileOptions,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub tropical_subgraph_table: TropicalSubgraphTableSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub threshold_subtraction: ThresholdSubtractionSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub uv: UVgenerationSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub force_cuts: Vec<Vec<String>>,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct ThresholdSubtractionSettings {
+    #[serde(skip_serializing_if = "is_true")]
+    pub enable_thresholds: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub check_esurface_at_generation: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub skip_thresholds_that_are_cuts: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub disable_integrated_ct: bool,
+}
+
+impl Default for ThresholdSubtractionSettings {
+    fn default() -> Self {
+        Self {
+            enable_thresholds: true,
+            check_esurface_at_generation: false,
+            skip_thresholds_that_are_cuts: true,
+            disable_integrated_ct: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[serde(deny_unknown_fields)]
+#[derive(Default)]
+pub enum CompilationOptimizationLevel {
+    O0,
+    O1,
+    O2,
+    #[default]
+    O3,
+}
+
+impl From<CompilationOptimizationLevel> for usize {
+    fn from(value: CompilationOptimizationLevel) -> Self {
+        match value {
+            CompilationOptimizationLevel::O0 => 0,
+            CompilationOptimizationLevel::O1 => 1,
+            CompilationOptimizationLevel::O2 => 2,
+            CompilationOptimizationLevel::O3 => 3,
+        }
+    }
+}
+
+fn _default_compiler() -> String {
+    "g++".to_owned()
+}
+
+pub const fn yes() -> bool {
+    true
+}
+
+pub fn gpp() -> String {
+    "g++".to_owned()
+}
+
+pub fn is_gpp(compiler: &str) -> bool {
+    "g++" == compiler
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(default, deny_unknown_fields)]
+pub struct GammaloopCompileOptions {
+    #[serde(skip_serializing_if = "is_true")]
+    pub inline_asm: bool,
+
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub optimization_level: CompilationOptimizationLevel,
+
+    #[serde(skip_serializing_if = "is_true")]
+    pub fast_math: bool,
+
+    #[serde(skip_serializing_if = "is_true")] // default true
+    pub unsafe_math: bool,
+
+    #[serde(skip_serializing_if = "is_gpp")] // default g++
+    pub compiler: String,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub custom: Vec<String>,
+}
+
+impl Default for GammaloopCompileOptions {
+    fn default() -> Self {
+        Self {
+            inline_asm: true,
+            optimization_level: CompilationOptimizationLevel::O3,
+            fast_math: true,
+            unsafe_math: true,
+            compiler: gpp(),
+            custom: vec![],
+        }
+    }
+}
+
+impl GammaloopCompileOptions {
+    pub(crate) fn export_settings(&self) -> ExportSettings {
+        ExportSettings {
+            inline_asm: if self.inline_asm {
+                InlineASM::default()
+            } else {
+                InlineASM::None
+            },
+            ..Default::default()
+        }
+    }
+
+    #[allow(clippy::needless_update)]
+    pub fn to_symbolica_compile_options(&self) -> CompileOptions {
+        CompileOptions {
+            optimization_level: self.optimization_level.into(),
+            fast_math: self.fast_math,
+            unsafe_math: self.unsafe_math,
+            compiler: self.compiler.clone(),
+            // custom: self.custom.clone(),
+            ..CompileOptions::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(default, deny_unknown_fields)]
+#[derive(Default)]
+pub struct FeyGenSettings {
+    #[serde(skip_serializing_if = "is_false")]
+    pub gamma_simplification_closure_check: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(default, deny_unknown_fields)]
+pub struct TropicalSubgraphTableSettings {
+    #[serde(skip_serializing_if = "is_false")]
+    pub panic_on_fail: bool,
+    #[serde(skip_serializing_if = "is_float::<1>")] // default 1.0
+    pub target_omega: f64,
+    #[serde(skip_serializing_if = "is_false")]
+    pub disable_tropical_generation: bool,
+}
+
+impl Default for TropicalSubgraphTableSettings {
+    fn default() -> Self {
+        Self {
+            panic_on_fail: false,
+            target_omega: 1.0,
+            disable_tropical_generation: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[serde(default, deny_unknown_fields)]
+pub struct OrientationPattern {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub pat: Option<StringSerializedAtom>,
+}
+
+impl From<Atom> for OrientationPattern {
+    fn from(value: Atom) -> Self {
+        OrientationPattern {
+            pat: Some(StringSerializedAtom(value)),
+        }
+    }
+}
+
+impl OrientationPattern {
+    pub fn from_orientation<O: GraphOrientation>(orientation: &O) -> Self {
+        orientation.orientation_delta().into()
+    }
+
+    pub fn select_pattern(&self, atom: impl AtomCore) -> Option<Atom> {
+        Some(
+            atom.replace(self.pat.as_ref()?.as_view().to_pattern())
+                .with(function!(GS.selected, &self.pat.as_ref()?.0))
+                .replace(function!(GS.orientation_delta, W_.a___))
+                .level_range((0, Some(0)))
+                .with(Atom::Zero),
+        )
+    }
+
+    pub fn filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
+        if let Some(pat) = &self.pat {
+            let a = orientation.orientation_delta();
+
+            // println!("{a}vs{}", pat.0);
+
+            // println!("{a}");
+            a.pattern_match(&pat.to_pattern(), None, None)
+                .next()
+                .is_some()
+        } else {
+            true
+        }
+    }
+
+    pub fn alt_filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
+        if let Some(pat) = &self.pat {
+            let mut theta_rep = Atom::num(1);
+            let atom_pat = pat.as_view();
+
+            if let AtomView::Fun(f) = atom_pat {
+                if f.get_symbol() == GS.orientation_delta {
+                    for (edge_id, edge_or) in f.iter().enumerate() {
+                        let edge_id = EdgeIndex::from(edge_id);
+                        if let Ok(sign) = i64::try_from(edge_or) {
+                            match sign {
+                                1 => theta_rep *= GS.sign_theta(GS.sign(edge_id)),
+                                -1 => theta_rep *= GS.sign_theta(-GS.sign(edge_id)),
+                                0 => {
+                                    theta_rep *= GS.sign_theta(GS.sign(edge_id))
+                                        * GS.sign_theta(-GS.sign(edge_id))
+                                }
+                                _ => {
+                                    panic!(
+                                        "arguments of orientation delta function should be -1,0 1"
+                                    )
+                                }
+                            }
+                        } else {
+                            panic!("arguments of orientation delta function should be -1,0 1")
+                        }
+                    }
+                } else {
+                    panic!("pattern should be a orientation delta function")
+                }
+            } else {
+                panic!("pattern should be a orientation delta function")
+            }
+
+            let orientation_theta_rep = orientation.orientation_thetas().to_pattern();
+
+            debug!("matching {} with {}", theta_rep, orientation_theta_rep);
+            theta_rep
+                .pattern_match(&orientation_theta_rep, None, None)
+                .next()
+                .is_some()
+        } else {
+            true
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(default, deny_unknown_fields)]
+pub struct Parallelisation {
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub feyngen: usize,
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub generate: usize,
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub compile: usize,
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub integrate: usize,
+}
+
+impl Default for Parallelisation {
+    fn default() -> Self {
+        Self {
+            feyngen: 1,
+            generate: 1,
+            compile: 1,
+            integrate: 1,
+        }
+    }
+}

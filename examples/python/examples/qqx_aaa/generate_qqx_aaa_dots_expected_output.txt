@@ -1,0 +1,606 @@
+
+Sample point PS point 1:
+----------------------------------------------------------------------------------------------------------------------------------------------------
+#0       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00    1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel= 1
+#1       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00   -1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel=-1
+#2       5.0000000000000000e-01    2.9999999999999999e-01    0.0000000000000000e+00    0.0000000000000000e+00 | m=   4.0000000000000002e-01 | hel=-1
+#3       2.0000000000000001e-01    0.0000000000000000e+00    1.0000000000000001e-01    1.0000000000000001e-01 | m=   1.4142135623730953e-01 | hel=-1
+#4       1.3000000000000000e+00   -2.9999999999999999e-01   -1.0000000000000001e-01   -1.0000000000000001e-01 | m=   1.2569805089976536e+00 | hel= 1
+----------------------------------------------------------------------------------------------------------------------------------------------------
+Sum:     0.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00
+Tree amplitude target         : +1.7858822342516714e-03-1.1629883111998010e-03j
+Loop amplitude finite target  : -1.8198810659122121e-03-1.7869260147041730e-04j
+Loop amplitude 1/eps  target  : -3.7515117422041994e-04+9.4252193393945936e-05j
+Loop amplitude 1/eps^2 target : -3.3539374272615706e-05+2.1841249941294190e-05j
+
+Sample point PS point 2:
+----------------------------------------------------------------------------------------------------------------------------------------------------
+#0       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00    1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel= 1
+#1       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00   -1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel=-1
+#2       4.0000000000000002e-01    1.0000000000000001e-01    0.0000000000000000e+00    0.0000000000000000e+00 | m=   3.8729833462074170e-01 | hel=-1
+#3       6.9999999999999996e-01    0.0000000000000000e+00    2.0000000000000001e-01    5.9999999999999998e-01 | m=   2.9999999999999993e-01 | hel=-1
+#4       8.9999999999999991e-01   -1.0000000000000001e-01   -2.0000000000000001e-01   -5.9999999999999998e-01 | m=   6.3245553203367566e-01 | hel= 1
+----------------------------------------------------------------------------------------------------------------------------------------------------
+Sum:     0.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00
+Tree amplitude target         : +7.6758313695721885e-04+6.6154109375016575e-05j
+Loop amplitude finite target  : -4.6454041054975819e-04-4.6649000332111597e-04j
+Loop amplitude 1/eps  target  : -1.2784747198788324e-04-5.6642320047823324e-05j
+Loop amplitude 1/eps^2 target : -1.4415428756731519e-05-1.2423929145798689e-06j
+
+Sample point PS onshell point 1:
+----------------------------------------------------------------------------------------------------------------------------------------------------
+#0       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00    1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel= 1
+#1       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00   -1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel=-1
+#2       9.1715757577088053e-01    3.3890644061935971e-01    7.5930732415639735e-01   -3.8700494930050489e-01 | m=   1.7473160325823090e-08 | hel=-1
+#3       7.2813324147363534e-01   -3.6659738586383703e-02   -6.9540860263873427e-01    2.1269921551741630e-01 | m=   7.4505805969238281e-09 | hel=-1
+#4       3.5470918275548424e-01   -3.0224670203297599e-01   -6.3898721517663071e-02    1.7430573378308858e-01 | m=   1.1632215228673813e-08 | hel= 1
+----------------------------------------------------------------------------------------------------------------------------------------------------
+Sum:     0.0000000000000000e+00   -1.3877787807814457e-17    0.0000000000000000e+00    0.0000000000000000e+00
+Tree amplitude target         : -6.1963955910266809e-04+8.4153554966889474e-04j
+Loop amplitude finite target  : +9.3441903738697950e-04-3.2651826076211311e-04j
+Loop amplitude 1/eps  target  : +1.5600762604558023e-04-1.0788527256794146e-04j
+Loop amplitude 1/eps^2 target : +1.1637006454444246e-05-1.5804276017048061e-05j
+
+Sample point PS onshell point 2:
+----------------------------------------------------------------------------------------------------------------------------------------------------
+#0       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00    1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel= 1
+#1       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00   -1.0000000000000000e+00 | m=   0.0000000000000000e+00 | hel=-1
+#2       9.9030678415476692e-01    3.7344583153842392e-01    6.3936715617004836e-01   -6.5761339498261195e-01 | m=   2.3560804576936212e-08 | hel=-1
+#3       2.0535582775001820e-01   -1.4124085461544450e-01   -8.6911905913932302e-02    1.2111299512769801e-01 | m=   1.3170890159654386e-09 | hel=-1
+#4       8.0433738809521493e-01   -2.3220497692297942e-01   -5.5245525025611608e-01    5.3650039985491393e-01 | m=   2.3560804576936212e-08 | hel= 1
+----------------------------------------------------------------------------------------------------------------------------------------------------
+Sum:     0.0000000000000000e+00    0.0000000000000000e+00    2.7755575615628914e-17    1.3877787807814457e-17
+Tree amplitude target         : +1.4727604164105617e-04-1.1503139369130220e-03j
+Loop amplitude finite target  : -6.4224166840662377e-04+7.0413313456657925e-04j
+Loop amplitude 1/eps  target  : -9.3147479931491922e-05+1.8875448630951172e-04j
+Loop amplitude 1/eps^2 target : -2.7658857830895706e-06+2.1603221601729886e-05j
+Atom eval:  1.4727604164105622e-4-1.1503139369130218e-3[35m𝑖[0m
+Atom eval:  1.4727604164105592e-4-1.1503139369130218e-3[35m𝑖[0m
+Eager eval:  1.47276041641056e-4-1.15031393691302e-3[35m𝑖[0m
+gL_PSA:  -6.196395591026679e-4+8.415355496688944e-4[35m𝑖[0m
+MG_PSA:  -6.196395591026681e-4+8.415355496688947e-4[35m𝑖[0m
+9.999999999999997e-1
+gL_PSB:  1.4727604164105592e-4-1.1503139369130218e-3[35m𝑖[0m
+MG_PSB:  1.4727604164105617e-4-1.1503139369130220e-3[35m𝑖[0m
+9.9999999999999978e-1-1.9e-16[35m𝑖[0m
+1.4727604164105592e-4-1.1503139369130218e-3[35m𝑖[0m
+Sample point "onshell 1":
+-------------------------------------------------------------------------------------------------------------------------------------------
+#0       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00    1.0000000000000000e+00 | m=   0.0000000000000000e+00
+#1       1.0000000000000000e+00    0.0000000000000000e+00    0.0000000000000000e+00   -1.0000000000000000e+00 | m=   0.0000000000000000e+00
+#2       9.1715757577088053e-01    3.3890644061935971e-01    7.5930732415639735e-01   -3.8700494930050489e-01 | m=   1.7473160325823090e-08
+#3       7.2813324147363534e-01   -3.6659738586383703e-02   -6.9540860263873427e-01    2.1269921551741630e-01 | m=   7.4505805969238281e-09
+#4       3.5470918275548424e-01   -3.0224670203297599e-01   -6.3898721517663071e-02    1.7430573378308858e-01 | m=   1.1632215228673813e-08
+-------------------------------------------------------------------------------------------------------------------------------------------
+Sum:     0.0000000000000000e+00   -1.3877787807814457e-17    0.0000000000000000e+00    0.0000000000000000e+00
+
+Total ME squared: 1.5911033065520652e-05
+Evaluation result for graph qqx_aaa_pentagon    : (-0.40970100399202336+0.12458335598878875j)
+Evaluation result for graph qqx_aaa_box_A       : (0.00839643943949426-0.25675454020899996j)
+Evaluation result for graph qqx_aaa_box_B       : (0.005173463022498881-0.003011333505665418j)
+Evaluation result for graph qqx_aaa_tri_A       : (0.03740826138380494-0.048661754265537094j)
+Evaluation result for graph qqx_aaa_tri_B       : (-0.006193589954038332-0.006207971034837799j):gammalooprs=info
+[2025-12-14 22:14:55.502] @import::model        INFO    : Loading built-in JSON model sm-default
+[2025-12-14 22:14:55.517] @gammalooprs::model   INFO    : The following [32m11[39m external parameters were forced to zero by the restriction card:
+[34mlamWS, AWS, rhoWS, etaWS, ymc, yme, ymm, MC, Me, MM, WTau[39m
+[2025-12-14 22:14:55.517] @gammalooprs::model   INFO    : The following [32m34[39m vertex rules were removed by the restriction card:
+[34mV_82 -> (c~, d, G+) | V_83 -> (t~, d, G+) | V_84 -> (c~, s, G+) | V_85 -> (t~, s, G+) | V_86 -> (u~, b, G+) | V_87 -> (c~, b, G+) | V_90 -> (c~, d, W+) | V_91 -> (t~, d, W+) | V_92 -> (u~, s, W+) | V_94 -> (t~, s, W+) | V_95 -> (u~, b, W+) | V_96 -> (c~, b, W+) | V_101 -> (e+, e-, G0) | V_102 -> (mu+, mu-, G0) | V_104 -> (e+, e-, H) | V_105 -> (mu+, mu-, H) | V_110 -> (ve~, e-, G+) | V_111 -> (vm~, mu-, G+) | V_116 -> (b~, u, G-) | V_117 -> (d~, c, G-) | V_118 -> (s~, c, G-) | V_119 -> (b~, c, G-) | V_120 -> (d~, t, G-) | V_121 -> (s~, t, G-) | V_124 -> (s~, u, W-) | V_125 -> (b~, u, W-) | V_126 -> (d~, c, W-) | V_128 -> (b~, c, W-) | V_129 -> (d~, t, W-) | V_130 -> (s~, t, W-) | V_138 -> (c~, c, G0) | V_140 -> (c~, c, H) | V_145 -> (e+, ve, G-) | V_146 -> (mu+, vm, G-)[39m
+[2025-12-14 22:14:55.517] @gammalooprs::model   INFO    : The following [32m36[39m couplings were removed by the restriction card:
+[34mGC_13, GC_14, GC_16, GC_17, GC_18, GC_19, GC_20, GC_22, GC_23, GC_24, GC_25, GC_26, GC_28, GC_29, GC_42, GC_43, GC_44, GC_46, GC_47, GC_48, GC_84, GC_85, GC_86, GC_87, GC_88, GC_89, GC_90, GC_91, GC_92, GC_93, GC_101, GC_102, GC_103, GC_105, GC_106, GC_107[39m
+[2025-12-14 22:14:55.534] @                     INFO    : Compiling amplitude default
+[2025-12-14 22:14:56.038] @gammalooprs::inspect INFO    : 
+Input point in unit hypercube xs: 
+
+(  )
+
+The evaluation of integrand 'default' is:
+
+( 1.47276041641056e-4, -1.1503139369130214e-3 i)
+
+Saving state to /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_tree..
+:gammalooprs=info
+[2025-12-14 22:14:56.233] @import::model        INFO    : Loading built-in JSON model sm-default
+[2025-12-14 22:14:56.249] @gammalooprs::model   INFO    : The following [32m11[39m external parameters were forced to zero by the restriction card:
+[34mlamWS, AWS, rhoWS, etaWS, ymc, yme, ymm, MC, Me, MM, WTau[39m
+[2025-12-14 22:14:56.249] @gammalooprs::model   INFO    : The following [32m34[39m vertex rules were removed by the restriction card:
+[34mV_82 -> (c~, d, G+) | V_83 -> (t~, d, G+) | V_84 -> (c~, s, G+) | V_85 -> (t~, s, G+) | V_86 -> (u~, b, G+) | V_87 -> (c~, b, G+) | V_90 -> (c~, d, W+) | V_91 -> (t~, d, W+) | V_92 -> (u~, s, W+) | V_94 -> (t~, s, W+) | V_95 -> (u~, b, W+) | V_96 -> (c~, b, W+) | V_101 -> (e+, e-, G0) | V_102 -> (mu+, mu-, G0) | V_104 -> (e+, e-, H) | V_105 -> (mu+, mu-, H) | V_110 -> (ve~, e-, G+) | V_111 -> (vm~, mu-, G+) | V_116 -> (b~, u, G-) | V_117 -> (d~, c, G-) | V_118 -> (s~, c, G-) | V_119 -> (b~, c, G-) | V_120 -> (d~, t, G-) | V_121 -> (s~, t, G-) | V_124 -> (s~, u, W-) | V_125 -> (b~, u, W-) | V_126 -> (d~, c, W-) | V_128 -> (b~, c, W-) | V_129 -> (d~, t, W-) | V_130 -> (s~, t, W-) | V_138 -> (c~, c, G0) | V_140 -> (c~, c, H) | V_145 -> (e+, ve, G-) | V_146 -> (mu+, vm, G-)[39m
+[2025-12-14 22:14:56.249] @gammalooprs::model   INFO    : The following [32m36[39m couplings were removed by the restriction card:
+[34mGC_13, GC_14, GC_16, GC_17, GC_18, GC_19, GC_20, GC_22, GC_23, GC_24, GC_25, GC_26, GC_28, GC_29, GC_42, GC_43, GC_44, GC_46, GC_47, GC_48, GC_84, GC_85, GC_86, GC_87, GC_88, GC_89, GC_90, GC_91, GC_92, GC_93, GC_101, GC_102, GC_103, GC_105, GC_106, GC_107[39m
+[2025-12-14 22:15:22.275] @                     INFO    : Compiling amplitude default
+[2025-12-14 22:15:32.323] @gammalooprs::inspect INFO    : f128 sampling jacobian for this point = 4.95826770019765608191644558605303258e0
+[2025-12-14 22:15:32.330] @gammalooprs::inspect INFO    : 
+Input point in unit hypercube xs: 
+
+( 0.15759882833025604, 0.17620819117478337, 0.9008918628686365 )
+
+The evaluation of integrand 'default' is:
+
+( 1.809008881143151e0, -6.145468531655169e-4 i)
+
+Saving state to /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_euclidean..
+:gammalooprs=info
+[2025-12-14 22:15:32.586] @import::model        INFO    : Loading built-in JSON model sm-default
+[2025-12-14 22:15:32.601] @gammalooprs::model   INFO    : The following [32m11[39m external parameters were forced to zero by the restriction card:
+[34mlamWS, AWS, rhoWS, etaWS, ymc, yme, ymm, MC, Me, MM, WTau[39m
+[2025-12-14 22:15:32.601] @gammalooprs::model   INFO    : The following [32m34[39m vertex rules were removed by the restriction card:
+[34mV_82 -> (c~, d, G+) | V_83 -> (t~, d, G+) | V_84 -> (c~, s, G+) | V_85 -> (t~, s, G+) | V_86 -> (u~, b, G+) | V_87 -> (c~, b, G+) | V_90 -> (c~, d, W+) | V_91 -> (t~, d, W+) | V_92 -> (u~, s, W+) | V_94 -> (t~, s, W+) | V_95 -> (u~, b, W+) | V_96 -> (c~, b, W+) | V_101 -> (e+, e-, G0) | V_102 -> (mu+, mu-, G0) | V_104 -> (e+, e-, H) | V_105 -> (mu+, mu-, H) | V_110 -> (ve~, e-, G+) | V_111 -> (vm~, mu-, G+) | V_116 -> (b~, u, G-) | V_117 -> (d~, c, G-) | V_118 -> (s~, c, G-) | V_119 -> (b~, c, G-) | V_120 -> (d~, t, G-) | V_121 -> (s~, t, G-) | V_124 -> (s~, u, W-) | V_125 -> (b~, u, W-) | V_126 -> (d~, c, W-) | V_128 -> (b~, c, W-) | V_129 -> (d~, t, W-) | V_130 -> (s~, t, W-) | V_138 -> (c~, c, G0) | V_140 -> (c~, c, H) | V_145 -> (e+, ve, G-) | V_146 -> (mu+, vm, G-)[39m
+[2025-12-14 22:15:32.601] @gammalooprs::model   INFO    : The following [32m36[39m couplings were removed by the restriction card:
+[34mGC_13, GC_14, GC_16, GC_17, GC_18, GC_19, GC_20, GC_22, GC_23, GC_24, GC_25, GC_26, GC_28, GC_29, GC_42, GC_43, GC_44, GC_46, GC_47, GC_48, GC_84, GC_85, GC_86, GC_87, GC_88, GC_89, GC_90, GC_91, GC_92, GC_93, GC_101, GC_102, GC_103, GC_105, GC_106, GC_107[39m
+[2025-12-14 22:16:46.777] @                     INFO    : Compiling amplitude default
+[2025-12-14 22:18:22.492] @gammaloop_integra... INFO    : overlap structure of group 0: [3]
+[2025-12-14 22:18:22.492] @gammaloop_integra... INFO    : overlap structure of group 1: [0]
+[2025-12-14 22:18:22.492] @gammalooprs::inspect INFO    : f128 sampling jacobian for this point = 4.95826770019765608191644558605303258e0
+[2025-12-14 22:18:22.501] @gammalooprs::inspect INFO    : 
+Input point in unit hypercube xs: 
+
+( 0.15759882833025604, 0.17620819117478337, 0.9008918628686365 )
+
+The evaluation of integrand 'default' is:
+
+( 1.8085325502433522e0, -1.3169291665718003e-3 i)
+
+Saving state to /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_physical..
+
+Investigating IR...
+Evaluation result for graph "qqx_aaa_pentagon" [I]          :     9.3799095924172216e+03+1.0901469171753702e+03j | scaled:     9.3791164266287014e+03+1.0906425589291050e+03j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_box_A" [I]             :     7.2772953093834438e+00-2.3022317284487229e+01j | scaled:     7.2735938283376544e+00-2.3012602296005767e+01j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_box_B" [I]             :     7.3739156007043505e-02-5.6650592292038526e-01j | scaled:     7.0573998653872552e-02-5.5816316121661047e-01j | log10(abs(scaled / orig)) = -0.007 
+Evaluation result for graph "qqx_aaa_tri_A" [I]             :    -5.5815888321546447e+02-2.0669349855017025e+01j | scaled:    -5.5816350441078680e+02-2.0670712446666535e+01j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_A" [I]             :     9.5865870077591472e-08+6.8868609142789192e-08j | scaled:     9.5513947241230226e-10+6.8952774430046264e-10j | log10(abs(scaled / orig)) = -2.001 
+Evaluation result for graph "qqx_aaa_tri_B" [I]             :    -3.5877936139473349e-05+4.9026992075088541e-06j | scaled:    -3.5879785241899713e-07+4.9026961640369253e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_triangle_B" [I]             :     7.5642757302441460e-07+1.1893216845668602e-07j | scaled:     7.5645131641693489e-09+1.1894385253453271e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_tri_C" [I]             :    -5.7637687407815713e+02+1.0037440655217472e+01j | scaled:    -5.7638406729698261e+02+1.0033029704241294e+01j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_C" [I]             :     4.1349173732129832e-08+2.0339751096205439e-07j | scaled:     4.1196048490242358e-10+2.0332205955819054e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_bub_A" [I]             :     2.7351665975819938e-05+3.6630416455208220e-06j | scaled:     2.7353511173127949e-07+3.6628438635486657e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_bubble_A" [I]               :    -7.6575191854449354e-07-9.9475877955204998e-08j | scaled:    -7.6615944517475944e-09-9.9423275940554777e-10j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_bub_B" [I]             :     3.3548200793216267e-05+4.5942027771686165e-06j | scaled:     3.3551054438312611e-07+4.5936250109477522e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_bubble_B" [I]               :     8.9878539535530283e-08-1.2349391674618575e-07j | scaled:     8.9725384734354851e-10-1.2327513425421902e-09j | log10(abs(scaled / orig)) = -2.001 
+Evaluation result for graph "ir_ct" [I]                     :    -8.2518190891471622e+03-1.0564900700491030e+03j | scaled:    -8.2518224433817268e+03-1.0564904994956862e+03j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_ir_ct" [I]                  :    -1.0349269582563993e-07-1.3250291151705397e-08j | scaled:    -1.0349268031160800e-09-1.3250289165425838e-10j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_bare_ct" [I]            :     1.7213661014292720e-05+2.2038851960181789e-06j | scaled:     1.7213661891318275e-07+2.2038853083047894e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_dressed_ct" [I]         :    -6.4909997676612345e-06-8.3105030843979330e-07j | scaled:    -6.4910000983737239e-08-8.3105035078130117e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ir_ct" [I]              :    -5.0106873007804166e-06-6.4152416821134713e-07j | scaled:    -5.0106875560718874e-08-6.4152420089661333e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ct" [I]                 :     1.1846132387911587e-07+1.5166742146317646e-08j | scaled:     1.1846132991464825e-09+1.5166742919053931e-10j | log10(abs(scaled / orig)) = -2.000 
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT                         :     8.2527249004413534e+03+1.0559261986745842e+03j | scaled:     8.2519130230564770e+03+1.0564341108685139e+03j  | log10(abs(scaled / orig)) = -0.000 
+Total evaluation result from CT                             :    -8.2518190890328860e+03-1.0564900698941246e+03j | scaled:    -8.2518224433805954e+03-1.0564904994941335e+03j  | log10(abs(scaled / orig)) = 0.000 
+Total evaluation result                                     :     9.0581140846734343e-01-5.6387121954048780e-01j | scaled:     9.0579675881599542e-02-5.6388625619547383e-02j  | log10(abs(scaled / orig)) = -1.000 
+
+
+Investigating UV...
+Evaluation result for graph "qqx_aaa_pentagon" [I]          :    -6.7523738001168607e-28+1.4768746072825907e-28j | scaled:    -6.7517264719168073e-30+1.4765903698611020e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_box_A" [I]             :    -3.2798649004535153e-23+2.0556283734980785e-23j | scaled:    -3.2787986430884916e-24+2.0554461453926805e-24j | log10(abs(scaled / orig)) = -1.000 
+Evaluation result for graph "qqx_aaa_box_B" [I]             :    -2.8988768188183564e-23+2.5783406924256078e-23j | scaled:    -2.8979293933301656e-24+2.5781022071810118e-24j | log10(abs(scaled / orig)) = -1.000 
+Evaluation result for graph "qqx_aaa_tri_A" [I]             :    -2.7016802003846959e-19-3.1266402932567835e-20j | scaled:    -2.7018930561441260e-19-3.1262241748039622e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_A" [I]             :     2.7019493139451606e-19+3.1256147977637628e-20j | scaled:     2.7019199733268763e-19+3.1261216370786039e-20j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_tri_B" [I]             :    -2.5046623018515590e-19-5.5256611887884266e-20j | scaled:    -2.5048461328089240e-19-5.5262272659642686e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_B" [I]             :     2.5050378410478402e-19+5.5267823883077322e-20j | scaled:     2.5048836899300465e-19+5.5263393662590591e-20j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_tri_C" [I]             :    -3.0841755857961127e-19-4.5382703539063764e-20j | scaled:    -3.0844462975619783e-19-4.5376099200786823e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_C" [I]             :     3.0843670637899919e-19+4.5391271987847405e-20j | scaled:     3.0844654510864121e-19+4.5376955930782113e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "qqx_aaa_bub_A" [I]             :    -5.9960343550952089e-15+1.2095812471203141e-15j | scaled:    -5.9966521131503880e-14+1.2094445830312438e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "uv_bubble_A" [I]               :     5.9963341843628980e-15-1.2096417339211254e-15j | scaled:     5.9966820966864529e-14-1.2094506303315339e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "qqx_aaa_bub_B" [I]             :    -7.9371162914616083e-15+2.2088609380963709e-15j | scaled:    -7.9375924640745051e-14+2.2086820509204904e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "uv_bubble_B" [I]               :     7.9375131942050137e-15-2.2089713995114326e-15j | scaled:     7.9376321525060793e-14-2.2086930945144090e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "ir_ct" [I]                     :     4.4107988702364642e-19+5.6471974931169332e-20j | scaled:     4.4112399869532425e-19+5.6477622600198042e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_ir_ct" [I]                  :    -4.4112399305099972e-19-5.6477621877548538e-20j | scaled:    -4.4112840991570466e-19-5.6478187373913790e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "int_ir_bare_ct" [I]            :     1.1104601789600817e-26+1.4217351829722781e-27j | scaled:     1.1103491452596226e-28+1.4215930252241394e-29j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_dressed_ct" [I]         :    -4.1873699950533790e-27-5.3611388853808138e-28j | scaled:    -4.1869513045009830e-29-5.3606028309590529e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ir_ct" [I]              :    -3.2324144829607320e-27-4.1384981500895492e-28j | scaled:    -3.2320912773669957e-29-4.1380843461795540e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ct" [I]                 :     7.6419875356803193e-29+9.7841262146716671e-30j | scaled:     7.6412234216931398e-31+9.7831479105776015e-32j | log10(abs(scaled / orig)) = -2.000 
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT                         :    -1.3933979760149953e-14+3.4183103258386460e-15j | scaled:    -1.3934327489697430e-13+3.4181134443537281e-14j  | log10(abs(scaled / orig)) = 1.000 
+Total evaluation result from CT                             :     1.3934676469883762e-14-3.4184812238356556e-15j | scaled:     1.3934397161442555e-13-3.4181305347458239e-14j  | log10(abs(scaled / orig)) = 1.000 
+Total evaluation result                                     :     6.9670973380913507e-19-1.7089799700958297e-19j | scaled:     6.9671745124799262e-19-1.7090392095818414e-19j  | log10(abs(scaled / orig)) = 0.000 
+
+
+Investigating IR...
+Evaluation result for graph "qqx_aaa_pentagon" [I]          :     9.3799095924172216e+03+1.0901469171753702e+03j | scaled:     9.3791164266287014e+03+1.0906425589291050e+03j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_pentagon" [th.CT]      :    -1.1396734622062162e-01-4.3986991206188507e-02j | scaled:    -1.1494918508228300e-03-4.4375236462884871e-04j | log10(abs(scaled / orig)) = -1.996 
+Evaluation result for graph "qqx_aaa_pentagon" [tot]        :     9.3797956250710013e+03+1.0901029301841641e+03j | scaled:     9.3791152771368506e+03+1.0906421151767404e+03j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_box_A" [I]             :     7.2772953093834438e+00-2.3022317284487229e+01j | scaled:     7.2735938283376544e+00-2.3012602296005767e+01j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_box_A" [th.CT]         :     2.8025179165947938e-06-6.5937951150186445e-06j | scaled:     2.8032068307672387e-08-6.5920560690420119e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_box_A" [tot]           :     7.2772981119013602e+00-2.3022323878282343e+01j | scaled:     7.2735938563697227e+00-2.3012602361926326e+01j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_box_B" [I]             :     7.3739156007043505e-02-5.6650592292038526e-01j | scaled:     7.0573998653872552e-02-5.5816316121661047e-01j | log10(abs(scaled / orig)) = -0.007 
+Evaluation result for graph "qqx_aaa_box_B" [th.CT]         :     5.6753021260530814e-07-7.2537116233620376e-07j | scaled:     5.6727706466436967e-09-7.2492873365238364e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_box_B" [tot]           :     7.3739723537256108e-02-5.6650664829154762e-01j | scaled:     7.0574004326643194e-02-5.5816316846589775e-01j | log10(abs(scaled / orig)) = -0.007 
+Evaluation result for graph "qqx_aaa_tri_A" [I]             :    -5.5815888321546447e+02-2.0669349855017025e+01j | scaled:    -5.5816350441078680e+02-2.0670712446666535e+01j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "qqx_aaa_tri_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_A" [tot]           :    -5.5815888321546447e+02-2.0669349855017025e+01j | scaled:    -5.5816350441078680e+02-2.0670712446666535e+01j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_A" [I]             :     9.5865870077591472e-08+6.8868609142789192e-08j | scaled:     9.5513947241230226e-10+6.8952774430046264e-10j | log10(abs(scaled / orig)) = -2.001 
+Evaluation result for graph "uv_triangle_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_A" [tot]           :     9.5865870077591472e-08+6.8868609142789192e-08j | scaled:     9.5513947241230226e-10+6.8952774430046264e-10j | log10(abs(scaled / orig)) = -2.001 
+Evaluation result for graph "qqx_aaa_tri_B" [I]             :    -3.5877936139473349e-05+4.9026992075088541e-06j | scaled:    -3.5879785241899713e-07+4.9026961640369253e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_tri_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_B" [tot]           :    -3.5877936139473349e-05+4.9026992075088541e-06j | scaled:    -3.5879785241899713e-07+4.9026961640369253e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_triangle_B" [I]             :     7.5642757302441460e-07+1.1893216845668602e-07j | scaled:     7.5645131641693489e-09+1.1894385253453271e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_triangle_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_B" [tot]           :     7.5642757302441460e-07+1.1893216845668602e-07j | scaled:     7.5645131641693489e-09+1.1894385253453271e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_tri_C" [I]             :    -5.7637687407815713e+02+1.0037440655217472e+01j | scaled:    -5.7638406729698261e+02+1.0033029704241294e+01j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "qqx_aaa_tri_C" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_C" [tot]           :    -5.7637687407815713e+02+1.0037440655217472e+01j | scaled:    -5.7638406729698261e+02+1.0033029704241294e+01j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_C" [I]             :     4.1349173732129832e-08+2.0339751096205439e-07j | scaled:     4.1196048490242358e-10+2.0332205955819054e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_triangle_C" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_C" [tot]           :     4.1349173732129832e-08+2.0339751096205439e-07j | scaled:     4.1196048490242358e-10+2.0332205955819054e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_bub_A" [I]             :     2.7351665975819938e-05+3.6630416455208220e-06j | scaled:     2.7353511173127949e-07+3.6628438635486657e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_bub_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_bub_A" [tot]           :     2.7351665975819938e-05+3.6630416455208220e-06j | scaled:     2.7353511173127949e-07+3.6628438635486657e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_bubble_A" [I]               :    -7.6575191854449354e-07-9.9475877955204998e-08j | scaled:    -7.6615944517475944e-09-9.9423275940554777e-10j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_bubble_A" [th.CT]           :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_bubble_A" [tot]             :    -7.6575191854449354e-07-9.9475877955204998e-08j | scaled:    -7.6615944517475944e-09-9.9423275940554777e-10j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_bub_B" [I]             :     3.3548200793216267e-05+4.5942027771686165e-06j | scaled:     3.3551054438312611e-07+4.5936250109477522e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_bub_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_bub_B" [tot]           :     3.3548200793216267e-05+4.5942027771686165e-06j | scaled:     3.3551054438312611e-07+4.5936250109477522e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_bubble_B" [I]               :     8.9878539535530283e-08-1.2349391674618575e-07j | scaled:     8.9725384734354851e-10-1.2327513425421902e-09j | log10(abs(scaled / orig)) = -2.001 
+Evaluation result for graph "uv_bubble_B" [th.CT]           :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_bubble_B" [tot]             :     8.9878539535530283e-08-1.2349391674618575e-07j | scaled:     8.9725384734354851e-10-1.2327513425421902e-09j | log10(abs(scaled / orig)) = -2.001 
+Evaluation result for graph "ir_ct" [I]                     :    -8.2518190891471622e+03-1.0564900700491030e+03j | scaled:    -8.2518224433817268e+03-1.0564904994956862e+03j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "ir_ct" [th.CT]                 :     1.1150511343860493e-01+4.4442640571052766e-02j | scaled:     1.1247793563894295e-03+4.4831467746734986e-04j | log10(abs(scaled / orig)) = -1.996 
+Evaluation result for graph "ir_ct" [tot]                   :    -8.2517075840337238e+03-1.0564456274085319e+03j | scaled:    -8.2518213186023695e+03-1.0564900511810088e+03j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_ir_ct" [I]                  :    -1.0349269582563993e-07-1.3250291151705397e-08j | scaled:    -1.0349268031160800e-09-1.3250289165425838e-10j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "uv_ir_ct" [th.CT]              :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_ir_ct" [tot]                :    -1.0349269582563993e-07-1.3250291151705397e-08j | scaled:    -1.0349268031160800e-09-1.3250289165425838e-10j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_bare_ct" [I]            :     1.7213661014292720e-05+2.2038851960181789e-06j | scaled:     1.7213661891318275e-07+2.2038853083047894e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_bare_ct" [th.CT]        :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_ir_bare_ct" [tot]          :     1.7213661014292720e-05+2.2038851960181789e-06j | scaled:     1.7213661891318275e-07+2.2038853083047894e-08j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_dressed_ct" [I]         :    -6.4909997676612345e-06-8.3105030843979330e-07j | scaled:    -6.4910000983737239e-08-8.3105035078130117e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_dressed_ct" [th.CT]     :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_ir_dressed_ct" [tot]       :    -6.4909997676612345e-06-8.3105030843979330e-07j | scaled:    -6.4910000983737239e-08-8.3105035078130117e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ir_ct" [I]              :    -5.0106873007804166e-06-6.4152416821134713e-07j | scaled:    -5.0106875560718874e-08-6.4152420089661333e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ir_ct" [th.CT]          :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_uv_ir_ct" [tot]            :    -5.0106873007804166e-06-6.4152416821134713e-07j | scaled:    -5.0106875560718874e-08-6.4152420089661333e-09j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ct" [I]                 :     1.1846132387911587e-07+1.5166742146317646e-08j | scaled:     1.1846132991464825e-09+1.5166742919053931e-10j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ct" [th.CT]             :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_uv_ct" [tot]               :     1.1846132387911587e-07+1.5166742146317646e-08j | scaled:     1.1846132991464825e-09+1.5166742919053931e-10j | log10(abs(scaled / orig)) = -2.000 
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT                         :     8.2526109364651820e+03+1.0558822043642117e+03j | scaled:     8.2519118735983302e+03+1.0564336670429793e+03j  | log10(abs(scaled / orig)) = -0.000 
+Total evaluation result from CT                             :    -8.2517075839194476e+03-1.0564456272535535e+03j | scaled:    -8.2518213186012381e+03-1.0564900511794560e+03j  | log10(abs(scaled / orig)) = 0.000 
+Total evaluation result                                     :     9.0335254573437851e-01-5.6342288934183671e-01j | scaled:     9.0554997092112899e-02-5.6384136476708591e-02j  | log10(abs(scaled / orig)) = -0.999 
+
+
+Investigating UV...
+Evaluation result for graph "qqx_aaa_pentagon" [I]          :    -6.7523738001168607e-28+1.4768746072825907e-28j | scaled:    -6.7517264719168073e-30+1.4765903698611020e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_pentagon" [th.CT]      :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_pentagon" [tot]        :    -6.7523738001168607e-28+1.4768746072825907e-28j | scaled:    -6.7517264719168073e-30+1.4765903698611020e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "qqx_aaa_box_A" [I]             :    -3.2798649004535153e-23+2.0556283734980785e-23j | scaled:    -3.2787986430884916e-24+2.0554461453926805e-24j | log10(abs(scaled / orig)) = -1.000 
+Evaluation result for graph "qqx_aaa_box_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_box_A" [tot]           :    -3.2798649004535153e-23+2.0556283734980785e-23j | scaled:    -3.2787986430884916e-24+2.0554461453926805e-24j | log10(abs(scaled / orig)) = -1.000 
+Evaluation result for graph "qqx_aaa_box_B" [I]             :    -2.8988768188183564e-23+2.5783406924256078e-23j | scaled:    -2.8979293933301656e-24+2.5781022071810118e-24j | log10(abs(scaled / orig)) = -1.000 
+Evaluation result for graph "qqx_aaa_box_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_box_B" [tot]           :    -2.8988768188183564e-23+2.5783406924256078e-23j | scaled:    -2.8979293933301656e-24+2.5781022071810118e-24j | log10(abs(scaled / orig)) = -1.000 
+Evaluation result for graph "qqx_aaa_tri_A" [I]             :    -2.7016802003846959e-19-3.1266402932567835e-20j | scaled:    -2.7018930561441260e-19-3.1262241748039622e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "qqx_aaa_tri_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_A" [tot]           :    -2.7016802003846959e-19-3.1266402932567835e-20j | scaled:    -2.7018930561441260e-19-3.1262241748039622e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_A" [I]             :     2.7019493139451606e-19+3.1256147977637628e-20j | scaled:     2.7019199733268763e-19+3.1261216370786039e-20j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "uv_triangle_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_A" [tot]           :     2.7019493139451606e-19+3.1256147977637628e-20j | scaled:     2.7019199733268763e-19+3.1261216370786039e-20j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_tri_B" [I]             :    -2.5046623018515590e-19-5.5256611887884266e-20j | scaled:    -2.5048461328089240e-19-5.5262272659642686e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "qqx_aaa_tri_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_B" [tot]           :    -2.5046623018515590e-19-5.5256611887884266e-20j | scaled:    -2.5048461328089240e-19-5.5262272659642686e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_B" [I]             :     2.5050378410478402e-19+5.5267823883077322e-20j | scaled:     2.5048836899300465e-19+5.5263393662590591e-20j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "uv_triangle_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_B" [tot]           :     2.5050378410478402e-19+5.5267823883077322e-20j | scaled:     2.5048836899300465e-19+5.5263393662590591e-20j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_tri_C" [I]             :    -3.0841755857961127e-19-4.5382703539063764e-20j | scaled:    -3.0844462975619783e-19-4.5376099200786823e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "qqx_aaa_tri_C" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_C" [tot]           :    -3.0841755857961127e-19-4.5382703539063764e-20j | scaled:    -3.0844462975619783e-19-4.5376099200786823e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_C" [I]             :     3.0843670637899919e-19+4.5391271987847405e-20j | scaled:     3.0844654510864121e-19+4.5376955930782113e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_C" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_C" [tot]           :     3.0843670637899919e-19+4.5391271987847405e-20j | scaled:     3.0844654510864121e-19+4.5376955930782113e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "qqx_aaa_bub_A" [I]             :    -5.9960343550952089e-15+1.2095812471203141e-15j | scaled:    -5.9966521131503880e-14+1.2094445830312438e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "qqx_aaa_bub_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_bub_A" [tot]           :    -5.9960343550952089e-15+1.2095812471203141e-15j | scaled:    -5.9966521131503880e-14+1.2094445830312438e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "uv_bubble_A" [I]               :     5.9963341843628980e-15-1.2096417339211254e-15j | scaled:     5.9966820966864529e-14-1.2094506303315339e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "uv_bubble_A" [th.CT]           :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_bubble_A" [tot]             :     5.9963341843628980e-15-1.2096417339211254e-15j | scaled:     5.9966820966864529e-14-1.2094506303315339e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "qqx_aaa_bub_B" [I]             :    -7.9371162914616083e-15+2.2088609380963709e-15j | scaled:    -7.9375924640745051e-14+2.2086820509204904e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "qqx_aaa_bub_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_bub_B" [tot]           :    -7.9371162914616083e-15+2.2088609380963709e-15j | scaled:    -7.9375924640745051e-14+2.2086820509204904e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "uv_bubble_B" [I]               :     7.9375131942050137e-15-2.2089713995114326e-15j | scaled:     7.9376321525060793e-14-2.2086930945144090e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "uv_bubble_B" [th.CT]           :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_bubble_B" [tot]             :     7.9375131942050137e-15-2.2089713995114326e-15j | scaled:     7.9376321525060793e-14-2.2086930945144090e-14j | log10(abs(scaled / orig)) = 1.000 
+Evaluation result for graph "ir_ct" [I]                     :     4.4107988702364642e-19+5.6471974931169332e-20j | scaled:     4.4112399869532425e-19+5.6477622600198042e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "ir_ct" [th.CT]                 :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "ir_ct" [tot]                   :     4.4107988702364642e-19+5.6471974931169332e-20j | scaled:     4.4112399869532425e-19+5.6477622600198042e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_ir_ct" [I]                  :    -4.4112399305099972e-19-5.6477621877548538e-20j | scaled:    -4.4112840991570466e-19-5.6478187373913790e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_ir_ct" [th.CT]              :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_ir_ct" [tot]                :    -4.4112399305099972e-19-5.6477621877548538e-20j | scaled:    -4.4112840991570466e-19-5.6478187373913790e-20j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "int_ir_bare_ct" [I]            :     1.1104601789600817e-26+1.4217351829722781e-27j | scaled:     1.1103491452596226e-28+1.4215930252241394e-29j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_bare_ct" [th.CT]        :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_ir_bare_ct" [tot]          :     1.1104601789600817e-26+1.4217351829722781e-27j | scaled:     1.1103491452596226e-28+1.4215930252241394e-29j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_dressed_ct" [I]         :    -4.1873699950533790e-27-5.3611388853808138e-28j | scaled:    -4.1869513045009830e-29-5.3606028309590529e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_dressed_ct" [th.CT]     :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_ir_dressed_ct" [tot]       :    -4.1873699950533790e-27-5.3611388853808138e-28j | scaled:    -4.1869513045009830e-29-5.3606028309590529e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ir_ct" [I]              :    -3.2324144829607320e-27-4.1384981500895492e-28j | scaled:    -3.2320912773669957e-29-4.1380843461795540e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ir_ct" [th.CT]          :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_uv_ir_ct" [tot]            :    -3.2324144829607320e-27-4.1384981500895492e-28j | scaled:    -3.2320912773669957e-29-4.1380843461795540e-30j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ct" [I]                 :     7.6419875356803193e-29+9.7841262146716671e-30j | scaled:     7.6412234216931398e-31+9.7831479105776015e-32j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ct" [th.CT]             :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_uv_ct" [tot]               :     7.6419875356803193e-29+9.7841262146716671e-30j | scaled:     7.6412234216931398e-31+9.7831479105776015e-32j | log10(abs(scaled / orig)) = -2.000 
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT                         :    -1.3933979760149953e-14+3.4183103258386460e-15j | scaled:    -1.3934327489697430e-13+3.4181134443537281e-14j  | log10(abs(scaled / orig)) = 1.000 
+Total evaluation result from CT                             :     1.3934676469883762e-14-3.4184812238356556e-15j | scaled:     1.3934397161442555e-13-3.4181305347458239e-14j  | log10(abs(scaled / orig)) = 1.000 
+Total evaluation result                                     :     6.9670973380913507e-19-1.7089799700958297e-19j | scaled:     6.9671745124799262e-19-1.7090392095818414e-19j  | log10(abs(scaled / orig)) = 0.000 
+
+
+Investigating THRES...
+Evaluation result for graph "qqx_aaa_pentagon" [I]          :    -2.0206604200445049e-03+6.2329099645187506e-05j | scaled:    -2.0322358896135303e-03+6.1425813414097596e-05j | log10(abs(scaled / orig)) = 0.002 
+Evaluation result for graph "qqx_aaa_pentagon" [th.CT]      :     2.0229883701925891e-03-6.7648861561324413e-05j | scaled:     2.0324702725128814e-03-6.1959566751817549e-05j | log10(abs(scaled / orig)) = 0.002 
+Evaluation result for graph "qqx_aaa_pentagon" [tot]        :     2.3279501480842277e-06-5.3197619161369066e-06j | scaled:     2.3438289935111267e-07-5.3375333771995377e-07j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "qqx_aaa_box_A" [I]             :    -2.4241420109282638e-06-7.2936736068517896e-07j | scaled:    -2.4311945922056676e-07-7.3342736929050558e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_box_A" [th.CT]         :     2.1879090675174120e-06+1.4263344709434106e-06j | scaled:     2.1991114550686185e-07+1.4306589672151009e-07j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "qqx_aaa_box_A" [tot]           :    -2.3623294341085177e-07+6.9696711025823162e-07j | scaled:    -2.3208313713704908e-08+6.9723159792459530e-08j | log10(abs(scaled / orig)) = -1.001 
+Evaluation result for graph "qqx_aaa_box_B" [I]             :    -1.9155598423857042e-06-8.4779661038388324e-08j | scaled:    -1.9208383573406234e-07-8.5996836995610411e-09j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_box_B" [th.CT]         :     4.2646877707202521e-07+1.5924597955680941e-07j | scaled:     4.2874205543003090e-08+1.5979151236212709e-08j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "qqx_aaa_box_B" [tot]           :    -1.4890910653136791e-06+7.4466318518421091e-08j | scaled:    -1.4920963019105924e-07+7.3794675366516678e-09j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_tri_A" [I]             :    -1.9954550846884344e-06-1.1103695700715465e-06j | scaled:    -2.0037102894647386e-07-1.1148883975852421e-07j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "qqx_aaa_tri_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_A" [tot]           :    -1.9954550846884344e-06-1.1103695700715465e-06j | scaled:    -2.0037102894647386e-07-1.1148883975852421e-07j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "uv_triangle_A" [I]             :    -6.1228738464505246e-07+3.4381371026963895e-08j | scaled:    -6.1496932527388961e-08+3.4997912243671059e-09j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "uv_triangle_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_A" [tot]           :    -6.1228738464505246e-07+3.4381371026963895e-08j | scaled:    -6.1496932527388961e-08+3.4997912243671059e-09j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "qqx_aaa_tri_B" [I]             :    -4.7926294211938257e-07+3.5334965159007643e-07j | scaled:    -4.8056684185405245e-08+3.5442581603264982e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_tri_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_B" [tot]           :    -4.7926294211938257e-07+3.5334965159007643e-07j | scaled:    -4.8056684185405245e-08+3.5442581603264982e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "uv_triangle_B" [I]             :     6.6274850604116634e-07+8.0229655184744155e-07j | scaled:     6.6400394188114714e-08+8.0450027702828964e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "uv_triangle_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_B" [tot]           :     6.6274850604116634e-07+8.0229655184744155e-07j | scaled:     6.6400394188114714e-08+8.0450027702828964e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_tri_C" [I]             :    -1.8834263130476753e-06-1.1542582643822828e-06j | scaled:    -1.8916288653492658e-07-1.1590592644591119e-07j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "qqx_aaa_tri_C" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_tri_C" [tot]           :    -1.8834263130476753e-06-1.1542582643822828e-06j | scaled:    -1.8916288653492658e-07-1.1590592644591119e-07j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "uv_triangle_C" [I]             :    -6.0392878630357965e-07+8.6162210551262526e-07j | scaled:    -6.0610331151419561e-08+8.6447889854929268e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "uv_triangle_C" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_triangle_C" [tot]           :    -6.0392878630357965e-07+8.6162210551262526e-07j | scaled:    -6.0610331151419561e-08+8.6447889854929268e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_bub_A" [I]             :     4.8059683123189003e-07+2.4140177236227409e-07j | scaled:     4.8218398107050899e-08+2.4171836230013481e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_bub_A" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_bub_A" [tot]           :     4.8059683123189003e-07+2.4140177236227409e-07j | scaled:     4.8218398107050899e-08+2.4171836230013481e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "uv_bubble_A" [I]               :    -5.1355682102419127e-07-1.2343332535445149e-06j | scaled:    -5.1571907683317314e-08-1.2374692986911365e-07j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "uv_bubble_A" [th.CT]           :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_bubble_A" [tot]             :    -5.1355682102419127e-07-1.2343332535445149e-06j | scaled:    -5.1571907683317314e-08-1.2374692986911365e-07j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_bub_B" [I]             :     3.4844312799422126e-07+3.8394437733644496e-07j | scaled:     3.5017570675589540e-08+3.8440444169878765e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "qqx_aaa_bub_B" [th.CT]         :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "qqx_aaa_bub_B" [tot]           :     3.4844312799422126e-07+3.8394437733644496e-07j | scaled:     3.5017570675589540e-08+3.8440444169878765e-08j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "uv_bubble_B" [I]               :     9.7106525471225991e-07-1.2951051815556085e-06j | scaled:     9.7216902089294589e-08-1.2974328043472590e-07j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "uv_bubble_B" [th.CT]           :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_bubble_B" [tot]             :     9.7106525471225991e-07-1.2951051815556085e-06j | scaled:     9.7216902089294589e-08-1.2974328043472590e-07j | log10(abs(scaled / orig)) = -0.999 
+Evaluation result for graph "ir_ct" [I]                     :     1.1391362358938685e-03+1.4584494747804346e-04j | scaled:     1.1453892640365582e-03+1.4664553000040854e-04j | log10(abs(scaled / orig)) = 0.002 
+Evaluation result for graph "ir_ct" [th.CT]                 :    -1.1393035277817119e-03-1.4276416559364251e-04j | scaled:    -1.1454062191015666e-03-1.4633606047174000e-04j | log10(abs(scaled / orig)) = 0.002 
+Evaluation result for graph "ir_ct" [tot]                   :    -1.6729188784345844e-07+3.0807818844009517e-06j | scaled:    -1.6955065008450801e-08+3.0946952866853575e-07j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "uv_ir_ct" [I]                  :     5.9175536317957306e-07+7.5763132752118132e-08j | scaled:     5.9453900108003469e-08+7.6119525175252808e-09j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "uv_ir_ct" [th.CT]              :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "uv_ir_ct" [tot]                :     5.9175536317957306e-07+7.5763132752118132e-08j | scaled:     5.9453900108003469e-08+7.6119525175252808e-09j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_ir_bare_ct" [I]            :     4.8093681478039078e-06+6.1574904108694137e-07j | scaled:     4.8263731176374798e-07+6.1792620730648212e-08j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_ir_bare_ct" [th.CT]        :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_ir_bare_ct" [tot]          :     4.8093681478039078e-06+6.1574904108694137e-07j | scaled:     4.8263731176374798e-07+6.1792620730648212e-08j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_ir_dressed_ct" [I]         :    -1.8135367894181338e-06-2.3218924081950608e-07j | scaled:    -1.8199490950367445e-07-2.3301021582380446e-08j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_ir_dressed_ct" [th.CT]     :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_ir_dressed_ct" [tot]       :    -1.8135367894181338e-06-2.3218924081950608e-07j | scaled:    -1.8199490950367445e-07-2.3301021582380446e-08j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_uv_ir_ct" [I]              :    -1.3999485573097904e-06-1.7923705469047319e-07j | scaled:    -1.4048984971467888e-07-1.7987080128969356e-08j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_uv_ir_ct" [th.CT]          :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_uv_ir_ct" [tot]            :    -1.3999485573097904e-06-1.7923705469047319e-07j | scaled:    -1.4048984971467888e-07-1.7987080128969356e-08j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_uv_ct" [I]                 :     3.3097207929089183e-08+4.2374743248336387e-09j | scaled:     3.3214233077739242e-09+4.2524571917820202e-10j | log10(abs(scaled / orig)) = -0.998 
+Evaluation result for graph "int_uv_ct" [th.CT]             :    -0.0000000000000000e+00-0.0000000000000000e+00j | scaled:     0.0000000000000000e+00-0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_uv_ct" [tot]               :     3.3097207929089183e-08+4.2374743248336387e-09j | scaled:     3.3214233077739242e-09+4.2524571917820202e-10j | log10(abs(scaled / orig)) = -0.998 
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT                         :     8.8629922025546632e-04-2.0882744670446668e-04j | scaled:     8.8732683876236460e-04-2.0813658217559982e-04j  | log10(abs(scaled / orig)) = 0.000 
+Total evaluation result from CT                             :    -8.8726821424361490e-04+2.0552715301428321e-04j | scaled:    -8.8742331750193385e-04+2.0780551030541051e-04j  | log10(abs(scaled / orig)) = 0.000 
+Total evaluation result                                     :    -9.6899398814857991e-07-3.3002936901834726e-06j | scaled:    -9.6478739569248392e-08-3.3107187018930500e-07j  | log10(abs(scaled / orig)) = -0.999 
+
+
+Evaluation result for graph qqx_aaa_tri_C       : (0.017487312974987172-0.001324618729674314j)
+Evaluation result for graph qqx_aaa_bub_A       : (0.0016515003055653304-0.003357970869223919j)
+Evaluation result for graph qqx_aaa_bub_B       : (0.0034927300049589225-0.022292867909243452j)
+Evaluation result for graph ir_ct               : (0.09684995297672667-0.13153240011290523j)
+
+Investigating IR limit...
+Evaluation result for graph "qqx_aaa_pentagon"    :     1.6257931512544150e+13-1.1078856846784533e+14j | scaled:     1.6253573272554285e+15-1.1079055526367738e+16j | log10(abs(scaled / orig)) = 2.000 
+Evaluation result for graph "qqx_aaa_box_A"       :     1.4974066343942579e+04+5.2362083209991160e+03j | scaled:     1.4960177209991518e+04+5.2476625064510572e+03j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "qqx_aaa_box_B"       :     1.0778106592653275e+10+1.5980314757105134e+09j | scaled:     1.0716934923567474e+12+1.7287680374574051e+11j | log10(abs(scaled / orig)) = 1.998 
+Evaluation result for graph "qqx_aaa_tri_A"       :     1.9492808722966882e+04-6.9303751205602265e+05j | scaled:     1.9452585005206372e+04-6.9303010242065636e+05j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "uv_triangle_A"       :     1.6401849223675733e-05+2.4122322225564530e-06j | scaled:     1.6461968196403642e-07+2.3743184842284013e-08j | log10(abs(scaled / orig)) = -1.999 
+Evaluation result for graph "qqx_aaa_tri_B"       :    -9.4687124575536363e+03-7.7943233468143168e+04j | scaled:    -9.4632104224444902e+03-7.7947333667156243e+04j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_triangle_B"       :     2.3560749941817779e-07+3.8614215196948819e-07j | scaled:     1.7339964721724077e-09+3.9510648074567124e-09j | log10(abs(scaled / orig)) = -2.021 
+Evaluation result for graph "qqx_aaa_tri_C"       :    -2.4776236363251257e+11-1.4297541652969398e+13j | scaled:    -2.4874784454098539e+13-1.4297267938372958e+15j | log10(abs(scaled / orig)) = 2.000 
+Evaluation result for graph "uv_triangle_C"       :    -5.5420425867647038e-08+2.3723360476148893e-08j | scaled:    -5.5396247530017828e-11+2.3739323983798063e-11j | log10(abs(scaled / orig)) = -3.000 
+Evaluation result for graph "qqx_aaa_bub_A"       :    -8.0300063074273694e+03+6.2663952125032389e+04j | scaled:    -8.0297535339649085e+03+6.2663885209148095e+04j | log10(abs(scaled / orig)) = -0.000 
+Evaluation result for graph "uv_bubble_A"         :     3.4210822186798451e-07-1.6861899217477638e-09j | scaled:     3.2476433146838071e-09+4.1654694573813132e-10j | log10(abs(scaled / orig)) = -2.019 
+Evaluation result for graph "qqx_aaa_bub_B"       :    -9.7028969761616318e+03+8.6791976437710109e+04j | scaled:    -9.7023904472073300e+03+8.6792392651496179e+04j | log10(abs(scaled / orig)) = 0.000 
+Evaluation result for graph "uv_bubble_B"         :    -7.2508281064161043e-06-4.1855221226298658e-04j | scaled:    -7.2814717548627581e-08-4.1852980894432402e-06j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "ir_ct"               :    -1.6014942415323268e+13+1.2508627509221639e+14j | scaled:    -1.6014941849547788e+15+1.2508627067317164e+16j | log10(abs(scaled / orig)) = 2.000 
+Evaluation result for graph "uv_ir_ct"            :     0.0000000000000000e+00+0.0000000000000000e+00j | scaled:     0.0000000000000000e+00+0.0000000000000000e+00j | log10(abs(scaled / orig)) = nan 
+Evaluation result for graph "int_ir_bare_ct"      :    -2.9316485299682891e-03+2.2897927759167838e-02j | scaled:    -2.9316487041082169e-05+2.2897929119304787e-04j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_ir_dressed_ct"   :     1.1054783704110532e-03-8.6344470035323879e-03j | scaled:     1.1054784360764703e-05-8.6344475164185531e-05j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ir_ct"        :     8.5336722079438901e-04-6.6653081957280423e-03j | scaled:     8.5336727148440345e-06-6.6653085916473602e-05j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "int_uv_ct"           :    -2.0175078719161177e-05+1.5757942683936740e-04j | scaled:    -2.0175079917560886e-07+1.5757943619958562e-06j | log10(abs(scaled / orig)) = -2.000 
+Evaluation result for graph "tri_norm_test"       :     3.1582732188521965e+02+0.0000000000000000e+00j | scaled:     3.1582734064536311e+00+0.0000000000000000e+00j | log10(abs(scaled / orig)) = -2.000 
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT               :     1.6020947263085377e+13-1.2508451270562764e+14j | scaled:     1.6015542363009072e+15-1.2508609444017562e+16j  | log10(abs(scaled / orig)) = 2.000 
+Total evaluation result from CT                   :    -1.6014942415323268e+13+1.2508627509221639e+14j | scaled:    -1.6014941849547788e+15+1.2508627067317164e+16j  | log10(abs(scaled / orig)) = 2.000 
+Total evaluation result                           :     6.0048477621093750e+09+1.7623865887500000e+09j | scaled:     6.0051346128500000e+10+1.7623299602000000e+10j  | log10(abs(scaled / orig)) = 1.000 
+Ratio non-CT / CT                                 :    -9.9999218495530040e-01-4.9006217895823148e-05j | scaled:    -9.9999921856893081e-01-4.9008418839256386e-06j  | log10(abs(scaled / orig)) = 0.000 
+
+
+Investigating IR limit...
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT               :     1.9422902007583953e+14-1.2638000278380862e+14j | scaled:     1.9420163684262820e+16-1.2645604541623580e+16j  | log10(abs(scaled / orig)) = 2.000 
+Total evaluation result from CT                   :    -1.9419860028419153e+14+1.2646449908636558e+14j | scaled:    -1.9419859342354836e+16+1.2646449461863098e+16j  | log10(abs(scaled / orig)) = 2.000 
+Total evaluation result                           :     3.0419791648000000e+10+8.4496302556953125e+10j | scaled:     3.0434190798400000e+11+8.4492023951800000e+11j  | log10(abs(scaled / orig)) = 1.000 
+
+
+Investigating UV limit...
+----------------------------------------------------------------------------------------------------
+Total evaluation result from non-CT               :     1.5173338562794202e-09-1.5125965472198642e-09j | scaled:     1.4683013220556174e-08-1.5532441315009017e-08j  | log10(abs(scaled / orig)) = 0.999 
+Total evaluation result from CT                   :    -1.4766345772942660e-09+1.5130012861055020e-09j | scaled:    -1.4682497204155530e-08+1.5532480648597877e-08j  | log10(abs(scaled / orig)) = 1.005 
+Total evaluation result                           :     4.0699278985154205e-11+4.0473888563772636e-13j | scaled:     5.1601640064305820e-13+3.9333588860859980e-14j  | log10(abs(scaled / orig)) = -1.896 
+
+>>>>> INPUT DOTS GENERATION SUCCESSFUL
+Running command: ../../../../target/dev-optim/gammaloop -s /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_tree ./toml_cards/generate_qqx_aaa_tree.toml
+>>>>> TREE PROCESS GENERATION SUCCESSFUL
+Running command: ../../../../target/dev-optim/gammaloop -s /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_euclidean ./toml_cards/generate_qqx_aaa_euclidean.toml
+>>>>> EUCLIDEAN PROCESS GENERATION SUCCESSFUL
+Running command: ../../../../target/dev-optim/gammaloop -s /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_physical ./toml_cards/generate_qqx_aaa_physical.toml
+>>>>> PHYSICAL PROCESS GENERATION SUCCESSFUL
+Now running './test_limits_qqx_aaa.py -d I -t IR UV -s ./states/qqx_aaa_euclidean'...
+>>>>> LOCAL APPROACH TEST EUCLIDEAN COMPLETED
+Now running './test_limits_qqx_aaa.py -d I th.CT tot -t IR UV THRES -s ./states/qqx_aaa_physical'...
+>>>>> LOCAL APPROACH TEST PHYSICAL COMPLETED
+Running command: ../../../../target/dev-optim/gammaloop -s /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_physical -o integrate --workspace-path ./integration_workspace --result-path ./integration_workspace/integration_results.txt -c 8 --restartWARNING, file log filter is set to info, will override settings gammalooprs=debug
+WARNING, display log filter is set to info, will override settings gammalooprs=info
+WARNING, file log filter is set to info, will override settings gammalooprs=debug
+WARNING, display log filter is set to info, will override settings gammalooprs=info
+:gammalooprs=info
+[2025-12-14 22:19:00.909] @gammaloop_integra... INFO    : overlap structure of group 0: [3]
+[2025-12-14 22:19:00.909] @gammaloop_integra... INFO    : overlap structure of group 1: [0]
+[2025-12-14 22:19:00.909] @commands::integrate  INFO    : Gammaloop now integrates default
+[2025-12-14 22:19:00.909] @commands::integrate  INFO    : No integration state found, starting new integration
+[2025-12-14 22:19:00.909] @commands::integrate  INFO    : Created workspace directory at ./integration_workspace
+[2025-12-14 22:19:01.294] @gammalooprs::inte... INFO    : Integrating using cff ltd with 8 cores over 3 continuous dimensions using spherical coordinates ...
+[2025-12-14 22:19:01.295] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : /  [   2s    ] Iteration #   1: n_pts=   100K n_tot=    100K 209.11 µs /sample/core
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  itg #1   re: 2.402(66)           2.752%    0.000 χ²/dof    mwi: 1.4084e-2 
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  itg #1   im: -0.000055(41)       74.816%   0.000 χ²/dof    mwi: 3.3127e-1 
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -1.2688339573229566e-2  | ( xs: [0.0021834415865481516, 0.6392632538205528, 0.9998374307077986] )
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 1.4199387232246248e0    | ( xs: [0.3765442936847021, 0.682104646674998, 0.9897134335470509] )
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:03.909] @gammalooprs::eval... INFO    : |  timing   | total:  206.75 µs | param:  150 ns    | ltd:    206.12 µs
+[2025-12-14 22:19:03.909] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:03.909] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : /  [   5s    ] Iteration #   2: n_pts=   100K n_tot=    200K 209.16 µs /sample/core
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  itg #1   re: 2.429(34)           1.389%    0.329 χ²/dof    mwi: 6.9628e-3 
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  itg #1   im: 0.00011(18)         161.481%  0.429 χ²/dof    mwi: 1.6024e0  
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -1.2688339573229566e-2  | ( xs: [0.0021834415865481516, 0.6392632538205528, 0.9998374307077986] )
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 3.5364001076026305e1    | ( xs: [0.9999991809514155, 0.4878600539595227, 0.6767377246671921] )
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:06.524] @gammalooprs::eval... INFO    : |  timing   | total:  206.78 µs | param:  149 ns    | ltd:    206.17 µs
+[2025-12-14 22:19:06.524] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:06.524] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : /  [   8s    ] Iteration #   3: n_pts=   100K n_tot=    300K 215.87 µs /sample/core
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  itg #1   re: 2.436(23)           0.927%    0.248 χ²/dof    mwi: 4.6287e-3 
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  itg #1   im: 0.00004(12)         282.290%  0.585 χ²/dof    mwi: 2.7958e0  
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -1.2688339573229566e-2  | ( xs: [0.0021834415865481516, 0.6392632538205528, 0.9998374307077986] )
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 3.5364001076026305e1    | ( xs: [0.9999991809514155, 0.4878600539595227, 0.6767377246671921] )
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:09.391] @gammalooprs::eval... INFO    : |  timing   | total:  212.52 µs | param:  169 ns    | ltd:    211.85 µs
+[2025-12-14 22:19:09.391] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:09.391] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : /  [   10s   ] Iteration #   4: n_pts=   100K n_tot=    400K 219.78 µs /sample/core
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  itg #1   re: 2.440(17)           0.697%    0.188 χ²/dof    mwi: 3.4660e-3 
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  itg #1   im: 9(90)e-6            1045.152%  0.455 χ²/dof    mwi: 1.0324e1  
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 3.5364001076026305e1    | ( xs: [0.9999991809514155, 0.4878600539595227, 0.6767377246671921] )
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:12.285] @gammalooprs::eval... INFO    : |  timing   | total:  216.76 µs | param:  175 ns    | ltd:    216.06 µs
+[2025-12-14 22:19:12.285] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:12.285] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : /  [   13s   ] Iteration #   5: n_pts=   100K n_tot=    500K 217.45 µs /sample/core
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  itg #1   re: 2.446(14)           0.559%    1.097 χ²/dof    mwi: 2.7664e-3 
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  itg #1   im: -1(74)e-6           6615.704%  0.405 χ²/dof    mwi: 6.2818e1  
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 3.5364001076026305e1    | ( xs: [0.9999991809514155, 0.4878600539595227, 0.6767377246671921] )
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:14.887] @gammalooprs::eval... INFO    : |  timing   | total:  214.59 µs | param:  169 ns    | ltd:    213.91 µs
+[2025-12-14 22:19:14.887] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:14.887] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : /  [   16s   ] Iteration #   6: n_pts=   100K n_tot=    600K 215.96 µs /sample/core
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  itg #1   re: 2.448(11)           0.467%    1.025 χ²/dof    mwi: 2.3029e-3 
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  itg #1   im: -0.000023(62)       274.060%  0.957 χ²/dof    mwi: 2.5995e0  
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 3.5364001076026305e1    | ( xs: [0.9999991809514155, 0.4878600539595227, 0.6767377246671921] )
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:17.493] @gammalooprs::eval... INFO    : |  timing   | total:  213.01 µs | param:  164 ns    | ltd:    212.35 µs
+[2025-12-14 22:19:17.493] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:17.493] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : /  [   18s   ] Iteration #   7: n_pts=   100K n_tot=    700K 215.17 µs /sample/core
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  itg #1   re: 2.4516(99)          0.404%    1.168 χ²/dof    mwi: 1.9712e-3 
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  itg #1   im: 0.00016(20)         125.516%  0.964 χ²/dof    mwi: 1.2115e0  
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 1.3764776545866923e2    | ( xs: [0.9999996617075915, 0.6695066976128554, 0.9488449766880744] )
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:20.123] @gammalooprs::eval... INFO    : |  timing   | total:  212.06 µs | param:  164 ns    | ltd:    211.40 µs
+[2025-12-14 22:19:20.123] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:20.123] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : /  [   21s   ] Iteration #   8: n_pts=   100K n_tot=    800K 218.38 µs /sample/core
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  itg #1   re: 2.4543(88)          0.360%    1.157 χ²/dof    mwi: 1.7229e-3 
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  itg #1   im: 0.00013(18)         135.711%  1.027 χ²/dof    mwi: 1.3098e0  
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 1.3764776545866923e2    | ( xs: [0.9999996617075915, 0.6695066976128554, 0.9488449766880744] )
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -1.8094801111555394e0   | ( xs: [0.3204299277575464, 0.2277256029254755, 0.9992055293158076] )
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:23.134] @gammalooprs::eval... INFO    : |  timing   | total:  215.21 µs | param:  172 ns    | ltd:    214.52 µs
+[2025-12-14 22:19:23.134] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:23.134] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : /  [   24s   ] Iteration #   9: n_pts=   100K n_tot=    900K 221.78 µs /sample/core
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  itg #1   re: 2.4561(79)          0.321%    1.245 χ²/dof    mwi: 1.5304e-3 
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  itg #1   im: 0.00010(16)         156.720%  1.087 χ²/dof    mwi: 1.5121e0  
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 1.3764776545866923e2    | ( xs: [0.9999996617075915, 0.6695066976128554, 0.9488449766880744] )
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -3.0798349859974916e0   | ( xs: [0.385109099023785, 0.6655223432020909, 0.989381312546559] )
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:26.246] @gammalooprs::eval... INFO    : |  timing   | total:  218.82 µs | param:  180 ns    | ltd:    218.10 µs
+[2025-12-14 22:19:26.246] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:26.246] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : /  [   27s   ] Iteration #  10: n_pts=   100K n_tot=   1000K 220.70 µs /sample/core
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  itg #1   re: 2.4581(71)          0.290%    1.794 χ²/dof    mwi: 1.3762e-3 
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  itg #1   im: 0.00008(14)         173.260%  1.006 χ²/dof    mwi: 1.6715e0  
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 1.3764776545866923e2    | ( xs: [0.9999996617075915, 0.6695066976128554, 0.9488449766880744] )
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -3.0798349859974916e0   | ( xs: [0.385109099023785, 0.6655223432020909, 0.989381312546559] )
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:28.884] @gammalooprs::eval... INFO    : |  timing   | total:  217.74 µs | param:  177 ns    | ltd:    217.03 µs
+[2025-12-14 22:19:28.884] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:28.884] @gammalooprs::inte... INFO    : 
+[2025-12-14 22:19:28.886] @                     INFO    : 
+[2025-12-14 22:19:28.886] @                     INFO    : Final integration results:
+[2025-12-14 22:19:28.886] @                     INFO    : 
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : /  [   27s   ] Iteration #  10: n_pts=     0K n_tot=   1000K 220.71 µs /sample/core
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  itg #1   re: 2.4581(71)          0.290%    1.794 χ²/dof    mwi: 1.3762e-3 
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  itg #1   im: 0.00008(14)         173.260%  1.006 χ²/dof    mwi: 1.6715e0  
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  Integrand        | Max Eval                | Max Eval xs
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  itg #1   re [+]      | 3.3828862127038738e3    | ( xs: [0.33376771396952565, 0.18378476669634936, 0.9993359216984666] )
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  itg #1   re [-]      | -6.0803534484704616e-2  | ( xs: [0.9997009986401107, 0.44892668516196177, 0.5135970850247603] )
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  itg #1   im [+]      | 1.3764776545866923e2    | ( xs: [0.9999996617075915, 0.6695066976128554, 0.9488449766880744] )
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  itg #1   im [-]      | -3.0798349859974916e0   | ( xs: [0.385109099023785, 0.6655223432020909, 0.989381312546559] )
+[2025-12-14 22:19:28.886] @gammalooprs::inte... INFO    : |  -------------------------------------------------------------------------------------------
+[2025-12-14 22:19:28.886] @gammalooprs::eval... INFO    : |  timing   | total:  217.74 µs | param:  177 ns    | ltd:    217.03 µs
+[2025-12-14 22:19:28.886] @gammalooprs::eval... INFO    : |  evals    | f64:    100.00%   | f128:   0.00%     | nan:    0.00%    
+[2025-12-14 22:19:28.886] @                     INFO    : 
+Saving state to /Users/vjhirsch/Documents/Work/gammaloop_hedge_numerator/examples/python/examples/qqx_aaa/./states/qqx_aaa_physical..
+
+>>>>> INTEGRATION COMPLETED (PHYSICAL)
+>>>>> ALL SUCCESSFUL

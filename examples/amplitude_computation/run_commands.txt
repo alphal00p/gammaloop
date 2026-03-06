@@ -1,0 +1,4 @@
+rm -rf GL_QQX_AAA_euclidean; GL_DISPLAY_FILTER=debug GL_LOGFILE_FILTER=debug  ../../target/dev-optim/gammaloop -o -s GL_QQX_AAA_euclidean -t generation generate_qqx_aaa_euclidean.toml
+rm -rf GL_QQX_AAA_threshold_subtracted; GL_DISPLAY_FILTER=debug GL_LOGFILE_FILTER=debug  ../../target/dev-optim/gammaloop -o -s GL_QQX_AAA_threshold_subtracted -t generation generate_qqx_aaa_threshold_subtracted.toml
+GL_DISPLAY_FILTER=debug GL_LOGFILE_FILTER=debug ../../target/dev-optim/gammaloop -n -s GL_QQX_AAA_euclidean inspect --discrete-dim 0 -m -p 0.1 0.2 0.3
+rm -rf ./integration_workspace; GL_DISPLAY_FILTER=info GL_LOGFILE_FILTER=warning ../../target/dev-optim/gammaloop -n -s GL_QQX_AAA_threshold_subtracted integrate --workspace-path ./integration_workspace --result-path ./integration_workspace/integration_results.txt -c 8 --target -6.4224166840662377e-04 7.0413313456657925e-04

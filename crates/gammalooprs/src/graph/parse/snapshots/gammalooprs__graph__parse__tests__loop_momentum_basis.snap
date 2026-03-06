@@ -1,0 +1,83 @@
+---
+source: src/graph/parse/tests.rs
+expression: g.loop_momentum_basis
+---
+LoopMomentumBasis(
+  tree: SubSet(
+    set: BitSeq(
+      order: "bitvec::order::Lsb0",
+      head: BitIdx(
+        width: 64,
+        index: 0,
+      ),
+      bits: 9,
+      data: [
+        480,
+      ],
+    ),
+    id: PhantomData,
+  ),
+  loop_edges: [
+    EdgeIndex(3),
+  ],
+  ext_edges: [
+    EdgeIndex(0),
+    EdgeIndex(2),
+  ],
+  edge_signatures: EdgeVec([
+    LoopExtSignature(
+      internal: SignatureLike([
+        0,
+      ]),
+      external: SignatureLike([
+        1,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        0,
+      ]),
+      external: SignatureLike([
+        0,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        0,
+      ]),
+      external: SignatureLike([
+        1,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        1,
+      ]),
+      external: SignatureLike([
+        0,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        1,
+      ]),
+      external: SignatureLike([
+        0,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        1,
+      ]),
+      external: SignatureLike([
+        -1,
+        0,
+      ]),
+    ),
+  ]),
+)

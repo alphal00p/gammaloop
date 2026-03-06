@@ -34,35 +34,95 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = nixpkgs.legacyPackages.${system};
-
       inherit (pkgs) lib;
 
       craneLib =
         (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain
         fenix.packages.${system}.stable.toolchain;
+
       src = craneLib.cleanCargoSource (craneLib.path ./.);
+
+      # Host Rust target triple, e.g. x86_64-unknown-linux-gnu
+      rustTarget = pkgs.stdenv.hostPlatform.rust.rustcTarget;
+
+      # Env var name Cargo uses to pick the linker for this target
+      cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
+
+      # Force the "Nix cc wrapper" as both C compiler and Rust linker.
+      nixCc = "${pkgs.stdenv.cc}/bin/cc";
+      nixCxx = "${pkgs.stdenv.cc}/bin/c++";
+
+      # Runtime library search path for locally-built binaries and for maturin/auditwheel
+      # (so it can locate libpython and libs like libmpfr at repair time).
+      runtimeLibPath = lib.makeLibraryPath [
+        pkgs.python313
+        pkgs.gmp
+        pkgs.mpfr
+        pkgs.libmpc
+        pkgs.openssl
+        pkgs.stdenv.cc.cc.lib
+      ];
 
       # Common arguments can be set here to avoid repeating them later
       commonArgs = {
         inherit src;
         strictDeps = true;
 
-        buildInputs =
+        nativeBuildInputs =
           [
-            pkgs.mold
+            pkgs.pkg-config
             pkgs.gcc
-            pkgs.clang
-            # Add additional build inputs here
+            pkgs.git
+            pkgs.python313
+            pkgs.gnum4
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
-            # Additional darwin specific inputs can be set here
-            pkgs.libiconv
-            pkgs.gcc.cc.lib
+            pkgs.darwin.cctools
           ];
 
-        # Additional environment variables can be set directly
-        # MY_CUSTOM_VAR = "some value";
+        buildInputs =
+          [
+            pkgs.openssl
+
+            # System GMP/MPFR/MPC (for gmp-mpfr-sys with feature use-system-libs)
+            pkgs.gmp
+            pkgs.gmp.dev
+            pkgs.mpfr
+            pkgs.mpfr.dev
+            pkgs.libmpc
+
+            pkgs.python313
+          ]
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.libiconv
+          ];
+
+        # Hard override: use Nix's compiler wrapper everywhere.
+        CC = nixCc;
+        CXX = nixCxx;
+
+        # Hard override: use Nix's cc wrapper as Rust linker for the host target.
+        "${cargoLinkerVar}" = nixCc;
+
+        # Final override in case something injects `-C linker=clang`.
+        RUSTFLAGS = "-C linker=${nixCc}";
+
+        # Make runtime libs discoverable inside Nix builds too (useful for build scripts/tests
+        # that execute freshly-built binaries).
+        LD_LIBRARY_PATH = runtimeLibPath;
+        DYLD_LIBRARY_PATH = runtimeLibPath;
       };
+
+      ciArgs =
+        commonArgs
+        // {
+          buildType = "release";
+
+          PYO3_PYTHON = "${pkgs.python313}/bin/python3";
+          PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
+        };
+
+      ciPartitionCount = 6;
 
       craneLibLLvmTools =
         craneLib.overrideToolchain
@@ -72,137 +132,186 @@
           "rustc"
         ]);
 
-      # Build *just* the cargo dependencies, so we can reuse
-      # all of that work (e.g. via cachix) when running in CI
-      cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+      cargoArtifacts = craneLib.buildDepsOnly ciArgs;
+      cargoArtifactsNextest = craneLib.buildDepsOnly (ciArgs
+        // {
+          pname = "gammaloop-cargo-artifacts-nextest";
+          cargoBuildCommand = "cargo test --workspace --all-targets --profile release --no-run";
+        });
 
-      # Build the actual crate itself, reusing the dependency
-      # artifacts from above.
-      my-crate = craneLib.buildPackage (commonArgs
+      gammaloop = craneLib.buildPackage (commonArgs
         // {
           inherit cargoArtifacts;
+          doCheck = false;
         });
+
+      gammaloop-nextest-archive = craneLib.mkCargoDerivation (ciArgs
+        // {
+          pname = "gammaloop-nextest-archive";
+          version = "0.1.0";
+          cargoArtifacts = cargoArtifactsNextest;
+          doCheck = false;
+
+          nativeBuildInputs = ciArgs.nativeBuildInputs ++ [pkgs.cargo-nextest];
+
+          buildPhaseCargoCommand = ''
+            cargo nextest archive \
+              --workspace \
+              --profile ci \
+              --cargo-profile release \
+              --archive-file nextest-archive.tar.zst
+          '';
+
+          installPhaseCommand = ''
+            mkdir -p "$out"
+            cp nextest-archive.tar.zst "$out/nextest-archive.tar.zst"
+          '';
+        });
+
+      partitionedNextestChecks = lib.listToAttrs (map (partition: {
+          name = "gammaloop-nextest-partition-${toString partition}";
+          value = craneLib.cargoNextest (ciArgs
+            // {
+              cargoArtifacts = cargoArtifactsNextest;
+              cargoNextestExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail";
+            });
+        })
+        (lib.range 1 ciPartitionCount));
     in {
-      checks = {
-        # Build the crate as part of `nix flake check` for convenience
-        inherit my-crate;
+      checks =
+        {
+          inherit gammaloop;
 
-        # Run clippy (and deny all warnings) on the crate source,
-        # again, reusing the dependency artifacts from above.
-        #
-        # Note that this is done as a separate derivation so that
-        # we can block the CI if there are issues here, but not
-        # prevent downstream consumers from building our crate by itself.
-        my-crate-clippy = craneLib.cargoClippy (commonArgs
-          // {
-            inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-          });
+          gammaloop-clippy = craneLib.cargoClippy (ciArgs
+            // {
+              inherit cargoArtifacts;
+              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+            });
 
-        my-crate-doc = craneLib.cargoDoc (commonArgs
-          // {
-            inherit cargoArtifacts;
-          });
+          gammaloop-doc = craneLib.cargoDoc (ciArgs
+            // {
+              inherit cargoArtifacts;
+            });
 
-        # Check formatting
-        my-crate-fmt = craneLib.cargoFmt {
-          inherit src;
-        };
+          gammaloop-fmt = craneLib.cargoFmt {
+            inherit src;
+          };
 
-        # Audit dependencies
-        my-crate-audit = craneLib.cargoAudit {
-          inherit src advisory-db;
-        };
+          gammaloop-audit = craneLib.cargoAudit {
+            inherit src advisory-db;
+          };
 
-        # Audit licenses
-        my-crate-deny = craneLib.cargoDeny {
-          inherit src;
-        };
+          gammaloop-deny = craneLib.cargoDeny {
+            src = builtins.path {
+              path = ./.;
+              name = "source";
+            };
+          };
 
-        # Run tests with cargo-nextest
-        # Consider setting `doCheck = false` on `my-crate` if you do not want
-        # the tests to run twice
-        my-crate-nextest = craneLib.cargoNextest (commonArgs
-          // {
-            inherit cargoArtifacts;
-            partitions = 1;
-            partitionType = "count";
-          });
-      };
+          gammaloop-nextest = craneLib.cargoNextest (ciArgs
+            // {
+              cargoArtifacts = cargoArtifactsNextest;
+              cargoNextestExtraArgs = "--profile ci --no-fail-fast --final-status-level fail";
+            });
+        }
+        // partitionedNextestChecks;
 
       packages =
         {
-          default = my-crate;
+          default = gammaloop;
+          inherit cargoArtifacts;
+          inherit cargoArtifactsNextest;
+          inherit gammaloop-nextest-archive;
         }
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
-          my-crate-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
+          gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
             // {
               inherit cargoArtifacts;
             });
         };
 
       apps.default = flake-utils.lib.mkApp {
-        drv = my-crate;
+        drv = gammaloop;
+      };
+
+      ci = {
+        partitionCount = toString ciPartitionCount;
       };
 
       devShells.default = craneLib.devShell {
-        # Inherit inputs from checks.
         checks = self.checks.${system};
 
-        # Additional dev-shell environment variables can be set directly
-        # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+        GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
 
-        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+        # Mirror the same hard overrides in the interactive shell.
+        CC = nixCc;
+        CXX = nixCxx;
+        "${cargoLinkerVar}" = nixCc;
+        RUSTFLAGS = "-C linker=${nixCc}";
 
-        shellHook =
-          if pkgs.stdenv.isDarwin
-          then ''
-            export CC=gcc
-            export CXX=g++
-            export RUSTFLAGS="$RUSTFLAGS -Clink-arg=${pkgs.gcc.cc.lib}/lib/libgcc_s.1.1.dylib"
+        # Make libpython + libgmp/libmpfr/libmpc visible to:
+        # - target/debug/stub_gen (runtime)
+        # - maturin/auditwheel (wheel repair step)
+        LD_LIBRARY_PATH = runtimeLibPath;
+        DYLD_LIBRARY_PATH = runtimeLibPath;
 
-            # Point the history file to your home directory’s bash history
-            export HISTFILE=~/.bash_history
-
-            # Ensure the history is appended rather than overwritten
-            shopt -s histappend
-
-            # Append each command to the history file immediately
-            export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
-          ''
-          else ''
-          '';
-
-        # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
           tdf
-          # pkgs.ripgrep
-          cargo-udeps
+          cargo-flamegraph
+          yaml-language-server
+          just
+          dot-language-server
           cargo-insta
+          cargo-udeps
+          cargo-machete
           openssl
           pyright
+          gmp
+          mpfr
+          libmpc
+          form
           gnum4
-          gmp.dev
-          mpfr.dev
-          gcc_debug.out
-          stdenv.cc.cc.lib
+          nickel
+          nls
+          typst
+          cargo-nextest
           pkg-config
           cargo-deny
           cargo-edit
           cargo-watch
-          # python311
-          texlive.combined.scheme-medium
+          bacon
+          gfortran
+          gcc
+          rust-script
           uv
-          ghostscript
           graphviz
           mupdf
-          poppler_utils
+          tinymist
+          typstyle
+          poppler-utils
           rust-analyzer
           maturin
           virtualenv
+          (pkgs.rustPlatform.buildRustPackage rec {
+            pname = "clinnet";
+            version = "0.1.8";
+            src = pkgs.fetchCrate {
+              inherit pname version;
+              sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
+            };
+            cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
+          })
+          (pkgs.rustPlatform.buildRustPackage rec {
+            pname = "rscls";
+            version = "0.2.3";
+            src = pkgs.fetchCrate {
+              inherit pname version;
+              sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
+            };
+            cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
+          })
         ];
       };
     });
-
 }

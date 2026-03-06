@@ -1,0 +1,227 @@
+#![allow(dead_code)]
+
+use crate::graph::{Edge, LoopMomentumBasis, Vertex};
+use slotmap::SecondaryMap;
+use std::collections::VecDeque;
+use std::fmt::Write;
+
+use linnet::half_edge::{
+    HedgeGraph,
+    subgraph::{InternalSubGraph, SubSetLike},
+};
+
+// use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
+
+use super::{
+    Forest, Poset, UltravioletGraph,
+    approx::Approximation,
+    poset::{DAG, DagNode, PosetNode},
+};
+
+pub struct Wood {
+    poset: Poset<InternalSubGraph, ()>,
+    pub max_loops: usize,
+    additional_unions: SecondaryMap<PosetNode, Vec<PosetNode>>,
+}
+
+impl Wood {
+    pub(crate) fn n_spinneys(&self) -> usize {
+        self.poset.n_nodes()
+    }
+
+    pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = InternalSubGraph>>(
+        s: I,
+        graph: impl AsRef<HedgeGraph<E, V, H>>,
+    ) -> Self {
+        let mut poset = Poset::from_iter(s.into_iter().map(|s| (s, ())));
+        let ref_graph = graph.as_ref();
+
+        poset.invert();
+        poset.compute_topological_order();
+        let mut max_loops = 0;
+
+        let mut unions = SecondaryMap::new();
+
+        for (i, sg) in poset.nodes.iter() {
+            let cs = ref_graph.connected_components(&sg.data);
+            let nloop = cs.iter().map(|c| ref_graph.cyclotomatic_number(c)).max();
+            if let Some(nloop) = nloop {
+                if nloop > max_loops {
+                    max_loops = nloop;
+                }
+            }
+
+            if cs.len() > 1 {
+                // sg is a disjoint union of spinneys (at the level of half-edges) (strongly disjoint)
+                let mut union = vec![];
+
+                for &c in sg.parents.iter() {
+                    let mut is_in = 0;
+                    for comp in &cs {
+                        let comp =
+                            InternalSubGraph::cleaned_filter_optimist(comp.clone(), ref_graph);
+                        if comp == poset.nodes[c].data {
+                            // find the components in the wood that this union is made of
+                            union.push(c);
+                            is_in += 1;
+                        }
+                    }
+
+                    if is_in > 1 {
+                        panic!("is in too many components")
+                    }
+                }
+
+                unions.insert(i, union.clone());
+                // sg.children = union;
+            }
+        }
+
+        // let coverset = poset.to_cover_set();
+        Wood {
+            max_loops,
+            poset,
+            additional_unions: unions,
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn unfold_bfs<E, V, H, G>(
+        &self,
+        graph: &G,
+        lmb: &LoopMomentumBasis,
+        dag: &mut DAG<Approximation, DagNode, ()>,
+        unions: &mut SecondaryMap<PosetNode, Option<Vec<(PosetNode, Option<DagNode>)>>>,
+        root: PosetNode,
+    ) -> DagNode
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+    {
+        // let graph = graph.as_ref();
+        let mut search_front = VecDeque::new();
+
+        let tree_root = dag.add_node(Approximation::new(
+            self.poset.data(root).clone(),
+            graph,
+            lmb,
+        ));
+        search_front.push_front((root, tree_root));
+
+        while let Some((node, parent)) = search_front.pop_front() {
+            for c in &self.poset.nodes[node].children {
+                if let Some(tagged_union) = unions.get_mut(*c) {
+                    // Is this node a disjoint union of spinneys
+                    if let Some(mut union) = tagged_union.take() {
+                        let mut all_supplied = true;
+                        for (p, d) in &mut union {
+                            if self.poset.nodes[*p].data == self.poset.nodes[node].data {
+                                *d = Some(parent);
+                            }
+                            if d.is_none() {
+                                all_supplied = false;
+                            }
+                        }
+                        if all_supplied {
+                            let child = dag.add_node(Approximation::new(
+                                self.poset.data(*c).clone(),
+                                graph,
+                                lmb,
+                            ));
+                            for (_, d) in union {
+                                dag.add_edge(d.unwrap(), child);
+                            }
+                            search_front.push_front((*c, child));
+                        } else {
+                            *tagged_union = Some(union);
+                        }
+                    }
+                } else {
+                    let child =
+                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph, lmb));
+                    dag.add_edge(parent, child);
+                    search_front.push_front((*c, child));
+                }
+            }
+        }
+        tree_root
+    }
+
+    pub(crate) fn unfold<E, V, H, G>(&self, graph: &G, lmb: &LoopMomentumBasis) -> Forest
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+    {
+        let mut dag: DAG<Approximation, DagNode, ()> = DAG::new();
+
+        let root = self.poset.minimum().unwrap();
+
+        let mut unions = SecondaryMap::new();
+
+        for (p, u) in self.additional_unions.iter() {
+            let union: Vec<(PosetNode, Option<DagNode>)> = u.iter().map(|i| (*i, None)).collect();
+            unions.insert(p, Some(union));
+        }
+
+        let _ = self.unfold_bfs(graph, lmb, &mut dag, &mut unions, root);
+
+        Forest { dag }
+    }
+
+    pub(crate) fn dot(&self, graph: &impl UltravioletGraph) -> String {
+        self.poset.to_dot_impl(&|n| {
+            format!(
+                "label={}, dod={},topo_order = {}",
+                n.data.string_label(),
+                graph.dod(&n.data),
+                // graph.as_ref().count_internal_edges(&n.data),
+                n.order.unwrap()
+            )
+        })
+    }
+
+    pub(crate) fn dot_spinneys<E, V, H, G>(&self, graph: &G) -> String
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+    {
+        let mut out = String::new();
+        for s in self.poset.node_values() {
+            writeln!(
+                out,
+                "found {} loop spinney with dod {}:{} ",
+                graph.n_loops(s),
+                graph.dod(s),
+                graph.as_ref().dot(s)
+            )
+            .unwrap();
+        }
+        out
+    }
+}
+
+impl Wood {
+    pub(crate) fn show_graphs<H, G>(&self, graph: &G) -> String
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
+    {
+        let mut out = String::new();
+        out.push_str("Poset structure:\n");
+        out.push_str(&self.poset.dot_structure());
+
+        out.push_str("Graphs:\n");
+        for (k, n) in self.poset.nodes.iter() {
+            // n.data
+            out.push_str(&graph.as_ref().dot_impl(
+                &n.data,
+                format!(
+                    "dod={};nodeid ={};\n",
+                    graph.dod(&n.data),
+                    self.poset.dot_id(k)
+                ),
+                &|_h| None,
+                &|e| Some(format!("dod={}", e.dod)),
+                &|n| Some(format!("dod={}", n.dod)),
+            ));
+            out.push('\n');
+        }
+        out
+    }
+}

@@ -1,161 +1,40 @@
-[package]
-name = "gammalooprs"
-version = "0.3.3"
-edition = "2021"
-authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
-categories = ["science"]
-description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
-keywords = ["loop", "cross-section", "perturbative", "physics"]
-license-file = "LICENSE.md"
-readme = "README.md"
-repository = "https://github.com/alphal00p/gammaloop"
 
-[profile.dev-optim]
-inherits = "dev"
-opt-level = 2
-#lto=true
+
+[workspace]
+members = ["crates/*", "tests"]
+default-members = ["crates/gammaloop-api"]
+resolver = "2"
+
+[patch.crates-io]
+symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "406272c24bcb5bde5551d7d29620459e0671c82e" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
+vakint = { git = "https://github.com/alphal00p/vakint", rev = "bf91ee57aa62604c7ae3fb919203bf6f09544470" }
+
 
 [profile.bench]
-lto = "fat"
 opt-level = 3
+lto = "fat"
 
-[[bench]]
-name = "cff_scalar"
+[profile.dev.package]
+insta.opt-level = 3
 
-harness = false
-
-[[bench]]
-name = "three_loop_photon"
-harness = false
-
-[[bench]]
-name = "polarization"
-
-harness = false
 
 [profile.release]
 lto = "fat"
 
-[dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+[profile.dev-optim]
+inherits = "dev"
+opt-level = 2
+# lto=true
 
-[profile.dev.package]
-insta.opt-level = 3
-similar.opt-level = 3
-
-[dependencies]
-# These will be patched
-symbolica = { version = "0.14.0" }
-
-spenso = { version = "0.4.0", features = ["shadowing"] }
-linnet = { version = "0.2.0", features = [
-    # "symbolica",
-    "drawing",
-] }
-
-
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
-    "log",
-], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "*"
-bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [
-    "serde",
-] }
-clap = "2.34"
-color-eyre = { version = "^0.3", default-features = false }
-eyre = "^0.4"
-lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = "hyperdual", features = [
-    "serde_support",
-    "hyperdual_support",
-] }
-hyperdual = { git = "https://gitlab.com/benruijl/hyperdual.git" }
-rand = { version = "0.8", features = ["small_rng"] }
-rayon = "1.5"
-tabled = "0.7"
-indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
-
-enum_dispatch = "*"
-git-version = "0.3"
-colored = "*"
-libc = "0.2.0"
-statrs = "0.16.0"
-smallvec = { version = "1.7", features = ["const_generics", "serde"] }
-itertools = "0.8"
-smartstring = { version = "*", features = ["serde"] }
-log = { version = "*", features = ["release_max_level_debug"] }
-env_logger = "*"
-pyo3-log = { version = "0.11.0", optional = true }
-nalgebra = "0.32.3"
-rug = { version = "1.22.0", features = ["serde"] }
-clarabel = "0"
-petgraph = "0.6.4"
-indexmap = "2.2.2"
-vectorize = "0.2.0"
-ahash = { version = "0.8.8", features = ["serde"] }
-# num = { version = "0.4.1", features = ["serde"] }
-pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
-derive_more = "0.99.17"
-serde_json = "1.0.115"
-ctrlc = "3.4.4"
-# constcat = "0.5.0"
-ref-ops = "0.2.5"
-delegate = "0.12.0"
-typed-index-collections = { version = "3.1.0", features = [
-    "serde",
-    "serde-alloc",
-] }
-gat-lending-iterator = "0.1.5"
-# gxhash = "3.4.1"
-thiserror = "1.0.63"
-serde_repr = "0.1.19"
-compensated-summation = "0.3.0"
-uuid = { version = "1.10.0", features = ["serde", "v4"] }
-serde_with = "3.9.0"
-insta = { version = "1.40.0", features = ["ron", "toml"] }
-bitvec = { version = "1.0.1", features = ["serde"] }
-# pathfinding = "4.11.0"
-brotli = "7.0.0"
-# cgmath = "0.18.0"
-# argmin = "0.10.0"
-# by_address = "1.2.1"
-pyo3-pylogger = { version = "0.3.0", optional = true }
-fern = "0.7.1"
-# humantime = "2.1.0"
-chrono = "0.4.39"
-
-[dependencies.pyo3]
-features = ["abi3", "abi3-py37"]
-optional = true
-version = "0.21"
-
-[build-dependencies]
-pyo3-build-config = "*"
-
-[lib]
-crate-type = ["cdylib", "lib"]
-name = "_gammaloop"
-# required-features = ["python_api"]
-bench = false
-[[bin]]
-name = "cli"
-# required-features = ["binary"]
-bench = false
-[features]
-default = ["python_api"]
-extension-module = ["pyo3/extension-module"]
-higher_loops = []
-fjcore = []
-
-python_api = ["pyo3", "extension-module", "pyo3-log", "pyo3-pylogger"]
-binary = []
-fail-on-warnings = []
-no_python = []
-# insta.opt-level = 3
-
-[patch.crates-io]
-symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "47a35775325a4d061af05e2fc00904b221d8bf83" }
-# spenso = { path = "../spenso" }
-[patch."https://github.com/alphal00p/linnet"]
-# linnet = { path = "../../linnet" }
+[profile.profiling]
+inherits = "release"
+opt-level = 3
+debug = true
+lto = "fat"

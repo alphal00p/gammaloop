@@ -1,0 +1,26 @@
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/HEAD/assets/schemas/runhistory.json
+[default_runtime_settings.kinematics]
+e_cm = 100.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    [
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+],
+    "dependent",
+]
+helicities = [
+    1,
+    -1,
+]
+
+[[commands]]
+
+[commands.Set.Global]
+input = "Stored"

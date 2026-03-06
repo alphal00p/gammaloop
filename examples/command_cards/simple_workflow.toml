@@ -1,0 +1,51 @@
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/HEAD/assets/schemas/runhistory.json
+
+# Simple GammaLoop workflow example
+# This file demonstrates basic commands for loading a model,
+# generating processes, and performing computations
+
+commands = [
+    # Load the Standard Model
+    "import model sm-default",
+
+    # Display available processes (should be empty initially)
+    "display processes",
+
+    # Generate a simple QED process: electron-positron to muon pair
+    "generate amplitude e+ e- > mu+ mu- QED=2",
+
+    # Display the generated processes
+    "display processes",
+
+    # Save Feynman diagrams as DOT files for visualization
+    "save dot ee_to_mumu_diagrams",
+
+    # Generate a more complex process with QCD corrections
+    "generate xs e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping",
+
+    # Display all processes again
+    "display processes",
+
+    # Save all diagrams
+    "save dot all_processes"
+]
+
+# Default CLI settings for this workflow
+[cli_settings]
+state_folder = "./example_state"
+
+[cli_settings.global]
+logfile_directive = "info"
+display_directive = "info"
+
+# Default runtime settings for integration
+[default_runtime_settings.general]
+m_uv = 1.0
+mu_r_sq = 91.1876  # Z boson mass squared
+
+[default_runtime_settings.kinematics]
+e_cm = 91.1876  # Center of mass energy (Z resonance)
+
+[default_runtime_settings.integrator]
+n_max = 1000000
+max_prob_ratio = 0.01

@@ -1,0 +1,57 @@
+global_settings:
+  stderr_directive: Debug
+  generation:
+    evaluator:
+      compile: true
+default_runtime_settings:
+  Kinematics:
+    e_cm: 64.0
+    externals:
+      type: constant
+      data:
+        momenta:
+          - dependent
+          - - 1.0
+            - 0.0
+            - 0.0
+            - 1.0
+          - - 1.0
+            - 0.0
+            - 0.0
+            - -1.0
+          - - 0.9903067841547669
+            - 0.3734458315384239
+            - 0.6393671561700484
+            - -0.657613394982612
+          - - 0.2053558277500182
+            - -0.1412408546154445
+            - -0.0869119059139323
+            - 0.121112995127698
+        helicities:
+          - 1
+          - 1
+          - -1
+          - -1
+          - -1
+  stability:
+    check_on_norm: true
+  subtraction:
+    disable_threshold_subtraction: true
+commands:
+#   - Import:
+#       Model:
+#         path: ../../crates/gammalooprs/src/test_resources/gammaloop_models/sm.yaml
+
+#   - Import:
+#       Amplitude:
+#         path: ./qqx_aaa_tree_user_numerator.dot
+#   - Generate: {}
+#   - Inspect:
+#       process_id: 0
+#       process_name: qqx_aaa_tree_user_numerator
+#       point: []
+#       use_f128: false
+#       force_radius: false
+#       momentum_space: false
+#       discrete_dim:
+#         - 0

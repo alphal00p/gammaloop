@@ -1,0 +1,2098 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunHistory",
+  "type": "object",
+  "properties": {
+    "commands": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CommandHistory"
+      }
+    },
+    "default_runtime_settings": {
+      "$ref": "#/$defs/RuntimeSettings"
+    },
+    "cli_settings": {
+      "$ref": "#/$defs/GlobalSettings"
+    }
+  },
+  "required": ["default_runtime_settings", "cli_settings", "commands"],
+  "$defs": {
+    "AFBSettings": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "n_bins": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "write_to_file": {
+          "type": "boolean"
+        },
+        "x_max": {
+          "type": "number",
+          "format": "double"
+        },
+        "x_min": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": ["x_min", "x_max", "n_bins", "write_to_file", "filename"]
+    },
+    "CommandHistory": {
+      "description": "Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data.",
+      "type": "object",
+      "properties": {
+        "command": {
+          "description": "The parsed command",
+          "$ref": "#/$defs/Commands"
+        },
+        "raw_string": {
+          "description": "The original string representation of the command, if available",
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["command"]
+    },
+    "Commands": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Display": {
+              "$ref": "#/$defs/Display"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Display"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Set": {
+              "$ref": "#/$defs/Set"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Set"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Import": {
+              "$ref": "#/$defs/Import"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Import"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Save": {
+              "$ref": "#/$defs/Save"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Save"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Run": {
+              "$ref": "#/$defs/Run"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Run"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Integrate": {
+              "$ref": "#/$defs/Integrate"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Integrate"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Generate": {
+              "$ref": "#/$defs/Generate"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Generate"]
+        },
+        {
+          "description": "Quit gammaloop",
+          "type": "object",
+          "properties": {
+            "Quit": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Quit"]
+        },
+        {
+          "description": "Inspect a single phase‑space point / momentum configuration",
+          "type": "object",
+          "properties": {
+            "Inspect": {
+              "$ref": "#/$defs/Inspect"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Inspect"]
+        },
+        {
+          "description": "Benchmark raw integrand evaluation speed",
+          "type": "object",
+          "properties": {
+            "Bench": {
+              "type": "object",
+              "properties": {
+                "n_cores": {
+                  "description": "Number of cores to parallelize over",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "process_id": {
+                  "description": "The process id to inspect",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                },
+                "process_name": {
+                  "description": "The name of the process to inspect",
+                  "type": "string"
+                },
+                "samples": {
+                  "description": "Number of random samples to evaluate",
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "required": ["samples", "process_id", "process_name", "n_cores"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Bench"]
+        },
+        {
+          "description": "HPC batch evaluation branch",
+          "type": "object",
+          "properties": {
+            "Batch": {
+              "type": "object",
+              "properties": {
+                "batch_input_file": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "output_name": {
+                  "type": "string"
+                },
+                "process_file": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "process_file",
+                "batch_input_file",
+                "name",
+                "output_name"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Batch"]
+        }
+      ]
+    },
+    "CompilationOptimizationLevel": {
+      "type": "string",
+      "enum": ["O0", "O1", "O2", "O3"]
+    },
+    "Dep": {
+      "type": "string",
+      "enum": ["dependent"]
+    },
+    "DiscreteGraphSamplingType": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "b": {
+              "type": "number",
+              "format": "double"
+            },
+            "input_rescaling": {
+              "description": "todo make proper type for this object",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    {
+                      "type": "number",
+                      "format": "double"
+                    }
+                  ]
+                }
+              }
+            },
+            "mapping": {
+              "$ref": "#/$defs/ParameterizationMapping"
+            },
+            "mode": {
+              "$ref": "#/$defs/ParameterizationMode"
+            },
+            "shifts": {
+              "description": "todo make proper type for this object",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  {
+                    "type": "number",
+                    "format": "double"
+                  }
+                ]
+              }
+            },
+            "subtype": {
+              "type": "string",
+              "const": "default"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["subtype"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "alpha": {
+              "type": "number",
+              "format": "double"
+            },
+            "parameterization_settings": {
+              "$ref": "#/$defs/ParameterizationSettings"
+            },
+            "subtype": {
+              "type": "string",
+              "const": "multi_channeling"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["subtype"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "alpha": {
+              "type": "number",
+              "format": "double"
+            },
+            "parameterization_settings": {
+              "$ref": "#/$defs/ParameterizationSettings"
+            },
+            "subtype": {
+              "type": "string",
+              "const": "discrete_multi_channeling"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["subtype"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "matrix_stability_test": {
+              "type": ["number", "null"],
+              "format": "double"
+            },
+            "subtype": {
+              "type": "string",
+              "const": "tropical"
+            },
+            "upcast_on_failure": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["subtype"]
+        }
+      ]
+    },
+    "Display": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["Model", "Processes"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Integrands": {
+              "type": "object",
+              "properties": {
+                "process_id": {
+                  "type": "integer",
+                  "format": "uint",
+                  "minimum": 0
+                }
+              },
+              "required": ["process_id"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Integrands"]
+        }
+      ]
+    },
+    "EvaluatorSettings": {
+      "type": "object",
+      "properties": {
+        "compile": {
+          "type": "boolean"
+        },
+        "iterative_orientation_optimization": {
+          "type": "boolean"
+        }
+      }
+    },
+    "ExternalMomenta": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Dep"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/F"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        }
+      ]
+    },
+    "Externals": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "helicities": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/SignOrZero"
+                  }
+                },
+                "momenta": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/ExternalMomenta"
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "required": ["momenta", "helicities"]
+            },
+            "type": {
+              "type": "string",
+              "const": "constant"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "data"]
+        }
+      ]
+    },
+    "F": {
+      "type": "number",
+      "format": "double"
+    },
+    "FilterQuantity": {
+      "type": "string",
+      "enum": ["E", "CosTheta", "PT"]
+    },
+    "GammaloopCompileOptions": {
+      "type": "object",
+      "properties": {
+        "compiler": {
+          "type": "string"
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fast_math": {
+          "type": "boolean"
+        },
+        "inline_asm": {
+          "type": "boolean"
+        },
+        "optimization_level": {
+          "$ref": "#/$defs/CompilationOptimizationLevel"
+        },
+        "unsafe_math": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GeneralSettings": {
+      "type": "object",
+      "properties": {
+        "enable_cache": {
+          "type": "boolean"
+        },
+        "load_compiled_cff": {
+          "type": "boolean"
+        },
+        "m_uv": {
+          "type": "number",
+          "format": "double"
+        },
+        "mu_r_sq": {
+          "type": "number",
+          "format": "double"
+        },
+        "orientation_pat": {
+          "$ref": "#/$defs/OrientationPattern"
+        },
+        "use_ltd": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Generate": {
+      "description": "Generate integrands",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GenerateCmd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "GenerateCmd": {
+      "description": "Generate integrands",
+      "oneOf": [
+        {
+          "description": "Cross-section (forward-scattering) generation",
+          "type": "object",
+          "properties": {
+            "Xs": {
+              "$ref": "#/$defs/SpecArgs"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Xs"]
+        },
+        {
+          "description": "Amplitude generation",
+          "type": "object",
+          "properties": {
+            "Amp": {
+              "$ref": "#/$defs/SpecArgs"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Amp"]
+        },
+        {
+          "description": "Reuse an already generated process",
+          "type": "object",
+          "properties": {
+            "Existing": {
+              "$ref": "#/$defs/ProcessArgs"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Existing"]
+        }
+      ]
+    },
+    "GenerationSettings": {
+      "type": "object",
+      "properties": {
+        "enable_thresholds": {
+          "type": "boolean"
+        },
+        "evaluator": {
+          "$ref": "#/$defs/EvaluatorSettings"
+        },
+        "compile": {
+          "$ref": "#/$defs/GammaloopCompileOptions"
+        },
+        "orientation_pattern": {
+          "$ref": "#/$defs/OrientationPattern"
+        },
+        "tropical_subgraph_table": {
+          "$ref": "#/$defs/TropicalSubgraphTableSettings"
+        },
+        "uv": {
+          "$ref": "#/$defs/UVgenerationSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GlobalSettings": {
+      "type": "object",
+      "properties": {
+        "generation": {
+          "$ref": "#/$defs/GenerationSettings"
+        },
+        "log_file_directive": {
+          "type": "string"
+        },
+        "stderr_directive": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GroupingChoice": {
+      "type": "string",
+      "enum": [
+        "NoGrouping",
+        "OnlyDetectZeroes",
+        "GroupIdenticalGraphsUpToSign",
+        "GroupIdenticalGraphsUpToScalarRescaling"
+      ]
+    },
+    "HFunction": {
+      "type": "string",
+      "enum": [
+        "poly_exponential",
+        "exponential",
+        "poly_left_right_exponential",
+        "exponential_ct"
+      ]
+    },
+    "HFunctionSettings": {
+      "type": "object",
+      "properties": {
+        "enabled_dampening": {
+          "type": "boolean"
+        },
+        "function": {
+          "$ref": "#/$defs/HFunction"
+        },
+        "power": {
+          "type": ["integer", "null"],
+          "format": "uint",
+          "minimum": 0
+        },
+        "sigma": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HFunctionTestSettings": {
+      "type": "object",
+      "properties": {
+        "h_function": {
+          "$ref": "#/$defs/HFunctionSettings"
+        }
+      },
+      "required": ["h_function"]
+    },
+    "Import": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Model": {
+              "$ref": "#/$defs/ImportModel"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Model"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Amplitude": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": ["path"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Amplitude"]
+        }
+      ]
+    },
+    "ImportModel": {
+      "description": "Generate integrands",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "simplify_model": {
+          "type": "boolean"
+        }
+      },
+      "required": ["path", "simplify_model"]
+    },
+    "Inspect": {
+      "type": "object",
+      "properties": {
+        "discrete_dim": {
+          "description": "The discrete dimensions of the sample",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "force_radius": {
+          "description": "Force the radius in the parameterisation",
+          "type": "boolean"
+        },
+        "integrand_name": {
+          "description": "The name of the process to inspect",
+          "type": "string"
+        },
+        "momentum_space": {
+          "description": "Interpret point as momentum‑space coordinates",
+          "type": "boolean"
+        },
+        "point": {
+          "description": "The point to inspect (x y) or (p0 px ...)",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "process_id": {
+          "description": "The process id to inspect",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "use_f128": {
+          "description": "Evaluate in f128 precision",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "process_id",
+        "integrand_name",
+        "point",
+        "use_f128",
+        "force_radius",
+        "momentum_space",
+        "discrete_dim"
+      ]
+    },
+    "IntegrandSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "unit_surface"
+            }
+          },
+          "$ref": "#/$defs/UnitSurfaceSettings",
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "unit_volume"
+            }
+          },
+          "$ref": "#/$defs/UnitVolumeSettings",
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "h_function_test"
+            }
+          },
+          "$ref": "#/$defs/HFunctionTestSettings",
+          "required": ["type"]
+        }
+      ]
+    },
+    "Integrate": {
+      "type": "object",
+      "properties": {
+        "integrand_name": {
+          "description": "The name of the process to inspect",
+          "type": "string"
+        },
+        "n_cores": {
+          "description": "Number of cores to parallelize over",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "process_id": {
+          "description": "The process id to inspect",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "restart": {
+          "description": "Whether to restart the integration from scratch, or continue from a previous run if possible",
+          "type": "boolean"
+        },
+        "result_path": {
+          "description": "The path to store results in",
+          "type": "string"
+        },
+        "target": {
+          "description": "Specify the target integration result to compare against",
+          "type": ["array", "null"],
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "workspace_path": {
+          "description": "The path to run the integrationg within",
+          "type": "string"
+        }
+      },
+      "required": [
+        "process_id",
+        "integrand_name",
+        "result_path",
+        "n_cores",
+        "workspace_path",
+        "restart"
+      ]
+    },
+    "IntegratedCounterTermRange": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "h_function_settings": {
+              "$ref": "#/$defs/HFunctionSettings"
+            },
+            "type": {
+              "type": "string",
+              "const": "infinite"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "h_function_settings"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "compact"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        }
+      ]
+    },
+    "IntegratedCounterTermSettings": {
+      "type": "object",
+      "properties": {
+        "range": {
+          "$ref": "#/$defs/IntegratedCounterTermRange"
+        }
+      },
+      "additionalProperties": false
+    },
+    "IntegratedPhase": {
+      "type": "string",
+      "enum": ["real", "imag", "both"]
+    },
+    "IntegratorSettings": {
+      "type": "object",
+      "properties": {
+        "bin_number_evolution": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "continuous_dim_learning_rate": {
+          "type": "number",
+          "format": "double"
+        },
+        "discrete_dim_learning_rate": {
+          "type": "number",
+          "format": "double"
+        },
+        "integrated_phase": {
+          "$ref": "#/$defs/IntegratedPhase"
+        },
+        "max_prob_ratio": {
+          "type": "number",
+          "format": "double"
+        },
+        "min_samples_for_update": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_bins": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_increase": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_max": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "n_start": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "seed": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "show_max_wgt_info": {
+          "type": "boolean"
+        },
+        "train_on_avg": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Jet1PTSettings": {
+      "type": "object",
+      "properties": {
+        "dR": {
+          "type": "number",
+          "format": "double"
+        },
+        "filename": {
+          "type": "string"
+        },
+        "min_jpt": {
+          "type": "number",
+          "format": "double"
+        },
+        "n_bins": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "use_fastjet": {
+          "type": "boolean"
+        },
+        "write_to_file": {
+          "type": "boolean"
+        },
+        "x_max": {
+          "type": "number",
+          "format": "double"
+        },
+        "x_min": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": [
+        "x_min",
+        "x_max",
+        "dR",
+        "min_jpt",
+        "n_bins",
+        "write_to_file",
+        "filename",
+        "use_fastjet"
+      ]
+    },
+    "JetSliceSettings": {
+      "type": "object",
+      "properties": {
+        "dR": {
+          "type": "number",
+          "format": "double"
+        },
+        "max_j1pt": {
+          "type": "number",
+          "format": "double"
+        },
+        "max_jets": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_j1pt": {
+          "type": "number",
+          "format": "double"
+        },
+        "min_jets": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_jpt": {
+          "type": "number",
+          "format": "double"
+        },
+        "use_fastjet": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "min_jets",
+        "max_jets",
+        "min_j1pt",
+        "max_j1pt",
+        "dR",
+        "min_jpt",
+        "use_fastjet"
+      ]
+    },
+    "KinematicsSettings": {
+      "type": "object",
+      "properties": {
+        "e_cm": {
+          "type": "number",
+          "format": "double"
+        },
+        "externals": {
+          "$ref": "#/$defs/Externals"
+        }
+      },
+      "additionalProperties": false
+    },
+    "KvPair": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": ["key", "value"]
+    },
+    "LocalCounterTermSettings": {
+      "type": "object",
+      "properties": {
+        "uv_localisation": {
+          "$ref": "#/$defs/UVLocalisationSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ObservableSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "jet1pt"
+            }
+          },
+          "$ref": "#/$defs/Jet1PTSettings",
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "one_particle_obs"
+            }
+          },
+          "$ref": "#/$defs/SingleParticleObservableSettings",
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "AFB"
+            }
+          },
+          "$ref": "#/$defs/AFBSettings",
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cross_section"
+            }
+          },
+          "required": ["type"]
+        }
+      ]
+    },
+    "OrientationPattern": {
+      "type": "object",
+      "properties": {
+        "pat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParseableAtom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "OverlapSettings": {
+      "type": "object",
+      "properties": {
+        "check_global_center": {
+          "type": "boolean"
+        },
+        "force_global_center": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "maxItems": 3,
+            "minItems": 3
+          }
+        },
+        "try_origin": {
+          "type": "boolean"
+        },
+        "try_origin_all_lmbs": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParameterizationMapping": {
+      "type": "string",
+      "enum": ["log", "linear"]
+    },
+    "ParameterizationMode": {
+      "type": "string",
+      "enum": [
+        "cartesian",
+        "spherical",
+        "hyperspherical",
+        "hyperspherical_flat"
+      ]
+    },
+    "ParameterizationSettings": {
+      "type": "object",
+      "properties": {
+        "b": {
+          "type": "number",
+          "format": "double"
+        },
+        "input_rescaling": {
+          "description": "todo make proper type for this object",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number",
+                  "format": "double"
+                },
+                {
+                  "type": "number",
+                  "format": "double"
+                }
+              ]
+            }
+          }
+        },
+        "mapping": {
+          "$ref": "#/$defs/ParameterizationMapping"
+        },
+        "mode": {
+          "$ref": "#/$defs/ParameterizationMode"
+        },
+        "shifts": {
+          "description": "todo make proper type for this object",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              },
+              {
+                "type": "number",
+                "format": "double"
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParseableAtom": {
+      "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
+      "type": ["string"]
+    },
+    "PhaseSpaceSelectorSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "jet"
+            }
+          },
+          "$ref": "#/$defs/JetSliceSettings",
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "ranged"
+            }
+          },
+          "$ref": "#/$defs/RangeFilterSettings",
+          "required": ["type"]
+        }
+      ]
+    },
+    "Precision": {
+      "type": "string",
+      "enum": ["Double", "Quad", "Arb"]
+    },
+    "ProcessArgs": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Optional human name",
+          "type": ["string", "null"]
+        },
+        "process_id": {
+          "description": "Stored process ID",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": ["process_id"]
+    },
+    "RangeFilterSettings": {
+      "type": "object",
+      "properties": {
+        "filter": {
+          "$ref": "#/$defs/FilterQuantity"
+        },
+        "max_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "min_value": {
+          "type": "number",
+          "format": "double"
+        },
+        "pdgs": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int"
+          }
+        }
+      },
+      "required": ["pdgs", "filter", "min_value", "max_value"]
+    },
+    "RotationSetting": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "x"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "y"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "z"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "none"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "alpha": {
+              "type": "number",
+              "format": "double"
+            },
+            "beta": {
+              "type": "number",
+              "format": "double"
+            },
+            "gamma": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "euler_angles"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type", "alpha", "beta", "gamma"]
+        }
+      ]
+    },
+    "Run": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "description": "Path to a run file to execute",
+          "type": "string"
+        }
+      },
+      "required": ["path"]
+    },
+    "RuntimeSettings": {
+      "type": "object",
+      "properties": {
+        "General": {
+          "$ref": "#/$defs/GeneralSettings"
+        },
+        "Integrand": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IntegrandSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "Integrator": {
+          "$ref": "#/$defs/IntegratorSettings"
+        },
+        "Kinematics": {
+          "$ref": "#/$defs/KinematicsSettings"
+        },
+        "Observables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ObservableSettings"
+          }
+        },
+        "Selectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PhaseSpaceSelectorSettings"
+          }
+        },
+        "stability": {
+          "$ref": "#/$defs/stabilitySettings"
+        },
+        "sampling": {
+          "$ref": "#/$defs/SamplingSettings"
+        },
+        "subtraction": {
+          "$ref": "#/$defs/SubtractionSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SamplingSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "b": {
+              "type": "number",
+              "format": "double"
+            },
+            "input_rescaling": {
+              "description": "todo make proper type for this object",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number",
+                      "format": "double"
+                    },
+                    {
+                      "type": "number",
+                      "format": "double"
+                    }
+                  ]
+                }
+              }
+            },
+            "mapping": {
+              "$ref": "#/$defs/ParameterizationMapping"
+            },
+            "mode": {
+              "$ref": "#/$defs/ParameterizationMode"
+            },
+            "shifts": {
+              "description": "todo make proper type for this object",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  {
+                    "type": "number",
+                    "format": "double"
+                  }
+                ]
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "default"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "alpha": {
+              "type": "number",
+              "format": "double"
+            },
+            "parameterization_settings": {
+              "$ref": "#/$defs/ParameterizationSettings"
+            },
+            "type": {
+              "type": "string",
+              "const": "multi_channeling"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sample_orientations": {
+              "type": "boolean"
+            },
+            "sampling_type": {
+              "$ref": "#/$defs/DiscreteGraphSamplingType"
+            },
+            "type": {
+              "type": "string",
+              "const": "discrete_graph_sampling"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["type"]
+        }
+      ]
+    },
+    "Save": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Dot": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": ["string", "null"]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Dot"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "State": {
+              "type": "object",
+              "properties": {
+                "no_skip_default": {
+                  "description": "Do not skip fields that are default",
+                  "type": "boolean"
+                },
+                "path": {
+                  "description": "Path to save the state to, by default is the current state folder",
+                  "type": ["string", "null"]
+                }
+              },
+              "required": ["no_skip_default"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["State"]
+        },
+        {
+          "description": "regenerate the schema files",
+          "type": "object",
+          "properties": {
+            "Schema": {
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Schema"]
+        }
+      ]
+    },
+    "Set": {
+      "oneOf": [
+        {
+          "description": "Set the base directory for gammaloop state and logs",
+          "type": "object",
+          "properties": {
+            "BaseDir": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": ["path"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["BaseDir"]
+        },
+        {
+          "description": "Set GLOBAL settings",
+          "type": "object",
+          "properties": {
+            "Global": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/SetArgs"
+                }
+              },
+              "required": ["input"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Global"]
+        },
+        {
+          "description": "Set DEFAULT RUNTIME settings",
+          "type": "object",
+          "properties": {
+            "DefaultRuntime": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/SetArgs"
+                }
+              },
+              "required": ["input"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["DefaultRuntime"]
+        },
+        {
+          "description": "Set settings for a PROCESS",
+          "type": "object",
+          "properties": {
+            "Process": {
+              "type": "object",
+              "properties": {
+                "input": {
+                  "$ref": "#/$defs/SetArgs"
+                },
+                "process": {
+                  "$ref": "#/$defs/ProcessArgs"
+                }
+              },
+              "required": ["input", "process"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Process"]
+        }
+      ]
+    },
+    "SetArgs": {
+      "oneOf": [
+        {
+          "description": "Load from a settings file",
+          "type": "object",
+          "properties": {
+            "File": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "string"
+                }
+              },
+              "required": ["file"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["File"]
+        },
+        {
+          "description": "Set one or more dotted key-paths",
+          "type": "object",
+          "properties": {
+            "Kv": {
+              "type": "object",
+              "properties": {
+                "pairs": {
+                  "description": "Any number of KEY=VALUE pairs",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/KvPair"
+                  }
+                }
+              },
+              "required": ["pairs"]
+            }
+          },
+          "additionalProperties": false,
+          "required": ["Kv"]
+        },
+        {
+          "description": "Use the stored settings file",
+          "type": "string",
+          "const": "Stored"
+        }
+      ]
+    },
+    "SignOrZero": {
+      "type": "string",
+      "enum": ["Zero", "Plus", "Minus"]
+    },
+    "SingleParticleObservableSettings": {
+      "type": "object",
+      "properties": {
+        "filename": {
+          "type": "string"
+        },
+        "log_obs": {
+          "type": "boolean",
+          "default": false
+        },
+        "log_x_axis": {
+          "type": "boolean",
+          "default": false
+        },
+        "log_y_axis": {
+          "type": "boolean",
+          "default": true
+        },
+        "n_bins": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "pdgs": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "int"
+          }
+        },
+        "quantity": {
+          "$ref": "#/$defs/FilterQuantity"
+        },
+        "write_to_file": {
+          "type": "boolean",
+          "default": true
+        },
+        "x_max": {
+          "type": "number",
+          "format": "double"
+        },
+        "x_min": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "required": ["x_min", "x_max", "n_bins", "filename", "pdgs", "quantity"]
+    },
+    "SpecArgs": {
+      "type": "object",
+      "properties": {
+        "allow_symmetrization_of_external_fermions_in_amplitudes": {
+          "description": "Symmetrization (Option<bool> for smart defaults depending on generation type)",
+          "type": ["boolean", "null"]
+        },
+        "amplitude": {
+          "description": "Treat the process as an amplitude (otherwise as cross-section/forward).",
+          "type": "boolean"
+        },
+        "clear_existing_processes": {
+          "description": "Clear pre-existing processes",
+          "type": "boolean"
+        },
+        "compare_canonized_numerator": {
+          "type": ["boolean", "null"]
+        },
+        "consider_internal_masses_only_in_numerator_isomorphisms": {
+          "type": ["boolean", "null"]
+        },
+        "filter_cross_section_tadpoles": {
+          "description": "Cross-section tadpole filtering when sewing",
+          "type": ["boolean", "null"]
+        },
+        "filter_self_loop": {
+          "description": "Filter self-loop (explicit; default false)",
+          "type": ["boolean", "null"]
+        },
+        "filter_selfenergies": {
+          "description": "Topology filters (Option<bool> to enable smart defaults)",
+          "type": ["boolean", "null"]
+        },
+        "filter_snails": {
+          "type": ["boolean", "null"]
+        },
+        "filter_tadpoles": {
+          "type": ["boolean", "null"]
+        },
+        "fully_numerical_substitution_when_comparing_numerators": {
+          "type": ["boolean", "null"]
+        },
+        "graph_prefix": {
+          "description": "Graph name prefix",
+          "type": ["string", "null"]
+        },
+        "loop_momentum_bases": {
+          "description": "Graph processing toggles\n\nFormat:\n  --loop-momentum-bases \"GL_12=p1,p2;GL_77=q1,q2\"\n  --select-graphs \"GL_12,GL_13\"\n  --veto-graphs \"GL_11,GL_15\"",
+          "type": ["string", "null"]
+        },
+        "max_multiplicity_for_fast_cut_filter": {
+          "description": "Fast cut filter switch multiplicity",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "max_n_bridges": {
+          "description": "Extra filters / constraints",
+          "type": ["integer", "null"],
+          "format": "int32"
+        },
+        "n_cut_blobs": {
+          "description": "Cut options (cross-section)\nRange of cut blobs on either side of the cut",
+          "type": ["array", "null"],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "n_cut_spectators": {
+          "description": "Range of cut spectators on either side of the cut",
+          "type": ["array", "null"],
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "num_threads": {
+          "description": "Number of threads",
+          "type": ["integer", "null"],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "number_of_factorized_loop_subtopologies": {
+          "type": ["integer", "null"],
+          "format": "int32"
+        },
+        "number_of_fermion_loops": {
+          "description": "Number of closed fermion loops; negative disables",
+          "type": ["integer", "null"],
+          "format": "int32"
+        },
+        "number_of_samples_for_numerator_comparisons": {
+          "type": ["integer", "null"],
+          "format": "uint",
+          "minimum": 0
+        },
+        "numerator_aware_isomorphism_grouping": {
+          "description": "Numerator-aware grouping choice",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupingChoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "numerical_samples_seed": {
+          "description": "Grouping attributes",
+          "type": ["integer", "null"],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
+        "select_graphs": {
+          "type": ["string", "null"]
+        },
+        "symmetrize_final_states": {
+          "type": ["boolean", "null"]
+        },
+        "symmetrize_initial_states": {
+          "type": ["boolean", "null"]
+        },
+        "symmetrize_left_right_states": {
+          "type": ["boolean", "null"]
+        },
+        "tokens": {
+          "description": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]`\nAlso accepts: `INITIAL > FINAL [ ... ]`\n\nExamples:\n  e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2\n  e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes:\n- `veto` and `only` are synonyms for `/` and `|`.\n- The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "veto_graphs": {
+          "type": ["string", "null"]
+        },
+        "veto_only_scaleless_self_energy": {
+          "type": ["boolean", "null"]
+        },
+        "veto_only_scaleless_snails": {
+          "type": ["boolean", "null"]
+        },
+        "veto_only_scaleless_tadpoles": {
+          "type": ["boolean", "null"]
+        },
+        "veto_self_energy_of_massive_lines": {
+          "description": "Self-energy veto details",
+          "type": ["boolean", "null"]
+        },
+        "veto_self_energy_of_massless_lines": {
+          "type": ["boolean", "null"]
+        },
+        "veto_snails_attached_to_massive_lines": {
+          "description": "Snail veto details",
+          "type": ["boolean", "null"]
+        },
+        "veto_snails_attached_to_massless_lines": {
+          "type": ["boolean", "null"]
+        },
+        "veto_tadpoles_attached_to_massive_lines": {
+          "description": "Tadpole veto details",
+          "type": ["boolean", "null"]
+        },
+        "veto_tadpoles_attached_to_massless_lines": {
+          "type": ["boolean", "null"]
+        }
+      },
+      "required": [
+        "tokens",
+        "amplitude",
+        "clear_existing_processes",
+        "max_multiplicity_for_fast_cut_filter"
+      ]
+    },
+    "StabilityLevelSetting": {
+      "type": "object",
+      "properties": {
+        "escalate_for_large_weight_threshold": {
+          "type": "number",
+          "format": "double"
+        },
+        "precision": {
+          "$ref": "#/$defs/Precision"
+        },
+        "required_precision_for_im": {
+          "type": "number",
+          "format": "double"
+        },
+        "required_precision_for_re": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "precision",
+        "required_precision_for_re",
+        "required_precision_for_im",
+        "escalate_for_large_weight_threshold"
+      ]
+    },
+    "StabilityRecordingSettings": {
+      "type": "object",
+      "properties": {
+        "record_rotated_results": {
+          "type": "boolean"
+        },
+        "record_all_stability_levels": {
+          "type": "boolean"
+        },
+        "record_loop_momenta_escalation": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StabilitySettings": {
+      "type": "object",
+      "properties": {
+        "check_on_norm": {
+          "type": "boolean"
+        },
+        "escalate_if_exact_zero": {
+          "type": "boolean"
+        },
+        "loop_momenta_norm_escalation_factor": {
+          "type": "number",
+          "format": "double"
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StabilityLevelSetting"
+          }
+        },
+        "rotate_numerator": {
+          "type": "boolean"
+        },
+        "recording": {
+          "$ref": "#/$defs/StabilityRecordingSettings"
+        },
+        "rotation_axis": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RotationSetting"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "SubtractionSettings": {
+      "type": "object",
+      "properties": {
+        "disable_threshold_subtraction": {
+          "type": "boolean"
+        },
+        "integrated_ct_settings": {
+          "$ref": "#/$defs/IntegratedCounterTermSettings"
+        },
+        "local_ct_settings": {
+          "$ref": "#/$defs/LocalCounterTermSettings"
+        },
+        "overlap_settings": {
+          "$ref": "#/$defs/OverlapSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "TropicalSubgraphTableSettings": {
+      "type": "object",
+      "properties": {
+        "disable_tropical_generation": {
+          "type": "boolean"
+        },
+        "panic_on_fail": {
+          "type": "boolean"
+        },
+        "target_omega": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UVLocalisationSettings": {
+      "type": "object",
+      "properties": {
+        "dynamic_width": {
+          "type": "boolean"
+        },
+        "gaussian_width": {
+          "type": "number",
+          "format": "double"
+        },
+        "sliver_width": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UVgenerationSettings": {
+      "type": "object",
+      "properties": {
+        "generate_integrated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UnitSurfaceSettings": {
+      "type": "object",
+      "properties": {
+        "n_3d_momenta": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": ["n_3d_momenta"]
+    },
+    "UnitVolumeSettings": {
+      "type": "object",
+      "properties": {
+        "n_3d_momenta": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": ["n_3d_momenta"]
+    }
+  }
+}

@@ -1,0 +1,71 @@
+global_settings:
+  stderr_directive: Debug
+  generation:
+    evaluator:
+      compile: true
+    tropical_subgraph_table:
+      disable_tropical_generation: true
+      panic_on_fail: false
+      target_omega: 1.0
+default_runtime_settings:
+  general:
+    m_uv: 1.0
+    mu_r_sq: 1.0
+  kinematics:
+    e_cm: 64.0
+    externals:
+      type: constant
+      data:
+        momenta:
+          - dependent
+          - - 1.0
+            - 0.0
+            - 0.0
+            - 1.0
+          - - 1.0
+            - 0.0
+            - 0.0
+            - -1.0
+          - - 0.9903067841547669
+            - 0.3734458315384239
+            - 0.6393671561700484
+            - -0.657613394982612
+          - - 0.2053558277500182
+            - -0.1412408546154445
+            - -0.0869119059139323
+            - 0.121112995127698
+          - - 5.0
+            - 1.0
+            - 1.0
+            - 1.0
+          - - 5.0
+            - 1.0
+            - 1.0
+            - 1.0
+        helicities:
+          - 1
+          - 1
+          - -1
+          - -1
+          - -1
+          - 1
+          - 1
+  subtraction:
+    disable_threshold_subtraction: true
+commands:
+  # - Import:
+  #     Model:
+  #       path: ../../crates/gammalooprs/src/test_resources/gammaloop_models/sm.yaml
+  # - Import:
+  #     Amplitude:
+  #       path: ./zeno_IR.dot
+  # - Generate: {}
+  # - Inspect:
+  #     process_id: 0
+  #     process_name: zeno_IR
+  #     point: [0.1 0.2 0.3]
+  #     use_f128: false
+  #     force_radius: false
+  #     momentum_space: false
+  #     discrete_dim:
+  #       - 0

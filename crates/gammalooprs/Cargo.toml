@@ -1,0 +1,151 @@
+[package]
+name = "gammalooprs"
+version = "0.3.3"
+edition = "2024"
+authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
+categories = ["science"]
+description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
+keywords = ["cross-section", "loop", "perturbative", "physics"]
+license = "MIT OR Apache-2.0"
+# license-file = "LICENSE.md"
+readme = "../../README.md"
+repository = "https://github.com/alphal00p/gammaloop"
+build = "build.rs"
+
+[lib]
+# required-features = ["python_api"]
+bench = false
+
+[dependencies]
+ahash = { version = "0.8.8", features = ["serde"] }
+base62 = "2.0.2"
+bincode = { version = "2.0.0", features = ["serde"] }
+# bincode-trait-derive = {path="../bincode-trait-derive"}
+bincode-trait-derive = { version = "0.1.1" }
+brotli = "7.0.0"
+clap = { version = "4.5.41", features = [
+  "derive",
+  "env",
+  "unicode",
+  "wrap_help",
+] }
+clarabel = "0"
+color-eyre = { version = "0.6", default-features = false }
+colored = "*"
+comemo = "0.5.0"
+ctrlc = "3.4.4"
+delegate = "0.12.0"
+# num = { version = "0.4.1", features = ["serde"] }
+# pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
+derive_more = "0.99.17"
+dirs = "5"
+dot-parser = "0.5.1"
+enum_dispatch = "*"
+eyre = "^0.6"
+git-version = "0.3"
+idenso = { version = "0.3", features = ["bincode"] }
+include_dir = "0.7"
+# petgraph = "0.6.4"
+indexmap = "2.2.2"
+# clap-repl = "0.3.2"
+indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
+insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
+itertools = "0.14"
+libc = "0.2.0"
+linnet = { version = "0.17.0", features = [
+  "bincode",
+  # "drawing",
+  "serde",
+  "symbolica",
+] }
+# cgmath = "0.18.0"
+# argmin = "0.10.0"
+# by_address = "1.2.1"
+# pyo3-pylogger = { version = "0.3.0", optional = true }
+# humantime = "2.1.0"
+linreg = "0.2.0"
+# vakint = { git = "https://github.com/alphal00p/vakint", rev = "a32723f7c56ce73dd6a35713880e3a924e72c51b" } # "e44c210ded3936048615d39872022a0b6ef18454"
+momtrop = { version = "0.3.0" }
+# log = { version = "*", features = ["release_max_level_debug"] }
+# env_logger = "*"
+# pyo3-log = { version = "0.12.0", optional = true }
+nalgebra = "0.34.1"
+nu-ansi-term = "0.50.3"
+paste = "1.0.15"
+pathfinding = "4.11.0"
+pyo3-stub-gen = { version = "0.13", default-features = false, optional = true }
+rand = { version = "0.9", features = ["small_rng"] }
+rayon = "1.5"
+# constcat = "0.5.0"
+ref-ops = "0.2.5"
+ringbuffer = "0.16.0"
+# gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
+rug = { version = "1.27.0", features = ["serde"] }
+schemars = "1.0.4"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.115"
+serde_repr = "0.1.19"
+serde_yaml = "*"
+slotmap = { version = "1.0.7", features = ["serde"] }
+smallvec = { version = "1.7", features = ["const_generics", "serde"] }
+smartstring = { version = "*", features = ["serde"] }
+spenso = { version = "0.6", features = ["shadowing"] }
+spenso-hep-lib = { version = "0.1.7" }
+spenso-macros = { version = "0.3" }
+statrs = "0.16.0"
+symbolica = { version = "1.3", default-features = false, features = [
+  "bincode",
+  "serde",
+] }
+# compensated-summation = "0.3.0"
+# serde_with = "3.9.0"
+tabled = { version = "0.20.0", features = ["ansi"] }
+# gxhash = "3.4.1"
+thiserror = "1.0.63"
+toml = "0.9.5"
+tracing = { version = "0.1.41", features = ["release_max_level_info"] }
+tracing-appender = "0.2.3"
+tracing-indicatif = "0.3.13"
+tracing-subscriber = { version = "0.3.19", features = [
+  "env-filter",
+  "fmt",
+  "json",
+  "time",
+] }
+twofloat = "0.8.4"
+typed-index-collections = { version = "3.3.0", features = [
+  "bincode",
+  "serde",
+  "serde-alloc",
+] }
+vakint = "0.1.2"
+varpro = "0.14.0"
+vectorize = "0.2.0"
+which = "8.0.0"
+
+[dependencies.pyo3]
+version = "0.25"
+features = ["auto-initialize", "eyre"]
+optional = true
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+# oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
+
+[build-dependencies]
+# pyo3-build-config = "*"
+vergen-gitcl = { version = "9", default-features = false }
+# pyo3-build-config = "*"
+
+[features]
+default = []
+fail-on-warnings = []
+fjcore = []
+higher_loops = []
+pyo3-extension-module = ["pyo3/extension-module"]
+python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
+python_api = ["pyo3"]
+# insta.opt-level = 3
+python_stubgen = ["pyo3-stub-gen", "python_api"]
+
+# use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]

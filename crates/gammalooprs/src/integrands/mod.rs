@@ -1,0 +1,606 @@
+pub mod builtin;
+pub mod evaluation;
+pub mod inspect;
+pub mod process;
+
+use crate::integrands::evaluation::{EvaluationMetaData, EvaluationResult, StabilityEvaluation};
+use colored::Colorize;
+// use crate::integrands::process::ProcessIntegrandImpl;
+use crate::integrands::builtin::h_function::{HFunctionTestIntegrand, HFunctionTestSettings};
+use crate::integrands::inspect::havana_sample;
+use crate::integrands::process::ProcessIntegrand;
+use crate::integrands::process::{amplitude, cross_section_integrand};
+use crate::model::Model;
+use crate::momentum::FourMomentum;
+use crate::momentum::ThreeMomentum;
+use crate::observables::EventManager;
+use crate::utils::{F, FloatLike, f128};
+use crate::{
+    settings::{
+        RuntimeSettings,
+        runtime::{IntegratorSettings, Precision},
+    },
+    utils,
+};
+
+use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
+use enum_dispatch::enum_dispatch;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::Complex;
+use std::fmt::{Display, Formatter};
+use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
+use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
+#[allow(unused_imports)]
+use tracing::{debug, error, info, instrument, trace, warn};
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+// #[trait_decode(trait= GammaLoopContext)]
+#[allow(non_snake_case)]
+#[serde(tag = "type")]
+pub enum IntegrandSettings {
+    #[serde(rename = "unit_surface")]
+    UnitSurface(UnitSurfaceSettings),
+    #[serde(rename = "unit_volume")]
+    UnitVolume(UnitVolumeSettings),
+    #[serde(rename = "h_function_test")]
+    HFunctionTest(HFunctionTestSettings),
+}
+
+impl Display for IntegrandSettings {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IntegrandSettings::UnitSurface(_) => write!(f, "unit_surface"),
+            IntegrandSettings::UnitVolume(_) => write!(f, "unit_volume"),
+            IntegrandSettings::HFunctionTest(_) => {
+                write!(f, "h_function_test")
+            }
+        }
+    }
+}
+
+impl Default for IntegrandSettings {
+    fn default() -> IntegrandSettings {
+        IntegrandSettings::UnitSurface(UnitSurfaceSettings { n_3d_momenta: 11 })
+    }
+}
+
+#[enum_dispatch]
+pub trait HasIntegrand {
+    #[instrument(skip_all)]
+    fn inspect(
+        &mut self,
+        settings: &RuntimeSettings,
+        model: &Model,
+        mut pt: Vec<F<f64>>,
+        discrete_dimensions: &[usize],
+        mut force_radius: bool,
+        is_momentum_space: bool,
+        use_arb_prec: bool,
+    ) -> Result<(Option<f64>, EvaluationResult)> {
+        if self.get_n_dim() as isize == pt.len() as isize - 1 {
+            force_radius = true;
+        }
+
+        let (jac, xs_f128) = if is_momentum_space {
+            let (xs, inv_jac) = utils::global_inv_parameterize::<f128>(
+                &pt.chunks_exact_mut(3)
+                    .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
+                    .collect::<Vec<ThreeMomentum<F<f128>>>>(),
+                F(settings.kinematics.e_cm).higher(),
+                // TODO! return an error instead of panic
+                &settings
+                    .sampling
+                    .get_parameterization_settings()
+                    .unwrap_or_else(|| {
+                        panic!("Invalid sampling method for momentum-space inspect.")
+                    }),
+                force_radius,
+            );
+
+            info!(
+                target: "gammalooprs::integrands::inspect",
+                "f128 sampling jacobian for this point = {:+.32e}",
+                inv_jac.inv()
+            );
+
+            (Some(inv_jac.inv().0.to_f64()), xs)
+        } else {
+            (
+                None,
+                pt.iter()
+                    .map(|x| F::<f128>::from_ff64(*x))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let xs_f64 = xs_f128.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>();
+
+        let sample = {
+            let cont_sample = if force_radius {
+                xs_f64.clone()[1..].to_vec()
+            } else {
+                xs_f64.clone()
+            };
+            havana_sample(cont_sample, discrete_dimensions)
+        };
+
+        let eval_result =
+            self.evaluate_sample(&sample, model, F(0.), 1, use_arb_prec, Complex::new_zero())?;
+        info!(
+            target: "gammalooprs::integrands::inspect",
+            "\nInput point in unit hypercube xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+            format!(
+                "( {} )",
+                xs_f64
+                    .iter()
+                    .map(|&x| format!("{:.16}", x))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .blue(),
+            self.name().to_string().green(),
+            format!(
+                "( {:+.16e}, {:+.16e} i)",
+                eval_result.integrand_result.re, eval_result.integrand_result.im
+            )
+            .blue(),
+        );
+
+        Ok((jac, eval_result))
+    }
+
+    fn create_grid(&self) -> Grid<F<f64>>;
+
+    fn name(&self) -> String;
+
+    fn evaluate_sample(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        model: &Model,
+        wgt: F<f64>,
+        iter: usize,
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<EvaluationResult>;
+
+    fn get_n_dim(&self) -> usize;
+
+    fn get_integrator_settings(&self) -> IntegratorSettings {
+        IntegratorSettings::default()
+    }
+
+    // In case your integrand supports observable, then overload this function to combine the observables
+    fn merge_results<I: HasIntegrand>(&mut self, _other: &mut I, _iter: usize) {}
+
+    // In case your integrand supports observable, then overload this function to write the observables to file
+    fn update_results(&mut self, _iter: usize) {}
+
+    // In case your integrand has an EventManager, overload this function to return it
+
+    fn get_event_manager_mut(&mut self) -> &mut EventManager {
+        panic!("This integrand does not have an EventManager");
+    }
+}
+
+#[derive(Clone)]
+pub enum Integrand {
+    UnitSurface(UnitSurfaceIntegrand),
+    UnitVolume(UnitVolumeIntegrand),
+    HFunctionTest(HFunctionTestIntegrand),
+    // ProcessIntegrandImpl(ProcessIntegrandImpl),
+    ProcessIntegrand(ProcessIntegrand),
+}
+
+impl HasIntegrand for Integrand {
+    fn name(&self) -> String {
+        match self {
+            Integrand::UnitSurface(_) => "UnitSurface".to_string(),
+            Integrand::UnitVolume(_) => "UnitVolume".to_string(),
+            Integrand::HFunctionTest(_) => "HFunctionTest".to_string(),
+            // Integrand::ProcessIntegrandImpl(_) => "ProcessIntegrandImpl".to_string(),
+            Integrand::ProcessIntegrand(i) => i.name(),
+        }
+    }
+
+    fn create_grid(&self) -> Grid<F<f64>> {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.create_grid(),
+            Integrand::UnitVolume(integrand) => integrand.create_grid(),
+            Integrand::HFunctionTest(integrand) => integrand.create_grid(),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.create_grid(),
+            Integrand::ProcessIntegrand(integrand) => integrand.create_grid(),
+        }
+    }
+
+    fn evaluate_sample(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        model: &Model,
+        wgt: F<f64>,
+        iter: usize,
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<EvaluationResult> {
+        match self {
+            Integrand::UnitSurface(integrand) => {
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
+            }
+            Integrand::UnitVolume(integrand) => {
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
+            }
+            Integrand::HFunctionTest(integrand) => {
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
+            }
+            // Integrand::ProcessIntegrandImpl(integrand) => {
+            //     integrand.evaluate_sample(sample,model, wgt, iter, use_f128, max_eval)
+            // }
+            Integrand::ProcessIntegrand(integrand) => {
+                integrand.evaluate_sample(sample, model, wgt, iter, use_arb_prec, max_eval)
+            }
+        }
+    }
+
+    fn get_n_dim(&self) -> usize {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.get_n_dim(),
+            Integrand::UnitVolume(integrand) => integrand.get_n_dim(),
+            Integrand::HFunctionTest(integrand) => integrand.get_n_dim(),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.get_n_dim(),
+            Integrand::ProcessIntegrand(integrand) => integrand.get_n_dim(),
+        }
+    }
+
+    fn get_integrator_settings(&self) -> IntegratorSettings {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.get_integrator_settings(),
+            Integrand::UnitVolume(integrand) => integrand.get_integrator_settings(),
+            Integrand::HFunctionTest(integrand) => integrand.get_integrator_settings(),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.get_integrator_settings(),
+            Integrand::ProcessIntegrand(integrand) => integrand.get_integrator_settings(),
+        }
+    }
+
+    fn merge_results<I: HasIntegrand>(&mut self, other: &mut I, iter: usize) {
+        match self {
+            Integrand::UnitSurface(integrand) => integrand.merge_results(other, iter),
+            Integrand::UnitVolume(integrand) => integrand.merge_results(other, iter),
+            Integrand::HFunctionTest(integrand) => integrand.merge_results(other, iter),
+            // Integrand::ProcessIntegrandImpl(integrand) => integrand.merge_results(other, iter),
+            Integrand::ProcessIntegrand(integrand) => integrand.merge_results(other, iter),
+        }
+    }
+}
+
+pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
+    match settings.hard_coded_integrand.as_ref().unwrap().clone() {
+        IntegrandSettings::UnitSurface(integrand_settings) => Integrand::UnitSurface(
+            UnitSurfaceIntegrand::new(settings.clone(), integrand_settings),
+        ),
+        IntegrandSettings::UnitVolume(integrand_settings) => Integrand::UnitVolume(
+            UnitVolumeIntegrand::new(settings.clone(), integrand_settings),
+        ),
+        IntegrandSettings::HFunctionTest(integrand_settings) => Integrand::HFunctionTest(
+            HFunctionTestIntegrand::new(settings.clone(), integrand_settings),
+        ),
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+// #[trait_decode(trait= GammaLoopContext)]
+pub struct UnitSurfaceSettings {
+    pub n_3d_momenta: usize,
+}
+
+#[derive(Clone)]
+pub struct UnitSurfaceIntegrand {
+    pub settings: RuntimeSettings,
+    pub n_dim: usize,
+    pub n_3d_momenta: usize,
+    pub surface: F<f64>,
+}
+
+#[allow(unused)]
+impl UnitSurfaceIntegrand {
+    pub(crate) fn new(
+        settings: RuntimeSettings,
+        integrand_settings: UnitSurfaceSettings,
+    ) -> UnitSurfaceIntegrand {
+        let n_dim = utils::get_n_dim_for_n_loop_momenta(
+            &settings.sampling,
+            integrand_settings.n_3d_momenta,
+            true,
+            None,
+        );
+        let surface = utils::compute_surface_and_volume(
+            integrand_settings.n_3d_momenta * 3 - 1,
+            F(settings.kinematics.e_cm),
+        )
+        .0;
+        UnitSurfaceIntegrand {
+            settings,
+            n_3d_momenta: integrand_settings.n_3d_momenta,
+            n_dim,
+            surface,
+        }
+    }
+
+    fn evaluate_numerator<T: FloatLike>(&self, loop_momenta: &[FourMomentum<F<T>>]) -> F<T> {
+        loop_momenta[0].temporal.value.one()
+    }
+
+    fn parameterize<T: FloatLike>(&self, xs: &[F<T>]) -> (Vec<[F<T>; 3]>, F<T>) {
+        let zero = xs[0].zero();
+        utils::global_parameterize(
+            xs,
+            F::<T>::from_f64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
+            &self
+                .settings
+                .sampling
+                .get_parameterization_settings()
+                .unwrap(),
+        )
+    }
+}
+
+#[allow(unused)]
+impl HasIntegrand for UnitSurfaceIntegrand {
+    fn name(&self) -> String {
+        "UnitSurfaceIntegrand".to_string()
+    }
+
+    fn create_grid(&self) -> Grid<F<f64>> {
+        Grid::Continuous(ContinuousGrid::new(
+            self.n_dim,
+            self.settings.integrator.n_bins,
+            self.settings.integrator.min_samples_for_update,
+            self.settings.integrator.bin_number_evolution.clone(),
+            self.settings.integrator.train_on_avg,
+        ))
+    }
+
+    fn get_n_dim(&self) -> usize {
+        self.n_dim
+    }
+
+    fn evaluate_sample(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        model: &Model,
+        wgt: F<f64>,
+        iter: usize,
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<EvaluationResult> {
+        let start_evaluate_sample = std::time::Instant::now();
+
+        let xs = match sample {
+            Sample::Continuous(_w, v) => v,
+            _ => panic!("Wrong sample type"),
+        };
+        let mut sample_xs = vec![F(self.settings.kinematics.e_cm)];
+        sample_xs.extend(xs);
+
+        let before_parameterization = std::time::Instant::now();
+        let (moms, jac) = self.parameterize(sample_xs.as_slice());
+        let mut loop_momenta = vec![];
+        for m in &moms {
+            loop_momenta.push(FourMomentum::from_args(
+                ((m[0] + m[1] + m[2]) * (m[0] + m[1] + m[2])).sqrt(),
+                m[0],
+                m[1],
+                m[2],
+            ));
+        }
+
+        let parameterization_time = before_parameterization.elapsed();
+
+        let before_evaluation = std::time::Instant::now();
+        let mut itg_wgt = self.evaluate_numerator(loop_momenta.as_slice());
+        // Normalize the integral
+        itg_wgt /= self.surface;
+
+        info!("Sampled loop momenta:");
+        for (i, l) in loop_momenta.iter().enumerate() {
+            info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
+        }
+        info!("Integrator weight : {:+.16e}", wgt);
+        info!("Integrand weight  : {:+.16e}", itg_wgt);
+        info!("Sampling jacobian : {:+.16e}", jac);
+        info!("Final contribution: {:+.16e}", itg_wgt * jac);
+
+        let is_nan = itg_wgt.is_nan();
+
+        let evaluation_time = before_evaluation.elapsed();
+
+        let evaluation_metadata = EvaluationMetaData {
+            total_timing: start_evaluate_sample.elapsed(),
+            rep3d_evaluation_time: evaluation_time,
+            parameterization_time,
+            relative_instability_error: Complex::new_zero(),
+            highest_precision: Precision::Double,
+            is_nan,
+            final_is_stable: !is_nan,
+            loop_momenta_escalation: None,
+            stability_evaluations: vec![StabilityEvaluation {
+                precision: Precision::Double,
+                result: Complex::new(itg_wgt, F(0.)) * jac,
+                parameterization_time,
+                ltd_evaluation_time: evaluation_time,
+                is_stable: !is_nan,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }],
+        };
+
+        Ok(EvaluationResult {
+            integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata,
+        })
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+// #[trait_decode(trait= GammaLoopContext)]
+pub struct UnitVolumeSettings {
+    pub n_3d_momenta: usize,
+}
+
+#[derive(Clone)]
+pub struct UnitVolumeIntegrand {
+    pub settings: RuntimeSettings,
+    pub n_dim: usize,
+    pub n_3d_momenta: usize,
+    pub volume: F<f64>,
+}
+
+#[allow(unused)]
+impl UnitVolumeIntegrand {
+    pub(crate) fn new(
+        settings: RuntimeSettings,
+        integrand_settings: UnitVolumeSettings,
+    ) -> UnitVolumeIntegrand {
+        let n_dim = utils::get_n_dim_for_n_loop_momenta(
+            &settings.sampling,
+            integrand_settings.n_3d_momenta,
+            false,
+            None,
+        );
+        let volume = utils::compute_surface_and_volume(
+            integrand_settings.n_3d_momenta * 3,
+            F(settings.kinematics.e_cm),
+        )
+        .1;
+        UnitVolumeIntegrand {
+            settings,
+            n_3d_momenta: integrand_settings.n_3d_momenta,
+            n_dim,
+            volume,
+        }
+    }
+
+    fn evaluate_numerator<T: FloatLike>(&self, loop_momenta: &[FourMomentum<F<T>>]) -> F<T> {
+        let zero = loop_momenta[0].temporal.value.zero();
+        if loop_momenta
+            .iter()
+            .map(|l| l.spatial.norm_squared())
+            .reduce(|acc, e| acc + &e)
+            .unwrap_or(zero.clone())
+            .sqrt()
+            > F::<T>::from_f64(self.settings.kinematics.e_cm)
+        {
+            zero
+        } else {
+            zero.one()
+        }
+    }
+
+    fn parameterize<T: FloatLike>(&self, xs: &[F<T>]) -> (Vec<[F<T>; 3]>, F<T>) {
+        let zero = xs[0].zero();
+        utils::global_parameterize(
+            xs,
+            F::<T>::from_f64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
+            &self
+                .settings
+                .sampling
+                .get_parameterization_settings()
+                .unwrap(),
+        )
+    }
+}
+
+#[allow(unused)]
+impl HasIntegrand for UnitVolumeIntegrand {
+    fn name(&self) -> String {
+        "UnitVolumeIntegrand".to_string()
+    }
+    fn create_grid(&self) -> Grid<F<f64>> {
+        Grid::Continuous(ContinuousGrid::new(
+            self.n_dim,
+            self.settings.integrator.n_bins,
+            self.settings.integrator.min_samples_for_update,
+            self.settings.integrator.bin_number_evolution.clone(),
+            self.settings.integrator.train_on_avg,
+        ))
+    }
+
+    fn get_n_dim(&self) -> usize {
+        self.n_dim
+    }
+
+    fn evaluate_sample(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        model: &Model,
+        wgt: F<f64>,
+        iter: usize,
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<EvaluationResult> {
+        let start_evaluate_sample = std::time::Instant::now();
+
+        let xs = match sample {
+            Sample::Continuous(_w, v) => v,
+            _ => panic!("Wrong sample type"),
+        };
+
+        let before_parameterization = std::time::Instant::now();
+
+        let (moms, jac) = self.parameterize(xs);
+        let mut loop_momenta = vec![];
+        for m in &moms {
+            loop_momenta.push(FourMomentum::new(F(0.).into(), (*m).into()));
+        }
+
+        let parameterization_time = before_parameterization.elapsed();
+
+        let before_evaluation = std::time::Instant::now();
+        let mut itg_wgt = self.evaluate_numerator(loop_momenta.as_slice());
+        // Normalize the integral
+        itg_wgt /= self.volume;
+        info!("Sampled loop momenta:");
+        for (i, l) in loop_momenta.iter().enumerate() {
+            info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
+        }
+        info!("Integrator weight : {:+.16e}", wgt);
+        info!("Integrand weight  : {:+.16e}", itg_wgt);
+        info!("Sampling jacobian : {:+.16e}", jac);
+        info!("Final contribution: {:+.16e}", itg_wgt * jac);
+
+        let is_nan = itg_wgt.is_nan();
+
+        let evaluation_time = before_evaluation.elapsed();
+
+        let evaluation_metadata = EvaluationMetaData {
+            total_timing: start_evaluate_sample.elapsed(),
+            rep3d_evaluation_time: evaluation_time,
+            parameterization_time,
+            relative_instability_error: Complex::new_zero(),
+            highest_precision: Precision::Double,
+            is_nan,
+            final_is_stable: !is_nan,
+            loop_momenta_escalation: None,
+            stability_evaluations: vec![StabilityEvaluation {
+                precision: Precision::Double,
+                result: Complex::new(itg_wgt, F(0.)) * jac,
+                parameterization_time,
+                ltd_evaluation_time: evaluation_time,
+                is_stable: !is_nan,
+                instability_reason: None,
+                rotated_results: Vec::new(),
+            }],
+        };
+
+        Ok(EvaluationResult {
+            integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata,
+        })
+    }
+}

@@ -3,44 +3,108 @@
 // For a full list of overridable settings, and general information on folder-specific settings,
 // see the documentation: https://zed.dev/docs/configuring-zed#folder-specific-settings
 {
-  "shell": {
-    "program": "bash"
-  },
   "inlay_hints": {
     "enabled": true,
     "show_type_hints": true,
     "show_parameter_hints": false,
-    "show_other_hints": true
+    "show_other_hints": true,
+  },
+  "load_direnv": "direct",
+
+  "languages": {
+    "Nickel": {
+      "language_servers": ["nls"],
+    },
+    "YAML": {
+      "language_servers": ["yaml-language-server"],
+    },
+    "Typst": {
+      "language_servers": ["tinymist"],
+    },
+    "Rust": {
+      "language_servers": ["rust-analyzer", "rscls"],
+    },
   },
   "lsp": {
+    "yaml-language-server": {
+      "settings": {
+        "yaml": {
+          "schemas": {
+            "./run_schema.json": "./examples/amplitude_computation/gammaloop_state/run.yaml",
+          },
+        },
+      },
+    },
+    "json-language-server": {
+      "settings": {
+        "json": {
+          "schemas": [
+            // {
+            //   "fileMatch": ["example-*.json"],
+            //   "url": "./.config/schema.json"
+            // },
+            // {
+            //   "fileMatch": ["example-*-root.json"],
+            //   "url": "./schema-at-root.json"
+            // }
+          ],
+        },
+      },
+    },
+
+    "nls": {
+      "binary": {
+        "ignore_system_version": false,
+      },
+      "enable_lsp_tasks": true,
+      "initialization_options": {
+        "experimentalFeatures": true,
+        "trace": {
+          "server": "verbose",
+        },
+      },
+    },
     "rust-analyzer": {
+      "binary": {
+        "ignore_system_version": false,
+        "path": "rust-analyzer",
+      },
+
       "initialization_options": {
         "inlayHints": {
           "typeHints": true,
           "maxLength": null,
           "lifetimeElisionHints": {
             "useParameterNames": true,
-            "enable": "never"
+            "enable": "never",
           },
           "closureReturnTypeHints": {
-            "enable": "always"
-          }
+            "enable": "always",
+          },
         },
         "cargo": {
-          "features": "none"
+          // "features": ["python_api"],
+          "features": ["no_pyo3"],
+          "allTargets": true,
         },
         "diagnostics": {
           "experimental": {
-            "enable": true
-          }
+            "enable": true,
+          },
         },
         "checkOnSave": true,
+
         "check": {
           "onSave": true,
-          "features": [],
-          "command": "check"
-        }
-      }
-    }
-  }
+          // "features": ["python_api"],
+          "features": ["no_pyo3"],
+          "command": "check",
+        },
+        "runnables": {
+          "extraArgs": ["--profile", "dev-optim"],
+          "cargoExtraArgs": ["--profile", "dev-optim"],
+        },
+      },
+    },
+  },
 }

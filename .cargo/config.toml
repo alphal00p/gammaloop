@@ -1,2 +1,14 @@
 [target.x86_64-unknown-linux-gnu]
-linker = "clang"
+linker = "cc"
+[env]
+# Visible to every rustc and every build script in the workspace build.
+SYMBOLICA_OEM_LICENSE = { value = "SYMBOLICA_OEM_GAMMALOOP", force = false }
+
+
+# [target.aarch64-apple-darwin]
+# rustflags = [
+#     "-C",
+#     "link-arg=-fuse-ld=/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld",
+#     "-C",
+#     "link-arg=-ld_new",
+# ]
