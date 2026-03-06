@@ -643,17 +643,24 @@ impl CFFapprox {
             }
         }
 
-        for (e, eid, _) in g.iter_edges_of(tree_edges) {
-            if e.is_paired() {
-                contract_edges.push(eid);
-            }
-        }
+        let bridgeless = amplitude_subgraph.subtract(tree_edges);
+
+        let comps: Vec<_> = g
+            .connected_components(&bridgeless)
+            .into_iter()
+            .map(|mut a| {
+                g.add_crown(&mut a);
+                a
+            })
+            .collect();
 
         for o in orientations {
-            cff_sum += o.orientation_thetas()
-                * generate_uv_cff(
+            let mut cff_product = Atom::one();
+
+            for c in &comps {
+                cff_product *= generate_uv_cff(
                     g,
-                    amplitude_subgraph,
+                    c,
                     canonize_esurface,
                     &contract_edges,
                     edges_in_initial_state_cut,
@@ -662,6 +669,8 @@ impl CFFapprox {
                     post_processing,
                 )
                 .unwrap()
+            }
+            cff_sum += o.orientation_thetas() * cff_product
         }
 
         let fourddenoms = GS.wrap_tree_denoms(graph.denominator(tree_edges, |_| -1));
