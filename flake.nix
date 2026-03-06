@@ -140,6 +140,29 @@
           doCheck = false;
         });
 
+      gammaloop-nextest-archive = craneLib.mkCargoDerivation (ciArgs
+        // {
+          pname = "gammaloop-nextest-archive";
+          version = "0.1.0";
+          inherit cargoArtifacts;
+          doCheck = false;
+
+          nativeBuildInputs = ciArgs.nativeBuildInputs ++ [pkgs.cargo-nextest];
+
+          buildPhaseCargoCommand = ''
+            cargo nextest archive \
+              --workspace \
+              --profile ci \
+              --cargo-profile release \
+              --archive-file nextest-archive.tar.zst
+          '';
+
+          installPhaseCommand = ''
+            mkdir -p "$out"
+            cp nextest-archive.tar.zst "$out/nextest-archive.tar.zst"
+          '';
+        });
+
       partitionedNextestChecks = lib.listToAttrs (map (partition: {
           name = "gammaloop-nextest-partition-${toString partition}";
           value = craneLib.cargoNextest (ciArgs
@@ -192,6 +215,7 @@
         {
           default = gammaloop;
           inherit cargoArtifacts;
+          inherit gammaloop-nextest-archive;
         }
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs

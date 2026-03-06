@@ -21,7 +21,7 @@ If you want to jump right in, run the following to immediately start integrating
 
 ```bash
 git clone https://github.com/alphal00p/gammaloop.git && cd gammaloop
-./bin/compile.sh
+just build-cli
 ./bin/gammaloop examples/command_cards/simple_workflow.toml
 ```
 
@@ -71,6 +71,10 @@ The installation may be successful with older versions than the ones indicated b
 
 * `git`
 
+* `just`
+
+* `maturin` (required for `just build-api`)
+
 Windows users are encouraged to use [WSL 2](https://learn.microsoft.com/en-us/windows/wsl/).
 
 ### > Installation using `pip`
@@ -83,9 +87,11 @@ gammaloop --build_dependencies
 ```bash
 git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
-./bin/compile.sh
+just build-cli
+just build-api
 ```
-The relevant binaries will then be in `./bin/` and the gammaloop python module is located at `./python/gammaloop`.
+`just build-cli` builds the CLI, and `just build-api` builds/installs the Python API via `maturin develop` (in your active Python environment).
+The Python package source is located in `./gammaloop-api/python/gammaloop`.
 
 *Note:* Alternatively, the dependencies can be built within a python virtual environment as follows:
 
