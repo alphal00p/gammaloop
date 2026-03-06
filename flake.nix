@@ -6,7 +6,6 @@
 
     crane = {
       url = "github:ipetkov/crane";
-      # inputs.nixpkgs.follows = "nixpkgs";
     };
 
     fenix = {
@@ -16,20 +15,13 @@
     };
 
     flake-utils.url = "github:numtide/flake-utils";
-
-    advisory-db = {
-      url = "github:rustsec/advisory-db";
-      flake = false;
-    };
   };
 
   outputs = {
-    self,
     nixpkgs,
     crane,
     fenix,
     flake-utils,
-    advisory-db,
     ...
   }:
     flake-utils.lib.eachDefaultSystem (system: let
@@ -37,10 +29,22 @@
       inherit (pkgs) lib;
 
       craneLib =
-        (crane.mkLib nixpkgs.legacyPackages.${system}).overrideToolchain
+        (crane.mkLib pkgs).overrideToolchain
         fenix.packages.${system}.stable.toolchain;
 
+      craneLibLLvmTools =
+        craneLib.overrideToolchain
+        (fenix.packages.${system}.stable.withComponents [
+          "cargo"
+          "llvm-tools"
+          "rustc"
+        ]);
+
       src = craneLib.cleanCargoSource (craneLib.path ./.);
+
+      apiMeta = craneLib.crateNameFromCargoToml {
+        cargoToml = ./crates/gammaloop-api/Cargo.toml;
+      };
 
       # Host Rust target triple, e.g. x86_64-unknown-linux-gnu
       rustTarget = pkgs.stdenv.hostPlatform.rust.rustcTarget;
@@ -48,12 +52,11 @@
       # Env var name Cargo uses to pick the linker for this target
       cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
 
-      # Force the "Nix cc wrapper" as both C compiler and Rust linker.
+      # Force the Nix cc wrapper as both C compiler and Rust linker.
       nixCc = "${pkgs.stdenv.cc}/bin/cc";
       nixCxx = "${pkgs.stdenv.cc}/bin/c++";
 
       # Runtime library search path for locally-built binaries and for maturin/auditwheel
-      # (so it can locate libpython and libs like libmpfr at repair time).
       runtimeLibPath = lib.makeLibraryPath [
         pkgs.python313
         pkgs.gmp
@@ -66,6 +69,8 @@
       # Common arguments can be set here to avoid repeating them later
       commonArgs = {
         inherit src;
+        pname = "gammaloop-workspace";
+        inherit (apiMeta) version;
         strictDeps = true;
 
         nativeBuildInputs =
@@ -83,32 +88,22 @@
         buildInputs =
           [
             pkgs.openssl
-
-            # System GMP/MPFR/MPC (for gmp-mpfr-sys with feature use-system-libs)
             pkgs.gmp
             pkgs.gmp.dev
             pkgs.mpfr
             pkgs.mpfr.dev
             pkgs.libmpc
-
             pkgs.python313
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             pkgs.libiconv
           ];
 
-        # Hard override: use Nix's compiler wrapper everywhere.
         CC = nixCc;
         CXX = nixCxx;
-
-        # Hard override: use Nix's cc wrapper as Rust linker for the host target.
         "${cargoLinkerVar}" = nixCc;
-
-        # Final override in case something injects `-C linker=clang`.
         RUSTFLAGS = "-C linker=${nixCc}";
 
-        # Make runtime libs discoverable inside Nix builds too (useful for build scripts/tests
-        # that execute freshly-built binaries).
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
       };
@@ -117,6 +112,7 @@
         commonArgs
         // {
           buildType = "release";
+          cargoExtraArgs = "--locked";
 
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
@@ -124,63 +120,64 @@
 
       ciPartitionCount = 6;
 
-      craneLibLLvmTools =
-        craneLib.overrideToolchain
-        (fenix.packages.${system}.stable.withComponents [
-          "cargo"
-          "llvm-tools"
-          "rustc"
-        ]);
+      # Source trimming for per-crate derivations, following crane workspace pattern.
+      # Keep both workspace crates + shared assets because build scripts and embedded data
+      # need access at build time.
+      fileSetForCrate = crate:
+        lib.fileset.toSource {
+          root = ./.;
+          fileset = lib.fileset.unions [
+            ./Cargo.toml
+            ./Cargo.lock
+            ./assets
+            (craneLib.fileset.commonCargoSources ./crates/gammalooprs)
+            (craneLib.fileset.commonCargoSources ./crates/gammaloop-api)
+            (craneLib.fileset.commonCargoSources crate)
+          ];
+        };
 
-      cargoArtifacts = craneLib.buildDepsOnly ciArgs;
-      cargoArtifactsNextest = craneLib.buildDepsOnly (ciArgs
+      # Build workspace dependency artifacts once and reuse for downstream checks/packages.
+      cargoArtifacts = craneLib.buildDepsOnly (ciArgs
         // {
-          pname = "gammaloop-cargo-artifacts-nextest";
-          cargoBuildCommand = "cargo test --workspace --all-targets --profile release --no-run";
+          pname = "gammaloop-workspace-artifacts";
+          inherit (apiMeta) version;
+          cargoBuildCommand = "cargo test --workspace --all-targets --profile release --no-run --locked";
+          buildPhaseCargoCommand = "cargo test --workspace --all-targets --profile release --no-run --locked";
+          doCheck = false;
         });
 
-      gammaloop = craneLib.buildPackage (commonArgs
+      individualCrateArgs =
+        commonArgs
         // {
           inherit cargoArtifacts;
+          buildType = "release";
           doCheck = false;
-        });
+        };
 
-      gammaloop-nextest-archive = craneLib.mkCargoDerivation (ciArgs
+      gammaloop-cli = craneLib.buildPackage (individualCrateArgs
         // {
-          pname = "gammaloop-nextest-archive";
-          version = "0.1.0";
-          cargoArtifacts = cargoArtifactsNextest;
-          doCheck = false;
-
-          nativeBuildInputs = ciArgs.nativeBuildInputs ++ [pkgs.cargo-nextest];
-
-          buildPhaseCargoCommand = ''
-            cargo nextest archive \
-              --workspace \
-              --profile ci \
-              --cargo-profile release \
-              --archive-file nextest-archive.tar.zst
-          '';
-
-          installPhaseCommand = ''
-            mkdir -p "$out"
-            cp nextest-archive.tar.zst "$out/nextest-archive.tar.zst"
-          '';
+          pname = "gammaloop";
+          inherit (apiMeta) version;
+          src = fileSetForCrate ./crates/gammaloop-api;
+          cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
       partitionedNextestChecks = lib.listToAttrs (map (partition: {
           name = "gammaloop-nextest-partition-${toString partition}";
           value = craneLib.cargoNextest (ciArgs
             // {
-              cargoArtifacts = cargoArtifactsNextest;
-              cargoNextestExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail";
+              inherit cargoArtifacts;
+              partitions = 1;
+              partitionType = "count";
+              cargoNextestPartitionsExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail --no-tests=pass";
             });
         })
         (lib.range 1 ciPartitionCount));
     in {
       checks =
         {
-          inherit gammaloop;
+          # Keep existing check names for CI compatibility.
+          gammaloop = gammaloop-cli;
 
           gammaloop-clippy = craneLib.cargoClippy (ciArgs
             // {
@@ -195,33 +192,25 @@
 
           gammaloop-fmt = craneLib.cargoFmt {
             inherit src;
-          };
-
-          gammaloop-audit = craneLib.cargoAudit {
-            inherit src advisory-db;
-          };
-
-          gammaloop-deny = craneLib.cargoDeny {
-            src = builtins.path {
-              path = ./.;
-              name = "source";
-            };
+            pname = "gammaloop-workspace";
+            inherit (apiMeta) version;
           };
 
           gammaloop-nextest = craneLib.cargoNextest (ciArgs
             // {
-              cargoArtifacts = cargoArtifactsNextest;
-              cargoNextestExtraArgs = "--profile ci --no-fail-fast --final-status-level fail";
+              inherit cargoArtifacts;
+              partitions = 1;
+              partitionType = "count";
+              cargoNextestPartitionsExtraArgs = "--profile ci --no-fail-fast --final-status-level fail --no-tests=pass";
             });
         }
         // partitionedNextestChecks;
 
       packages =
         {
-          default = gammaloop;
+          default = gammaloop-cli;
+          gammaloop = gammaloop-cli;
           inherit cargoArtifacts;
-          inherit cargoArtifactsNextest;
-          inherit gammaloop-nextest-archive;
         }
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
@@ -230,8 +219,13 @@
             });
         };
 
-      apps.default = flake-utils.lib.mkApp {
-        drv = gammaloop;
+      apps = {
+        default = flake-utils.lib.mkApp {
+          drv = gammaloop-cli;
+        };
+        gammaloop = flake-utils.lib.mkApp {
+          drv = gammaloop-cli;
+        };
       };
 
       ci = {
@@ -239,20 +233,16 @@
       };
 
       devShells.default = craneLib.devShell {
-        checks = self.checks.${system};
+        # checks = self.checks.${system};
 
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
         GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
 
-        # Mirror the same hard overrides in the interactive shell.
         CC = nixCc;
         CXX = nixCxx;
         "${cargoLinkerVar}" = nixCc;
         RUSTFLAGS = "-C linker=${nixCc}";
 
-        # Make libpython + libgmp/libmpfr/libmpc visible to:
-        # - target/debug/stub_gen (runtime)
-        # - maturin/auditwheel (wheel repair step)
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
 

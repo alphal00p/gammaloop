@@ -1,10 +1,10 @@
-name: Hedge Numerator CI
+name: crane-workflow
 
 on:
   push:
-    branches: ["hedge_numerator", "main"]
+    branches: ["main"]
   pull_request:
-    branches: ["hedge_numerator", "main"]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -76,7 +76,7 @@ jobs:
       - name: Build cargo dependencies
         run: |
           echo "Starting dependency build at $(date)"
-          time nix build .#cargoArtifacts .#cargoArtifactsNextest --print-build-logs
+          time nix build .#cargoArtifacts --print-build-logs
           echo "Dependencies built at $(date)"
 
   build-deps-macos:
@@ -121,7 +121,7 @@ jobs:
       - name: Build cargo dependencies (macOS)
         run: |
           echo "Starting dependency build at $(date)"
-          time nix build .#cargoArtifacts .#cargoArtifactsNextest --print-build-logs
+          time nix build .#cargoArtifacts --print-build-logs
           echo "Dependencies built at $(date)"
 
   package:
@@ -350,115 +350,11 @@ jobs:
         if: steps.fmt_check.outcome != 'success'
         run: exit 1
 
-  nextest-archive-linux:
-    if: needs.build-deps.result == 'success'
-    needs: build-deps
-    environment: Cachix
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-            substituters = https://cache.nixos.org/ https://nix-community.cachix.org
-            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v14
-        with:
-          name: gammaloop
-          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
-
-      - name: Cache Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: ${{ needs.build-deps.outputs.cache-key }}-nextest-archive-ubuntu-latest
-          restore-prefixes-first-match: |
-            ${{ needs.build-deps.outputs.cache-key }}-ubuntu-latest
-            ${{ needs.build-deps.outputs.cache-key }}
-            nix-deps-ubuntu-latest-
-            nix-deps-
-
-      - name: Build nextest archive
-        run: |
-          rm -f nextest-archive.tar.zst
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          time nix build ".#packages.${system}.gammaloop-nextest-archive" --print-build-logs
-          cp result/nextest-archive.tar.zst ./nextest-archive.tar.zst
-
-      - name: Upload nextest archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextest-archive-ubuntu-latest
-          path: nextest-archive.tar.zst
-          if-no-files-found: error
-          retention-days: 1
-
-  nextest-archive-macos:
-    if: needs.build-deps-macos.result == 'success'
-    needs: build-deps-macos
-    environment: Cachix
-    runs-on: macos-latest
-    timeout-minutes: 180
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
-            substituters = https://cache.nixos.org/ https://nix-community.cachix.org
-            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v14
-        with:
-          name: gammaloop
-          authToken: "${{ secrets.CACHIX_AUTH_TOKEN }}"
-          skipPush: true
-
-      - name: Cache Nix store
-        uses: nix-community/cache-nix-action@v7
-        with:
-          primary-key: ${{ needs.build-deps-macos.outputs.cache-key }}-nextest-archive-macos-latest
-          restore-prefixes-first-match: |
-            ${{ needs.build-deps-macos.outputs.cache-key }}-macos-latest
-            ${{ needs.build-deps-macos.outputs.cache-key }}
-            nix-deps-macos-latest-
-            nix-deps-
-
-      - name: Build nextest archive
-        run: |
-          rm -f nextest-archive.tar.zst
-          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          time nix build ".#packages.${system}.gammaloop-nextest-archive" --print-build-logs
-          cp result/nextest-archive.tar.zst ./nextest-archive.tar.zst
-
-      - name: Upload nextest archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: nextest-archive-macos-latest
-          path: nextest-archive.tar.zst
-          if-no-files-found: error
-          retention-days: 1
-
   test-linux:
-    if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success' && needs.nextest-archive-linux.result == 'success'
-    needs: [build-deps, partition-config, nextest-archive-linux]
+    if: needs.build-deps.result == 'success' && needs.partition-config.result == 'success'
+    needs: [build-deps, partition-config]
     environment: Cachix
     permissions:
-      checks: write
       contents: read
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
@@ -501,12 +397,6 @@ jobs:
             nix-deps-ubuntu-latest-
             nix-deps-
 
-      - name: Download nextest archive
-        uses: actions/download-artifact@v4
-        with:
-          name: nextest-archive-ubuntu-latest
-          path: .
-
       - name: Run nextest (partition ${{ matrix.partition }})
         run: |
           echo "Starting nextest partition ${{ matrix.partition }} at $(date)"
@@ -514,12 +404,8 @@ jobs:
           df -h
           echo "Available memory:"
           free -h || vm_stat
-          time nix develop --command cargo nextest run \
-            --profile ci \
-            --archive-file ./nextest-archive.tar.zst \
-            --workspace-remap "$GITHUB_WORKSPACE" \
-            --partition hash:${{ matrix.partition }}/${{ needs.partition-config.outputs.count }} \
-            --no-fail-fast
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          time nix build ".#checks.${system}.gammaloop-nextest-partition-${{ matrix.partition }}" --print-build-logs
           echo "Nextest partition ${{ matrix.partition }} completed at $(date)"
         timeout-minutes: 120
 
@@ -531,48 +417,11 @@ jobs:
           echo "Doctests completed at $(date)"
         timeout-minutes: 60
 
-      - name: Normalize JUnit report
-        if: always()
-        run: |
-          mkdir -p target/nextest/ci
-          if [ -f target/nextest/ci/junit.xml ]; then
-            exit 0
-          fi
-          report_path="$(find . -path '*/target/nextest/ci/junit.xml' -print -quit || true)"
-          if [ -n "${report_path}" ]; then
-            cp "${report_path}" target/nextest/ci/junit.xml
-            exit 0
-          fi
-          echo "::warning::No JUnit report found; writing a placeholder report."
-          cat > target/nextest/ci/junit.xml <<'XML'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <testsuites tests="0" failures="0" errors="0" skipped="0" time="0"></testsuites>
-          XML
-
-      - name: Publish test results
-        if: ${{ !cancelled() }}
-        uses: EnricoMi/publish-unit-test-result-action@v2
-        with:
-          check_name: Test Results (ubuntu-latest / partition ${{ matrix.partition }})
-          comment_mode: off
-          action_fail_on_inconclusive: false
-          files: target/nextest/ci/junit.xml
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-ubuntu-latest-${{ matrix.partition }}
-          path: target/nextest/ci/junit.xml
-          if-no-files-found: ignore
-          retention-days: 7
-
   test-macos:
-    if: needs.build-deps-macos.result == 'success' && needs.partition-config.result == 'success' && needs.nextest-archive-macos.result == 'success'
-    needs: [build-deps-macos, partition-config, nextest-archive-macos]
+    if: needs.build-deps-macos.result == 'success' && needs.partition-config.result == 'success'
+    needs: [build-deps-macos, partition-config]
     environment: Cachix
     permissions:
-      checks: write
       contents: read
     env:
       SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
@@ -611,12 +460,6 @@ jobs:
             nix-deps-macos-latest-
             nix-deps-
 
-      - name: Download nextest archive
-        uses: actions/download-artifact@v4
-        with:
-          name: nextest-archive-macos-latest
-          path: .
-
       - name: Run nextest (partition 1)
         run: |
           echo "Starting nextest partition 1 at $(date)"
@@ -624,12 +467,8 @@ jobs:
           df -h
           echo "Available memory:"
           vm_stat
-          time nix develop --command cargo nextest run \
-            --profile ci \
-            --archive-file ./nextest-archive.tar.zst \
-            --workspace-remap "$GITHUB_WORKSPACE" \
-            --partition hash:1/${{ needs.partition-config.outputs.count }} \
-            --no-fail-fast
+          system="$(nix eval --impure --raw --expr builtins.currentSystem)"
+          time nix build ".#checks.${system}.gammaloop-nextest-partition-1" --print-build-logs
           echo "Nextest partition 1 completed at $(date)"
         timeout-minutes: 120
 
@@ -639,42 +478,6 @@ jobs:
           time nix develop --command cargo test --doc --verbose
           echo "Doctests completed at $(date)"
         timeout-minutes: 60
-
-      - name: Normalize JUnit report
-        if: always()
-        run: |
-          mkdir -p target/nextest/ci
-          if [ -f target/nextest/ci/junit.xml ]; then
-            exit 0
-          fi
-          report_path="$(find . -path '*/target/nextest/ci/junit.xml' -print -quit || true)"
-          if [ -n "${report_path}" ]; then
-            cp "${report_path}" target/nextest/ci/junit.xml
-            exit 0
-          fi
-          echo "::warning::No JUnit report found; writing a placeholder report."
-          cat > target/nextest/ci/junit.xml <<'XML'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <testsuites tests="0" failures="0" errors="0" skipped="0" time="0"></testsuites>
-          XML
-
-      - name: Publish test results
-        if: ${{ !cancelled() }}
-        uses: EnricoMi/publish-unit-test-result-action/macos@v2
-        with:
-          check_name: Test Results (macos-latest / partition 1)
-          comment_mode: off
-          action_fail_on_inconclusive: false
-          files: target/nextest/ci/junit.xml
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-macos-latest-1
-          path: target/nextest/ci/junit.xml
-          if-no-files-found: ignore
-          retention-days: 7
 
   docs:
     if: needs.build-deps.result == 'success'

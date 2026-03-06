@@ -17,22 +17,21 @@ build = "build.rs"
 bench = false
 
 [dependencies]
-ahash = { version = "0.8.8", features = ["serde"] }
 base62 = "2.0.2"
-bincode = { version = "2.0.0", features = ["serde"] }
-# bincode-trait-derive = {path="../bincode-trait-derive"}
-bincode-trait-derive = { version = "0.1.1" }
 brotli = "7.0.0"
-clap = { version = "4.5.41", features = [
+clarabel = "0"
+color-eyre = { version = "0.6", default-features = false }
+
+ahash = { workspace = true, features = ["serde"] }
+bincode = { workspace = true, features = ["serde"] }
+bincode-trait-derive = { workspace = true }
+clap = { workspace = true, features = [
   "derive",
   "env",
   "unicode",
   "wrap_help",
 ] }
-clarabel = "0"
-color-eyre = { version = "0.6", default-features = false }
-colored = "*"
-comemo = "0.5.0"
+colored = { workspace = true }
 ctrlc = "3.4.4"
 delegate = "0.12.0"
 # num = { version = "0.4.1", features = ["serde"] }
@@ -41,18 +40,18 @@ derive_more = "0.99.17"
 dirs = "5"
 dot-parser = "0.5.1"
 enum_dispatch = "*"
-eyre = "^0.6"
-git-version = "0.3"
-idenso = { version = "0.3", features = ["bincode"] }
-include_dir = "0.7"
+eyre = { workspace = true }
+git-version = { workspace = true }
+idenso = { workspace = true, features = ["bincode"] }
+include_dir = { workspace = true }
 # petgraph = "0.6.4"
 indexmap = "2.2.2"
 # clap-repl = "0.3.2"
 indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
 insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
-itertools = "0.14"
+itertools = { workspace = true }
 libc = "0.2.0"
-linnet = { version = "0.17.0", features = [
+linnet = { workspace = true, features = [
   "bincode",
   # "drawing",
   "serde",
@@ -70,50 +69,50 @@ momtrop = { version = "0.3.0" }
 # env_logger = "*"
 # pyo3-log = { version = "0.12.0", optional = true }
 nalgebra = "0.34.1"
-nu-ansi-term = "0.50.3"
+nu-ansi-term = { workspace = true }
 paste = "1.0.15"
 pathfinding = "4.11.0"
-pyo3-stub-gen = { version = "0.13", default-features = false, optional = true }
-rand = { version = "0.9", features = ["small_rng"] }
-rayon = "1.5"
+pyo3-stub-gen = { workspace = true, optional = true }
+rand = { workspace = true, features = ["small_rng"] }
+rayon = { workspace = true }
 # constcat = "0.5.0"
 ref-ops = "0.2.5"
 ringbuffer = "0.16.0"
 # gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
 rug = { version = "1.27.0", features = ["serde"] }
-schemars = "1.0.4"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.115"
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 serde_repr = "0.1.19"
-serde_yaml = "*"
+serde_yaml = { workspace = true }
 slotmap = { version = "1.0.7", features = ["serde"] }
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
-smartstring = { version = "*", features = ["serde"] }
-spenso = { version = "0.6", features = ["shadowing"] }
+smartstring = { workspace = true, features = ["serde"] }
+spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib = { version = "0.1.7" }
 spenso-macros = { version = "0.3" }
 statrs = "0.16.0"
-symbolica = { version = "1.3", default-features = false, features = [
+symbolica = { workspace = true, features = [
   "bincode",
   "serde",
 ] }
 # compensated-summation = "0.3.0"
 # serde_with = "3.9.0"
-tabled = { version = "0.20.0", features = ["ansi"] }
+tabled = { workspace = true, features = ["ansi"] }
 # gxhash = "3.4.1"
 thiserror = "1.0.63"
-toml = "0.9.5"
-tracing = { version = "0.1.41", features = ["release_max_level_info"] }
-tracing-appender = "0.2.3"
-tracing-indicatif = "0.3.13"
-tracing-subscriber = { version = "0.3.19", features = [
+toml = { workspace = true }
+tracing = { workspace = true, features = ["release_max_level_info"] }
+tracing-appender = { workspace = true }
+tracing-indicatif = { workspace = true }
+tracing-subscriber = { workspace = true, features = [
   "env-filter",
   "fmt",
   "json",
   "time",
 ] }
 twofloat = "0.8.4"
-typed-index-collections = { version = "3.3.0", features = [
+typed-index-collections = { workspace = true, features = [
   "bincode",
   "serde",
   "serde-alloc",
@@ -124,7 +123,7 @@ vectorize = "0.2.0"
 which = "8.0.0"
 
 [dependencies.pyo3]
-version = "0.25"
+workspace = true
 features = ["auto-initialize", "eyre"]
 optional = true
 
@@ -134,7 +133,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 [build-dependencies]
 # pyo3-build-config = "*"
-vergen-gitcl = { version = "9", default-features = false }
+vergen-gitcl = { workspace = true }
 # pyo3-build-config = "*"
 
 [features]
