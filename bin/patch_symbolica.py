@@ -1,1 +1,0 @@
-../../bin/patch_symbolica.py

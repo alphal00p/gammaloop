@@ -23,6 +23,7 @@ use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
 use tracing::debug;
 use tracing::info;
+use tracing::warn;
 use tracing_subscriber::{reload, EnvFilter, Registry};
 
 use gammalooprs::{
@@ -574,6 +575,116 @@ pub struct State {
     pub log_filter: reload::Handle<EnvFilter, Registry>,
 }
 
+const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+struct StateManifest {
+    version: u32,
+}
+
+impl Default for StateManifest {
+    fn default() -> Self {
+        Self {
+            version: CURRENT_STATE_MANIFEST_VERSION,
+        }
+    }
+}
+
+impl StateManifest {
+    fn legacy() -> Self {
+        Self { version: 0 }
+    }
+}
+
+fn run_state_migration_checks(
+    manifest: &StateManifest,
+    save_path: &Path,
+    has_external_model_override: bool,
+) -> Result<()> {
+    if manifest.version > CURRENT_STATE_MANIFEST_VERSION {
+        return Err(eyre!(
+            "State version {} is newer than this binary supports (max {}). Please upgrade gammaloop.",
+            manifest.version,
+            CURRENT_STATE_MANIFEST_VERSION
+        ));
+    }
+
+    match manifest.version {
+        0 => {
+            if !save_path.join("symbolica_state.bin").exists() {
+                return Err(eyre!(
+                    "Legacy state at '{}' is missing required file symbolica_state.bin",
+                    save_path.display()
+                ));
+            }
+            if !save_path.join("processes").exists() {
+                return Err(eyre!(
+                    "Legacy state at '{}' is missing required folder processes/",
+                    save_path.display()
+                ));
+            }
+            if !has_external_model_override && !save_path.join("model.json").exists() {
+                return Err(eyre!(
+                    "Legacy state at '{}' is missing required file model.json",
+                    save_path.display()
+                ));
+            }
+            Ok(())
+        }
+        1 => Ok(()),
+        _ => Err(eyre!(
+            "State version {} is not supported by this binary.",
+            manifest.version
+        )),
+    }
+}
+
+fn load_state_manifest(
+    save_path: &Path,
+    has_external_model_override: bool,
+) -> Result<StateManifest> {
+    let manifest_path = save_path.join(STATE_MANIFEST_FILE);
+    let manifest = if manifest_path.exists() {
+        let raw_manifest = fs::read_to_string(&manifest_path).with_context(|| {
+            format!(
+                "Trying to read state manifest file {}",
+                manifest_path.display()
+            )
+        })?;
+        toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
+            format!(
+                "Trying to parse state manifest file {}",
+                manifest_path.display()
+            )
+        })?
+    } else {
+        warn!(
+            "No {} found in '{}'. Treating state as legacy version 0.",
+            STATE_MANIFEST_FILE,
+            save_path.display()
+        );
+        StateManifest::legacy()
+    };
+
+    run_state_migration_checks(&manifest, save_path, has_external_model_override)?;
+    Ok(manifest)
+}
+
+fn save_state_manifest(save_path: &Path) -> Result<()> {
+    let manifest = StateManifest::default();
+    let raw_manifest =
+        toml::to_string_pretty(&manifest).context("Trying to serialize state manifest to TOML")?;
+    fs::write(save_path.join(STATE_MANIFEST_FILE), raw_manifest).with_context(|| {
+        format!(
+            "Trying to write state manifest file {}",
+            save_path.join(STATE_MANIFEST_FILE).display()
+        )
+    })?;
+    Ok(())
+}
+
 impl State {
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.model = Model::from_file(path)?;
@@ -926,6 +1037,8 @@ impl State {
         trace_logs_filename: Option<String>,
     ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
+        let manifest = load_state_manifest(&save_path, model_path.is_some())?;
+        debug!("Loading state manifest version {}", manifest.version);
 
         let mut model = if let Some(model_path) = &model_path {
             info!("Loading model from {}", model_path.display());
@@ -1040,9 +1153,11 @@ impl State {
             }
         }
 
+        fs::create_dir_all(&selected_root_folder)?;
+
         let mut state_file =
         // info!("Hi");
-            fs::File::create(root_folder.join("symbolica_state.bin"))?;
+            fs::File::create(selected_root_folder.join("symbolica_state.bin"))?;
 
         symbolica::state::State::export(&mut state_file)?;
         self.process_list
@@ -1057,18 +1172,22 @@ impl State {
             selected_root_folder.join("model_parameters.json"),
             override_state_file,
         )?;
+        save_state_manifest(&selected_root_folder)?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use gammalooprs::{
         improve_ps::PhaseSpaceImprovementSettings,
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
         utils::serde_utils::SHOWDEFAULTS,
     };
+    use tempfile::tempdir;
 
     use crate::commands::{
         display::Display,
@@ -1303,6 +1422,42 @@ use_picobarns = true
         }
 
         assert!(run_history.default_runtime_settings.general.use_picobarns);
+    }
+
+    #[test]
+    fn state_manifest_roundtrip_current_version() {
+        let temp = tempdir().unwrap();
+        save_state_manifest(temp.path()).unwrap();
+
+        let manifest = load_state_manifest(temp.path(), false).unwrap();
+        assert_eq!(manifest.version, CURRENT_STATE_MANIFEST_VERSION);
+    }
+
+    #[test]
+    fn state_manifest_rejects_future_versions() {
+        let temp = tempdir().unwrap();
+        let future_manifest = StateManifest {
+            version: CURRENT_STATE_MANIFEST_VERSION + 1,
+        };
+        fs::write(
+            temp.path().join(STATE_MANIFEST_FILE),
+            toml::to_string_pretty(&future_manifest).unwrap(),
+        )
+        .unwrap();
+
+        let err = load_state_manifest(temp.path(), false).unwrap_err();
+        assert!(format!("{err}").contains("newer than this binary supports"));
+    }
+
+    #[test]
+    fn legacy_state_layout_check_requires_expected_files() {
+        let temp = tempdir().unwrap();
+        fs::write(temp.path().join("model.json"), "{}").unwrap();
+        fs::write(temp.path().join("symbolica_state.bin"), []).unwrap();
+        fs::create_dir_all(temp.path().join("processes")).unwrap();
+
+        let manifest = load_state_manifest(temp.path(), false).unwrap();
+        assert_eq!(manifest.version, 0);
     }
 }
 

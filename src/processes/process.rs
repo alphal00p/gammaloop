@@ -43,6 +43,48 @@ use crate::{
 
 use super::{Amplitude, CrossSection};
 
+const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
+const SETTINGS_HISTORY_YAML: &str = "settings_history.yaml";
+
+fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
+    let settings_history_toml = path.join(SETTINGS_HISTORY_TOML);
+    if settings_history_toml.exists() {
+        let settings_history_raw =
+            fs::read_to_string(&settings_history_toml).with_context(|| {
+                format!(
+                    "Error reading process settings history file {}",
+                    settings_history_toml.display()
+                )
+            })?;
+        let settings_history = toml::from_str(&settings_history_raw).with_context(|| {
+            format!(
+                "Error parsing process settings history file {}",
+                settings_history_toml.display()
+            )
+        })?;
+        return Ok(Some(settings_history));
+    }
+
+    let settings_history_yaml = path.join(SETTINGS_HISTORY_YAML);
+    if settings_history_yaml.exists() {
+        warn!(
+            "Using legacy process settings history file {}. Re-save state to migrate to {}.",
+            settings_history_yaml.display(),
+            SETTINGS_HISTORY_TOML
+        );
+        let settings_history = serde_yaml::from_reader(File::open(&settings_history_yaml)?)
+            .with_context(|| {
+                format!(
+                    "Error parsing legacy process settings history file {}",
+                    settings_history_yaml.display()
+                )
+            })?;
+        return Ok(Some(settings_history));
+    }
+
+    Ok(None)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ProcessDefinition {
@@ -353,10 +395,7 @@ impl Process {
             path.as_ref().display()
         ))?;
 
-        let settings_history = File::open(path.as_ref().join("settings_history.yaml"))
-            .ok()
-            .map(serde_yaml::from_reader)
-            .transpose()?;
+        let settings_history = load_settings_history(path.as_ref())?;
 
         let (definition, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
@@ -397,10 +436,7 @@ impl Process {
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
         let mut collection = ProcessCollection::new_cross_section();
-        let settings_history = File::open(path.as_ref().join("settings_history.yaml"))
-            .ok()
-            .map(serde_yaml::from_reader)
-            .transpose()?;
+        let settings_history = load_settings_history(path.as_ref())?;
 
         for entry in fs::read_dir(path.as_ref())
             .context(format!("error reading {}", path.as_ref().display()))?
@@ -447,7 +483,7 @@ impl Process {
                 fs::write(p.join("def.bin"), binary)?;
 
                 if let Some(a) = &self.settings_history {
-                    File::create(path.as_ref().join("settings_history.toml"))?
+                    File::create(p.join(SETTINGS_HISTORY_TOML))?
                         .write_all(toml::to_string_pretty(a)?.as_bytes())?;
                 }
 
@@ -475,7 +511,7 @@ impl Process {
                 fs::write(p.join("def.bin"), binary)?;
 
                 if let Some(a) = &self.settings_history {
-                    File::create(path.as_ref().join("settings_history.toml"))?
+                    File::create(p.join(SETTINGS_HISTORY_TOML))?
                         .write_all(toml::to_string_pretty(a)?.as_bytes())?;
                 }
 

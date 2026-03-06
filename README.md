@@ -12,6 +12,7 @@
 See [www.alphaloop.ch](https://www.alphaloop.ch) for details on the theoretical framework and related literature.
 
 See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
+Architecture documentation is available under [docs/architecture](docs/architecture/architecture.md).
 
 ## TL;DR: I want to be running γLoop already!
 
