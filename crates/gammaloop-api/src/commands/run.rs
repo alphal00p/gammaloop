@@ -21,6 +21,10 @@ pub struct Run {
     #[arg(value_hint = clap::ValueHint::FilePath)]
     path: Option<PathBuf>,
 
+    /// Command block names to execute (in order)
+    #[arg(value_name = "BLOCK_NAME")]
+    block_names: Vec<String>,
+
     #[arg(short = 'c', long)]
     commands: Option<String>,
 }
@@ -34,7 +38,17 @@ impl Run {
         run_history: &mut RunHistory,
     ) -> Result<ControlFlow<SaveState>> {
         let mut a: ControlFlow<SaveState> = ControlFlow::Continue(());
-        if let Some(mut new_run_history) = self.path.as_ref().map(RunHistory::load).transpose()? {
+        if let Some(mut new_run_history) = self
+            .path
+            .as_ref()
+            .map(|path| {
+                RunHistory::load_with_block_selection(
+                    path,
+                    (!self.block_names.is_empty()).then_some(self.block_names.as_slice()),
+                )
+            })
+            .transpose()?
+        {
             let res = new_run_history.run(state, global_settings, default_runtime_settings);
 
             run_history.merge(new_run_history);

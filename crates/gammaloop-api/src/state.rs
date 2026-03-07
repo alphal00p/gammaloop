@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs::{self},
     io::{self},
     ops::ControlFlow,
@@ -302,6 +303,10 @@ impl SyncSettings for CLISettings {
 // Static flag to control serialization behavior
 static SERIALIZE_COMMANDS_AS_STRINGS: AtomicBool = AtomicBool::new(false);
 
+fn is_commands_blocks_empty(commands_blocks: &Vec<CommandsBlock>) -> bool {
+    commands_blocks.is_empty()
+}
+
 /// Set whether CommandHistory should serialize as strings when the raw_string is available
 pub fn set_serialize_commands_as_strings(value: bool) {
     SERIALIZE_COMMANDS_AS_STRINGS.store(value, std::sync::atomic::Ordering::Relaxed);
@@ -457,8 +462,18 @@ pub struct RunHistory {
 
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub cli_settings: CLISettings,
+
+    #[serde(skip_serializing_if = "is_commands_blocks_empty")]
+    pub commands_blocks: Vec<CommandsBlock>,
     // #[serde(with = "serde_yaml::with::singleton_map_recursive")]
     // #[schemars(with = "Vec<CommandHistory>")]
+    pub commands: Vec<CommandHistory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct CommandsBlock {
+    pub name: String,
     pub commands: Vec<CommandHistory>,
 }
 
@@ -490,23 +505,87 @@ impl RunHistory {
     pub fn schema() -> Schema {
         schema_for!(RunHistory)
     }
-    pub fn run(
+
+    fn select_commands_blocks(&mut self, selected_block_names: Option<&[String]>) -> Result<()> {
+        if !self.commands.is_empty() && !self.commands_blocks.is_empty() {
+            return Err(eyre!(
+                "Run card defines both `commands` and `commands_blocks`; use only one of them"
+            ));
+        }
+
+        if self.commands_blocks.is_empty() {
+            if let Some(selected_block_names) =
+                selected_block_names.filter(|names| !names.is_empty())
+            {
+                return Err(eyre!(
+                    "Run card block selection requested ({}) but this run card only defines `commands`",
+                    selected_block_names.join(", ")
+                ));
+            }
+            return Ok(());
+        }
+
+        let mut seen_names = HashSet::with_capacity(self.commands_blocks.len());
+        for block in &self.commands_blocks {
+            if block.name.trim().is_empty() {
+                return Err(eyre!(
+                    "Run card `commands_blocks` contains a block with an empty name"
+                ));
+            }
+            if !seen_names.insert(block.name.clone()) {
+                return Err(eyre!(
+                    "Run card `commands_blocks` contains duplicate block name '{}'",
+                    block.name
+                ));
+            }
+        }
+
+        let selected_blocks = if let Some(selected_block_names) =
+            selected_block_names.filter(|names| !names.is_empty())
+        {
+            let mut selected = Vec::with_capacity(selected_block_names.len());
+            for name in selected_block_names {
+                let block = self
+                    .commands_blocks
+                    .iter()
+                    .find(|block| block.name == *name)
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Unknown command block '{name}'. Available command blocks: {}",
+                            self.commands_blocks
+                                .iter()
+                                .map(|block| block.name.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    })?;
+                selected.push(block.clone());
+            }
+            selected
+        } else {
+            self.commands_blocks.clone()
+        };
+
+        if selected_blocks.is_empty() {
+            warn!("Run card defines `commands_blocks` but no blocks were selected");
+        }
+
+        self.commands = selected_blocks
+            .iter()
+            .flat_map(|block| block.commands.clone())
+            .collect();
+        self.commands_blocks = selected_blocks;
+        Ok(())
+    }
+
+    fn run_commands(
         &mut self,
+        commands: Vec<CommandHistory>,
         state: &mut State,
         global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<SaveState>> {
-        // A run card can carry runtime/global defaults that should be active before
-        // executing any command (e.g. before `set process ... defaults`).
-        if self.cli_settings.global != GlobalSettings::default() {
-            global_settings.global = self.cli_settings.global.clone();
-            global_settings.sync_settings()?;
-        }
-        if self.default_runtime_settings != RuntimeSettings::default() {
-            *default_runtime_settings = self.default_runtime_settings.clone();
-        }
-
-        for command_history in self.commands.clone() {
+        for command_history in commands {
             info!(
                 "Running command: {}",
                 if let Some(rs) = command_history.raw_string {
@@ -526,15 +605,67 @@ impl RunHistory {
         }
         Ok(ControlFlow::Continue(()))
     }
+
+    pub fn run(
+        &mut self,
+        state: &mut State,
+        global_settings: &mut CLISettings,
+        default_runtime_settings: &mut RuntimeSettings,
+    ) -> Result<ControlFlow<SaveState>> {
+        // A run card can carry runtime/global defaults that should be active before
+        // executing any command (e.g. before `set process ... defaults`).
+        if self.cli_settings.global != GlobalSettings::default() {
+            global_settings.global = self.cli_settings.global.clone();
+            global_settings.sync_settings()?;
+        }
+        if self.default_runtime_settings != RuntimeSettings::default() {
+            *default_runtime_settings = self.default_runtime_settings.clone();
+        }
+
+        if !self.commands_blocks.is_empty() {
+            for block in self.commands_blocks.clone() {
+                info!(
+                    "> {} {}",
+                    "Starting command block".blue(),
+                    block.name.green()
+                );
+                if let ControlFlow::Break(a) = self.run_commands(
+                    block.commands,
+                    state,
+                    global_settings,
+                    default_runtime_settings,
+                )? {
+                    return Ok(ControlFlow::Break(a));
+                }
+            }
+            return Ok(ControlFlow::Continue(()));
+        }
+
+        self.run_commands(
+            self.commands.clone(),
+            state,
+            global_settings,
+            default_runtime_settings,
+        )
+    }
     pub fn merge(&mut self, other: Self) {
         self.commands.extend(other.commands);
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
-        debug!("Loaded run history from file {}", path.as_ref().display());
+        Self::load_with_block_selection(path, None)
+    }
 
-        let runhistory = Self::from_file(path.as_ref(), "run history")?;
+    pub fn load_with_block_selection(
+        path: impl AsRef<Path>,
+        selected_block_names: Option<&[String]>,
+    ) -> Result<Self> {
+        let path = path.as_ref();
+        debug!("Loaded run history from file {}", path.display());
+
+        let mut runhistory = Self::from_file(path, "run history")?;
         runhistory.cli_settings.sync_settings()?;
+        runhistory.select_commands_blocks(selected_block_names)?;
 
         Ok(runhistory)
     }
@@ -1422,6 +1553,170 @@ use_picobarns = true
         }
 
         assert!(run_history.default_runtime_settings.general.use_picobarns);
+    }
+
+    #[test]
+    fn run_history_load_selects_all_commands_blocks_by_default() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        fs::write(
+            &run_path,
+            r#"
+[[commands_blocks]]
+name = "zeta"
+commands = ["quit -n"]
+
+[[commands_blocks]]
+name = "alpha"
+commands = ["quit -o"]
+"#,
+        )
+        .unwrap();
+
+        let run_history = RunHistory::load_with_block_selection(&run_path, None).unwrap();
+        assert_eq!(run_history.commands.len(), 2);
+        assert_eq!(
+            run_history.commands[0].raw_string.as_deref(),
+            Some("quit -n")
+        );
+        assert_eq!(
+            run_history.commands[1].raw_string.as_deref(),
+            Some("quit -o")
+        );
+    }
+
+    #[test]
+    fn run_history_load_selects_named_commands_blocks_in_order() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        fs::write(
+            &run_path,
+            r#"
+[[commands_blocks]]
+name = "first"
+commands = ["quit -n"]
+
+[[commands_blocks]]
+name = "second"
+commands = ["quit -o"]
+"#,
+        )
+        .unwrap();
+
+        let requested = vec!["second".to_string(), "first".to_string()];
+        let run_history =
+            RunHistory::load_with_block_selection(&run_path, Some(requested.as_slice())).unwrap();
+        assert_eq!(run_history.commands.len(), 2);
+        assert_eq!(
+            run_history.commands[0].raw_string.as_deref(),
+            Some("quit -o")
+        );
+        assert_eq!(
+            run_history.commands[1].raw_string.as_deref(),
+            Some("quit -n")
+        );
+    }
+
+    #[test]
+    fn run_history_load_rejects_unknown_command_block() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        fs::write(
+            &run_path,
+            r#"
+[[commands_blocks]]
+name = "first"
+commands = ["quit -n"]
+"#,
+        )
+        .unwrap();
+
+        let requested = vec!["missing".to_string()];
+        let err = RunHistory::load_with_block_selection(&run_path, Some(requested.as_slice()))
+            .unwrap_err();
+        let message = format!("{err}");
+        assert!(message.contains("Unknown command block 'missing'"));
+        assert!(message.contains("first"));
+    }
+
+    #[test]
+    fn run_history_load_rejects_selection_when_only_legacy_commands_exist() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        fs::write(
+            &run_path,
+            r#"
+commands = ["quit -o"]
+"#,
+        )
+        .unwrap();
+
+        let requested = vec!["first".to_string()];
+        let err = RunHistory::load_with_block_selection(&run_path, Some(requested.as_slice()))
+            .unwrap_err();
+        assert!(format!("{err}").contains("only defines `commands`"));
+    }
+
+    #[test]
+    fn run_history_load_accepts_legacy_commands_without_selection() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        fs::write(
+            &run_path,
+            r#"
+commands = ["quit -o"]
+"#,
+        )
+        .unwrap();
+
+        let run_history = RunHistory::load_with_block_selection(&run_path, None).unwrap();
+        assert_eq!(run_history.commands.len(), 1);
+        assert_eq!(
+            run_history.commands[0].raw_string.as_deref(),
+            Some("quit -o")
+        );
+    }
+
+    #[test]
+    fn run_history_load_rejects_commands_and_commands_blocks_together() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        fs::write(
+            &run_path,
+            r#"
+commands = ["quit -o"]
+
+[[commands_blocks]]
+name = "first"
+commands = ["quit -n"]
+"#,
+        )
+        .unwrap();
+
+        let err = RunHistory::load_with_block_selection(&run_path, None).unwrap_err();
+        assert!(format!("{err}").contains("both `commands` and `commands_blocks`"));
+    }
+
+    #[test]
+    fn run_history_load_rejects_duplicate_command_block_names() {
+        let temp = tempdir().unwrap();
+        let run_path = temp.path().join("run.toml");
+        fs::write(
+            &run_path,
+            r#"
+[[commands_blocks]]
+name = "first"
+commands = ["quit -o"]
+
+[[commands_blocks]]
+name = "first"
+commands = ["quit -n"]
+"#,
+        )
+        .unwrap();
+
+        let err = RunHistory::load_with_block_selection(&run_path, None).unwrap_err();
+        assert!(format!("{err}").contains("duplicate block name"));
     }
 
     #[test]

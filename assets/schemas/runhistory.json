@@ -9,6 +9,12 @@
         "$ref": "#/$defs/CommandHistory"
       }
     },
+    "commands_blocks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CommandsBlock"
+      }
+    },
     "default_runtime_settings": {
       "$ref": "#/$defs/RuntimeSettings"
     },
@@ -16,7 +22,6 @@
       "$ref": "#/$defs/GlobalSettings"
     }
   },
-  "required": ["default_runtime_settings", "cli_settings", "commands"],
   "$defs": {
     "AFBSettings": {
       "type": "object",
@@ -57,6 +62,21 @@
         }
       },
       "required": ["command"]
+    },
+    "CommandsBlock": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CommandHistory"
+          }
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": ["name"]
     },
     "Commands": {
       "oneOf": [
@@ -1372,12 +1392,21 @@
     "Run": {
       "type": "object",
       "properties": {
+        "block_names": {
+          "description": "Command block names to execute (in order)",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "commands": {
+          "type": "string"
+        },
         "path": {
           "description": "Path to a run file to execute",
           "type": "string"
         }
-      },
-      "required": ["path"]
+      }
     },
     "RuntimeSettings": {
       "type": "object",

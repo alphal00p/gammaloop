@@ -380,6 +380,7 @@ impl GammaLoopAPI {
         let mut one_shot = OneShot {
             // Path to the a run file to execute
             run_history: None,
+            run_block_names: vec![],
             // Don't actually run anything, just build up run card
             dry_run: false,
             // Path to the state folder

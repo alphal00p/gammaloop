@@ -80,9 +80,19 @@ pub struct Repl {
 #[derive(Parser, Debug)]
 #[command(name = "gammaLoop", version, about)]
 #[command(next_line_help = true)]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct OneShot {
     /// Path to the a run file to execute
     pub run_history: Option<PathBuf>,
+
+    /// Command block names to execute from `commands_blocks` in run cards.
+    /// When provided, only those blocks are run, in this order.
+    #[arg(
+        value_name = "BLOCK_NAME",
+        requires = "run_history",
+        trailing_var_arg = true
+    )]
+    pub run_block_names: Vec<String>,
 
     /// Don't actually run anything, just build up run card
     #[arg(short = 'd', long, default_value_t = false)]
@@ -190,6 +200,7 @@ impl OneShot {
     pub fn new_test(state_folder: PathBuf) -> Self {
         OneShot {
             run_history: None,
+            run_block_names: vec![],
             state_folder,
             state_folder_explicitly_set: false,
             dry_run: false,
@@ -202,6 +213,10 @@ impl OneShot {
             fresh_state: false,
             trace_logs_filename: None,
         }
+    }
+
+    fn selected_run_blocks(&self) -> Option<&[String]> {
+        (!self.run_block_names.is_empty()).then_some(self.run_block_names.as_slice())
     }
 
     fn subcmd_input_string(
@@ -262,7 +277,8 @@ impl OneShot {
         }
 
         if let Some(run_path) = self.run_history.as_ref() {
-            let run_history = RunHistory::load(run_path)?;
+            let run_history =
+                RunHistory::load_with_block_selection(run_path, self.selected_run_blocks())?;
             return Ok(run_history.cli_settings.state_folder.clone());
         }
 
@@ -326,7 +342,8 @@ impl OneShot {
                 let state = State::new(self.state_folder.clone(), self.trace_logs_filename.clone());
 
                 if let Some(run) = self.run_history.as_ref() {
-                    let mut run_history = RunHistory::load(run)?;
+                    let mut run_history =
+                        RunHistory::load_with_block_selection(run, self.selected_run_blocks())?;
                     // Freeze state folder for the whole session.
                     run_history.cli_settings.state_folder = self.state_folder.clone();
                     let mut global = run_history.cli_settings.clone();
@@ -363,7 +380,7 @@ impl OneShot {
         println!(":{}", cli_settings.global.display_directive);
 
         if let Some(run) = self.run_history.as_ref() {
-            let mut run = RunHistory::load(run)?;
+            let mut run = RunHistory::load_with_block_selection(run, self.selected_run_blocks())?;
             // Never switch state folder while executing commands in one session.
             run.cli_settings.state_folder = cli_settings.state_folder.clone();
             run_history.merge(run.clone());
@@ -553,6 +570,7 @@ pub fn write_schemas() -> Result<()> {
 mod tests {
     use std::{fs, path::PathBuf};
 
+    use clap::Parser;
     use tempfile::tempdir;
 
     use super::{CLISettings, OneShot, RunHistory};
@@ -598,5 +616,47 @@ mod tests {
             one_shot.resolve_initial_state_folder().unwrap(),
             PathBuf::from("./from_run_card")
         );
+    }
+
+    #[test]
+    fn oneshot_parses_run_card_block_names() {
+        let parsed =
+            OneShot::try_parse_from(["gammaloop", "card.toml", "generation", "integration"])
+                .unwrap();
+        assert_eq!(parsed.run_history, Some(PathBuf::from("card.toml")));
+        assert_eq!(
+            parsed.run_block_names,
+            vec!["generation".to_string(), "integration".to_string()]
+        );
+    }
+
+    #[test]
+    fn oneshot_treats_subcommand_names_as_block_names_when_run_card_is_present() {
+        let parsed = OneShot::try_parse_from([
+            "gammaloop",
+            "card.toml",
+            "generate",
+            "integrate_euclidean",
+            "quit",
+        ])
+        .unwrap();
+        assert_eq!(parsed.run_history, Some(PathBuf::from("card.toml")));
+        assert_eq!(
+            parsed.run_block_names,
+            vec![
+                "generate".to_string(),
+                "integrate_euclidean".to_string(),
+                "quit".to_string()
+            ]
+        );
+        assert!(parsed.command.is_none());
+    }
+
+    #[test]
+    fn oneshot_parses_subcommand_without_run_card() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "display", "integrands"]).unwrap();
+        assert!(parsed.run_history.is_none());
+        assert!(parsed.run_block_names.is_empty());
+        assert!(parsed.command.is_some());
     }
 }

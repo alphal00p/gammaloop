@@ -43,6 +43,7 @@ git-version = { workspace = true }
 idenso = { workspace = true }
 include_dir = { workspace = true }
 indicatif = "0.18.4"
+indexmap = "2.2.2"
 itertools = { workspace = true }
 json5 = "0.4.1"
 linnet = { workspace = true, features = [
