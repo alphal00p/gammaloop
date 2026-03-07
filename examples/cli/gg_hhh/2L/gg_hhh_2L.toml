@@ -23,7 +23,6 @@ commands = [
 "save dot",
 
 "save state",
-"quit -o",
 ]
 
 [[commands_blocks]]
@@ -54,8 +53,6 @@ commands = [
         --result-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace/result.txt
         --restart
     """,
-
-    "quit -n",
 
 ]
 
