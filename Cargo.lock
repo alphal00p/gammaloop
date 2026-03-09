@@ -179,28 +179,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "approx-derive"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7d4712bcff4a775f6f3b89f44dd563bcd699e70c4d35dea56645f22d65ca465"
-dependencies = [
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "approxim"
-version = "0.6.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "816825ba1726f300e5558f701bf3be2d2d2d2b6bdd0e648f338366c9ce12798a"
-dependencies = [
- "approx-derive",
- "num-traits",
-]
-
-[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -434,12 +412,6 @@ name = "bumpalo"
 version = "3.20.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d20789868f4b01b2f2caec9f5c4e0213b41e3e5702a50157d699ae31ced2fcb"
-
-[[package]]
-name = "by_address"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64fa3c856b712db6612c019f14756e64e4bcea13337a6b33b696333a9eaa2d06"
 
 [[package]]
 name = "bytecount"
@@ -1351,7 +1323,7 @@ dependencies = [
  "figment",
  "gammalooprs",
  "git-version",
- "idenso 0.3.0",
+ "idenso",
  "include_dir",
  "indexmap",
  "indicatif 0.18.4",
@@ -1375,7 +1347,7 @@ dependencies = [
  "serde_yaml",
  "shlex",
  "smartstring",
- "spenso 0.6.0",
+ "spenso",
  "symbolica",
  "tabled",
  "tempfile",
@@ -1403,7 +1375,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "momtrop",
- "spenso 0.6.0",
+ "spenso",
  "symbolica",
  "tabled",
  "tracing",
@@ -1433,7 +1405,7 @@ dependencies = [
  "enum_dispatch",
  "eyre",
  "git-version",
- "idenso 0.3.0",
+ "idenso",
  "include_dir",
  "indexmap",
  "indicatif 0.17.11",
@@ -1462,9 +1434,9 @@ dependencies = [
  "slotmap",
  "smallvec",
  "smartstring",
- "spenso 0.6.0",
+ "spenso",
  "spenso-hep-lib",
- "spenso-macros 0.3.2",
+ "spenso-macros",
  "statrs",
  "symbolica",
  "tabled",
@@ -1826,25 +1798,10 @@ dependencies = [
  "nu-ansi-term",
  "pyo3",
  "pyo3-stub-gen",
- "spenso 0.6.0",
- "spenso-macros 0.3.2",
+ "spenso",
+ "spenso-macros",
  "symbolica",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "idenso"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6857a788b5829891df51de1ec06cae7ddda0b86f1ac757f5046bb7ecc209d812"
-dependencies = [
- "anyhow",
- "itertools 0.14.0",
- "linnet 0.16.1",
- "spenso 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "spenso-macros 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "symbolica",
- "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2173,35 +2130,6 @@ dependencies = [
 
 [[package]]
 name = "linnet"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91a120f2641194c53262169f188898bab2c0762ad745497bd9ca998415932f33"
-dependencies = [
- "ahash",
- "bincode 2.0.1",
- "bincode-trait-derive",
- "bitvec",
- "by_address",
- "derive_more 0.99.20",
- "dot-parser",
- "duplicate 2.0.1",
- "figment",
- "getrandom 0.2.17",
- "indenter",
- "indexmap",
- "itertools 0.14.0",
- "kurbo",
- "paste",
- "piet",
- "rand 0.8.5",
- "rand_xoshiro 0.7.0",
- "ref-ops",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "linnet"
 version = "0.17.0"
 dependencies = [
  "ahash",
@@ -2316,12 +2244,6 @@ checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
  "regex-automata",
 ]
-
-[[package]]
-name = "matches"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
 
 [[package]]
 name = "matrixmultiply"
@@ -2895,16 +2817,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "piet"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5139c7ec7de4cc21d108484af288b9c335b731194218023acf8b02874ed2b25e"
-dependencies = [
- "kurbo",
- "unic-bidi",
-]
-
-[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2976,15 +2888,6 @@ checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "proc-macro-crate"
-version = "3.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
-dependencies = [
- "toml_edit 0.25.4+spec-1.1.0",
 ]
 
 [[package]]
@@ -4026,50 +3929,7 @@ dependencies = [
  "ron 0.8.1",
  "serde",
  "serde_json",
- "spenso-macros 0.3.2",
- "symbolica",
- "tabled",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "spenso"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27c2c74edaf1cdcf13912e1e1ee2bea7c6510e17ae7799ecbf9dc4fc002480d0"
-dependencies = [
- "ahash",
- "anyhow",
- "append-only-vec",
- "approx-derive",
- "approxim",
- "bincode 2.0.1",
- "bincode-trait-derive",
- "bitvec",
- "colored 3.1.1",
- "constcat",
- "delegate",
- "derive_more 0.99.20",
- "duplicate 1.0.0",
- "dyn-clone",
- "enum-try-as-inner",
- "env_logger",
- "features",
- "gat-lending-iterator",
- "indexmap",
- "itertools 0.14.0",
- "linnet 0.16.1",
- "log",
- "num",
- "once_cell",
- "rand 0.9.2",
- "rand_xoshiro 0.6.0",
- "rayon",
- "ref-ops",
- "serde",
- "serde_json",
- "slotmap",
- "spenso-macros 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "spenso-macros",
  "symbolica",
  "tabled",
  "thiserror 1.0.69",
@@ -4080,10 +3940,10 @@ name = "spenso-hep-lib"
 version = "0.1.7"
 dependencies = [
  "ahash",
- "idenso 0.3.0",
+ "idenso",
  "insta",
- "spenso 0.6.0",
- "spenso-macros 0.3.2",
+ "spenso",
+ "spenso-macros",
  "symbolica",
  "xpct",
 ]
@@ -4096,20 +3956,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "spenso 0.6.0",
- "symbolica",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "spenso-macros"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9afcbf0b89d59a87e646cca1601ede3b1d0b09a2b40e553044af85ea55a0fdf9"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde",
+ "spenso",
  "symbolica",
  "syn 2.0.117",
 ]
@@ -4120,14 +3967,14 @@ version = "0.1.2"
 dependencies = [
  "ahash",
  "eyre",
- "idenso 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "idenso",
  "itertools 0.14.0",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
- "spenso 0.6.0",
+ "spenso",
  "spenso-hep-lib",
- "spenso-macros 0.3.2",
+ "spenso-macros",
  "symbolica",
  "thiserror 1.0.69",
  "xpct",
@@ -4532,15 +4379,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml_datetime"
-version = "1.0.0+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32c2555c699578a4f59f0cc68e5116c8d7cabbd45e1409b989d4be085b53f13e"
-dependencies = [
- "serde_core",
-]
-
-[[package]]
 name = "toml_edit"
 version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4566,18 +4404,6 @@ dependencies = [
  "toml_datetime 0.7.5+spec-1.1.0",
  "toml_parser",
  "toml_writer",
- "winnow",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.25.4+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7193cbd0ce53dc966037f54351dbbcf0d5a642c7f0038c382ef9e677ce8c13f2"
-dependencies = [
- "indexmap",
- "toml_datetime 1.0.0+spec-1.1.0",
- "toml_parser",
  "winnow",
 ]
 
@@ -4766,16 +4592,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unic-bidi"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1356b759fb6a82050666f11dce4b6fe3571781f1449f3ef78074e408d468ec09"
-dependencies = [
- "matches",
- "unic-ucd-bidi",
-]
-
-[[package]]
 name = "unic-char-property"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4801,17 +4617,6 @@ name = "unic-emoji-char"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b07221e68897210270a38bde4babb655869637af0f69407f96053a34f76494d"
-dependencies = [
- "unic-char-property",
- "unic-char-range",
- "unic-ucd-version",
-]
-
-[[package]]
-name = "unic-ucd-bidi"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1d568b51222484e1f8209ce48caa6b430bf352962b877d592c29ab31fb53d8c"
 dependencies = [
  "unic-char-property",
  "unic-char-range",

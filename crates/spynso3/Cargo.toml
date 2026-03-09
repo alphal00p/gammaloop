@@ -12,7 +12,7 @@ symbolica = {workspace=true, default-features = false, features = [
 ] }
 spenso-macros = { workspace=true }
 spenso-hep-lib = { workspace=true}
-idenso = "0.3"
+idenso = { workspace=true}
 ahash = { version = "0.8.11", features = ["serde"] }
 xpct = "0.5.1"
 

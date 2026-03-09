@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ops::Deref};
 
-use anyhow::anyhow;
+use eyre::eyre;
 
 use library::SpensorLibrary;
 use library_tensor::AtomsOrFloats;

@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use eyre::eyre;
 use pyo3::{FromPyObject, PyErr, exceptions};
 
 use pyo3::{PyResult, pyclass, pymethods};
@@ -79,7 +79,7 @@ impl ConvertibleToSymbol {
                 if let AtomView::Var(a) = symbol.as_view() {
                     Ok(a.get_symbol())
                 } else {
-                    Err(anyhow::eyre!("Symbol is not a variable"))
+                    Err(eyre::eyre!("Symbol is not a variable"))
                 }
             }
         }

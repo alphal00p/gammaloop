@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use anyhow::anyhow;
+use eyre::eyre;
 
 use pyo3::{
     exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError},
