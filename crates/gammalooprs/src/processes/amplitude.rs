@@ -38,14 +38,14 @@ use crate::{
             PostProcessingSetup, generate_cff_expression, get_orientations_from_subgraph,
         },
     },
+    disable,
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     integrands::process::{
         LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
     },
     model::ArcParticle,
-    momentum::sample::ExternalIndex,
-    momentum::signature::SignatureLike,
+    momentum::{sample::ExternalIndex, signature::SignatureLike},
     numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
@@ -483,19 +483,21 @@ impl AmplitudeGraph {
             rewrite_esurfaces: None,
         };
 
-        forest.compute(
-            &self.graph,
-            &self.graph.tree_edges,
-            &self.graph.no_dummy(),
-            vk,
-            &orientations,
-            &canonize_esurface,
-            &[],
-            &[],
-            post,
-            &settings,
-            false,
-        )?;
+        // forest.compute(
+        //     &self.graph,
+        //     &self.graph.tree_edges,
+        //     &self.graph.no_dummy(),
+        //     vk,
+        //     &orientations,
+        //     &canonize_esurface,
+        //     &[],
+        //     &[],
+        //     post,
+        //     &settings,
+        //     false,
+        // )?;
+
+        todo!("compute forest");
 
         forest.pole_part_of_ends(&self.graph)
     }
@@ -844,268 +846,271 @@ impl AmplitudeGraph {
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
-        let global_num = self.graph.global_network();
+        disable! {
+            let global_num = self.graph.global_network();
 
-        let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = TiVec::new();
-        let canonize_esurface = self
-            .graph
-            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+            let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = TiVec::new();
+            let canonize_esurface = self
+                .graph
+                .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        for (esurface_id, esurface) in self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .esurface_cache
-            .iter_enumerated()
-        {
-            if esurface.external_shift.is_empty() {
-                // these will never satsify the threshold condition
-                // so we can skip them
-                counterterms.push(AmplitudeCountertermAtom {
-                    parametric_local: Atom::new(),
-                    parametric_integrated: Atom::new(),
-                });
-                continue;
-            }
-
-            if settings.threshold_subtraction.check_esurface_at_generation {
-                let masses = self.graph.get_real_mass_vector(model);
-                let external_signature = self.graph.get_external_signature();
-
-                let exists = locked_runtime_settings.existence_check(
-                    esurface,
-                    &masses,
-                    &external_signature,
-                    &self.graph.loop_momentum_basis,
-                );
-
-                if !exists {
+            for (esurface_id, esurface) in self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .surfaces
+                .esurface_cache
+                .iter_enumerated()
+            {
+                if esurface.external_shift.is_empty() {
+                    // these will never satsify the threshold condition
+                    // so we can skip them
                     counterterms.push(AmplitudeCountertermAtom {
                         parametric_local: Atom::new(),
                         parametric_integrated: Atom::new(),
                     });
                     continue;
                 }
-            }
 
-            let (circled, complement) = esurface.get_subgraph_components(&self.graph.underlying);
-            let edges_in_cut = esurface.bitvec(&self.graph.underlying);
+                if settings.threshold_subtraction.check_esurface_at_generation {
+                    let masses = self.graph.get_real_mass_vector(model);
+                    let external_signature = self.graph.get_external_signature();
 
-            let orientations = self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .get_orientations_with_esurface(esurface_id);
+                    let exists = locked_runtime_settings.existence_check(
+                        esurface,
+                        &masses,
+                        &external_signature,
+                        &self.graph.loop_momentum_basis,
+                    );
 
-            let first_orientation = &self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .orientations[orientations[0]]
-                .data
-                .orientation;
+                    if !exists {
+                        counterterms.push(AmplitudeCountertermAtom {
+                            parametric_local: Atom::new(),
+                            parametric_integrated: Atom::new(),
+                        });
+                        continue;
+                    }
+                }
 
-            let orientation_of_edges_in_esurface = esurface
-                .energies
-                .iter()
-                .map(|e| first_orientation[*e])
-                .collect_vec();
+                let (circled, complement) = esurface.get_subgraph_components(&self.graph.underlying);
+                let edges_in_cut = esurface.bitvec(&self.graph.underlying);
 
-            assert!(orientations.iter().all(|o| {
-                let or = &self
+                let orientations = self
                     .derived_data
                     .cff_expression
                     .as_ref()
                     .unwrap()
-                    .orientations[*o]
+                    .get_orientations_with_esurface(esurface_id);
+
+                let first_orientation = &self
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .orientations[orientations[0]]
                     .data
                     .orientation;
 
-                let orientation_of_esurface_in_this_orientation =
-                    esurface.energies.iter().map(|e| or[*e]).collect_vec();
+                let orientation_of_edges_in_esurface = esurface
+                    .energies
+                    .iter()
+                    .map(|e| first_orientation[*e])
+                    .collect_vec();
 
-                if orientation_of_edges_in_esurface != orientation_of_esurface_in_this_orientation {
-                    println!("{:?}", orientation_of_edges_in_esurface);
-                    println!("{:?}", orientation_of_esurface_in_this_orientation);
-                    println!("esurface shift: {:?}", esurface.external_shift);
-                    false
-                } else {
-                    true
-                }
-            }));
+                assert!(orientations.iter().all(|o| {
+                    let or = &self
+                        .derived_data
+                        .cff_expression
+                        .as_ref()
+                        .unwrap()
+                        .orientations[*o]
+                        .data
+                        .orientation;
 
-            let circled_wood = self.graph.wood(&circled);
-            let mut vk_settings_circled = vakint.1.clone();
-            //  it needs to be the max number of loops across all divergent spinneys of that graph
-            vk_settings_circled.number_of_terms_in_epsilon_expansion =
-                circled_wood.max_loops as i64;
-            let vakint_circled = (vakint.0, &vk_settings_circled);
+                    let orientation_of_esurface_in_this_orientation =
+                        esurface.energies.iter().map(|e| or[*e]).collect_vec();
 
-            let complement_wood = self.graph.wood(&complement);
-            let mut vk_settings_complement = vakint.1.clone();
-            //  it needs to be the max number of loops across all divergent spinneys of that graph
-            vk_settings_complement.number_of_terms_in_epsilon_expansion =
-                complement_wood.max_loops as i64;
-            let vakint_complement = (vakint.0, &vk_settings_complement);
-
-            let mut circled_forest =
-                circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-            let mut complement_forest =
-                complement_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-            let reverse_dangling = esurface
-                .energies
-                .iter()
-                .zip(orientation_of_edges_in_esurface)
-                .filter_map(|(e, o)| {
-                    if o == Orientation::Reversed {
-                        Some(*e)
+                    if orientation_of_edges_in_esurface != orientation_of_esurface_in_this_orientation {
+                        println!("{:?}", orientation_of_edges_in_esurface);
+                        println!("{:?}", orientation_of_esurface_in_this_orientation);
+                        println!("esurface shift: {:?}", esurface.external_shift);
+                        false
                     } else {
-                        None
+                        true
                     }
-                })
-                .collect_vec();
+                }));
 
-            let circled_bridgeless = circled.subtract(&self.graph.tree_edges);
+                let circled_wood = self.graph.wood(&circled);
+                let mut vk_settings_circled = vakint.1.clone();
+                //  it needs to be the max number of loops across all divergent spinneys of that graph
+                vk_settings_circled.number_of_terms_in_epsilon_expansion =
+                    circled_wood.max_loops as i64;
+                let vakint_circled = (vakint.0, &vk_settings_circled);
 
-            let circled_orientations = get_orientations_from_subgraph(
-                &self.graph.underlying,
-                &circled_bridgeless,
-                &reverse_dangling,
-            )
-            .into_iter()
-            .map(|cff_graph| cff_graph.global_orientation)
-            .filter(|a| settings.orientation_pattern.filter(a))
-            .collect::<TiVec<SubgraphOrientationID, _>>();
+                let complement_wood = self.graph.wood(&complement);
+                let mut vk_settings_complement = vakint.1.clone();
+                //  it needs to be the max number of loops across all divergent spinneys of that graph
+                vk_settings_complement.number_of_terms_in_epsilon_expansion =
+                    complement_wood.max_loops as i64;
+                let vakint_complement = (vakint.0, &vk_settings_complement);
 
-            let complement_bridgeless = complement.subtract(&self.graph.tree_edges);
+                let mut circled_forest =
+                    circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-            let complement_orientations = get_orientations_from_subgraph(
-                &self.graph.underlying,
-                &complement_bridgeless,
-                &reverse_dangling,
-            )
-            .into_iter()
-            .map(|cff_graph| cff_graph.global_orientation)
-            .filter(|a| settings.orientation_pattern.filter(a))
-            .collect::<TiVec<SubgraphOrientationID, _>>();
+                let mut complement_forest =
+                    complement_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-            let post = PostProcessingSetup {
-                constraint_data: None,
-                rewrite_esurfaces: None,
-            };
-            // println!("//Circled\n{}", self.graph.dot(&circled));
-            // println!("//Complement\n{}", self.graph.dot(&complement));
-            circled_forest.compute(
-                &self.graph,
-                &self.graph.tree_edges,
-                &circled,
-                vakint_circled,
-                &circled_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-                &self.graph.get_edges_in_initial_state_cut(),
-                post.clone(),
-                &settings.uv,
-                false,
-            )?;
+                let reverse_dangling = esurface
+                    .energies
+                    .iter()
+                    .zip(orientation_of_edges_in_esurface)
+                    .filter_map(|(e, o)| {
+                        if o == Orientation::Reversed {
+                            Some(*e)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect_vec();
 
-            complement_forest.compute(
-                &self.graph,
-                &self.graph.tree_edges,
-                &complement,
-                vakint_complement,
-                &complement_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-                &self.graph.get_edges_in_initial_state_cut(),
-                post.clone(),
-                &settings.uv,
-                false,
-            )?;
+                let circled_bridgeless = circled.subtract(&self.graph.tree_edges);
 
-            let circled_expr = circled_forest.orientation_parametric_expr(
-                Some(&edges_in_cut),
-                &self.graph,
-                settings.uv.add_sigma,
-            );
-
-            let complement_expr = complement_forest.orientation_parametric_expr(
-                None,
-                &self.graph,
-                settings.uv.add_sigma,
-            );
-
-            // println!("Circled Expression Network:");
-            // println!("{}", circled_expr.dot_pretty());
-
-            // println!("Complement Expression Network:");
-            // println!("{}", complement_expr.dot_pretty());
-
-            let mut product = circled_expr * complement_expr * global_num.clone();
-            debug!(dot = %product.dot_pretty(),"Product before execution");
-            product
-                .execute::<Sequential, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
+                let circled_orientations = get_orientations_from_subgraph(
+                    &self.graph.underlying,
+                    &circled_bridgeless,
+                    &reverse_dangling,
                 )
-                .unwrap();
-            // println!("{}", product.dot_pretty());
+                .into_iter()
+                .map(|cff_graph| cff_graph.global_orientation)
+                .filter(|a| settings.orientation_pattern.filter(a))
+                .collect::<TiVec<SubgraphOrientationID, _>>();
 
-            let scalar: Atom = product
-                .result_scalar()
-                .with_context(|| "in building threshold counterterm")?
-                .into();
+                let complement_bridgeless = complement.subtract(&self.graph.tree_edges);
 
-            let counterterm = scalar
-                .unwrap_function(GS.color_wrap)
-                .simplify_color()
-                .replace(function!(GS.energy, W_.x_))
-                .with(function!(GS.ose, W_.x_))
-                .expand_dots();
+                let complement_orientations = get_orientations_from_subgraph(
+                    &self.graph.underlying,
+                    &complement_bridgeless,
+                    &reverse_dangling,
+                )
+                .into_iter()
+                .map(|cff_graph| cff_graph.global_orientation)
+                .filter(|a| settings.orientation_pattern.filter(a))
+                .collect::<TiVec<SubgraphOrientationID, _>>();
 
-            let loop_3 = self.graph.get_loop_number() as i64 * 3;
+                let post = PostProcessingSetup {
+                    constraint_data: None,
+                    rewrite_esurfaces: None,
+                };
+                // println!("//Circled\n{}", self.graph.dot(&circled));
+                // println!("//Complement\n{}", self.graph.dot(&complement));
+                circled_forest.compute(
+                    &self.graph,
+                    &self.graph.tree_edges,
+                    &circled,
+                    vakint_circled,
+                    &circled_orientations,
+                    &canonize_esurface,
+                    &esurface.energies,
+                    &self.graph.get_edges_in_initial_state_cut(),
+                    post.clone(),
+                    &settings.uv,
+                    false,
+                )?;
 
-            let grad_eta = Atom::var(GS.deta_left_th);
-            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
-            let i = Atom::i();
+                complement_forest.compute(
+                    &self.graph,
+                    &self.graph.tree_edges,
+                    &complement,
+                    vakint_complement,
+                    &complement_orientations,
+                    &canonize_esurface,
+                    &esurface.energies,
+                    &self.graph.get_edges_in_initial_state_cut(),
+                    post.clone(),
+                    &settings.uv,
+                    false,
+                )?;
 
-            let radius = Atom::var(GS.radius_left);
-            let radius_star = Atom::var(GS.radius_star_left);
-            let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
-            let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
-            let hfunction = Atom::var(GS.hfunction_left_th);
+                let circled_expr = circled_forest.orientation_parametric_expr(
+                    Some(&edges_in_cut),
+                    &self.graph,
+                    settings.uv.add_sigma,
+                );
 
-            let delta_r_plus = &radius - &radius_star;
-            let delta_r_minus = -&radius - &radius_star;
+                let complement_expr = complement_forest.orientation_parametric_expr(
+                    None,
+                    &self.graph,
+                    settings.uv.add_sigma,
+                );
 
-            let jacobian_ratio = (&radius_star / &radius).pow(loop_3 - 1);
+                // println!("Circled Expression Network:");
+                // println!("{}", circled_expr.dot_pretty());
 
-            let local_prefactor = &jacobian_ratio / &factors_of_pi / &grad_eta
-                * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
+                // println!("Complement Expression Network:");
+                // println!("{}", complement_expr.dot_pretty());
 
-            let integrated_prefactor =
-                -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
+                let mut product = circled_expr * complement_expr * global_num.clone();
+                debug!(dot = %product.dot_pretty(),"Product before execution");
+                product
+                    .execute::<Sequential, SmallestDegree, _, _, _>(
+                        TENSORLIB.read().unwrap().deref(),
+                        FUN_LIB.deref(),
+                    )
+                    .unwrap();
+                // println!("{}", product.dot_pretty());
 
-            let local_counterterm = local_prefactor * &counterterm;
-            let integrated_counterterm = integrated_prefactor * &counterterm;
+                let scalar: Atom = product
+                    .result_scalar()
+                    .with_context(|| "in building threshold counterterm")?
+                    .into();
 
-            // println!("CounterTerm{}", counterterm);
-            counterterms.push(AmplitudeCountertermAtom {
-                parametric_local: local_counterterm,
-                parametric_integrated: integrated_counterterm,
-            });
+                let counterterm = scalar
+                    .unwrap_function(GS.color_wrap)
+                    .simplify_color()
+                    .replace(function!(GS.energy, W_.x_))
+                    .with(function!(GS.ose, W_.x_))
+                    .expand_dots();
+
+                let loop_3 = self.graph.get_loop_number() as i64 * 3;
+
+                let grad_eta = Atom::var(GS.deta_left_th);
+                let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
+                let i = Atom::i();
+
+                let radius = Atom::var(GS.radius_left);
+                let radius_star = Atom::var(GS.radius_star_left);
+                let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+                let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+                let hfunction = Atom::var(GS.hfunction_left_th);
+
+                let delta_r_plus = &radius - &radius_star;
+                let delta_r_minus = -&radius - &radius_star;
+
+                let jacobian_ratio = (&radius_star / &radius).pow(loop_3 - 1);
+
+                let local_prefactor = &jacobian_ratio / &factors_of_pi / &grad_eta
+                    * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
+
+                let integrated_prefactor =
+                    -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
+
+                let local_counterterm = local_prefactor * &counterterm;
+                let integrated_counterterm = integrated_prefactor * &counterterm;
+
+                // println!("CounterTerm{}", counterterm);
+                counterterms.push(AmplitudeCountertermAtom {
+                    parametric_local: local_counterterm,
+                    parametric_integrated: integrated_counterterm,
+                });
+            }
+
+            // let ct_4 = &counterterms[EsurfaceID::from(4)];
+            // panic!("Counterterm 4: {}", ct_4.parametric_local);
+
+            Ok(counterterms)
         }
-
-        // let ct_4 = &counterterms[EsurfaceID::from(4)];
-        // panic!("Counterterm 4: {}", ct_4.parametric_local);
-
-        Ok(counterterms)
+        todo!()
     }
 
     #[instrument(
@@ -1166,62 +1171,65 @@ impl AmplitudeGraph {
             constraint_data: None,
             rewrite_esurfaces: None,
         };
-        forest.compute(
-            &self.graph,
-            &self.graph.tree_edges,
-            &self.graph.no_dummy(),
-            vakint,
-            &orientations,
-            &canonize_esurface,
-            &[],
-            &self.graph.get_edges_in_initial_state_cut(),
-            post.clone(),
-            &settings.uv,
-            false,
-        )?;
+        todo!("compute forest");
+        disable! {
+            forest.compute(
+                &self.graph,
+                &self.graph.tree_edges,
+                &self.graph.no_dummy(),
+                vakint,
+                &orientations,
+                &canonize_esurface,
+                &[],
+                &self.graph.get_edges_in_initial_state_cut(),
+                post.clone(),
+                &settings.uv,
+                false,
+            )?;
 
-        let global_num = self.graph.global_network();
-        let mut full = forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
+            let global_num = self.graph.global_network();
+            let mut full = forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
 
-        full *= global_num;
+            full *= global_num;
 
-        debug!(dot = %full.dot_pretty(),"Full before execution");
+            debug!(dot = %full.dot_pretty(),"Full before execution");
 
-        full.execute::<Sequential, SmallestDegree, _, _, _>(
-            TENSORLIB.read().unwrap().deref(),
-            FUN_LIB.deref(),
-        )
-        .unwrap();
+            full.execute::<Sequential, SmallestDegree, _, _, _>(
+                TENSORLIB.read().unwrap().deref(),
+                FUN_LIB.deref(),
+            )
+            .unwrap();
 
-        let mut scalar: Atom = full
-            .result_scalar()
-            .with_context(|| {
-                "Failed to get scalar from network when building original paramteric integrand."
-                    .to_string()
-            })
-            .with_note(|| {
-                format!(
-                    "Network: \n{}\nGraph:\n{}",
-                    full.dot_pretty(),
-                    DotGraph::from(&self.graph).debug_dot()
-                )
-            })?
-            .into();
+            let mut scalar: Atom = full
+                .result_scalar()
+                .with_context(|| {
+                    "Failed to get scalar from network when building original paramteric integrand."
+                        .to_string()
+                })
+                .with_note(|| {
+                    format!(
+                        "Network: \n{}\nGraph:\n{}",
+                        full.dot_pretty(),
+                        DotGraph::from(&self.graph).debug_dot()
+                    )
+                })?
+                .into();
 
-        debug!("All parametric before color atom:{}", scalar.log_print());
-        scalar = scalar
-            .unwrap_function(GS.color_wrap)
-            .simplify_color()
-            .expand_dots();
+            debug!("All parametric before color atom:{}", scalar.log_print());
+            scalar = scalar
+                .unwrap_function(GS.color_wrap)
+                .simplify_color()
+                .expand_dots();
 
-        scalar = self.add_additional_factors_to_cff_atom(&scalar);
+            scalar = self.add_additional_factors_to_cff_atom(&scalar);
 
-        debug!(
-            "All parametric integrand atom:{}",
-            scalar.printer(LOGPRINTOPTS)
-        );
+            debug!(
+                "All parametric integrand atom:{}",
+                scalar.printer(LOGPRINTOPTS)
+            );
 
-        Ok(scalar)
+            Ok(scalar)
+        }
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Loop Momentum Bases"))]
