@@ -276,7 +276,7 @@ impl GraphOrientation for OrientationExpression {
     }
 }
 
-impl<O: OrientationID> CFFExpression<O>
+impl<O: OrientationID + Clone> CFFExpression<O>
 where
     usize: From<O>,
 {
@@ -364,6 +364,40 @@ where
                 }
             })
             .collect()
+    }
+
+    pub(crate) fn select_raised_cut(
+        mut self,
+        raised_cut_id: RaisedCutId,
+        raised_data: &RaisedData,
+        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+    ) -> Vec<CFFExpression<O>> {
+        self.normalize_wrt_raisings(raised_data, cut_esurface_map);
+
+        let max_occurrence = raised_data.cross_free_powersets[raised_cut_id]
+            .iter()
+            .map(|set| set.len())
+            .max()
+            .unwrap();
+
+        let reprentative_esurface_id =
+            cut_esurface_map[raised_data.raised_cut_groups[raised_cut_id][0]];
+
+        let mut result = vec![];
+        for occurence in 1..=max_occurrence {
+            let mut new_expression = self.clone();
+
+            for orientation in new_expression.orientations.iter_mut() {
+                orientation.expression.keep_branches_with_value_count_mut(
+                    &HybridSurfaceID::Esurface(reprentative_esurface_id),
+                    occurence,
+                );
+            }
+
+            result.push(new_expression);
+        }
+
+        result
     }
 
     pub(crate) fn normalize_wrt_raisings(

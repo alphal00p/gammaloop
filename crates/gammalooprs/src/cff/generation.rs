@@ -474,7 +474,6 @@ pub(crate) fn generate_cff_expression<E, V, H>(
     )?;
 
     // patch the surface cache
-    surface_cache.set_subspaces(&graph.full_graph());
     Ok(graph_cff)
 }
 
@@ -1112,12 +1111,6 @@ impl SurfaceCache {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
             hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
-        }
-    }
-
-    pub(crate) fn set_subspaces(&mut self, _subspace_graph: &InternalSubGraph) {
-        for _esurface in self.esurface_cache.iter_mut() {
-            //esurface.subspace_graph = subspace_graph.clone();
         }
     }
 }
