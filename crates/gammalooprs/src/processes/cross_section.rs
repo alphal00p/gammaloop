@@ -680,8 +680,6 @@ impl CrossSectionGraph {
         self.generate_esurface_cuts();
         debug!("generating cff");
         self.generate_cff(settings)?;
-        debug!("extending cut esurface cache");
-        self.update_surface_cache();
         debug!("building lmbs");
         self.build_lmbs();
         debug!("building multi channeling channels");
@@ -900,26 +898,6 @@ impl CrossSectionGraph {
         settings: &DotExportSettings,
     ) -> Result<(), std::fmt::Error> {
         self.graph.dot_serialize_fmt(writer, settings)
-    }
-
-    pub(crate) fn update_surface_cache(&mut self) {
-        let esurface_cache = &mut self
-            .derived_data
-            .global_cff_expression
-            .as_mut()
-            .unwrap()
-            .surfaces
-            .esurface_cache;
-
-        // if a cut was not generated during cff, we still add it to the surface cache such that it has an esurface_id
-        for esurface in self.cut_esurface.iter() {
-            if let Some(esurface_id) = esurface_cache.iter().position(|e| e == esurface) {
-                self.cut_esurface_id_map.push(esurface_id.into());
-            } else {
-                self.cut_esurface_id_map.push(esurface_cache.len().into());
-                esurface_cache.push(esurface.clone());
-            }
-        }
     }
 
     fn generate_cff(&mut self, _settings: &GenerationSettings) -> Result<()> {
