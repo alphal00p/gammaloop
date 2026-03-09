@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
-use std::{borrow::Borrow, fmt::Display};
+use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
 use crate::{
-    cff::esurface::EsurfaceID,
+    cff::esurface::{self, EsurfaceID},
+    processes::{CutId, RaisedCutId, RaisedData},
     settings::global::OrientationPattern,
     utils::{W_, ose_atom_from_index},
 };
@@ -363,6 +364,36 @@ where
                 }
             })
             .collect()
+    }
+
+    pub(crate) fn normalize_wrt_raisings(
+        &mut self,
+        raised_data: &RaisedData,
+        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+    ) {
+        let mut esurface_mappings = HashMap::new();
+
+        for cut_group in raised_data.raised_cut_groups.iter() {
+            let esurface_id_of_first = cut_esurface_map[cut_group[0]];
+
+            for cut_id in cut_group.iter() {
+                let esurface_id = cut_esurface_map[*cut_id];
+                esurface_mappings.insert(esurface_id, esurface_id_of_first);
+            }
+        }
+
+        for orientation in self.orientations.iter_mut() {
+            orientation
+                .expression
+                .map_mut(|hybrid_surface_id| match hybrid_surface_id {
+                    HybridSurfaceID::Esurface(esurface_id) => {
+                        if let Some(normalized_esurface_id) = esurface_mappings.get(esurface_id) {
+                            *esurface_id = *normalized_esurface_id;
+                        }
+                    }
+                    _ => (),
+                });
+        }
     }
 }
 
