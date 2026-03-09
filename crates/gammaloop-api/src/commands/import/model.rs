@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
-
+#[cfg(feature = "ufo_support")]
+use pyo3::sync::PyOnceLock;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
@@ -17,8 +18,6 @@ use tracing::info;
 
 #[cfg(feature = "ufo_support")]
 use pyo3::prelude::*;
-#[cfg(feature = "ufo_support")]
-use pyo3::sync::GILOnceCell;
 
 use crate::state::State;
 
@@ -67,7 +66,7 @@ impl PyLogStream {
 }
 
 #[cfg(feature = "ufo_support")]
-static PY_LOG_BRIDGE_INIT: GILOnceCell<()> = GILOnceCell::new();
+static PY_LOG_BRIDGE_INIT: PyOnceLock<()> = PyOnceLock::new();
 
 #[cfg(feature = "ufo_support")]
 fn ensure_py_log_bridge(py: Python<'_>) -> PyResult<()> {
@@ -113,9 +112,9 @@ pub(crate) fn load_ufo_model(
     simplify_model: bool,
 ) -> eyre::Result<(Model, InputParamCard<F<f64>>)> {
     use pyo3::{prelude::*, types::PyDict};
-    pyo3::prepare_freethreaded_python(); // safe if auto-init is also on
+    Python::initialize(); // safe if auto-init is also on
 
-    Python::with_gil(|py| {
+    Python::attach(|py| {
         // helpful diag if import fails
         let sys = py.import("sys")?;
         let exe: String = sys.getattr("prefix")?.extract()?;
