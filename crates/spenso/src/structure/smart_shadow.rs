@@ -3,14 +3,14 @@ use linnet::permutation::Permutation;
 use delegate::delegate;
 
 use super::{
+    HasName, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure,
+    StructureContract, StructureError, TensorStructure, TracksCount,
     abstract_index::AbstractIndex,
     dimension::Dimension,
     named::IdentityName,
     permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
     slot::{AbsInd, DummyAind, IsAbstractSlot, Slot},
-    HasName, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure,
-    StructureContract, StructureError, TensorStructure, TracksCount,
 };
 use bitvec::vec::BitVec;
 

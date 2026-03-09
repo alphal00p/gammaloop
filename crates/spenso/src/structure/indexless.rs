@@ -1,20 +1,20 @@
-use std::marker::PhantomData;
 use linnet::permutation::Permutation;
+use std::marker::PhantomData;
 use tabled::{builder::Builder, settings::Style};
 
 use super::{
+    HasName, NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure,
+    SmartShadowStructure, StructureError, TensorStructure,
     abstract_index::AbstractIndex,
     dimension::Dimension,
     named::{ArgDisplay, IdentityName},
     permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
     slot::{AbsInd, IsAbstractSlot, Slot},
-    HasName, NamedStructure, OrderedStructure, PermutedStructure, ScalarStructure,
-    SmartShadowStructure, StructureError, TensorStructure,
 };
 
-use eyre::{eyre, Result};
 use delegate::delegate;
+use eyre::{Result, eyre};
 
 use crate::network::StructureLessDisplay;
 #[cfg(feature = "shadowing")]

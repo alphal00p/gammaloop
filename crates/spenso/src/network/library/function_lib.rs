@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use eyre::eyre;
+use std::collections::HashMap;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
     function,

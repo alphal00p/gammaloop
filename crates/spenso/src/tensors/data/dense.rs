@@ -1,3 +1,7 @@
+use crate::structure::StructureError;
+use crate::structure::dimension::Dimension;
+use crate::structure::representation::Representation;
+use crate::structure::slot::IsAbstractSlot;
 use crate::{
     algebra::{
         algebraic_traits::RefZero,
@@ -5,31 +9,27 @@ use crate::{
     },
     iterators::IteratableTensor,
     structure::{
+        CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
+        ScalarStructure, ScalarTensor, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
         permuted::PermuteTensor,
         representation::RepName,
         slot::{AbsInd, Slot},
-        CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, TensorStructure, TracksCount,
     },
 };
-use crate::structure::dimension::Dimension;
-use crate::structure::representation::Representation;
-use crate::structure::slot::IsAbstractSlot;
-use crate::structure::StructureError;
 use delegate::delegate;
 
 #[cfg(feature = "shadowing")]
 use crate::{
     shadowing::{
-        symbolica_utils::{atomic_expanded_label_id, IntoArgs, IntoSymbol},
         ShadowMapping, Shadowable,
+        symbolica_utils::{IntoArgs, IntoSymbol, atomic_expanded_label_id},
     },
     structure::slot::ParseableAind,
     tensors::{data::DataIterator, parametric::TensorCoefficient},
 };
-use eyre::{eyre, Result};
 use bincode::{Decode, Encode};
+use eyre::{Result, eyre};
 use indexmap::IndexMap;
 use num::Zero;
 

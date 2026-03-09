@@ -5,33 +5,32 @@ use crate::{
     },
     iterators::{DenseTensorLinearIterator, SparseTensorLinearIterator},
     structure::{
+        CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
+        ScalarStructure, ScalarTensor, StructureContract, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
         permuted::PermuteTensor,
         representation::RepName,
         slot::{AbsInd, Slot},
-        CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, StructureContract, TensorStructure, TracksCount,
     },
 };
 
-
+use crate::structure::StructureError;
 use crate::structure::dimension::Dimension;
 use crate::structure::representation::Representation;
 use crate::structure::slot::IsAbstractSlot;
-use crate::structure::StructureError;
 use delegate::delegate;
 
 #[cfg(feature = "shadowing")]
 use crate::{
     shadowing::{
-        symbolica_utils::{IntoArgs, IntoSymbol},
         ShadowMapping, Shadowable,
+        symbolica_utils::{IntoArgs, IntoSymbol},
     },
     structure::slot::ParseableAind,
     tensors::parametric::TensorCoefficient,
 };
 
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 
 use bincode::{Decode, Encode};
 use derive_more::From;

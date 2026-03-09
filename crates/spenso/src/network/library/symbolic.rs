@@ -1,15 +1,14 @@
-use std::sync::LazyLock;
-use eyre::eyre;
 use super::*;
 use ahash::AHashMap;
+use eyre::eyre;
 use linnet::permutation::Permutation;
+use std::sync::LazyLock;
 
 use symbolica::printer::PrintState;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     symbol,
 };
-
 
 use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 use crate::{

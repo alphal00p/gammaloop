@@ -1,4 +1,3 @@
-
 use graph::{NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp};
 use linnet::half_edge::NodeIndex;
 use serde::{Deserialize, Serialize};
@@ -20,11 +19,11 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 use store::{NetworkStore, TensorScalarStore, TensorScalarStoreMapping};
 use thiserror::Error;
 // use log::trace;
-use eyre::eyre;
 use crate::{
     contraction::ContractionError,
     structure::{CastStructure, HasStructure, ScalarTensor, TensorStructure},
 };
+use eyre::eyre;
 
 // use eyre::Result;
 

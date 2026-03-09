@@ -9,8 +9,8 @@ use crate::{
         },
     },
     structure::{
-        dimension::DimensionError, HasStructure, MergeInfo, StructureContract, StructureError,
-        TensorStructure,
+        HasStructure, MergeInfo, StructureContract, StructureError, TensorStructure,
+        dimension::DimensionError,
     },
     tensors::data::DataTensor,
 };

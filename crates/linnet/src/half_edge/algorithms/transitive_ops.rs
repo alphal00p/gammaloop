@@ -436,12 +436,12 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
 
 #[cfg(test)]
 mod tests {
+    use crate::half_edge::nodestore::NodeStorageVec;
     use crate::{
         dot,
         half_edge::{nodestore::NodeStorageOps, HedgeGraph, NoData},
         parser::{DotGraph, DotVertexData},
     };
-    use crate::half_edge::nodestore::NodeStorageVec;
 
     #[test]
     fn test_transitive_closure_simple() {

@@ -9,8 +9,8 @@ use symbolica::{
 };
 
 use crate::{
-    get_individual_momenta_from_atom, get_node_ids, get_prop_with_id, utils::replace_until_stable,
-    VakintError,
+    VakintError, get_individual_momenta_from_atom, get_node_ids, get_prop_with_id,
+    utils::replace_until_stable,
 };
 
 #[derive(Debug, Clone)]
@@ -166,8 +166,11 @@ impl Graph {
 
         for (n_id, nodes) in graph.nodes.iter() {
             if nodes.edges.len() <= 1 {
-                return Err(VakintError::MalformedGraph(format!("Node {} is connected to only {} edges, this cannot be for a vaccuum graph. Graph:\n{}",
-                    n_id, nodes.edges.len(), integral_expression
+                return Err(VakintError::MalformedGraph(format!(
+                    "Node {} is connected to only {} edges, this cannot be for a vaccuum graph. Graph:\n{}",
+                    n_id,
+                    nodes.edges.len(),
+                    integral_expression
                 )));
             }
         }

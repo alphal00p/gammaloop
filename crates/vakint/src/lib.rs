@@ -11,8 +11,8 @@ pub mod utils;
 
 use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
-use eyre::Result;
 use colored::Colorize;
+use eyre::Result;
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};

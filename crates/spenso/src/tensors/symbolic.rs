@@ -5,31 +5,31 @@ use crate::{
     algebra::ScalarMul,
     contraction::{Contract, ContractionError},
     network::{
+        Network, Ref, StructureLessDisplay, TensorNetworkError,
         library::{
-            symbolic::{ExplicitKey, TensorLibrary},
             TensorLibraryData,
+            symbolic::{ExplicitKey, TensorLibrary},
         },
         parsing::{ParseSettings, ShadowedStructure},
         store::NetworkStore,
-        Network, Ref, StructureLessDisplay, TensorNetworkError,
     },
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
+        HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
+        ScalarStructure, ScalarTensor, StructureContract, TensorShell, TensorStructure, ToSymbolic,
         abstract_index::AIND_SYMBOLS,
         permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, ParseableAind},
-        HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, StructureContract, TensorShell, TensorStructure, ToSymbolic,
     },
     tensors::parametric::MixedTensor,
 };
 
+use crate::structure::StructureError;
 use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::dimension::Dimension;
 use crate::structure::representation::Representation;
 use crate::structure::slot::IsAbstractSlot;
-use crate::structure::StructureError;
 use delegate::delegate;
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};

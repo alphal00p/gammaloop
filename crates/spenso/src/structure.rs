@@ -1,6 +1,4 @@
 use ahash::AHashMap;
-use eyre::eyre;
-use eyre::{Result};
 use bitvec::vec::BitVec;
 use concrete_index::ConcreteIndex;
 use concrete_index::DualConciousExpandedIndex;
@@ -9,6 +7,8 @@ use concrete_index::ExpandedIndex;
 use concrete_index::FlatIndex;
 use delegate::delegate;
 use dimension::Dimension;
+use eyre::Result;
+use eyre::eyre;
 
 use thiserror::Error;
 
@@ -814,7 +814,6 @@ pub trait HasName {
     ) -> ExpandedCoefficent<Self::Args>
     where
         Self: TensorStructure,
-
         Self::Name: IntoSymbol,
         Self::Args: IntoArgs,
     {

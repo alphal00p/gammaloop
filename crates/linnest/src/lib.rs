@@ -432,8 +432,8 @@ impl TypstNode {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TypstEdge {
-    from: Option<(NodeIndex,Hedge)>,
-    to: Option<(NodeIndex,Hedge)>,
+    from: Option<(NodeIndex, Hedge)>,
+    to: Option<(NodeIndex, Hedge)>,
     bend: Result<Rad<f64>, GeomError>,
     pos: Point2<f64>,
     label_pos: Option<Point2<f64>>,
@@ -495,18 +495,13 @@ impl TypstEdge {
             let shift =
                 TypstNode::parse_position(&d.statements, "shift").map(|(x, y)| Vector2::new(x, y));
 
-            let label_pos =
-                TypstNode::parse_position(&d.statements, "label_pos").map(|(x, y)| {
-                    Point2::new(x, y)
-                });
-            let label_angle = d
-                .statements
-                .get("label_angle")
-                .and_then(|value| {
-                    let unquoted = value.trim().trim_matches('"');
-                    let cleaned = unquoted.trim().trim_end_matches("rad");
-                    cleaned.trim().parse::<f64>().ok()
-                });
+            let label_pos = TypstNode::parse_position(&d.statements, "label_pos")
+                .map(|(x, y)| Point2::new(x, y));
+            let label_angle = d.statements.get("label_angle").and_then(|value| {
+                let unquoted = value.trim().trim_matches('"');
+                let cleaned = unquoted.trim().trim_end_matches("rad");
+                cleaned.trim().parse::<f64>().ok()
+            });
 
             let mut eval_sink: Option<String> = d.get("eval_sink").transpose().unwrap();
 
@@ -559,21 +554,21 @@ impl TypstEdge {
             let mut to = None;
             match p {
                 HedgePair::Split { source, sink, .. } | HedgePair::Paired { source, sink } => {
-                    from = Some((node_store.node_id_ref(source),source));
-                    to = Some((node_store.node_id_ref(sink),sink));
+                    from = Some((node_store.node_id_ref(source), source));
+                    to = Some((node_store.node_id_ref(sink), sink));
                 }
                 HedgePair::Unpaired {
                     hedge,
                     flow: Flow::Source,
                 } => {
-                    from = Some((node_store.node_id_ref(hedge),hedge));
+                    from = Some((node_store.node_id_ref(hedge), hedge));
                 }
 
                 HedgePair::Unpaired {
                     hedge,
                     flow: Flow::Sink,
                 } => {
-                    to = Some((node_store.node_id_ref(hedge),hedge));
+                    to = Some((node_store.node_id_ref(hedge), hedge));
                 }
             }
 
@@ -816,7 +811,10 @@ struct LayoutConfig {
         deserialize_with = "deserialize_f64"
     )]
     z_spring_growth: f64,
-    #[serde(default = "default_label_steps", deserialize_with = "deserialize_usize")]
+    #[serde(
+        default = "default_label_steps",
+        deserialize_with = "deserialize_usize"
+    )]
     label_steps: usize,
     #[serde(default = "default_label_step", deserialize_with = "deserialize_f64")]
     label_step: f64,
@@ -829,7 +827,10 @@ struct LayoutConfig {
     label_charge: f64,
     #[serde(default = "default_label_spring", deserialize_with = "deserialize_f64")]
     label_spring: f64,
-    #[serde(default = "default_label_early_tol", deserialize_with = "deserialize_f64")]
+    #[serde(
+        default = "default_label_early_tol",
+        deserialize_with = "deserialize_f64"
+    )]
     label_early_tol: f64,
     #[serde(
         default = "default_label_max_delta_scale",
@@ -1512,7 +1513,7 @@ impl TypstGraph {
         });
 
         for _ in 0..cfg.label_steps {
-            let mut max_move:f64 = 0.0;
+            let mut max_move: f64 = 0.0;
 
             for i in 0..labels.len().0 {
                 let idx = EdgeIndex(i);

@@ -6,10 +6,10 @@
 use super::fiber::{Fiber, FiberClass, FiberClassMut, FiberMut};
 use super::indices::{AbstractFiberIndex, FiberData};
 use crate::structure::{
+    HasStructure, TensorStructure,
     concrete_index::{ExpandedIndex, FlatIndex},
     dimension::Dimension,
     representation::{RepName, Representation},
-    HasStructure, TensorStructure,
 };
 use bitvec::vec::BitVec;
 use linnet::permutation::Permutation;

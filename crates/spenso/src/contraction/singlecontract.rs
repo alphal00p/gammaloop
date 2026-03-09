@@ -12,8 +12,8 @@ use crate::{
         ResetableIterator,
     },
     structure::{
-        concrete_index::ExpandedIndex, slot::IsAbstractSlot, HasStructure, StructureContract,
-        TensorStructure,
+        HasStructure, StructureContract, TensorStructure, concrete_index::ExpandedIndex,
+        slot::IsAbstractSlot,
     },
     tensors::data::{DataIterator, DenseTensor, SparseTensor},
 };
@@ -25,9 +25,9 @@ use super::{ContractableWith, ContractionError, SingleContract, SingleContractIn
 impl<T, U, I> SingleContract<DenseTensor<T, I>> for DenseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = DenseTensor<U::Out, I>;
@@ -78,9 +78,9 @@ where
 impl<T, U, I> SingleContract<SparseTensor<T, I>> for DenseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = DenseTensor<U::Out, I>;
@@ -134,9 +134,9 @@ where
 impl<T, U, I> SingleContract<DenseTensor<T, I>> for SparseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     T: TrySmallestUpgrade<U, LCM = U::Out>,
     I: TensorStructure + Clone + StructureContract,
 {
@@ -198,9 +198,9 @@ where
 impl<T, U, I> SingleContract<SparseTensor<T, I>> for SparseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = SparseTensor<U::Out, I>;
@@ -287,9 +287,9 @@ where
 impl<T, U, I> SingleContractInterleaved<DenseTensor<T, I>> for DenseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = DenseTensor<U::Out, I>;
@@ -368,9 +368,9 @@ where
 impl<T, U, I> SingleContractInterleaved<SparseTensor<T, I>> for DenseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = DenseTensor<U::Out, I>;
@@ -450,9 +450,9 @@ where
 impl<T, U, I> SingleContractInterleaved<DenseTensor<T, I>> for SparseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     T: TrySmallestUpgrade<U, LCM = U::Out>,
     I: TensorStructure + Clone + StructureContract,
 {
@@ -540,9 +540,9 @@ where
 impl<T, U, I> SingleContractInterleaved<SparseTensor<T, I>> for SparseTensor<U, I>
 where
     U: ContractableWith<
-        T,
-        Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
-    >,
+            T,
+            Out: FallibleAddAssign<U::Out> + FallibleSubAssign<U::Out> + Clone + RefZero + IsZero,
+        >,
     I: TensorStructure + Clone + StructureContract,
 {
     type LCM = SparseTensor<U::Out, I>;

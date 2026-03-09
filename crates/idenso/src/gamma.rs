@@ -1,5 +1,7 @@
 use std::sync::LazyLock;
 
+use crate::{IndexTooling, color::SelectiveExpand, metric::MetricSimplifier, rep_symbols::RS};
+use eyre::Result;
 use spenso::{
     network::library::symbolic::{ETS, ExplicitKey},
     shadowing::symbolica_utils::SpensoPrintSettings,
@@ -18,8 +20,6 @@ use symbolica::{
     symbol,
     utils::Settable,
 };
-use eyre::Result;
-use crate::{IndexTooling, color::SelectiveExpand, metric::MetricSimplifier, rep_symbols::RS};
 
 use super::representations::Bispinor;
 

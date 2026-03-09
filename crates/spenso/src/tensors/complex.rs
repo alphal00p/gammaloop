@@ -3,32 +3,32 @@ use std::fmt::{Debug, Display};
 use crate::{
     iterators::IteratorEnum,
     structure::{
+        IndexLess, PermutedStructure,
         concrete_index::ConcreteIndex,
         permuted::PermuteTensor,
         representation::RepName,
         slot::{AbsInd, Slot},
-        IndexLess, PermutedStructure,
     },
     tensors::data::{SparseTensor, StorageTensor},
 };
-use eyre::{eyre, Result};
 use enum_try_as_inner::EnumTryAsInner;
+use eyre::{Result, eyre};
 #[cfg(feature = "shadowing")]
 use symbolica::{atom::Atom, evaluate::FunctionMap};
 
+use crate::structure::StructureError;
 use crate::structure::dimension::Dimension;
 use crate::structure::representation::Representation;
 use crate::structure::slot::IsAbstractSlot;
-use crate::structure::StructureError;
 use delegate::delegate;
 
 #[cfg(feature = "shadowing")]
 use crate::{
     shadowing::{
-        symbolica_utils::{IntoArgs, IntoSymbol},
         ShadowMapping, Shadowable,
+        symbolica_utils::{IntoArgs, IntoSymbol},
     },
-    structure::{slot::ParseableAind, ToSymbolic},
+    structure::{ToSymbolic, slot::ParseableAind},
     tensors::{
         data::{DataIterator, DenseTensor},
         parametric::TensorCoefficient,
@@ -42,9 +42,9 @@ use crate::{
     contraction::{Contract, ContractableWith, ContractionError, Trace},
     iterators::IteratableTensor,
     structure::{
-        concrete_index::{ExpandedIndex, FlatIndex},
         CastStructure, HasName, HasStructure, ScalarStructure, ScalarTensor, StructureContract,
         TensorStructure, TracksCount,
+        concrete_index::{ExpandedIndex, FlatIndex},
     },
     tensors::data::{DataTensor, GetTensorData, HasTensorData, SetTensorData, SparseOrDense},
 };
@@ -123,9 +123,7 @@ impl<T: Clone, S: TensorStructure> SetTensorData for RealOrComplexTensor<T, S> {
             )?,
             RealOrComplexTensor::Complex(d) => d.set(
                 indices,
-                value
-                    .try_into_complex()
-                    .map_err(|r| eyre!(r.to_string()))?,
+                value.try_into_complex().map_err(|r| eyre!(r.to_string()))?,
             )?,
         }
         Ok(())
@@ -139,9 +137,7 @@ impl<T: Clone, S: TensorStructure> SetTensorData for RealOrComplexTensor<T, S> {
             )?,
             RealOrComplexTensor::Complex(d) => d.set_flat(
                 index,
-                value
-                    .try_into_complex()
-                    .map_err(|r| eyre!(r.to_string()))?,
+                value.try_into_complex().map_err(|r| eyre!(r.to_string()))?,
             )?,
         }
         Ok(())

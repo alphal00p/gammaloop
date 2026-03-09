@@ -19,13 +19,8 @@ pub struct GraphSet<E, V, H, G, S: NodeStorage<NodeData = V>> {
     pub set: Vec<HedgeGraph<E, V, H, S>>,
 }
 
-pub type DotGraphSet = GraphSet<
-    DotEdgeData,
-    DotVertexData,
-    DotHedgeData,
-    GlobalData,
-    DefaultNodeStore<DotVertexData>,
->;
+pub type DotGraphSet =
+    GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, DefaultNodeStore<DotVertexData>>;
 
 impl<S: NodeStorageOps<NodeData = DotVertexData>>
     GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, S>

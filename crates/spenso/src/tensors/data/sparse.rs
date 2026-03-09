@@ -11,17 +11,17 @@ use crate::{
     algebra::upgrading_arithmetic::{TryFromUpgrade, TrySmallestUpgrade},
     iterators::IteratableTensor,
     structure::{
-        concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
         CastStructure, HasName, HasStructure, OrderedStructure, ScalarStructure, ScalarTensor,
         TensorStructure, TracksCount,
+        concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
     },
 };
-use eyre::{eyre, Result};
 use delegate::delegate;
+use eyre::{Result, eyre};
 
 #[cfg(feature = "shadowing")]
 use crate::{
-    shadowing::symbolica_utils::{atomic_expanded_label_id, IntoArgs, IntoSymbol},
+    shadowing::symbolica_utils::{IntoArgs, IntoSymbol, atomic_expanded_label_id},
     shadowing::{ShadowMapping, Shadowable},
     tensors::parametric::{ExpandedCoefficent, FlatCoefficent, TensorCoefficient},
 };

@@ -3,9 +3,9 @@
 //! Contains tests for fiber behavior and operations.
 
 use crate::iterators::{AbstractFiber, AbstractFiberIndex, Fiber, FiberClass, FiberIndex};
-use crate::structure::representation::RepName;
 use crate::structure::TensorStructure;
-use crate::structure::{representation::Euclidean, OrderedStructure};
+use crate::structure::representation::RepName;
+use crate::structure::{OrderedStructure, representation::Euclidean};
 
 #[test]
 fn test_fiber_creation() {

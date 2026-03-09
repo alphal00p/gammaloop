@@ -1,10 +1,5 @@
 extern crate derive_more;
 
-use std::{
-    fmt::{Debug, Display},
-    io::Cursor,
-    path::Path,
-};
 use crate::structure::{IndexLess, slot::IsAbstractSlot};
 use crate::structure::{StructureError, slot::AbsInd};
 use crate::structure::{
@@ -20,6 +15,11 @@ use crate::{
 };
 use ahash::HashMap;
 use delegate::delegate;
+use std::{
+    fmt::{Debug, Display},
+    io::Cursor,
+    path::Path,
+};
 
 use eyre::Result;
 use eyre::eyre;

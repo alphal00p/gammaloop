@@ -137,7 +137,8 @@ impl VakintSettings {
             run_time_decimal_precision: self.run_time_decimal_precision as u32,
             allow_unknown_integrals: false,
             clean_tmp_dir: self.clean_tmp_dir,
-            precision_for_input_float_rationalization: vakint::InputFloatRationalizationPrecision::FullPrecision,
+            precision_for_input_float_rationalization:
+                vakint::InputFloatRationalizationPrecision::FullPrecision,
             evaluation_order: vakint::EvaluationOrder(
                 self.evaluation_methods
                     .iter()
