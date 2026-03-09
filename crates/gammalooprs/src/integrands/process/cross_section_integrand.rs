@@ -20,7 +20,7 @@ use crate::{
     momentum::sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     momentum::{Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum},
     processes::{
-        CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData,
+        CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId,
         StandaloneExportSettings,
     },
     settings::{GlobalSettings, RuntimeSettings},
@@ -274,7 +274,7 @@ pub struct CrossSectionGraphTerm {
     pub orientation_filter: SubSet<SuperGraphOrientationID>,
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
-    pub raised_data: RaisedData,
+    pub raised_data: RaisedCutData,
 }
 
 impl CrossSectionGraphTerm {

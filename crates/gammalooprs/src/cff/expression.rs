@@ -4,7 +4,7 @@ use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
 use crate::{
     cff::esurface::{self, EsurfaceID},
-    processes::{CutId, RaisedCutId, RaisedData},
+    processes::{CutId, RaisedCutData, RaisedCutId},
     settings::global::OrientationPattern,
     utils::{W_, ose_atom_from_index},
 };
@@ -369,7 +369,7 @@ where
     pub(crate) fn select_raised_cut(
         mut self,
         raised_cut_id: RaisedCutId,
-        raised_data: &RaisedData,
+        raised_data: &RaisedCutData,
         cut_esurface_map: &TiVec<CutId, EsurfaceID>,
     ) -> Vec<CFFExpression<O>> {
         self.normalize_wrt_raisings(raised_data, cut_esurface_map);
@@ -402,7 +402,7 @@ where
 
     pub(crate) fn normalize_wrt_raisings(
         &mut self,
-        raised_data: &RaisedData,
+        raised_data: &RaisedCutData,
         cut_esurface_map: &TiVec<CutId, EsurfaceID>,
     ) {
         let mut esurface_mappings = HashMap::new();
