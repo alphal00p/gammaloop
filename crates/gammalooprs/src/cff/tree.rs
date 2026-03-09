@@ -157,6 +157,20 @@ impl<T> Tree<T> {
         self.nodes.iter()
     }
 
+    fn path_to_root(&self, mut node_id: NodeId) -> Vec<NodeId> {
+        let mut path = Vec::new();
+        loop {
+            path.push(node_id);
+            if let Some(parent_id) = self.nodes[node_id].parent {
+                node_id = parent_id;
+            } else {
+                break;
+            }
+        }
+        path.reverse();
+        path
+    }
+
     #[allow(dead_code)]
     fn obtain_subtree_node_ids_impl(&self, node_id: NodeId, collected_ids: &mut Vec<NodeId>) {
         for &child_id in &self.nodes[node_id].children {
@@ -206,6 +220,48 @@ impl<T> Tree<T> {
 
         for node in &mut self.nodes {
             // shift all the node ids accordingly
+            node.update_node_ids(&nodes_to_remove);
+        }
+    }
+
+    pub(crate) fn keep_branches_with_value_count_mut(&mut self, value: &T, n: usize)
+    where
+        T: Eq,
+    {
+        if self.nodes.is_empty() {
+            return;
+        }
+
+        let leaves = self.get_bottom_layer();
+        let mut nodes_to_keep = HashSet::new();
+
+        for leaf in leaves {
+            let path = self.path_to_root(leaf);
+            let count = path
+                .iter()
+                .filter(|&&node_id| self.nodes[node_id].data == *value)
+                .count();
+
+            if count == n {
+                nodes_to_keep.extend(path);
+            }
+        }
+
+        nodes_to_keep.insert(NodeId::root());
+
+        let nodes_to_remove: Vec<NodeId> = self
+            .nodes
+            .iter()
+            .filter(|node| !nodes_to_keep.contains(&node.node_id))
+            .map(|node| node.node_id)
+            .sorted()
+            .collect();
+
+        for id in nodes_to_remove.iter().rev() {
+            self.nodes.remove(*id);
+        }
+
+        for node in &mut self.nodes {
             node.update_node_ids(&nodes_to_remove);
         }
     }
@@ -284,6 +340,76 @@ mod tests {
         expected_tree.insert_node(NodeId(0), 7);
         expected_tree.insert_node(NodeId(1), 8);
         expected_tree.insert_node(NodeId(1), 9);
+
+        assert_eq!(tree, expected_tree);
+    }
+
+    #[test]
+    fn test_keep_branches_with_value_count_mut() {
+        let mut tree = Tree::from_root(0);
+        tree.insert_node(NodeId(0), 1);
+        tree.insert_node(NodeId(1), 2);
+        tree.insert_node(NodeId(2), 1);
+        tree.insert_node(NodeId(0), 1);
+        tree.insert_node(NodeId(4), 3);
+        tree.insert_node(NodeId(5), 4);
+
+        tree.keep_branches_with_value_count_mut(&1, 1);
+
+        let mut expected_tree = Tree::from_root(0);
+        expected_tree.insert_node(NodeId(0), 1);
+        expected_tree.insert_node(NodeId(1), 3);
+        expected_tree.insert_node(NodeId(2), 4);
+
+        assert_eq!(tree, expected_tree);
+    }
+
+    #[test]
+    fn test_keep_branches_with_value_count_mut_no_match() {
+        let mut tree = Tree::from_root(0);
+        tree.insert_node(NodeId(0), 1);
+        tree.insert_node(NodeId(1), 2);
+        tree.insert_node(NodeId(2), 1);
+
+        tree.keep_branches_with_value_count_mut(&1, 3);
+
+        let expected_tree = Tree::from_root(0);
+
+        assert_eq!(tree, expected_tree);
+    }
+
+    #[test]
+    fn test_keep_branches_with_value_count_mut_zero_occurrences() {
+        let mut tree = Tree::from_root(0);
+        tree.insert_node(NodeId(0), 2);
+        tree.insert_node(NodeId(1), 3);
+        tree.insert_node(NodeId(0), 1);
+        tree.insert_node(NodeId(3), 4);
+
+        tree.keep_branches_with_value_count_mut(&1, 0);
+
+        let mut expected_tree = Tree::from_root(0);
+        expected_tree.insert_node(NodeId(0), 2);
+        expected_tree.insert_node(NodeId(1), 3);
+
+        assert_eq!(tree, expected_tree);
+    }
+
+    #[test]
+    fn test_keep_branches_with_value_count_mut_keeps_shared_prefix() {
+        let mut tree = Tree::from_root(0);
+        tree.insert_node(NodeId(0), 9);
+        tree.insert_node(NodeId(1), 1);
+        tree.insert_node(NodeId(2), 5);
+        tree.insert_node(NodeId(1), 2);
+        tree.insert_node(NodeId(4), 6);
+
+        tree.keep_branches_with_value_count_mut(&1, 1);
+
+        let mut expected_tree = Tree::from_root(0);
+        expected_tree.insert_node(NodeId(0), 9);
+        expected_tree.insert_node(NodeId(1), 1);
+        expected_tree.insert_node(NodeId(2), 5);
 
         assert_eq!(tree, expected_tree);
     }
