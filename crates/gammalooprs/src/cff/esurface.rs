@@ -25,6 +25,7 @@ use crate::cff::cff_graph::VertexSet;
 use crate::define_index;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 
+use crate::integrands::process::GenericEvaluator;
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
@@ -918,6 +919,16 @@ impl From<EsurfaceID> for Atom {
     fn from(id: EsurfaceID) -> Self {
         parse!(&format!("η({})", Into::<usize>::into(id.0)))
     }
+}
+
+define_index!(
+    pub struct RaisedEsurfaceId;
+);
+
+pub struct RaisedEsurfaceData {
+    pub raised_groups: TiVec<RaisedEsurfaceId, Vec<EsurfaceID>>,
+    pub max_occurence: TiVec<RaisedEsurfaceId, usize>,
+    pub pass_two_evaluator: Option<Vec<GenericEvaluator>>,
 }
 
 #[cfg(test)]
