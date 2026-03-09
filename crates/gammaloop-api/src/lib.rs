@@ -82,18 +82,6 @@ pub struct Repl {
 #[command(next_line_help = true)]
 #[command(args_conflicts_with_subcommands = true)]
 pub struct OneShot {
-    /// Path to the a run file to execute
-    pub run_history: Option<PathBuf>,
-
-    /// Command block names to execute from `commands_blocks` in run cards.
-    /// When provided, only those blocks are run, in this order.
-    #[arg(
-        value_name = "BLOCK_NAME",
-        requires = "run_history",
-        trailing_var_arg = true
-    )]
-    pub run_block_names: Vec<String>,
-
     /// Don't actually run anything, just build up run card
     #[arg(short = 'd', long, default_value_t = false)]
     pub dry_run: bool,
@@ -199,8 +187,6 @@ impl OneShot {
 
     pub fn new_test(state_folder: PathBuf) -> Self {
         OneShot {
-            run_history: None,
-            run_block_names: vec![],
             state_folder,
             state_folder_explicitly_set: false,
             dry_run: false,
@@ -215,8 +201,18 @@ impl OneShot {
         }
     }
 
-    fn selected_run_blocks(&self) -> Option<&[String]> {
-        (!self.run_block_names.is_empty()).then_some(self.run_block_names.as_slice())
+    fn run_command(&self) -> Option<&commands::run::Run> {
+        match self.command.as_ref() {
+            Some(Commands::Run(run)) => Some(run),
+            _ => None,
+        }
+    }
+
+    fn load_initial_run_history(&self) -> Result<Option<RunHistory>> {
+        self.run_command()
+            .map(commands::run::Run::load_run_history)
+            .transpose()
+            .map(Option::flatten)
     }
 
     fn subcmd_input_string(
@@ -276,9 +272,7 @@ impl OneShot {
             return Ok(self.state_folder.clone());
         }
 
-        if let Some(run_path) = self.run_history.as_ref() {
-            let run_history =
-                RunHistory::load_with_block_selection(run_path, self.selected_run_blocks())?;
+        if let Some(run_history) = self.load_initial_run_history()? {
             return Ok(run_history.cli_settings.state_folder.clone());
         }
 
@@ -341,9 +335,7 @@ impl OneShot {
                 );
                 let state = State::new(self.state_folder.clone(), self.trace_logs_filename.clone());
 
-                if let Some(run) = self.run_history.as_ref() {
-                    let mut run_history =
-                        RunHistory::load_with_block_selection(run, self.selected_run_blocks())?;
+                if let Some(mut run_history) = self.load_initial_run_history()? {
                     // Freeze state folder for the whole session.
                     run_history.cli_settings.state_folder = self.state_folder.clone();
                     let mut global = run_history.cli_settings.clone();
@@ -378,24 +370,6 @@ impl OneShot {
             self.load()?;
 
         println!(":{}", cli_settings.global.display_directive);
-
-        if let Some(run) = self.run_history.as_ref() {
-            let mut run = RunHistory::load_with_block_selection(run, self.selected_run_blocks())?;
-            // Never switch state folder while executing commands in one session.
-            run.cli_settings.state_folder = cli_settings.state_folder.clone();
-            run_history.merge(run.clone());
-            match run.run(&mut state, &mut cli_settings, &mut default_runtime_settings)? {
-                ControlFlow::Break(a) => {
-                    return a.save(
-                        &mut state,
-                        &run_history,
-                        &default_runtime_settings,
-                        &cli_settings,
-                    )
-                }
-                ControlFlow::Continue(()) => {}
-            }
-        }
 
         let mut save_state = SaveState::default();
 
@@ -573,7 +547,7 @@ mod tests {
     use clap::Parser;
     use tempfile::tempdir;
 
-    use super::{CLISettings, OneShot, RunHistory};
+    use super::{CLISettings, Commands, OneShot, RunHistory};
 
     fn write_run_card(path: &PathBuf, state_folder: &str) {
         let run_history = RunHistory {
@@ -592,8 +566,10 @@ mod tests {
         let run_path = temp.path().join("run.toml");
         write_run_card(&run_path, "./from_run_card");
 
-        let mut one_shot = OneShot::new_test("./from_cli".into());
-        one_shot.run_history = Some(run_path);
+        let mut one_shot =
+            OneShot::try_parse_from(["gammaloop", "run", run_path.to_string_lossy().as_ref()])
+                .unwrap();
+        one_shot.state_folder = "./from_cli".into();
         one_shot.state_folder_explicitly_set = true;
 
         assert_eq!(
@@ -608,9 +584,9 @@ mod tests {
         let run_path = temp.path().join("run.toml");
         write_run_card(&run_path, "./from_run_card");
 
-        let mut one_shot = OneShot::new_test("./from_cli_default".into());
-        one_shot.run_history = Some(run_path);
-        one_shot.state_folder_explicitly_set = false;
+        let one_shot =
+            OneShot::try_parse_from(["gammaloop", "run", run_path.to_string_lossy().as_ref()])
+                .unwrap();
 
         assert_eq!(
             one_shot.resolve_initial_state_folder().unwrap(),
@@ -619,44 +595,49 @@ mod tests {
     }
 
     #[test]
-    fn oneshot_parses_run_card_block_names() {
+    fn oneshot_parses_run_subcommand_block_names() {
         let parsed =
-            OneShot::try_parse_from(["gammaloop", "card.toml", "generation", "integration"])
+            OneShot::try_parse_from(["gammaloop", "run", "card.toml", "generation", "integration"])
                 .unwrap();
-        assert_eq!(parsed.run_history, Some(PathBuf::from("card.toml")));
+        let run = parsed.run_command().unwrap();
         assert_eq!(
-            parsed.run_block_names,
-            vec!["generation".to_string(), "integration".to_string()]
+            run.selected_block_names(),
+            Some(&["generation".to_string(), "integration".to_string()][..])
         );
     }
 
     #[test]
-    fn oneshot_treats_subcommand_names_as_block_names_when_run_card_is_present() {
+    fn oneshot_treats_subcommand_names_as_run_block_names() {
         let parsed = OneShot::try_parse_from([
             "gammaloop",
+            "run",
             "card.toml",
             "generate",
             "integrate_euclidean",
             "quit",
         ])
         .unwrap();
-        assert_eq!(parsed.run_history, Some(PathBuf::from("card.toml")));
+        let run = parsed.run_command().unwrap();
         assert_eq!(
-            parsed.run_block_names,
-            vec![
-                "generate".to_string(),
-                "integrate_euclidean".to_string(),
-                "quit".to_string()
-            ]
+            run.selected_block_names(),
+            Some(
+                &[
+                    "generate".to_string(),
+                    "integrate_euclidean".to_string(),
+                    "quit".to_string()
+                ][..]
+            )
         );
-        assert!(parsed.command.is_none());
     }
 
     #[test]
     fn oneshot_parses_subcommand_without_run_card() {
         let parsed = OneShot::try_parse_from(["gammaloop", "display", "integrands"]).unwrap();
-        assert!(parsed.run_history.is_none());
-        assert!(parsed.run_block_names.is_empty());
-        assert!(parsed.command.is_some());
+        assert!(matches!(parsed.command, Some(Commands::Display(_))));
+    }
+
+    #[test]
+    fn oneshot_rejects_run_card_without_run_subcommand() {
+        assert!(OneShot::try_parse_from(["gammaloop", "card.toml"]).is_err());
     }
 }

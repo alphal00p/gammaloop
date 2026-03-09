@@ -1,11 +1,11 @@
-use std::path::{Path, PathBuf};
-#[cfg(feature = "ufo_support")]
-use pyo3::sync::PyOnceLock;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::utils::F;
+#[cfg(feature = "ufo_support")]
+use pyo3::sync::PyOnceLock;
+use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

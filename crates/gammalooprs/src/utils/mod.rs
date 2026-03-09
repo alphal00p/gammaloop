@@ -3758,8 +3758,10 @@ impl<'py> pyo3::IntoPyObject<'py> for &F<f64> {
 }
 
 #[cfg(feature = "python_api")]
-impl<'py> pyo3::FromPyObject<'py> for F<f64> {
-    fn extract_bound(obj: &pyo3::Bound<'py, pyo3::types::PyAny>) -> pyo3::PyResult<Self> {
-        f64::extract_bound(obj).map(F)
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for F<f64> {
+    type Error = pyo3::PyErr;
+
+    fn extract(obj: pyo3::Borrowed<'a, 'py, pyo3::types::PyAny>) -> pyo3::PyResult<Self> {
+        <f64 as pyo3::FromPyObject<'a, 'py>>::extract(obj).map(F)
     }
 }

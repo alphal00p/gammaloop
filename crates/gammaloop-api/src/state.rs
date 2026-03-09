@@ -307,6 +307,10 @@ fn is_commands_blocks_empty(commands_blocks: &Vec<CommandsBlock>) -> bool {
     commands_blocks.is_empty()
 }
 
+fn should_persist_command(command: &Commands) -> bool {
+    !matches!(command, Commands::Quit(_) | Commands::Run(_))
+}
+
 /// Set whether CommandHistory should serialize as strings when the raw_string is available
 pub fn set_serialize_commands_as_strings(value: bool) {
     SERIALIZE_COMMANDS_AS_STRINGS.store(value, std::sync::atomic::Ordering::Relaxed);
@@ -494,7 +498,7 @@ impl RunHistory {
     /// If raw_string is provided, it will be stored alongside the command
     /// for potential later serialization as a string.
     pub fn push_with_raw(&mut self, command: Commands, raw_string: Option<String>) {
-        if !matches!(&command, Commands::Quit { .. }) {
+        if should_persist_command(&command) {
             self.commands.push(CommandHistory {
                 command,
                 raw_string,
@@ -652,6 +656,22 @@ impl RunHistory {
         self.commands.extend(other.commands);
     }
 
+    fn flattened_for_save(&self) -> Self {
+        let mut flattened = self.clone();
+        if flattened.commands.is_empty() && !flattened.commands_blocks.is_empty() {
+            flattened.commands = flattened
+                .commands_blocks
+                .iter()
+                .flat_map(|block| block.commands.clone())
+                .collect();
+        }
+        flattened
+            .commands
+            .retain(|command_history| should_persist_command(&command_history.command));
+        flattened.commands_blocks.clear();
+        flattened
+    }
+
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         Self::load_with_block_selection(path, None)
     }
@@ -676,7 +696,8 @@ impl RunHistory {
         override_state_file: bool,
         _strict: bool,
     ) -> Result<()> {
-        self.to_file(root_folder.join("run.toml"), override_state_file)?;
+        self.flattened_for_save()
+            .to_file(root_folder.join("run.toml"), override_state_file)?;
 
         //Self::schema().to_file(root_folder.join("run_schema.json"))?;
         Ok(())
@@ -688,7 +709,8 @@ impl RunHistory {
         override_state_file: bool,
         _strict: bool,
     ) -> Result<()> {
-        self.to_file(root_folder.join("run.yaml"), override_state_file)?;
+        self.flattened_for_save()
+            .to_file(root_folder.join("run.yaml"), override_state_file)?;
         //Self::schema().to_file(root_folder.join("run_schema.json"))?;
         Ok(())
     }
@@ -1490,6 +1512,61 @@ subtype = "tropical"
         }
         // Reset flag
         set_serialize_commands_as_strings(false);
+    }
+
+    #[test]
+    fn run_history_push_with_raw_skips_quit_and_run_wrapper_commands() {
+        use super::{CommandHistory, RunHistory};
+
+        let mut run_history = RunHistory::default();
+        let run_command = CommandHistory::from_raw_string("run card.toml")
+            .unwrap()
+            .command;
+
+        run_history.push_with_raw(run_command, Some("run card.toml".to_string()));
+        run_history.push_with_raw(
+            Commands::Quit(SaveState::default()),
+            Some("quit".to_string()),
+        );
+
+        assert!(run_history.commands.is_empty());
+    }
+
+    #[test]
+    fn run_history_flattened_for_save_omits_commands_blocks() {
+        let mut run_history = RunHistory::default();
+        run_history.commands_blocks = vec![
+            CommandsBlock {
+                name: "generate".to_string(),
+                commands: vec![CommandHistory::new_with_raw(
+                    Commands::Display(Display::Processes),
+                    "display processes".to_string(),
+                )],
+            },
+            CommandsBlock {
+                name: "integrate".to_string(),
+                commands: vec![CommandHistory::new_with_raw(
+                    CommandHistory::from_raw_string("quit -o").unwrap().command,
+                    "quit -o".to_string(),
+                )],
+            },
+        ];
+        run_history.push_with_raw(
+            CommandHistory::from_raw_string("display processes")
+                .unwrap()
+                .command,
+            Some("display processes".to_string()),
+        );
+
+        let flattened = run_history.flattened_for_save();
+        set_serialize_commands_as_strings(true);
+        let toml = toml::to_string_pretty(&flattened).unwrap();
+        set_serialize_commands_as_strings(false);
+
+        assert!(flattened.commands_blocks.is_empty());
+        assert!(toml.contains("commands = ["));
+        assert!(!toml.contains("[[commands_blocks]]"));
+        assert!(!toml.contains("quit -o"));
     }
 
     #[test]
