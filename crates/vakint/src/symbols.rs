@@ -73,6 +73,7 @@ pub struct VakintSymbols {
     pub vec1: Symbol,
     pub form_epsilon: Symbol,
     pub form_dimension: Symbol,
+    pub float_marker: Symbol,
 }
 
 pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
@@ -130,6 +131,7 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     vec1: vk_symbol!("vec1"),
     form_epsilon: vk_symbol!("ep"),
     form_dimension: vk_symbol!("d"),
+    float_marker: vk_symbol!("float"),
 });
 
 pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
@@ -173,6 +175,7 @@ pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
         s.vec1,
         s.form_epsilon,
         s.form_dimension,
+        s.float_marker,
     ]
     .into_iter()
     .collect()

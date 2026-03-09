@@ -29,11 +29,16 @@ use std::{
     ops::Div,
     path::PathBuf,
     process::{Command, ExitStatus, Stdio},
-    sync::{Arc, LazyLock, Mutex},
+    sync::{
+        Arc, LazyLock, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{SystemTime, UNIX_EPOCH},
     vec,
 };
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::{
+    atom::NumView,
     coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
@@ -108,6 +113,7 @@ pub static PYSECDEC_UNDERSCORE: &str = "PSDU";
 pub static PYSECDEC_ATTRIBUTE_START: &str = "PSDAB";
 pub static PYSECDEC_ATTRIBUTE_SEPARATOR: &str = "PSDAS";
 pub static PYSECDEC_ATTRIBUTE_END: &str = "PSDAE";
+static TMP_DIR_UNIQUIFIER: AtomicU64 = AtomicU64::new(0);
 
 // pub static VAKINT_SYMBOL_UNDRESSING_RE: LazyLock<Regex> = LazyLock::new(|| {
 //     Regex::new(&format!(r"{}::\{{[^{{}}]*\}}::", regex::escape(NAMESPACE)))
@@ -120,6 +126,36 @@ pub static VAKINT_SYMBOL_UNDRESSING_RE: LazyLock<Regex> = LazyLock::new(|| {
     ))
     .expect("invalid regex")
 });
+
+fn create_unique_tmp_run_dir(base_dir: Option<&str>, prefix: &str) -> std::io::Result<PathBuf> {
+    let root = base_dir.map(PathBuf::from).unwrap_or_else(env::temp_dir);
+    fs::create_dir_all(&root)?;
+
+    for _ in 0..1024 {
+        let sequence = TMP_DIR_UNIQUIFIER.fetch_add(1, Ordering::Relaxed);
+        let timestamp_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+
+        let candidate = root.join(format!(
+            "{prefix}_pid{}_{}_{}",
+            std::process::id(),
+            timestamp_ns,
+            sequence
+        ));
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(err) => return Err(err),
+        }
+    }
+
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        format!("Could not allocate a unique temporary directory for '{prefix}'"),
+    ))
+}
 
 static MINIMAL_FORM_VERSION: &str = "4.2.1";
 static MINIMAL_PYSECDEC_VERSION: &str = "1.6.4";
@@ -3620,11 +3656,37 @@ Evaluated (n_loops=1, mu_r=1) :
             vars.insert("propagators".into(), pysecdec_propagators);
             let mut sorted_lorentz_indices = lorentz_indices.iter().cloned().collect::<Vec<_>>();
             sorted_lorentz_indices.sort();
+            let mut lorentz_index_replacements = vec![];
+            let mut sanitized_lorentz_indices = vec![];
+            let mut used_sanitized_lorentz_indices = HashSet::new();
+            for original_index in sorted_lorentz_indices {
+                let mut sanitized_index = original_index
+                    .chars()
+                    .map(|c| {
+                        if c.is_ascii_alphanumeric() || c == '_' {
+                            c
+                        } else {
+                            '_'
+                        }
+                    })
+                    .collect::<String>();
+                if sanitized_index.is_empty() || sanitized_index.as_bytes()[0].is_ascii_digit() {
+                    sanitized_index = format!("idx_{}", sanitized_index);
+                }
+                let sanitized_index_base = sanitized_index.clone();
+                let mut collision_counter = 1;
+                while !used_sanitized_lorentz_indices.insert(sanitized_index.clone()) {
+                    collision_counter += 1;
+                    sanitized_index = format!("{}_{}", sanitized_index_base, collision_counter);
+                }
+                lorentz_index_replacements.push((original_index, sanitized_index.clone()));
+                sanitized_lorentz_indices.push(sanitized_index);
+            }
             vars.insert(
                 "lorentz_indices".into(),
                 format!(
                     "[{}]",
-                    sorted_lorentz_indices
+                    sanitized_lorentz_indices
                         .iter()
                         .map(|li| format!("'{}'", li))
                         .collect::<Vec<_>>()
@@ -3700,6 +3762,24 @@ Evaluated (n_loops=1, mu_r=1) :
                     "eps",
                 ),
             );
+            for (original_index, sanitized_index) in lorentz_index_replacements.iter() {
+                if original_index != sanitized_index {
+                    let encoded_original_index = pysecdec_encode(original_index);
+                    let index_replacement_re = Regex::new(
+                        format!(
+                            r"(^|[^A-Za-z0-9_])({})([^A-Za-z0-9_]|$)",
+                            regex::escape(&encoded_original_index)
+                        )
+                        .as_str(),
+                    )
+                    .unwrap();
+                    numerator_string = index_replacement_re
+                        .replace_all(numerator_string.as_str(), |caps: &regex::Captures<'_>| {
+                            format!("{}{}{}", &caps[1], sanitized_index, &caps[3])
+                        })
+                        .to_string();
+                }
+            }
 
             // Powers higher than two cannot occur as different dummy indices would have been used in
             // the call 'processed_numerator = Vakint::convert_from_dot_notation(processed_numerator.as_view(), true)'
@@ -4647,7 +4727,20 @@ Evaluated (n_loops=1, mu_r=1) :
 
         // If there are floats in the expression we must rationalize them to target precision
         // because the FORM version we want to support here does not necessarily support floats.
+        // First wrap all coefficients within a marker function so that we can floatify them back after
+        // FORM has processed them
+
         let binary_prec = settings.get_binary_precision();
+        // TODO VHBEN
+        // expression = expression.replace_map(|term, _ctx, out| match term {
+        //     AtomView::Num(c) => match c.get_coeff_view() {
+        //         CoefficientView::Float(_, _) => {
+        //             **out = function!(S.float_marker, Atom::from(c.to_owned()));
+        //         }
+        //         _ => {}
+        //     },
+        //     _ => {}
+        // });
         expression = expression.map_coefficient(|c| match c {
             CoefficientView::Float(re, im) => {
                 let mut re = re.to_float();
@@ -4980,6 +5073,35 @@ Evaluated (n_loops=1, mu_r=1) :
                     .when(Condition::from((vk_symbol!("v1_"), symbol_condition())))
                     .with(vk_parse!("vec_(idx_)").unwrap().to_pattern());
 
+                // Undo the temporary float marker wrapping the rationalized coefficients and map them back to floats
+                // TODO VHBEN
+                // processed = processed.replace_map(|term, _ctx, out| match term {
+                //     AtomView::Fun(c) => {
+                //         if c.get_symbol() == S.float_marker {
+                //             if c.get_nargs() == 1 {
+                //                 let inner_c = c.iter().next().unwrap();
+                //                 if let AtomView::Num(inner_c) = inner_c {
+                //                     if let CoefficientView::Natural(n_re, d_re, n_im, d_im) =
+                //                         inner_c.get_coeff_view()
+                //                     {
+                //                         **out = Atom::from(Complex::new(
+                //                             Float::from_rational(&Rational::from_int_unchecked(
+                //                                 n_re.clone(),
+                //                                 d_re.clone(),
+                //                             )),
+                //                             Float::from_rational(&Rational::from_int_unchecked(
+                //                                 n_im.clone(),
+                //                                 d_im.clone(),
+                //                             )),
+                //                         ));
+                //                     }
+                //                 }
+                //             }
+                //         }
+                //     }
+                //     _ => {}
+                // });
+
                 // Convert vectors back from pi(j) notation to p(i,j) notation
                 for (s, t) in vector_mapping.iter() {
                     processed = processed.replace(s.to_pattern()).with(t.to_pattern());
@@ -5049,61 +5171,54 @@ Evaluated (n_loops=1, mu_r=1) :
         temporary_directory: Option<String>,
     ) -> Result<Vec<String>, VakintError> {
         let mut generate_pysecdec_sources = true;
-        let tmp_dir = &(if let Some(reused_path_specified) = reused_path.as_ref() {
+        let tmp_dir = if let Some(reused_path_specified) = reused_path.as_ref() {
             let specified_dir = PathBuf::from(reused_path_specified);
             if !specified_dir.exists() {
-                if fs::create_dir(specified_dir.clone()).is_err() {
-                    return Err(VakintError::PySecDecError(format!(
-                        "Could not create user-specified directory to be reused for pySecDec run '{}'.",
-                        reused_path_specified.green()
-                    )));
-                } else {
-                    warn!(
-                        "User-specified directory '{}' not found, and was instead created and pySecDec sources will be regenerated.",
-                        reused_path_specified
-                    );
-                }
+                fs::create_dir_all(&specified_dir).map_err(|err| {
+                    VakintError::PySecDecError(format!(
+                        "Could not create user-specified directory to be reused for pySecDec run '{}': {}",
+                        reused_path_specified.green(),
+                        err
+                    ))
+                })?;
+                warn!(
+                    "User-specified directory '{}' not found, and was instead created and pySecDec sources will be regenerated.",
+                    reused_path_specified
+                );
             } else {
                 generate_pysecdec_sources = false;
                 warn!("{}",format!("User requested to re-use existing directory '{}' for the pysecdec run.\nThis is of course potentially unsafe and should be used for debugging only.\nRemove that directory to start clean.", reused_path_specified).red());
             }
             specified_dir
         } else {
-            let tmp_directory = if let Some(temp_path) = temporary_directory {
-                &PathBuf::from(temp_path).join("vakint_temp_pysecdec")
-            } else {
-                &env::temp_dir().join("vakint_temp_pysecdec")
-            };
-            tmp_directory.clone()
-        });
+            create_unique_tmp_run_dir(temporary_directory.as_deref(), "vakint_temp_pysecdec")?
+        };
 
         if generate_pysecdec_sources {
-            if tmp_dir.exists() {
-                fs::remove_dir_all(tmp_dir)?;
-            }
-            fs::create_dir(tmp_dir)?;
             for input in input.iter() {
-                fs::write(tmp_dir.join(&input.0).to_str().unwrap(), &input.1)?;
+                fs::write(tmp_dir.join(&input.0), &input.1)?;
             }
-        };
+        }
 
         let mut cmd = Command::new(settings.python_exe_path.as_str());
         cmd.arg(input[0].clone().0);
         for opt in options {
             cmd.arg(opt);
         }
-        cmd.current_dir(tmp_dir);
+        cmd.current_dir(&tmp_dir);
 
         if !clean {
             info!("Running {} with command: {:?}", "PySecDec".green(), cmd);
             info!(
                 "You can follow the run live with 'tail -f follow_run.txt' in that temporary directory"
             );
+            info!("Temporary run directory: {}", tmp_dir.display());
         } else {
             debug!("Running {} with command: {:?}", "PySecDec".green(), cmd);
             debug!(
                 "You can follow the run live with 'tail -f follow_run.txt' in that temporary directory"
             );
+            debug!("Temporary run directory: {}", tmp_dir.display());
         }
 
         let mut child = cmd.stderr(Stdio::piped()).stdout(Stdio::piped()).spawn()?;
@@ -5126,19 +5241,19 @@ Evaluated (n_loops=1, mu_r=1) :
                 "N/A".into(),
                 "N/A".into(),
                 format!("{:?}", cmd),
-                tmp_dir.to_str().unwrap().into(),
+                tmp_dir.display().to_string(),
             ));
         }
         if !tmp_dir.join("out.txt").exists() {
             return Err(VakintError::MissingFormOutput(
                 "N/A".into(),
                 format!("{:?}", cmd),
-                tmp_dir.to_str().unwrap().into(),
+                tmp_dir.display().to_string(),
             ));
         }
         let result = fs::read_to_string(tmp_dir.join("out.txt"))?;
         if clean {
-            fs::remove_dir_all(tmp_dir)?;
+            fs::remove_dir_all(&tmp_dir)?;
         }
         Ok(result.split('\n').map(|s| s.into()).collect::<Vec<_>>())
     }
@@ -5152,31 +5267,24 @@ Evaluated (n_loops=1, mu_r=1) :
         clean: bool,
         temporary_directory: Option<String>,
     ) -> Result<String, VakintError> {
-        let tmp_dir = if let Some(temp_path) = temporary_directory {
-            &PathBuf::from(temp_path).join("vakint_temp")
-        } else {
-            &env::temp_dir().join("vakint_temp")
-        };
-
-        if tmp_dir.exists() {
-            fs::remove_dir_all(tmp_dir)?;
-        }
-        fs::create_dir(tmp_dir)?;
+        let tmp_dir = create_unique_tmp_run_dir(temporary_directory.as_deref(), "vakint_temp")?;
 
         for resource in resources.iter() {
             fs::write(tmp_dir.join(resource), FORM_SRC.get(resource).unwrap())?;
         }
-        fs::write(tmp_dir.join(&input.0).to_str().unwrap(), &input.1)?;
+        fs::write(tmp_dir.join(&input.0), &input.1)?;
         let mut cmd = Command::new(settings.form_exe_path.as_str());
         for opt in options {
             cmd.arg(opt);
         }
         cmd.arg(input.0);
-        cmd.current_dir(tmp_dir);
+        cmd.current_dir(&tmp_dir);
         if !clean {
             info!("Running {} with command: {:?}", "FORM".green(), cmd);
+            info!("Temporary run directory: {}", tmp_dir.display());
         } else {
             debug!("Running {} with command: {:?}", "FORM".green(), cmd);
+            debug!("Temporary run directory: {}", tmp_dir.display());
         }
         //println!("Running {} with command: {:?}", "FORM".green(), cmd);
         let output = cmd.stderr(Stdio::piped()).stdout(Stdio::piped()).output()?;
@@ -5186,20 +5294,20 @@ Evaluated (n_loops=1, mu_r=1) :
                 String::from_utf8_lossy(&output.stderr).into(),
                 String::from_utf8_lossy(&output.stdout).into(),
                 format!("{:?}", cmd),
-                tmp_dir.to_str().unwrap().into(),
+                tmp_dir.display().to_string(),
             ));
         }
         if !tmp_dir.join("out.txt").exists() {
             return Err(VakintError::MissingFormOutput(
                 String::from_utf8_lossy(&output.stderr).into(),
                 format!("{:?}", cmd),
-                tmp_dir.to_str().unwrap().into(),
+                tmp_dir.display().to_string(),
             ));
         }
 
         let result = fs::read_to_string(tmp_dir.join("out.txt"))?;
         if clean {
-            fs::remove_dir_all(tmp_dir)?;
+            fs::remove_dir_all(&tmp_dir)?;
         }
         Ok(result)
     }
