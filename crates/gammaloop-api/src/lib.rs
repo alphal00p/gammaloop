@@ -80,7 +80,6 @@ pub struct Repl {
 #[derive(Parser, Debug)]
 #[command(name = "gammaLoop", version, about)]
 #[command(next_line_help = true)]
-#[command(args_conflicts_with_subcommands = true)]
 pub struct OneShot {
     /// Don't actually run anything, just build up run card
     #[arg(short = 'd', long, default_value_t = false)]
@@ -639,5 +638,21 @@ mod tests {
     #[test]
     fn oneshot_rejects_run_card_without_run_subcommand() {
         assert!(OneShot::try_parse_from(["gammaloop", "card.toml"]).is_err());
+    }
+
+    #[test]
+    fn oneshot_allows_top_level_state_folder_with_run_subcommand() {
+        let parsed = OneShot::try_parse_from([
+            "gammaloop",
+            "-s",
+            "./GL_OUTPUT/triangle",
+            "run",
+            "-c",
+            "quit -o",
+        ])
+        .unwrap();
+
+        assert_eq!(parsed.state_folder, PathBuf::from("./GL_OUTPUT/triangle"));
+        assert!(matches!(parsed.command, Some(Commands::Run(_))));
     }
 }
