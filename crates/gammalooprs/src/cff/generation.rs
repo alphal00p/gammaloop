@@ -478,6 +478,63 @@ pub(crate) fn generate_cff_expression<E, V, H>(
     Ok(graph_cff)
 }
 
+impl Graph {
+    pub(crate) fn generate_cff(
+        &self,
+        contract_edges: &[EdgeIndex],
+        canonize_esurface: &Option<ShiftRewrite>,
+        surface_cache: &mut SurfaceCache,
+    ) -> Result<CFFExpression<SuperGraphOrientationID>> {
+        let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
+        for edge in contract_edges {
+            seed_graph = seed_graph.contract_edge(*edge);
+        }
+
+        let edges_in_initial_state_cut = self
+            .iter_edges_of(&self.initial_state_cut)
+            .map(|x| x.1)
+            .collect_vec();
+
+        let virtual_edges_of_contracted_graph = seed_graph.num_virtual_edges();
+
+        let orientations = iterate_possible_orientations(virtual_edges_of_contracted_graph);
+
+        let mut oriented_acyclic_graphs = vec![];
+
+        for orientation in orientations {
+            let mut orientation_iterator = orientation.into_iter();
+
+            let global_orientation = self.new_edgevec(|_, edge_id, hedge_pair| {
+                if hedge_pair.is_unpaired() {
+                    Orientation::Undirected
+                } else {
+                    if contract_edges.contains(&edge_id) {
+                        Orientation::Undirected
+                    } else {
+                        orientation_iterator
+                            .next()
+                            .expect("orientation generation corrupted, not enough edges")
+                    }
+                }
+            });
+
+            let mut cff_graph = seed_graph.clone();
+            cff_graph.apply_orientation(global_orientation)?;
+
+            if !cff_graph.has_directed_cycle_initial() {
+                oriented_acyclic_graphs.push(cff_graph);
+            }
+        }
+
+        generate_cff_from_orientations(
+            oriented_acyclic_graphs,
+            surface_cache,
+            &edges_in_initial_state_cut,
+            canonize_esurface,
+        )
+    }
+}
+
 pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
