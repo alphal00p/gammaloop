@@ -1,11 +1,10 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alphal00p/gammaloop/main/python/gammaloop/data/assets/gammalooplogo-dark.svg">
-  <img src="https://raw.githubusercontent.com/alphal00p/gammaloop/main/python/gammaloop/data/assets/gammalooplogo-light.svg", width="300">
+  <source media="(prefers-color-scheme: dark)" srcset="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-dark.svg">
+  <img src="https://github.com/alphal00p/gammaloop/blob/2ee2ec575fa575c26bdaf89a3e7df41428b879dc/assets/gammalooplogo-light.svg", width="300">
 </picture>
 </div> 
 
-![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push)
 
 *Computation of differential cross-sections using Local Unitarity.*
 
