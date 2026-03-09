@@ -1,0 +1,32 @@
+digraph GL303{
+    num = "1";
+    overall_factor = "(AutG(1))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+    overall_factor_evaluated = "-1";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))";
+
+    0 [dod="0" int_id="V_141" num="(spenso::projm(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)))+spenso::projp(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6))))*UFO::GC_94*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))"];
+    1 [dod="0" int_id="V_141" num="(spenso::projm(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(12)))+spenso::projp(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(12))))*UFO::GC_94*spenso::g(spenso::cof(3,hedge(12)),spenso::dind(spenso::cof(3,hedge(9))))"];
+    2 [dod="0" int_id="V_137" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(15)),spenso::bis(4,hedge(14)),spenso::mink(4,hedge(1)))*spenso::t(spenso::coad(8,hedge(1)),spenso::cof(3,hedge(14)),spenso::dind(spenso::cof(3,hedge(15))))"];
+    3 [dod="0" int_id="V_137" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(13)),spenso::bis(4,hedge(18)),spenso::mink(4,hedge(0)))*spenso::t(spenso::coad(8,hedge(0)),spenso::cof(3,hedge(18)),spenso::dind(spenso::cof(3,hedge(13))))"];
+    4 [dod="0" int_id="V_141" num="(spenso::projm(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(10)))+spenso::projp(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(10))))*UFO::GC_94*spenso::g(spenso::cof(3,hedge(10)),spenso::dind(spenso::cof(3,hedge(5))))"];
+    5 [dod="0" int_id="V_137" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(16)),spenso::mink(4,hedge(19)))*spenso::t(spenso::coad(8,hedge(19)),spenso::cof(3,hedge(16)),spenso::dind(spenso::cof(3,hedge(11))))"];
+    6 [dod="0" int_id="V_137" num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(17)),spenso::bis(4,hedge(8)),spenso::mink(4,hedge(20)))*spenso::t(spenso::coad(8,hedge(20)),spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(17))))"];
+    exte0    [style=invis];
+    exte0    -> 3:0    [id=0 dir=none sink=2  dod="-2" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="g" pin="x:@+right"];
+    exte1    [style=invis];
+    exte1    -> 2:1    [id=1 dir=none sink=2  dod="-2" is_dummy="false" lmb_rep="P(1,a___)" name="e1" num="1𝑖" particle="g" pin="x:@+right"];
+    exte2    [style=invis];
+    1:2    -> exte2    [id=2 dir=none source=2  dod="-2" is_dummy="false" lmb_rep="P(2,a___)" name="e2" num="1𝑖" particle="H" pin="x:@-left"];
+    exte3    [style=invis];
+    4:3    -> exte3    [id=3 dir=none source=2  dod="-2" is_dummy="false" lmb_rep="P(3,a___)" name="e3" num="1𝑖" particle="H" pin="x:@-left"];
+    exte4    [style=invis];
+    0:4    -> exte4    [id=4 dir=none source=2  dod="-2" is_dummy="false" lmb_rep="-1*P(2,a___)+-1*P(3,a___)+P(0,a___)+P(1,a___)" name="e4" num="1𝑖" particle="H" pin="x:@-left"];
+    4:5    -> 0:6    [id=5 source=0 sink=1  dod="-1" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e5" num="(Q(5,spenso::mink(4,edge(5,1)))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(5,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(6))))*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(6))))" particle="t"];
+    0:7    -> 6:8    [id=6 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="-1*P(0,a___)+-1*P(1,a___)+K(0,a___)+P(2,a___)+P(3,a___)" name="e6" num="(Q(6,spenso::mink(4,edge(6,1)))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(6,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(8))))*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(8))))" particle="t"];
+    1:9    -> 4:10    [id=7 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="K(0,a___)+P(3,a___)" name="e7" num="(Q(7,spenso::mink(4,edge(7,1)))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,edge(7,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9))))*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))" particle="t"];
+    5:11    -> 1:12    [id=8 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="K(0,a___)+P(2,a___)+P(3,a___)" name="e8" num="(Q(8,spenso::mink(4,edge(8,1)))*spenso::gamma(spenso::bis(4,hedge(12)),spenso::bis(4,hedge(11)),spenso::mink(4,edge(8,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(12))))*spenso::g(spenso::cof(3,hedge(11)),spenso::dind(spenso::cof(3,hedge(12))))" particle="t"];
+    3:13    -> 2:14    [id=9 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="K(1,a___)+P(0,a___)" name="e9" num="(Q(9,spenso::mink(4,edge(9,1)))*spenso::gamma(spenso::bis(4,hedge(14)),spenso::bis(4,hedge(13)),spenso::mink(4,edge(9,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(13)),spenso::bis(4,hedge(14))))*spenso::g(spenso::cof(3,hedge(13)),spenso::dind(spenso::cof(3,hedge(14))))" particle="t"];
+    2:15    -> 5:16    [id=10 source=0 sink=1  dod="-1" is_dummy="false" lmb_rep="K(1,a___)+P(0,a___)+P(1,a___)" name="e10" num="(Q(10,spenso::mink(4,edge(10,1)))*spenso::gamma(spenso::bis(4,hedge(16)),spenso::bis(4,hedge(15)),spenso::mink(4,edge(10,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(15)),spenso::bis(4,hedge(16))))*spenso::g(spenso::cof(3,hedge(15)),spenso::dind(spenso::cof(3,hedge(16))))" particle="t"];
+    6:17    -> 3:18    [id=11 source=0 sink=1  dod="-1" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e11" num="(Q(11,spenso::mink(4,edge(11,1)))*spenso::gamma(spenso::bis(4,hedge(18)),spenso::bis(4,hedge(17)),spenso::mink(4,edge(11,1)))+UFO::MT*spenso::g(spenso::bis(4,hedge(17)),spenso::bis(4,hedge(18))))*spenso::g(spenso::cof(3,hedge(17)),spenso::dind(spenso::cof(3,hedge(18))))" particle="t"];
+    5:19    -> 6:20    [id=12 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*P(2,a___)+-1*P(3,a___)+K(1,a___)+P(0,a___)+P(1,a___)" name="e12" num="-1*spenso::g(spenso::coad(8,hedge(19)),spenso::coad(8,hedge(20)))*spenso::g(spenso::mink(4,hedge(19)),spenso::mink(4,hedge(20)))" particle="g"];
+}

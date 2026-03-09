@@ -1,0 +1,723 @@
+---
+source: spenso/src/tests.rs
+expression: "(a, fiter, fciter)"
+---
+(VecStructure(
+  structure: [
+    Slot(
+      aind: Normal(221),
+      rep: Representation(
+        dim: Concrete(4),
+        rep: SelfDual(0),
+      ),
+    ),
+    Slot(
+      aind: Normal(61),
+      rep: Representation(
+        dim: Concrete(4),
+        rep: InlineMetric(0),
+      ),
+    ),
+    Slot(
+      aind: Normal(152),
+      rep: Representation(
+        dim: Concrete(1),
+        rep: SelfDual(0),
+      ),
+    ),
+    Slot(
+      aind: Normal(118),
+      rep: Representation(
+        dim: Concrete(2),
+        rep: InlineMetric(0),
+      ),
+    ),
+    Slot(
+      aind: Normal(251),
+      rep: Representation(
+        dim: Concrete(7),
+        rep: SelfDual(0),
+      ),
+    ),
+  ],
+), [
+  FlatIndex(
+    index: 0,
+  ),
+  FlatIndex(
+    index: 1,
+  ),
+  FlatIndex(
+    index: 2,
+  ),
+  FlatIndex(
+    index: 3,
+  ),
+  FlatIndex(
+    index: 4,
+  ),
+  FlatIndex(
+    index: 5,
+  ),
+  FlatIndex(
+    index: 6,
+  ),
+  FlatIndex(
+    index: 14,
+  ),
+  FlatIndex(
+    index: 15,
+  ),
+  FlatIndex(
+    index: 16,
+  ),
+  FlatIndex(
+    index: 17,
+  ),
+  FlatIndex(
+    index: 18,
+  ),
+  FlatIndex(
+    index: 19,
+  ),
+  FlatIndex(
+    index: 20,
+  ),
+  FlatIndex(
+    index: 28,
+  ),
+  FlatIndex(
+    index: 29,
+  ),
+  FlatIndex(
+    index: 30,
+  ),
+  FlatIndex(
+    index: 31,
+  ),
+  FlatIndex(
+    index: 32,
+  ),
+  FlatIndex(
+    index: 33,
+  ),
+  FlatIndex(
+    index: 34,
+  ),
+  FlatIndex(
+    index: 42,
+  ),
+  FlatIndex(
+    index: 43,
+  ),
+  FlatIndex(
+    index: 44,
+  ),
+  FlatIndex(
+    index: 45,
+  ),
+  FlatIndex(
+    index: 46,
+  ),
+  FlatIndex(
+    index: 47,
+  ),
+  FlatIndex(
+    index: 48,
+  ),
+  FlatIndex(
+    index: 56,
+  ),
+  FlatIndex(
+    index: 57,
+  ),
+  FlatIndex(
+    index: 58,
+  ),
+  FlatIndex(
+    index: 59,
+  ),
+  FlatIndex(
+    index: 60,
+  ),
+  FlatIndex(
+    index: 61,
+  ),
+  FlatIndex(
+    index: 62,
+  ),
+  FlatIndex(
+    index: 70,
+  ),
+  FlatIndex(
+    index: 71,
+  ),
+  FlatIndex(
+    index: 72,
+  ),
+  FlatIndex(
+    index: 73,
+  ),
+  FlatIndex(
+    index: 74,
+  ),
+  FlatIndex(
+    index: 75,
+  ),
+  FlatIndex(
+    index: 76,
+  ),
+  FlatIndex(
+    index: 84,
+  ),
+  FlatIndex(
+    index: 85,
+  ),
+  FlatIndex(
+    index: 86,
+  ),
+  FlatIndex(
+    index: 87,
+  ),
+  FlatIndex(
+    index: 88,
+  ),
+  FlatIndex(
+    index: 89,
+  ),
+  FlatIndex(
+    index: 90,
+  ),
+  FlatIndex(
+    index: 98,
+  ),
+  FlatIndex(
+    index: 99,
+  ),
+  FlatIndex(
+    index: 100,
+  ),
+  FlatIndex(
+    index: 101,
+  ),
+  FlatIndex(
+    index: 102,
+  ),
+  FlatIndex(
+    index: 103,
+  ),
+  FlatIndex(
+    index: 104,
+  ),
+  FlatIndex(
+    index: 112,
+  ),
+  FlatIndex(
+    index: 113,
+  ),
+  FlatIndex(
+    index: 114,
+  ),
+  FlatIndex(
+    index: 115,
+  ),
+  FlatIndex(
+    index: 116,
+  ),
+  FlatIndex(
+    index: 117,
+  ),
+  FlatIndex(
+    index: 118,
+  ),
+  FlatIndex(
+    index: 126,
+  ),
+  FlatIndex(
+    index: 127,
+  ),
+  FlatIndex(
+    index: 128,
+  ),
+  FlatIndex(
+    index: 129,
+  ),
+  FlatIndex(
+    index: 130,
+  ),
+  FlatIndex(
+    index: 131,
+  ),
+  FlatIndex(
+    index: 132,
+  ),
+  FlatIndex(
+    index: 140,
+  ),
+  FlatIndex(
+    index: 141,
+  ),
+  FlatIndex(
+    index: 142,
+  ),
+  FlatIndex(
+    index: 143,
+  ),
+  FlatIndex(
+    index: 144,
+  ),
+  FlatIndex(
+    index: 145,
+  ),
+  FlatIndex(
+    index: 146,
+  ),
+  FlatIndex(
+    index: 154,
+  ),
+  FlatIndex(
+    index: 155,
+  ),
+  FlatIndex(
+    index: 156,
+  ),
+  FlatIndex(
+    index: 157,
+  ),
+  FlatIndex(
+    index: 158,
+  ),
+  FlatIndex(
+    index: 159,
+  ),
+  FlatIndex(
+    index: 160,
+  ),
+  FlatIndex(
+    index: 168,
+  ),
+  FlatIndex(
+    index: 169,
+  ),
+  FlatIndex(
+    index: 170,
+  ),
+  FlatIndex(
+    index: 171,
+  ),
+  FlatIndex(
+    index: 172,
+  ),
+  FlatIndex(
+    index: 173,
+  ),
+  FlatIndex(
+    index: 174,
+  ),
+  FlatIndex(
+    index: 182,
+  ),
+  FlatIndex(
+    index: 183,
+  ),
+  FlatIndex(
+    index: 184,
+  ),
+  FlatIndex(
+    index: 185,
+  ),
+  FlatIndex(
+    index: 186,
+  ),
+  FlatIndex(
+    index: 187,
+  ),
+  FlatIndex(
+    index: 188,
+  ),
+  FlatIndex(
+    index: 196,
+  ),
+  FlatIndex(
+    index: 197,
+  ),
+  FlatIndex(
+    index: 198,
+  ),
+  FlatIndex(
+    index: 199,
+  ),
+  FlatIndex(
+    index: 200,
+  ),
+  FlatIndex(
+    index: 201,
+  ),
+  FlatIndex(
+    index: 202,
+  ),
+  FlatIndex(
+    index: 210,
+  ),
+  FlatIndex(
+    index: 211,
+  ),
+  FlatIndex(
+    index: 212,
+  ),
+  FlatIndex(
+    index: 213,
+  ),
+  FlatIndex(
+    index: 214,
+  ),
+  FlatIndex(
+    index: 215,
+  ),
+  FlatIndex(
+    index: 216,
+  ),
+  FlatIndex(
+    index: 7,
+  ),
+  FlatIndex(
+    index: 8,
+  ),
+  FlatIndex(
+    index: 9,
+  ),
+  FlatIndex(
+    index: 10,
+  ),
+  FlatIndex(
+    index: 11,
+  ),
+  FlatIndex(
+    index: 12,
+  ),
+  FlatIndex(
+    index: 13,
+  ),
+  FlatIndex(
+    index: 21,
+  ),
+  FlatIndex(
+    index: 22,
+  ),
+  FlatIndex(
+    index: 23,
+  ),
+  FlatIndex(
+    index: 24,
+  ),
+  FlatIndex(
+    index: 25,
+  ),
+  FlatIndex(
+    index: 26,
+  ),
+  FlatIndex(
+    index: 27,
+  ),
+  FlatIndex(
+    index: 35,
+  ),
+  FlatIndex(
+    index: 36,
+  ),
+  FlatIndex(
+    index: 37,
+  ),
+  FlatIndex(
+    index: 38,
+  ),
+  FlatIndex(
+    index: 39,
+  ),
+  FlatIndex(
+    index: 40,
+  ),
+  FlatIndex(
+    index: 41,
+  ),
+  FlatIndex(
+    index: 49,
+  ),
+  FlatIndex(
+    index: 50,
+  ),
+  FlatIndex(
+    index: 51,
+  ),
+  FlatIndex(
+    index: 52,
+  ),
+  FlatIndex(
+    index: 53,
+  ),
+  FlatIndex(
+    index: 54,
+  ),
+  FlatIndex(
+    index: 55,
+  ),
+  FlatIndex(
+    index: 63,
+  ),
+  FlatIndex(
+    index: 64,
+  ),
+  FlatIndex(
+    index: 65,
+  ),
+  FlatIndex(
+    index: 66,
+  ),
+  FlatIndex(
+    index: 67,
+  ),
+  FlatIndex(
+    index: 68,
+  ),
+  FlatIndex(
+    index: 69,
+  ),
+  FlatIndex(
+    index: 77,
+  ),
+  FlatIndex(
+    index: 78,
+  ),
+  FlatIndex(
+    index: 79,
+  ),
+  FlatIndex(
+    index: 80,
+  ),
+  FlatIndex(
+    index: 81,
+  ),
+  FlatIndex(
+    index: 82,
+  ),
+  FlatIndex(
+    index: 83,
+  ),
+  FlatIndex(
+    index: 91,
+  ),
+  FlatIndex(
+    index: 92,
+  ),
+  FlatIndex(
+    index: 93,
+  ),
+  FlatIndex(
+    index: 94,
+  ),
+  FlatIndex(
+    index: 95,
+  ),
+  FlatIndex(
+    index: 96,
+  ),
+  FlatIndex(
+    index: 97,
+  ),
+  FlatIndex(
+    index: 105,
+  ),
+  FlatIndex(
+    index: 106,
+  ),
+  FlatIndex(
+    index: 107,
+  ),
+  FlatIndex(
+    index: 108,
+  ),
+  FlatIndex(
+    index: 109,
+  ),
+  FlatIndex(
+    index: 110,
+  ),
+  FlatIndex(
+    index: 111,
+  ),
+  FlatIndex(
+    index: 119,
+  ),
+  FlatIndex(
+    index: 120,
+  ),
+  FlatIndex(
+    index: 121,
+  ),
+  FlatIndex(
+    index: 122,
+  ),
+  FlatIndex(
+    index: 123,
+  ),
+  FlatIndex(
+    index: 124,
+  ),
+  FlatIndex(
+    index: 125,
+  ),
+  FlatIndex(
+    index: 133,
+  ),
+  FlatIndex(
+    index: 134,
+  ),
+  FlatIndex(
+    index: 135,
+  ),
+  FlatIndex(
+    index: 136,
+  ),
+  FlatIndex(
+    index: 137,
+  ),
+  FlatIndex(
+    index: 138,
+  ),
+  FlatIndex(
+    index: 139,
+  ),
+  FlatIndex(
+    index: 147,
+  ),
+  FlatIndex(
+    index: 148,
+  ),
+  FlatIndex(
+    index: 149,
+  ),
+  FlatIndex(
+    index: 150,
+  ),
+  FlatIndex(
+    index: 151,
+  ),
+  FlatIndex(
+    index: 152,
+  ),
+  FlatIndex(
+    index: 153,
+  ),
+  FlatIndex(
+    index: 161,
+  ),
+  FlatIndex(
+    index: 162,
+  ),
+  FlatIndex(
+    index: 163,
+  ),
+  FlatIndex(
+    index: 164,
+  ),
+  FlatIndex(
+    index: 165,
+  ),
+  FlatIndex(
+    index: 166,
+  ),
+  FlatIndex(
+    index: 167,
+  ),
+  FlatIndex(
+    index: 175,
+  ),
+  FlatIndex(
+    index: 176,
+  ),
+  FlatIndex(
+    index: 177,
+  ),
+  FlatIndex(
+    index: 178,
+  ),
+  FlatIndex(
+    index: 179,
+  ),
+  FlatIndex(
+    index: 180,
+  ),
+  FlatIndex(
+    index: 181,
+  ),
+  FlatIndex(
+    index: 189,
+  ),
+  FlatIndex(
+    index: 190,
+  ),
+  FlatIndex(
+    index: 191,
+  ),
+  FlatIndex(
+    index: 192,
+  ),
+  FlatIndex(
+    index: 193,
+  ),
+  FlatIndex(
+    index: 194,
+  ),
+  FlatIndex(
+    index: 195,
+  ),
+  FlatIndex(
+    index: 203,
+  ),
+  FlatIndex(
+    index: 204,
+  ),
+  FlatIndex(
+    index: 205,
+  ),
+  FlatIndex(
+    index: 206,
+  ),
+  FlatIndex(
+    index: 207,
+  ),
+  FlatIndex(
+    index: 208,
+  ),
+  FlatIndex(
+    index: 209,
+  ),
+  FlatIndex(
+    index: 217,
+  ),
+  FlatIndex(
+    index: 218,
+  ),
+  FlatIndex(
+    index: 219,
+  ),
+  FlatIndex(
+    index: 220,
+  ),
+  FlatIndex(
+    index: 221,
+  ),
+  FlatIndex(
+    index: 222,
+  ),
+  FlatIndex(
+    index: 223,
+  ),
+], [
+  FlatIndex(
+    index: 0,
+  ),
+  FlatIndex(
+    index: 7,
+  ),
+])

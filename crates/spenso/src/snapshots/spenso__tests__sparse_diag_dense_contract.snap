@@ -1,0 +1,31 @@
+---
+source: src/tests.rs
+expression: f
+---
+data:
+  - 1
+  - 2
+  - 3
+  - 8
+  - 10
+  - 12
+  - 21
+  - 24
+  - 27
+  - 40
+  - 44
+  - 48
+structure:
+  structure:
+    - aind:
+        Normal: 1
+      rep:
+        dim:
+          Concrete: 4
+        rep: {}
+    - aind:
+        Normal: 3
+      rep:
+        dim:
+          Concrete: 3
+        rep: {}

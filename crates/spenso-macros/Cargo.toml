@@ -1,0 +1,21 @@
+[package]
+name = "spenso-macros"
+version = "0.3.2"
+edition.workspace = true
+description = "Procedural macros for the spenso tensor library"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }
+symbolica = { workspace = true, optional = true, default-features = false }
+serde ={ workspace = true}
+
+[features]
+shadowing = ["dep:symbolica"]
+[dev-dependencies]
+spenso = { workspace = true }
+linnet = {workspace = true}

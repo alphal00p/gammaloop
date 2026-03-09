@@ -1,0 +1,35 @@
+---
+source: src/half_edge/algorithms/transitive_ops.rs
+expression: closure_graph.debug_dot()
+---
+digraph {
+  a1;
+  a2;
+  b1;
+  b2;
+  bottom3;
+  c1;
+  c2;
+  center2;
+  d1;
+  isolated1;
+  isolated2;
+  left3;
+  right3;
+  top3;
+
+  a1:0	-> b1:1	 [id=0 ];
+  b1:2	-> c1:3	 [id=1 ];
+  c1:4	-> d1:5	 [id=2 ];
+  center2:6	-> a2:7	 [id=3 ];
+  center2:8	-> b2:9	 [id=4 ];
+  center2:10	-> c2:11	 [id=5 ];
+  left3:12	-> bottom3:13	 [id=6 ];
+  right3:14	-> bottom3:15	 [id=7 ];
+  top3:16	-> left3:17	 [id=8 ];
+  top3:18	-> right3:19	 [id=9 ];
+  a1:20	-> c1:21	 [id=10 ];
+  a1:22	-> d1:23	 [id=11 ];
+  top3:24	-> bottom3:25	 [id=12 ];
+  b1:26	-> d1:27	 [id=13 ];
+}

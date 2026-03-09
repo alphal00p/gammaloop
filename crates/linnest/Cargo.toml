@@ -1,0 +1,27 @@
+[package]
+name = "linnest"
+version = "0.1.0"
+edition = "2021"
+description = "A library for working with linnet data structures in WebAssembly environments"
+license = "MIT"
+authors = ["Lucien Huber"]
+repository = "https://github.com/lcnbr/linnet"
+publish = false
+
+[features]
+custom = []
+
+[dependencies]
+ciborium = "0.2.2"
+linnet = { version = "0.17", features = ["serde", "drawing"] }
+serde = {version="1.0", features=["derive"]}
+
+cgmath = { version = "0.18.0", features = ["serde"] }
+wasm-minimal-protocol = { git = "https://github.com/astrale-sharp/wasm-minimal-protocol" }
+getrandom = { version = "0.2", default-features = false, features = ["custom"] }
+thiserror = "2.0.16"
+rand = "0.8.5"
+figment = "0.10.19"
+
+[lib]
+crate-type = ["cdylib", "rlib"]

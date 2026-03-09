@@ -1,0 +1,8 @@
+---
+source: spenso/src/tests.rs
+expression: common.to_string()
+---
+140 (lor🠓1)
+176 (euc3)
+17  (euc1)
+201 (euc2)

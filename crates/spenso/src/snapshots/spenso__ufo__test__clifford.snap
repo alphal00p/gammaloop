@@ -1,0 +1,94 @@
+---
+source: src/ufo.rs
+expression: net.result_tensor().unwrap().try_into_concrete().unwrap().try_into_complex().unwrap().to_dense()
+---
+DenseTensor(
+  data: [
+    Complex(
+      re: 8.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: -8.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: -8.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: 0.0,
+      im: 0.0,
+    ),
+    Complex(
+      re: -8.0,
+      im: 0.0,
+    ),
+  ],
+  structure: NamedStructure(
+    structure: VecStructure(
+      structure: [
+        Slot(
+          aind: Normal(1),
+          rep: Representation(
+            dim: Concrete(4),
+            rep: Minkowski(Minkowski()),
+          ),
+        ),
+        Slot(
+          aind: Normal(2),
+          rep: Representation(
+            dim: Concrete(4),
+            rep: Minkowski(Minkowski()),
+          ),
+        ),
+      ],
+    ),
+    global_name: Some("γ"),
+    additional_args: None,
+  ),
+)

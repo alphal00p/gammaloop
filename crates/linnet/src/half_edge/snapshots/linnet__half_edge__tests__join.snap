@@ -1,0 +1,20 @@
+---
+source: src/half_edge/tests.rs
+expression: c.dot_display(&c.full_filter())
+---
+digraph {
+  node	 [shape=circle,height=0.1,label=""];
+  overlap = "scale";
+  layout = "neato";
+  start=2;
+  0	 [a];
+  1	 [a];
+  2	 [b];
+  3	 [b];
+  0:0:s	-> 1:1:s	 [id=0 source= sink=  color="red:blue;0.5" ie];
+  1:2:s	-> 0:3:s	 [id=1 source= sink=  color="red:blue;0.5" ie];
+  3:11:s	-> 0:4:s	 [id=2 source= sink=  color="red:blue;0.5" esink];
+  1:5:s	-> 2:10:s	 [id=3 source= sink=  color="red:blue;0.5" esource];
+  2:6:s	-> 3:7:s	 [id=4 source= sink=  color="red:blue;0.5" if];
+  3:8:s	-> 2:9:s	 [id=5 source= sink=  color="red:blue;0.5" if];
+}

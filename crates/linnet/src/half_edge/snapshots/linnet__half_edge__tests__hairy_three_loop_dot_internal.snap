@@ -1,0 +1,22 @@
+---
+source: src/half_edge/tests.rs
+expression: graph.dot(&graph.full_node())
+---
+digraph {
+  node	 [shape=circle,height=0.1,label=""];
+  overlap = "scale";
+  layout = "neato";
+  start=2;
+  0:0:s	-> 1:1:s	 [id=0 dir=none  color="red:blue;0.5"];
+  1:2:s	-> 0:3:s	 [id=1 dir=none  color="red:blue;0.5"];
+  0:4:s	-> 1:5:s	 [id=2 dir=none  color="red:blue;0.5"];
+  ext3	 [style=invis];
+  ext3	-> 0:6:s	 [id=3 dir=none color="blue"];
+  ext4	 [style=invis];
+  ext4	-> 1:7:s	 [id=4 dir=none color="blue"];
+  ext5	 [style=invis];
+  ext5	-> 1:8:s	 [id=5 dir=none color="blue"];
+  1:9:s	-> 2:10:s	 [id=6 dir=none  color="red:blue;0.5"];
+  2:11:s	-> 3:12:s	 [id=7 dir=none  color="red:blue;0.5"];
+  3:13:s	-> 0:14:s	 [id=8 dir=none  color="red:blue;0.5"];
+}

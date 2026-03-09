@@ -3,23 +3,37 @@ resolver = "2"
 members = ["crates/*", "tests"]
 default-members = ["crates/gammaloop-api"]
 
+
+
+[workspace.package]
+edition = "2024"
+
 [workspace.dependencies]
+gammaloop-api = { path = "crates/gammaloop-api/" }
+gammalooprs = { path = "crates/gammalooprs/" }
+linnet = { path = "crates/linnet/" }
+linnest = { path = "crates/linnest/" }
+spenso = { path = "crates/spenso/" }
+idenso = { path = "crates/idenso/" }
+spenso-macros = { path = "crates/spenso-macros/" }
+spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
+vakint = { path = "crates/vakint/" }
+symbolica = { version = "1.4", default-features = false }
 ahash = "0.8.8"
 bincode = "2.0.0"
 bincode-trait-derive = "0.1.1"
 clap = "4.5.47"
+dot-parser = "0.5"
 colored = "3.0.0"
 eyre = "0.6.12"
-gammaloop-api = { path = "crates/gammaloop-api/" }
-gammalooprs = { path = "crates/gammalooprs/" }
+thiserror ="1.0.60"
 git-version = "0.3"
-idenso = "0.3"
 include_dir = "0.7"
 itertools = "0.14"
-linnet = "0.17"
 nu-ansi-term = "0.50.3"
-pyo3 = "0.25"
-pyo3-stub-gen = { version = "0.13", default-features = false }
+pyo3 = "0.28"
+pyo3-stub-gen = { version = "0.17", default-features = false }
+pyo3-stub-gen-derive = { version = "0.17", default-features = false }
 rand = "0.9"
 rayon = "1.5"
 schemars = "1.0.4"
@@ -27,8 +41,6 @@ serde = "1.0.219"
 serde_json = "1"
 serde_yaml = "*"
 smartstring = "*"
-spenso = "0.6"
-symbolica = { version = "1.3", default-features = false }
 tabled = "0.20.0"
 toml = "0.9.5"
 tracing = "0.1.41"
@@ -37,17 +49,15 @@ tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.19"
 typed-index-collections = "3.3.0"
 vergen-gitcl = { version = "9", default-features = false }
+pyo3-build-config = "0.28"
+numpy = "0.28"
+
+
 
 [patch.crates-io]
 graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
-linnet = { git = "https://github.com/alphal00p/linnet", rev = "406272c24bcb5bde5551d7d29620459e0671c82e" }
 numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c052f22dc98a18535e114eede758674befc2758f" }
 symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-vakint = { git = "https://github.com/alphal00p/vakint", rev = "bf91ee57aa62604c7ae3fb919203bf6f09544470" }
 
 [profile.bench]
 opt-level = 3

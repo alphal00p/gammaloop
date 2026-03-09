@@ -20,8 +20,17 @@ bench = false
 base62 = "2.0.2"
 brotli = "7.0.0"
 clarabel = "0"
+delegate = "0.12.0"
+derive_more = "0.99.17"
+ctrlc = "3.4.4"
+dirs = "5"
+dot-parser = {workspace=true}
+indexmap = "2.2.2"
+enum_dispatch = "*"
+libc = "0.2.0"
+indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
+insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
 color-eyre = { version = "0.6", default-features = false }
-
 ahash = { workspace = true, features = ["serde"] }
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
@@ -32,25 +41,12 @@ clap = { workspace = true, features = [
   "wrap_help",
 ] }
 colored = { workspace = true }
-ctrlc = "3.4.4"
-delegate = "0.12.0"
-# num = { version = "0.4.1", features = ["serde"] }
-# pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
-derive_more = "0.99.17"
-dirs = "5"
-dot-parser = "0.5.1"
-enum_dispatch = "*"
 eyre = { workspace = true }
 git-version = { workspace = true }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
-# petgraph = "0.6.4"
-indexmap = "2.2.2"
-# clap-repl = "0.3.2"
-indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
-insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
+
 itertools = { workspace = true }
-libc = "0.2.0"
 linnet = { workspace = true, features = [
   "bincode",
   # "drawing",
@@ -89,8 +85,8 @@ slotmap = { version = "1.0.7", features = ["serde"] }
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
 smartstring = { workspace = true, features = ["serde"] }
 spenso = { workspace = true, features = ["shadowing"] }
-spenso-hep-lib = { version = "0.1.7" }
-spenso-macros = { version = "0.3" }
+spenso-hep-lib ={workspace=true}
+spenso-macros ={workspace=true}
 statrs = "0.16.0"
 symbolica = { workspace = true, features = [
   "bincode",
@@ -100,7 +96,7 @@ symbolica = { workspace = true, features = [
 # serde_with = "3.9.0"
 tabled = { workspace = true, features = ["ansi"] }
 # gxhash = "3.4.1"
-thiserror = "1.0.63"
+thiserror = {workspace=true}
 toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }
 tracing-appender = { workspace = true }
@@ -117,7 +113,7 @@ typed-index-collections = { workspace = true, features = [
   "serde",
   "serde-alloc",
 ] }
-vakint = "0.1.2"
+vakint = {workspace=true}
 varpro = "0.14.0"
 vectorize = "0.2.0"
 which = "8.0.0"

@@ -1,0 +1,12 @@
+[project]
+name = "linnet-py"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.maturin]
+module-name = "linnet_py"
+
+[build-system]
+requires = ["maturin>=1.7"]
+build-backend = "maturin"

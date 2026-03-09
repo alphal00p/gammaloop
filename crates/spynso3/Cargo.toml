@@ -1,0 +1,37 @@
+[package]
+name = "spynso3"
+version = "0.1.2"
+edition = "2024"
+description = "Pyo3 bindings for spenso"
+
+[dependencies]
+
+spenso = { workspace=true, features = ["shadowing", "python"] }
+symbolica = {workspace=true, default-features = false, features = [
+    "python_export",
+] }
+spenso-macros = { workspace=true }
+spenso-hep-lib = { workspace=true}
+idenso = "0.3"
+ahash = { version = "0.8.11", features = ["serde"] }
+xpct = "0.5.1"
+
+eyre = { workspace=true }
+pyo3 = { workspace=true, features = ["eyre"] }
+
+pyo3-stub-gen = {workspace=true, default-features = false, optional = true }
+itertools = "0.14.0"
+thiserror = {workspace=true}
+pyo3-stub-gen-derive = {workspace=true}
+
+[features]
+
+python_stubgen = [
+    "symbolica/python_stubgen",
+    "dep:pyo3-stub-gen",
+    "spenso/python_stubgen",
+]
+
+
+# [patch.crates-io]
+# pyo3-stub-gen = { git = "https://github.com/benruijl/pyo3-stub-gen", branch = "patched" }
