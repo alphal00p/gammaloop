@@ -13,7 +13,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::gamma::GammaSimplifier;
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -42,13 +42,17 @@ use crate::{
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
+    numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        UVgenerationSettings, UltravioletGraph, approx::integrated::to_vakint_integrand,
+        UVgenerationSettings, UltravioletGraph,
+        approx::{CutStructure, integrated::to_vakint_integrand},
+        forest,
         settings::VakintSettings,
+        wood::CutWoods,
     },
 };
 use eyre::{Context, eyre};
@@ -501,7 +505,7 @@ impl AmplitudeGraph {
 
         self.generate_cff()?;
 
-        self.build_parametric_integrand(settings, vk)?;
+        self.build_integrands(settings, vk)?;
 
         if self.graph.is_group_master {
             self.build_tropical_sampler(settings)?;
@@ -778,11 +782,34 @@ impl AmplitudeGraph {
         fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Parametric Integrand"),
         err
     )]
-    pub(crate) fn build_parametric_integrand(
+    pub(crate) fn build_integrands(
         &mut self,
         settings: &GenerationSettings,
         vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<()> {
+        //TODO actual cut structure
+        let cutstructure = CutStructure {
+            cuts: vec![CutSet::empty(self.graph.n_hedges())],
+        };
+        let woods = CutWoods::new(cutstructure, &self.graph);
+        let mut forests = woods.unfold(&self.graph);
+        forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        let exprs: Vec<_> = forests
+            .orientation_parametric_exprs(&self.graph, false)?
+            .into_iter()
+            .map(|e| {
+                e.map(|a| {
+                    let scalar = a
+                        .unwrap_function(GS.color_wrap)
+                        .simplify_color()
+                        .expand_dots();
+                    self.add_additional_factors_to_cff_atom(&scalar)
+                })
+            })
+            .collect();
+
+        //TODO use the expresssions
+
         self.derived_data.all_mighty_integrand =
             self.build_original_parametric_integrand(settings, vakint)?;
         Ok(())

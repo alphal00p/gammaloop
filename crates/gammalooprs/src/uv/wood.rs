@@ -25,7 +25,7 @@ pub struct CutWoods {
 }
 
 impl CutWoods {
-    fn new(cuts: CutStructure, graph: &Graph) -> Self {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph) -> Self {
         let mut woods = vec![];
         for cut in cuts.cuts.iter() {
             let mut subgraph = graph.full_filter();
@@ -38,7 +38,7 @@ impl CutWoods {
         CutWoods { cuts, woods }
     }
 
-    fn unfold(self, graph: &Graph) -> CutForests {
+    pub(crate) fn unfold(self, graph: &Graph) -> CutForests {
         CutForests {
             cuts: self.cuts,
             forests: self

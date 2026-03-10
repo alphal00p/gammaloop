@@ -73,7 +73,7 @@ fn four_photon_one_loop_amp() {
     let vk = (crate::utils::vakint().unwrap(), &vk_settings);
 
     amp.generate_cff().unwrap();
-    amp.build_parametric_integrand(&set, vk).unwrap();
+    amp.build_integrands(&set, vk).unwrap();
 
     println!("{}", amp.derived_data.all_mighty_integrand);
 }

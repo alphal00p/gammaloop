@@ -11,7 +11,7 @@ use symbolica::{
     function,
 };
 
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use linnet::half_edge::subgraph::SubSetLike;
 use std::fmt::Write;
 use tracing::{debug, instrument};
 
@@ -28,6 +28,20 @@ pub struct CutForests {
     pub forests: Vec<Forest>,
 }
 
+pub struct ParametricIntegrands {
+    pub integrands: Vec<Atom>,
+    pub cuts: CutSet,
+}
+
+impl ParametricIntegrands {
+    pub fn map<F: FnMut(Atom) -> Atom>(self, map: F) -> Self {
+        Self {
+            integrands: self.integrands.into_iter().map(map).collect(),
+            cuts: self.cuts,
+        }
+    }
+}
+
 impl CutForests {
     pub(crate) fn compute(
         &mut self,
@@ -39,6 +53,20 @@ impl CutForests {
             forest.compute(graph, vakint, &cuts, settings)?;
         }
         Ok(())
+    }
+
+    pub(crate) fn orientation_parametric_exprs(
+        self,
+        graph: &Graph,
+        add_sigma: bool,
+    ) -> Result<Vec<ParametricIntegrands>> {
+        let mut exprs = vec![];
+
+        for (forest, cuts) in self.forests.iter().zip(self.cuts.cuts.into_iter()) {
+            let integrands = forest.orientation_parametric_expr(&cuts, graph, add_sigma)?;
+            exprs.push(ParametricIntegrands { integrands, cuts });
+        }
+        Ok(exprs)
     }
 }
 
@@ -227,7 +255,7 @@ impl Forest {
     #[instrument(skip_all)]
     pub(crate) fn orientation_parametric_expr(
         &self,
-        cut_edges: Option<&SuBitGraph>,
+        cut_edges: &CutSet,
         graph: &Graph,
         add_sigma: bool,
     ) -> Result<Vec<Atom>> {
@@ -284,15 +312,14 @@ impl Forest {
 
         let mut sum = sum.ok_or(eyre!("No terms in forest"))?;
 
-        if let Some(cut) = cut_edges {
-            // add Feynman rules of cut edges
-            for (_p, edge_index, d) in graph.iter_edges_of(cut) {
-                for s in &mut sum {
-                    *s *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
-                        .wrap_color(GS.color_wrap);
-                }
+        // add Feynman rules of cut edges
+        for (_p, edge_index, d) in graph.iter_edges_of(&cut_edges.union) {
+            for s in &mut sum {
+                *s *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
+                    .wrap_color(GS.color_wrap);
             }
         }
+
         for (_, edge_index, _) in graph.iter_edges() {
             for s in &mut sum {
                 *s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
