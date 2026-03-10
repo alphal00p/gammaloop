@@ -1,6 +1,6 @@
 Auto S cMi1L1, cmi1L2, cmi2L2, alarm;
 S eulergamma, log4pi, pi, cl2, sqrt3, MASTER2m22EP, MASTER3m111111FINPIECE, MASTER3m011111FIN, MASTER3m011101EP, MASTER3m001111FIN;
-CF uvid;
+CF uvid, vakintFloat;
 
 #if `MAXPOLE' == 3
     #define SPURIOUSPOLE "1"

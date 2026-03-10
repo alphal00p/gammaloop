@@ -28,8 +28,8 @@
 * -                                                                           - *
 * ================================== Options ================================== *
 * -                                                                           - *
-* -           We do not load any other program files and not                  - * 
-* -           need to set any other options in this version                   - * 
+* -           We do not load any other program files and not                  - *
+* -           need to set any other options in this version                   - *
 * -                                                                           - *
 * -                                                                           - *
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
@@ -87,6 +87,7 @@ S d1,...,d10;
 V p1,...,p10;
 S n1,...,n10;
 
+CF vakintFloat;
 CF Fab;
 
 CTensor ftensor,dd;
@@ -121,7 +122,7 @@ S j3;
 *
 ****
 * Tarcer declarations
-**** 
+****
 *
 * momentum rules:
 *   k1->tk1, k2->tk2, p->tp;
@@ -149,7 +150,7 @@ S [pp-tmm],[pp-3*tmm],[pp-4*tmm],[pp-9*tmm],mm,mden,tmm;
 PolyRatFun rat;
 
 
-* One dim rec rel 
+* One dim rec rel
 
 CF m0denJ0001X01110, m0denJ0001X11110, m0denJ0001X00110,
 m0denJ0001X01110, m0denJ0001X11110, m0denJ0011X01100,
@@ -216,14 +217,14 @@ m9denJ1010X01100, m9denJ1010X11100, m9denJ1011X01110,
 m9denJ1011X11110, m9denJ1011X01110, m9denJ1011X11110,
 m9denJ2010X01100, m9denJ2010X11100, m9denJ2011X11110;
 
-CF numJ0001X01110, numJ0001X11110, numJ0001X00110, numJ0001X01110, 
-numJ0001X11110, numJ0011X01100, numJ0011X01110, numJ0011X10110, 
-numJ0011X11100, numJ0011X11110, numJ0011X00110, numJ0011X01100, 
-numJ0011X01110, numJ0011X10110, numJ0011X11100, numJ0011X11110, 
-numJ0021X00110, numJ0021X10110, numJ0031X10110, numJ1000X01100, 
-numJ1000X01100, numJ1001X01110, numJ1001X11110, numJ1001X01110, 
-numJ1001X11110, numJ1010X01100, numJ1010X11100, numJ1010X01100, 
-numJ1010X11100, numJ1011X01110, numJ1011X11110, numJ1011X01110, 
+CF numJ0001X01110, numJ0001X11110, numJ0001X00110, numJ0001X01110,
+numJ0001X11110, numJ0011X01100, numJ0011X01110, numJ0011X10110,
+numJ0011X11100, numJ0011X11110, numJ0011X00110, numJ0011X01100,
+numJ0011X01110, numJ0011X10110, numJ0011X11100, numJ0011X11110,
+numJ0021X00110, numJ0021X10110, numJ0031X10110, numJ1000X01100,
+numJ1000X01100, numJ1001X01110, numJ1001X11110, numJ1001X01110,
+numJ1001X11110, numJ1010X01100, numJ1010X11100, numJ1010X01100,
+numJ1010X11100, numJ1011X01110, numJ1011X11110, numJ1011X01110,
 numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 
 .global
@@ -236,31 +237,31 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 * 3 edges
 #procedure dzero3(N1,N2,N3)
         if((count(tarC`N1',-1) <= 0) && (count(tarC`N2',-1) <= 0) && (count(tarC`N3',-1) <= 0)) Discard;
-#endprocedure        
+#endprocedure
 * 4 edges
 #procedure dzero4(N1,N2,N3,N4)
         if((count(tarC`N1',-1) <= 0) && (count(tarC`N2',-1) <= 0) && (count(tarC`N3',-1) <= 0) && (count(tarC`N4',-1) <= 0)) Discard;
-#endprocedure        
+#endprocedure
 *--#] dzero :
 
 *--#[ zeroTFI :
 #procedure zeroTFI(topo)
         if(count(int`topo',1));
-        #call dzero3(2,4,5)        
-        #call dzero3(1,3,5)                
-        #call dzero4(1,2,3,4)                
-        #call dzero4(2,3,4,5)                        
-        #call dzero4(1,2,3,5)                                        
-        #call dzero4(1,2,4,5)                                                
+        #call dzero3(2,4,5)
+        #call dzero3(1,3,5)
+        #call dzero4(1,2,3,4)
+        #call dzero4(2,3,4,5)
+        #call dzero4(1,2,3,5)
+        #call dzero4(1,2,4,5)
         #call dzero4(1,3,4,5)
-        endif;        
-#endprocedure        
+        endif;
+#endprocedure
 *--#] zeroTFI :
 
 
 
 #procedure GGdecouple(topo)
-*       <-9->        
+*       <-9->
 *       B()*B()
 *       Gamma[k + a_] -> Po[a, k]*Gamma[a]
         if(count(int`topo',1));
@@ -268,44 +269,44 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         id tk1.tk1^v?*tk2.tk2^w?*tp.tk1^x?*tp.tk2^y?*tk1.tk2^z?pos_/tarC1^n1?/tarC2^n2?/tarC3^n3?/tarC4^n4? =
         sum_(k, 0, integer_(z/2), sum_(i, 0, k, sum_(j, 0, k, sign_(i + j)*tk1.tk1^(i + v)*tk2.tk2^(j + w)*pp^(i + j - z)*tp.tk1^(-2*i + x + z)*tp.tk2^(-2*j + y + z)*binom_(k, i)*binom_(k, j)*binom_(z, 2*k)*Pochhammer(k,1/2)*PochhammerINV(k,-1/2 + d/2)/(tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4))));
         endif;
-        endif;        
+        endif;
 #endprocedure
 
 
 * Here we cancel each scalar product with its corresponding denominator
 *--#[ spcontract1 :
 #procedure spcontract1(topo,nc)
-* 
-* 
+*
+*
 *       Red SP 1
-* 
-*         
+*
+*
 
-        #$repcount = 1;                
-        #do irep=1,1       
+        #$repcount = 1;
+        #do irep=1,1
                 #$irep = 1;
                 if(count(int`topo',1));
-                
+
 *               (tk1^1)--
                 if(count(tk1.tk1,1) > count(tarC1,-1));
                 id,ifmatch->sortsp tk1.tk1^v?pos_*tk2.tk2^w?*tp.tk1^x?*tp.tk2^y?*tk1.tk2^z?/tarC1^n1?pos_/tarC2^n2?/tarC3^n3?/tarC4^n4?/tarC5^n5? =
                 sum_(i, 0, n1, (tarC1^(i - n1)*tk1.tk1^(-n1 + v)*tk1.tk2^z*tk2.tk2^w*(tmm)^(-i + n1)*tp.tk1^x*tp.tk2^y*binom_(n1, i))/(tarC2^n2*tarC3^n3*tarC4^n4*tarC5^n5));
                 endif;
-                
+
                 if(count(tk1.tk1,1) <= count(tarC1,-1));
                 id,ifmatch->sortsp tk1.tk1^v?pos_*tk2.tk2^w?*tp.tk1^x?*tp.tk2^y?*tk1.tk2^z?/tarC1^n1?pos_/tarC2^n2?/tarC3^n3?/tarC4^n4?/tarC5^n5? =
                 sum_(i, 0, v, (tarC1^(i - n1)*tk1.tk2^z*tk2.tk2^w*(tmm)^(-i + v)*tp.tk1^x*tp.tk2^y*binom_(v, i))/(tarC2^n2*tarC3^n3*tarC4^n4*tarC5^n5));
                 endif;
-                
-                
-                
+
+
+
 *               (tk2^2)--
                 if(count(tk2.tk2,1) > count(tarC2,-1));
                 id,ifmatch->sortsp tk1.tk1^v?*tk2.tk2^w?pos_*tp.tk1^x?*tp.tk2^y?*tk1.tk2^z?/tarC1^n1?/tarC2^n2?pos_/tarC3^n3?/tarC4^n4?/tarC5^n5? =
                 sum_(i, 0, n2, (tarC2^(i - n2)*tk1.tk1^v*tk1.tk2^z*tk2.tk2^(-n2 + w)*(tmm)^(-i + n2)*tp.tk1^x*tp.tk2^y*binom_(n2, i))/(tarC1^n1*tarC3^n3*tarC4^n4*tarC5^n5));
                 endif;
-                
-                
+
+
                 if(count(tk2.tk2,1) <= count(tarC2,-1));
                 id,ifmatch->sortsp tk1.tk1^v?*tk2.tk2^w?pos_*tp.tk1^x?*tp.tk2^y?*tk1.tk2^z?/tarC1^n1?/tarC2^n2?pos_/tarC3^n3?/tarC4^n4?/tarC5^n5? =
                 sum_(i, 0, w, (tarC2^(i - n2)*tk1.tk1^v*tk1.tk2^z*(tmm)^(-i + w)*tp.tk1^x*tp.tk2^y*binom_(w, i))/(tarC1^n1*tarC3^n3*tarC4^n4*tarC5^n5));
@@ -319,17 +320,17 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
                 + (tk1.tk1^v*tk1.tk2^(-1 + z)*tk2.tk2^(1 + w)*tp.tk1^x*tp.tk2^y)/(2*tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4*tarC5^n5)
                 - (tk1.tk1^v*tk1.tk2^(-1 + z)*tk2.tk2^w*tmm*tp.tk1^x*tp.tk2^y)/(2*tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4*tarC5^n5);
                 endif;
-                
+
                 endif;
-                goto endrec;                
+                goto endrec;
                 la sortsp;
                 $irep = 0;
                 la endrec;
-                
+
                 ModuleOption,minimum,$irep;
                 .sort:red-SP1-`nc'-`$repcount++';
                 #redefine irep "`$irep'"
-        #enddo        
+        #enddo
 #endprocedure
 *--#] spcontract1 :
 
@@ -337,8 +338,8 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 
 * We reduce all k1.p and k2.p to C1C2C5
 #procedure redTad125(topo)
-        #$repcount = 1;                
-        #do irep=1,1       
+        #$repcount = 1;
+        #do irep=1,1
                 #$irep = 1;
                 if(count(int`topo',1));
 *       zero if odd(x+y)=true
@@ -346,13 +347,13 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
                 id tk1.tk1^v?*tk2.tk2^w?*tp.tk1^x?pos0_*tp.tk2^y?pos0_*tk1.tk2^z?/tarC1^n1?pos_/tarC2^n2?pos_/tarC5^n5? =
                 mod_(x+y+1,2)*tk1.tk1^v*tk2.tk2^w*tp.tk1^x*tp.tk2^y*tk1.tk2^z/tarC1^n1/tarC2^n2/tarC5^n5;
                 endif;
-                
+
 *       even(x+y)
                 if((count(tarC3,-1)) == 0 && (count(tarC4,-1) == 0));
                 id,ifmatch->sortsp tk1.tk1^v?*tk2.tk2^w?*tp.tk1^x?{>1}*tp.tk2^y?pos_*tk1.tk2^z?/tarC1^n1?/tarC2^n2?/tarC5^n5?pos_ =
                 mod_(x+y+1,2)*(pp*((tk1.tk1^(1 + v)*tk1.tk2^z*tk2.tk2^w*tp.tk1^(-2 + x)*tp.tk2^y*(-1 + x))/(tarC1^n1*tarC2^n2*tarC5^n5) + (tk1.tk1^v*tk1.tk2^(1 + z)*tk2.tk2^w*tp.tk1^(-1 + x)*tp.tk2^(-1 + y)*y)/(tarC1^n1*tarC2^n2*tarC5^n5)))*rat(1,-2 + d + x + y);
                 endif;
-                
+
 *       even(x+y)
                 if((count(tarC3,-1)) == 0 && (count(tarC4,-1) == 0));
                 id,ifmatch->sortsp tk1.tk1^v?*tk2.tk2^w?*tp.tk1^x?pos_*tp.tk2^y?{>1}*tk1.tk2^z?/tarC1^n1?/tarC2^n2?/tarC5^n5?pos_ =
@@ -360,15 +361,15 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
                 endif;
 
                 endif;
-                goto endrec;                
+                goto endrec;
                 la sortsp;
                 $irep = 0;
                 la endrec;
-                
+
                 ModuleOption,minimum,$irep;
                 .sort:red-Tad125-`$repcount++';
                 #redefine irep "`$irep'"
-        #enddo        
+        #enddo
 #endprocedure
 
 #procedure convto124(topo)
@@ -389,9 +390,9 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         if((count(tk1.tk2,1) == 0) && (count(tarC1,-1) == 0)   && (count(tarC3,-1) == 0));
         id tk1.tk1^v?pos_*tk2.tk2^w?*tp.tk1^x?*tp.tk2^y?/tarC2^n2?/tarC4^n4?/tarC5^n5?pos_ =
         sum_(j, 0, x, sum_(i, 0, v, sum_(r, 0, i, (2^r*tk1.tk1^(-i + v)*tk1.tk2^r*tk2.tk2^(i - r + w)*tp.tk1^j*tp.tk2^(-j + x + y)*binom_(i, r)*binom_(v, i)*binom_(x, j))/(tarC1^n5*tarC2^n2*tarC4^n4))));
-        endif;        
         endif;
-        .sort conv124;        
+        endif;
+        .sort conv124;
 #endprocedure
 
 
@@ -420,7 +421,7 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         (tarC2^n2*tarC3^n3*tarC4^n4*pp*[pp-3*tmm]) + (tarC1^(1 - n1)*tarC4^(1 - n4)*tarC5^(-1 - n5)*
         (rat(-n5, -1 + n1)/[pp-3*tmm] + (tmm*rat(3*n5, 2*(-1 + n1)))/(pp*[pp-3*tmm])))/
         (tarC2^n2*tarC3^n3))*sdim(dp);
-        
+
 * eq.35 (2-)
         id,ifmatch->dopartfrac sdim(dp?)/tarC1^n1?pos_/tarC2^n2?{>1}/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?pos_=
         ((tarC5^(1 - n5)*rat(-1, 2))/(tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4*[pp-3*tmm]) +
@@ -440,7 +441,7 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         (tarC1^n1*tarC3^n3*tarC4^n4*pp*[pp-3*tmm]) + (tarC2^(1 - n2)*tarC3^(1 - n3)*tarC5^(-1 - n5)*
         (rat(-n5, -1 + n2)/[pp-3*tmm] + (tmm*rat(3*n5, 2*(-1 + n2)))/(pp*[pp-3*tmm])))/
         (tarC1^n1*tarC4^n4))*sdim(dp);
-        
+
 * eq.35 (3-)
         id,ifmatch->dopartfrac sdim(dp?)/tarC1^n1?pos_/tarC2^n2?pos_/tarC3^n3?{>1}/tarC4^n4?pos_/tarC5^n5?pos_=
         ((tarC5^(1 - n5)*rat(-1, 2))/(tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4*[pp-3*tmm]) +
@@ -461,7 +462,7 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         (tarC1^n1*tarC2^n2*tarC4^n4*pp*[pp-3*tmm]) + (tarC2^(1 - n2)*tarC3^(1 - n3)*tarC5^(-1 - n5)*
         (rat(-n5, -1 + n3)/[pp-3*tmm] + (tmm*rat(3*n5, 2*(-1 + n3)))/(pp*[pp-3*tmm])))/
         (tarC1^n1*tarC4^n4))*sdim(dp);
-        
+
 * eq.35 (4-)
         id,ifmatch->dopartfrac sdim(dp?)/tarC1^n1?pos_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?{>1}/tarC5^n5?pos_=
         ((tarC5^(1 - n5)*rat(-1, 2))/(tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4*[pp-3*tmm]) +
@@ -482,7 +483,7 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         (tarC1^n1*tarC2^n2*tarC3^n3*pp*[pp-3*tmm]) + (tarC1^(1 - n1)*tarC4^(1 - n4)*tarC5^(-1 - n5)*
         (rat(-n5, -1 + n4)/[pp-3*tmm] + (tmm*rat(3*n5, 2*(-1 + n4)))/(pp*[pp-3*tmm])))/
         (tarC2^n2*tarC3^n3))*sdim(dp);
-        
+
 
 * eq.41 (5-)
         id,ifmatch->dopartfrac sdim(dp?)/tarC1^n1?pos_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?{>1}=
@@ -503,8 +504,8 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         (tarC5^(1 - n5)*((pp*rat(2 + d + dp - n1 - n3 - 2*n5, 2*(-1 + n5)))/(tmm*[pp-3*tmm]) +
         rat(-6 - 2*(d + dp) + n1 + n3 + 6*n5, 2*(-1 + n5))/[pp-3*tmm]))/
         (tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4))*sdim(dp);
-        
-#endprocedure        
+
+#endprocedure
 *--#] redF :
 
 *--#[ redT2 :
@@ -512,11 +513,11 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
         Symmetrize T2 4,3,2;
 * eq.91-4
         id T2(dp?,n1?{>1},n2?pos_,n3?pos_)=
-        (rat(-2*n2, 3*(-1 + n1))*T2(dp, -2 + n1, 1 + n2, n3))/tmm + (rat(3 + d - 3*n1, 3*(-1 + n1))*T2(dp, -1 + n1, n2, n3))/tmm + 
-        (rat(2*n2, 3*(-1 + n1))*T2(dp, -1 + n1, 1 + n2, -1 + n3))/tmm + (rat(1, 3)*T2(dp, n1, -1 + n2, n3))/tmm + 
+        (rat(-2*n2, 3*(-1 + n1))*T2(dp, -2 + n1, 1 + n2, n3))/tmm + (rat(3 + d - 3*n1, 3*(-1 + n1))*T2(dp, -1 + n1, n2, n3))/tmm +
+        (rat(2*n2, 3*(-1 + n1))*T2(dp, -1 + n1, 1 + n2, -1 + n3))/tmm + (rat(1, 3)*T2(dp, n1, -1 + n2, n3))/tmm +
         (rat(-1, 3)*T2(dp, n1, n2, -1 + n3))/tmm;
 
-*       Master integral        
+*       Master integral
         id T2(0,1,1,1) = T2x111;
 #endprocedure
 *--#] redT2 :
@@ -528,46 +529,46 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 *       Now we need symmetrize only once, because structure (dp,n1 < n2) is kept
         Symmetrize G 2,3;
 
-        #$repcount = 1;        
+        #$repcount = 1;
         #do irep=1,1
-                #$irep = 1;                
+                #$irep = 1;
                 if(count(int`topo',1));
-               
+
 * eq.95
-                id,ifmatch->sortme G(dp?pos_,n1?{>1},n2?pos_) = 
-                G(-2 + dp, -1 + n1, -1 + n2)*rat(-1, 2*(-1 + n1))/pp + 
-                G(-2 + dp, -1 + n1, n2)*rat(-1, 2*(-1 + n1)) + 
+                id,ifmatch->sortme G(dp?pos_,n1?{>1},n2?pos_) =
+                G(-2 + dp, -1 + n1, -1 + n2)*rat(-1, 2*(-1 + n1))/pp +
+                G(-2 + dp, -1 + n1, n2)*rat(-1, 2*(-1 + n1)) +
                 G(-2 + dp, -2 + n1, n2)*rat(1, 2*(-1 + n1))/pp;
-                
+
                 endif;
-                
-                goto endrec;                
+
+                goto endrec;
                 la sortme;
                 $irep = 0;
                 la endrec;
-                
+
                 ModuleOption,minimum,$irep;
                 .sort:drrG-1-`$repcount++';
                 #redefine irep "`$irep'"
         #enddo
 
-        #$repcount = 1;        
+        #$repcount = 1;
         #do irep=1,1
-                #$irep = 1;                
+                #$irep = 1;
                 if(count(int`topo',1));
-                
+
 * eq.96
-                id,ifmatch->sortme G(dp?pos_,1,n2?pos_) = 
-                T1(-2 + dp, n2)*rat(-1, 2*(-2 + d + dp - n2)) + 
-                G(-2 + dp, 1, -1 + n2)*rat(-1, 2*(-2 + d + dp - n2)) + 
-                G(-2 + dp, 1, n2)*(tmm*rat(-2, -2 + d + dp - n2) + pp*rat(1, 2*(-2 + d + dp - n2)));                
+                id,ifmatch->sortme G(dp?pos_,1,n2?pos_) =
+                T1(-2 + dp, n2)*rat(-1, 2*(-2 + d + dp - n2)) +
+                G(-2 + dp, 1, -1 + n2)*rat(-1, 2*(-2 + d + dp - n2)) +
+                G(-2 + dp, 1, n2)*(tmm*rat(-2, -2 + d + dp - n2) + pp*rat(1, 2*(-2 + d + dp - n2)));
                 endif;
-                
-                goto endrec;                
+
+                goto endrec;
                 la sortme;
                 $irep = 0;
                 la endrec;
-                
+
                 ModuleOption,minimum,$irep;
                 .sort:drrG-2-`$repcount++';
                 #redefine irep "`$irep'"
@@ -577,90 +578,90 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 
 *--#[ redG :
 #procedure redG(topo)
-        #$repcount = 1;        
+        #$repcount = 1;
         #do irep=1,1
-                #$irep = 1;                
+                #$irep = 1;
                 if(count(int`topo',1));
-                
+
                 Symmetrize G 3,2;
 * eq.94
                 id,ifmatch->sortme G(dp?,n1?{>1},n2?pos_)=
-                G(dp, n1, -1 + n2)*((tmm*rat(-2, 1))/(pp*[pp-4*tmm]) + rat(1, 1)/[pp-4*tmm]) + 
-                (tmm*G(dp, -2 + n1, 1 + n2)*rat(2*n2, -1 + n1))/(pp*[pp-4*tmm]) + 
-                G(dp, -1 + n1, n2)*((tmm*rat(2*(-1 + n1 - n2), -1 + n1))/(pp*[pp-4*tmm]) + 
+                G(dp, n1, -1 + n2)*((tmm*rat(-2, 1))/(pp*[pp-4*tmm]) + rat(1, 1)/[pp-4*tmm]) +
+                (tmm*G(dp, -2 + n1, 1 + n2)*rat(2*n2, -1 + n1))/(pp*[pp-4*tmm]) +
+                G(dp, -1 + n1, n2)*((tmm*rat(2*(-1 + n1 - n2), -1 + n1))/(pp*[pp-4*tmm]) +
                 rat(-1 - d + dp + n1 + 2*n2, -1 + n1)/[pp-4*tmm]);
                 endif;
-               
-                goto endrec;                
+
+                goto endrec;
                 la sortme;
                 $irep = 0;
                 la endrec;
 
                 b pp,[pp-4*tmm];
-                ModuleOption,minimum,$irep;                
+                ModuleOption,minimum,$irep;
                 .sort:redG-`$repcount++';
                 #redefine irep "`$irep'"
                 Keep Brackets;
-                ratio [pp-4*tmm],pp,mden;        
+                ratio [pp-4*tmm],pp,mden;
                 Multiply replace_(mden,4*tmm);
-                .sort                
+                .sort
         #enddo
 #endprocedure
 *--#] redG :
 
 *--#[ drrT1 :
 #procedure drrT1
-* eq.98        
-        repeat id T1(dp?pos_,n1?pos_) =        
+* eq.98
+        repeat id T1(dp?pos_,n1?pos_) =
         tmm*rat(-2, d + dp - 2*n1)*T1(-2 + dp, n1);
 #endprocedure
 *--#] drrT1 :
 
 *--#[ redT1 :
 #procedure redT1
-* eq.97        
-        repeat id T1(dp?,n1?{>1}) =        
+* eq.97
+        repeat id T1(dp?,n1?{>1}) =
         (rat(2 + d + dp - 2*n1, 2*(-1 + n1))*T1(dp, -1 + n1))/tmm;
-        
+
         id T1(0,1) = T1x1;
 #endprocedure
 *--#] redT1 :
 
 *--#[ partfrac :
 #procedure partfrac
-* Do partial fractioning for propagators connecting 
+* Do partial fractioning for propagators connecting
 * two-loop diagram with one-loop
         b pp,[pp-tmm],[pp-3*tmm],[pp-4*tmm],[pp-9*tmm];
         .sort
-        Keep Brackets;        
-*       [pp]        
+        Keep Brackets;
+*       [pp]
         #do ms={tmm,3*tmm,4*tmm,9*tmm}
-                ratio [pp-`ms'],pp,mden;        
+                ratio [pp-`ms'],pp,mden;
                 Multiply replace_(mden,`ms');
         #enddo
-*       [pp-ms]        
+*       [pp-ms]
         #do ms={3*tmm,4*tmm,9*tmm}
-                ratio [pp-`ms'],[pp-tmm],mden;        
+                ratio [pp-`ms'],[pp-tmm],mden;
                 Multiply replace_(mden,`ms'-tmm);
         #enddo
-*       [pp-3ms]                
+*       [pp-3ms]
         #do ms={4*tmm,9*tmm}
-                ratio [pp-`ms'],[pp-3*tmm],mden;        
+                ratio [pp-`ms'],[pp-3*tmm],mden;
                 Multiply replace_(mden,`ms'-3*tmm);
         #enddo
-*       [pp-4ms]                
-        ratio [pp-9*tmm],[pp-4*tmm],mden;        
+*       [pp-4ms]
+        ratio [pp-9*tmm],[pp-4*tmm],mden;
         Multiply replace_(mden,5*tmm);
-        .sort        
-#endprocedure        
+        .sort
+#endprocedure
 *--#] partfrac :
 
 
 *--#[ subpoch :
 #procedure subpoch
 *         Pochhammer(n,x)    = Pochhammer[x,n]
-*         PochhammerINV(n,x) = 1/Pochhammer[x,n]        
-        
+*         PochhammerINV(n,x) = 1/Pochhammer[x,n]
+
         repeat id Pochhammer(n?pos_,x?) = Pochhammer(n-1,x)*num(n-1+x);
         repeat id Pochhammer(n?neg_,x?) = Pochhammer(n+1,x)*den(n+x);
         repeat id PochhammerINV(n?pos_,x?) = PochhammerINV(n-1,x)*den(n-1+x);
@@ -682,18 +683,18 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 #procedure tensG(D1,D2,K,Q)
 * Tensor reduction of G with tensor structure in numerator
 * Loop momentum is K
-*         
-*    D1 = K^2 - tm^2        
+*
+*    D1 = K^2 - tm^2
 *    D2 = (K-Q)^2 - tm^2
-*         
+*
 *    /
 *    |       (K.PX)^n
 *    | ------------------ dP1
 *    |   (D1)^n1 * (D2)^n2
-*    /     
+*    /
 
-        id `D1'^n1?pos_ =  (`K'.`K' - tmm)^n1;        
-        id `D2'^n2?pos_ =  (`K'.`K' - 2*`K'.`Q' + `Q'.`Q' - tmm)^n2;        
+        id `D1'^n1?pos_ =  (`K'.`K' - tmm)^n1;
+        id `D2'^n2?pos_ =  (`K'.`K' - 2*`K'.`Q' + `Q'.`Q' - tmm)^n2;
 
 *       <1> reduce all squares of loop momenta in numerator
 
@@ -704,63 +705,63 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 
 
         if((count(`D1',-1) > 0) && (count(`D2',-1) > 0));
-*         
-*       Self-energy        
-*         
+*
+*       Self-energy
+*
         totensor,nosquare,`K',ftensor;
-*       Davydychev, eq.11, momenta flow differen G[n1,n2]->G[n2,n1]        
+*       Davydychev, eq.11, momenta flow differen G[n1,n2]->G[n2,n1]
         id ftensor(?a)/`D1'^n2?pos_/`D2'^n1?pos_=
         sum_(j,0,integer_(nargs_(?a)/2),sign_(j)/2^j*distrib_(1,2*j,dd,ftensor,?a)*fac_(n1 + nargs_(?a) - 2*j- 1)*invfac_(n1 - 1)*G(2*(nargs_(?a)-j),n1+nargs_(?a)-2*j,n2));
-        
+
         id 1/`D1'^n1?pos_/`D2'^n2?pos_ = G(0, n1,n2);
-*       Change external momenta sign according to Davydychev        
+*       Change external momenta sign according to Davydychev
         id ftensor(?a) = sign_(nargs_(?a))*ftensor(?a);
-        
+
         tovector, ftensor, `Q';
         id dd(?a)=dd_(?a);
 
         elseif ((count(`D1',-1) > 0) && (count(`D2',1) >= 0));
-*         
-*       Tadpole D1        
-*         
+*
+*       Tadpole D1
+*
         totensor,nosquare,`K',ftensor;
         id ftensor(?a) = [sqrt(x)]^nargs_(?a)*ftensor(?a);
         id [sqrt(x)]^n?odd_ = 0;
         id,many, [sqrt(x)]*[sqrt(x)] = [x];
-        
+
         id ftensor(?a) = dd_(?a);
 *         .sort
         if ( count([x],1) != 0 );
         id [x]^s? =  rat(1-(2-d/2),1)*PochhammerINV(s+2,d/2-2)*rat(d-4,2)*`K'.`K'^(s)/2^s;
-        endif;        
+        endif;
         id `K'.`K'^n?pos_ = (`D1' + tmm)^n;
-        if(count(`D1',1) >= 0) Discard;        
+        if(count(`D1',1) >= 0) Discard;
         id 1/`D1'^n?pos_ = T1(0,n);
 
 
         elseif((count(`D1',1) >= 0) && (count(`D2',-1) > 0));
-*         
-*       Tadpole D2        
-*         
+*
+*       Tadpole D2
+*
         Multiply replace_(`K', [k-q] + `Q');
         totensor,nosquare,[k-q],ftensor;
         id ftensor(?a) = [sqrt(x)]^nargs_(?a)*ftensor(?a);
         id [sqrt(x)]^n?odd_ = 0;
         id,many, [sqrt(x)]*[sqrt(x)] = [x];
-        
+
         id ftensor(?a) = dd_(?a);
 *         .sort
         if ( count([x],1) != 0 );
         id [x]^s? =  rat(1-(2-d/2),1)*PochhammerINV(s+2,d/2-2)*rat(d-4,2)*[k-q].[k-q]^(s)/2^s;
-        endif;        
+        endif;
         id [k-q].[k-q] = `D2' + tmm;
-        
+
         Multiply replace_([k-q],`K'-`Q');
-        if(count(`D2',1) >= 0) Discard;        
+        if(count(`D2',1) >= 0) Discard;
         id 1/`D2'^n?pos_ = T1(0,n);
 
         else;
-        Discard;        
+        Discard;
         endif;
 #endprocedure
 *--#] tensG :
@@ -770,40 +771,40 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 #procedure tensT1(D1,K,MUL)
 * Tensor reduction of T1 with tensor structure in numerator
 * Loop momentum is K
-*         
-*    D1 = K^2 - tm^2        
-*         
+*
+*    D1 = K^2 - tm^2
+*
 *    /
 *    |   (K.PX)^n
 *    | ----------- dK
-*    |   (D1)^n1 
-*    /     
+*    |   (D1)^n1
+*    /
 
-        id `D1'^n1?pos_ =  (`K'.`K' - tmm)^n1;        
+        id `D1'^n1?pos_ =  (`K'.`K' - tmm)^n1;
 
 *       <1> reduce all squares of loop momenta in numerator
 
         repeat id `K'.`K'^n?pos_/`D1'^n1?pos_ = `K'.`K'^(n-1)*(`D1' + tmm)/`D1'^n1;
 
         if (count(`D1',-1) > 0);
-*         
-*       Tadpole D1        
-*         
+*
+*       Tadpole D1
+*
         totensor,nosquare,`K',ftensor;
         id ftensor(?a) = [sqrt(x)]^nargs_(?a)*ftensor(?a);
         id [sqrt(x)]^n?odd_ = 0;
         id,many, [sqrt(x)]*[sqrt(x)] = [x];
-        
+
         id ftensor(?a) = dd_(?a);
 *         .sort
         if ( count([x],1) != 0 );
         id [x]^s? =  rat(1-(2-d/2),1)*PochhammerINV(s+2,d/2-2)*rat(d-4,2)*`K'.`K'^(s)/2^s;
-        endif;        
+        endif;
         id `K'.`K'^n?pos_ = (`D1' + tmm)^n;
-        if(count(`D1',1) >= 0) Discard;        
+        if(count(`D1',1) >= 0) Discard;
         id 1/`D1'^n?pos_ = T1(0,n);
         else;
-        Multiply `MUL';        
+        Multiply `MUL';
         endif;
 #endprocedure
 *--#] tensT1 :
@@ -820,7 +821,7 @@ numJ1011X11110, numJ2010X01100, numJ2010X11100, numJ2011X11110;
 *--#[ sp2den :
 #procedure sp2den(TOPO)
 
-if(count(int`TOPO',1));        
+if(count(int`TOPO',1));
 id p1.p1 = 1 + d1;
 id p2.p2 = 1 + d2;
 id p3.p3 = 1 + d3;
@@ -833,7 +834,7 @@ id p9.p9 = 1 + d9;
 id p10.p10 = 1 + d10;
 endif;
 .sort:sp2den-pp;
-        
+
 if(count(int`TOPO',1));
 id p1.p2 = 1/2 + d1/2 + d2/2 - d8/2;
 id p1.p3 = 1/2 + d1/2 + d3/2 - d9/2;
@@ -920,108 +921,108 @@ endif;
 
 
 *
-* 
+*
 * Mapping topologies
-* 
+*
 *
 
 *--#[ mapBMW :
-#procedure mapBMW(TOPO)        
+#procedure mapBMW(TOPO)
         if(count(int`TOPO',1));
 
-*       BMW ::       
+*       BMW ::
         if(match(1/d1^n1?neg0_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_))
         Multiply intBMW/int`TOPO';
- 
+
 *       [0, 1, 0, 1, 1, 1, 1, 1, 1, 1] -> BMW
         if(match(1/d1^n1?neg0_/d2^n2?pos_/d3^n3?neg0_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_));
         if ((count(d1,1) == 0) && (count(d3,1) == 0));
-        Multiply replace_(d4,d10, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d4,d10, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d7,d9)*intBMW/int`TOPO';
         elseif (count(d1,1) == 0);
-        Multiply replace_(d4,d10, d3,d2, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d4,d10, d3,d2, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d7,d9)*intBMW/int`TOPO';
         elseif (count(d3,1) == 0);
-        Multiply replace_(d4,d10, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d4,d10, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';
         else;
-        Multiply replace_(d4,d10, d3,d2, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d4,d10, d3,d2, d6,d3, d8,d4, d9,d5, d10,d6, d5,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';
         endif;
         endif;
 
 *       [0, 1, 1, 0, 1, 1, 1, 1, 1, 1] -> BMW
         if(match(1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?neg0_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_));
         if ((count(d1,1) == 0) && (count(d4,1) == 0));
-        Multiply replace_(d2,d10, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d6,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d6,d9)*intBMW/int`TOPO';
         elseif (count(d1,1) == 0);
-        Multiply replace_(d2,d10, d4,d2, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d6,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d4,d2, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d6,d9)*intBMW/int`TOPO';
         elseif (count(d4,1) == 0);
-        Multiply replace_(d2,d10, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d6,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d6,d9)*intBMW/int`TOPO';
         else;
-        Multiply replace_(d2,d10, d4,d2, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d6,d9)*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d2,d10, d4,d2, d10,d3, d3,d4, d7,d6, d8,d7, d9,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d6,d9)*intBMW/int`TOPO';
+        endif;
         endif;
 
 *       [0, 1, 1, 1, 0, 1, 1, 1, 1, 1] -> BMW
         if(match(1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?neg0_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_));
         if ((count(d1,1) == 0) && (count(d5,1) == 0));
-        Multiply replace_(d9,d10, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d9,d10, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d7,d9)*intBMW/int`TOPO';
         elseif (count(d1,1) == 0);
-        Multiply replace_(d9,d10, d5,d2, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d9,d10, d5,d2, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d7,d9)*intBMW/int`TOPO';
         elseif (count(d5,1) == 0);
-        Multiply replace_(d9,d10, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d9,d10, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';
         else;
-        Multiply replace_(d9,d10, d5,d2, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d9,d10, d5,d2, d10,d3, d8,d4, d4,d5, d3,d7, d2,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d7,d9)*intBMW/int`TOPO';
+        endif;
         endif;
 
 *       [0, 1, 1, 1, 1, 0, 1, 1, 1, 1] -> BMW
         if(match(1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?neg0_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_));
         if ((count(d1,1) == 0) && (count(d6,1) == 0));
-        Multiply replace_(d2,d10, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9)*intBMW/int`TOPO';
         elseif (count(d1,1) == 0);
-        Multiply replace_(d2,d10, d6,d2, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d6,d2, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9)*intBMW/int`TOPO';
         elseif (count(d6,1) == 0);
-        Multiply replace_(d2,d10, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';
         else;
-        Multiply replace_(d2,d10, d6,d2, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d2,d10, d6,d2, d9,d3, d5,d4, d3,d5, d8,d6, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';
+        endif;
         endif;
 
 *       [0, 1, 1, 1, 1, 1, 0, 1, 1, 1] -> BMW
         if(match(1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?neg0_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_));
         if ((count(d1,1) == 0) && (count(d7,1) == 0));
-        Multiply replace_(d3,d10, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d3,d10, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9)*intBMW/int`TOPO';
         elseif (count(d1,1) == 0);
-        Multiply replace_(d3,d10, d7,d2, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d3,d10, d7,d2, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9)*intBMW/int`TOPO';
         elseif (count(d7,1) == 0);
-        Multiply replace_(d3,d10, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';         
+        Multiply replace_(d3,d10, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';
         else;
-        Multiply replace_(d3,d10, d7,d2, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d3,d10, d7,d2, d8,d3, d5,d4, d2,d5, d9,d6, d6,d7, d10,d8, d4,d9, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';
+        endif;
         endif;
 
 *       [0, 1, 1, 1, 1, 1, 1, 0, 1, 1] -> BMW
         if(match(1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?neg0_/d9^n9?pos_/d10^n10?pos_));
         if ((count(d1,1) == 0) && (count(d8,1) == 0));
-        Multiply replace_(d3,d10, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d10,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d3,d10, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d10,d9)*intBMW/int`TOPO';
         elseif (count(d1,1) == 0);
-        Multiply replace_(d3,d10, d8,d2, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d10,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d3,d10, d8,d2, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d10,d9)*intBMW/int`TOPO';
         elseif (count(d8,1) == 0);
-        Multiply replace_(d3,d10, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d3,d10, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';
         else;
-        Multiply replace_(d3,d10, d8,d2, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d3,d10, d8,d2, d7,d3, d5,d4, d2,d5, d9,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';
+        endif;
         endif;
 
 *       [0, 1, 1, 1, 1, 1, 1, 1, 0, 1] -> BMW
         if(match(1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?neg0_/d10^n10?pos_));
         if ((count(d1,1) == 0) && (count(d9,1) == 0));
-        Multiply replace_(d2,d10, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d10,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d10,d9)*intBMW/int`TOPO';
         elseif (count(d1,1) == 0);
-        Multiply replace_(d2,d10, d9,d2, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d10,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d9,d2, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d10,d9)*intBMW/int`TOPO';
         elseif (count(d9,1) == 0);
-        Multiply replace_(d2,d10, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';
         else;
-        Multiply replace_(d2,d10, d9,d2, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d2,d10, d9,d2, d6,d3, d5,d4, d3,d5, d7,d6, d8,d7, d4,d8, d1,(1 - d1 + d2 + d4 + d5 - d6 + d8), d10,d9)*intBMW/int`TOPO';
+        endif;
         endif;
 
 *       [0, 1, 1, 1, 1, 1, 1, 1, 1, 0] -> BMW
@@ -1033,37 +1034,37 @@ endif;
         elseif (count(d10,1) == 0);
         Multiply replace_(d2,d10, d4,d3, d3,d4, d8,d6, d6,d8, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';
         else;
-        Multiply replace_(d2,d10, d10,d2, d4,d3, d3,d4, d8,d6, d6,d8, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d2,d10, d10,d2, d4,d3, d3,d4, d8,d6, d6,d8, d1,(1 - d1 + d3 + d4 + d5 - d7 + d9))*intBMW/int`TOPO';
+        endif;
         endif;
 
 * PL
 *       [1, 1, 1, 0, 1, 1, 1, 1, 1, 0] -> BMW
         if(match(1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?neg0_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_));
         if ((count(d4,1) == 0) && (count(d10,1) == 0));
-        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d1,d8, d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d1,d8, d7,d9)*intBMW/int`TOPO';
         elseif (count(d4,1) == 0);
-        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d7,d9)*intBMW/int`TOPO';
         elseif (count(d10,1) == 0);
-        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d4,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d7,d9)*intBMW/int`TOPO';         
+        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d4,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d7,d9)*intBMW/int`TOPO';
         else;
-        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d4,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d7,d9)*intBMW/int`TOPO';         
-        endif;        
+        Multiply replace_(d2,d10, d8,d3, d6,d4, d9,d5, d3,d6, d5,d7, d4,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d7,d9)*intBMW/int`TOPO';
+        endif;
         endif;
 
 *       [1, 1, 1, 1, 0, 1, 1, 1, 1, 0] -> BMW
         if(match(1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?neg0_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_));
         if ((count(d5,1) == 0) && (count(d10,1) == 0));
-        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d1,d8, d6,d9)*intBMW/int`TOPO';        
+        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d1,d8, d6,d9)*intBMW/int`TOPO';
         elseif (count(d5,1) == 0);
-        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d6,d9)*intBMW/int`TOPO';        
+        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d6,d9)*intBMW/int`TOPO';
         elseif (count(d10,1) == 0);
-        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d5,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d6,d9)*intBMW/int`TOPO';        
+        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d5,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d6,d9)*intBMW/int`TOPO';
         else;
-        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d5,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d6,d9)*intBMW/int`TOPO';        
-        endif;        
+        Multiply replace_(d9,d10, d7,d4, d2,d5, d8,d6, d4,d7, d5,(d1 + d10 - d2 - d3 - d5 + d6 + d7), d1,d8, d10,(d1 + d10 - d4 + d6 + d7 - d8 - d9), d6,d9)*intBMW/int`TOPO';
         endif;
-        
+        endif;
+
         endif;
 #endprocedure
 *--#] mapBMW :
@@ -3903,1657 +3904,1657 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
 #endprocedure
 *--#] zeroBMW :
 
-* 
+*
 * Non-planar 9 line
-*         
+*
 *--#[ redX :
 #procedure redX
-#$repcount = 1;        
+#$repcount = 1;
 #do irep=1,1
-        #$irep = 1;                
+        #$irep = 1;
         if(count(intX,1));
 
 * den: minus
 * n6 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?{>1}/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d2^(-1 - n2)*d4^(1 - n4))/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*d6^(1 - n6)*n1)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d6^(1 - n6)*n1)/(d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d3^(1 - n3)*d6^(1 - n6)*n1)/(d10^n10*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d6^(1 - n6)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d10^(-1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n10)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d10^(-1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d6^(1 - n6)*n10)/(d1^n1*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*d6^(1 - n6)*(-1 - n2))/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-2 - n2)*d6^(2 - n6)*(1 + n2))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d6^(1 - n6)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d6^(1 - n6)*n3)/(d1^n1*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d4^(-1 - n4)*d6^(2 - n6)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n6)) + 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d6^(1 - n6)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) - 
-        (d2^(-1 - n2)*d5^(1 - n5)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d1^n1*d10^n10*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d6^(1 - n6)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) + 
+
+        (d2^(-1 - n2)*d4^(1 - n4))/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*d6^(1 - n6)*n1)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d6^(1 - n6)*n1)/(d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d3^(1 - n3)*d6^(1 - n6)*n1)/(d10^n10*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d6^(1 - n6)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d10^(-1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n10)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d10^(-1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d6^(1 - n6)*n10)/(d1^n1*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*d6^(1 - n6)*(-1 - n2))/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-2 - n2)*d6^(2 - n6)*(1 + n2))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d6^(1 - n6)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d6^(1 - n6)*n3)/(d1^n1*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d4^(-1 - n4)*d6^(2 - n6)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n6)) +
+        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d6^(1 - n6)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) -
+        (d2^(-1 - n2)*d5^(1 - n5)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d1^n1*d10^n10*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d6^(1 - n6)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) +
         (d2^(-1 - n2)*d5^(1 - n5)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n6));
 
 * n10 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?{>1} =
-        
-        (d2^(-1 - n2)*d9^(1 - n9))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) - 
-        (d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d10^(1 - n10)*d2^(-2 - n2)*d9^(1 - n9)*(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-2 - n2)*d6^(1 - n6)*(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(d1^n1*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(2 - n10)*d2^(-2 - n2)*(1 + n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(2 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(d1^n1*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d4^(-1 - n4)*n4)/(d1^n1*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d4^(-1 - n4)*n4)/(d1^n1*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d7^(1 - n7)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d1^n1*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d1^n1*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d4^(1 - n4)*d6^(-1 - n6)*n6)/(d1^n1*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d6^(-1 - n6)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d1^n1*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d4^(1 - n4)*d7^(-1 - n7)*n7)/(d1^n1*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d7^(-1 - n7)*n7)/(d1^n1*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
-        (d10^(2 - n10)*d2^(-1 - n2)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) - 
-        (d10^(2 - n10)*d2^(-1 - n2)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
+
+        (d2^(-1 - n2)*d9^(1 - n9))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) -
+        (d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d10^(1 - n10)*d2^(-2 - n2)*d9^(1 - n9)*(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-2 - n2)*d6^(1 - n6)*(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(d1^n1*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(2 - n10)*d2^(-2 - n2)*(1 + n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(2 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(d1^n1*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d4^(-1 - n4)*n4)/(d1^n1*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d4^(-1 - n4)*n4)/(d1^n1*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d7^(1 - n7)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d1^n1*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d1^n1*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d4^(1 - n4)*d6^(-1 - n6)*n6)/(d1^n1*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d6^(-1 - n6)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d1^n1*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d4^(1 - n4)*d7^(-1 - n7)*n7)/(d1^n1*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d7^(-1 - n7)*n7)/(d1^n1*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
+        (d10^(2 - n10)*d2^(-1 - n2)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) -
+        (d10^(2 - n10)*d2^(-1 - n2)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
         (d10^(1 - n10)*d9^(-1 - n9)*n9)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10));
 
 * * n6 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?{>1}/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        -d8^(1 - n8)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) + 
-        d5^(1 - n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (2*d4^(1 - n4))/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (2*d2^(1 - n2))/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d6^(1 - n6)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) + 
-        (4*d1^(-1 - n1)*d6^(1 - n6)*d8^(1 - n8)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (2*d1^(-1 - n1)*d5^(1 - n5)*d6^(1 - n6)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (2*d1^(-1 - n1)*d4^(1 - n4)*d6^(1 - n6)*n1)/(3*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*n1)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (4*d1^(-1 - n1)*d2^(1 - n2)*d6^(1 - n6)*n1)/(3*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d6^(1 - n6)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (2*d10^(-1 - n10)*d6^(1 - n6)*d8^(1 - n8)*n10)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
-        (2*d10^(-1 - n10)*d3^(1 - n3)*d6^(1 - n6)*n10)/(3*d1^n1*d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) + 
-        (2*d2^(-1 - n2)*d4^(1 - n4)*d6^(1 - n6)*n2)/(3*d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*n2)/(3*d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d6^(1 - n6)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (2*d2^(-1 - n2)*d6^(2 - n6)*n2)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (2*d3^(-1 - n3)*d6^(1 - n6)*d8^(1 - n8)*n3)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (2*d10^(1 - n10)*d3^(-1 - n3)*d6^(1 - n6)*n3)/(3*d1^n1*d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d4^(-1 - n4)*d6^(1 - n6)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n6)) - 
-        (d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d1^n1*d10^n10*d2^n2*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (2*d2^(1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (2*d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n6)) + 
-        (2*d5^(-1 - n5)*d6^(1 - n6)*d8^(1 - n8)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n6)) - 
-        (2*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) - 
-        (2*d5^(-1 - n5)*d6^(2 - n6)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (2*d6^(1 - n6)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) + 
-        (2*d5^(1 - n5)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) - 
-        (2*d4^(1 - n4)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n6)) + 
-        (2*d3^(1 - n3)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n6)) - 
-        (2*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
-        (2*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
-        (2*d6^(1 - n6)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) - 
-        (2*d5^(1 - n5)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n6)) - 
-        (2*d2^(1 - n2)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) + 
-        (2*d10^(1 - n10)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) + 
+
+        -d8^(1 - n8)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) +
+        d5^(1 - n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (2*d4^(1 - n4))/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (2*d2^(1 - n2))/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d6^(1 - n6)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) +
+        (4*d1^(-1 - n1)*d6^(1 - n6)*d8^(1 - n8)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (2*d1^(-1 - n1)*d5^(1 - n5)*d6^(1 - n6)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (2*d1^(-1 - n1)*d4^(1 - n4)*d6^(1 - n6)*n1)/(3*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*n1)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (4*d1^(-1 - n1)*d2^(1 - n2)*d6^(1 - n6)*n1)/(3*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d6^(1 - n6)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (2*d10^(-1 - n10)*d6^(1 - n6)*d8^(1 - n8)*n10)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
+        (2*d10^(-1 - n10)*d3^(1 - n3)*d6^(1 - n6)*n10)/(3*d1^n1*d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) +
+        (2*d2^(-1 - n2)*d4^(1 - n4)*d6^(1 - n6)*n2)/(3*d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*n2)/(3*d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d6^(1 - n6)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (2*d2^(-1 - n2)*d6^(2 - n6)*n2)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (2*d3^(-1 - n3)*d6^(1 - n6)*d8^(1 - n8)*n3)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (2*d10^(1 - n10)*d3^(-1 - n3)*d6^(1 - n6)*n3)/(3*d1^n1*d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d4^(-1 - n4)*d6^(1 - n6)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n6)) -
+        (d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d1^n1*d10^n10*d2^n2*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (2*d2^(1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (2*d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n6)) +
+        (2*d5^(-1 - n5)*d6^(1 - n6)*d8^(1 - n8)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n6)) -
+        (2*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) -
+        (2*d5^(-1 - n5)*d6^(2 - n6)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (2*d6^(1 - n6)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) +
+        (2*d5^(1 - n5)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) -
+        (2*d4^(1 - n4)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n6)) +
+        (2*d3^(1 - n3)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n6)) -
+        (2*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
+        (2*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
+        (2*d6^(1 - n6)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) -
+        (2*d5^(1 - n5)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n6)) -
+        (2*d2^(1 - n2)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) +
+        (2*d10^(1 - n10)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) +
         (d6^(1 - n6)*rat(3 + 2*d - n1 - 3*n2 - 3*n4 - 3*n6, 3*(-1 + n6)))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9);
-        
+
 * * n1 != 0 && n10 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?{>1} =
-        
-        -((d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9)) - 
-        (d1^(-1 - n1)*d6^(1 - n6))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d2^(1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d10^(1 - n10)*d4^(1 - n4)*(-1 - n1))/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(-2 - n1)*d10^(1 - n10)*(-1 - n1))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(-2 - n1)*d10^(1 - n10)*d5^(1 - n5)*(1 + n1))/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d4^(1 - n4)*d5^(-1 - n5)*n5)/(d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d5^(-1 - n5)*n5)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d5^(-1 - n5)*n5)/(d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*(-1 - n1 + n5))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d2^(1 - n2)*d8^(-1 - n8)*n8)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) - 
+
+        -((d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9)) -
+        (d1^(-1 - n1)*d6^(1 - n6))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d2^(1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d10^(1 - n10)*d4^(1 - n4)*(-1 - n1))/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(-2 - n1)*d10^(1 - n10)*(-1 - n1))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(-2 - n1)*d10^(1 - n10)*d5^(1 - n5)*(1 + n1))/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d4^(1 - n4)*d5^(-1 - n5)*n5)/(d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d5^(-1 - n5)*n5)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d5^(-1 - n5)*n5)/(d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*(-1 - n1 + n5))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d2^(1 - n2)*d8^(-1 - n8)*n8)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) -
         (d10^(1 - n10)*d9^(-1 - n9)*n9)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10));
 
 * * n7 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?{>1}/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
 
-        -d9^(1 - n9)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) + 
-        d5^(1 - n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (2*d4^(1 - n4))/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (2*d3^(1 - n3))/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d7^(1 - n7)*d9^(1 - n9)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) - 
-        (d1^(-1 - n1)*d7^(1 - n7)*d8^(1 - n8)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d7^(1 - n7)*n1)/(3*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d7^(1 - n7)*n1)/(3*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d7^(1 - n7)*d9^(1 - n9)*n2)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d7^(1 - n7)*n2)/(3*d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d2^(-1 - n2)*d7^(1 - n7)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d3^(-1 - n3)*d7^(1 - n7)*d8^(1 - n8)*n3)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) - 
-        (d10^(1 - n10)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(3*d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d4^(-1 - n4)*d6^(1 - n6)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n7)) + 
-        (d3^(1 - n3)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(1 - n2)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d4^(-1 - n4)*d7^(2 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (2*d5^(-1 - n5)*d7^(1 - n7)*d9^(1 - n9)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n7)) - 
-        (2*d5^(-1 - n5)*d7^(1 - n7)*d8^(1 - n8)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n7)) + 
-        (2*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) - 
-        (2*d5^(-1 - n5)*d7^(2 - n7)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d6^(-1 - n6)*d7^(1 - n7)*d8^(1 - n8)*n6)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d9^n9*(-1 + n7)) - 
-        (d5^(1 - n5)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) - 
-        (2*d4^(1 - n4)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n7)) + 
-        (2*d2^(1 - n2)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) + 
-        (d6^(-1 - n6)*d7^(1 - n7)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) + 
-        (d7^(1 - n7)*(1 + n2 - n3 + n6 - n7))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (2*d3^(1 - n3)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) + 
-        (2*d10^(1 - n10)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) + 
-        (2*d2^(1 - n2)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) - 
+        -d9^(1 - n9)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
+        d5^(1 - n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (2*d4^(1 - n4))/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (2*d3^(1 - n3))/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d7^(1 - n7)*d9^(1 - n9)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) -
+        (d1^(-1 - n1)*d7^(1 - n7)*d8^(1 - n8)*n1)/(3*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d7^(1 - n7)*n1)/(3*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d7^(1 - n7)*n1)/(3*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d7^(1 - n7)*d9^(1 - n9)*n2)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d7^(1 - n7)*n2)/(3*d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d2^(-1 - n2)*d7^(1 - n7)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d3^(-1 - n3)*d7^(1 - n7)*d8^(1 - n8)*n3)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) -
+        (d10^(1 - n10)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(3*d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d4^(-1 - n4)*d6^(1 - n6)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n7)) +
+        (d3^(1 - n3)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(1 - n2)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(3*d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d4^(-1 - n4)*d7^(2 - n7)*n4)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (2*d5^(-1 - n5)*d7^(1 - n7)*d9^(1 - n9)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n7)) -
+        (2*d5^(-1 - n5)*d7^(1 - n7)*d8^(1 - n8)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n7)) +
+        (2*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) -
+        (2*d5^(-1 - n5)*d7^(2 - n7)*n5)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d6^(-1 - n6)*d7^(1 - n7)*d8^(1 - n8)*n6)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d9^n9*(-1 + n7)) -
+        (d5^(1 - n5)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) -
+        (2*d4^(1 - n4)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(3*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n7)) +
+        (2*d2^(1 - n2)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) +
+        (d6^(-1 - n6)*d7^(1 - n7)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) +
+        (d7^(1 - n7)*(1 + n2 - n3 + n6 - n7))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (2*d3^(1 - n3)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(3*d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) +
+        (2*d10^(1 - n10)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) +
+        (2*d2^(1 - n2)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(3*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) -
         (2*d10^(1 - n10)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(3*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7));
 
 * * n8 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?{>1}/d9^n9?pos_/d10^n10?pos_ =
 
-        d3^(1 - n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d10^(1 - n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d8^(1 - n8)*n1)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d1^(-1 - n1)*d8^(2 - n8)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d10^(1 - n10)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d3^(-1 - n3)*d8^(2 - n8)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d4^(-1 - n4)*d6^(1 - n6)*d8^(1 - n8)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n8)) + 
-        (d2^(1 - n2)*d4^(-1 - n4)*d8^(1 - n8)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d4^(-1 - n4)*d8^(1 - n8)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d5^(-1 - n5)*d8^(1 - n8)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*(-1 + n8)) + 
-        (d5^(-1 - n5)*d7^(1 - n7)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n8)) - 
-        (d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d4^(1 - n4)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n8)) - 
-        (d2^(1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) - 
-        (d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) + 
-        (d7^(-1 - n7)*d8^(1 - n8)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*(-1 + n8)) - 
-        (d5^(1 - n5)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n8)) + 
-        (d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n8)) + 
+        d3^(1 - n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d10^(1 - n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d8^(1 - n8)*n1)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d1^(-1 - n1)*d8^(2 - n8)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d10^(1 - n10)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d3^(-1 - n3)*d8^(2 - n8)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d4^(-1 - n4)*d6^(1 - n6)*d8^(1 - n8)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n8)) +
+        (d2^(1 - n2)*d4^(-1 - n4)*d8^(1 - n8)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d4^(-1 - n4)*d8^(1 - n8)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d5^(-1 - n5)*d8^(1 - n8)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*(-1 + n8)) +
+        (d5^(-1 - n5)*d7^(1 - n7)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n8)) -
+        (d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d4^(1 - n4)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n8)) -
+        (d2^(1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) -
+        (d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) +
+        (d7^(-1 - n7)*d8^(1 - n8)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*(-1 + n8)) -
+        (d5^(1 - n5)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n8)) +
+        (d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n8)) +
         (d8^(1 - n8)*(1 + n3 + n4 - n5 - n6 + n7 - n8))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8));
 
 * * n1 != 0 && n6 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?{>1}/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
 
-        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) + 
-        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) - 
-        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d10^(1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d6^(1 - n6)*n10)/(d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*n2)/(d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d6^(1 - n6)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
+        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
+        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
+        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d10^(1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d6^(1 - n6)*n10)/(d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*n2)/(d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d6^(1 - n6)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
         (d1^(-1 - n1)*d6^(1 - n6)*(-n10 + n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6));
 
 * * n10 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?{>1} =
-        
-        -(d1^(-1 - n1)*d10^(1 - n10)*d9^(1 - n9)*n1)/(2*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d3^(1 - n3)*n1)/(2*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*n1)/(2*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*n2)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
-        (d10^(1 - n10)*d5^(-1 - n5)*d7^(1 - n7)*n5)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d5^(-1 - n5)*n5)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d4^(1 - n4)*d6^(-1 - n6)*n6)/(2*d1^n1*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(1 - n2)*d6^(-1 - n6)*n6)/(2*d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d6^(-1 - n6)*n6)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(2*d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d8^(-1 - n8)*n8)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(2 - n10)*d8^(-1 - n8)*n8)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d9^(-1 - n9)*n9)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
+
+        -(d1^(-1 - n1)*d10^(1 - n10)*d9^(1 - n9)*n1)/(2*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d3^(1 - n3)*n1)/(2*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*n1)/(2*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*n2)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
+        (d10^(1 - n10)*d5^(-1 - n5)*d7^(1 - n7)*n5)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d5^(-1 - n5)*n5)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d4^(1 - n4)*d6^(-1 - n6)*n6)/(2*d1^n1*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(1 - n2)*d6^(-1 - n6)*n6)/(2*d1^n1*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d6^(-1 - n6)*n6)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(2*d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d8^(-1 - n8)*n8)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(2 - n10)*d8^(-1 - n8)*n8)/(2*d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d9^(-1 - n9)*n9)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
         (d10^(1 - n10)*rat(2 + 2*d - n1 - 2*n10 - 2*n2 - n5 - n6 - n8 - 2*n9, 2*(-1 + n10)))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
-                
+
 * * n9 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?pos_ =
-        
-        -(d2^(1 - n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9)) + 
-        d10^(1 - n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (2*d1^(-1 - n1)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) - 
-        (2*d1^(-1 - n1)*d2^(1 - n2)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (2*d2^(-1 - n2)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d3^(-1 - n3)*d8^(1 - n8)*d9^(1 - n9)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) - 
-        (d10^(1 - n10)*d3^(-1 - n3)*d9^(1 - n9)*n3)/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d3^(-1 - n3)*d9^(1 - n9)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d4^(-1 - n4)*d6^(1 - n6)*d9^(1 - n9)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*(-1 + n9)) - 
-        (d2^(1 - n2)*d4^(-1 - n4)*d9^(1 - n9)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d4^(-1 - n4)*d9^(1 - n9)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d5^(-1 - n5)*d8^(1 - n8)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*(-1 + n9)) - 
-        (d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) + 
-        (d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d5^(1 - n5)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n9)) - 
-        (d4^(1 - n4)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*(-1 + n9)) + 
-        (d3^(1 - n3)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n9)) - 
-        (d7^(-1 - n7)*d9^(2 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n9)) + 
-        (2*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) + 
+
+        -(d2^(1 - n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9)) +
+        d10^(1 - n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (2*d1^(-1 - n1)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
+        (2*d1^(-1 - n1)*d2^(1 - n2)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (2*d2^(-1 - n2)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d3^(-1 - n3)*d8^(1 - n8)*d9^(1 - n9)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
+        (d10^(1 - n10)*d3^(-1 - n3)*d9^(1 - n9)*n3)/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d3^(-1 - n3)*d9^(1 - n9)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d4^(-1 - n4)*d6^(1 - n6)*d9^(1 - n9)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*(-1 + n9)) -
+        (d2^(1 - n2)*d4^(-1 - n4)*d9^(1 - n9)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d4^(-1 - n4)*d9^(1 - n9)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d5^(-1 - n5)*d8^(1 - n8)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*(-1 + n9)) -
+        (d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) +
+        (d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d5^(1 - n5)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n9)) -
+        (d4^(1 - n4)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*(-1 + n9)) +
+        (d3^(1 - n3)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n9)) -
+        (d7^(-1 - n7)*d9^(2 - n9)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n9)) +
+        (2*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) +
         (d9^(1 - n9)*(1 - 2*n2 + n3 - n4 + n5 + 2*n8 - n9))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9));
-        
+
 * * n1 != 0 && n7 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?{>1}/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) + 
-        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) - 
-        (d1^(-1 - n1)*d6^(1 - n6))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d2^(1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d10^(1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d7^(1 - n7)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d7^(1 - n7)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d7^(1 - n7)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d1^(-1 - n1)*d3^(-1 - n3)*d7^(1 - n7)*d9^(1 - n9)*n3)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) + 
-        (d1^(-1 - n1)*d3^(-1 - n3)*d7^(1 - n7)*d8^(1 - n8)*n3)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) + 
-        (d1^(-1 - n1)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) + 
+
+        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
+        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
+        (d1^(-1 - n1)*d6^(1 - n6))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d2^(1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d10^(1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d7^(1 - n7)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d7^(1 - n7)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d7^(1 - n7)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d1^(-1 - n1)*d3^(-1 - n3)*d7^(1 - n7)*d9^(1 - n9)*n3)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) +
+        (d1^(-1 - n1)*d3^(-1 - n3)*d7^(1 - n7)*d8^(1 - n8)*n3)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) +
+        (d1^(-1 - n1)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) +
         (d1^(-1 - n1)*d7^(1 - n7)*(-n10 + n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7));
- 
+
 * * n1 != 0 && n2 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?{>1}/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
 
-        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) + 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d8^(1 - n8)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n2)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d3^(1 - n3)*n10)/(d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n2)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n2)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n2)) - 
-        (d1^(-1 - n1)*d2^(1 - n2)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n2)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n2)) + 
-        (2*d1^(-1 - n1)*d2^(1 - n2)*d8^(-1 - n8)*n8)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n2)) + 
+        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) +
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d8^(1 - n8)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n2)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d3^(1 - n3)*n10)/(d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n2)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n2)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n2)) -
+        (d1^(-1 - n1)*d2^(1 - n2)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n2)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n2)) +
+        (2*d1^(-1 - n1)*d2^(1 - n2)*d8^(-1 - n8)*n8)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n2)) +
         (d1^(-1 - n1)*d2^(1 - n2)*rat(-1 - d + n10 + n2 + n6 + 2*n8, -1 + n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
-        
+
 * * n1 != 0 && n3 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?{>1}/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
 
-        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) - 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d3^(1 - n3)*d8^(1 - n8)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n3)) + 
-        (d1^(-2 - n1)*d3^(1 - n3)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-2 - n1)*d2^(1 - n2)*d3^(1 - n3)*(1 + n1))/(d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d9^(1 - n9)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d3^(1 - n3)*n10)/(d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n3)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d10^n10*d2^n2*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*n5)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d4^(1 - n4)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(2 - n3)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n3)) - 
-        (2*d1^(-1 - n1)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n3)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) + 
+        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) -
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d3^(1 - n3)*d8^(1 - n8)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n3)) +
+        (d1^(-2 - n1)*d3^(1 - n3)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-2 - n1)*d2^(1 - n2)*d3^(1 - n3)*(1 + n1))/(d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d9^(1 - n9)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d3^(1 - n3)*n10)/(d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n3)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d10^n10*d2^n2*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*n5)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d4^(1 - n4)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(2 - n3)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n3)) -
+        (2*d1^(-1 - n1)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n3)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) +
         (d1^(-1 - n1)*d3^(1 - n3)*rat(d - n1 - n10 - n3 - n5 - 2*n8 + n9, -1 + n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * * n1 != 0 && n4 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?pos_/d4^n4?{>1}/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
 
-        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d4^(1 - n4)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n4)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d4^(1 - n4)*n10)/(d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d4^(1 - n4)*n10)/(d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d1^(-1 - n1)*d3^(-1 - n3)*d4^(1 - n4)*d9^(1 - n9)*n3)/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n4)) - 
-        (d1^(-1 - n1)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
+        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d4^(1 - n4)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n4)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d4^(1 - n4)*n10)/(d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d4^(1 - n4)*n10)/(d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d1^(-1 - n1)*d3^(-1 - n3)*d4^(1 - n4)*d9^(1 - n9)*n3)/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n4)) -
+        (d1^(-1 - n1)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
         (d1^(-1 - n1)*d4^(1 - n4)*rat(-1 + d - 2*n1 - n2 - n3 - n4, -1 + n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * * n1 != 0 && n5 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?{>1}/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d5^(1 - n5)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d5^(1 - n5)*n10)/(d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d5^(1 - n5)*n10)/(d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d3^(-1 - n3)*d5^(1 - n5)*d9^(1 - n9)*n3)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) - 
-        (d1^(-1 - n1)*d3^(-1 - n3)*d5^(1 - n5)*n3)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d5^(1 - n5)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d2^n2*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d2^(1 - n2)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d5^(2 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d5^(1 - n5)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n5)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d6^n6*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d5^(2 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) + 
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d5^(1 - n5)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d5^(1 - n5)*n10)/(d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d5^(1 - n5)*n10)/(d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d3^(-1 - n3)*d5^(1 - n5)*d9^(1 - n9)*n3)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) -
+        (d1^(-1 - n1)*d3^(-1 - n3)*d5^(1 - n5)*n3)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d5^(1 - n5)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d2^n2*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d2^(1 - n2)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d5^(2 - n5)*d6^(-1 - n6)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d5^(1 - n5)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n5)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d6^n6*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d5^(2 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) +
         (d1^(-1 - n1)*d5^(1 - n5)*rat(-1 + d - 2*n1 - n2 - n3 - n5, -1 + n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * * n1 != 0 && n8 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?{>1}/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*d2^(1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d8^(1 - n8)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d8^(1 - n8)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d8^(1 - n8)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d8^(2 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d2^(-1 - n2)*d8^(1 - n8)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(2 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(-1 - n1)*d5^(1 - n5)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n8)) - 
-        (d1^(-1 - n1)*d4^(1 - n4)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) - 
-        (d1^(-1 - n1)*d6^(-1 - n6)*d8^(2 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) + 
+
+        (d1^(-1 - n1)*d2^(1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d8^(1 - n8)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d8^(1 - n8)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d8^(1 - n8)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d8^(2 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d2^(-1 - n2)*d8^(1 - n8)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(2 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(-1 - n1)*d5^(1 - n5)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n8)) -
+        (d1^(-1 - n1)*d4^(1 - n4)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) -
+        (d1^(-1 - n1)*d6^(-1 - n6)*d8^(2 - n8)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) +
         (d1^(-1 - n1)*d8^(1 - n8)*(1 + n2 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8));
 
 * n1 != 0 && n9 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?pos_ =
 
-        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d9^(1 - n9)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d8^(1 - n8)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d9^(1 - n9)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d9^(1 - n9)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d9^(2 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(-1 - n1)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d2^(1 - n2)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) - 
-        (d1^(-1 - n1)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) - 
-        (d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) + 
+        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d9^(1 - n9)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d8^(1 - n8)*d9^(1 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d9^(1 - n9)*n10)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d9^(1 - n9)*n10)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d9^(2 - n9)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(-1 - n1)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d2^(1 - n2)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
+        (d1^(-1 - n1)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
+        (d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) +
         (d1^(-1 - n1)*d9^(1 - n9)*rat(-1 + d - 2*n1 - n5 - n8 - n9, -1 + n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8);
 
 * n1 == 0 && n10 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n5 != 1 && n5 != 2
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?{>2}/d6/d7/d8/d9/d10 =
 
-        -1/(3*d10*d2^n2*d3^n3*d4^n4*d5^n5*d6*d7*d9) + 
-        1/(3*d10*d2^n2*d3^n3*d4^n4*d5^n5*d7*d8*d9) + 
-        d5^(1 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d7^2*d8*(-1 + n5)) + 
-        d5^(1 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d8*d9^2*(-1 + n5)) + 
-        (d2^(1 - n2)*d5^(1 - n5))/(3*d10*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) - 
-        d5^(1 - n5)/(3*d2^n2*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) - 
-        d5^(2 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) + 
-        (2*d5^(1 - n5))/(3*d10*d2^n2*d3^n3*d4^n4*d6^2*d7*d9*(-1 + n5)) - 
-        d5^(1 - n5)/(3*d10^2*d2^n2*d3^n3*d4^n4*d6*d7*d9*(-1 + n5)) + 
-        (d4^(1 - n4)*d5^(1 - n5))/(3*d10*d2^n2*d3^n3*d6*d7^2*d8*d9*(-1 + n5)) - 
-        (d3^(1 - n3)*d5^(1 - n5))/(3*d10*d2^n2*d4^n4*d6*d7^2*d8*d9*(-1 + n5)) - 
-        d5^(2 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d7^2*d8*d9*(-1 + n5)) + 
-        (d3^(1 - n3)*d5^(1 - n5))/(3*d10^2*d2^n2*d4^n4*d6*d7*d8*d9*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(6*d10*d3^n3*d4^n4*d6*d7*d8*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(3*d10*d3^n3*d4^n4*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*d5^(1 - n5)*n2)/(3*d10*d3^n3*d6*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(6*d3^n3*d4^n4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4^n4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(6*d10*d2^n2*d4^n4*d6*d7*d9*(-1 + n5)) - 
-        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(6*d2^n2*d4^n4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(2*d10*d2^n2*d4^n4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6*d7*d9*(-1 + n5)) - 
-        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(6*d10*d2^n2*d3^n3*d6*d8*d9*(-1 + n5)) - 
-        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d2^n2*d3^n3*d7*d8*d9*(-1 + n5)) + 
-        (d3^(1 - n3)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(6*d10*d2^n2*d6*d7*d8*d9*(-1 + n5)) - 
-        (d2^(1 - n2)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(6*d10*d3^n3*d6*d7*d8*d9*(-1 + n5)) + 
-        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6*d7*d8*d9*(-1 + n5)) - 
-        (d2^(1 - n2)*d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d3^n3*d6*d7*d8*d9^2*(-2 + n5)*(-1 + n5)) + 
-        (d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d2^n2*d3^n3*d6*d7*d8*d9^2*(-2 + n5)*(-1 + n5)) - 
-        (d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6*d7*d8*d9^2*(-2 + n5)*(-1 + n5)) - 
-        (d2^(1 - n2)*d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d3^n3*d6^2*d7*d8*d9*(-2 + n5)*(-1 + n5)) - 
-        (d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6^2*d7*d8*d9*(-2 + n5)*(-1 + n5)) - 
-        (d2^(-1 - n2)*d4^(-1 - n4)*d5^(2 - n5)*n2*n4)/(d10*d3^n3*d6*d7*d8*d9*(-2 + n5)*(-1 + n5)) + 
-        (d5^(2 - n5)*(8 + 3*n4 - 4*n5))/(6*d10*d2^n2*d3^n3*d4^n4*d6^2*d7*d8*d9*(-2 + n5)*(-1 + n5)) + 
-        (d5^(1 - n5)*rat(6 - d + 3*n2 + 3*n3 + 6*n4 - 6*n5, 6*(-1 + n5)))/(d10*d2^n2*d3^n3*d4^n4*d6*d7*d8*d9) + 
+        -1/(3*d10*d2^n2*d3^n3*d4^n4*d5^n5*d6*d7*d9) +
+        1/(3*d10*d2^n2*d3^n3*d4^n4*d5^n5*d7*d8*d9) +
+        d5^(1 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d7^2*d8*(-1 + n5)) +
+        d5^(1 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d8*d9^2*(-1 + n5)) +
+        (d2^(1 - n2)*d5^(1 - n5))/(3*d10*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) -
+        d5^(1 - n5)/(3*d2^n2*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) -
+        d5^(2 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) +
+        (2*d5^(1 - n5))/(3*d10*d2^n2*d3^n3*d4^n4*d6^2*d7*d9*(-1 + n5)) -
+        d5^(1 - n5)/(3*d10^2*d2^n2*d3^n3*d4^n4*d6*d7*d9*(-1 + n5)) +
+        (d4^(1 - n4)*d5^(1 - n5))/(3*d10*d2^n2*d3^n3*d6*d7^2*d8*d9*(-1 + n5)) -
+        (d3^(1 - n3)*d5^(1 - n5))/(3*d10*d2^n2*d4^n4*d6*d7^2*d8*d9*(-1 + n5)) -
+        d5^(2 - n5)/(3*d10*d2^n2*d3^n3*d4^n4*d6*d7^2*d8*d9*(-1 + n5)) +
+        (d3^(1 - n3)*d5^(1 - n5))/(3*d10^2*d2^n2*d4^n4*d6*d7*d8*d9*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(6*d10*d3^n3*d4^n4*d6*d7*d8*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(3*d10*d3^n3*d4^n4*d7*d8*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*d5^(1 - n5)*n2)/(3*d10*d3^n3*d6*d7*d8*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(6*d3^n3*d4^n4*d6*d7*d8*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4^n4*d6*d7*d8*d9*(-1 + n5)) +
+        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(6*d10*d2^n2*d4^n4*d6*d7*d9*(-1 + n5)) -
+        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(6*d2^n2*d4^n4*d6*d7*d8*d9*(-1 + n5)) +
+        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(2*d10*d2^n2*d4^n4*d6*d7*d8*d9*(-1 + n5)) +
+        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6*d7*d9*(-1 + n5)) -
+        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(6*d10*d2^n2*d3^n3*d6*d8*d9*(-1 + n5)) -
+        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d2^n2*d3^n3*d7*d8*d9*(-1 + n5)) +
+        (d3^(1 - n3)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(6*d10*d2^n2*d6*d7*d8*d9*(-1 + n5)) -
+        (d2^(1 - n2)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(6*d10*d3^n3*d6*d7*d8*d9*(-1 + n5)) +
+        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6*d7*d8*d9*(-1 + n5)) -
+        (d2^(1 - n2)*d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d3^n3*d6*d7*d8*d9^2*(-2 + n5)*(-1 + n5)) +
+        (d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d2^n2*d3^n3*d6*d7*d8*d9^2*(-2 + n5)*(-1 + n5)) -
+        (d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6*d7*d8*d9^2*(-2 + n5)*(-1 + n5)) -
+        (d2^(1 - n2)*d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d3^n3*d6^2*d7*d8*d9*(-2 + n5)*(-1 + n5)) -
+        (d4^(-1 - n4)*d5^(2 - n5)*n4)/(2*d10*d2^n2*d3^n3*d6^2*d7*d8*d9*(-2 + n5)*(-1 + n5)) -
+        (d2^(-1 - n2)*d4^(-1 - n4)*d5^(2 - n5)*n2*n4)/(d10*d3^n3*d6*d7*d8*d9*(-2 + n5)*(-1 + n5)) +
+        (d5^(2 - n5)*(8 + 3*n4 - 4*n5))/(6*d10*d2^n2*d3^n3*d4^n4*d6^2*d7*d8*d9*(-2 + n5)*(-1 + n5)) +
+        (d5^(1 - n5)*rat(6 - d + 3*n2 + 3*n3 + 6*n4 - 6*n5, 6*(-1 + n5)))/(d10*d2^n2*d3^n3*d4^n4*d6*d7*d8*d9) +
         (d4^(-1 - n4)*d5^(2 - n5)*rat(d*n4 - 2*n2*n4 - n4*n5, 2*(-2 + n5)*(-1 + n5)))/(d10*d2^n2*d3^n3*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n5 == 2 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n4 != 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3^n3?pos_/d4^n4?{>1}/d5^2/d6/d7/d8/d9/d10 =
-        
-        d2^(-1 - n2)/(d10*d3^n3*d4^n4*d5^2*d6*d8*d9) + 
-        11/(6*d10*d2^n2*d3^n3*d4^n4*d5^2*d6*d8*d9) - 
-        d2^(-1 - n2)/(2*d10*d3^n3*d4^n4*d5^2*d7*d8*d9) - 
-        1/(3*d10*d2^n2*d3^n3*d4^n4*d5^2*d7*d8*d9) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(d10*d4^n4*d5^2*d6*d7*d8*d9) - 
-        (11*d3^(1 - n3))/(6*d10*d2^n2*d4^n4*d5^2*d6*d7*d8*d9) + 
-        d2^(1 - n2)/(3*d10*d3^n3*d4^n4*d5^2*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d6*d7*d8*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10^2*d3^n3*d5^2*d6*d7*d8*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d6^2*d7*d9*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5*d6*d7*d8^2*d9*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(2 - n4))/(d10*d3^n3*d5^2*d6*d7^2*d8*d9*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d7^2*d8*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7^2*d8*(-1 + n4)) + 
-        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d6*d7*d8*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d8*d9^2*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d3^n3*d5^2*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5^2*d6*d7*d8*d9^2*(-1 + n4)) - 
-        d4^(1 - n4)/(3*d2^n2*d3^n3*d5^2*d6*d7*d8*d9^2*(-1 + n4)) + 
-        d4^(1 - n4)/(6*d10*d2^n2*d3^n3*d5^2*d6^2*d7*d9*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d6*d7*d9*(-1 + n4)) - 
-        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d6*d7*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10^2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) + 
-        (2*d4^(1 - n4))/(d10^2*d2^n2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d7*d8^2*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10*d5^2*d6*d7*d8^2*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5^2*d6*d7*d8^2*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d3^n3*d5^2*d6*d7*d8^2*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d2^n2*d3^n3*d5^2*d6*d7*d8^2*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d6*d8*d9*(-1 + n4)) - 
-        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d6*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(d10*d5^2*d6*d7^2*d8*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5^2*d6*d7^2*d8*d9*(-1 + n4)) + 
-        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7^2*d8*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) - 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d7*d8*d9*(-1 + n4)) + 
-        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d7*d8*d9*(-1 + n4)) + 
-        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(2 - n4))/(2*d10*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) - 
-        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10^2*d5^2*d6*d7*d8*d9*(-1 + n4)) - 
-        (2*d3^(1 - n3)*d4^(1 - n4))/(d10^2*d2^n2*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*(-1 - n2))/(d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(2 - n4)*(-1 - n2))/(2*d10*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d10*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (2*d4^(1 - n4)*n2)/(d10*d2^n2*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10*d3^n3*d5^2*d7*d8*d9*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) - 
-        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (3*d2^(-1 - n2)*d4^(1 - n4)*n2)/(2*d10*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(d10*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(2*d10*d3^n3*d5^2*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*(1 + 2*n2))/(d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*(1 + 4*n2))/(2*d10*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (d4^(1 - n4)*(-1 + 12*n2))/(6*d10*d2^n2*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*(4*n2 + 4*n2^2))/(d10*d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d10*d5^2*d6*d7*d9*(-1 + n4)) - 
-        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d10*d2^n2*d5^2*d6*d7*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5^2*d6*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d2^n2*d5^2*d6*d7*d8*d9*(-1 + n4)) - 
-        (4*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d2^n2*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(2 - n4)*n3)/(d10*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*rat(8*n2 - 2*d*n2 + 4*n2^2, -1 + n4))/(d10*d3^n3*d5*d6*d7*d8*d9) + 
+
+        d2^(-1 - n2)/(d10*d3^n3*d4^n4*d5^2*d6*d8*d9) +
+        11/(6*d10*d2^n2*d3^n3*d4^n4*d5^2*d6*d8*d9) -
+        d2^(-1 - n2)/(2*d10*d3^n3*d4^n4*d5^2*d7*d8*d9) -
+        1/(3*d10*d2^n2*d3^n3*d4^n4*d5^2*d7*d8*d9) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(d10*d4^n4*d5^2*d6*d7*d8*d9) -
+        (11*d3^(1 - n3))/(6*d10*d2^n2*d4^n4*d5^2*d6*d7*d8*d9) +
+        d2^(1 - n2)/(3*d10*d3^n3*d4^n4*d5^2*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d6*d7*d8*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10^2*d3^n3*d5^2*d6*d7*d8*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d6^2*d7*d9*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5*d6*d7*d8^2*d9*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(2 - n4))/(d10*d3^n3*d5^2*d6*d7^2*d8*d9*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d7^2*d8*(-1 + n4)) +
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7^2*d8*(-1 + n4)) +
+        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d6*d7*d8*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d8*d9^2*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d3^n3*d5^2*d6*d7*d8*d9^2*(-1 + n4)) +
+        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5^2*d6*d7*d8*d9^2*(-1 + n4)) -
+        d4^(1 - n4)/(3*d2^n2*d3^n3*d5^2*d6*d7*d8*d9^2*(-1 + n4)) +
+        d4^(1 - n4)/(6*d10*d2^n2*d3^n3*d5^2*d6^2*d7*d9*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d6*d7*d9*(-1 + n4)) -
+        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d6*d7*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10^2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) +
+        (2*d4^(1 - n4))/(d10^2*d2^n2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d7*d8^2*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10*d5^2*d6*d7*d8^2*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5^2*d6*d7*d8^2*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d3^n3*d5^2*d6*d7*d8^2*d9*(-1 + n4)) +
+        d4^(1 - n4)/(3*d2^n2*d3^n3*d5^2*d6*d7*d8^2*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d6*d8*d9*(-1 + n4)) -
+        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d6*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(d10*d5^2*d6*d7^2*d8*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5^2*d6*d7^2*d8*d9*(-1 + n4)) +
+        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7^2*d8*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) -
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^3*d7*d8*d9*(-1 + n4)) +
+        (2*d4^(1 - n4))/(3*d10*d2^n2*d3^n3*d5^3*d7*d8*d9*(-1 + n4)) +
+        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(2 - n4))/(2*d10*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) -
+        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10^2*d5^2*d6*d7*d8*d9*(-1 + n4)) -
+        (2*d3^(1 - n3)*d4^(1 - n4))/(d10^2*d2^n2*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*(-1 - n2))/(d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(2 - n4)*(-1 - n2))/(2*d10*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d10*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) +
+        (2*d4^(1 - n4)*n2)/(d10*d2^n2*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10*d3^n3*d5^2*d7*d8*d9*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) -
+        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (3*d2^(-1 - n2)*d4^(1 - n4)*n2)/(2*d10*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(d10*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(2*d10*d3^n3*d5^2*d7*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*(1 + 2*n2))/(d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*(1 + 4*n2))/(2*d10*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) +
+        (d4^(1 - n4)*(-1 + 12*n2))/(6*d10*d2^n2*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*(4*n2 + 4*n2^2))/(d10*d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d10*d5^2*d6*d7*d9*(-1 + n4)) -
+        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d10*d2^n2*d5^2*d6*d7*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5^2*d6*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d2^n2*d5^2*d6*d7*d8*d9*(-1 + n4)) -
+        (4*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d2^n2*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(2 - n4)*n3)/(d10*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*rat(8*n2 - 2*d*n2 + 4*n2^2, -1 + n4))/(d10*d3^n3*d5*d6*d7*d8*d9) +
         (d4^(1 - n4)*rat(4 + 2*d + 3*n2 - 8*n3 - 3*n4, 2*(-1 + n4)))/(d10*d2^n2*d3^n3*d5^2*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n4 != 1 && n4 != 2
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3^n3?pos_/d4^n4?{>2}/d5/d6/d7/d8/d9/d10 =
 
-        d2^(-1 - n2)/(d10*d3^n3*d4^n4*d5*d6*d8*d9) + 
-        11/(6*d10*d2^n2*d3^n3*d4^n4*d5*d6*d8*d9) - 
-        d2^(-1 - n2)/(2*d10*d3^n3*d4^n4*d5*d7*d8*d9) - 
-        1/(3*d10*d2^n2*d3^n3*d4^n4*d5*d7*d8*d9) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(d10*d4^n4*d5*d6*d7*d8*d9) - 
-        (11*d3^(1 - n3))/(6*d10*d2^n2*d4^n4*d5*d6*d7*d8*d9) + 
-        d2^(1 - n2)/(3*d10*d3^n3*d4^n4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10^2*d3^n3*d5*d6*d7*d8*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5*d6^2*d7*d9*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d6*d7*d8^2*d9*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(2 - n4))/(d10*d3^n3*d5*d6*d7^2*d8*d9*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d7*d8*d9*(1 - n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5*d6*d7^2*d8*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5*d6*d7^2*d8*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5*d6*d8*d9^2*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) - 
-        d4^(1 - n4)/(3*d2^n2*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) + 
-        d4^(1 - n4)/(6*d10*d2^n2*d3^n3*d5*d6^2*d7*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) - 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10^2*d3^n3*d5*d6*d7*d9*(-1 + n4)) + 
-        (2*d4^(1 - n4))/(d10^2*d2^n2*d3^n3*d5*d6*d7*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5*d7*d8^2*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10*d5*d6*d7*d8^2*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5*d6*d7*d8^2*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d3^n3*d5*d6*d7*d8^2*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d2^n2*d3^n3*d5*d6*d7*d8^2*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d8*d9*(-1 + n4)) - 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d8*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d6*d7^2*d8*d9*(-1 + n4)) - 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d6*d7^2*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(d10*d5*d6*d7^2*d8*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5*d6*d7^2*d8*d9*(-1 + n4)) + 
-        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d6^2*d7*d8*d9*(-1 + n4)) - 
-        d4^(1 - n4)/(6*d10*d2^n2*d3^n3*d6^2*d7*d8*d9*(-1 + n4)) + 
-        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) - 
-        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10^2*d5*d6*d7*d8*d9*(-1 + n4)) - 
-        (2*d3^(1 - n3)*d4^(1 - n4))/(d10^2*d2^n2*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*(-1 - n2))/(d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d10*d3^n3*d5*d6*d7*d8*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10*d3^n3*d5*d6*d7*d9*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10*d3^n3*d6*d7*d8*d9*(-1 + n4)) - 
-        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (7*d2^(-1 - n2)*d4^(1 - n4)*n2)/(2*d10*d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(d10*d3^n3*d5*d6*d7*d8*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(2*d10*d3^n3*d5*d7*d8*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d10*d5*d6*d7*d9*(-1 + n4)) - 
-        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d10*d2^n2*d5*d6*d7*d9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5*d6*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d2^n2*d5*d6*d7*d8*d9*(-1 + n4)) - 
-        (4*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d2^n2*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(2 - n4)*n3)/(d10*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6*d7^2*d8*(-2 + n4)*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d3^n3*d5*d6*d7*d8*d9^2*(-2 + n4)*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6*d7*d8*d9^2*(-2 + n4)*(-1 + n4)) + 
-        (2*d4^(2 - n4)*n2)/(d10*d2^n2*d3^n3*d5*d6*d7*d8*d9^2*(-2 + n4)*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6^2*d7*d9*(-2 + n4)*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d6*d7*d9*(-2 + n4)*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d6*d7^2*d8*d9*(-2 + n4)*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d3^(1 - n3)*d4^(2 - n4)*n2)/(d10*d5*d6*d7^2*d8*d9*(-2 + n4)*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(3 - n4)*n2)/(d10*d3^n3*d5*d6*d7^2*d8*d9*(-2 + n4)*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d7*d8*d9*(-2 + n4)*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d6^2*d7*d8*d9*(-2 + n4)*(-1 + n4)) - 
-        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d6*d7*d8*d9*(-2 + n4)*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(2 - n4)*(-2 + 4*n2 + n4))/(2*d10*d3^n3*d5*d6^2*d7*d8*d9*(-2 + n4)*(-1 + n4)) + 
-        (d2^(-2 - n2)*d4^(2 - n4)*(2 + 10*n2 + 8*n2^2 - n4 - n2*n4))/(2*d10*d3^n3*d5*d6*d7*d8*d9*(-2 + n4)*(-1 + n4)) + 
-        (d4^(1 - n4)*rat(4 + 2*d + 3*n2 - 8*n3 - 3*n4, 2*(-1 + n4)))/(d10*d2^n2*d3^n3*d5*d6*d7*d8*d9) + 
+        d2^(-1 - n2)/(d10*d3^n3*d4^n4*d5*d6*d8*d9) +
+        11/(6*d10*d2^n2*d3^n3*d4^n4*d5*d6*d8*d9) -
+        d2^(-1 - n2)/(2*d10*d3^n3*d4^n4*d5*d7*d8*d9) -
+        1/(3*d10*d2^n2*d3^n3*d4^n4*d5*d7*d8*d9) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(d10*d4^n4*d5*d6*d7*d8*d9) -
+        (11*d3^(1 - n3))/(6*d10*d2^n2*d4^n4*d5*d6*d7*d8*d9) +
+        d2^(1 - n2)/(3*d10*d3^n3*d4^n4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10^2*d3^n3*d5*d6*d7*d8*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5*d6^2*d7*d9*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d6*d7*d8^2*d9*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(2 - n4))/(d10*d3^n3*d5*d6*d7^2*d8*d9*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d7*d8*d9*(1 - n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5*d6*d7^2*d8*(-1 + n4)) +
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5*d6*d7^2*d8*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) +
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7*d8*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5*d6*d8*d9^2*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d6*d7*d8*d9^2*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) +
+        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) -
+        d4^(1 - n4)/(3*d2^n2*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) +
+        d4^(1 - n4)/(6*d10*d2^n2*d3^n3*d5*d6^2*d7*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) -
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10^2*d3^n3*d5*d6*d7*d9*(-1 + n4)) +
+        (2*d4^(1 - n4))/(d10^2*d2^n2*d3^n3*d5*d6*d7*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d5*d7*d8^2*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10*d5*d6*d7*d8^2*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5*d6*d7*d8^2*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d3^n3*d5*d6*d7*d8^2*d9*(-1 + n4)) +
+        d4^(1 - n4)/(3*d2^n2*d3^n3*d5*d6*d7*d8^2*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d5^2*d6*d8*d9*(-1 + n4)) -
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d6*d8*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4))/(2*d10*d3^n3*d6*d7^2*d8*d9*(-1 + n4)) -
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d6*d7^2*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(d10*d5*d6*d7^2*d8*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d2^n2*d5*d6*d7^2*d8*d9*(-1 + n4)) +
+        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) +
+        d4^(1 - n4)/(3*d10*d2^n2*d3^n3*d5^2*d7*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d10*d3^n3*d6^2*d7*d8*d9*(-1 + n4)) -
+        d4^(1 - n4)/(6*d10*d2^n2*d3^n3*d6^2*d7*d8*d9*(-1 + n4)) +
+        (d2^(1 - n2)*d4^(1 - n4))/(3*d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) -
+        d4^(2 - n4)/(3*d10*d2^n2*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*d4^(1 - n4))/(2*d10^2*d5*d6*d7*d8*d9*(-1 + n4)) -
+        (2*d3^(1 - n3)*d4^(1 - n4))/(d10^2*d2^n2*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*(-1 - n2))/(d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d10*d3^n3*d5*d6*d7*d8*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10*d3^n3*d5*d6*d7*d9*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10*d3^n3*d6*d7*d8*d9*(-1 + n4)) -
+        (11*d2^(-1 - n2)*d4^(1 - n4)*n2)/(6*d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (7*d2^(-1 - n2)*d4^(1 - n4)*n2)/(2*d10*d3^n3*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(d10*d3^n3*d5*d6*d7*d8*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(1 - n4)*(1 + n2))/(2*d10*d3^n3*d5*d7*d8*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d10*d5*d6*d7*d9*(-1 + n4)) -
+        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d10*d2^n2*d5*d6*d7*d9*(-1 + n4)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5*d6*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(2*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(3*d2^n2*d5*d6*d7*d8*d9*(-1 + n4)) -
+        (4*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d2^n2*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(2 - n4)*n3)/(d10*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6*d7^2*d8*(-2 + n4)*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d3^n3*d5*d6*d7*d8*d9^2*(-2 + n4)*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6*d7*d8*d9^2*(-2 + n4)*(-1 + n4)) +
+        (2*d4^(2 - n4)*n2)/(d10*d2^n2*d3^n3*d5*d6*d7*d8*d9^2*(-2 + n4)*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5*d6^2*d7*d9*(-2 + n4)*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d6*d7*d9*(-2 + n4)*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d6*d7^2*d8*d9*(-2 + n4)*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d3^(1 - n3)*d4^(2 - n4)*n2)/(d10*d5*d6*d7^2*d8*d9*(-2 + n4)*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(3 - n4)*n2)/(d10*d3^n3*d5*d6*d7^2*d8*d9*(-2 + n4)*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d7*d8*d9*(-2 + n4)*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d6^2*d7*d8*d9*(-2 + n4)*(-1 + n4)) -
+        (2*d2^(-1 - n2)*d4^(2 - n4)*n2)/(d10*d3^n3*d5^2*d6*d7*d8*d9*(-2 + n4)*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(2 - n4)*(-2 + 4*n2 + n4))/(2*d10*d3^n3*d5*d6^2*d7*d8*d9*(-2 + n4)*(-1 + n4)) +
+        (d2^(-2 - n2)*d4^(2 - n4)*(2 + 10*n2 + 8*n2^2 - n4 - n2*n4))/(2*d10*d3^n3*d5*d6*d7*d8*d9*(-2 + n4)*(-1 + n4)) +
+        (d4^(1 - n4)*rat(4 + 2*d + 3*n2 - 8*n3 - 3*n4, 2*(-1 + n4)))/(d10*d2^n2*d3^n3*d5*d6*d7*d8*d9) +
         (d2^(-1 - n2)*d4^(2 - n4)*rat(2*n2 - 2*d*n2 + 4*n2^2 + 2*n2*n4, (-2 + n4)*(-1 + n4)))/(d10*d3^n3*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n4 == 1 && n5 == 2 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3^n3?{>1}/d4/d5^2/d6/d7/d8/d9/d10 =
 
-        -d2^(-1 - n2)/(4*d10*d3^n3*d4*d5^2*d6*d7*d9) - 
-        1/(6*d10*d2^n2*d3^n3*d4*d5^2*d6*d7*d9) - 
-        d2^(-1 - n2)/(4*d10*d3^n3*d4*d5^2*d6*d8*d9) + 
-        d2^(-1 - n2)/(4*d10*d3^n3*d5^2*d6*d7*d8*d9) + 
-        d2^(-1 - n2)/(4*d3^n3*d4*d5^2*d6*d7*d8*d9) + 
-        1/(6*d2^n2*d3^n3*d4*d5^2*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d7^2*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d4*d5^2*d6*d7^2*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5^2*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d8*d9^2*(-1 + n3)) - 
-        d3^(1 - n3)/(12*d10*d2^n2*d4*d5^2*d6*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d2^n2*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6^2*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(12*d10*d2^n2*d4*d5^2*d6^2*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d6*d7*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(3*d10*d2^n2*d4*d5^3*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) + 
-        (7*d3^(1 - n3))/(12*d10^2*d2^n2*d4*d5^2*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d7*d8^2*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7*d8^2*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d6*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) + 
-        (5*d3^(1 - n3))/(12*d10*d2^n2*d4^2*d5^2*d6*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d5^2*d6*d7^2*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(6*d10*d2^n2*d4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d7*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(3*d10*d2^n2*d4*d5^3*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d7*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5^2*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(12*d10*d2^n2*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10^2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (7*d3^(2 - n3))/(12*d10^2*d2^n2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d10*d5^2*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) + 
-        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5^2*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (7*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d5*d6^2*d7*d8*d9*(-1 + n3)) - 
-        (7*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5^2*d6*d7*d8*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*(1 + 2*n2))/(4*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*(1 + 2*n2))/(4*d10*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d3^(1 - n3)*(-1 + 6*n2))/(12*d10*d2^n2*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d3^(1 - n3)*(1 + 6*n2))/(12*d10*d2^n2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(n2 + n2^2))/(d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*rat(4*n2 - d*n2 + 2*n2^2, 2*(-1 + n3)))/(d10*d4*d5*d6*d7*d8*d9) + 
+        -d2^(-1 - n2)/(4*d10*d3^n3*d4*d5^2*d6*d7*d9) -
+        1/(6*d10*d2^n2*d3^n3*d4*d5^2*d6*d7*d9) -
+        d2^(-1 - n2)/(4*d10*d3^n3*d4*d5^2*d6*d8*d9) +
+        d2^(-1 - n2)/(4*d10*d3^n3*d5^2*d6*d7*d8*d9) +
+        d2^(-1 - n2)/(4*d3^n3*d4*d5^2*d6*d7*d8*d9) +
+        1/(6*d2^n2*d3^n3*d4*d5^2*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d7^2*d8*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d4*d5^2*d6*d7^2*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5^2*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d8*d9^2*(-1 + n3)) -
+        d3^(1 - n3)/(12*d10*d2^n2*d4*d5^2*d6*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) -
+        d3^(1 - n3)/(6*d2^n2*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6^2*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(12*d10*d2^n2*d4*d5^2*d6^2*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d6*d7*d9*(-1 + n3)) -
+        d3^(1 - n3)/(3*d10*d2^n2*d4*d5^3*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) +
+        (7*d3^(1 - n3))/(12*d10^2*d2^n2*d4*d5^2*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d7*d8^2*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7*d8^2*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d6*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) +
+        (5*d3^(1 - n3))/(12*d10*d2^n2*d4^2*d5^2*d6*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d5^2*d6*d7^2*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(6*d10*d2^n2*d4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5^3*d7*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(3*d10*d2^n2*d4*d5^3*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d7*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5^2*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(12*d10*d2^n2*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10^2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        (7*d3^(2 - n3))/(12*d10^2*d2^n2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d10*d5^2*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) +
+        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5^2*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (7*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d5*d6^2*d7*d8*d9*(-1 + n3)) -
+        (7*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5^2*d6*d7*d8*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*(1 + 2*n2))/(4*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*(1 + 2*n2))/(4*d10*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d3^(1 - n3)*(-1 + 6*n2))/(12*d10*d2^n2*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d3^(1 - n3)*(1 + 6*n2))/(12*d10*d2^n2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(n2 + n2^2))/(d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*rat(4*n2 - d*n2 + 2*n2^2, 2*(-1 + n3)))/(d10*d4*d5*d6*d7*d8*d9) +
         (d3^(1 - n3)*rat(6 + d + 3*n2 - 6*n3, 6*(-1 + n3)))/(d10*d2^n2*d4*d5^2*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n4 == 2 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3^n3?{>1}/d4^2/d5/d6/d7/d8/d9/d10 =
 
-        -d2^(-1 - n2)/(4*d10*d3^n3*d4^2*d5*d6*d7*d9) - 
-        1/(6*d10*d2^n2*d3^n3*d4^2*d5*d6*d7*d9) - 
-        d2^(-1 - n2)/(4*d10*d3^n3*d4^2*d5*d6*d8*d9) + 
-        d2^(-1 - n2)/(4*d3^n3*d4^2*d5*d6*d7*d8*d9) + 
-        1/(6*d2^n2*d3^n3*d4^2*d5*d6*d7*d8*d9) + 
-        d2^(-1 - n2)/(4*d10*d3^n3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6*d7^2*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5*d6*d7^2*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4^2*d5*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6*d8*d9^2*(-1 + n3)) - 
-        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d5*d6*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6*d7*d8*d9^2*(-1 + n3)) + 
-        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4^2*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4^2*d5*d6*d7*d8*d9^2*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d2^n2*d4^2*d5*d6*d7*d8*d9^2*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6^2*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d5*d6^2*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d7*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5^2*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4^2*d5*d6*d7*d9*(-1 + n3)) + 
-        (7*d3^(1 - n3))/(12*d10^2*d2^n2*d4^2*d5*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d7*d8^2*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6*d7*d8^2*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4^2*d5*d6*d7*d8^2*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5*d6*d7*d8^2*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^3*d5*d6*d8*d9*(-1 + n3)) + 
-        (5*d3^(1 - n3))/(6*d10*d2^n2*d4^3*d5*d6*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d6*d7^2*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(6*d10*d2^n2*d4^2*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d7*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5^2*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^3*d5*d7*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(3*d10*d2^n2*d4^3*d5*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6^2*d7*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(1 - n2)*d3^(1 - n3))/(3*d10*d4^3*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3))/(2*d10*d4^3*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(6*d10*d2^n2*d4^3*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10^2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (7*d3^(2 - n3))/(12*d10^2*d2^n2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*(-1 + n3)) + 
-        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4^2*d5*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d3^(1 - n3)*n2)/(2*d10*d2^n2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6^2*d7*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4^2*d5*d6*d7*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d6*d7^2*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d6^2*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4^2*d5*d6*d7*d8*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*(1 + 2*n2))/(4*d10*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(-1 + 3*n2 + 4*n2^2))/(4*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*rat(23*n2 - 6*d*n2 + 12*n2^2, 12*(-1 + n3)))/(d10*d4*d5*d6*d7*d8*d9) + 
+        -d2^(-1 - n2)/(4*d10*d3^n3*d4^2*d5*d6*d7*d9) -
+        1/(6*d10*d2^n2*d3^n3*d4^2*d5*d6*d7*d9) -
+        d2^(-1 - n2)/(4*d10*d3^n3*d4^2*d5*d6*d8*d9) +
+        d2^(-1 - n2)/(4*d3^n3*d4^2*d5*d6*d7*d8*d9) +
+        1/(6*d2^n2*d3^n3*d4^2*d5*d6*d7*d8*d9) +
+        d2^(-1 - n2)/(4*d10*d3^n3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6*d7^2*d8*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5*d6*d7^2*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4^2*d5*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6*d8*d9^2*(-1 + n3)) -
+        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d5*d6*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6*d7*d8*d9^2*(-1 + n3)) +
+        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4^2*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4^2*d5*d6*d7*d8*d9^2*(-1 + n3)) -
+        d3^(1 - n3)/(6*d2^n2*d4^2*d5*d6*d7*d8*d9^2*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6^2*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d5*d6^2*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d7*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5^2*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4^2*d5*d6*d7*d9*(-1 + n3)) +
+        (7*d3^(1 - n3))/(12*d10^2*d2^n2*d4^2*d5*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d7*d8^2*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6*d7*d8^2*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4^2*d5*d6*d7*d8^2*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5*d6*d7*d8^2*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^3*d5*d6*d8*d9*(-1 + n3)) +
+        (5*d3^(1 - n3))/(6*d10*d2^n2*d4^3*d5*d6*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d6*d7^2*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(6*d10*d2^n2*d4^2*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5^2*d7*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5^2*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^3*d5*d7*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(3*d10*d2^n2*d4^3*d5*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d6^2*d7*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(12*d10*d2^n2*d4^2*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(1 - n2)*d3^(1 - n3))/(3*d10*d4^3*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3))/(2*d10*d4^3*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(6*d10*d2^n2*d4^3*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10^2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (7*d3^(2 - n3))/(12*d10^2*d2^n2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*(-1 + n3)) +
+        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4^2*d5*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d3^(1 - n3)*n2)/(2*d10*d2^n2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6^2*d7*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4^2*d5*d6*d7*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d6*d7^2*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d6^2*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4^2*d6*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4^2*d5*d6*d7*d8*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*(1 + 2*n2))/(4*d10*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(-1 + 3*n2 + 4*n2^2))/(4*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*rat(23*n2 - 6*d*n2 + 12*n2^2, 12*(-1 + n3)))/(d10*d4*d5*d6*d7*d8*d9) +
         (d3^(1 - n3)*rat(9 + 2*d + 6*n2 - 12*n3, 12*(-1 + n3)))/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1 && n3 != 2
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3^n3?{>2}/d4/d5/d6/d7/d8/d9/d10 =
 
-        -d2^(-1 - n2)/(4*d10*d3^n3*d4*d5*d6*d7*d9) - 
-        1/(6*d10*d2^n2*d3^n3*d4*d5*d6*d7*d9) - 
-        d2^(-1 - n2)/(4*d10*d3^n3*d4*d5*d6*d8*d9) + 
-        d2^(-1 - n2)/(4*d10*d3^n3*d5*d6*d7*d8*d9) + 
-        d2^(-1 - n2)/(4*d3^n3*d4*d5*d6*d7*d8*d9) + 
-        1/(6*d2^n2*d3^n3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7^2*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d8*d9^2*(-1 + n3)) - 
-        d3^(1 - n3)/(12*d10*d2^n2*d4*d5*d6*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6*d7*d8*d9^2*(-1 + n3)) + 
-        d3^(1 - n3)/(12*d10*d2^n2*d4*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d2^n2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6^2*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(12*d10*d2^n2*d4*d5*d6^2*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d7*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d2^n2*d4*d5^2*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        (7*d3^(1 - n3))/(12*d10^2*d2^n2*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d7*d8^2*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6*d7*d8^2*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5*d6*d7*d8^2*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6*d8*d9*(-1 + n3)) + 
-        (5*d3^(1 - n3))/(12*d10*d2^n2*d4^2*d5*d6*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d2^n2*d4*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5*d6*d7^2*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d5*d6*d7^2*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d2^n2*d4*d5^2*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6^2*d7*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(12*d10*d2^n2*d4*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(12*d10*d2^n2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d10*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d4*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5*d6*d7*d8*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5*d6*d7*d8*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*(-2 + n3)*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10^2*d4*d5*d6*d7*d8*(-2 + n3)*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9^2*(-2 + n3)*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*d9^2*(-2 + n3)*(-1 + n3)) - 
-        (d3^(2 - n3)*n2)/(2*d10*d2^n2*d4*d5*d6*d7*d8*d9^2*(-2 + n3)*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d9*(-2 + n3)*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d6*d7^2*d8*d9*(-2 + n3)*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d5*d6*d7^2*d8*d9*(-2 + n3)*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(3 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*d9*(-2 + n3)*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5^2*d7*d8*d9*(-2 + n3)*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d8*d9*(-2 + n3)*(-1 + n3)) + 
-        (d3^(2 - n3)*(14 + 6*n2 - 7*n3))/(12*d10^2*d2^n2*d4*d5*d6*d7*d8*d9*(-2 + n3)*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3)*(2 + 2*n2 - n3))/(4*d10^2*d4*d5*d6*d7*d8*d9*(-2 + n3)*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3)*(-2 + 4*n2 + n3))/(4*d10*d4*d5*d6*d7*d8^2*d9*(-2 + n3)*(-1 + n3)) + 
-        (d3^(1 - n3)*rat(6 + d + 3*n2 - 6*n3, 6*(-1 + n3)))/(d10*d2^n2*d4*d5*d6*d7*d8*d9) + 
+        -d2^(-1 - n2)/(4*d10*d3^n3*d4*d5*d6*d7*d9) -
+        1/(6*d10*d2^n2*d3^n3*d4*d5*d6*d7*d9) -
+        d2^(-1 - n2)/(4*d10*d3^n3*d4*d5*d6*d8*d9) +
+        d2^(-1 - n2)/(4*d10*d3^n3*d5*d6*d7*d8*d9) +
+        d2^(-1 - n2)/(4*d3^n3*d4*d5*d6*d7*d8*d9) +
+        1/(6*d2^n2*d3^n3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d7^2*d8*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6*d8*d9^2*(-1 + n3)) -
+        d3^(1 - n3)/(12*d10*d2^n2*d4*d5*d6*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6*d7*d8*d9^2*(-1 + n3)) +
+        d3^(1 - n3)/(12*d10*d2^n2*d4*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) -
+        d3^(1 - n3)/(6*d2^n2*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d6^2*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(12*d10*d2^n2*d4*d5*d6^2*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d7*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d2^n2*d4*d5^2*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) +
+        (7*d3^(1 - n3))/(12*d10^2*d2^n2*d4*d5*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5*d7*d8^2*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6*d7*d8^2*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d4*d5*d6*d7*d8^2*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d6*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d6*d8*d9*(-1 + n3)) +
+        (5*d3^(1 - n3))/(12*d10*d2^n2*d4^2*d5*d6*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d2^n2*d4*d6*d7^2*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5*d6*d7^2*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d5*d6*d7^2*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d5^2*d7*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d2^n2*d4*d5^2*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d2^n2*d4^2*d5*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d4*d6^2*d7*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(12*d10*d2^n2*d4*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(4*d10*d5*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(1 - n2)*d3^(1 - n3))/(6*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3))/(4*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(12*d10*d2^n2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d10*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(4*d4*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5*d6*d7*d8*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d4*d5*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d10*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (5*d2^(-1 - n2)*d3^(1 - n3)*n2)/(12*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5*d6*d7*d8*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(4*d10*d4*d5*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*(-2 + n3)*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10^2*d4*d5*d6*d7*d8*(-2 + n3)*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9^2*(-2 + n3)*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*d9^2*(-2 + n3)*(-1 + n3)) -
+        (d3^(2 - n3)*n2)/(2*d10*d2^n2*d4*d5*d6*d7*d8*d9^2*(-2 + n3)*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d9*(-2 + n3)*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d6*d7^2*d8*d9*(-2 + n3)*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d5*d6*d7^2*d8*d9*(-2 + n3)*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(3 - n3)*n2)/(2*d10*d4*d5*d6*d7^2*d8*d9*(-2 + n3)*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5^2*d7*d8*d9*(-2 + n3)*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3)*n2)/(2*d10*d4*d5^2*d6*d7*d8*d9*(-2 + n3)*(-1 + n3)) +
+        (d3^(2 - n3)*(14 + 6*n2 - 7*n3))/(12*d10^2*d2^n2*d4*d5*d6*d7*d8*d9*(-2 + n3)*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3)*(2 + 2*n2 - n3))/(4*d10^2*d4*d5*d6*d7*d8*d9*(-2 + n3)*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3)*(-2 + 4*n2 + n3))/(4*d10*d4*d5*d6*d7*d8^2*d9*(-2 + n3)*(-1 + n3)) +
+        (d3^(1 - n3)*rat(6 + d + 3*n2 - 6*n3, 6*(-1 + n3)))/(d10*d2^n2*d4*d5*d6*d7*d8*d9) +
         (d2^(-1 - n2)*d3^(2 - n3)*rat(n2 - d*n2 + n2*n3, 2*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n3 == 1 && n4 == 1 && n5 == 2 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3/d4/d5^2/d6/d7/d8/d9/d10 =
 
-        d2^(1 - n2)/(3*d10*d3*d4*d5^2*d6*d7^2*d8) - 
-        1/(2*d10*d2^n2*d3*d4*d5^2*d6*d7^2*d8) + 
-        2/(3*d10*d2^n2*d3*d4*d5*d6*d7^2*d8) - 
-        (4*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d6*d7*d8) - 
-        1/(d10*d2^n2*d3*d4*d5^3*d6*d7*d8) - 
-        1/(2*d10^2*d2^n2*d3*d4*d5^2*d6*d7*d8) - 
-        d2^(1 - n2)/(2*d10*d3*d4*d5^2*d6*d8*d9^2) - 
-        3/(2*d10*d2^n2*d3*d4*d5^2*d6*d8*d9^2) - 
-        2/(3*d10*d2^n2*d3*d4*d5*d6*d8*d9^2) + 
-        2/(3*d10*d2^n2*d3*d4*d6*d7*d8*d9^2) - 
-        d2^(1 - n2)/(3*d3*d4*d5^2*d6*d7*d8*d9^2) + 
-        d2^(2 - n2)/(3*d10*d3*d4*d5^2*d6*d7*d8*d9^2) - 
-        1/(2*d2^n2*d3*d4*d5^2*d6*d7*d8*d9^2) + 
-        (5*d2^(1 - n2))/(3*d10*d3*d4*d5*d6*d7*d8*d9^2) - 
-        7/(6*d2^n2*d3*d4*d5*d6*d7*d8*d9^2) + 
-        d2^(1 - n2)/(6*d10*d3*d4*d5^2*d6^2*d7*d9) + 
-        3/(2*d10*d2^n2*d3*d4*d5^2*d6^2*d7*d9) + 
-        4/(3*d10*d2^n2*d3*d4*d5*d6^2*d7*d9) - 
-        (2*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d6*d7*d9) - 
-        1/(d10*d2^n2*d3*d4*d5^3*d6*d7*d9) - 
-        d2^(1 - n2)/(3*d10*d3^2*d4*d5^2*d6*d7*d9) + 
-        1/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d7*d9) + 
-        d2^(1 - n2)/(2*d10^2*d3*d4*d5^2*d6*d7*d9) + 
-        3/(2*d10^2*d2^n2*d3*d4*d5^2*d6*d7*d9) - 
-        7/(6*d10*d2^n2*d3*d4*d5^2*d6*d7*d9) - 
-        2/(3*d10*d2^n2*d3^2*d4*d5*d6*d7*d9) + 
-        2/(3*d10^2*d2^n2*d3*d4*d5*d6*d7*d9) + 
-        1/(2*d10*d2^n2*d3*d4*d5^2*d7*d8^2*d9) + 
-        (2*d2^(1 - n2))/(3*d10*d4*d5^2*d6*d7*d8^2*d9) + 
-        1/(2*d10*d2^n2*d4*d5^2*d6*d7*d8^2*d9) - 
-        (2*d2^(1 - n2))/(3*d3*d4*d5^2*d6*d7*d8^2*d9) - 
-        1/(2*d2^n2*d3*d4*d5^2*d6*d7*d8^2*d9) + 
-        7/(6*d10*d2^n2*d4*d5*d6*d7*d8^2*d9) - 
-        7/(6*d2^n2*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (4*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d6*d8*d9) + 
-        1/(d10*d2^n2*d3*d4*d5^3*d6*d8*d9) - 
-        d2^(1 - n2)/(6*d10*d3*d4^2*d5^2*d6*d8*d9) - 
-        3/(2*d10*d2^n2*d3*d4^2*d5^2*d6*d8*d9) - 
-        1/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9) + 
-        7/(6*d10*d2^n2*d3*d4*d5^2*d6*d8*d9) - 
-        4/(3*d10*d2^n2*d3*d4^2*d5*d6*d8*d9) - 
-        2/(3*d10*d2^n2*d3*d4*d6*d7^2*d8*d9) + 
-        d2^(1 - n2)/(3*d10*d3*d5^2*d6*d7^2*d8*d9) + 
-        1/(2*d10*d2^n2*d3*d5^2*d6*d7^2*d8*d9) - 
-        d2^(1 - n2)/(3*d10*d4*d5^2*d6*d7^2*d8*d9) - 
-        1/(2*d10*d2^n2*d4*d5^2*d6*d7^2*d8*d9) + 
-        7/(6*d10*d2^n2*d3*d5*d6*d7^2*d8*d9) - 
-        7/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9) - 
-        d2^(1 - n2)/(3*d10*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (2*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d7*d8*d9) + 
-        1/(d10*d2^n2*d3*d4*d5^3*d7*d8*d9) - 
-        d2^(1 - n2)/(3*d10*d3*d4^2*d5^2*d7*d8*d9) + 
-        1/(2*d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9) - 
-        2/(3*d10*d2^n2*d3*d4^2*d5*d7*d8*d9) - 
-        4/(3*d10*d2^n2*d3*d4*d6^2*d7*d8*d9) + 
-        (2*d2^(1 - n2))/(3*d10*d3*d5^2*d6^2*d7*d8*d9) + 
-        1/(2*d10*d2^n2*d3*d5^2*d6^2*d7*d8*d9) - 
-        (2*d2^(2 - n2))/(3*d10*d3*d4*d5^2*d6^2*d7*d8*d9) + 
-        7/(6*d10*d2^n2*d3*d5*d6^2*d7*d8*d9) - 
-        (4*d2^(1 - n2))/(3*d10*d3*d4*d5*d6^2*d7*d8*d9) + 
-        1/(2*d10*d2^n2*d3^2*d5^2*d6*d7*d8*d9) + 
-        d2^(1 - n2)/(6*d10*d4^2*d5^2*d6*d7*d8*d9) + 
-        3/(2*d10*d2^n2*d4^2*d5^2*d6*d7*d8*d9) + 
-        d2^(2 - n2)/(3*d10*d3*d4^2*d5^2*d6*d7*d8*d9) - 
-        d2^(1 - n2)/(2*d10^2*d4*d5^2*d6*d7*d8*d9) - 
-        3/(2*d10^2*d2^n2*d4*d5^2*d6*d7*d8*d9) + 
-        d2^(1 - n2)/(3*d3^2*d4*d5^2*d6*d7*d8*d9) - 
-        1/(2*d2^n2*d3^2*d4*d5^2*d6*d7*d8*d9) + 
-        4/(3*d10*d2^n2*d4^2*d5*d6*d7*d8*d9) + 
-        (2*d2^(1 - n2))/(3*d10*d3*d4^2*d5*d6*d7*d8*d9) + 
-        2/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8*d9) - 
-        2/(3*d10^2*d2^n2*d4*d5*d6*d7*d8*d9) + 
-        2/(3*d2^n2*d3^2*d4*d5*d6*d7*d8*d9) + 
-        1/(d10*d2^n2*d3^2*d4*d5*d6*d7*d8*d9) + 
-        (-6 - n2)/(6*d10*d2^n2*d3*d4*d5^2*d6*d7*d8) + 
-        (1 - n2)/(2*d10*d2^n2*d3*d5^2*d6*d7*d8*d9) + 
-        (-1 + n2)/(6*d2^n2*d3*d4*d5^2*d6*d7*d8*d9) - 
-        (3*d2^(-1 - n2)*n2)/(2*d10*d3*d4*d5^2*d6*d7*d8) - 
-        (4*d2^(-1 - n2)*n2)/(3*d10*d3*d4*d5*d6*d7*d8) + 
-        (3*d2^(-1 - n2)*n2)/(2*d10*d3*d4*d5^2*d7*d8*d9) + 
-        (2*d2^(-1 - n2)*n2)/(3*d10*d3*d4*d5*d7*d8*d9) - 
-        (3*d2^(-1 - n2)*n2)/(2*d10*d3*d5^2*d6*d7*d8*d9) + 
-        (3*d2^(-1 - n2)*n2)/(2*d3*d4*d5^2*d6*d7*d8*d9) - 
-        (2*d2^(-1 - n2)*n2)/(3*d10*d3*d5*d6*d7*d8*d9) + 
-        (4*d2^(-1 - n2)*n2)/(3*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*n2)/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (4 + 3*n2)/(6*d10*d2^n2*d3*d4*d5^2*d7*d8*d9) + 
-        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7*d8^2) + 
-        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6^2*d7*d8) + 
-        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d8*d9^2) + 
-        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d7*d8*d9^2) + 
-        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d7^2*d9) + 
-        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6^2*d7*d9) + 
-        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d7^2*d8*d9) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d7*d8^2) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d7^2*d8*d9^2) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9^2) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d6*d7^2*d9) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7^2*d9) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d4*d5^2*d6^2*d7*d9) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d7*d9) + 
-        rat(-3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6*d7*d8^2*d9) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d5^2*d6*d7^2*d8*d9) + 
-        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d5^2*d6^2*d7*d8*d9) + 
-        rat(-3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6^2*d7*d8*d9) + 
-        rat(3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d6^2*d7*d8) + 
-        rat(3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6*d7^2*d9^2) + 
-        rat(3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6*d7*d8*d9^2) + 
-        rat(3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d8^2*d9) + 
-        rat(3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d6*d8^2*d9) + 
-        rat(3, -4 + d)/(d10*d2^n2*d3^2*d4*d5^2*d6^2*d8*d9) + 
-        rat(3, -4 + d)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d8*d9) + 
-        rat(3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6*d7^2*d8*d9) + 
-        rat(3, -4 + d)/(d2^n2*d3^2*d4*d5^2*d6*d7^2*d8*d9) + 
-        rat(3, -4 + d)/(d2^n2*d3^2*d4*d5^2*d6^2*d7*d8*d9) + 
-        rat(3, -4 + d)/(d2^n2*d3^2*d4^2*d5^2*d6*d7*d8*d9) + 
-        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d7^2*d8) + 
-        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7^2*d8) + 
-        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7*d9^2) + 
-        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7^2*d9) + 
-        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d8^2*d9) + 
-        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d7*d8^2*d9) + 
-        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d10*d3*d4*d5^2*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d3*d4*d5^2*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d10*d3*d4^2*d5^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d3*d4*d5^2*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d3*d4^2*d5^2*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d4*d5^2*d6*d7^2*d8) + 
-        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d4*d5^2*d6^2*d7*d8) + 
-        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d4^2*d5^2*d6*d7*d8) + 
-        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d5^2*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d5^2*d6^2*d7*d8*d9) + 
+        d2^(1 - n2)/(3*d10*d3*d4*d5^2*d6*d7^2*d8) -
+        1/(2*d10*d2^n2*d3*d4*d5^2*d6*d7^2*d8) +
+        2/(3*d10*d2^n2*d3*d4*d5*d6*d7^2*d8) -
+        (4*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d6*d7*d8) -
+        1/(d10*d2^n2*d3*d4*d5^3*d6*d7*d8) -
+        1/(2*d10^2*d2^n2*d3*d4*d5^2*d6*d7*d8) -
+        d2^(1 - n2)/(2*d10*d3*d4*d5^2*d6*d8*d9^2) -
+        3/(2*d10*d2^n2*d3*d4*d5^2*d6*d8*d9^2) -
+        2/(3*d10*d2^n2*d3*d4*d5*d6*d8*d9^2) +
+        2/(3*d10*d2^n2*d3*d4*d6*d7*d8*d9^2) -
+        d2^(1 - n2)/(3*d3*d4*d5^2*d6*d7*d8*d9^2) +
+        d2^(2 - n2)/(3*d10*d3*d4*d5^2*d6*d7*d8*d9^2) -
+        1/(2*d2^n2*d3*d4*d5^2*d6*d7*d8*d9^2) +
+        (5*d2^(1 - n2))/(3*d10*d3*d4*d5*d6*d7*d8*d9^2) -
+        7/(6*d2^n2*d3*d4*d5*d6*d7*d8*d9^2) +
+        d2^(1 - n2)/(6*d10*d3*d4*d5^2*d6^2*d7*d9) +
+        3/(2*d10*d2^n2*d3*d4*d5^2*d6^2*d7*d9) +
+        4/(3*d10*d2^n2*d3*d4*d5*d6^2*d7*d9) -
+        (2*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d6*d7*d9) -
+        1/(d10*d2^n2*d3*d4*d5^3*d6*d7*d9) -
+        d2^(1 - n2)/(3*d10*d3^2*d4*d5^2*d6*d7*d9) +
+        1/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d7*d9) +
+        d2^(1 - n2)/(2*d10^2*d3*d4*d5^2*d6*d7*d9) +
+        3/(2*d10^2*d2^n2*d3*d4*d5^2*d6*d7*d9) -
+        7/(6*d10*d2^n2*d3*d4*d5^2*d6*d7*d9) -
+        2/(3*d10*d2^n2*d3^2*d4*d5*d6*d7*d9) +
+        2/(3*d10^2*d2^n2*d3*d4*d5*d6*d7*d9) +
+        1/(2*d10*d2^n2*d3*d4*d5^2*d7*d8^2*d9) +
+        (2*d2^(1 - n2))/(3*d10*d4*d5^2*d6*d7*d8^2*d9) +
+        1/(2*d10*d2^n2*d4*d5^2*d6*d7*d8^2*d9) -
+        (2*d2^(1 - n2))/(3*d3*d4*d5^2*d6*d7*d8^2*d9) -
+        1/(2*d2^n2*d3*d4*d5^2*d6*d7*d8^2*d9) +
+        7/(6*d10*d2^n2*d4*d5*d6*d7*d8^2*d9) -
+        7/(6*d2^n2*d3*d4*d5*d6*d7*d8^2*d9) +
+        (4*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d6*d8*d9) +
+        1/(d10*d2^n2*d3*d4*d5^3*d6*d8*d9) -
+        d2^(1 - n2)/(6*d10*d3*d4^2*d5^2*d6*d8*d9) -
+        3/(2*d10*d2^n2*d3*d4^2*d5^2*d6*d8*d9) -
+        1/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9) +
+        7/(6*d10*d2^n2*d3*d4*d5^2*d6*d8*d9) -
+        4/(3*d10*d2^n2*d3*d4^2*d5*d6*d8*d9) -
+        2/(3*d10*d2^n2*d3*d4*d6*d7^2*d8*d9) +
+        d2^(1 - n2)/(3*d10*d3*d5^2*d6*d7^2*d8*d9) +
+        1/(2*d10*d2^n2*d3*d5^2*d6*d7^2*d8*d9) -
+        d2^(1 - n2)/(3*d10*d4*d5^2*d6*d7^2*d8*d9) -
+        1/(2*d10*d2^n2*d4*d5^2*d6*d7^2*d8*d9) +
+        7/(6*d10*d2^n2*d3*d5*d6*d7^2*d8*d9) -
+        7/(6*d10*d2^n2*d4*d5*d6*d7^2*d8*d9) -
+        d2^(1 - n2)/(3*d10*d3*d4*d5*d6*d7^2*d8*d9) +
+        (2*d2^(1 - n2))/(3*d10*d3*d4*d5^3*d7*d8*d9) +
+        1/(d10*d2^n2*d3*d4*d5^3*d7*d8*d9) -
+        d2^(1 - n2)/(3*d10*d3*d4^2*d5^2*d7*d8*d9) +
+        1/(2*d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9) -
+        2/(3*d10*d2^n2*d3*d4^2*d5*d7*d8*d9) -
+        4/(3*d10*d2^n2*d3*d4*d6^2*d7*d8*d9) +
+        (2*d2^(1 - n2))/(3*d10*d3*d5^2*d6^2*d7*d8*d9) +
+        1/(2*d10*d2^n2*d3*d5^2*d6^2*d7*d8*d9) -
+        (2*d2^(2 - n2))/(3*d10*d3*d4*d5^2*d6^2*d7*d8*d9) +
+        7/(6*d10*d2^n2*d3*d5*d6^2*d7*d8*d9) -
+        (4*d2^(1 - n2))/(3*d10*d3*d4*d5*d6^2*d7*d8*d9) +
+        1/(2*d10*d2^n2*d3^2*d5^2*d6*d7*d8*d9) +
+        d2^(1 - n2)/(6*d10*d4^2*d5^2*d6*d7*d8*d9) +
+        3/(2*d10*d2^n2*d4^2*d5^2*d6*d7*d8*d9) +
+        d2^(2 - n2)/(3*d10*d3*d4^2*d5^2*d6*d7*d8*d9) -
+        d2^(1 - n2)/(2*d10^2*d4*d5^2*d6*d7*d8*d9) -
+        3/(2*d10^2*d2^n2*d4*d5^2*d6*d7*d8*d9) +
+        d2^(1 - n2)/(3*d3^2*d4*d5^2*d6*d7*d8*d9) -
+        1/(2*d2^n2*d3^2*d4*d5^2*d6*d7*d8*d9) +
+        4/(3*d10*d2^n2*d4^2*d5*d6*d7*d8*d9) +
+        (2*d2^(1 - n2))/(3*d10*d3*d4^2*d5*d6*d7*d8*d9) +
+        2/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8*d9) -
+        2/(3*d10^2*d2^n2*d4*d5*d6*d7*d8*d9) +
+        2/(3*d2^n2*d3^2*d4*d5*d6*d7*d8*d9) +
+        1/(d10*d2^n2*d3^2*d4*d5*d6*d7*d8*d9) +
+        (-6 - n2)/(6*d10*d2^n2*d3*d4*d5^2*d6*d7*d8) +
+        (1 - n2)/(2*d10*d2^n2*d3*d5^2*d6*d7*d8*d9) +
+        (-1 + n2)/(6*d2^n2*d3*d4*d5^2*d6*d7*d8*d9) -
+        (3*d2^(-1 - n2)*n2)/(2*d10*d3*d4*d5^2*d6*d7*d8) -
+        (4*d2^(-1 - n2)*n2)/(3*d10*d3*d4*d5*d6*d7*d8) +
+        (3*d2^(-1 - n2)*n2)/(2*d10*d3*d4*d5^2*d7*d8*d9) +
+        (2*d2^(-1 - n2)*n2)/(3*d10*d3*d4*d5*d7*d8*d9) -
+        (3*d2^(-1 - n2)*n2)/(2*d10*d3*d5^2*d6*d7*d8*d9) +
+        (3*d2^(-1 - n2)*n2)/(2*d3*d4*d5^2*d6*d7*d8*d9) -
+        (2*d2^(-1 - n2)*n2)/(3*d10*d3*d5*d6*d7*d8*d9) +
+        (4*d2^(-1 - n2)*n2)/(3*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*n2)/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (4 + 3*n2)/(6*d10*d2^n2*d3*d4*d5^2*d7*d8*d9) +
+        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7*d8^2) +
+        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6^2*d7*d8) +
+        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d8*d9^2) +
+        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d7*d8*d9^2) +
+        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d7^2*d9) +
+        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6^2*d7*d9) +
+        rat(-6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d7^2*d8*d9) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d7*d8^2) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d7^2*d8*d9^2) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9^2) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d6*d7^2*d9) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7^2*d9) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d4*d5^2*d6^2*d7*d9) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d7*d9) +
+        rat(-3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6*d7*d8^2*d9) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d5^2*d6*d7^2*d8*d9) +
+        rat(-3, -4 + d)/(d10*d2^n2*d3^2*d5^2*d6^2*d7*d8*d9) +
+        rat(-3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6^2*d7*d8*d9) +
+        rat(3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d6^2*d7*d8) +
+        rat(3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6*d7^2*d9^2) +
+        rat(3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6*d7*d8*d9^2) +
+        rat(3, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d8^2*d9) +
+        rat(3, -4 + d)/(d10*d2^n2*d3*d4^2*d5^2*d6*d8^2*d9) +
+        rat(3, -4 + d)/(d10*d2^n2*d3^2*d4*d5^2*d6^2*d8*d9) +
+        rat(3, -4 + d)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d8*d9) +
+        rat(3, -4 + d)/(d2^n2*d3*d4^2*d5^2*d6*d7^2*d8*d9) +
+        rat(3, -4 + d)/(d2^n2*d3^2*d4*d5^2*d6*d7^2*d8*d9) +
+        rat(3, -4 + d)/(d2^n2*d3^2*d4*d5^2*d6^2*d7*d8*d9) +
+        rat(3, -4 + d)/(d2^n2*d3^2*d4^2*d5^2*d6*d7*d8*d9) +
+        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^2*d6^2*d7^2*d8) +
+        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7^2*d8) +
+        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7*d9^2) +
+        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d7^2*d9) +
+        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6*d8^2*d9) +
+        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d7*d8^2*d9) +
+        rat(6, -4 + d)/(d10*d2^n2*d3*d4*d5^3*d6^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d10*d3*d4*d5^2*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d3*d4*d5^2*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d10*d3*d4^2*d5^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d3*d4*d5^2*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-3*n2, -4 + d))/(d3*d4^2*d5^2*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d4*d5^2*d6*d7^2*d8) +
+        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d4*d5^2*d6^2*d7*d8) +
+        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d4^2*d5^2*d6*d7*d8) +
+        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d5^2*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(3*n2, -4 + d))/(d10*d3*d5^2*d6^2*d7*d8*d9) +
         rat(6 - 2*d + 3*n2, 3)/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n3 == 1 && n4 == 2 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n2 != 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?{>1}/d3/d4^2/d5/d6/d7/d8/d9/d10 =
 
-        (2*d2^(1 - n2))/(3*d3*d4^2*d5*d6*d7*d8*d9^2) - 
-        (2*d2^(2 - n2))/(3*d10*d3*d4^2*d5*d6*d7*d8*d9^2) + 
-        (2*d2^(1 - n2))/(3*d10*d3*d4^2*d5^2*d6*d7*d9) + 
-        (2*d2^(1 - n2))/(3*d10*d4^2*d5*d6*d7^2*d8*d9) - 
-        (2*d2^(1 - n2))/(3*d10*d3*d4*d5*d6*d7^2*d8*d9) - 
-        (2*d2^(1 - n2))/(3*d10*d3*d4^2*d5^2*d7*d8*d9) - 
-        d2^(1 - n2)/(d10*d3*d4^2*d5*d6*d7*d8*d9) + 
-        d2^(1 - n2)/(d10*d3*d4^2*d5*d6^2*d7*d9^2*(-1 + n2)) + 
-        (d2^(1 - n2)*rat(-4, -5 + d))/(d10^2*d3*d4^2*d5*d6*d7*d9^2) + 
-        (d2^(1 - n2)*rat(-2, -5 + d))/(d10*d3*d4^2*d5*d6*d7^2*d9^2) + 
-        (d2^(1 - n2)*rat(-2, -5 + d))/(d10*d3*d4^2*d5^2*d6*d7*d9^2) + 
-        (d2^(1 - n2)*rat(-2, -5 + d))/(d10*d3*d4^2*d5^2*d6*d7^2*d9) + 
-        (d2^(1 - n2)*rat(2, -5 + d))/(d10*d3*d4^2*d5*d7^2*d8*d9^2) + 
-        (d2^(1 - n2)*rat(2, -5 + d))/(d10*d3*d4^2*d5^2*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(2, -5 + d))/(d10*d3*d4^2*d5^2*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(4, -5 + d))/(d10^2*d4^2*d5*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(30 - 2*d - 20*n2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^3*d5*d6*d7*d8*d9^2) + 
-        rat(6 + 2*d - 16*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d9^2) + 
-        rat(-6 + 4*d - 14*n2, 3*(-5 + d))/(d10^2*d2^n2*d3*d4^2*d5*d6*d7*d9) + 
-        rat(-12 + 4*d - 8*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(-12 + 4*d - 8*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d8*d9^3) + 
-        (d2^(1 - n2)*rat(9 - d - 4*n2, 3*(-5 + d)*(-1 + n2)))/(d3^2*d4^2*d5*d6*d7*d8*d9^2) + 
-        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d2^n2*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d9) + 
-        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d6*d7^2*d8*d9) + 
-        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d4*d5*d6*d7^2*d8*d9) + 
-        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d6^2*d7*d8*d9) + 
-        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-6 + 2*d - 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d6^2*d7*d8) + 
-        (d2^(1 - n2)*rat(-6 + 2*d - 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d3*d4^2*d5^2*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(2 - 2*n2, -5 + d))/(d10*d3*d4^2*d6*d7*d8*d9^2) + 
-        rat(2 - 2*n2, -5 + d)/(d2^n2*d3*d4^2*d5*d6*d7*d8*d9^2) + 
-        rat(2 - 2*n2, -5 + d)/(d10*d2^n2*d3^2*d4*d5*d6*d7*d8*d9) + 
-        rat(12 - 2*d - 2*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9^2) + 
-        (d2^(1 - n2)*rat(12 - 2*d - 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(12 - 2*d - 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(12 - 2*d - 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-3 + d - 2*n2, (-5 + d)*(-4 + d - n2)))/(d10*d3*d4^2*d5*d6^2*d7^2*d9) + 
-        (d2^(1 - n2)*rat(-3 + d - 2*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d7^2*d8) + 
-        rat(-18 + 4*d - 2*n2, 3*(-5 + d))/(d2^n2*d3^2*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(6 - d - n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(-6 + d + n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d6*d7^2*d8*d9) + 
-        rat(-2 + 2*n2, -5 + d)/(d10^2*d2^n2*d3*d4^2*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-2 + 2*n2, -5 + d))/(d10*d3*d4^2*d5*d6*d8*d9^2) + 
-        rat(3 - d + 2*n2, -5 + d)/(d2^n2*d3*d4^2*d5*d6*d7*d8^2*d9) + 
-        rat(-12 + 2*d + 2*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d6*d7*d8*d9) + 
-        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5*d6*d7^2*d8) + 
-        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(6 - 2*d + 4*n2, 3*(-5 + d)))/(d10*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5*d6^2*d7*d9) + 
-        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d9) + 
-        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d5*d6*d7^2*d8*d9) + 
-        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(6 - 2*d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^3*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(6 - 2*d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d4^2*d5^2*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-9 + d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d9^2) + 
-        (d2^(1 - n2)*rat(-24 + 4*d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d6*d7*d8) + 
-        rat(12 - 4*d + 8*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^3*d5*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(12 - 4*d + 8*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d6*d7*d8*d9^3) + 
-        (d2^(1 - n2)*rat(-18 + 2*d + 8*n2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^3*d5*d6*d7*d8^2*d9) + 
-        rat(-2*d + 10*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5^2*d6*d7*d8) + 
-        rat(6 - 4*d + 14*n2, 3*(-5 + d))/(d10^2*d2^n2*d4^2*d5*d6*d7*d8*d9) + 
-        rat(-6 - 2*d + 16*n2, 3*(-5 + d))/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-30 + 2*d + 20*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-42 + 2*d + 32*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d4^3*d5*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-60 + 28*d - 4*d^2 - 20*n2 + 12*d*n2 - 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^2*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-30 + 22*d - 4*d^2 - 50*n2 + 18*d*n2 - 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3^2*d4^2*d5*d6*d7*d9) + 
-        (d2^(2 - n2)*rat(10 - 6*d + 16*n2 + 4*d*n2 - 16*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-36 + 14*d - 2*d^2 + 2*n2 + 6*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d7^2*d9) + 
-        (d2^(1 - n2)*rat(-36 + 14*d - 2*d^2 + 2*n2 + 6*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-66 + 30*d - 4*d^2 - 18*n2 + 10*d*n2 - 16*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^3*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-6 + 8*d - 2*d^2 - 28*n2 + 12*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^3*d7*d9) + 
-        (d2^(1 - n2)*rat(174 - 58*d + 4*d^2 - 58*n2 + 18*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6^2*d7*d9) + 
-        rat(-84 + 34*d - 4*d^2 - 2*n2 + 6*d*n2 - 14*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^2*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-54 + 28*d - 4*d^2 - 32*n2 + 12*d*n2 - 14*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d8*d9^2) + 
-        rat(-9 + 19*d - 4*d^2 - 77*n2 + 21*d*n2 - 14*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(34 - 10*d - 12*n2 + 8*d*n2 - 12*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d8*d9) + 
-        rat(-15 + 11*d - 2*d^2 - 25*n2 + 9*d*n2 - 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^2*d5*d6^2*d7*d8*d9) + 
-        rat(-75 + 38*d - 5*d^2 - 40*n2 + 12*d*n2 - 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d6*d7^2*d8*d9) + 
-        rat(90 - 25*d + d^2 - 55*n2 + 15*d*n2 - 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(42 - 20*d + 2*d^2 + 16*n2 - 8*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^4*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(42 - 20*d + 2*d^2 + 16*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^3*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-5 - d + 18*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d4^2*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-5 - d + 18*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(-5 - d + 18*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(5 - 3*d + 8*n2 + 2*d*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(5 - 3*d + 8*n2 + 2*d*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d3^2*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-18 + 7*d - d^2 + n2 + 3*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7^2*d9) + 
-        (d2^(1 - n2)*rat(-78 + 34*d - 4*d^2 - 14*n2 + 6*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-3 + 4*d - d^2 - 14*n2 + 6*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3*d4^2*d5*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(-18 + 12*d - 2*d^2 - 24*n2 + 8*d*n2 - 8*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d8^2*d9) + 
-        rat(132 - 38*d + 2*d^2 - 74*n2 + 18*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-2*d + 16*n2 - 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d3*d4^2*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(11 - 3*d - 10*n2 + 4*d*n2 - 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7*d8*d9) + 
-        rat(17 - 5*d - 6*n2 + 4*d*n2 - 6*n2^2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-54 + 20*d - 2*d^2 + 8*n2 - 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d6*d8*d9) + 
-        rat(-24 + 9*d - d^2 + 3*n2 + d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-24 + 9*d - d^2 + 3*n2 + d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d6*d7*d8*d9^2) + 
-        rat(6 - 2*d - 2*n2 + 2*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^3*d5*d6*d7*d8*d9) + 
-        rat(-44 + 18*d - 2*d^2 - 2*n2 + 2*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(-39 + 17*d - 2*d^2 - 7*n2 + 3*d*n2 - 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d8*d9^2) + 
-        rat(-14 + 7*d - d^2 - 7*n2 + 3*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d8*d9) + 
-        rat(-9 + 6*d - d^2 - 12*n2 + 4*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8^2) + 
-        (d2^(1 - n2)*rat(-9 + 6*d - d^2 - 12*n2 + 4*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(-9 + 6*d - d^2 - 12*n2 + 4*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(156 - 52*d + 4*d^2 - 52*n2 + 12*d*n2 - 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(2*n2 - 2*n2^2, -5 + d))/(d10*d3*d4^2*d5*d6*d7*d8) + 
-        rat(-2 + 4*n2 - 2*n2^2, -5 + d)/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9) + 
-        rat(-32 + 11*d - d^2 + 9*n2 - d*n2 - 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d7*d8^2*d9) + 
-        rat(27 - 10*d + d^2 - 4*n2 + 2*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^2*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-2*n2 + 2*n2^2, -5 + d))/(d3*d4^2*d5*d6*d7*d8*d9) + 
-        rat(-108 + 32*d - 2*d^2 + 56*n2 - 12*d*n2 + 2*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5^2*d6*d7*d9) + 
-        rat(7 - 6*d + d^2 + 16*n2 - 4*d*n2 + 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5^2*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(8*n2 - 2*d*n2 + 2*n2^2, -5 + d))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        rat(32 - 11*d + d^2 - 9*n2 + d*n2 + 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8^2*d9) + 
-        rat(32 - 11*d + d^2 - 9*n2 + d*n2 + 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(-12*n2 + 2*d*n2 + 2*n2^2, 3*(-5 + d)))/(d10*d3*d4^2*d5*d7*d8*d9) + 
-        rat(132 - 46*d + 4*d^2 - 34*n2 + 6*d*n2 + 2*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9) + 
-        rat(-21 + 10*d - d^2 - 8*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^2*d5^2*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-21 + 10*d - d^2 - 8*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-21 + 10*d - d^2 - 8*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-156 + 52*d - 4*d^2 + 52*n2 - 12*d*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d6*d7*d9) + 
-        rat(-21 + 5*d + 17*n2 - 5*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(9 - 6*d + d^2 + 12*n2 - 4*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(9 - 6*d + d^2 + 12*n2 - 4*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d6^2*d7*d8*d9) + 
-        rat(14 - 7*d + d^2 + 7*n2 - 3*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^2*d5*d6^2*d7*d8*d9) + 
-        rat(-6 + 2*d + 2*n2 - 2*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d5*d6*d7*d8) + 
-        rat(44 - 18*d + 2*d^2 + 2*n2 - 2*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^3*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(24 - 9*d + d^2 - 3*n2 - d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d8*d9^2) + 
-        (d2^(1 - n2)*rat(2*d - 16*n2 + 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d4^2*d5*d6*d7*d8*d9) + 
-        rat(21 - 13*d + 2*d^2 + 23*n2 - 7*d*n2 + 6*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^2*d5*d6*d7*d8^2*d9) + 
-        rat(-17 + 5*d + 6*n2 - 4*d*n2 + 6*n2^2, 3*(-5 + d))/(d2^n2*d3*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-11 + 3*d + 10*n2 - 4*d*n2 + 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(5 + d - 18*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(5 + d - 18*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^2*d5*d6*d7*d8^2*d9) + 
-        (d2^(2 - n2)*rat(5 + d - 18*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-42 + 20*d - 2*d^2 - 16*n2 + 8*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^4*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(-42 + 20*d - 2*d^2 - 16*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3*d4^3*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-42 + 20*d - 2*d^2 - 16*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^3*d5^2*d6*d7*d8*d9) + 
-        rat(-132 + 38*d - 2*d^2 + 74*n2 - 18*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(3 - 4*d + d^2 + 14*n2 - 6*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^2*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(78 - 34*d + 4*d^2 + 14*n2 - 6*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^3*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(18 - 7*d + d^2 - n2 - 3*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d3^2*d4^2*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-5 + 3*d - 8*n2 - 2*d*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-5 + 3*d - 8*n2 - 2*d*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d6*d7^2*d8*d9) + 
-        rat(-90 + 25*d - d^2 + 55*n2 - 15*d*n2 + 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d6^2*d7*d8*d9) + 
-        rat(15 - 11*d + 2*d^2 + 25*n2 - 9*d*n2 + 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d7*d8) + 
-        (d2^(1 - n2)*rat(-34 + 10*d + 12*n2 - 8*d*n2 + 12*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d4^3*d5*d6*d7*d8*d9) + 
-        rat(18 - 10*d + 2*d^2 + 8*n2 - 8*d*n2 + 14*n2^2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9) + 
-        rat(84 - 34*d + 4*d^2 + 2*n2 - 6*d*n2 + 14*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-174 + 58*d - 4*d^2 + 58*n2 - 18*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-174 + 58*d - 4*d^2 + 58*n2 - 18*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(6 - 8*d + 2*d^2 + 28*n2 - 12*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d8*d9^2) + 
-        (d2^(1 - n2)*rat(6 - 8*d + 2*d^2 + 28*n2 - 12*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6*d7^2*d8*d9^2) + 
-        (d2^(1 - n2)*rat(6 - 8*d + 2*d^2 + 28*n2 - 12*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^3*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(66 - 30*d + 4*d^2 + 18*n2 - 10*d*n2 + 16*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(36 - 14*d + 2*d^2 - 2*n2 - 6*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d3*d4^3*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(36 - 14*d + 2*d^2 - 2*n2 - 6*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d3^2*d4^3*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-10 + 6*d - 16*n2 - 4*d*n2 + 16*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(30 - 22*d + 4*d^2 + 50*n2 - 18*d*n2 + 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^2*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(60 - 28*d + 4*d^2 + 20*n2 - 12*d*n2 + 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3*d4^2*d5*d6*d7^2*d9) + 
+        (2*d2^(1 - n2))/(3*d3*d4^2*d5*d6*d7*d8*d9^2) -
+        (2*d2^(2 - n2))/(3*d10*d3*d4^2*d5*d6*d7*d8*d9^2) +
+        (2*d2^(1 - n2))/(3*d10*d3*d4^2*d5^2*d6*d7*d9) +
+        (2*d2^(1 - n2))/(3*d10*d4^2*d5*d6*d7^2*d8*d9) -
+        (2*d2^(1 - n2))/(3*d10*d3*d4*d5*d6*d7^2*d8*d9) -
+        (2*d2^(1 - n2))/(3*d10*d3*d4^2*d5^2*d7*d8*d9) -
+        d2^(1 - n2)/(d10*d3*d4^2*d5*d6*d7*d8*d9) +
+        d2^(1 - n2)/(d10*d3*d4^2*d5*d6^2*d7*d9^2*(-1 + n2)) +
+        (d2^(1 - n2)*rat(-4, -5 + d))/(d10^2*d3*d4^2*d5*d6*d7*d9^2) +
+        (d2^(1 - n2)*rat(-2, -5 + d))/(d10*d3*d4^2*d5*d6*d7^2*d9^2) +
+        (d2^(1 - n2)*rat(-2, -5 + d))/(d10*d3*d4^2*d5^2*d6*d7*d9^2) +
+        (d2^(1 - n2)*rat(-2, -5 + d))/(d10*d3*d4^2*d5^2*d6*d7^2*d9) +
+        (d2^(1 - n2)*rat(2, -5 + d))/(d10*d3*d4^2*d5*d7^2*d8*d9^2) +
+        (d2^(1 - n2)*rat(2, -5 + d))/(d10*d3*d4^2*d5^2*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(2, -5 + d))/(d10*d3*d4^2*d5^2*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(4, -5 + d))/(d10^2*d4^2*d5*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(30 - 2*d - 20*n2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^3*d5*d6*d7*d8*d9^2) +
+        rat(6 + 2*d - 16*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d9^2) +
+        rat(-6 + 4*d - 14*n2, 3*(-5 + d))/(d10^2*d2^n2*d3*d4^2*d5*d6*d7*d9) +
+        rat(-12 + 4*d - 8*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(-12 + 4*d - 8*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d8*d9^3) +
+        (d2^(1 - n2)*rat(9 - d - 4*n2, 3*(-5 + d)*(-1 + n2)))/(d3^2*d4^2*d5*d6*d7*d8*d9^2) +
+        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d2^n2*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d9) +
+        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d6*d7^2*d8*d9) +
+        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d4*d5*d6*d7^2*d8*d9) +
+        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d6^2*d7*d8*d9) +
+        rat(-6 + 2*d - 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-6 + 2*d - 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d6^2*d7*d8) +
+        (d2^(1 - n2)*rat(-6 + 2*d - 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d3*d4^2*d5^2*d6*d7*d9) +
+        (d2^(1 - n2)*rat(2 - 2*n2, -5 + d))/(d10*d3*d4^2*d6*d7*d8*d9^2) +
+        rat(2 - 2*n2, -5 + d)/(d2^n2*d3*d4^2*d5*d6*d7*d8*d9^2) +
+        rat(2 - 2*n2, -5 + d)/(d10*d2^n2*d3^2*d4*d5*d6*d7*d8*d9) +
+        rat(12 - 2*d - 2*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9^2) +
+        (d2^(1 - n2)*rat(12 - 2*d - 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(12 - 2*d - 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(12 - 2*d - 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-3 + d - 2*n2, (-5 + d)*(-4 + d - n2)))/(d10*d3*d4^2*d5*d6^2*d7^2*d9) +
+        (d2^(1 - n2)*rat(-3 + d - 2*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d7^2*d8) +
+        rat(-18 + 4*d - 2*n2, 3*(-5 + d))/(d2^n2*d3^2*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(6 - d - n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(-6 + d + n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d6*d7^2*d8*d9) +
+        rat(-2 + 2*n2, -5 + d)/(d10^2*d2^n2*d3*d4^2*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-2 + 2*n2, -5 + d))/(d10*d3*d4^2*d5*d6*d8*d9^2) +
+        rat(3 - d + 2*n2, -5 + d)/(d2^n2*d3*d4^2*d5*d6*d7*d8^2*d9) +
+        rat(-12 + 2*d + 2*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-12 + 2*d + 2*n2, (-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d6*d7*d8*d9) +
+        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5*d6*d7^2*d8) +
+        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(6 - 2*d + 4*n2, 3*(-5 + d)))/(d10*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5*d6^2*d7*d9) +
+        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d9) +
+        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d5*d6*d7^2*d8*d9) +
+        rat(6 - 2*d + 4*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(6 - 2*d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^3*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(6 - 2*d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d4^2*d5^2*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-9 + d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d9^2) +
+        (d2^(1 - n2)*rat(-24 + 4*d + 4*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d6*d7*d8) +
+        rat(12 - 4*d + 8*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^3*d5*d7*d8*d9) +
+        (d2^(1 - n2)*rat(12 - 4*d + 8*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d6*d7*d8*d9^3) +
+        (d2^(1 - n2)*rat(-18 + 2*d + 8*n2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^3*d5*d6*d7*d8^2*d9) +
+        rat(-2*d + 10*n2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5^2*d6*d7*d8) +
+        rat(6 - 4*d + 14*n2, 3*(-5 + d))/(d10^2*d2^n2*d4^2*d5*d6*d7*d8*d9) +
+        rat(-6 - 2*d + 16*n2, 3*(-5 + d))/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-30 + 2*d + 20*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-42 + 2*d + 32*n2, 3*(-5 + d)*(-1 + n2)))/(d10*d4^3*d5*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-60 + 28*d - 4*d^2 - 20*n2 + 12*d*n2 - 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^2*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-30 + 22*d - 4*d^2 - 50*n2 + 18*d*n2 - 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3^2*d4^2*d5*d6*d7*d9) +
+        (d2^(2 - n2)*rat(10 - 6*d + 16*n2 + 4*d*n2 - 16*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-36 + 14*d - 2*d^2 + 2*n2 + 6*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d7^2*d9) +
+        (d2^(1 - n2)*rat(-36 + 14*d - 2*d^2 + 2*n2 + 6*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-66 + 30*d - 4*d^2 - 18*n2 + 10*d*n2 - 16*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^3*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-6 + 8*d - 2*d^2 - 28*n2 + 12*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^3*d7*d9) +
+        (d2^(1 - n2)*rat(174 - 58*d + 4*d^2 - 58*n2 + 18*d*n2 - 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6^2*d7*d9) +
+        rat(-84 + 34*d - 4*d^2 - 2*n2 + 6*d*n2 - 14*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^2*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-54 + 28*d - 4*d^2 - 32*n2 + 12*d*n2 - 14*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d8*d9^2) +
+        rat(-9 + 19*d - 4*d^2 - 77*n2 + 21*d*n2 - 14*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(34 - 10*d - 12*n2 + 8*d*n2 - 12*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d8*d9) +
+        rat(-15 + 11*d - 2*d^2 - 25*n2 + 9*d*n2 - 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^2*d5*d6^2*d7*d8*d9) +
+        rat(-75 + 38*d - 5*d^2 - 40*n2 + 12*d*n2 - 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d6*d7^2*d8*d9) +
+        rat(90 - 25*d + d^2 - 55*n2 + 15*d*n2 - 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(42 - 20*d + 2*d^2 + 16*n2 - 8*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^4*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(42 - 20*d + 2*d^2 + 16*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^3*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-5 - d + 18*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d4^2*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-5 - d + 18*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d8*d9) +
+        (d2^(1 - n2)*rat(-5 - d + 18*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(5 - 3*d + 8*n2 + 2*d*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(5 - 3*d + 8*n2 + 2*d*n2 - 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d3^2*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-18 + 7*d - d^2 + n2 + 3*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7^2*d9) +
+        (d2^(1 - n2)*rat(-78 + 34*d - 4*d^2 - 14*n2 + 6*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6^2*d8*d9) +
+        (d2^(1 - n2)*rat(-3 + 4*d - d^2 - 14*n2 + 6*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3*d4^2*d5*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(-18 + 12*d - 2*d^2 - 24*n2 + 8*d*n2 - 8*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d8^2*d9) +
+        rat(132 - 38*d + 2*d^2 - 74*n2 + 18*d*n2 - 8*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-2*d + 16*n2 - 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d3*d4^2*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(11 - 3*d - 10*n2 + 4*d*n2 - 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7*d8*d9) +
+        rat(17 - 5*d - 6*n2 + 4*d*n2 - 6*n2^2, 3*(-5 + d))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-54 + 20*d - 2*d^2 + 8*n2 - 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d6*d8*d9) +
+        rat(-24 + 9*d - d^2 + 3*n2 + d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-24 + 9*d - d^2 + 3*n2 + d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d6*d7*d8*d9^2) +
+        rat(6 - 2*d - 2*n2 + 2*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^3*d5*d6*d7*d8*d9) +
+        rat(-44 + 18*d - 2*d^2 - 2*n2 + 2*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(-39 + 17*d - 2*d^2 - 7*n2 + 3*d*n2 - 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d8*d9^2) +
+        rat(-14 + 7*d - d^2 - 7*n2 + 3*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d8*d9) +
+        rat(-9 + 6*d - d^2 - 12*n2 + 4*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8^2) +
+        (d2^(1 - n2)*rat(-9 + 6*d - d^2 - 12*n2 + 4*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(-9 + 6*d - d^2 - 12*n2 + 4*d*n2 - 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(156 - 52*d + 4*d^2 - 52*n2 + 12*d*n2 - 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(2*n2 - 2*n2^2, -5 + d))/(d10*d3*d4^2*d5*d6*d7*d8) +
+        rat(-2 + 4*n2 - 2*n2^2, -5 + d)/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9) +
+        rat(-32 + 11*d - d^2 + 9*n2 - d*n2 - 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d7*d8^2*d9) +
+        rat(27 - 10*d + d^2 - 4*n2 + 2*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^2*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-2*n2 + 2*n2^2, -5 + d))/(d3*d4^2*d5*d6*d7*d8*d9) +
+        rat(-108 + 32*d - 2*d^2 + 56*n2 - 12*d*n2 + 2*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5^2*d6*d7*d9) +
+        rat(7 - 6*d + d^2 + 16*n2 - 4*d*n2 + 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5^2*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(8*n2 - 2*d*n2 + 2*n2^2, -5 + d))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        rat(32 - 11*d + d^2 - 9*n2 + d*n2 + 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8^2*d9) +
+        rat(32 - 11*d + d^2 - 9*n2 + d*n2 + 2*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(-12*n2 + 2*d*n2 + 2*n2^2, 3*(-5 + d)))/(d10*d3*d4^2*d5*d7*d8*d9) +
+        rat(132 - 46*d + 4*d^2 - 34*n2 + 6*d*n2 + 2*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9) +
+        rat(-21 + 10*d - d^2 - 8*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d2^n2*d3*d4^2*d5^2*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-21 + 10*d - d^2 - 8*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-21 + 10*d - d^2 - 8*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^2*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-156 + 52*d - 4*d^2 + 52*n2 - 12*d*n2 + 4*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5^2*d6*d7*d9) +
+        rat(-21 + 5*d + 17*n2 - 5*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(9 - 6*d + d^2 + 12*n2 - 4*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(9 - 6*d + d^2 + 12*n2 - 4*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d6^2*d7*d8*d9) +
+        rat(14 - 7*d + d^2 + 7*n2 - 3*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^2*d5*d6^2*d7*d8*d9) +
+        rat(-6 + 2*d + 2*n2 - 2*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d5*d6*d7*d8) +
+        rat(44 - 18*d + 2*d^2 + 2*n2 - 2*d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^3*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(24 - 9*d + d^2 - 3*n2 - d*n2 + 4*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d8*d9^2) +
+        (d2^(1 - n2)*rat(2*d - 16*n2 + 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10^2*d4^2*d5*d6*d7*d8*d9) +
+        rat(21 - 13*d + 2*d^2 + 23*n2 - 7*d*n2 + 6*n2^2, (-5 + d)*(-4 + d - n2))/(d10*d2^n2*d4^2*d5*d6*d7*d8^2*d9) +
+        rat(-17 + 5*d + 6*n2 - 4*d*n2 + 6*n2^2, 3*(-5 + d))/(d2^n2*d3*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-11 + 3*d + 10*n2 - 4*d*n2 + 6*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(5 + d - 18*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5^2*d6*d7*d8) +
+        (d2^(1 - n2)*rat(5 + d - 18*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d3*d4^2*d5*d6*d7*d8^2*d9) +
+        (d2^(2 - n2)*rat(5 + d - 18*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-42 + 20*d - 2*d^2 - 16*n2 + 8*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^4*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(-42 + 20*d - 2*d^2 - 16*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3*d4^3*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-42 + 20*d - 2*d^2 - 16*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^3*d5^2*d6*d7*d8*d9) +
+        rat(-132 + 38*d - 2*d^2 + 74*n2 - 18*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^3*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(3 - 4*d + d^2 + 14*n2 - 6*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^2*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(78 - 34*d + 4*d^2 + 14*n2 - 6*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^3*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(18 - 7*d + d^2 - n2 - 3*d*n2 + 8*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d3^2*d4^2*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-5 + 3*d - 8*n2 - 2*d*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-5 + 3*d - 8*n2 - 2*d*n2 + 8*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^2*d6*d7^2*d8*d9) +
+        rat(-90 + 25*d - d^2 + 55*n2 - 15*d*n2 + 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d6^2*d7*d8*d9) +
+        rat(15 - 11*d + 2*d^2 + 25*n2 - 9*d*n2 + 10*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d7*d8) +
+        (d2^(1 - n2)*rat(-34 + 10*d + 12*n2 - 8*d*n2 + 12*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d4^3*d5*d6*d7*d8*d9) +
+        rat(18 - 10*d + 2*d^2 + 8*n2 - 8*d*n2 + 14*n2^2, 3*(-5 + d))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9) +
+        rat(84 - 34*d + 4*d^2 + 2*n2 - 6*d*n2 + 14*n2^2, 3*(-5 + d)*(-4 + d - n2))/(d10*d2^n2*d3*d4^2*d5*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-174 + 58*d - 4*d^2 + 58*n2 - 18*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-174 + 58*d - 4*d^2 + 58*n2 - 18*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(6 - 8*d + 2*d^2 + 28*n2 - 12*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^3*d5*d6*d8*d9^2) +
+        (d2^(1 - n2)*rat(6 - 8*d + 2*d^2 + 28*n2 - 12*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6*d7^2*d8*d9^2) +
+        (d2^(1 - n2)*rat(6 - 8*d + 2*d^2 + 28*n2 - 12*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d6^3*d7*d8*d9) +
+        (d2^(1 - n2)*rat(66 - 30*d + 4*d^2 + 18*n2 - 10*d*n2 + 16*n2^2, (-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d3^2*d4^3*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(36 - 14*d + 2*d^2 - 2*n2 - 6*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d3*d4^3*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(36 - 14*d + 2*d^2 - 2*n2 - 6*d*n2 + 16*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d3^2*d4^3*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-10 + 6*d - 16*n2 - 4*d*n2 + 16*n2^2, 3*(-5 + d)*(-1 + n2)))/(d10*d3*d4^3*d5*d7*d8*d9) +
+        (d2^(1 - n2)*rat(30 - 22*d + 4*d^2 + 50*n2 - 18*d*n2 + 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d4^2*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(60 - 28*d + 4*d^2 + 20*n2 - 12*d*n2 + 20*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10^2*d3*d4^2*d5*d6*d7^2*d9) +
         (d2^(1 - n2)*rat(-18 - 10*d + 4*d^2 + 86*n2 - 30*d*n2 + 32*n2^2, 3*(-5 + d)*(-4 + d - n2)*(-1 + n2)))/(d10*d4^3*d5*d6*d7*d8^2*d9);
 
 * n1 == 0 && n10 == 1 && n3 == 2 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?pos_/d3^2/d4/d5/d6/d7/d8/d9/d10 =
 
-        (5*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6*d7*d8^2) + 
-        (2*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7^2*d8) - 
-        d2^(-1 - n2)/(d10*d3*d4*d5^2*d6*d7*d8) + 
-        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d6*d7*d8) - 
-        d2^(-1 - n2)/(d10^2*d3^2*d4*d5*d6*d7*d8) + 
-        (3*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6*d7*d9^2) + 
-        (2*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6*d8*d9^2) - 
-        (4*d2^(-1 - n2))/(d10*d3^2*d4*d5*d7*d8*d9^2) - 
-        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6*d7*d8*d9^2) + 
-        (4*d2^(-1 - n2))/(d10*d3^2*d5*d6*d7*d8*d9^2) + 
-        d2^(-1 - n2)/(d3^2*d4*d5*d6*d7*d8*d9^2) + 
-        d2^(-1 - n2)/(d3*d4*d5*d6*d7*d8*d9^2) - 
-        (2*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6^2*d7*d9) - 
-        (2*d2^(-1 - n2))/(d10*d3*d4*d5*d6^2*d7*d9) + 
-        d2^(-1 - n2)/(d10*d3*d4*d5^2*d6*d7*d9) + 
-        d2^(-1 - n2)/(d10*d3^2*d4^2*d5*d6*d7*d9) - 
-        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d6*d7*d9) - 
-        (2*d2^(-1 - n2))/(d10*d3^2*d4*d5*d7*d8^2*d9) + 
-        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6*d7*d8^2*d9) + 
-        d2^(-1 - n2)/(d10*d4*d5*d6*d7*d8^2*d9) - 
-        (8*d2^(-1 - n2))/(d3^2*d4*d5*d6*d7*d8^2*d9) - 
-        d2^(-1 - n2)/(d3*d4*d5*d6*d7*d8^2*d9) - 
-        (3*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6^2*d8*d9) + 
-        d2^(-1 - n2)/(d10*d3*d4*d5^2*d6*d8*d9) + 
-        (2*d2^(-1 - n2))/(d10*d3*d4^2*d5*d6*d8*d9) + 
-        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d6*d8*d9) - 
-        d2^(-1 - n2)/(d10^2*d3^2*d4*d5*d6*d8*d9) - 
-        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6*d7^2*d8*d9) - 
-        (2*d2^(-1 - n2))/(d10*d3*d4*d6*d7^2*d8*d9) - 
-        d2^(-1 - n2)/(d10*d3*d5*d6*d7^2*d8*d9) + 
-        d2^(-1 - n2)/(d10*d4*d5*d6*d7^2*d8*d9) - 
-        d2^(-1 - n2)/(d10*d3*d4*d5^2*d7*d8*d9) - 
-        (2*d2^(-1 - n2))/(d10*d3*d4^2*d5*d7*d8*d9) - 
-        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d7*d8*d9) - 
-        d2^(-1 - n2)/(d10^2*d3^2*d4*d5*d7*d8*d9) + 
-        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6^2*d7*d8*d9) + 
-        (2*d2^(-1 - n2))/(d10*d3*d4*d6^2*d7*d8*d9) + 
-        d2^(-1 - n2)/(d10*d3*d5*d6^2*d7*d8*d9) - 
-        d2^(-1 - n2)/(d10*d3^2*d4^2*d6*d7*d8*d9) + 
-        d2^(-1 - n2)/(d10^2*d3^2*d4*d6*d7*d8*d9) + 
-        d2^(-1 - n2)/(d10^2*d3^2*d5*d6*d7*d8*d9) - 
-        (2*d2^(-1 - n2))/(d10*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(-2 - n2)*(-3 - 3*n2))/(d10*d3^2*d4*d5*d7*d8*d9) + 
-        (d2^(-2 - n2)*(-3 - 3*n2))/(d3^2*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-2 - n2)*(-2 - 2*n2))/(d3*d4*d5*d6*d7*d8*d9) + 
-        7/(2*d10*d2^n2*d3^2*d4*d5*d6^2*d7*d8^2*n2) + 
-        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d7*d8^2*n2) + 
-        2/(d10*d2^n2*d3^2*d4^2*d5*d6*d7^2*d8*n2) + 
-        4/(d10*d2^n2*d3^3*d4*d5*d6*d7^2*d8*n2) + 
-        6/(d10^2*d2^n2*d3^2*d4*d5*d6*d7^2*d8*n2) + 
-        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6^2*d7*d8*n2) - 
-        7/(d10^2*d2^n2*d3^2*d4*d5*d6^2*d7*d8*n2) - 
-        5/(d10^2*d2^n2*d3^2*d4*d5^2*d6*d7*d8*n2) + 
-        4/(d10*d2^n2*d3^3*d4^2*d5*d6*d7*d8*n2) + 
-        8/(d10^2*d2^n2*d3^2*d4^2*d5*d6*d7*d8*n2) + 
-        6/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9^3*n2) - 
-        6/(d10*d2^n2*d3^2*d4*d6*d7*d8*d9^3*n2) + 
-        3/(d10*d2^n2*d3^2*d4*d5*d6^2*d7*d9^2*n2) - 
-        4/(d10*d2^n2*d3^3*d4*d5*d6*d7*d9^2*n2) - 
-        2/(d10*d2^n2*d3^2*d4*d5*d6*d8^2*d9^2*n2) - 
-        1/(d10*d2^n2*d3^2*d4*d5*d7*d8^2*d9^2*n2) + 
-        3/(d10*d2^n2*d3^2*d4*d6*d7*d8^2*d9^2*n2) - 
-        3/(d10*d2^n2*d3^2*d4*d5*d6^2*d8*d9^2*n2) + 
-        3/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9^2*n2) - 
-        2/(d10*d2^n2*d3^3*d4*d5*d6*d8*d9^2*n2) - 
-        1/(d10^2*d2^n2*d3^2*d4*d5*d6*d8*d9^2*n2) + 
-        3/(d10*d2^n2*d3^2*d4*d6*d7^2*d8*d9^2*n2) - 
-        1/(d10^2*d2^n2*d3^2*d4*d5*d7*d8*d9^2*n2) - 
-        3/(d10*d2^n2*d3^2*d4^2*d6*d7*d8*d9^2*n2) + 
-        2/(d10*d2^n2*d3^3*d4*d6*d7*d8*d9^2*n2) + 
-        1/(d10^2*d2^n2*d3^2*d4*d6*d7*d8*d9^2*n2) + 
-        1/(d10^2*d2^n2*d3^2*d5*d6*d7*d8*d9^2*n2) + 
-        4/(d2^n2*d3^3*d4*d5*d6*d7*d8*d9^2*n2) + 
-        9/(2*d10*d2^n2*d3^2*d4^2*d5*d6*d7^2*d9*n2) + 
-        9/(d10*d2^n2*d3^3*d4*d5*d6*d7^2*d9*n2) + 
-        4/(d10^2*d2^n2*d3^2*d4*d5*d6*d7^2*d9*n2) - 
-        6/(d10*d2^n2*d3^2*d4*d5*d6^3*d7*d9*n2) - 
-        3/(2*d10*d2^n2*d3^2*d4*d5^2*d6^2*d7*d9*n2) + 
-        1/(d10*d2^n2*d3^2*d4^2*d5*d6^2*d7*d9*n2) - 
-        5/(d10*d2^n2*d3^3*d4*d5*d6^2*d7*d9*n2) - 
-        3/(d10^2*d2^n2*d3^2*d4*d5*d6^2*d7*d9*n2) + 
-        5/(d10^2*d2^n2*d3^2*d4*d5^2*d6*d7*d9*n2) + 
-        9/(d10*d2^n2*d3^3*d4^2*d5*d6*d7*d9*n2) - 
-        2/(d10^2*d2^n2*d3^2*d4^2*d5*d6*d7*d9*n2) + 
-        8/(d10^2*d2^n2*d3^3*d4*d5*d6*d7*d9*n2) - 
-        7/(2*d10*d2^n2*d3^2*d4*d5*d6^2*d8^2*d9*n2) - 
-        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d8^2*d9*n2) + 
-        3/(2*d10*d2^n2*d3^2*d4^2*d5*d6*d8^2*d9*n2) - 
-        4/(d10*d2^n2*d3^3*d4*d5*d6*d8^2*d9*n2) - 
-        2/(d10^2*d2^n2*d3^2*d4*d5*d6*d8^2*d9*n2) + 
-        9/(2*d10*d2^n2*d3^2*d4*d5^2*d7*d8^2*d9*n2) - 
-        6/(d10*d2^n2*d3^2*d4^2*d5*d7*d8^2*d9*n2) - 
-        4/(d10*d2^n2*d3^3*d4*d5*d7*d8^2*d9*n2) - 
-        2/(d10^2*d2^n2*d3^2*d4*d5*d7*d8^2*d9*n2) - 
-        3/(d10*d2^n2*d3^2*d4*d6^2*d7*d8^2*d9*n2) + 
-        6/(d10*d2^n2*d3^2*d4^2*d6*d7*d8^2*d9*n2) + 
-        4/(d10*d2^n2*d3^3*d4*d6*d7*d8^2*d9*n2) + 
-        2/(d10^2*d2^n2*d3^2*d4*d6*d7*d8^2*d9*n2) + 
-        4/(d10*d2^n2*d3^3*d5*d6*d7*d8^2*d9*n2) + 
-        2/(d10^2*d2^n2*d3^2*d5*d6*d7*d8^2*d9*n2) - 
-        3/(2*d2^n2*d3^2*d4^2*d5*d6*d7*d8^2*d9*n2) - 
-        8/(d2^n2*d3^3*d4*d5*d6*d7*d8^2*d9*n2) - 
-        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6^2*d8*d9*n2) - 
-        21/(d10*d2^n2*d3^3*d4*d5*d6^2*d8*d9*n2) + 
-        5/(d10^2*d2^n2*d3^2*d4*d5^2*d6*d8*d9*n2) + 
-        19/(d10*d2^n2*d3^3*d4^2*d5*d6*d8*d9*n2) + 
-        2/(d10^2*d2^n2*d3^2*d4^2*d5*d6*d8*d9*n2) - 
-        4/(d10^2*d2^n2*d3^3*d4*d5*d6*d8*d9*n2) - 
-        3/(d10*d2^n2*d3^2*d4*d6^2*d7^2*d8*d9*n2) - 
-        2/(d10*d2^n2*d3^2*d4^2*d6*d7^2*d8*d9*n2) - 
-        4/(d10*d2^n2*d3^3*d4*d6*d7^2*d8*d9*n2) - 
-        6/(d10^2*d2^n2*d3^2*d4*d6*d7^2*d8*d9*n2) - 
-        19/(d10*d2^n2*d3^3*d5*d6*d7^2*d8*d9*n2) - 
-        4/(d10^2*d2^n2*d3^2*d5*d6*d7^2*d8*d9*n2) - 
-        9/(2*d2^n2*d3^2*d4^2*d5*d6*d7^2*d8*d9*n2) - 
-        9/(d2^n2*d3^3*d4*d5*d6*d7^2*d8*d9*n2) - 
-        5/(d10^2*d2^n2*d3^2*d4*d5^2*d7*d8*d9*n2) - 
-        8/(d10^2*d2^n2*d3^2*d4^2*d5*d7*d8*d9*n2) - 
-        4/(d10^2*d2^n2*d3^3*d4*d5*d7*d8*d9*n2) + 
-        6/(d10*d2^n2*d3^2*d4*d6^3*d7*d8*d9*n2) - 
-        1/(d10*d2^n2*d3^2*d4^2*d6^2*d7*d8*d9*n2) - 
-        2/(d10*d2^n2*d3^3*d4*d6^2*d7*d8*d9*n2) + 
-        3/(d10^2*d2^n2*d3^2*d4*d6^2*d7*d8*d9*n2) + 
-        21/(d10*d2^n2*d3^3*d5*d6^2*d7*d8*d9*n2) + 
-        7/(d10^2*d2^n2*d3^2*d5*d6^2*d7*d8*d9*n2) + 
-        7/(d2^n2*d3^3*d4*d5*d6^2*d7*d8*d9*n2) - 
-        4/(d10*d2^n2*d3^3*d4^2*d6*d7*d8*d9*n2) + 
-        4/(d10^2*d2^n2*d3^3*d4*d6*d7*d8*d9*n2) + 
-        4/(d10^2*d2^n2*d3^3*d5*d6*d7*d8*d9*n2) - 
-        9/(d2^n2*d3^3*d4^2*d5*d6*d7*d8*d9*n2) - 
-        (2*d2^(-1 - n2)*n2)/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-2 - n2)*(2 + 2*n2))/(d10*d3*d4*d5*d6*d7*d8) + 
-        (d2^(-2 - n2)*(3 + 3*n2))/(d10*d3^2*d4*d5*d6*d7*d8) + 
-        (d2^(-2 - n2)*(3 + 3*n2))/(d10*d3^2*d5*d6*d7*d8*d9) + 
-        rat(-2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d4*d6*d7*d8*d9) + 
-        rat(-2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(1, -4 + d - n2))/(d10*d3^2*d4*d5*d6^2*d8*d9) + 
-        rat(1, -4 + d - n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d8*d9) + 
-        (d1*rat(1, -4 + d - n2))/(d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9) + 
-        (d1*rat(1, -4 + d - n2))/(d10*d2^n2*d3^2*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(1, -4 + d - n2))/(d3^2*d4*d5*d6^2*d7*d8*d9) + 
-        rat(1, -4 + d - n2)/(d2^n2*d3^2*d4*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(1, 4 - d + n2))/(d10*d3^2*d4*d5*d6^2*d7*d8) + 
-        rat(1, 4 - d + n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7*d8) + 
-        (d1*rat(1, 4 - d + n2))/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d8) + 
-        (d1*rat(1, 4 - d + n2))/(d2^n2*d3^2*d4*d5*d6*d7*d8^2*d9) + 
-        rat(1, 4 - d + n2)/(d10*d2^n2*d3^2*d5^2*d6*d7*d8*d9) + 
-        rat(2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d4*d5*d6*d8*d9) + 
-        rat(2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d4*d5*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(8 - 2*d, -4 + d - n2))/(d10*d3^2*d4*d5*d6*d7*d9) + 
-        rat(-12 + 3*d - 10*n2, 12*n2)/(d2^n2*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(-12 + 3*d - 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d6*d7*d9) + 
-        rat(-12 + 3*d - 10*n2, 12*n2)/(d10*d2^n2*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-36 + 9*d - 10*n2, 12))/(d10*d3*d5*d6*d7*d8*d9) + 
-        rat(-36 + 9*d - 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5*d6*d8*d9^2) + 
-        rat(-36 + 9*d - 10*n2, 12*n2)/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9) + 
-        rat(-60 + 15*d - 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d6*d7*d8) + 
-        rat(-60 + 15*d - 10*n2, 12*n2)/(d2^n2*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-60 + 15*d - 10*n2, 12*n2))/(d10*d3*d4*d5*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(46 - 13*d - 6*n2, 2*(-4 + d)))/(d10*d3^2*d4^2*d5*d7*d8*d9) + 
-        rat(6 - 3*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9^2) + 
-        (d2^(-1 - n2)*rat(-26 + 5*d - 6*n2, 2*(-4 + d)))/(d3^2*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-42 + 9*d - 6*n2, 2*(-4 + d)))/(d3^2*d4*d5*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-66 + 15*d - 6*n2, 2*(-4 + d)))/(d3^2*d4^2*d5*d6*d7*d8*d9) + 
-        rat(-66 + 15*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5*d7*d8*d9^2) + 
-        rat(-66 + 15*d - 6*n2, 2*(-4 + d)*n2)/(d2^n2*d3^2*d4^2*d5*d6^2*d7*d8*d9) + 
-        rat(-82 + 19*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d7^2*d8*d9^2) + 
-        rat(-82 + 19*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d7*d8*d9^2) + 
-        rat(-82 + 19*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-114 + 27*d - 6*n2, 2*(-4 + d)))/(d10*d3^2*d4*d5*d7^2*d8*d9) + 
-        rat(-15 + 3*d - 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d7*d8*d9) + 
-        rat(-31 + 7*d - 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7^2*d9) + 
-        rat(-39 + 9*d - 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(12 - 3*d - 2*n2, 12))/(d10*d3*d4*d5*d6*d7*d8) + 
-        rat(12 - 3*d - 2*n2, 12*n2)/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9) + 
-        rat(12 - 3*d - 2*n2, 12*n2)/(d10*d2^n2*d3*d4*d6^2*d7*d8*d9) + 
-        rat(-7 + 2*d - 2*n2, -4 + d - n2)/(d10^2*d2^n2*d3*d4*d5*d6*d7*d8) + 
-        rat(-12 + 3*d - 2*n2, 2*n2)/(d2^n2*d3^3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 3*n2))/(d10*d3^2*d4*d5^2*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 3*n2))/(d10*d3^3*d4*d5*d6*d7*d9) + 
-        (d2^(2 - n2)*rat(-12 + 3*d - 2*n2, 3*n2))/(d10*d3^2*d4*d5*d6^2*d7*d8*d9) + 
-        rat(-12 + 3*d - 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d8) + 
-        rat(-12 + 3*d - 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d8) + 
-        rat(-12 + 3*d - 2*n2, 4*n2)/(d10^2*d2^n2*d3^2*d4*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 4*n2))/(d10*d3^2*d4*d5*d6*d8*d9^2) + 
-        rat(-12 + 3*d - 2*n2, 4*n2)/(d2^n2*d3^2*d4*d5*d6*d7*d8*d9^2) + 
-        rat(-12 + 3*d - 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d3^2*d4*d5*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3^2*d4*d5^2*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3^2*d4*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3^2*d4^2*d5*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 12*n2))/(d10*d3^2*d4^2*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(3 - d + n2, -4 + d - n2))/(d10*d3^2*d4*d5*d6*d7*d8*d9) + 
-        rat(12 - 3*d + 2*n2, 2*n2)/(d10*d2^n2*d3^3*d4*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 3*n2))/(d10*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 3*n2))/(d10*d3^2*d4*d5^2*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 3*n2))/(d3^3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 4*n2))/(d10*d3^2*d4*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 4*n2))/(d10^2*d3^2*d4*d5*d6*d7*d9) + 
-        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9) + 
-        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d6*d7^2*d8*d9) + 
-        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d7*d8*d9) + 
-        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4^2*d5*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4*d5*d6*d7^2*d8) + 
-        (d2^(2 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4*d5*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4*d5^2*d7*d8*d9) + 
-        (d2^(2 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 12*n2))/(d10*d3^2*d4*d5*d6^2*d7*d9) + 
-        (d2^(-1 - n2)*rat(-12 + 3*d + 2*n2, 12))/(d3*d4*d5*d6*d7*d8*d9) + 
-        rat(-12 + 3*d + 2*n2, 12*n2)/(d10*d2^n2*d3*d4*d5*d6^2*d7*d9) + 
-        rat(-12 + 3*d + 2*n2, 12*n2)/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9) + 
-        rat(39 - 9*d + 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d7*d8) + 
-        rat(19 - 4*d + 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7^2*d8) + 
-        rat(15 - 3*d + 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(90 - 21*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d5*d6*d7^2*d8*d9) + 
-        rat(82 - 19*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d9^2) + 
-        rat(82 - 19*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d9^2) + 
-        rat(82 - 19*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7^2*d9) + 
-        (d2^(-1 - n2)*rat(66 - 15*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d4^2*d5*d6*d7*d8) + 
-        rat(66 - 15*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5*d6^2*d7*d8) + 
-        rat(66 - 15*d + 6*n2, 2*(-4 + d)*n2)/(d2^n2*d3^2*d4^2*d5*d6*d7*d8*d9^2) + 
-        (d2^(-1 - n2)*rat(42 - 9*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d4*d5*d6^2*d7*d8) + 
-        rat(12 - 3*d + 6*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d6^2*d7*d8*d9) + 
-        rat(18 - 3*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7^2*d8) + 
-        (d2^(-1 - n2)*rat(10 - d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d4*d5*d6*d7^2*d8) + 
-        (d2^(-1 - n2)*rat(-46 + 13*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d5*d6^2*d7*d8*d9) + 
-        rat(60 - 15*d + 10*n2, 12*n2)/(d10*d2^n2*d4*d5*d6*d7*d8^2*d9) + 
-        rat(60 - 15*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(36 - 9*d + 10*n2, 12))/(d10*d3*d4*d5*d7*d8*d9) + 
-        rat(36 - 9*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d6*d7*d8*d9^2) + 
-        rat(36 - 9*d + 10*n2, 12*n2)/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(12 - 3*d + 10*n2, 12*n2))/(d10*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(12 - 3*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d5*d6*d7^2*d8*d9) + 
-        rat(12 - 3*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d7*d8*d9) + 
-        rat(-240 + 120*d - 15*d^2 - 112*n2 + 25*d*n2 - 10*n2^2, 12*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d5*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-48 + 24*d - 3*d^2 - 44*n2 + 9*d*n2 - 6*n2^2, 4*(-4 + d - n2)))/(d10*d3^2*d4*d5*d6*d7*d8) + 
-        (d2^(-1 - n2)*rat(-48 + 24*d - 3*d^2 - 40*n2 + 9*d*n2 - 6*n2^2, 4*(-4 + d - n2)))/(d10*d3^2*d5*d6*d7*d8*d9) + 
-        rat(-48 + 24*d - 3*d^2 - 25*n2 + 7*d*n2 - 4*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d4*d5*d6*d7^2*d8) + 
-        rat(48 - 24*d + 3*d^2 + 7*n2 - d*n2 - 2*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d5*d6*d7*d9) + 
-        rat(48 - 24*d + 3*d^2 + 7*n2 - d*n2 - 2*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9) + 
-        rat(12 - 3*d - 10*n2 + 3*d*n2 - 2*n2^2, 4*n2)/(d10*d2^n2*d3^2*d5*d6*d7*d8*d9) + 
-        rat(-48 + 24*d - 3*d^2 - 24*n2 + 5*d*n2 - 2*n2^2, 2*(-4 + d - n2)*n2)/(d10*d2^n2*d3^3*d5*d6*d7*d8*d9) + 
-        rat(-48 + 24*d - 3*d^2 - 24*n2 + 5*d*n2 - 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-48 + 24*d - 3*d^2 - 23*n2 + 5*d*n2 - 2*n2^2, 3*(-4 + d - n2)*n2))/(d10*d3^2*d5*d6^2*d7*d8*d9) + 
-        rat(-48 + 24*d - 3*d^2 - 16*n2 + 5*d*n2 - 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d5*d7*d8^2*d9) + 
-        rat(-48 + 24*d - 3*d^2 - 16*n2 + 5*d*n2 - 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(48 - 24*d + 3*d^2 + 8*n2 - 5*d*n2 + 2*n2^2, 12*(-4 + d - n2)*n2))/(d10*d3^2*d4*d6^2*d7*d8*d9) + 
-        rat(48 - 24*d + 3*d^2 + 16*n2 - 5*d*n2 + 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(48 - 24*d + 3*d^2 + 23*n2 - 5*d*n2 + 2*n2^2, 3*(-4 + d - n2)*n2))/(d3^2*d4*d5*d6*d7*d8^2*d9) + 
-        rat(48 - 24*d + 3*d^2 + 24*n2 - 5*d*n2 + 2*n2^2, 2*(-4 + d - n2)*n2)/(d10*d2^n2*d3^3*d4*d5*d6*d8*d9) + 
-        rat(48 - 24*d + 3*d^2 + 24*n2 - 5*d*n2 + 2*n2^2, 4*(-4 + d - n2)*n2)/(d2^n2*d3^2*d4*d5*d6*d7*d8^2*d9) + 
-        rat(-12 + 3*d + 10*n2 - 3*d*n2 + 2*n2^2, 4*n2)/(d10*d2^n2*d3^2*d4*d5*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-80 + 40*d - 5*d^2 - 16*n2 + 3*d*n2 + 2*n2^2, 4*(-4 + d - n2)*n2))/(d10*d3*d4^2*d5*d6*d7*d8*d9) + 
-        rat(48 - 24*d + 3*d^2 + 25*n2 - 7*d*n2 + 4*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d4*d6*d7^2*d8*d9) + 
-        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d6*d7*d8*d9^2) + 
-        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7*d9) + 
-        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)*n2)/(d10^2*d2^n2*d3^2*d4*d5*d6*d7*d9) + 
-        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9^2) + 
-        (d2^(-1 - n2)*rat(16 - 16*d + 3*d^2 + 36*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)))/(d3^2*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(48 - 24*d + 3*d^2 + 40*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)))/(d10*d3^2*d4*d5*d7*d8*d9) + 
-        rat(48 - 24*d + 3*d^2 + 40*n2 - 9*d*n2 + 6*n2^2, 4*n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9) + 
-        rat(15 - 11*d + 2*d^2 + 24*n2 - 8*d*n2 + 6*n2^2, 3*(-4 + d - n2))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(48 - 24*d + 3*d^2 + 48*n2 - 13*d*n2 + 10*n2^2, 4*(-4 + d - n2)*n2))/(d10^2*d3*d4*d5*d6*d7*d8*d9) + 
-        rat(-144 + 72*d - 9*d^2 - 68*n2 + 23*d*n2 - 3*d^2*n2 + 2*n2^2 + 5*d*n2^2 - 2*n2^3, 12*(-4 + d - n2)*n2)/(d2^n2*d3^2*d4*d5*d6*d7*d8*d9) + 
+        (5*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6*d7*d8^2) +
+        (2*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7^2*d8) -
+        d2^(-1 - n2)/(d10*d3*d4*d5^2*d6*d7*d8) +
+        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d6*d7*d8) -
+        d2^(-1 - n2)/(d10^2*d3^2*d4*d5*d6*d7*d8) +
+        (3*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6*d7*d9^2) +
+        (2*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6*d8*d9^2) -
+        (4*d2^(-1 - n2))/(d10*d3^2*d4*d5*d7*d8*d9^2) -
+        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6*d7*d8*d9^2) +
+        (4*d2^(-1 - n2))/(d10*d3^2*d5*d6*d7*d8*d9^2) +
+        d2^(-1 - n2)/(d3^2*d4*d5*d6*d7*d8*d9^2) +
+        d2^(-1 - n2)/(d3*d4*d5*d6*d7*d8*d9^2) -
+        (2*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6^2*d7*d9) -
+        (2*d2^(-1 - n2))/(d10*d3*d4*d5*d6^2*d7*d9) +
+        d2^(-1 - n2)/(d10*d3*d4*d5^2*d6*d7*d9) +
+        d2^(-1 - n2)/(d10*d3^2*d4^2*d5*d6*d7*d9) -
+        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d6*d7*d9) -
+        (2*d2^(-1 - n2))/(d10*d3^2*d4*d5*d7*d8^2*d9) +
+        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6*d7*d8^2*d9) +
+        d2^(-1 - n2)/(d10*d4*d5*d6*d7*d8^2*d9) -
+        (8*d2^(-1 - n2))/(d3^2*d4*d5*d6*d7*d8^2*d9) -
+        d2^(-1 - n2)/(d3*d4*d5*d6*d7*d8^2*d9) -
+        (3*d2^(-1 - n2))/(d10*d3^2*d4*d5*d6^2*d8*d9) +
+        d2^(-1 - n2)/(d10*d3*d4*d5^2*d6*d8*d9) +
+        (2*d2^(-1 - n2))/(d10*d3*d4^2*d5*d6*d8*d9) +
+        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d6*d8*d9) -
+        d2^(-1 - n2)/(d10^2*d3^2*d4*d5*d6*d8*d9) -
+        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6*d7^2*d8*d9) -
+        (2*d2^(-1 - n2))/(d10*d3*d4*d6*d7^2*d8*d9) -
+        d2^(-1 - n2)/(d10*d3*d5*d6*d7^2*d8*d9) +
+        d2^(-1 - n2)/(d10*d4*d5*d6*d7^2*d8*d9) -
+        d2^(-1 - n2)/(d10*d3*d4*d5^2*d7*d8*d9) -
+        (2*d2^(-1 - n2))/(d10*d3*d4^2*d5*d7*d8*d9) -
+        (2*d2^(-1 - n2))/(d10*d3^3*d4*d5*d7*d8*d9) -
+        d2^(-1 - n2)/(d10^2*d3^2*d4*d5*d7*d8*d9) +
+        (2*d2^(-1 - n2))/(d10*d3^2*d4*d6^2*d7*d8*d9) +
+        (2*d2^(-1 - n2))/(d10*d3*d4*d6^2*d7*d8*d9) +
+        d2^(-1 - n2)/(d10*d3*d5*d6^2*d7*d8*d9) -
+        d2^(-1 - n2)/(d10*d3^2*d4^2*d6*d7*d8*d9) +
+        d2^(-1 - n2)/(d10^2*d3^2*d4*d6*d7*d8*d9) +
+        d2^(-1 - n2)/(d10^2*d3^2*d5*d6*d7*d8*d9) -
+        (2*d2^(-1 - n2))/(d10*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(-2 - n2)*(-3 - 3*n2))/(d10*d3^2*d4*d5*d7*d8*d9) +
+        (d2^(-2 - n2)*(-3 - 3*n2))/(d3^2*d4*d5*d6*d7*d8*d9) +
+        (d2^(-2 - n2)*(-2 - 2*n2))/(d3*d4*d5*d6*d7*d8*d9) +
+        7/(2*d10*d2^n2*d3^2*d4*d5*d6^2*d7*d8^2*n2) +
+        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d7*d8^2*n2) +
+        2/(d10*d2^n2*d3^2*d4^2*d5*d6*d7^2*d8*n2) +
+        4/(d10*d2^n2*d3^3*d4*d5*d6*d7^2*d8*n2) +
+        6/(d10^2*d2^n2*d3^2*d4*d5*d6*d7^2*d8*n2) +
+        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6^2*d7*d8*n2) -
+        7/(d10^2*d2^n2*d3^2*d4*d5*d6^2*d7*d8*n2) -
+        5/(d10^2*d2^n2*d3^2*d4*d5^2*d6*d7*d8*n2) +
+        4/(d10*d2^n2*d3^3*d4^2*d5*d6*d7*d8*n2) +
+        8/(d10^2*d2^n2*d3^2*d4^2*d5*d6*d7*d8*n2) +
+        6/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9^3*n2) -
+        6/(d10*d2^n2*d3^2*d4*d6*d7*d8*d9^3*n2) +
+        3/(d10*d2^n2*d3^2*d4*d5*d6^2*d7*d9^2*n2) -
+        4/(d10*d2^n2*d3^3*d4*d5*d6*d7*d9^2*n2) -
+        2/(d10*d2^n2*d3^2*d4*d5*d6*d8^2*d9^2*n2) -
+        1/(d10*d2^n2*d3^2*d4*d5*d7*d8^2*d9^2*n2) +
+        3/(d10*d2^n2*d3^2*d4*d6*d7*d8^2*d9^2*n2) -
+        3/(d10*d2^n2*d3^2*d4*d5*d6^2*d8*d9^2*n2) +
+        3/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9^2*n2) -
+        2/(d10*d2^n2*d3^3*d4*d5*d6*d8*d9^2*n2) -
+        1/(d10^2*d2^n2*d3^2*d4*d5*d6*d8*d9^2*n2) +
+        3/(d10*d2^n2*d3^2*d4*d6*d7^2*d8*d9^2*n2) -
+        1/(d10^2*d2^n2*d3^2*d4*d5*d7*d8*d9^2*n2) -
+        3/(d10*d2^n2*d3^2*d4^2*d6*d7*d8*d9^2*n2) +
+        2/(d10*d2^n2*d3^3*d4*d6*d7*d8*d9^2*n2) +
+        1/(d10^2*d2^n2*d3^2*d4*d6*d7*d8*d9^2*n2) +
+        1/(d10^2*d2^n2*d3^2*d5*d6*d7*d8*d9^2*n2) +
+        4/(d2^n2*d3^3*d4*d5*d6*d7*d8*d9^2*n2) +
+        9/(2*d10*d2^n2*d3^2*d4^2*d5*d6*d7^2*d9*n2) +
+        9/(d10*d2^n2*d3^3*d4*d5*d6*d7^2*d9*n2) +
+        4/(d10^2*d2^n2*d3^2*d4*d5*d6*d7^2*d9*n2) -
+        6/(d10*d2^n2*d3^2*d4*d5*d6^3*d7*d9*n2) -
+        3/(2*d10*d2^n2*d3^2*d4*d5^2*d6^2*d7*d9*n2) +
+        1/(d10*d2^n2*d3^2*d4^2*d5*d6^2*d7*d9*n2) -
+        5/(d10*d2^n2*d3^3*d4*d5*d6^2*d7*d9*n2) -
+        3/(d10^2*d2^n2*d3^2*d4*d5*d6^2*d7*d9*n2) +
+        5/(d10^2*d2^n2*d3^2*d4*d5^2*d6*d7*d9*n2) +
+        9/(d10*d2^n2*d3^3*d4^2*d5*d6*d7*d9*n2) -
+        2/(d10^2*d2^n2*d3^2*d4^2*d5*d6*d7*d9*n2) +
+        8/(d10^2*d2^n2*d3^3*d4*d5*d6*d7*d9*n2) -
+        7/(2*d10*d2^n2*d3^2*d4*d5*d6^2*d8^2*d9*n2) -
+        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6*d8^2*d9*n2) +
+        3/(2*d10*d2^n2*d3^2*d4^2*d5*d6*d8^2*d9*n2) -
+        4/(d10*d2^n2*d3^3*d4*d5*d6*d8^2*d9*n2) -
+        2/(d10^2*d2^n2*d3^2*d4*d5*d6*d8^2*d9*n2) +
+        9/(2*d10*d2^n2*d3^2*d4*d5^2*d7*d8^2*d9*n2) -
+        6/(d10*d2^n2*d3^2*d4^2*d5*d7*d8^2*d9*n2) -
+        4/(d10*d2^n2*d3^3*d4*d5*d7*d8^2*d9*n2) -
+        2/(d10^2*d2^n2*d3^2*d4*d5*d7*d8^2*d9*n2) -
+        3/(d10*d2^n2*d3^2*d4*d6^2*d7*d8^2*d9*n2) +
+        6/(d10*d2^n2*d3^2*d4^2*d6*d7*d8^2*d9*n2) +
+        4/(d10*d2^n2*d3^3*d4*d6*d7*d8^2*d9*n2) +
+        2/(d10^2*d2^n2*d3^2*d4*d6*d7*d8^2*d9*n2) +
+        4/(d10*d2^n2*d3^3*d5*d6*d7*d8^2*d9*n2) +
+        2/(d10^2*d2^n2*d3^2*d5*d6*d7*d8^2*d9*n2) -
+        3/(2*d2^n2*d3^2*d4^2*d5*d6*d7*d8^2*d9*n2) -
+        8/(d2^n2*d3^3*d4*d5*d6*d7*d8^2*d9*n2) -
+        7/(2*d10*d2^n2*d3^2*d4*d5^2*d6^2*d8*d9*n2) -
+        21/(d10*d2^n2*d3^3*d4*d5*d6^2*d8*d9*n2) +
+        5/(d10^2*d2^n2*d3^2*d4*d5^2*d6*d8*d9*n2) +
+        19/(d10*d2^n2*d3^3*d4^2*d5*d6*d8*d9*n2) +
+        2/(d10^2*d2^n2*d3^2*d4^2*d5*d6*d8*d9*n2) -
+        4/(d10^2*d2^n2*d3^3*d4*d5*d6*d8*d9*n2) -
+        3/(d10*d2^n2*d3^2*d4*d6^2*d7^2*d8*d9*n2) -
+        2/(d10*d2^n2*d3^2*d4^2*d6*d7^2*d8*d9*n2) -
+        4/(d10*d2^n2*d3^3*d4*d6*d7^2*d8*d9*n2) -
+        6/(d10^2*d2^n2*d3^2*d4*d6*d7^2*d8*d9*n2) -
+        19/(d10*d2^n2*d3^3*d5*d6*d7^2*d8*d9*n2) -
+        4/(d10^2*d2^n2*d3^2*d5*d6*d7^2*d8*d9*n2) -
+        9/(2*d2^n2*d3^2*d4^2*d5*d6*d7^2*d8*d9*n2) -
+        9/(d2^n2*d3^3*d4*d5*d6*d7^2*d8*d9*n2) -
+        5/(d10^2*d2^n2*d3^2*d4*d5^2*d7*d8*d9*n2) -
+        8/(d10^2*d2^n2*d3^2*d4^2*d5*d7*d8*d9*n2) -
+        4/(d10^2*d2^n2*d3^3*d4*d5*d7*d8*d9*n2) +
+        6/(d10*d2^n2*d3^2*d4*d6^3*d7*d8*d9*n2) -
+        1/(d10*d2^n2*d3^2*d4^2*d6^2*d7*d8*d9*n2) -
+        2/(d10*d2^n2*d3^3*d4*d6^2*d7*d8*d9*n2) +
+        3/(d10^2*d2^n2*d3^2*d4*d6^2*d7*d8*d9*n2) +
+        21/(d10*d2^n2*d3^3*d5*d6^2*d7*d8*d9*n2) +
+        7/(d10^2*d2^n2*d3^2*d5*d6^2*d7*d8*d9*n2) +
+        7/(d2^n2*d3^3*d4*d5*d6^2*d7*d8*d9*n2) -
+        4/(d10*d2^n2*d3^3*d4^2*d6*d7*d8*d9*n2) +
+        4/(d10^2*d2^n2*d3^3*d4*d6*d7*d8*d9*n2) +
+        4/(d10^2*d2^n2*d3^3*d5*d6*d7*d8*d9*n2) -
+        9/(d2^n2*d3^3*d4^2*d5*d6*d7*d8*d9*n2) -
+        (2*d2^(-1 - n2)*n2)/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-2 - n2)*(2 + 2*n2))/(d10*d3*d4*d5*d6*d7*d8) +
+        (d2^(-2 - n2)*(3 + 3*n2))/(d10*d3^2*d4*d5*d6*d7*d8) +
+        (d2^(-2 - n2)*(3 + 3*n2))/(d10*d3^2*d5*d6*d7*d8*d9) +
+        rat(-2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d4*d6*d7*d8*d9) +
+        rat(-2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(1, -4 + d - n2))/(d10*d3^2*d4*d5*d6^2*d8*d9) +
+        rat(1, -4 + d - n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d8*d9) +
+        (d1*rat(1, -4 + d - n2))/(d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9) +
+        (d1*rat(1, -4 + d - n2))/(d10*d2^n2*d3^2*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(1, -4 + d - n2))/(d3^2*d4*d5*d6^2*d7*d8*d9) +
+        rat(1, -4 + d - n2)/(d2^n2*d3^2*d4*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(1, 4 - d + n2))/(d10*d3^2*d4*d5*d6^2*d7*d8) +
+        rat(1, 4 - d + n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7*d8) +
+        (d1*rat(1, 4 - d + n2))/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d8) +
+        (d1*rat(1, 4 - d + n2))/(d2^n2*d3^2*d4*d5*d6*d7*d8^2*d9) +
+        rat(1, 4 - d + n2)/(d10*d2^n2*d3^2*d5^2*d6*d7*d8*d9) +
+        rat(2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d4*d5*d6*d8*d9) +
+        rat(2, -4 + d - n2)/(d10^2*d2^n2*d3^2*d4*d5*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(8 - 2*d, -4 + d - n2))/(d10*d3^2*d4*d5*d6*d7*d9) +
+        rat(-12 + 3*d - 10*n2, 12*n2)/(d2^n2*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(-12 + 3*d - 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d6*d7*d9) +
+        rat(-12 + 3*d - 10*n2, 12*n2)/(d10*d2^n2*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-36 + 9*d - 10*n2, 12))/(d10*d3*d5*d6*d7*d8*d9) +
+        rat(-36 + 9*d - 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5*d6*d8*d9^2) +
+        rat(-36 + 9*d - 10*n2, 12*n2)/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9) +
+        rat(-60 + 15*d - 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d6*d7*d8) +
+        rat(-60 + 15*d - 10*n2, 12*n2)/(d2^n2*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-60 + 15*d - 10*n2, 12*n2))/(d10*d3*d4*d5*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(46 - 13*d - 6*n2, 2*(-4 + d)))/(d10*d3^2*d4^2*d5*d7*d8*d9) +
+        rat(6 - 3*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9^2) +
+        (d2^(-1 - n2)*rat(-26 + 5*d - 6*n2, 2*(-4 + d)))/(d3^2*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-42 + 9*d - 6*n2, 2*(-4 + d)))/(d3^2*d4*d5*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-66 + 15*d - 6*n2, 2*(-4 + d)))/(d3^2*d4^2*d5*d6*d7*d8*d9) +
+        rat(-66 + 15*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5*d7*d8*d9^2) +
+        rat(-66 + 15*d - 6*n2, 2*(-4 + d)*n2)/(d2^n2*d3^2*d4^2*d5*d6^2*d7*d8*d9) +
+        rat(-82 + 19*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d7^2*d8*d9^2) +
+        rat(-82 + 19*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d7*d8*d9^2) +
+        rat(-82 + 19*d - 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-114 + 27*d - 6*n2, 2*(-4 + d)))/(d10*d3^2*d4*d5*d7^2*d8*d9) +
+        rat(-15 + 3*d - 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d7*d8*d9) +
+        rat(-31 + 7*d - 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7^2*d9) +
+        rat(-39 + 9*d - 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(12 - 3*d - 2*n2, 12))/(d10*d3*d4*d5*d6*d7*d8) +
+        rat(12 - 3*d - 2*n2, 12*n2)/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9) +
+        rat(12 - 3*d - 2*n2, 12*n2)/(d10*d2^n2*d3*d4*d6^2*d7*d8*d9) +
+        rat(-7 + 2*d - 2*n2, -4 + d - n2)/(d10^2*d2^n2*d3*d4*d5*d6*d7*d8) +
+        rat(-12 + 3*d - 2*n2, 2*n2)/(d2^n2*d3^3*d4*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 3*n2))/(d10*d3^2*d4*d5^2*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 3*n2))/(d10*d3^3*d4*d5*d6*d7*d9) +
+        (d2^(2 - n2)*rat(-12 + 3*d - 2*n2, 3*n2))/(d10*d3^2*d4*d5*d6^2*d7*d8*d9) +
+        rat(-12 + 3*d - 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d8) +
+        rat(-12 + 3*d - 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d8) +
+        rat(-12 + 3*d - 2*n2, 4*n2)/(d10^2*d2^n2*d3^2*d4*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 4*n2))/(d10*d3^2*d4*d5*d6*d8*d9^2) +
+        rat(-12 + 3*d - 2*n2, 4*n2)/(d2^n2*d3^2*d4*d5*d6*d7*d8*d9^2) +
+        rat(-12 + 3*d - 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d3^2*d4*d5*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3^2*d4*d5^2*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3^2*d4*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 6*n2))/(d10*d3^2*d4^2*d5*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-12 + 3*d - 2*n2, 12*n2))/(d10*d3^2*d4^2*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(3 - d + n2, -4 + d - n2))/(d10*d3^2*d4*d5*d6*d7*d8*d9) +
+        rat(12 - 3*d + 2*n2, 2*n2)/(d10*d2^n2*d3^3*d4*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 3*n2))/(d10*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 3*n2))/(d10*d3^2*d4*d5^2*d6*d8*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 3*n2))/(d3^3*d4*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 4*n2))/(d10*d3^2*d4*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 4*n2))/(d10^2*d3^2*d4*d5*d6*d7*d9) +
+        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d8*d9) +
+        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d6*d7^2*d8*d9) +
+        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d5^2*d7*d8*d9) +
+        rat(12 - 3*d + 2*n2, 4*n2)/(d10*d2^n2*d3^2*d4^2*d5*d7*d8*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4*d5*d6*d7^2*d8) +
+        (d2^(2 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4*d5*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4*d5^2*d7*d8*d9) +
+        (d2^(2 - n2)*rat(12 - 3*d + 2*n2, 6*n2))/(d10*d3^2*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 2*n2, 12*n2))/(d10*d3^2*d4*d5*d6^2*d7*d9) +
+        (d2^(-1 - n2)*rat(-12 + 3*d + 2*n2, 12))/(d3*d4*d5*d6*d7*d8*d9) +
+        rat(-12 + 3*d + 2*n2, 12*n2)/(d10*d2^n2*d3*d4*d5*d6^2*d7*d9) +
+        rat(-12 + 3*d + 2*n2, 12*n2)/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9) +
+        rat(39 - 9*d + 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d7*d8) +
+        rat(19 - 4*d + 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7^2*d8) +
+        rat(15 - 3*d + 3*n2, (-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5^2*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(90 - 21*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d5*d6*d7^2*d8*d9) +
+        rat(82 - 19*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d9^2) +
+        rat(82 - 19*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7*d9^2) +
+        rat(82 - 19*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7^2*d9) +
+        (d2^(-1 - n2)*rat(66 - 15*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d4^2*d5*d6*d7*d8) +
+        rat(66 - 15*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4^2*d5*d6^2*d7*d8) +
+        rat(66 - 15*d + 6*n2, 2*(-4 + d)*n2)/(d2^n2*d3^2*d4^2*d5*d6*d7*d8*d9^2) +
+        (d2^(-1 - n2)*rat(42 - 9*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d4*d5*d6^2*d7*d8) +
+        rat(12 - 3*d + 6*n2, 4*n2)/(d10*d2^n2*d3^2*d4*d6^2*d7*d8*d9) +
+        rat(18 - 3*d + 6*n2, 2*(-4 + d)*n2)/(d10*d2^n2*d3^2*d4*d5^2*d6*d7^2*d8) +
+        (d2^(-1 - n2)*rat(10 - d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d4*d5*d6*d7^2*d8) +
+        (d2^(-1 - n2)*rat(-46 + 13*d + 6*n2, 2*(-4 + d)))/(d10*d3^2*d5*d6^2*d7*d8*d9) +
+        rat(60 - 15*d + 10*n2, 12*n2)/(d10*d2^n2*d4*d5*d6*d7*d8^2*d9) +
+        rat(60 - 15*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(36 - 9*d + 10*n2, 12))/(d10*d3*d4*d5*d7*d8*d9) +
+        rat(36 - 9*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d6*d7*d8*d9^2) +
+        rat(36 - 9*d + 10*n2, 12*n2)/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(12 - 3*d + 10*n2, 12*n2))/(d10*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(12 - 3*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d5*d6*d7^2*d8*d9) +
+        rat(12 - 3*d + 10*n2, 12*n2)/(d10*d2^n2*d3*d4*d5^2*d7*d8*d9) +
+        rat(-240 + 120*d - 15*d^2 - 112*n2 + 25*d*n2 - 10*n2^2, 12*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d5*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-48 + 24*d - 3*d^2 - 44*n2 + 9*d*n2 - 6*n2^2, 4*(-4 + d - n2)))/(d10*d3^2*d4*d5*d6*d7*d8) +
+        (d2^(-1 - n2)*rat(-48 + 24*d - 3*d^2 - 40*n2 + 9*d*n2 - 6*n2^2, 4*(-4 + d - n2)))/(d10*d3^2*d5*d6*d7*d8*d9) +
+        rat(-48 + 24*d - 3*d^2 - 25*n2 + 7*d*n2 - 4*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d4*d5*d6*d7^2*d8) +
+        rat(48 - 24*d + 3*d^2 + 7*n2 - d*n2 - 2*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d5*d6*d7*d9) +
+        rat(48 - 24*d + 3*d^2 + 7*n2 - d*n2 - 2*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9) +
+        rat(12 - 3*d - 10*n2 + 3*d*n2 - 2*n2^2, 4*n2)/(d10*d2^n2*d3^2*d5*d6*d7*d8*d9) +
+        rat(-48 + 24*d - 3*d^2 - 24*n2 + 5*d*n2 - 2*n2^2, 2*(-4 + d - n2)*n2)/(d10*d2^n2*d3^3*d5*d6*d7*d8*d9) +
+        rat(-48 + 24*d - 3*d^2 - 24*n2 + 5*d*n2 - 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-48 + 24*d - 3*d^2 - 23*n2 + 5*d*n2 - 2*n2^2, 3*(-4 + d - n2)*n2))/(d10*d3^2*d5*d6^2*d7*d8*d9) +
+        rat(-48 + 24*d - 3*d^2 - 16*n2 + 5*d*n2 - 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d5*d7*d8^2*d9) +
+        rat(-48 + 24*d - 3*d^2 - 16*n2 + 5*d*n2 - 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(48 - 24*d + 3*d^2 + 8*n2 - 5*d*n2 + 2*n2^2, 12*(-4 + d - n2)*n2))/(d10*d3^2*d4*d6^2*d7*d8*d9) +
+        rat(48 - 24*d + 3*d^2 + 16*n2 - 5*d*n2 + 2*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(48 - 24*d + 3*d^2 + 23*n2 - 5*d*n2 + 2*n2^2, 3*(-4 + d - n2)*n2))/(d3^2*d4*d5*d6*d7*d8^2*d9) +
+        rat(48 - 24*d + 3*d^2 + 24*n2 - 5*d*n2 + 2*n2^2, 2*(-4 + d - n2)*n2)/(d10*d2^n2*d3^3*d4*d5*d6*d8*d9) +
+        rat(48 - 24*d + 3*d^2 + 24*n2 - 5*d*n2 + 2*n2^2, 4*(-4 + d - n2)*n2)/(d2^n2*d3^2*d4*d5*d6*d7*d8^2*d9) +
+        rat(-12 + 3*d + 10*n2 - 3*d*n2 + 2*n2^2, 4*n2)/(d10*d2^n2*d3^2*d4*d5*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-80 + 40*d - 5*d^2 - 16*n2 + 3*d*n2 + 2*n2^2, 4*(-4 + d - n2)*n2))/(d10*d3*d4^2*d5*d6*d7*d8*d9) +
+        rat(48 - 24*d + 3*d^2 + 25*n2 - 7*d*n2 + 4*n2^2, 3*(-4 + d - n2)*n2)/(d10*d2^n2*d3*d4*d6*d7^2*d8*d9) +
+        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d6*d7*d8*d9^2) +
+        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d5*d6^2*d7*d9) +
+        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)*n2)/(d10^2*d2^n2*d3^2*d4*d5*d6*d7*d9) +
+        rat(48 - 24*d + 3*d^2 + 32*n2 - 9*d*n2 + 6*n2^2, 4*n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9^2) +
+        (d2^(-1 - n2)*rat(16 - 16*d + 3*d^2 + 36*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)))/(d3^2*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(48 - 24*d + 3*d^2 + 40*n2 - 9*d*n2 + 6*n2^2, 4*(-4 + d - n2)))/(d10*d3^2*d4*d5*d7*d8*d9) +
+        rat(48 - 24*d + 3*d^2 + 40*n2 - 9*d*n2 + 6*n2^2, 4*n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9) +
+        rat(15 - 11*d + 2*d^2 + 24*n2 - 8*d*n2 + 6*n2^2, 3*(-4 + d - n2))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(48 - 24*d + 3*d^2 + 48*n2 - 13*d*n2 + 10*n2^2, 4*(-4 + d - n2)*n2))/(d10^2*d3*d4*d5*d6*d7*d8*d9) +
+        rat(-144 + 72*d - 9*d^2 - 68*n2 + 23*d*n2 - 3*d^2*n2 + 2*n2^2 + 5*d*n2^2 - 2*n2^3, 12*(-4 + d - n2)*n2)/(d2^n2*d3^2*d4*d5*d6*d7*d8*d9) +
         rat(-48 + 24*d - 3*d^2 - 20*n2 + 5*d*n2 + 3*d^2*n2 - 18*n2^2 - 5*d*n2^2 + 2*n2^3, 12*(-4 + d - n2)*n2)/(d10*d2^n2*d3^2*d4*d5*d6*d7*d8);
-        
+
 * n1 == 0 && n10 == 1 && n3 == 1 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n2 != 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?{>1}/d3/d4/d5/d6/d7/d8/d9/d10 =
 
-        (d2^(1 - n2)*rat(-16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d7*d8^3*d9) + 
-        (d2^(1 - n2)*rat(-16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d5*d6*d7^2*d8*d9) + 
-        rat(-10, 9*(3 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6*d7^2*d9) + 
-        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7^2*d9) + 
-        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d9) + 
-        rat(-8, 9*(3 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d7*d8*d9) + 
-        rat(-8, 9*(3 - d + n2))/(d10*d2^n2*d3*d5^2*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7^2*d8^2) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8^2) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6*d7*d8^2*d9^2) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6*d7^2*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5^2*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5^2*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^3*d5*d6*d7*d8*d9) + 
-        rat(-4, 9*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d6*d7*d8^2) + 
-        rat(-4, 9*(3 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6^2*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d3*d4^2*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d10^2*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d7*d8^2) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d8^2) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6^2*d7*d8) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5^2*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3^2*d4*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d7^2*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6^2*d7*d9) + 
-        (d2^(2 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6^2*d7*d9) + 
-        (d2^(2 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3^2*d4*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6^2*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5^2*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6^2*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6^2*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5^2*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4^3*d5*d6*d7*d8*d9) + 
-        rat(-2, 9*(3 - d + n2))/(d2^n2*d3*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d4^2*d5*d6*d7*d8*d9) + 
-        rat(2, 3*(3 - d + n2))/(d2^n2*d3*d4*d5*d6*d7^2*d8*d9) + 
-        rat(2, 9*(3 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6*d8*d9^2) + 
-        (d2^(1 - n2)*rat(2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4^2*d5*d6*d7*d9) + 
-        rat(4, 3*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d7^2*d8*d9) + 
-        rat(4, 9*(3 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(4, 3*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4*d5*d6*d7^2*d9) + 
-        (d2^(1 - n2)*rat(4, 3*(-1 + n2)*(3 - d + n2)))/(d10*d4^2*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d8^2*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d8^2*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6^2*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6^2*d8*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6^2*d8*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5^2*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^3*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6^2*d7^2*d8*d9) + 
-        (d2^(2 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4^2*d5^2*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d7^2*d8) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6*d7*d8^2*d9^2) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d8*d9^2) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7^2*d8*d9^2) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6*d7^2*d8*d9^2) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d8^2*d9) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7^2*d8^2*d9) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^3*d4*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d3^2*d4*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4^2*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d3^2*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d3^2*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7*d8^3*d9) + 
-        (d2^(1 - n2)*rat(16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(16 - 4*d, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d7*d8*d9) + 
-        rat(8 - 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d6^2*d7*d9) + 
-        rat(-8 + 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d9) + 
-        rat(-8 + 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d4*d5*d6*d7^2*d8*d9) + 
-        rat(-8 + 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d6^2*d7*d8*d9) + 
-        (d2^(2 - n2)*rat(-16 + 4*d, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-16 + 4*d, 9*(-3 + d - n2)*(-1 + n2)))/(d3^2*d4*d5*d6*d7*d8*d9) + 
-        rat(32 - 6*d - 8*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d7*d8*d9) + 
-        rat(35 - 7*d - 7*n2, 9*(-3 + d - n2)*(-1 + n2))/(d2^n2*d3^2*d4*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-6 + 4*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-6 + 4*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10^2*d3*d4*d5*d6*d7*d9) + 
-        rat(-6 + 4*d - 6*n2, 9*(3 - d + n2))/(d10*d2^n2*d3*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-30 + 10*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(-30 + 10*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5^2*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(-30 + 10*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d5*d6^2*d7*d8*d9) + 
-        (d2^(2 - n2)*rat(12 - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4*d5*d6*d7*d8*d9) + 
-        rat(28 - 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d6*d7*d8^2*d9) + 
-        rat(28 - 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(-8 + 4*d - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(-8 + 4*d - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7^2*d8*d9) + 
-        (d2^(2 - n2)*rat(-8 + 4*d - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8*d9) + 
-        rat(-20 + 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d2^n2*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(-20 + 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9) + 
-        rat(-20 + 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3^2*d5*d6*d7*d8*d9) + 
-        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d6*d7*d8*d9^2) + 
-        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9) + 
-        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d4*d5*d6*d7*d8^2*d9) + 
-        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d6*d8*d9) + 
-        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-21 + 5*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d8*d9) + 
-        (d2^(1 - n2)*rat(-21 + 5*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d6^2*d7*d8*d9) + 
-        rat(-21 + 5*d - 3*n2, 9*(3 - d + n2))/(d2^n2*d3*d4*d5*d6*d7*d8*d9) + 
-        rat(-25 + 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7*d9) + 
-        (d2^(2 - n2)*rat(-26 + 6*d - 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(-26 + 6*d - 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(-26 + 6*d - 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d7*d8*d9) + 
-        rat(29 - 7*d - n2, 9*(-1 + n2)*(3 - d + n2))/(d10*d2^n2*d3*d4*d6*d7^2*d8*d9) + 
-        rat(27 - 7*d + n2, 9*(-1 + n2)*(3 - d + n2))/(d2^n2*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(1 - n2)*rat(26 - 6*d + 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6*d7*d8*d9^2) + 
-        (d2^(1 - n2)*rat(26 - 6*d + 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d9) + 
-        (d2^(1 - n2)*rat(26 - 6*d + 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(1 - n2)*rat(21 - 5*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5*d6^2*d7*d9) + 
-        (d2^(1 - n2)*rat(21 - 5*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d4^2*d5*d6*d7*d8*d9) + 
-        rat(21 - 5*d + 3*n2, 9*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d6*d7*d8) + 
-        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d8) + 
-        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d6*d8*d9^2) + 
-        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9) + 
-        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(-8 + 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(-8 + 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4*d5*d6*d7*d8) + 
-        rat(20 - 6*d + 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d8) + 
-        rat(20 - 6*d + 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(8 - 4*d + 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7^2*d8) + 
-        rat(4 - 2*d + 4*n2, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d5*d6*d7^2*d8*d9) + 
-        rat(-28 + 6*d + 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d7*d8^2*d9) + 
-        rat(23 - 7*d + 5*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d6*d7^2*d8) + 
-        (d2^(1 - n2)*rat(30 - 10*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5^2*d6*d7*d8) + 
-        (d2^(1 - n2)*rat(30 - 10*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(2 - n2)*rat(30 - 10*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5*d6^2*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(6 - 4*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5*d6*d8*d9^2) + 
-        (d2^(1 - n2)*rat(6 - 4*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10^2*d4*d5*d6*d7*d8*d9) + 
-        rat(6 - 4*d + 6*n2, 9*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d7*d8*d9) + 
-        (d2^(1 - n2)*rat(19 - 3*d - 2*d^2 - 14*n2 + 11*d*n2 - 9*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-20*n2 + 6*d*n2 - 4*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(31*n2 - 7*d*n2 - 3*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-31*n2 + 7*d*n2 + 3*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d7*d8*d9) + 
+        (d2^(1 - n2)*rat(-16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d7*d8^3*d9) +
+        (d2^(1 - n2)*rat(-16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d5*d6*d7^2*d8*d9) +
+        rat(-10, 9*(3 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6*d7^2*d9) +
+        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7^2*d9) +
+        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d9) +
+        rat(-8, 9*(3 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d7*d8*d9) +
+        rat(-8, 9*(3 - d + n2))/(d10*d2^n2*d3*d5^2*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7^2*d8^2) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8^2) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6*d7*d8^2*d9^2) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6*d7^2*d8*d9^2) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5^2*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5^2*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^3*d5*d6*d7*d8*d9) +
+        rat(-4, 9*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d6*d7*d8^2) +
+        rat(-4, 9*(3 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6^2*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d3*d4^2*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-4, 3*(-1 + n2)*(3 - d + n2)))/(d10^2*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d7*d8^2) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d8^2) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6^2*d7*d8) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5^2*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3^2*d4*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d7^2*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6^2*d7*d9) +
+        (d2^(2 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6^2*d7*d9) +
+        (d2^(2 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3^2*d4*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6^2*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5^2*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6^2*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6^2*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5^2*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4^3*d5*d6*d7*d8*d9) +
+        rat(-2, 9*(3 - d + n2))/(d2^n2*d3*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d4^2*d5*d6*d7*d8*d9) +
+        rat(2, 3*(3 - d + n2))/(d2^n2*d3*d4*d5*d6*d7^2*d8*d9) +
+        rat(2, 9*(3 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(2, 3*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6*d8*d9^2) +
+        (d2^(1 - n2)*rat(2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4^2*d5*d6*d7*d9) +
+        rat(4, 3*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d7^2*d8*d9) +
+        rat(4, 9*(3 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(4, 3*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4*d5*d6*d7^2*d9) +
+        (d2^(1 - n2)*rat(4, 3*(-1 + n2)*(3 - d + n2)))/(d10*d4^2*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d8^2*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d8^2*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6^2*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6^2*d8*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6^2*d8*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5^2*d6*d8*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^3*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6^2*d7^2*d8*d9) +
+        (d2^(2 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(4, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4^2*d5^2*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6^2*d7^2*d8) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6*d7*d8^2*d9^2) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d8*d9^2) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7^2*d8*d9^2) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6*d7^2*d8*d9^2) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d8^2*d9) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7^2*d8^2*d9) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d6*d8*d9) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^3*d4*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5^2*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(8, 9*(-1 + n2)*(3 - d + n2)))/(d3^2*d4*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4^2*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d3^2*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4^2*d5^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(10, 9*(-1 + n2)*(3 - d + n2)))/(d3^2*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7*d8^3*d9) +
+        (d2^(1 - n2)*rat(16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(16, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4^2*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(16 - 4*d, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d7*d8*d9) +
+        rat(8 - 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d6^2*d7*d9) +
+        rat(-8 + 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d9) +
+        rat(-8 + 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d4*d5*d6*d7^2*d8*d9) +
+        rat(-8 + 2*d, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d6^2*d7*d8*d9) +
+        (d2^(2 - n2)*rat(-16 + 4*d, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-16 + 4*d, 9*(-3 + d - n2)*(-1 + n2)))/(d3^2*d4*d5*d6*d7*d8*d9) +
+        rat(32 - 6*d - 8*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d7*d8*d9) +
+        rat(35 - 7*d - 7*n2, 9*(-3 + d - n2)*(-1 + n2))/(d2^n2*d3^2*d4*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-6 + 4*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-6 + 4*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10^2*d3*d4*d5*d6*d7*d9) +
+        rat(-6 + 4*d - 6*n2, 9*(3 - d + n2))/(d10*d2^n2*d3*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-30 + 10*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(-30 + 10*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5^2*d6*d8*d9) +
+        (d2^(1 - n2)*rat(-30 + 10*d - 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d5*d6^2*d7*d8*d9) +
+        (d2^(2 - n2)*rat(12 - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4*d5*d6*d7*d8*d9) +
+        rat(28 - 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d6*d7*d8^2*d9) +
+        rat(28 - 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(-8 + 4*d - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d9) +
+        (d2^(1 - n2)*rat(-8 + 4*d - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d6*d7^2*d8*d9) +
+        (d2^(2 - n2)*rat(-8 + 4*d - 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8*d9) +
+        rat(-20 + 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d2^n2*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(-20 + 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9) +
+        rat(-20 + 6*d - 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3^2*d5*d6*d7*d8*d9) +
+        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d6*d7*d8*d9^2) +
+        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9) +
+        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d4*d5*d6*d7*d8^2*d9) +
+        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d6*d8*d9) +
+        rat(31 - 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-21 + 5*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4^2*d5*d6*d8*d9) +
+        (d2^(1 - n2)*rat(-21 + 5*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d6^2*d7*d8*d9) +
+        rat(-21 + 5*d - 3*n2, 9*(3 - d + n2))/(d2^n2*d3*d4*d5*d6*d7*d8*d9) +
+        rat(-25 + 7*d - 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7*d9) +
+        (d2^(2 - n2)*rat(-26 + 6*d - 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(-26 + 6*d - 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(-26 + 6*d - 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d7*d8*d9) +
+        rat(29 - 7*d - n2, 9*(-1 + n2)*(3 - d + n2))/(d10*d2^n2*d3*d4*d6*d7^2*d8*d9) +
+        rat(27 - 7*d + n2, 9*(-1 + n2)*(3 - d + n2))/(d2^n2*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(1 - n2)*rat(26 - 6*d + 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6*d7*d8*d9^2) +
+        (d2^(1 - n2)*rat(26 - 6*d + 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d9) +
+        (d2^(1 - n2)*rat(26 - 6*d + 2*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(1 - n2)*rat(21 - 5*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5*d6^2*d7*d9) +
+        (d2^(1 - n2)*rat(21 - 5*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d4^2*d5*d6*d7*d8*d9) +
+        rat(21 - 5*d + 3*n2, 9*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d6*d7*d8) +
+        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d8) +
+        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d6*d8*d9^2) +
+        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4^2*d5*d7*d8*d9) +
+        rat(-31 + 7*d + 3*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(-8 + 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8) +
+        (d2^(1 - n2)*rat(-8 + 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10^2*d3*d4*d5*d6*d7*d8) +
+        rat(20 - 6*d + 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d8) +
+        rat(20 - 6*d + 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(1 - n2)*rat(8 - 4*d + 4*n2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7^2*d8) +
+        rat(4 - 2*d + 4*n2, 3*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d5*d6*d7^2*d8*d9) +
+        rat(-28 + 6*d + 4*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d7*d8^2*d9) +
+        rat(23 - 7*d + 5*n2, 9*(-3 + d - n2)*(-1 + n2))/(d10*d2^n2*d3*d4*d5*d6*d7^2*d8) +
+        (d2^(1 - n2)*rat(30 - 10*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5^2*d6*d7*d8) +
+        (d2^(1 - n2)*rat(30 - 10*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d3*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(2 - n2)*rat(30 - 10*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5*d6^2*d7*d8*d9) +
+        (d2^(1 - n2)*rat(6 - 4*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10*d3*d4*d5*d6*d8*d9^2) +
+        (d2^(1 - n2)*rat(6 - 4*d + 6*n2, 9*(-3 + d - n2)*(-1 + n2)))/(d10^2*d4*d5*d6*d7*d8*d9) +
+        rat(6 - 4*d + 6*n2, 9*(3 - d + n2))/(d10*d2^n2*d3*d4*d5*d7*d8*d9) +
+        (d2^(1 - n2)*rat(19 - 3*d - 2*d^2 - 14*n2 + 11*d*n2 - 9*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-20*n2 + 6*d*n2 - 4*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(31*n2 - 7*d*n2 - 3*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-31*n2 + 7*d*n2 + 3*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d7*d8*d9) +
         (d2^(-1 - n2)*rat(20*n2 - 6*d*n2 + 4*n2^2, 9*(-1 + n2)*(3 - d + n2)))/(d10*d3*d4*d5*d6*d7*d8);
 
 * n10 == 1 && n2 == 1 && n3 == 1 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n1 != 0
         id,only,ifmatch->sortme 1/d1^n1?neg_/d2/d3/d4/d5/d6/d7/d8/d9/d10 =
-        
-        rat(-3, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d6*d7*d8) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6^2*d7*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2^2*d3*d4*d5*d6*d7*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10^2*d2*d3*d4*d5*d6*d7*d9) + 
-        rat(-3, -9 + 2*d - n1)/(d1^n1*d2*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d7^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d2*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5^2*d7*d8*d9) + 
-        rat(-3, -9 + 2*d - n1)/(d1^n1*d10*d3*d4*d5*d6^2*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6^2*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d2*d3^2*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2^2*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10^2*d2*d3*d4*d5*d6*d7*d8*d9) + 
-        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5*d6*d8*d9^2) + 
-        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d5*d6*d7^2*d8*d9) + 
-        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d7*d8*d9) + 
-        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2^2*d3*d5*d6*d7*d8*d9) + 
-        rat(-2, -9 + 2*d - n1)/(d1^n1*d10^2*d2*d4*d5*d6*d7*d8*d9) + 
-        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5*d6*d7^2*d8) + 
-        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2^2*d3*d4*d5*d6*d7*d8) + 
-        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4^2*d5*d6*d8*d9) + 
-        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d6^2*d7*d8*d9) + 
-        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d3*d4^2*d5*d6*d7*d8*d9) + 
-        rat(1, -9 + 2*d - n1)/(d1^n1*d2*d3^2*d4*d5*d6*d7*d8*d9) + 
-        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3*d4*d5*d6^2*d7*d9) + 
-        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3^2*d4*d5*d6*d7*d9) + 
-        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3*d4*d6*d7^2*d8*d9) + 
-        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3*d4^2*d5*d7*d8*d9) + 
-        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d4^2*d5*d6*d7*d8*d9) + 
-        rat(1, 9 - 2*d + n1)/(d1^n1*d2^2*d3*d4*d5*d6*d7*d8*d9) + 
-        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d6*d7*d8*d9^2) + 
-        rat(2, -9 + 2*d - n1)/(d1^n1*d2*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d6*d7*d9) + 
-        rat(2, -9 + 2*d - n1)/(d1^n1*d10^2*d2*d3*d4*d5*d6*d7*d9) + 
-        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2*d4*d5*d6*d7^2*d8*d9) + 
-        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2^2*d3*d4*d5*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7^2*d8) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3^2*d4*d5*d6*d7*d8) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7^2*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5^2*d6*d7*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3^2*d4*d5*d6*d7*d9) + 
-        rat(3, -9 + 2*d - n1)/(d1^n1*d10*d2*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d3*d4*d5*d6*d7*d8^2*d9) + 
-        rat(3, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d6*d8*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d5*d6*d7^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d6^2*d7*d8*d9) + 
-        rat(3, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d5*d6^2*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d5^2*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10^2*d2*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-2 - n1)*rat(-3 - 3*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d9) + 
-        (d1^(-1 - n1)*rat(-15 + 3*d - 2*n1, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-2*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-2*n1, 9 - 2*d + n1))/(d10*d2*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d9) + 
-        (d1^(-1 - n1)*rat(n1, 9 - 2*d + n1))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(2*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d8) + 
-        (d1^(-1 - n1)*rat(2*n1, 9 - 2*d + n1))/(d10*d2*d3*d5*d6*d7*d8*d9) + 
-        (d1^(-2 - n1)*rat(3 + 3*n1, 9 - 2*d + n1))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
+
+        rat(-3, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d6*d7*d8) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6^2*d7*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2^2*d3*d4*d5*d6*d7*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10^2*d2*d3*d4*d5*d6*d7*d9) +
+        rat(-3, -9 + 2*d - n1)/(d1^n1*d2*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d7^2*d8*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d2*d3*d4*d5*d6*d7^2*d8*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5^2*d7*d8*d9) +
+        rat(-3, -9 + 2*d - n1)/(d1^n1*d10*d3*d4*d5*d6^2*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6^2*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d2*d3^2*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10*d2^2*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-3, -9 + 2*d - n1))/(d10^2*d2*d3*d4*d5*d6*d7*d8*d9) +
+        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5*d6*d8*d9^2) +
+        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d5*d6*d7^2*d8*d9) +
+        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d7*d8*d9) +
+        rat(-2, -9 + 2*d - n1)/(d1^n1*d10*d2^2*d3*d5*d6*d7*d8*d9) +
+        rat(-2, -9 + 2*d - n1)/(d1^n1*d10^2*d2*d4*d5*d6*d7*d8*d9) +
+        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5*d6*d7^2*d8) +
+        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2^2*d3*d4*d5*d6*d7*d8) +
+        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4^2*d5*d6*d8*d9) +
+        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d6^2*d7*d8*d9) +
+        rat(1, -9 + 2*d - n1)/(d1^n1*d10*d3*d4^2*d5*d6*d7*d8*d9) +
+        rat(1, -9 + 2*d - n1)/(d1^n1*d2*d3^2*d4*d5*d6*d7*d8*d9) +
+        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3*d4*d5*d6^2*d7*d9) +
+        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3^2*d4*d5*d6*d7*d9) +
+        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3*d4*d6*d7^2*d8*d9) +
+        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d3*d4^2*d5*d7*d8*d9) +
+        rat(1, 9 - 2*d + n1)/(d1^n1*d10*d2*d4^2*d5*d6*d7*d8*d9) +
+        rat(1, 9 - 2*d + n1)/(d1^n1*d2^2*d3*d4*d5*d6*d7*d8*d9) +
+        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d6*d7*d8*d9^2) +
+        rat(2, -9 + 2*d - n1)/(d1^n1*d2*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d6*d7*d9) +
+        rat(2, -9 + 2*d - n1)/(d1^n1*d10^2*d2*d3*d4*d5*d6*d7*d9) +
+        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2*d4*d5*d6*d7^2*d8*d9) +
+        rat(2, -9 + 2*d - n1)/(d1^n1*d10*d2^2*d3*d4*d5*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7^2*d8) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3^2*d4*d5*d6*d7*d8) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7^2*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5^2*d6*d7*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3^2*d4*d5*d6*d7*d9) +
+        rat(3, -9 + 2*d - n1)/(d1^n1*d10*d2*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d3*d4*d5*d6*d7*d8^2*d9) +
+        rat(3, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d4*d5^2*d6*d8*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d5*d6*d7^2*d8*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d3*d4*d5*d6*d7^2*d8*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7^2*d8*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d4*d6^2*d7*d8*d9) +
+        rat(3, -9 + 2*d - n1)/(d1^n1*d10*d2*d3*d5*d6^2*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10*d2*d3*d5^2*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(3, -9 + 2*d - n1))/(d10^2*d2*d4*d5*d6*d7*d8*d9) +
+        (d1^(-2 - n1)*rat(-3 - 3*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d9) +
+        (d1^(-1 - n1)*rat(-15 + 3*d - 2*n1, -9 + 2*d - n1))/(d10*d2*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-2*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-2*n1, 9 - 2*d + n1))/(d10*d2*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d9) +
+        (d1^(-1 - n1)*rat(n1, 9 - 2*d + n1))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(2*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d8) +
+        (d1^(-1 - n1)*rat(2*n1, 9 - 2*d + n1))/(d10*d2*d3*d5*d6*d7*d8*d9) +
+        (d1^(-2 - n1)*rat(3 + 3*n1, 9 - 2*d + n1))/(d10*d3*d4*d5*d6*d7*d8*d9) +
         (d1^(-2 - n1)*rat(3 + 3*n1, 9 - 2*d + n1))/(d10*d2*d3*d4*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 1 && n3 == 1 && n4 == 2 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1
         if(count(d1,1)==0) id,only 1/d2/d3/d4^2/d5/d6/d7/d8/d9/d10 = 1/(d10*d2*d3^2*d4*d5*d6*d7*d8*d9);
-        
-        if(count(d1,1)==0) id,only 1/d2/d3/d4/d5/d6/d7/d8/d9/d10 = PR0/intX;                
+
+        if(count(d1,1)==0) id,only 1/d2/d3/d4/d5/d6/d7/d8/d9/d10 = PR0/intX;
 
         #call zeroX
 
-        endif;        
-        
-        goto endrec;         
+        endif;
+
+        goto endrec;
         la sortme;
         $irep = 0;
         la endrec;
-        
+
         ModuleOption,minimum,$irep;
         .sort:redX-`$repcount++';
         #redefine irep "`$irep'"
@@ -5561,18 +5562,18 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
 #endprocedure
 *--#] redX :
 
-* 
+*
 * Planar 9 line
-* 
+*
 *--#[ redH :
 #procedure redH
-#$repcount = 1;        
+#$repcount = 1;
 #do irep=1,1
-        #$irep = 1;                
+        #$irep = 1;
         if(count(intH,1));
 * den: minus
-* [1111111110]                  
-* n9 (-)                        
+* [1111111110]
+* n9 (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?neg0_ =
         -((d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9)) +
         (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) +
@@ -5650,7 +5651,7 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         d8^n8*(-1 + n1)) + (7*d1^(1 - n1)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(12*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n1)) -
         (7*d1^(2 - n1)*d9^(-1 - n9)*n9)/(12*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*
         (-1 + n1)) + (d1^(1 - n1)*rat(6 + d - 6*n1 + n10, 6*(-1 + n1)))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
-        
+
 *  3: n2      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?{>1}/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_ =
 
@@ -5677,10 +5678,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         d9^n9*(-1 + n2)) + (3*d1^(1 - n1)*d2^(1 - n2)*d8^(-1 - n8)*n8)/(4*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n2)) -
         (3*d2^(2 - n2)*d8^(-1 - n8)*n8)/(4*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*
         (-1 + n2)) + (d2^(1 - n2)*rat(4 + d - n10 - 4*n2, 4*(-1 + n2)))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
-        
+
 *  4: n3      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?{>1}/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_ =
-        
+
         d9^(1 - n9)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) -
         d1^(1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
         (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*n1)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*
@@ -5716,10 +5717,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (-1 + n3)) - (d1^(1 - n1)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n3)) +
         (d3^(2 - n3)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*
         (-1 + n3)) + (d3^(1 - n3)*rat(1 + d - 3*n1 - n2 - n3, -1 + n3))/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
-        
+
 *  5: n10, n2 (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?{>1}/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg_ =
-        
+
         (d10^(-1 - n10)*d9^(1 - n9))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
         (d10^(-1 - n10)*d8^(1 - n8))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
         (d1^(1 - n1)*d10^(-1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
@@ -5736,10 +5737,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d1^(1 - n1)*d10^(-1 - n10)*d2^(1 - n2)*d9^(-1 - n9)*n9)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n2)) +
         (d10^(-1 - n10)*d2^(1 - n2)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*
         d8^n8*(-1 + n2)) + (d10^(-1 - n10)*d2^(1 - n2)*(-n1 - n4 + n7 + n9))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n2));
-        
+
 *  6: n7      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?{>1}/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_ =
-        
+
         d4^(1 - n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         d3^(1 - n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
         (2*d1^(-1 - n1)*d7^(1 - n7)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*
@@ -5760,10 +5761,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (-1 + n7)) + (d7^(1 - n7)*(1 + 2*n1 - n10 + n2 - 2*n3 + n5 - n7))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
         (2*d3^(1 - n3)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*
         d8^n8*(-1 + n7)) + (2*d1^(1 - n1)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7));
-        
+
 *  7: n10, n6 (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?{>1}/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg_ =
-        
+
         (d10^(-1 - n10)*d9^(1 - n9))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
         (d10^(-1 - n10)*d8^(1 - n8))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
         (d10^(-1 - n10)*d7^(1 - n7))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) +
@@ -5786,10 +5787,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d1^(1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) +
         (d10^(-1 - n10)*d6^(1 - n6)*d9^(-1 - n9)*n9)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*
         d8^n8*(-1 + n6)) + (d10^(-1 - n10)*d6^(1 - n6)*(-n1 + n9))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6));
-        
+
 *  8: n10, n8 (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?{>1}/d9^n9?pos_/d10^n10?neg_ =
-        
+
         (d10^(-1 - n10)*d3^(1 - n3))/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
         d10^(-1 - n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         (d1^(-1 - n1)*d10^(-1 - n10)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) +
@@ -5809,7 +5810,7 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         d7^n7*(-1 + n8));
 *  9: n10, n3 (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?{>1}/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg_ =
-        
+
         (d10^(-1 - n10)*d9^(1 - n9))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
         (d10^(-1 - n10)*d8^(1 - n8))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
         (d1^(1 - n1)*d10^(-1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
@@ -5826,10 +5827,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d1^(1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n3)) +
         (d10^(-1 - n10)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*
         d9^n9*(-1 + n3)) + (d10^(-1 - n10)*d3^(1 - n3)*(-n1 - n4 + n6 + n8))/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3));
-        
+
 * 10: n10, n7 (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?{>1}/d8^n8?pos_/d9^n9?pos_/d10^n10?neg_ =
-        
+
         (d10^(-1 - n10)*d9^(1 - n9))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
         (d10^(-1 - n10)*d8^(1 - n8))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
         (d10^(-1 - n10)*d6^(1 - n6))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) +
@@ -5852,10 +5853,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d1^(1 - n1)*d10^(-1 - n10)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) +
         (d10^(-1 - n10)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*
         d9^n9*(-1 + n7)) + (d10^(-1 - n10)*d7^(1 - n7)*(-n1 + n8))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7));
-        
+
 * 11: n6      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?{>1}/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_ =
-        
+
         d8^(1 - n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
         d5^(1 - n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) +
         (2*d4^(1 - n4))/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
@@ -5871,10 +5872,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         d8^n8*d9^n9*(-1 + n6)) - (2*d2^(1 - n2)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
         (2*d1^(1 - n1)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*
         d9^n9*(-1 + n6)) + (d6^(1 - n6)*rat(1 + d - n10 - 3*n2 - n6, -1 + n6))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9);
-        
+
 * 12: n10, n9 (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?neg_ =
-        
+
         (d10^(-1 - n10)*d2^(1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
         d10^(-1 - n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         (d1^(-1 - n1)*d10^(-1 - n10)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) +
@@ -5891,10 +5892,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d1^(1 - n1)*d10^(-1 - n10)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
         (d10^(-1 - n10)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*
         d7^n7*(-1 + n9)) + (d10^(-1 - n10)*d9^(1 - n9)*(-2 + n1 - n10 - n8 + n9))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9));
-        
+
 * 13: n4      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?{>1}/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_ =
-        
+
         d5^(1 - n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) -
         d1^(1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         (2*d1^(-1 - n1)*d4^(1 - n4)*n1)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*
@@ -5909,10 +5910,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d1^(1 - n1)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*
         (-1 + n4)) - (d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*
         d8^n8*d9^n9*(-1 + n4)) + (d4^(1 - n4)*rat(1 + d - 2*n1 - n2 - n3 - n4, -1 + n4))/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
-        
+
 * 14: n5      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?{>1}/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?neg0_ =
-        
+
         d4^(1 - n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         d1^(1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         (2*d1^(-1 - n1)*d5^(1 - n5)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*
@@ -5935,10 +5936,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (-1 + n5)) - (d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) -
         (d5^(2 - n5)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*
         (-1 + n5)) + (d5^(1 - n5)*rat(1 + d - 2*n1 - n2 - n3 - n5, -1 + n5))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9);
-        
+
 * 15: n8      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?{>1}/d9^n9?pos_/d10^n10?neg0_ =
-        
+
         d2^(1 - n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         d1^(1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         (d10^(-1 - n10)*d8^(1 - n8)*d9^(1 - n9)*n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*
@@ -5953,10 +5954,10 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d2^(1 - n2)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*
         (-1 + n8)) - (d6^(-1 - n6)*d8^(2 - n8)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*
         d7^n7*d9^n9*(-1 + n8)) + (d8^(1 - n8)*(1 + n2 - n8))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8));
-        
+
 * 16: n9      (-)
         id,ifmatch->sortme 1/d1^n1?pos_/d2^n2?pos_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?neg0_ =
-        
+
         d3^(1 - n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         d1^(1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
         (2*d1^(-1 - n1)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*
@@ -5972,7 +5973,7 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (-1 + n9)) - (d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*
         d6^n6*d7^n7*(-1 + n9)) + (d9^(1 - n9)*rat(1 + d - 2*n1 - n5 - n8 - n9, -1 + n9))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8);
 
-* 17: n10     (-)              
+* 17: n10     (-)
         id,only,ifmatch->sortme 1/d1/d2/d3/d4/d5/d6/d7/d8/d9/d10^n10?neg_ =
 
         (d10^(-1 - n10)*rat(-4, -4 + d - n10))/(d1*d2*d3*d4*d5^2*d6*d7*d9) +
@@ -6013,17 +6014,17 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         (d10^(-1 - n10)*rat(2*n10, -4 + d - n10))/(d1*d2*d3*d4*d5*d6*d7*d9) +
         (d10^(-1 - n10)*rat(3*n10, -4 + d - n10))/(d1*d2*d3*d4*d5*d6*d7*d8);
 
-        if(count(d10,1)==0) id,only 1/d1/d2/d3/d4/d5/d6/d7/d8/d9 = PR12/intH;        
+        if(count(d10,1)==0) id,only 1/d1/d2/d3/d4/d5/d6/d7/d8/d9 = PR12/intH;
 
-        #call zeroH        
+        #call zeroH
 
         endif;
 
-        goto endrec;         
+        goto endrec;
         la sortme;
         $irep = 0;
         la endrec;
-        
+
         ModuleOption,minimum,$irep;
         .sort:redH-`$repcount++';
         #redefine irep "`$irep'"
@@ -6031,1317 +6032,1317 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
 #endprocedure
 *--#] redH :
 
-* 
+*
 * Planar 8 line
-* 
+*
 *--#[ redBMW :
 #procedure redBMW
-#$repcount = 1;        
+#$repcount = 1;
 #do irep=1,1
-        #$irep = 1;                
+        #$irep = 1;
         if(count(intBMW,1));
-* [0011111111]                  
+* [0011111111]
 * den: minus
 * n7 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?{>1}/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        -(d1^(-1 - n1)*d7^(1 - n7)*d9^(1 - n9)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) + 
-        (d1^(-1 - n1)*d5^(1 - n5)*d7^(1 - n7)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d1^(-1 - n1)*d4^(1 - n4)*d7^(1 - n7)*n1)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d7^(1 - n7)*n1)/(2*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d1^(-1 - n1)*d7^(1 - n7)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d7^(1 - n7)*d9^(1 - n9)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) - 
-        (d2^(-1 - n2)*d7^(1 - n7)*d8^(1 - n8)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) + 
-        (d2^(-1 - n2)*d6^(1 - n6)*d7^(1 - n7)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d4^(1 - n4)*d7^(1 - n7)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d7^(1 - n7)*n2)/(2*d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d1^(1 - n1)*d2^(-1 - n2)*d7^(1 - n7)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d7^(1 - n7)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d3^(1 - n3)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(2*d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d4^(-1 - n4)*d7^(1 - n7)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d4^(-1 - n4)*d7^(2 - n7)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d5^(-1 - n5)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d6^(-1 - n6)*d7^(1 - n7)*d8^(1 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d9^n9*(-1 + n7)) + 
-        (d5^(1 - n5)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) + 
-        (d6^(-1 - n6)*d7^(1 - n7)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) + 
-        (d7^(1 - n7)*(2 + n1 - n2 - n4 + 2*n5 + n6 - 2*n7))/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d5^(1 - n5)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n7)) - 
+
+        -(d1^(-1 - n1)*d7^(1 - n7)*d9^(1 - n9)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) +
+        (d1^(-1 - n1)*d5^(1 - n5)*d7^(1 - n7)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d1^(-1 - n1)*d4^(1 - n4)*d7^(1 - n7)*n1)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d7^(1 - n7)*n1)/(2*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d1^(-1 - n1)*d7^(1 - n7)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d7^(1 - n7)*d9^(1 - n9)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7)) -
+        (d2^(-1 - n2)*d7^(1 - n7)*d8^(1 - n8)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) +
+        (d2^(-1 - n2)*d6^(1 - n6)*d7^(1 - n7)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d4^(1 - n4)*d7^(1 - n7)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d7^(1 - n7)*n2)/(2*d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d1^(1 - n1)*d2^(-1 - n2)*d7^(1 - n7)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d7^(1 - n7)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d3^(1 - n3)*d4^(-1 - n4)*d7^(1 - n7)*n4)/(2*d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d4^(-1 - n4)*d7^(1 - n7)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d4^(-1 - n4)*d7^(2 - n7)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d5^(-1 - n5)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d6^(-1 - n6)*d7^(1 - n7)*d8^(1 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d9^n9*(-1 + n7)) +
+        (d5^(1 - n5)*d6^(-1 - n6)*d7^(1 - n7)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) +
+        (d6^(-1 - n6)*d7^(1 - n7)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n7)) +
+        (d7^(1 - n7)*(2 + n1 - n2 - n4 + 2*n5 + n6 - 2*n7))/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d5^(1 - n5)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n7)) -
         (d7^(2 - n7)*d9^(-1 - n9)*n9)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n7));
 
 * n1 != 0 && n3 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?neg0_/d3^n3?{>1}/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) - 
-        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d3^(1 - n3)*d5^(1 - n5)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-2 - n1)*d3^(1 - n3)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-2 - n1)*d3^(1 - n3)*d4^(1 - n4)*(1 + n1))/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) - 
-        (2*d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*n5)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n3)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n3)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n3)) + 
+
+        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) -
+        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d3^(1 - n3)*d5^(1 - n5)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-2 - n1)*d3^(1 - n3)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-2 - n1)*d3^(1 - n3)*d4^(1 - n4)*(1 + n1))/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) -
+        (2*d1^(-1 - n1)*d3^(1 - n3)*d5^(-1 - n5)*n5)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n3)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n3)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n3)) +
         (d1^(-1 - n1)*d3^(1 - n3)*rat(-1 + d - n1 - 2*n5 - n7 - n8, -1 + n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * n9 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?pos_ =
 
-        d7^(1 - n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) - 
-        d5^(1 - n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d5^(1 - n5)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(-1 - n1)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) - 
-        (d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n9)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(1 - n1)*d2^(-1 - n2)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (2*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d6^(-1 - n6)*d8^(1 - n8)*d9^(1 - n9)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*(-1 + n9)) - 
-        (d5^(1 - n5)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) - 
-        (d6^(-1 - n6)*d9^(1 - n9)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n9)) + 
+        d7^(1 - n7)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) -
+        d5^(1 - n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d5^(1 - n5)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(-1 - n1)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
+        (d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n9)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(1 - n1)*d2^(-1 - n2)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (2*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d6^(-1 - n6)*d8^(1 - n8)*d9^(1 - n9)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*(-1 + n9)) -
+        (d5^(1 - n5)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) -
+        (d6^(-1 - n6)*d9^(1 - n9)*n6)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n9)) +
         (d9^(1 - n9)*rat(1 + d - n1 - 2*n5 - n6 - n9, -1 + n9))/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8);
 
 * n1 != 0 && n10 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?{>1} =
-        
-        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) + 
-        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) - 
-        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d6^(1 - n6))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d10^(1 - n10)*d4^(1 - n4)*(-1 - n1))/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(-2 - n1)*d10^(1 - n10)*d5^(1 - n5)*(1 + n1))/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(-2 - n1)*d10^(1 - n10)*(1 + n1))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (2*d1^(-1 - n1)*d10^(1 - n10)*d5^(-1 - n5)*n5)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
+
+        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
+        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
+        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d6^(1 - n6))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d10^(1 - n10)*d4^(1 - n4)*(-1 - n1))/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(-2 - n1)*d10^(1 - n10)*d5^(1 - n5)*(1 + n1))/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(-2 - n1)*d10^(1 - n10)*(1 + n1))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (2*d1^(-1 - n1)*d10^(1 - n10)*d5^(-1 - n5)*n5)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d7^(1 - n7)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d9^(-1 - n9)*n9)/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
         (d1^(-1 - n1)*d10^(1 - n10)*rat(1 - d + n1 + 2*n5 + n8 + n9, -1 + n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * n8 != 1
 
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?{>1}/d9^n9?pos_/d10^n10?pos_ =
 
-        -(d1^(-1 - n1)*d8^(1 - n8)*d9^(1 - n9)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d8^(1 - n8)*n1)/(2*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(-1 - n1)*d8^(1 - n8)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d10^(-1 - n10)*d3^(1 - n3)*d8^(1 - n8)*n10)/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d10^(-1 - n10)*d8^(2 - n8)*n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(2*d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d2^(-1 - n2)*d8^(1 - n8)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d2^(-1 - n2)*d8^(2 - n8)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d4^(-1 - n4)*d7^(1 - n7)*d8^(1 - n8)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d9^n9*(-1 + n8)) + 
-        (d3^(1 - n3)*d4^(-1 - n4)*d8^(1 - n8)*n4)/(2*d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d4^(-1 - n4)*d8^(1 - n8)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d5^(1 - n5)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n8)) - 
-        (d6^(-1 - n6)*d8^(1 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) - 
-        (d6^(-1 - n6)*d8^(2 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) + 
+        -(d1^(-1 - n1)*d8^(1 - n8)*d9^(1 - n9)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d8^(1 - n8)*n1)/(2*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(-1 - n1)*d8^(1 - n8)*n1)/(2*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d10^(-1 - n10)*d3^(1 - n3)*d8^(1 - n8)*n10)/(d1^n1*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d10^(-1 - n10)*d8^(2 - n8)*n10)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(2*d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d2^(-1 - n2)*d8^(1 - n8)*n2)/(2*d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d2^(-1 - n2)*d8^(2 - n8)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d4^(-1 - n4)*d7^(1 - n7)*d8^(1 - n8)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d9^n9*(-1 + n8)) +
+        (d3^(1 - n3)*d4^(-1 - n4)*d8^(1 - n8)*n4)/(2*d1^n1*d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d4^(-1 - n4)*d8^(1 - n8)*n4)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d5^(1 - n5)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d9^n9*(-1 + n8)) -
+        (d6^(-1 - n6)*d8^(1 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) -
+        (d6^(-1 - n6)*d8^(2 - n8)*n6)/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n8)) +
         (d8^(1 - n8)*(2 + n1 - n2 + 2*n3 + n4 - n6 - 2*n8))/(2*d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8));
 
 * n1 != 0 && n4 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?neg0_/d3^n3?pos_/d4^n4?{>1}/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d4^(1 - n4)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d4^(1 - n4)*n10)/(d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (2*d1^(-1 - n1)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d4^(1 - n4)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*(-1 + n4)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d6^n6*d8^n8*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d4^(1 - n4)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n4)) - 
-        (2*d1^(-1 - n1)*d4^(1 - n4)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n4)) + 
+
+        (d1^(-1 - n1)*d5^(1 - n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d4^(1 - n4)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d4^(1 - n4)*n10)/(d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d4^(1 - n4)*n10)/(d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*n2)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4)*n2)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (2*d1^(-1 - n1)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10^n10*d2^n2*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d4^(1 - n4)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*(-1 + n4)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d6^n6*d8^n8*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d4^(1 - n4)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n4)) -
+        (2*d1^(-1 - n1)*d4^(1 - n4)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n4)) +
         (d1^(-1 - n1)*d4^(1 - n4)*rat(-1 + 2*d - 2*n1 - n10 - n2 - 2*n3 - n4 - n7 - 2*n9, -1 + n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * n1 != 0 && n6 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?{>1}/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) + 
-        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) - 
-        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d10^(1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d6^(1 - n6)*n10)/(d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*n2)/(d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d6^(1 - n6)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) - 
-        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
-        (d1^(-1 - n1)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) + 
+
+        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
+        (d1^(-1 - n1)*d8^(1 - n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
+        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d10^(1 - n10))/(d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d6^(1 - n6)*n10)/(d2^n2*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d6^(1 - n6)*n10)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n6)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d6^(1 - n6)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d6^(1 - n6)*n2)/(d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d6^(1 - n6)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d3^(1 - n3)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) -
+        (d1^(-1 - n1)*d10^(1 - n10)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
+        (d1^(-1 - n1)*d6^(1 - n6)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n6)) +
         (d1^(-1 - n1)*d6^(1 - n6)*(-n10 + n8))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6));
 
 * n1 != 0 && n5 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?{>1}/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) - 
-        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d3^(1 - n3)*d5^(1 - n5)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-2 - n1)*d5^(1 - n5)*d9^(1 - n9)*(1 + n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) + 
-        (d1^(-2 - n1)*d5^(1 - n5)*(1 + n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d5^(1 - n5)*n10)/(d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d4^(-1 - n4)*d5^(2 - n5)*n4)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d5^(1 - n5)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n5)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d6^n6*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d5^(2 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) + 
-        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) - 
-        (d1^(-1 - n1)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) + 
-        (2*d1^(-1 - n1)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) + 
+
+        (d1^(-1 - n1)*d9^(1 - n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) -
+        (d1^(-1 - n1)*d7^(1 - n7))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d4^(1 - n4))/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d3^(1 - n3)*d5^(1 - n5)*(-1 - n1))/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-2 - n1)*d5^(1 - n5)*d9^(1 - n9)*(1 + n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) +
+        (d1^(-2 - n1)*d5^(1 - n5)*(1 + n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*d8^(1 - n8)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d3^(1 - n3)*d5^(1 - n5)*n10)/(d2^n2*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d10^(-1 - n10)*d5^(1 - n5)*n10)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*d8^(1 - n8)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d5^(1 - n5)*n2)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(d1^n1*d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d4^(-1 - n4)*d5^(2 - n5)*n4)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d5^(1 - n5)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*(-1 + n5)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d6^n6*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d5^(2 - n5)*d7^(-1 - n7)*n7)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d3^(1 - n3)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) +
+        (d1^(-1 - n1)*d10^(1 - n10)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) -
+        (d1^(-1 - n1)*d5^(1 - n5)*d8^(-1 - n8)*n8)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n5)) +
+        (2*d1^(-1 - n1)*d5^(1 - n5)*d9^(-1 - n9)*n9)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n5)) +
         (d1^(-1 - n1)*d5^(1 - n5)*rat(1 - d + n1 + n10 + n2 + n4 - n8 + 2*n9, -1 + n5))/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * n2 != 0 && n4 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg_/d3^n3?pos_/d4^n4?{>1}/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d2^(-1 - n2)*d6^(1 - n6))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*n1)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) - 
-        (d1^(-1 - n1)*d4^(1 - n4)*n1)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d10^n10*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n4)) - 
-        (d2^(-1 - n2)*d4^(1 - n4)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d1^n1*d10^n10*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*d6^(-1 - n6)*n6)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n4)) + 
-        (2*d2^(-1 - n2)*d4^(1 - n4)*d8^(-1 - n8)*n8)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) + 
+
+        (d2^(-1 - n2)*d6^(1 - n6))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d4^(1 - n4)*n1)/(d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) -
+        (d1^(-1 - n1)*d4^(1 - n4)*n1)/(d10^n10*d2^n2*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d2^(-1 - n2)*d3^(-1 - n3)*d4^(1 - n4)*n3)/(d1^n1*d10^n10*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d9^n9*(-1 + n4)) -
+        (d2^(-1 - n2)*d4^(1 - n4)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d1^n1*d10^n10*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*d6^(-1 - n6)*n6)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n4)) +
+        (2*d2^(-1 - n2)*d4^(1 - n4)*d8^(-1 - n8)*n8)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n4)) +
         (d2^(-1 - n2)*d4^(1 - n4)*rat(-d + n1 + n3 + n6 + 2*n8, -1 + n4))/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * n2 != 0 && n7 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?{>1}/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        -((d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9)) + 
-        (d2^(-1 - n2)*d6^(1 - n6))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d10^(1 - n10)*d2^(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d2^(-1 - n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d7^(1 - n7)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d7^(1 - n7)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) + 
-        (d1^(-1 - n1)*d7^(1 - n7)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d7^(1 - n7)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n7)) + 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) - 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) - 
-        (2*d2^(-1 - n2)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) + 
+
+        -((d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9)) +
+        (d2^(-1 - n2)*d6^(1 - n6))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d10^(1 - n10)*d2^(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d2^(-1 - n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d7^(1 - n7)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d7^(1 - n7)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) +
+        (d1^(-1 - n1)*d7^(1 - n7)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d7^(1 - n7)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d5^(-1 - n5)*d7^(1 - n7)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n7)) +
+        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n7)) -
+        (d2^(-1 - n2)*d5^(-1 - n5)*d7^(1 - n7)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d8^n8*d9^n9*(-1 + n7)) -
+        (2*d2^(-1 - n2)*d7^(1 - n7)*d8^(-1 - n8)*n8)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n7)) +
         (d2^(-1 - n2)*d7^(1 - n7)*rat(d - n1 - n3 - n5 - 2*n8, -1 + n7))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d8^n8*d9^n9);
 
 * n10 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?{>1} =
-        
-        -(d8^(1 - n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9)) + 
-        d3^(1 - n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
-        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*n2)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*n2)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d6^(-1 - n6)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (2*d10^(1 - n10)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
+
+        -(d8^(1 - n8)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9)) +
+        d3^(1 - n3)/(d1^n1*d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d8^(1 - n8)*n2)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
+        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*n2)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*n2)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d6^(-1 - n6)*d8^(1 - n8)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d5^(1 - n5)*d6^(-1 - n6)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d6^(-1 - n6)*n6)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (2*d10^(1 - n10)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
         (d10^(1 - n10)*rat(1 + d - n10 - n2 - n6 - 2*n8, -1 + n10))/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * n2 != 0 && n9 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?pos_ =
-        
-        -((d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9)) + 
-        (d10^(1 - n10)*d2^(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(-1 - n1)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d10^(-1 - n10)*d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n10)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) - 
-        (d10^(-1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d9^(1 - n9)*n10)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d10^(-1 - n10)*d2^(-1 - n2)*d9^(1 - n9)*n10)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*(-1 + n9)) - 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) + 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (2*d2^(-1 - n2)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) + 
+
+        -((d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9)) +
+        (d10^(1 - n10)*d2^(-1 - n2))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d9^(1 - n9)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(-1 - n1)*d9^(1 - n9)*n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d10^(-1 - n10)*d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n10)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
+        (d10^(-1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d9^(1 - n9)*n10)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d10^(-1 - n10)*d2^(-1 - n2)*d9^(1 - n9)*n10)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*(-1 + n9)) -
+        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) +
+        (d2^(-1 - n2)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (2*d2^(-1 - n2)*d8^(-1 - n8)*d9^(1 - n9)*n8)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) +
         (d2^(-1 - n2)*d9^(1 - n9)*rat(-d + n1 + n10 + n5 + 2*n8, -1 + n9))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8);
 
 * n2 != 0 && n6 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?{>1}/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d2^(-1 - n2)*d4^(1 - n4))/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        (d2^(-1 - n2)*d4^(-1 - n4)*d5^(1 - n5)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d1^(1 - n1)*d2^(-1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d6^(1 - n6)*(n4 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d1^n1*d10^n10*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d1^(1 - n1)*d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) - 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d6^(1 - n6)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) - 
-        (d2^(-1 - n2)*d5^(1 - n5)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) + 
-        (d2^(-1 - n2)*d4^(1 - n4)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n6)) - 
+
+        (d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d2^(-1 - n2)*d4^(1 - n4))/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        (d2^(-1 - n2)*d4^(-1 - n4)*d5^(1 - n5)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d1^(1 - n1)*d2^(-1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d1^n1*d10^n10*d3^n3*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d6^(1 - n6)*(n4 - n5))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d1^n1*d10^n10*d3^n3*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d1^(1 - n1)*d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) -
+        (d2^(-1 - n2)*d5^(-1 - n5)*d6^(1 - n6)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d7^n7*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d6^(1 - n6)*d7^(-1 - n7)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d8^n8*(-1 + n6)) -
+        (d2^(-1 - n2)*d5^(1 - n5)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d8^n8*d9^n9*(-1 + n6)) +
+        (d2^(-1 - n2)*d4^(1 - n4)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d3^n3*d5^n5*d8^n8*d9^n9*(-1 + n6)) -
         (d2^(-1 - n2)*d3^(1 - n3)*d6^(1 - n6)*d7^(-1 - n7)*n7)/(d1^n1*d10^n10*d4^n4*d5^n5*d8^n8*d9^n9*(-1 + n6));
-        
+
 * n2 != 0 && n8 != 1
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?{>1}/d9^n9?pos_/d10^n10?pos_ =
-        
-        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        d2^(-1 - n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (2*d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*d9^(1 - n9)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) + 
-        (d1^(1 - n1)*d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d2^(-1 - n2)*d4^(1 - n4)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d3^n3*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d1^(1 - n1)*d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n8)) + 
-        (d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n8)) - 
-        (d2^(-1 - n2)*d7^(-1 - n7)*d8^(1 - n8)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*(-1 + n8)) + 
-        (d2^(-1 - n2)*d5^(1 - n5)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n8)) - 
-        (d2^(-1 - n2)*d4^(1 - n4)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d9^n9*(-1 + n8)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n8)) + 
+
+        (d1^(1 - n1)*d2^(-1 - n2))/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        d2^(-1 - n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (2*d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*n1)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*d9^(1 - n9)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n8)) +
+        (d1^(1 - n1)*d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d2^(-1 - n2)*d3^(-1 - n3)*d8^(1 - n8)*n3)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d2^(-1 - n2)*d4^(1 - n4)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d3^n3*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d1^(1 - n1)*d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n8)) +
+        (d2^(-1 - n2)*d5^(-1 - n5)*d8^(1 - n8)*n5)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d7^n7*d9^n9*(-1 + n8)) -
+        (d2^(-1 - n2)*d7^(-1 - n7)*d8^(1 - n8)*d9^(1 - n9)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*(-1 + n8)) +
+        (d2^(-1 - n2)*d5^(1 - n5)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d3^n3*d4^n4*d6^n6*d9^n9*(-1 + n8)) -
+        (d2^(-1 - n2)*d4^(1 - n4)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d3^n3*d5^n5*d6^n6*d9^n9*(-1 + n8)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*d7^(-1 - n7)*d8^(1 - n8)*n7)/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d9^n9*(-1 + n8)) +
         (d2^(-1 - n2)*d8^(1 - n8)*rat(-1 - d + 2*n1 + n3 + n5 + n8, -1 + n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9);
 
 * n1 != 0 && n9 != 1
         id,ifmatch->sortme 1/d1^n1?neg_/d2^n2?neg0_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?{>1}/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) - 
-        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (d1^(-2 - n1)*d9^(1 - n9)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) - 
-        (d1^(-1 - n1)*d2^(-1 - n2)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d2^(-1 - n2)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(-1 - n1)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) - 
-        (d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d6^(-1 - n6)*d8^(1 - n8)*d9^(1 - n9)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*(-1 + n9)) - 
-        (d1^(-1 - n1)*d5^(1 - n5)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) + 
-        (d1^(-1 - n1)*d4^(1 - n4)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*(-1 + n9)) - 
-        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n9)) + 
+
+        (d1^(-1 - n1)*d3^(1 - n3))/(d10^n10*d2^n2*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) -
+        d1^(-1 - n1)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (d1^(-2 - n1)*d9^(1 - n9)*(-2 - 2*n1))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*d8^(1 - n8)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*(-1 + n9)) -
+        (d1^(-1 - n1)*d2^(-1 - n2)*d9^(1 - n9)*n2)/(d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d2^(-1 - n2)*d9^(1 - n9)*n2)/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(-1 - n1)*d5^(-1 - n5)*d9^(1 - n9)*n5)/(d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) -
+        (d5^(-1 - n5)*d9^(1 - n9)*n5)/(d1^n1*d10^n10*d2^n2*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d6^(-1 - n6)*d8^(1 - n8)*d9^(1 - n9)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d7^n7*(-1 + n9)) -
+        (d1^(-1 - n1)*d5^(1 - n5)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d10^n10*d2^n2*d3^n3*d4^n4*d7^n7*d8^n8*(-1 + n9)) +
+        (d1^(-1 - n1)*d4^(1 - n4)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d10^n10*d2^n2*d3^n3*d5^n5*d7^n7*d8^n8*(-1 + n9)) -
+        (d1^(-1 - n1)*d2^(1 - n2)*d6^(-1 - n6)*d9^(1 - n9)*n6)/(d10^n10*d3^n3*d4^n4*d5^n5*d7^n7*d8^n8*(-1 + n9)) +
         (d1^(-1 - n1)*d9^(1 - n9)*rat(-1 + d - 2*n1 - n2 - n5 - n9, -1 + n9))/(d10^n10*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8);
 
 * n10 != 1 && n2 != 0
         id,ifmatch->sortme 1/d1^n1?neg0_/d2^n2?neg_/d3^n3?pos_/d4^n4?pos_/d5^n5?pos_/d6^n6?pos_/d7^n7?pos_/d8^n8?pos_/d9^n9?pos_/d10^n10?{>1} =
-        
-        (d2^(-1 - n2)*d9^(1 - n9))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) + 
-        (d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) + 
-        (2*d1^(-1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*n1)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d4^(1 - n4)*d5^(-1 - n5)*n5)/(d1^n1*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*n5)/(d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) + 
-        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d8^(-1 - n8)*n8)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) - 
-        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
-        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d9^(-1 - n9)*n9)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
-        (d10^(1 - n10)*d2^(-1 - n2)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) + 
+
+        (d2^(-1 - n2)*d9^(1 - n9))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8) +
+        (d2^(-1 - n2)*d8^(1 - n8))/(d1^n1*d10^n10*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(d1^n1*d10^n10*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9) +
+        (2*d1^(-1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*n1)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d4^(1 - n4)*d5^(-1 - n5)*n5)/(d1^n1*d3^n3*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*n5)/(d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d5^(-1 - n5)*n5)/(d1^n1*d3^n3*d4^n4*d6^n6*d7^n7*d8^n8*d9^n9*(-1 + n10)) +
+        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d8^(-1 - n8)*n8)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d8^(-1 - n8)*n8)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d8^(-1 - n8)*n8)/(d1^n1*d2^n2*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d9^n9*(-1 + n10)) -
+        (d10^(1 - n10)*d2^(-1 - n2)*d3^(1 - n3)*d9^(-1 - n9)*n9)/(d1^n1*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
+        (d1^(1 - n1)*d10^(1 - n10)*d2^(-1 - n2)*d9^(-1 - n9)*n9)/(d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
+        (d10^(1 - n10)*d2^(-1 - n2)*d9^(-1 - n9)*n9)/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*(-1 + n10)) +
         (d10^(1 - n10)*d2^(-1 - n2)*rat(-d + 2*n1 + n5 + n8 + n9, -1 + n10))/(d1^n1*d3^n3*d4^n4*d5^n5*d6^n6*d7^n7*d8^n8*d9^n9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n7 == 1 && n8 == 1 && n9 == 1 && n5 != 1 && n6 != 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3^n3?pos_/d4^n4?pos_/d5^n5?{>1}/d6^n6?{>1}/d7/d8/d9/d10 =
-        
-        -1/(3*d10*d3^n3*d4^n4*d5^n5*d6^n6*d7*d9) - 
-        (2*d3^(1 - n3))/(3*d10*d4^n4*d5^n5*d6^n6*d7*d8*d9) + 
-        2/(3*d3^n3*d4^n4*d5^n5*d6^n6*d7*d8*d9) + 
-        (2*d5^(1 - n5))/(3*d10*d3^n3*d4^n4*d6^n6*d8*d9^2*(-1 + n5)) - 
-        (2*d5^(2 - n5))/(3*d10*d3^n3*d4^n4*d6^n6*d7*d8*d9^2*(-1 + n5)) + 
-        (2*d5^(1 - n5))/(3*d10^2*d3^n3*d4^n4*d6^n6*d7*d9*(-1 + n5)) - 
-        (2*d3^(1 - n3)*d5^(1 - n5))/(3*d10*d4^n4*d6^n6*d7*d8^2*d9*(-1 + n5)) + 
-        (2*d5^(1 - n5))/(3*d3^n3*d4^n4*d6^n6*d7*d8^2*d9*(-1 + n5)) + 
-        (2*d4^(1 - n4)*d5^(1 - n5))/(3*d10*d3^n3*d6^n6*d7^2*d8*d9*(-1 + n5)) - 
-        (2*d3^(1 - n3)*d5^(1 - n5))/(3*d10*d4^n4*d6^n6*d7^2*d8*d9*(-1 + n5)) - 
-        (2*d3^(1 - n3)*d5^(1 - n5))/(3*d10^2*d4^n4*d6^n6*d7*d8*d9*(-1 + n5)) - 
-        (2*d3^(-1 - n3)*d5^(1 - n5)*n3)/(d10*d4^n4*d6^n6*d7*d8*d9*(-1 + n5)) + 
-        (2*d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d3^n3*d6^n6*d8*d9*(-1 + n5)) - 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d6^n6*d7*d8*d9*(-1 + n5)) + 
-        (2*d6^(1 - n6))/(3*d10^2*d3^n3*d4^n4*d5^n5*d7*d9*(-1 + n6)) - 
-        (2*d3^(1 - n3)*d6^(1 - n6))/(3*d10*d4^n4*d5^n5*d7*d8^2*d9*(-1 + n6)) + 
-        (2*d6^(1 - n6))/(3*d3^n3*d4^n4*d5^n5*d7*d8^2*d9*(-1 + n6)) - 
-        (2*d3^(1 - n3)*d6^(1 - n6))/(3*d10^2*d4^n4*d5^n5*d7*d8*d9*(-1 + n6)) - 
-        (2*d3^(-1 - n3)*d6^(1 - n6)*n3)/(d10*d4^n4*d5^n5*d7*d8*d9*(-1 + n6)) + 
-        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10*d3^n3*d5^n5*d8*d9*(-1 + n6)) - 
-        (d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10*d5^n5*d7*d8*d9*(-1 + n6)) - 
-        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10*d3^n3*d5^n5*d7*d8*d9*(-1 + n6)) + 
-        (2*d5^(1 - n5)*d6^(-1 - n6)*n6)/(3*d10*d3^n3*d4^n4*d7*d9*(-1 + n5)) - 
-        (2*d5^(2 - n5)*d6^(-1 - n6)*n6)/(3*d10*d3^n3*d4^n4*d7*d8*d9*(-1 + n5)) + 
-        (d5^(1 - n5)*rat(3 + 2*d - 6*n3 - 3*n5, 3*(-1 + n5)))/(d10*d3^n3*d4^n4*d6^n6*d7*d8*d9) + 
+
+        -1/(3*d10*d3^n3*d4^n4*d5^n5*d6^n6*d7*d9) -
+        (2*d3^(1 - n3))/(3*d10*d4^n4*d5^n5*d6^n6*d7*d8*d9) +
+        2/(3*d3^n3*d4^n4*d5^n5*d6^n6*d7*d8*d9) +
+        (2*d5^(1 - n5))/(3*d10*d3^n3*d4^n4*d6^n6*d8*d9^2*(-1 + n5)) -
+        (2*d5^(2 - n5))/(3*d10*d3^n3*d4^n4*d6^n6*d7*d8*d9^2*(-1 + n5)) +
+        (2*d5^(1 - n5))/(3*d10^2*d3^n3*d4^n4*d6^n6*d7*d9*(-1 + n5)) -
+        (2*d3^(1 - n3)*d5^(1 - n5))/(3*d10*d4^n4*d6^n6*d7*d8^2*d9*(-1 + n5)) +
+        (2*d5^(1 - n5))/(3*d3^n3*d4^n4*d6^n6*d7*d8^2*d9*(-1 + n5)) +
+        (2*d4^(1 - n4)*d5^(1 - n5))/(3*d10*d3^n3*d6^n6*d7^2*d8*d9*(-1 + n5)) -
+        (2*d3^(1 - n3)*d5^(1 - n5))/(3*d10*d4^n4*d6^n6*d7^2*d8*d9*(-1 + n5)) -
+        (2*d3^(1 - n3)*d5^(1 - n5))/(3*d10^2*d4^n4*d6^n6*d7*d8*d9*(-1 + n5)) -
+        (2*d3^(-1 - n3)*d5^(1 - n5)*n3)/(d10*d4^n4*d6^n6*d7*d8*d9*(-1 + n5)) +
+        (2*d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d3^n3*d6^n6*d8*d9*(-1 + n5)) -
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d6^n6*d7*d8*d9*(-1 + n5)) +
+        (2*d6^(1 - n6))/(3*d10^2*d3^n3*d4^n4*d5^n5*d7*d9*(-1 + n6)) -
+        (2*d3^(1 - n3)*d6^(1 - n6))/(3*d10*d4^n4*d5^n5*d7*d8^2*d9*(-1 + n6)) +
+        (2*d6^(1 - n6))/(3*d3^n3*d4^n4*d5^n5*d7*d8^2*d9*(-1 + n6)) -
+        (2*d3^(1 - n3)*d6^(1 - n6))/(3*d10^2*d4^n4*d5^n5*d7*d8*d9*(-1 + n6)) -
+        (2*d3^(-1 - n3)*d6^(1 - n6)*n3)/(d10*d4^n4*d5^n5*d7*d8*d9*(-1 + n6)) +
+        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10*d3^n3*d5^n5*d8*d9*(-1 + n6)) -
+        (d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10*d5^n5*d7*d8*d9*(-1 + n6)) -
+        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(d10*d3^n3*d5^n5*d7*d8*d9*(-1 + n6)) +
+        (2*d5^(1 - n5)*d6^(-1 - n6)*n6)/(3*d10*d3^n3*d4^n4*d7*d9*(-1 + n5)) -
+        (2*d5^(2 - n5)*d6^(-1 - n6)*n6)/(3*d10*d3^n3*d4^n4*d7*d8*d9*(-1 + n5)) +
+        (d5^(1 - n5)*rat(3 + 2*d - 6*n3 - 3*n5, 3*(-1 + n5)))/(d10*d3^n3*d4^n4*d6^n6*d7*d8*d9) +
         (d6^(1 - n6)*rat(-1 + 2*d - 6*n3 - 3*n4 + n6, 3*(-1 + n6)))/(d10*d3^n3*d4^n4*d5^n5*d7*d8*d9);
-        
+
 * n1 == 0 && n10 == 1 && n2 == 0 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n5 != 1 && n5 != 2
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3^n3?pos_/d4^n4?pos_/d5^n5?{>2}/d6/d7/d8/d9/d10 =
-        
-        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d6*d7^2*d8*(-1 + n5)) + 
-        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d6*d8*d9^2*(-1 + n5)) - 
-        d5^(2 - n5)/(3*d10*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) + 
-        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d6^2*d7*d9*(-1 + n5)) + 
-        d5^(1 - n5)/(3*d10^2*d3^n3*d4^n4*d6*d7*d9*(-1 + n5)) + 
-        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d7*d8^2*d9*(-1 + n5)) - 
-        d5^(2 - n5)/(3*d10*d3^n3*d4^n4*d6^2*d7*d8*d9*(-1 + n5)) - 
-        (d3^(1 - n3)*d5^(1 - n5))/(3*d10^2*d4^n4*d6*d7*d8*d9*(-1 + n5)) - 
-        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(3*d10*d4^n4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d3^n3*d6*d8*d9*(-1 + n5)) - 
-        (d3^(1 - n3)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d6*d7*d8*d9*(-1 + n5)) - 
-        (d3^(-1 - n3)*d5^(2 - n5)*n3)/(3*d4^n4*d6*d7*d8^2*d9*(-2 + n5)*(-1 + n5)) + 
-        (d3^(-1 - n3)*d5^(2 - n5)*n3)/(3*d10*d4^n4*d6*d7*d8^2*d9*(-2 + n5)*(-1 + n5)) - 
-        (d3^(-1 - n3)*d4^(1 - n4)*d5^(2 - n5)*n3)/(3*d10*d6*d7^2*d8*d9*(-2 + n5)*(-1 + n5)) + 
-        (d3^(-1 - n3)*d5^(2 - n5)*n3)/(3*d10*d4^n4*d6*d7^2*d8*d9*(-2 + n5)*(-1 + n5)) + 
-        (d3^(-2 - n3)*d5^(2 - n5)*(2*n3 + 2*n3^2))/(3*d10*d4^n4*d6*d7*d8*d9*(-2 + n5)*(-1 + n5)) + 
-        (d5^(2 - n5)*(2 + n3 - n5))/(3*d10*d3^n3*d4^n4*d6*d7*d8^2*d9*(-2 + n5)*(-1 + n5)) + 
-        (d5^(2 - n5)*(2 + n3 - n5))/(3*d10*d3^n3*d4^n4*d6*d7^2*d8*d9*(-2 + n5)*(-1 + n5)) + 
-        (d3^(-1 - n3)*d5^(2 - n5)*rat(4*n3 - d*n3 + 2*n3^2, 3*(-2 + n5)*(-1 + n5)))/(d10*d4^n4*d6*d7*d8*d9) + 
+
+        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d6*d7^2*d8*(-1 + n5)) +
+        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d6*d8*d9^2*(-1 + n5)) -
+        d5^(2 - n5)/(3*d10*d3^n3*d4^n4*d6*d7*d8*d9^2*(-1 + n5)) +
+        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d6^2*d7*d9*(-1 + n5)) +
+        d5^(1 - n5)/(3*d10^2*d3^n3*d4^n4*d6*d7*d9*(-1 + n5)) +
+        d5^(1 - n5)/(3*d10*d3^n3*d4^n4*d7*d8^2*d9*(-1 + n5)) -
+        d5^(2 - n5)/(3*d10*d3^n3*d4^n4*d6^2*d7*d8*d9*(-1 + n5)) -
+        (d3^(1 - n3)*d5^(1 - n5))/(3*d10^2*d4^n4*d6*d7*d8*d9*(-1 + n5)) -
+        (d3^(-1 - n3)*d5^(1 - n5)*n3)/(3*d10*d4^n4*d6*d7*d8*d9*(-1 + n5)) +
+        (d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d3^n3*d6*d8*d9*(-1 + n5)) -
+        (d3^(1 - n3)*d4^(-1 - n4)*d5^(1 - n5)*n4)/(3*d10*d6*d7*d8*d9*(-1 + n5)) -
+        (d3^(-1 - n3)*d5^(2 - n5)*n3)/(3*d4^n4*d6*d7*d8^2*d9*(-2 + n5)*(-1 + n5)) +
+        (d3^(-1 - n3)*d5^(2 - n5)*n3)/(3*d10*d4^n4*d6*d7*d8^2*d9*(-2 + n5)*(-1 + n5)) -
+        (d3^(-1 - n3)*d4^(1 - n4)*d5^(2 - n5)*n3)/(3*d10*d6*d7^2*d8*d9*(-2 + n5)*(-1 + n5)) +
+        (d3^(-1 - n3)*d5^(2 - n5)*n3)/(3*d10*d4^n4*d6*d7^2*d8*d9*(-2 + n5)*(-1 + n5)) +
+        (d3^(-2 - n3)*d5^(2 - n5)*(2*n3 + 2*n3^2))/(3*d10*d4^n4*d6*d7*d8*d9*(-2 + n5)*(-1 + n5)) +
+        (d5^(2 - n5)*(2 + n3 - n5))/(3*d10*d3^n3*d4^n4*d6*d7*d8^2*d9*(-2 + n5)*(-1 + n5)) +
+        (d5^(2 - n5)*(2 + n3 - n5))/(3*d10*d3^n3*d4^n4*d6*d7^2*d8*d9*(-2 + n5)*(-1 + n5)) +
+        (d3^(-1 - n3)*d5^(2 - n5)*rat(4*n3 - d*n3 + 2*n3^2, 3*(-2 + n5)*(-1 + n5)))/(d10*d4^n4*d6*d7*d8*d9) +
         (d5^(1 - n5)*rat(3 + d - n3 - 3*n5, 3*(-1 + n5)))/(d10*d3^n3*d4^n4*d6*d7*d8*d9);
-        
+
 * n1 == 0 && n10 == 1 && n2 == 0 && n5 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1 && n6 != 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3^n3?{>1}/d4^n4?pos_/d5/d6^n6?{>1}/d7/d8/d9/d10 =
-        
-        1/(9*d10*d3^n3*d4^n4*d5*d6^n6*d7*d9) - 
-        1/(3*d10*d3^n3*d4^n4*d6^n6*d7*d8*d9) + 
-        2/(9*d3^n3*d4^n4*d5*d6^n6*d7*d8*d9) + 
-        (4*d3^(1 - n3))/(9*d10^2*d4^n4*d5*d6^n6*d7*d9*(-1 + n3)) - 
-        (4*d3^(2 - n3))/(9*d10^2*d4^n4*d5*d6^n6*d7*d8*d9*(-1 + n3)) - 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d7*d8*(-1 + n3)) - 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d7*d9*(-1 + n3)) + 
-        (4*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d8*d9*(-1 + n3)) + 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d6^n6*d7*d8*d9*(-1 + n3)) + 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d5*d6^n6*d7*d8*d9*(-1 + n3)) - 
-        (4*d3^(2 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d7*d8*d9*(-1 + n3)) + 
-        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d5*d7^2*d8*(-1 + n6)) + 
-        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d5*d8*d9^2*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d7*d8*d9^2*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d7^2*d8*d9*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(3*d10*d3^n3*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) + 
-        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d3^n3*d5*d7*d8*(-1 + n6)) - 
-        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d3^n3*d5*d8*d9*(-1 + n6)) - 
-        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d3^n3*d7*d8*d9*(-1 + n6)) - 
-        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3^n3*d5*d7*d8*d9*(-1 + n6)) + 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5*d7^2*d8*(-1 + n3)*(-1 + n6)) - 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5^2*d7*d8*(-1 + n3)*(-1 + n6)) - 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5*d8*d9^2*(-1 + n3)*(-1 + n6)) + 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d7*d8*d9^2*(-1 + n3)*(-1 + n6)) + 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10^2*d5*d7*d9*(-1 + n3)*(-1 + n6)) - 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d7*d8^2*d9*(-1 + n3)*(-1 + n6)) + 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(2 - n6)*n4)/(9*d10*d5*d7*d8^2*d9*(-1 + n3)*(-1 + n6)) + 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5^2*d8*d9*(-1 + n3)*(-1 + n6)) - 
-        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d7^2*d8*d9*(-1 + n3)*(-1 + n6)) - 
-        (2*d3^(2 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10^2*d5*d7*d8*d9*(-1 + n3)*(-1 + n6)) + 
-        (d3^(2 - n3)*d4^(-2 - n4)*d6^(1 - n6)*(-2*n4 - 2*n4^2))/(9*d10*d5*d7*d8*d9*(-1 + n3)*(-1 + n6)) + 
-        (d3^(1 - n3)*d4^(-2 - n4)*d6^(1 - n6)*(2*n4 + 2*n4^2))/(9*d10*d5*d8*d9*(-1 + n3)*(-1 + n6)) + 
-        (d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*(n4 - 3*n3*n4 + 2*n4*n6))/(9*d10*d5*d7*d8*d9*(-1 + n3)*(-1 + n6)) + 
-        (d3^(1 - n3)*rat(6 + 2*d - 6*n3 - 2*n4, 9*(-1 + n3)))/(d10*d4^n4*d5*d6^n6*d7*d8*d9) + 
+
+        1/(9*d10*d3^n3*d4^n4*d5*d6^n6*d7*d9) -
+        1/(3*d10*d3^n3*d4^n4*d6^n6*d7*d8*d9) +
+        2/(9*d3^n3*d4^n4*d5*d6^n6*d7*d8*d9) +
+        (4*d3^(1 - n3))/(9*d10^2*d4^n4*d5*d6^n6*d7*d9*(-1 + n3)) -
+        (4*d3^(2 - n3))/(9*d10^2*d4^n4*d5*d6^n6*d7*d8*d9*(-1 + n3)) -
+        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d7*d8*(-1 + n3)) -
+        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d7*d9*(-1 + n3)) +
+        (4*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d8*d9*(-1 + n3)) +
+        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d10*d6^n6*d7*d8*d9*(-1 + n3)) +
+        (2*d3^(1 - n3)*d4^(-1 - n4)*n4)/(9*d5*d6^n6*d7*d8*d9*(-1 + n3)) -
+        (4*d3^(2 - n3)*d4^(-1 - n4)*n4)/(9*d10*d5*d6^n6*d7*d8*d9*(-1 + n3)) +
+        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d5*d7^2*d8*(-1 + n6)) +
+        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d5*d8*d9^2*(-1 + n6)) -
+        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d7*d8*d9^2*(-1 + n6)) -
+        (2*d6^(1 - n6))/(9*d10*d3^n3*d4^n4*d7^2*d8*d9*(-1 + n6)) -
+        (2*d6^(1 - n6))/(3*d10*d3^n3*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) +
+        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d3^n3*d5*d7*d8*(-1 + n6)) -
+        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d3^n3*d5*d8*d9*(-1 + n6)) -
+        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d3^n3*d7*d8*d9*(-1 + n6)) -
+        (d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3^n3*d5*d7*d8*d9*(-1 + n6)) +
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5*d7^2*d8*(-1 + n3)*(-1 + n6)) -
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5^2*d7*d8*(-1 + n3)*(-1 + n6)) -
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5*d8*d9^2*(-1 + n3)*(-1 + n6)) +
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d7*d8*d9^2*(-1 + n3)*(-1 + n6)) +
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10^2*d5*d7*d9*(-1 + n3)*(-1 + n6)) -
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d7*d8^2*d9*(-1 + n3)*(-1 + n6)) +
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(2 - n6)*n4)/(9*d10*d5*d7*d8^2*d9*(-1 + n3)*(-1 + n6)) +
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d5^2*d8*d9*(-1 + n3)*(-1 + n6)) -
+        (2*d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10*d7^2*d8*d9*(-1 + n3)*(-1 + n6)) -
+        (2*d3^(2 - n3)*d4^(-1 - n4)*d6^(1 - n6)*n4)/(9*d10^2*d5*d7*d8*d9*(-1 + n3)*(-1 + n6)) +
+        (d3^(2 - n3)*d4^(-2 - n4)*d6^(1 - n6)*(-2*n4 - 2*n4^2))/(9*d10*d5*d7*d8*d9*(-1 + n3)*(-1 + n6)) +
+        (d3^(1 - n3)*d4^(-2 - n4)*d6^(1 - n6)*(2*n4 + 2*n4^2))/(9*d10*d5*d8*d9*(-1 + n3)*(-1 + n6)) +
+        (d3^(1 - n3)*d4^(-1 - n4)*d6^(1 - n6)*(n4 - 3*n3*n4 + 2*n4*n6))/(9*d10*d5*d7*d8*d9*(-1 + n3)*(-1 + n6)) +
+        (d3^(1 - n3)*rat(6 + 2*d - 6*n3 - 2*n4, 9*(-1 + n3)))/(d10*d4^n4*d5*d6^n6*d7*d8*d9) +
         (d6^(1 - n6)*rat(-3 + 2*d + n4 - 3*n6, 9*(-1 + n6)))/(d10*d3^n3*d4^n4*d5*d7*d8*d9);
-        
+
 * n1 == 0 && n10 == 1 && n4 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n2 != 0 && n5 != 1
         if(count(d1,1)==0) id,only,ifmatch->sortme  1/d2^n2?neg_/d3^n3?pos_/d4/d5^n5?{>1}/d6/d7/d8/d9/d10 =
-        
-        -d2^(-1 - n2)/(2*d10*d3^n3*d4*d5^n5*d6*d7*d9) + 
-        d2^(-1 - n2)/(2*d10*d3^n3*d4*d5^n5*d7*d8*d9) - 
-        d2^(-1 - n2)/(2*d10*d3^n3*d5^n5*d6*d7*d8*d9) + 
-        (d1*d2^(-1 - n2))/(2*d10*d3^n3*d4*d5^n5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*d5^(1 - n5))/(d10*d3^n3*d4*d6*d7*d8^2*d9*(1 - n5)) + 
-        d5^(1 - n5)/(2*d10*d2^n2*d3^n3*d4*d6*d8*d9^2*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(2*d3^n3*d4*d6*d7*d8*d9^2*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10*d3^n3*d4*d6*d7*d8*d9^2*(-1 + n5)) - 
-        d5^(2 - n5)/(2*d10*d2^n2*d3^n3*d4*d6*d7*d8*d9^2*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10*d3^n3*d4*d6^2*d7*d9*(-1 + n5)) + 
-        d5^(1 - n5)/(2*d10*d2^n2*d3^n3*d4*d6^2*d7*d9*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10^2*d3^n3*d4*d6*d7*d9*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10*d3^n3*d6^2*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(2 - n5))/(2*d10*d3^n3*d4*d6^2*d7*d8*d9*(-1 + n5)) - 
-        d5^(2 - n5)/(2*d10*d2^n2*d3^n3*d4*d6^2*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*d5^(1 - n5))/(2*d10^2*d4*d6*d7*d8*d9*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10^2*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-2 - n2)*d5^(1 - n5)*(-1 - n2))/(2*d10*d3^n3*d4*d6*d7*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(1 - n5)*(-1 + n2))/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4*d6*d7*d9*(-1 + n5)) - 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d6*d7*d8*d9*(-1 + n5)) - 
-        (d1*d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d2^(-2 - n2)*d5^(1 - n5)*(1 + n2))/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) + 
-        (d1*d2^(-2 - n2)*d5^(1 - n5)*(1 + n2))/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) + 
+
+        -d2^(-1 - n2)/(2*d10*d3^n3*d4*d5^n5*d6*d7*d9) +
+        d2^(-1 - n2)/(2*d10*d3^n3*d4*d5^n5*d7*d8*d9) -
+        d2^(-1 - n2)/(2*d10*d3^n3*d5^n5*d6*d7*d8*d9) +
+        (d1*d2^(-1 - n2))/(2*d10*d3^n3*d4*d5^n5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*d5^(1 - n5))/(d10*d3^n3*d4*d6*d7*d8^2*d9*(1 - n5)) +
+        d5^(1 - n5)/(2*d10*d2^n2*d3^n3*d4*d6*d8*d9^2*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(2*d3^n3*d4*d6*d7*d8*d9^2*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10*d3^n3*d4*d6*d7*d8*d9^2*(-1 + n5)) -
+        d5^(2 - n5)/(2*d10*d2^n2*d3^n3*d4*d6*d7*d8*d9^2*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10*d3^n3*d4*d6^2*d7*d9*(-1 + n5)) +
+        d5^(1 - n5)/(2*d10*d2^n2*d3^n3*d4*d6^2*d7*d9*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10^2*d3^n3*d4*d6*d7*d9*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10*d3^n3*d6^2*d7*d8*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(2 - n5))/(2*d10*d3^n3*d4*d6^2*d7*d8*d9*(-1 + n5)) -
+        d5^(2 - n5)/(2*d10*d2^n2*d3^n3*d4*d6^2*d7*d8*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*d5^(1 - n5))/(2*d10^2*d4*d6*d7*d8*d9*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5))/(2*d10^2*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) +
+        (d2^(-2 - n2)*d5^(1 - n5)*(-1 - n2))/(2*d10*d3^n3*d4*d6*d7*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(1 - n5)*(-1 + n2))/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4*d6*d7*d9*(-1 + n5)) -
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4*d7*d8*d9*(-1 + n5)) +
+        (d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d6*d7*d8*d9*(-1 + n5)) -
+        (d1*d2^(-1 - n2)*d5^(1 - n5)*n2)/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) +
+        (d2^(-2 - n2)*d5^(1 - n5)*(1 + n2))/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) +
+        (d1*d2^(-2 - n2)*d5^(1 - n5)*(1 + n2))/(2*d10*d3^n3*d4*d6*d7*d8*d9*(-1 + n5)) +
         (d5^(1 - n5)*rat(d - 2*n5, 2*(-1 + n5)))/(d10*d2^n2*d3^n3*d4*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n5 == 2 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1 && n4 != 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3^n3?{>1}/d4^n4?{>1}/d5^2/d6/d7/d8/d9/d10 =
-        
-        1/(8*d10*d3^n3*d4^n4*d5^2*d6*d7*d8) + 
-        1/(3*d10*d3^n3*d4^n4*d5^2*d6*d8*d9) - 
-        1/(8*d10*d3^n3*d4^n4*d5*d6*d7*d8*d9) + 
-        d3^(1 - n3)/(d10*d4^n4*d5^3*d6*d8*d9*(1 - n3)) + 
-        d3^(1 - n3)/(8*d10*d4^n4*d5^2*d6*d7^2*d8*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d4^n4*d5^2*d6^2*d7*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(12*d10*d4^n4*d5^3*d6*d7*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(3*d10^2*d4^n4*d5^2*d6*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(8*d10*d4^n4*d5^2*d7*d8^2*d9*(-1 + n3)) + 
-        (5*d3^(1 - n3))/(24*d4^n4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(24*d10*d4^n4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(8*d10*d4^n4*d5*d6*d7*d8^2*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(24*d10*d4^n4*d5^2*d6^2*d8*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(24*d10*d4^n4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(8*d10*d4^n4*d5*d6*d7^2*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d4^n4*d5^2*d6^2*d7*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(24*d10*d4^n4*d5^2*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (11*d3^(2 - n3))/(12*d10*d4^n4*d5^3*d6*d7*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(3*d10^2*d4^n4*d5^2*d6*d7*d8*d9*(-1 + n3)) + 
-        d4^(1 - n4)/(8*d10*d3^n3*d5^2*d6*d7^2*d8*(-1 + n4)) + 
-        d4^(1 - n4)/(2*d10*d3^n3*d5^2*d6*d8*d9^2*(-1 + n4)) - 
-        d4^(1 - n4)/(2*d10*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (5*d4^(1 - n4))/(12*d10*d3^n3*d5^2*d6^2*d7*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d10^2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d3^n3*d5^2*d6*d7*d8^2*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(24*d10*d3^n3*d5^2*d6^2*d8*d9*(-1 + n4)) + 
-        (5*d4^(2 - n4))/(24*d10*d3^n3*d5^2*d6*d7^2*d8*d9*(-1 + n4)) - 
-        d4^(1 - n4)/(8*d10*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) + 
-        (5*d4^(1 - n4))/(24*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) - 
-        d4^(2 - n4)/(24*d10*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) - 
-        (5*d4^(1 - n4))/(8*d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(3*d10^2*d5^2*d6*d7*d8*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d7*d8^2*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6*d7*d8^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d7^2*d8*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(6*d10*d5^3*d6*d7^2*d8*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6^2*d7*d8*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d5^2*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(6*d10*d5^3*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(6*d10*d5^3*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6^3*d7*d9*(-1 + n3)*(-1 + n4)) + 
-        (2*d3^(1 - n3)*d4^(1 - n4))/(3*d10*d5^3*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10^2*d5^2*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) - 
-        (5*d3^(1 - n3)*d4^(1 - n4))/(6*d10^2*d5^3*d6*d7*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (5*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(4*d5^2*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(8*d10*d5*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(2*d5^3*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(2*d10*d5^3*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(4*d10*d5^2*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(6*d10*d5^3*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(6*d10*d5^3*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5*d6^3*d7*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(2*d5^3*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(2*d10*d5^3*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(2 - n3)*d4^(1 - n4))/(24*d10^2*d5^2*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (5*d3^(2 - n3)*d4^(1 - n4))/(6*d10^2*d5^3*d6*d7*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5^2*d6*d7*d8*d9*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5^2*d6*d8*d9*(-1 + n3)) - 
-        (d3^(2 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5^2*d6*d7*d8*d9*(-1 + n3)) + 
-        (d3^(1 - n3)*d4^(1 - n4)*(2 - 5*n3 + 5*n4))/(24*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*rat(19 + 4*d - 29*n3, 24*(-1 + n3)))/(d10*d4^n4*d5^2*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*d4^(1 - n4)*rat(16 + d - 8*n3, 24*(-1 + n3)*(-1 + n4)))/(d10*d5^2*d6*d7*d8^2*d9) + 
-        (d3^(1 - n3)*d4^(1 - n4)*rat(1 - d + 2*n3, 12*(-1 + n3)*(-1 + n4)))/(d10*d5^2*d6*d7*d8*d9^2) + 
-        (d3^(1 - n3)*d4^(1 - n4)*rat(6 - 2*d + 7*n3 - 4*n4, 24*(-1 + n3)*(-1 + n4)))/(d10*d5^2*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-52 + 15*d - 24*n3 - 3*n4, 24*(-1 + n4)))/(d10*d3^n3*d5^2*d6*d7*d8*d9) + 
+
+        1/(8*d10*d3^n3*d4^n4*d5^2*d6*d7*d8) +
+        1/(3*d10*d3^n3*d4^n4*d5^2*d6*d8*d9) -
+        1/(8*d10*d3^n3*d4^n4*d5*d6*d7*d8*d9) +
+        d3^(1 - n3)/(d10*d4^n4*d5^3*d6*d8*d9*(1 - n3)) +
+        d3^(1 - n3)/(8*d10*d4^n4*d5^2*d6*d7^2*d8*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d4^n4*d5^2*d6^2*d7*d8*(-1 + n3)) +
+        d3^(1 - n3)/(12*d10*d4^n4*d5^3*d6*d7*d8*(-1 + n3)) +
+        d3^(1 - n3)/(3*d10^2*d4^n4*d5^2*d6*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(8*d10*d4^n4*d5^2*d7*d8^2*d9*(-1 + n3)) +
+        (5*d3^(1 - n3))/(24*d4^n4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(24*d10*d4^n4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) -
+        d3^(1 - n3)/(8*d10*d4^n4*d5*d6*d7*d8^2*d9*(-1 + n3)) +
+        d3^(1 - n3)/(24*d10*d4^n4*d5^2*d6^2*d8*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(24*d10*d4^n4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(8*d10*d4^n4*d5*d6*d7^2*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d4^n4*d5^2*d6^2*d7*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(24*d10*d4^n4*d5^2*d6^2*d7*d8*d9*(-1 + n3)) +
+        (11*d3^(2 - n3))/(12*d10*d4^n4*d5^3*d6*d7*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(3*d10^2*d4^n4*d5^2*d6*d7*d8*d9*(-1 + n3)) +
+        d4^(1 - n4)/(8*d10*d3^n3*d5^2*d6*d7^2*d8*(-1 + n4)) +
+        d4^(1 - n4)/(2*d10*d3^n3*d5^2*d6*d8*d9^2*(-1 + n4)) -
+        d4^(1 - n4)/(2*d10*d3^n3*d5*d6*d7*d8*d9^2*(-1 + n4)) +
+        (5*d4^(1 - n4))/(12*d10*d3^n3*d5^2*d6^2*d7*d9*(-1 + n4)) +
+        d4^(1 - n4)/(3*d10^2*d3^n3*d5^2*d6*d7*d9*(-1 + n4)) +
+        d4^(1 - n4)/(3*d3^n3*d5^2*d6*d7*d8^2*d9*(-1 + n4)) +
+        d4^(1 - n4)/(24*d10*d3^n3*d5^2*d6^2*d8*d9*(-1 + n4)) +
+        (5*d4^(2 - n4))/(24*d10*d3^n3*d5^2*d6*d7^2*d8*d9*(-1 + n4)) -
+        d4^(1 - n4)/(8*d10*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) +
+        (5*d4^(1 - n4))/(24*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) -
+        d4^(2 - n4)/(24*d10*d3^n3*d5^2*d6^2*d7*d8*d9*(-1 + n4)) -
+        (5*d4^(1 - n4))/(8*d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(3*d10^2*d5^2*d6*d7*d8*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d7*d8^2*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6*d7*d8^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d7^2*d8*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(6*d10*d5^3*d6*d7^2*d8*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6^2*d7*d8*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d5^2*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) -
+        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(6*d10*d5^3*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(6*d10*d5^3*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) -
+        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6^3*d7*d9*(-1 + n3)*(-1 + n4)) +
+        (2*d3^(1 - n3)*d4^(1 - n4))/(3*d10*d5^3*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10^2*d5^2*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) -
+        (5*d3^(1 - n3)*d4^(1 - n4))/(6*d10^2*d5^3*d6*d7*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (5*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(4*d5^2*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(8*d10*d5*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(2*d5^3*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(2*d10*d5^3*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^3*d6^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(4*d10*d5^2*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(6*d10*d5^3*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(6*d10*d5^3*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5*d6^3*d7*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(2*d5^3*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(2*d10*d5^3*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(2 - n3)*d4^(1 - n4))/(24*d10^2*d5^2*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (5*d3^(2 - n3)*d4^(1 - n4))/(6*d10^2*d5^3*d6*d7*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5^2*d6*d7*d8*d9*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5^2*d6*d8*d9*(-1 + n3)) -
+        (d3^(2 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5^2*d6*d7*d8*d9*(-1 + n3)) +
+        (d3^(1 - n3)*d4^(1 - n4)*(2 - 5*n3 + 5*n4))/(24*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*rat(19 + 4*d - 29*n3, 24*(-1 + n3)))/(d10*d4^n4*d5^2*d6*d7*d8*d9) +
+        (d3^(1 - n3)*d4^(1 - n4)*rat(16 + d - 8*n3, 24*(-1 + n3)*(-1 + n4)))/(d10*d5^2*d6*d7*d8^2*d9) +
+        (d3^(1 - n3)*d4^(1 - n4)*rat(1 - d + 2*n3, 12*(-1 + n3)*(-1 + n4)))/(d10*d5^2*d6*d7*d8*d9^2) +
+        (d3^(1 - n3)*d4^(1 - n4)*rat(6 - 2*d + 7*n3 - 4*n4, 24*(-1 + n3)*(-1 + n4)))/(d10*d5^2*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-52 + 15*d - 24*n3 - 3*n4, 24*(-1 + n4)))/(d10*d3^n3*d5^2*d6*d7*d8*d9) +
         (d3^(1 - n3)*d4^(1 - n4)*rat(-42 - 4*d + 22*n3 + 7*n4, 12*(-1 + n3)*(-1 + n4)))/(d10*d5^3*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1 && n4 != 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3^n3?{>1}/d4^n4?{>1}/d5/d6/d7/d8/d9/d10 =
-        
-        1/(8*d10*d3^n3*d4^n4*d5*d6*d7*d8) + 
-        1/(3*d10*d3^n3*d4^n4*d5*d6*d8*d9) - 
-        1/(8*d10*d3^n3*d4^n4*d6*d7*d8*d9) + 
-        d3^(1 - n3)/(8*d10*d4^n4*d5*d6*d7^2*d8*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d4^n4*d5*d6^2*d7*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(24*d10*d4^n4*d5^2*d6*d7*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(3*d10^2*d4^n4*d5*d6*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(8*d10*d4^n4*d5*d7*d8^2*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(8*d10*d4^n4*d6*d7*d8^2*d9*(-1 + n3)) + 
-        (5*d3^(1 - n3))/(24*d4^n4*d5*d6*d7*d8^2*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(24*d10*d4^n4*d5*d6*d7*d8^2*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(24*d10*d4^n4*d5*d6^2*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(2*d10*d4^n4*d5^2*d6*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(8*d10*d4^n4*d6*d7^2*d8*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(24*d10*d4^n4*d5*d6*d7^2*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d4^n4*d5*d6^2*d7*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(24*d10*d4^n4*d5*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (11*d3^(2 - n3))/(24*d10*d4^n4*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(3*d10^2*d4^n4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        d4^(1 - n4)/(8*d10*d3^n3*d5*d6*d7^2*d8*(-1 + n4)) + 
-        d4^(1 - n4)/(2*d10*d3^n3*d5*d6*d8*d9^2*(-1 + n4)) - 
-        d4^(1 - n4)/(2*d10*d3^n3*d6*d7*d8*d9^2*(-1 + n4)) + 
-        (5*d4^(1 - n4))/(12*d10*d3^n3*d5*d6^2*d7*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d10^2*d3^n3*d5*d6*d7*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(3*d3^n3*d5*d6*d7*d8^2*d9*(-1 + n4)) + 
-        d4^(1 - n4)/(24*d10*d3^n3*d5*d6^2*d8*d9*(-1 + n4)) - 
-        d4^(1 - n4)/(8*d10*d3^n3*d6*d7^2*d8*d9*(-1 + n4)) + 
-        (5*d4^(2 - n4))/(24*d10*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) - 
-        (5*d4^(1 - n4))/(8*d10*d3^n3*d6^2*d7*d8*d9*(-1 + n4)) + 
-        (5*d4^(1 - n4))/(24*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) - 
-        d4^(2 - n4)/(24*d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(3*d10^2*d5*d6*d7*d8*d9*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7*d8^2*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6*d7*d8^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7^2*d8*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7^2*d8*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d7*d8*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d5*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d6^2*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5^2*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) - 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5*d6^3*d7*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d5^2*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10^2*d5*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) - 
-        (5*d3^(1 - n3)*d4^(1 - n4))/(12*d10^2*d5^2*d6*d7*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (5*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(8*d10*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(4*d5*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(4*d5^2*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(4*d10*d5*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d6^3*d7*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(1 - n3)*d4^(1 - n4))/(4*d5^2*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(2 - n3)*d4^(1 - n4))/(24*d10^2*d5*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (5*d3^(2 - n3)*d4^(1 - n4))/(12*d10^2*d5^2*d6*d7*d8*d9*(-1 + n3)*(-1 + n4)) - 
-        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5*d6*d7*d8*d9*(-1 + n4)) + 
-        (d3^(1 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5*d6*d8*d9*(-1 + n3)) - 
-        (d3^(2 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d3^(1 - n3)*d4^(1 - n4)*(-5*n3 + 5*n4))/(24*d10*d5*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) + 
-        (d3^(1 - n3)*rat(26 + 4*d - 29*n3, 24*(-1 + n3)))/(d10*d4^n4*d5*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*d4^(1 - n4)*rat(12 + d - 8*n3, 24*(-1 + n3)*(-1 + n4)))/(d10*d5*d6*d7*d8^2*d9) + 
-        (d3^(1 - n3)*d4^(1 - n4)*rat(-d + 2*n3, 12*(-1 + n3)*(-1 + n4)))/(d10*d5*d6*d7*d8*d9^2) + 
-        (d3^(1 - n3)*d4^(1 - n4)*rat(2 - 2*d + 7*n3 - 4*n4, 24*(-1 + n3)*(-1 + n4)))/(d10*d5*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-10 + 5*d - 8*n3 - n4, 8*(-1 + n4)))/(d10*d3^n3*d5*d6*d7*d8*d9) + 
+
+        1/(8*d10*d3^n3*d4^n4*d5*d6*d7*d8) +
+        1/(3*d10*d3^n3*d4^n4*d5*d6*d8*d9) -
+        1/(8*d10*d3^n3*d4^n4*d6*d7*d8*d9) +
+        d3^(1 - n3)/(8*d10*d4^n4*d5*d6*d7^2*d8*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d4^n4*d5*d6^2*d7*d8*(-1 + n3)) +
+        d3^(1 - n3)/(24*d10*d4^n4*d5^2*d6*d7*d8*(-1 + n3)) +
+        d3^(1 - n3)/(3*d10^2*d4^n4*d5*d6*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(8*d10*d4^n4*d5*d7*d8^2*d9*(-1 + n3)) -
+        d3^(1 - n3)/(8*d10*d4^n4*d6*d7*d8^2*d9*(-1 + n3)) +
+        (5*d3^(1 - n3))/(24*d4^n4*d5*d6*d7*d8^2*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(24*d10*d4^n4*d5*d6*d7*d8^2*d9*(-1 + n3)) +
+        d3^(1 - n3)/(24*d10*d4^n4*d5*d6^2*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(2*d10*d4^n4*d5^2*d6*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(8*d10*d4^n4*d6*d7^2*d8*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(24*d10*d4^n4*d5*d6*d7^2*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d4^n4*d5*d6^2*d7*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(24*d10*d4^n4*d5*d6^2*d7*d8*d9*(-1 + n3)) +
+        (11*d3^(2 - n3))/(24*d10*d4^n4*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(3*d10^2*d4^n4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        d4^(1 - n4)/(8*d10*d3^n3*d5*d6*d7^2*d8*(-1 + n4)) +
+        d4^(1 - n4)/(2*d10*d3^n3*d5*d6*d8*d9^2*(-1 + n4)) -
+        d4^(1 - n4)/(2*d10*d3^n3*d6*d7*d8*d9^2*(-1 + n4)) +
+        (5*d4^(1 - n4))/(12*d10*d3^n3*d5*d6^2*d7*d9*(-1 + n4)) +
+        d4^(1 - n4)/(3*d10^2*d3^n3*d5*d6*d7*d9*(-1 + n4)) +
+        d4^(1 - n4)/(3*d3^n3*d5*d6*d7*d8^2*d9*(-1 + n4)) +
+        d4^(1 - n4)/(24*d10*d3^n3*d5*d6^2*d8*d9*(-1 + n4)) -
+        d4^(1 - n4)/(8*d10*d3^n3*d6*d7^2*d8*d9*(-1 + n4)) +
+        (5*d4^(2 - n4))/(24*d10*d3^n3*d5*d6*d7^2*d8*d9*(-1 + n4)) -
+        (5*d4^(1 - n4))/(8*d10*d3^n3*d6^2*d7*d8*d9*(-1 + n4)) +
+        (5*d4^(1 - n4))/(24*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) -
+        d4^(2 - n4)/(24*d10*d3^n3*d5*d6^2*d7*d8*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(3*d10^2*d5*d6*d7*d8*d9*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7*d8^2*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6*d7*d8^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d7^2*d8*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7^2*d8*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d7*d8*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d5*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5*d6*d7*d8^2*d9^2*(-1 + n3)*(-1 + n4)) -
+        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(12*d10*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5*d6*d7^2*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (7*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d6^2*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5^2*d6*d7*d8*d9^2*(-1 + n3)*(-1 + n4)) -
+        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d5*d6^3*d7*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(3*d10*d5^2*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10^2*d5*d6^2*d7*d9*(-1 + n3)*(-1 + n4)) -
+        (5*d3^(1 - n3)*d4^(1 - n4))/(12*d10^2*d5^2*d6*d7*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5*d6^2*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (5*d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(8*d10*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(4*d5*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5*d6^2*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(4*d5^2*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6*d7*d8^2*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d5^2*d6^2*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(24*d10*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(4*d10*d5*d6^2*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(2 - n4))/(12*d10*d5^2*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (7*d3^(1 - n3)*d4^(1 - n4))/(12*d10*d6^3*d7*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(1 - n3)*d4^(1 - n4))/(4*d5^2*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(2 - n3)*d4^(1 - n4))/(4*d10*d5^2*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(2 - n3)*d4^(1 - n4))/(24*d10^2*d5*d6^2*d7*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (5*d3^(2 - n3)*d4^(1 - n4))/(12*d10^2*d5^2*d6*d7*d8*d9*(-1 + n3)*(-1 + n4)) -
+        (d3^(-1 - n3)*d4^(1 - n4)*n3)/(d10*d5*d6*d7*d8*d9*(-1 + n4)) +
+        (d3^(1 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5*d6*d8*d9*(-1 + n3)) -
+        (d3^(2 - n3)*d4^(-1 - n4)*n4)/(3*d10*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d3^(1 - n3)*d4^(1 - n4)*(-5*n3 + 5*n4))/(24*d10*d5*d6*d7^2*d8*d9*(-1 + n3)*(-1 + n4)) +
+        (d3^(1 - n3)*rat(26 + 4*d - 29*n3, 24*(-1 + n3)))/(d10*d4^n4*d5*d6*d7*d8*d9) +
+        (d3^(1 - n3)*d4^(1 - n4)*rat(12 + d - 8*n3, 24*(-1 + n3)*(-1 + n4)))/(d10*d5*d6*d7*d8^2*d9) +
+        (d3^(1 - n3)*d4^(1 - n4)*rat(-d + 2*n3, 12*(-1 + n3)*(-1 + n4)))/(d10*d5*d6*d7*d8*d9^2) +
+        (d3^(1 - n3)*d4^(1 - n4)*rat(2 - 2*d + 7*n3 - 4*n4, 24*(-1 + n3)*(-1 + n4)))/(d10*d5*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-10 + 5*d - 8*n3 - n4, 8*(-1 + n4)))/(d10*d3^n3*d5*d6*d7*d8*d9) +
         (d3^(1 - n3)*d4^(1 - n4)*rat(-42 - 4*d + 22*n3 + 7*n4, 24*(-1 + n3)*(-1 + n4)))/(d10*d5^2*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n2 != 0 && n3 != 1
         if(count(d1,1)==0) id,only,ifmatch->sortme 1/d2^n2?neg_/d3^n3?{>1}/d4/d5/d6/d7/d8/d9/d10 =
-        
-        -d2^(-1 - n2)/(2*d10*d3^n3*d4*d5*d6*d7*d8) - 
-        d2^(-1 - n2)/(2*d10*d3^n3*d4*d5*d6*d7*d9) + 
-        d2^(-1 - n2)/(2*d3^n3*d4*d5*d6*d7*d8*d9) + 
-        (d1*d2^(-1 - n2))/(2*d10*d3^n3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(d10*d4*d5*d6*d7*d8^2*d9*(1 - n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5*d6^2*d7*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(2*d10^2*d2^n2*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(2*d10*d2^n2*d4^2*d5*d6*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d6^2*d7*d8*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(2*d10*d2^n2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(2 - n3))/(2*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(2*d10^2*d2^n2*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(2*d10*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*(-1 + n2))/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*(-1 + n3)) + 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d9*(-1 + n3)) - 
-        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (d1*d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d1*d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
+
+        -d2^(-1 - n2)/(2*d10*d3^n3*d4*d5*d6*d7*d8) -
+        d2^(-1 - n2)/(2*d10*d3^n3*d4*d5*d6*d7*d9) +
+        d2^(-1 - n2)/(2*d3^n3*d4*d5*d6*d7*d8*d9) +
+        (d1*d2^(-1 - n2))/(2*d10*d3^n3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(d10*d4*d5*d6*d7*d8^2*d9*(1 - n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5*d6^2*d7*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(2*d10^2*d2^n2*d4*d5*d6*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(2*d10*d2^n2*d4^2*d5*d6*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^2*d5*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d6^2*d7*d8*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4*d5*d6^2*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3))/(2*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(2*d10*d2^n2*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(2 - n3))/(2*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(2*d10^2*d2^n2*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(-1 - n2))/(2*d10*d4*d5*d6*d7*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*(-1 + n2))/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*(-1 + n3)) +
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d9*(-1 + n3)) -
+        (d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d4*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (d1*d2^(-1 - n2)*d3^(1 - n3)*n2)/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d1*d2^(-2 - n2)*d3^(1 - n3)*(1 + n2))/(2*d10*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
         (d3^(1 - n3)*rat(d - 2*n3, 2*(-1 + n3)))/(d10*d2^n2*d4*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n3 == 1 && n5 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n6 != 1 && n6 != 2
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3/d4^n4?pos_/d5/d6^n6?{>2}/d7/d8/d9/d10 =
 
-        5/(3*d10*d3*d4^n4*d5*d6^n6*d7*d9) - 
-        5/(3*d10*d3*d4^n4*d6^n6*d7*d8*d9) + 
-        (2*d6^(1 - n6))/(3*d10*d3*d4^n4*d5*d7^2*d8*(-1 + n6)) + 
-        (4*d6^(1 - n6))/(3*d10*d3*d4^n4*d5*d8*d9^2*(-1 + n6)) - 
-        (4*d6^(1 - n6))/(3*d10*d3*d4^n4*d7*d8*d9^2*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(3*d10*d3*d4^n4*d5^2*d7*d9*(-1 + n6)) + 
-        d6^(1 - n6)/(d10*d3^2*d4^n4*d5*d7*d9*(-1 + n6)) - 
-        (4*d6^(1 - n6))/(3*d10^2*d3*d4^n4*d5*d7*d9*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(3*d10*d4^n4*d5*d7*d8^2*d9*(-1 + n6)) + 
-        (2*d6^(1 - n6))/(3*d3*d4^n4*d5*d7*d8^2*d9*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(3*d10*d3*d4^n4*d7^2*d8*d9*(-1 + n6)) + 
-        (2*d4^(1 - n4)*d6^(1 - n6))/(3*d10*d3*d5*d7^2*d8*d9*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(3*d10*d4^n4*d5*d7^2*d8*d9*(-1 + n6)) - 
-        (2*d6^(1 - n6))/(3*d10*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) + 
-        (2*d6^(1 - n6))/(3*d3*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) - 
-        (10*d6^(1 - n6))/(3*d10*d3*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) + 
-        (4*d6^(1 - n6))/(3*d10^2*d4^n4*d5*d7*d8*d9*(-1 + n6)) - 
-        d6^(1 - n6)/(d3^2*d4^n4*d5*d7*d8*d9*(-1 + n6)) + 
-        d6^(1 - n6)/(d10*d3^2*d4^n4*d5*d7*d8*d9*(-1 + n6)) + 
-        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d7*d8*(-1 + n6)) + 
-        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d7*d9*(-1 + n6)) - 
-        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d8*d9*(-1 + n6)) - 
-        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d7*d8*d9*(-1 + n6)) + 
-        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d5*d7*d8*d9*(-1 + n6)) - 
-        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d3*d5*d7*d8*d9*(-1 + n6)) + 
-        (7*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d7*d8*d9*(-1 + n6)) - 
-        (2*d6^(2 - n6))/(3*d10^2*d3*d4^n4*d5^2*d7*d9*(-2 + n6)*(-1 + n6)) - 
-        (2*d6^(2 - n6))/(3*d10*d4^n4*d5^2*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) + 
-        (2*d6^(2 - n6))/(3*d3*d4^n4*d5^2*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) - 
-        (2*d6^(2 - n6))/(3*d10*d3*d4^n4*d5^2*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) + 
-        (2*d6^(2 - n6))/(3*d10^2*d4^n4*d5^2*d7*d8*d9*(-2 + n6)*(-1 + n6)) + 
-        (2*d6^(2 - n6))/(3*d10^2*d3*d4^n4*d5^2*d7*d8*d9*(-2 + n6)*(-1 + n6)) + 
-        (d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5^2*d7*d8*(-2 + n6)*(-1 + n6)) + 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5*d7*d8*d9^2*(-2 + n6)*(-1 + n6)) + 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10^2*d3*d5*d7*d9*(-2 + n6)*(-1 + n6)) + 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10*d5*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) - 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d3*d5*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) + 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10*d3*d5*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) - 
-        (d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5^2*d8*d9*(-2 + n6)*(-1 + n6)) + 
-        (d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5^2*d7*d8*d9*(-2 + n6)*(-1 + n6)) - 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10^2*d5*d7*d8*d9*(-2 + n6)*(-1 + n6)) - 
-        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10^2*d3*d5*d7*d8*d9*(-2 + n6)*(-1 + n6)) + 
-        (d6^(1 - n6)*rat(-2 + d + 4*n4 - 3*n6, 3*(-1 + n6)))/(d10*d3*d4^n4*d5*d7*d8*d9) + 
+        5/(3*d10*d3*d4^n4*d5*d6^n6*d7*d9) -
+        5/(3*d10*d3*d4^n4*d6^n6*d7*d8*d9) +
+        (2*d6^(1 - n6))/(3*d10*d3*d4^n4*d5*d7^2*d8*(-1 + n6)) +
+        (4*d6^(1 - n6))/(3*d10*d3*d4^n4*d5*d8*d9^2*(-1 + n6)) -
+        (4*d6^(1 - n6))/(3*d10*d3*d4^n4*d7*d8*d9^2*(-1 + n6)) -
+        (2*d6^(1 - n6))/(3*d10*d3*d4^n4*d5^2*d7*d9*(-1 + n6)) +
+        d6^(1 - n6)/(d10*d3^2*d4^n4*d5*d7*d9*(-1 + n6)) -
+        (4*d6^(1 - n6))/(3*d10^2*d3*d4^n4*d5*d7*d9*(-1 + n6)) -
+        (2*d6^(1 - n6))/(3*d10*d4^n4*d5*d7*d8^2*d9*(-1 + n6)) +
+        (2*d6^(1 - n6))/(3*d3*d4^n4*d5*d7*d8^2*d9*(-1 + n6)) -
+        (2*d6^(1 - n6))/(3*d10*d3*d4^n4*d7^2*d8*d9*(-1 + n6)) +
+        (2*d4^(1 - n4)*d6^(1 - n6))/(3*d10*d3*d5*d7^2*d8*d9*(-1 + n6)) -
+        (2*d6^(1 - n6))/(3*d10*d4^n4*d5*d7^2*d8*d9*(-1 + n6)) -
+        (2*d6^(1 - n6))/(3*d10*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) +
+        (2*d6^(1 - n6))/(3*d3*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) -
+        (10*d6^(1 - n6))/(3*d10*d3*d4^n4*d5^2*d7*d8*d9*(-1 + n6)) +
+        (4*d6^(1 - n6))/(3*d10^2*d4^n4*d5*d7*d8*d9*(-1 + n6)) -
+        d6^(1 - n6)/(d3^2*d4^n4*d5*d7*d8*d9*(-1 + n6)) +
+        d6^(1 - n6)/(d10*d3^2*d4^n4*d5*d7*d8*d9*(-1 + n6)) +
+        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d7*d8*(-1 + n6)) +
+        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d7*d9*(-1 + n6)) -
+        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d8*d9*(-1 + n6)) -
+        (2*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d7*d8*d9*(-1 + n6)) +
+        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d5*d7*d8*d9*(-1 + n6)) -
+        (5*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d3*d5*d7*d8*d9*(-1 + n6)) +
+        (7*d4^(-1 - n4)*d6^(1 - n6)*n4)/(3*d10*d3*d5*d7*d8*d9*(-1 + n6)) -
+        (2*d6^(2 - n6))/(3*d10^2*d3*d4^n4*d5^2*d7*d9*(-2 + n6)*(-1 + n6)) -
+        (2*d6^(2 - n6))/(3*d10*d4^n4*d5^2*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) +
+        (2*d6^(2 - n6))/(3*d3*d4^n4*d5^2*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) -
+        (2*d6^(2 - n6))/(3*d10*d3*d4^n4*d5^2*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) +
+        (2*d6^(2 - n6))/(3*d10^2*d4^n4*d5^2*d7*d8*d9*(-2 + n6)*(-1 + n6)) +
+        (2*d6^(2 - n6))/(3*d10^2*d3*d4^n4*d5^2*d7*d8*d9*(-2 + n6)*(-1 + n6)) +
+        (d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5^2*d7*d8*(-2 + n6)*(-1 + n6)) +
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5*d7*d8*d9^2*(-2 + n6)*(-1 + n6)) +
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10^2*d3*d5*d7*d9*(-2 + n6)*(-1 + n6)) +
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10*d5*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) -
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d3*d5*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) +
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10*d3*d5*d7*d8^2*d9*(-2 + n6)*(-1 + n6)) -
+        (d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5^2*d8*d9*(-2 + n6)*(-1 + n6)) +
+        (d4^(-1 - n4)*d6^(2 - n6)*n4)/(d10*d3*d5^2*d7*d8*d9*(-2 + n6)*(-1 + n6)) -
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10^2*d5*d7*d8*d9*(-2 + n6)*(-1 + n6)) -
+        (2*d4^(-1 - n4)*d6^(2 - n6)*n4)/(3*d10^2*d3*d5*d7*d8*d9*(-2 + n6)*(-1 + n6)) +
+        (d6^(1 - n6)*rat(-2 + d + 4*n4 - 3*n6, 3*(-1 + n6)))/(d10*d3*d4^n4*d5*d7*d8*d9) +
         (d4^(-1 - n4)*d6^(2 - n6)*rat(n4 - d*n4 + n4*n6, (-2 + n6)*(-1 + n6)))/(d10*d3*d5*d7*d8*d9);
 
 * n10 == 1 && n3 == 1 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n1 != 0 && n2 != 0
         id,only,ifmatch->sortme 1/d1^n1?neg_/d2^n2?neg_/d3/d4/d5/d6/d7/d8/d9/d10 =
-        
-        (d2^(-1 - n2)*rat(-3, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9^2) + 
-        (d2^(-1 - n2)*rat(-3, -4 + d - n1))/(d1^n1*d10^2*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9) + 
-        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d2^n2*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5^2*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(-2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5^2*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-2, -4 + d - n1))/(d1^n1*d10*d3^2*d4*d5*d6*d7*d8*d9) + 
-        rat(1, -4 + d - n1)/(d1^n1*d10*d2^n2*d3*d4*d6*d7*d8*d9^2) + 
-        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6^2*d7*d9) + 
-        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10^2*d3*d4*d5*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d4*d5^2*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d4*d5^2*d7*d8*d9) + 
-        rat(1, -4 + d - n1)/(d1^n1*d10*d2^n2*d3*d4*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d5*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5^2*d6*d7*d8) + 
-        rat(1, 4 - d + n1)/(d1^n1*d10*d2^n2*d3*d4*d5*d6*d8*d9^2) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d3*d4*d5*d6*d7*d8*d9^2) + 
-        rat(1, 4 - d + n1)/(d1^n1*d10*d2^n2*d3*d4*d5*d6^2*d7*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5^2*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10^2*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d8) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d4*d5*d6*d7*d8*d9^2) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9^2) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d2^n2*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d3*d5^2*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-2 - n1)*rat(-2 - 2*n1, 4 - d + n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8) + 
-        (d1^(-1 - n1)*rat(-n1, 4 - d + n1))/(d10*d2^n2*d3*d4*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*rat(-n1, 4 - d + n1))/(d10*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*rat(n1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d8) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*rat(n1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d9) + 
-        (d1^(-1 - n1)*rat(n1, 4 - d + n1))/(d10*d2^n2*d3*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*d2^(-1 - n2)*rat(2*n1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-2 - n1)*rat(2 + 2*n1, 4 - d + n1))/(d10*d2^n2*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-2 - n1)*rat(2 + 2*n1, 4 - d + n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(1 - n1)*d2^(-2 - n2)*rat(-1 - n2, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-2 - n2)*rat(-1 - n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-13 + 3*d - 2*n1 - n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(-n2, -4 + d - n1))/(d1^n1*d10*d3*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d7*d8*d9) + 
-        (d1^(1 - n1)*d2^(-1 - n2)*rat(n2, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
+
+        (d2^(-1 - n2)*rat(-3, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9^2) +
+        (d2^(-1 - n2)*rat(-3, -4 + d - n1))/(d1^n1*d10^2*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9) +
+        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d2^n2*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5^2*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(-2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5^2*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-2, -4 + d - n1))/(d1^n1*d10*d3^2*d4*d5*d6*d7*d8*d9) +
+        rat(1, -4 + d - n1)/(d1^n1*d10*d2^n2*d3*d4*d6*d7*d8*d9^2) +
+        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6^2*d7*d9) +
+        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10^2*d3*d4*d5*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d4*d5^2*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d4*d5^2*d7*d8*d9) +
+        rat(1, -4 + d - n1)/(d1^n1*d10*d2^n2*d3*d4*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(1, -4 + d - n1))/(d1^n1*d10*d3*d5*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5^2*d6*d7*d8) +
+        rat(1, 4 - d + n1)/(d1^n1*d10*d2^n2*d3*d4*d5*d6*d8*d9^2) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d3*d4*d5*d6*d7*d8*d9^2) +
+        rat(1, 4 - d + n1)/(d1^n1*d10*d2^n2*d3*d4*d5*d6^2*d7*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5^2*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10*d3*d4*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(1, 4 - d + n1))/(d1^n1*d10^2*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5^2*d6*d7*d8) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d4*d5*d6*d7*d8*d9^2) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9^2) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d2^n2*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d2^n2*d3*d5^2*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10^2*d2^n2*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(-2 - n1)*rat(-2 - 2*n1, 4 - d + n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8) +
+        (d1^(-1 - n1)*rat(-n1, 4 - d + n1))/(d10*d2^n2*d3*d4*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*rat(-n1, 4 - d + n1))/(d10*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*rat(n1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d8) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*rat(n1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d9) +
+        (d1^(-1 - n1)*rat(n1, 4 - d + n1))/(d10*d2^n2*d3*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*d2^(-1 - n2)*rat(2*n1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(-2 - n1)*rat(2 + 2*n1, 4 - d + n1))/(d10*d2^n2*d4*d5*d6*d7*d8*d9) +
+        (d1^(-2 - n1)*rat(2 + 2*n1, 4 - d + n1))/(d10*d2^n2*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(1 - n1)*d2^(-2 - n2)*rat(-1 - n2, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-2 - n2)*rat(-1 - n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-13 + 3*d - 2*n1 - n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(-n2, -4 + d - n1))/(d1^n1*d10*d3*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d7*d8*d9) +
+        (d1^(1 - n1)*d2^(-1 - n2)*rat(n2, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9) +
         (d2^(-2 - n2)*rat(1 + n2, -4 + d - n1))/(d1^n1*d10*d3*d4*d5*d6*d7*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n4 == 1 && n5 == 2 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3^n3?{>1}/d4/d5^2/d6/d7/d8/d9/d10 =
 
-        2/(3*d10*d3^n3*d4*d5^2*d6*d7*d8) + 
-        1/(3*d10*d3^n3*d4*d5*d6*d8*d9^2) - 
-        1/(3*d10*d3^n3*d4*d6*d7*d8*d9^2) + 
-        1/(3*d10*d3^n3*d4*d5*d6^2*d7*d9) + 
-        1/(3*d10^2*d3^n3*d4*d5*d6*d7*d9) + 
-1/(3*d3^n3*d4*d5*d6*d7*d8^2*d9) - 2/(3*d10*d3^n3*d4*d5^2*d6*d8*d9) + 
-1/(3*d10*d3^n3*d4^2*d5*d6*d8*d9) + 
-1/(3*d10*d3^n3*d5*d6*d7^2*d8*d9) - 1/(3*d10*d3^n3*d4*d6^2*d7*d8*d9) + 2/(3*d10*d3^n3*d5^2*d6*d7*d8*d9) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7^2*d8*(-1 + n3)) + d3^(1 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*(-1 + n3)) + d3^(2 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d8*d9^2*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) + d3^(2 - n3)/(3*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        (2*d3^(1 - n3))/(3*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) - 
-        (d1*d3^(1 - n3))/(3*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) + 
-        (2*d3^(2 - n3))/(3*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d7*d8^2*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) + d3^(1 - n3)/(3*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) - 
-        (d1*d3^(1 - n3))/(3*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) - d3^(1 - n3)/(3*d10^2*d4*d5^2*d6*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10^2*d4*d5^2*d6*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) - d3^(1 - n3)/(3*d10^2*d4*d5^2*d7*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10^2*d4*d5^2*d7*d8*d9*(-1 + n3)) + 
-        (4*d3^(2 - n3))/(3*d10*d4*d5^3*d6*d7*d8*d9*(-1 + n3)) + d3^(1 - n3)/(3*d10^2*d5^2*d6*d7*d8*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10^2*d5^2*d6*d7*d8*d9*(-1 + n3)) - 
-        (2*d3^(2 - n3))/(3*d10*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) - d3^(3 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d3^(1 - n3)*(2 - n3))/(3*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        (d3^(1 - n3)*(2 - n3))/(3*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (d3^(-1 - n3)*n3)/(d10*d4*d5*d6*d7*d8*d9) + 
-        rat(1 + 3*d - 7*n3, 3)/(d10*d3^n3*d4*d5*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(4 + d - 4*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(2 + d - 3*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(2 + d - 3*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8*d9) + 
-        (d3^(1 - n3)*rat(1 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d8*d9) + 
-        (d3^(2 - n3)*rat(2 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7*d8^2*d9) + 
-        (d3^(2 - n3)*rat(2 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8*d9) + 
-        (d3^(2 - n3)*rat(4 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(-1 - d + 2*n3, 3*(-1 + n3)))/(d4*d5*d6*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(-1 - d + 2*n3, 3*(-1 + n3)))/(d10*d5*d6*d7^2*d8*d9) + 
-        (d3^(1 - n3)*rat(-1 - d + 2*n3, 3*(-1 + n3)))/(d10*d5^2*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(-d + 2*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8) + 
+        2/(3*d10*d3^n3*d4*d5^2*d6*d7*d8) +
+        1/(3*d10*d3^n3*d4*d5*d6*d8*d9^2) -
+        1/(3*d10*d3^n3*d4*d6*d7*d8*d9^2) +
+        1/(3*d10*d3^n3*d4*d5*d6^2*d7*d9) +
+        1/(3*d10^2*d3^n3*d4*d5*d6*d7*d9) +
+1/(3*d3^n3*d4*d5*d6*d7*d8^2*d9) - 2/(3*d10*d3^n3*d4*d5^2*d6*d8*d9) +
+1/(3*d10*d3^n3*d4^2*d5*d6*d8*d9) +
+1/(3*d10*d3^n3*d5*d6*d7^2*d8*d9) - 1/(3*d10*d3^n3*d4*d6^2*d7*d8*d9) + 2/(3*d10*d3^n3*d5^2*d6*d7*d8*d9) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7^2*d8*(-1 + n3)) + d3^(1 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*(-1 + n3)) + d3^(2 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d8*d9^2*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7*d8*d9^2*(-1 + n3)) + d3^(2 - n3)/(3*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        (2*d3^(1 - n3))/(3*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) -
+        (d1*d3^(1 - n3))/(3*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) +
+        (2*d3^(2 - n3))/(3*d10^2*d4*d5^2*d6*d7*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d7*d8^2*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7*d8^2*d9*(-1 + n3)) + d3^(1 - n3)/(3*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) -
+        (d1*d3^(1 - n3))/(3*d10*d4^2*d5^2*d6*d8*d9*(-1 + n3)) - d3^(1 - n3)/(3*d10^2*d4*d5^2*d6*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10^2*d4*d5^2*d6*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10*d4*d5^2*d6*d7^2*d8*d9*(-1 + n3)) - d3^(1 - n3)/(3*d10^2*d4*d5^2*d7*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10^2*d4*d5^2*d7*d8*d9*(-1 + n3)) +
+        (4*d3^(2 - n3))/(3*d10*d4*d5^3*d6*d7*d8*d9*(-1 + n3)) + d3^(1 - n3)/(3*d10^2*d5^2*d6*d7*d8*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10^2*d5^2*d6*d7*d8*d9*(-1 + n3)) -
+        (2*d3^(2 - n3))/(3*d10*d4^2*d5^2*d6*d7*d8*d9*(-1 + n3)) - d3^(2 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) - d3^(3 - n3)/(3*d10^2*d4*d5^2*d6*d7*d8*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) + d3^(2 - n3)/(3*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d3^(1 - n3)*(2 - n3))/(3*d10*d4^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        (d3^(1 - n3)*(2 - n3))/(3*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (d3^(-1 - n3)*n3)/(d10*d4*d5*d6*d7*d8*d9) +
+        rat(1 + 3*d - 7*n3, 3)/(d10*d3^n3*d4*d5*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(4 + d - 4*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(2 + d - 3*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(2 + d - 3*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8*d9) +
+        (d3^(1 - n3)*rat(1 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d8*d9) +
+        (d3^(2 - n3)*rat(2 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7*d8^2*d9) +
+        (d3^(2 - n3)*rat(2 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8*d9) +
+        (d3^(2 - n3)*rat(4 + d - 2*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(-1 - d + 2*n3, 3*(-1 + n3)))/(d4*d5*d6*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(-1 - d + 2*n3, 3*(-1 + n3)))/(d10*d5*d6*d7^2*d8*d9) +
+        (d3^(1 - n3)*rat(-1 - d + 2*n3, 3*(-1 + n3)))/(d10*d5^2*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(-d + 2*n3, 3*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8) +
         (d3^(1 - n3)*rat(-d - d^2 + 2*n3 + 4*d*n3 - 4*n3^2, 3*(-1 + n3)))/(d10*d4*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n3 != 1 && n3 != 2
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3^n3?{>2}/d4/d5/d6/d7/d8/d9/d10 =
-        
-        1/(3*d10*d3^n3*d4*d5*d6*d7*d8) - 
-        1/(3*d10*d3^n3*d4*d5*d6*d8*d9) + 
-        1/(3*d10*d3^n3*d5*d6*d7*d8*d9) + 
-        d3^(1 - n3)/(6*d10*d4*d5*d6*d7^2*d8*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) + 
-        d3^(2 - n3)/(6*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) - 
-        d3^(1 - n3)/(3*d10*d4*d5*d6*d8*d9^2*(-1 + n3)) - 
-        d3^(2 - n3)/(6*d10*d4*d5*d6*d8*d9^2*(-1 + n3)) + 
-        d3^(1 - n3)/(3*d10*d4*d6*d7*d8*d9^2*(-1 + n3)) + 
-        d3^(2 - n3)/(6*d10*d4*d6*d7*d8*d9^2*(-1 + n3)) - 
-        d3^(2 - n3)/(6*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) + 
-        d3^(1 - n3)/(d10^2*d4*d5*d6*d7*d9*(-1 + n3)) - 
-        (d1*d3^(1 - n3))/(6*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        d3^(2 - n3)/(3*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d4*d5*d7*d8^2*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d4*d6*d7*d8^2*d9*(-1 + n3)) - 
-        (d1*d3^(1 - n3))/(6*d10*d4^2*d5*d6*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10^2*d4*d5*d6*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(6*d10^2*d4*d5*d6*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10*d4*d6*d7^2*d8*d9*(-1 + n3)) - 
-        d3^(1 - n3)/(6*d10^2*d4*d5*d7*d8*d9*(-1 + n3)) - 
-        d3^(2 - n3)/(6*d10^2*d4*d5*d7*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10*d4^2*d6*d7*d8*d9*(-1 + n3)) + 
-        d3^(2 - n3)/(6*d10*d4^2*d6*d7*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10^2*d4*d6*d7*d8*d9*(-1 + n3)) + 
-        d3^(2 - n3)/(6*d10^2*d4*d6*d7*d8*d9*(-1 + n3)) + 
-        d3^(1 - n3)/(6*d10^2*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        d3^(2 - n3)/(6*d10^2*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        (5*d3^(2 - n3))/(6*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) - 
-        d3^(3 - n3)/(6*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) + 
-        rat(-3, 4*(2 - d + n3))/(d3^n3*d4*d5*d6*d7*d8*d9^2) + 
-        (d3^(1 - n3)*rat(-2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d5*d6*d8*d9^3) + 
-        (d3^(2 - n3)*rat(-2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4^3*d5*d6*d8*d9) + 
-        (d3^(1 - n3)*rat(-2, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d5*d6^2*d7*d8*d9) + 
-        rat(-1, 3*(2 - d + n3))/(d10^2*d3^n3*d4*d5*d6*d7*d9) + 
-        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d4*d6*d7*d8^2*d9) + 
-        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d5*d6*d7*d8^2*d9) + 
-        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d4*d6*d7^2*d8*d9) + 
-        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d4^2*d6*d7*d8*d9) + 
-        rat(-1, 6*(2 - d + n3))/(d10^2*d3^n3*d4*d6*d7*d8*d9) + 
-        rat(-1, 6*(2 - d + n3))/(d10^2*d3^n3*d5*d6*d7*d8*d9) + 
-        rat(-1, 12*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d8*d9^2) + 
-        (d3^(1 - n3)*rat(-1, 2*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d6*d8*d9) + 
-        (d3^(1 - n3)*rat(-1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d5*d6^2*d7*d9^2) + 
-        (d3^(2 - n3)*rat(-1, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4^2*d5*d6*d7*d9) + 
-        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6*d7^2*d9) + 
-        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d6*d7*d9) + 
-        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d6*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d6*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d5*d6*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d6*d7^2*d8*d9) + 
-        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d6*d7^2*d8*d9) + 
-        rat(1, 3*(2 - d + n3))/(d3^n3*d4*d5*d6*d7*d8^2*d9) + 
-        rat(1, 4*(2 - d + n3))/(d10*d3^n3*d4*d6^2*d7*d8*d9) + 
-        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d7^2*d8) + 
-        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4^2*d5*d6*d7*d8) + 
-        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d8^2*d9) + 
-        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4*d5*d7*d8^2*d9) + 
-        rat(1, 6*(2 - d + n3))/(d10^2*d3^n3*d4*d5*d6*d8*d9) + 
-        rat(1, 6*(2 - d + n3))/(d10^2*d3^n3*d4*d5*d7*d8*d9) + 
-        rat(1, 12*(2 - d + n3))/(d10*d3^n3*d4*d6*d7*d8*d9^2) + 
-        (d3^(1 - n3)*rat(1, 2*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d6*d7*d8) + 
-        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6^2*d7*d8*d9^2) + 
-        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4^2*d5*d6*d7*d9) + 
-        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6^2*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6^2*d7^2*d8*d9) + 
-        (d3^(3 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4^2*d5*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d5*d6*d7^2*d8) + 
-        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6*d7^2*d8) + 
-        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6*d8^2*d9) + 
-        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d5*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d5*d6*d7^2*d8*d9) + 
-        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6^2*d7*d8) + 
-        (d3^(1 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6*d7*d8*d9^3) + 
-        (d3^(1 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4^3*d5*d6*d8*d9) + 
-        (d3^(3 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4^3*d5*d6*d7*d8*d9) + 
-        rat(3, 4*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d7*d9^2) + 
-        (d3^(2 - n3)*rat(9 - 2*d, 3*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(4 - d, 3*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7*d9) + 
-        (d3^(1 - n3)*rat(-4 + d, 3*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d6^2*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(16 - d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d8^2*d9) + 
-        (d3^(1 - n3)*rat(16 - d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d8^2*d9) + 
-        (d3^(1 - n3)*rat(16 - d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6^2*d8*d9) + 
-        rat(8 + d - 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d3^n3*d4*d5*d6*d7^2*d8*d9) + 
-        rat(8 + d - 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d3^n3*d4^2*d5*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(8 + d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6*d7^2*d8*d9) + 
-        (d3^(1 - n3)*rat(-8 + 5*d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d7*d8^2*d9) + 
-        rat(-16 + 7*d - 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4^2*d5*d6*d8*d9) + 
-        (d3^(1 - n3)*rat(14 - 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d9^2) + 
-        (d3^(1 - n3)*rat(14 - 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d9^2) + 
-        (d3^(1 - n3)*rat(14 - 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7^2*d9) + 
-        rat(2 + d - 3*n3, 6*(-4 + d)*(-2 + d - n3))/(d3^n3*d4*d5*d6^2*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(2 + d - 3*n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7^2*d8) + 
-        (d3^(1 - n3)*rat(2 + d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6^2*d7*d8) + 
-        (d3^(2 - n3)*rat(3 + d - 3*n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8*d9) + 
-        (d3^(1 - n3)*rat(-2 + 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d6*d8*d9) + 
-        (d3^(1 - n3)*rat(-10 + 4*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7^2*d8) + 
-        (d3^(1 - n3)*rat(-14 + 5*d - 3*n3, 6*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d8*d9) + 
-        (d3^(1 - n3)*rat(-22 + 7*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6*d7*d8*d9^2) + 
-        rat(16 - 3*d - 2*n3, 4*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4*d5*d6^2*d8*d9) + 
-        (d3^(1 - n3)*rat(d - 2*n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d8^2*d9) + 
-        (d3^(1 - n3)*rat(1 + d - 2*n3, 6*(-1 + n3)))/(d10*d4*d5*d6*d8*d9) + 
-        (d3^(1 - n3)*rat(10 - 2*d - n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d7*d8*d9) + 
-        (d3^(2 - n3)*rat(-1 + d - n3, 3*(-2 + n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8*d9) + 
-        (d3^(2 - n3)*rat(-1 + d - n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d6*d7*d8^2*d9) + 
-        (d3^(2 - n3)*rat(-1 + d - n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7*d8^2*d9) + 
-        (d3^(2 - n3)*rat(-1 + d - n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d6*d7^2*d8*d9) + 
-        (d3^(2 - n3)*rat(1 - d + n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8) + 
-        (d3^(2 - n3)*rat(1 - d + n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d7*d8^2*d9) + 
-        (d3^(1 - n3)*rat(-10 + 2*d + n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d6*d7*d9) + 
-        (d3^(1 - n3)*rat(-1 - d + 2*n3, 6*(-1 + n3)))/(d10*d5*d6*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(-d + 2*n3, 6*(-1 + n3)))/(d10*d4*d5*d6*d7*d8) + 
-        (d3^(1 - n3)*rat(-d + 2*n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6*d7*d8^2*d9) + 
-        rat(-16 + 3*d + 2*n3, 4*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d5*d6^2*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(22 - 7*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d7*d8*d9^2) + 
-        (d3^(1 - n3)*rat(10 - 4*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d8*d9^2) + 
-        (d3^(1 - n3)*rat(2 - 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d6*d7*d8) + 
-        (d3^(1 - n3)*rat(-2 - d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6^2*d7*d8*d9) + 
-        (d3^(1 - n3)*rat(-14 + 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d7^2*d8*d9^2) + 
-        (d3^(1 - n3)*rat(-14 + 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d7*d8*d9^2) + 
-        (d3^(1 - n3)*rat(-14 + 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d7^2*d8*d9) + 
-        rat(16 - 7*d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d5*d6*d7^2*d8*d9) + 
-        rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4*d5*d6*d7^2*d9) + 
-        rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4^2*d5*d6*d7*d9) + 
-        (d3^(1 - n3)*rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d7^2*d9) + 
-        (d3^(1 - n3)*rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6^2*d7*d9) + 
-        rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4*d5*d6^2*d7*d9) + 
-        (d3^(1 - n3)*rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7*d8^2) + 
-        (d3^(1 - n3)*rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8^2) + 
-        (d3^(1 - n3)*rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6^2*d7*d8) + 
-        (d3^(1 - n3)*rat(-22 + d + 9*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7^2*d9) + 
-        (d3^(1 - n3)*rat(24 - 6*d - 2*d^2 - 12*n3 + 11*d*n3 - 8*n3^2, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4*d5*d6*d7*d8*d9) + 
+
+        1/(3*d10*d3^n3*d4*d5*d6*d7*d8) -
+        1/(3*d10*d3^n3*d4*d5*d6*d8*d9) +
+        1/(3*d10*d3^n3*d5*d6*d7*d8*d9) +
+        d3^(1 - n3)/(6*d10*d4*d5*d6*d7^2*d8*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) +
+        d3^(2 - n3)/(6*d10^2*d4*d5*d6*d7*d8*(-1 + n3)) -
+        d3^(1 - n3)/(3*d10*d4*d5*d6*d8*d9^2*(-1 + n3)) -
+        d3^(2 - n3)/(6*d10*d4*d5*d6*d8*d9^2*(-1 + n3)) +
+        d3^(1 - n3)/(3*d10*d4*d6*d7*d8*d9^2*(-1 + n3)) +
+        d3^(2 - n3)/(6*d10*d4*d6*d7*d8*d9^2*(-1 + n3)) -
+        d3^(2 - n3)/(6*d10*d4*d5*d6*d7*d8*d9^2*(-1 + n3)) +
+        d3^(1 - n3)/(d10^2*d4*d5*d6*d7*d9*(-1 + n3)) -
+        (d1*d3^(1 - n3))/(6*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) +
+        d3^(2 - n3)/(3*d10^2*d4*d5*d6*d7*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d4*d5*d7*d8^2*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d4*d6*d7*d8^2*d9*(-1 + n3)) -
+        (d1*d3^(1 - n3))/(6*d10*d4^2*d5*d6*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10^2*d4*d5*d6*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(6*d10^2*d4*d5*d6*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10*d4*d6*d7^2*d8*d9*(-1 + n3)) -
+        d3^(1 - n3)/(6*d10^2*d4*d5*d7*d8*d9*(-1 + n3)) -
+        d3^(2 - n3)/(6*d10^2*d4*d5*d7*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10*d4^2*d6*d7*d8*d9*(-1 + n3)) +
+        d3^(2 - n3)/(6*d10*d4^2*d6*d7*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10^2*d4*d6*d7*d8*d9*(-1 + n3)) +
+        d3^(2 - n3)/(6*d10^2*d4*d6*d7*d8*d9*(-1 + n3)) +
+        d3^(1 - n3)/(6*d10^2*d5*d6*d7*d8*d9*(-1 + n3)) +
+        d3^(2 - n3)/(6*d10^2*d5*d6*d7*d8*d9*(-1 + n3)) -
+        (5*d3^(2 - n3))/(6*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) -
+        d3^(3 - n3)/(6*d10^2*d4*d5*d6*d7*d8*d9*(-1 + n3)) +
+        rat(-3, 4*(2 - d + n3))/(d3^n3*d4*d5*d6*d7*d8*d9^2) +
+        (d3^(1 - n3)*rat(-2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d5*d6*d8*d9^3) +
+        (d3^(2 - n3)*rat(-2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4^3*d5*d6*d8*d9) +
+        (d3^(1 - n3)*rat(-2, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d5*d6^2*d7*d8*d9) +
+        rat(-1, 3*(2 - d + n3))/(d10^2*d3^n3*d4*d5*d6*d7*d9) +
+        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d4*d6*d7*d8^2*d9) +
+        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d5*d6*d7*d8^2*d9) +
+        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d4*d6*d7^2*d8*d9) +
+        rat(-1, 6*(2 - d + n3))/(d10*d3^n3*d4^2*d6*d7*d8*d9) +
+        rat(-1, 6*(2 - d + n3))/(d10^2*d3^n3*d4*d6*d7*d8*d9) +
+        rat(-1, 6*(2 - d + n3))/(d10^2*d3^n3*d5*d6*d7*d8*d9) +
+        rat(-1, 12*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d8*d9^2) +
+        (d3^(1 - n3)*rat(-1, 2*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d6*d8*d9) +
+        (d3^(1 - n3)*rat(-1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d5*d6^2*d7*d9^2) +
+        (d3^(2 - n3)*rat(-1, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4^2*d5*d6*d7*d9) +
+        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6*d7^2*d9) +
+        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d6*d7*d9) +
+        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d6*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d6*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d5*d6*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d6*d7^2*d8*d9) +
+        (d3^(1 - n3)*rat(-1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d6*d7^2*d8*d9) +
+        rat(1, 3*(2 - d + n3))/(d3^n3*d4*d5*d6*d7*d8^2*d9) +
+        rat(1, 4*(2 - d + n3))/(d10*d3^n3*d4*d6^2*d7*d8*d9) +
+        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d7^2*d8) +
+        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4^2*d5*d6*d7*d8) +
+        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d8^2*d9) +
+        rat(1, 6*(2 - d + n3))/(d10*d3^n3*d4*d5*d7*d8^2*d9) +
+        rat(1, 6*(2 - d + n3))/(d10^2*d3^n3*d4*d5*d6*d8*d9) +
+        rat(1, 6*(2 - d + n3))/(d10^2*d3^n3*d4*d5*d7*d8*d9) +
+        rat(1, 12*(2 - d + n3))/(d10*d3^n3*d4*d6*d7*d8*d9^2) +
+        (d3^(1 - n3)*rat(1, 2*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d6*d7*d8) +
+        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6^2*d7*d8*d9^2) +
+        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4^2*d5*d6*d7*d9) +
+        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6^2*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6^2*d7^2*d8*d9) +
+        (d3^(3 - n3)*rat(1, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4^2*d5*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d5*d6*d7^2*d8) +
+        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6*d7^2*d8) +
+        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6*d8^2*d9) +
+        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4^2*d5*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d5*d6*d7^2*d8*d9) +
+        (d3^(1 - n3)*rat(1, 6*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5^2*d7*d8*d9) +
+        (d3^(1 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10^2*d4*d5*d6^2*d7*d8) +
+        (d3^(1 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4*d6*d7*d8*d9^3) +
+        (d3^(1 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4^3*d5*d6*d8*d9) +
+        (d3^(3 - n3)*rat(2, 3*(-1 + n3)*(2 - d + n3)))/(d10*d4^3*d5*d6*d7*d8*d9) +
+        rat(3, 4*(2 - d + n3))/(d10*d3^n3*d4*d5*d6*d7*d9^2) +
+        (d3^(2 - n3)*rat(9 - 2*d, 3*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(4 - d, 3*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7*d9) +
+        (d3^(1 - n3)*rat(-4 + d, 3*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d6^2*d7*d8*d9) +
+        (d3^(1 - n3)*rat(16 - d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d8^2*d9) +
+        (d3^(1 - n3)*rat(16 - d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d8^2*d9) +
+        (d3^(1 - n3)*rat(16 - d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6^2*d8*d9) +
+        rat(8 + d - 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d3^n3*d4*d5*d6*d7^2*d8*d9) +
+        rat(8 + d - 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d3^n3*d4^2*d5*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(8 + d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6*d7^2*d8*d9) +
+        (d3^(1 - n3)*rat(-8 + 5*d - 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d7*d8^2*d9) +
+        rat(-16 + 7*d - 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4^2*d5*d6*d8*d9) +
+        (d3^(1 - n3)*rat(14 - 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d9^2) +
+        (d3^(1 - n3)*rat(14 - 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d9^2) +
+        (d3^(1 - n3)*rat(14 - 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7^2*d9) +
+        rat(2 + d - 3*n3, 6*(-4 + d)*(-2 + d - n3))/(d3^n3*d4*d5*d6^2*d7*d8*d9) +
+        (d3^(1 - n3)*rat(2 + d - 3*n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7^2*d8) +
+        (d3^(1 - n3)*rat(2 + d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6^2*d7*d8) +
+        (d3^(2 - n3)*rat(3 + d - 3*n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8*d9) +
+        (d3^(1 - n3)*rat(-2 + 2*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d6*d8*d9) +
+        (d3^(1 - n3)*rat(-10 + 4*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7^2*d8) +
+        (d3^(1 - n3)*rat(-14 + 5*d - 3*n3, 6*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d8*d9) +
+        (d3^(1 - n3)*rat(-22 + 7*d - 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6*d7*d8*d9^2) +
+        rat(16 - 3*d - 2*n3, 4*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4*d5*d6^2*d8*d9) +
+        (d3^(1 - n3)*rat(d - 2*n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d8^2*d9) +
+        (d3^(1 - n3)*rat(1 + d - 2*n3, 6*(-1 + n3)))/(d10*d4*d5*d6*d8*d9) +
+        (d3^(1 - n3)*rat(10 - 2*d - n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d7*d8*d9) +
+        (d3^(2 - n3)*rat(-1 + d - n3, 3*(-2 + n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8*d9) +
+        (d3^(2 - n3)*rat(-1 + d - n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d6*d7*d8^2*d9) +
+        (d3^(2 - n3)*rat(-1 + d - n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7*d8^2*d9) +
+        (d3^(2 - n3)*rat(-1 + d - n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d6*d7^2*d8*d9) +
+        (d3^(2 - n3)*rat(1 - d + n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7^2*d8) +
+        (d3^(2 - n3)*rat(1 - d + n3, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d7*d8^2*d9) +
+        (d3^(1 - n3)*rat(-10 + 2*d + n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d6*d7*d9) +
+        (d3^(1 - n3)*rat(-1 - d + 2*n3, 6*(-1 + n3)))/(d10*d5*d6*d7*d8*d9) +
+        (d3^(1 - n3)*rat(-d + 2*n3, 6*(-1 + n3)))/(d10*d4*d5*d6*d7*d8) +
+        (d3^(1 - n3)*rat(-d + 2*n3, 4*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6*d7*d8^2*d9) +
+        rat(-16 + 3*d + 2*n3, 4*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d5*d6^2*d7*d8*d9) +
+        (d3^(1 - n3)*rat(22 - 7*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d7*d8*d9^2) +
+        (d3^(1 - n3)*rat(10 - 4*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d8*d9^2) +
+        (d3^(1 - n3)*rat(2 - 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5^2*d6*d7*d8) +
+        (d3^(1 - n3)*rat(-2 - d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d4^2*d5*d6^2*d7*d8*d9) +
+        (d3^(1 - n3)*rat(-14 + 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d7^2*d8*d9^2) +
+        (d3^(1 - n3)*rat(-14 + 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d7*d8*d9^2) +
+        (d3^(1 - n3)*rat(-14 + 2*d + 3*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d7^2*d8*d9) +
+        rat(16 - 7*d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d5*d6*d7^2*d8*d9) +
+        rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4*d5*d6*d7^2*d9) +
+        rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4^2*d5*d6*d7*d9) +
+        (d3^(1 - n3)*rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4^2*d5*d6*d7^2*d9) +
+        (d3^(1 - n3)*rat(-8 - d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6^2*d7*d9) +
+        rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3))/(d10*d3^n3*d4*d5*d6^2*d7*d9) +
+        (d3^(1 - n3)*rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7*d8^2) +
+        (d3^(1 - n3)*rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6*d7*d8^2) +
+        (d3^(1 - n3)*rat(-16 + d + 6*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5^2*d6^2*d7*d8) +
+        (d3^(1 - n3)*rat(-22 + d + 9*n3, 12*(-4 + d)*(-2 + d - n3)*(-1 + n3)))/(d10*d4*d5*d6^2*d7^2*d9) +
+        (d3^(1 - n3)*rat(24 - 6*d - 2*d^2 - 12*n3 + 11*d*n3 - 8*n3^2, 6*(-1 + n3)*(2 - d + n3)))/(d10*d4*d5*d6*d7*d8*d9) +
         (d3^(2 - n3)*rat(d - d^2 - 2*n3 + 3*d*n3 - 2*n3^2, 6*(-2 + n3)*(-1 + n3)))/(d10*d4*d5*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n3 == 1 && n5 == 1 && n6 == 2 && n7 == 1 && n8 == 1 && n9 == 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3/d4^n4?pos_/d5/d6^2/d7/d8/d9/d10 =
-        
-        -2/(3*d10^2*d3*d4^n4*d5*d6*d7*d9) + 
-        2/(3*d10^2*d4^n4*d5*d6*d7*d8*d9) + 
-        2/(d10*d3^2*d4^n4*d5*d6*d7*d8*d9) - 
-        (d4^(-1 - n4)*n4)/(d10*d3*d5*d6*d8*d9) + 
-        (d4^(-1 - n4)*n4)/(d10*d5*d6*d7*d8*d9) + 
-        (d4^(-1 - n4)*n4)/(d10*d3*d5*d6*d7*d8*d9) + 
-        rat(-4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^3*d7*d8) + 
-        rat(-4, 3*(-3 + d - n4))/(d10^2*d3*d4^n4*d5*d6^2*d7*d8) + 
-        rat(-4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^3*d7*d9) + 
-        (d1*rat(-4, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5*d6^3*d7*d9) + 
-        (d4^(1 - n4)*rat(-4, 3*(-3 + d - n4)))/(d10*d3^2*d5*d6^2*d7*d9) + 
-        rat(-4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-4, 3*(-3 + d - n4)))/(d10*d3*d6^3*d7*d8*d9) + 
-        rat(-4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^3*d7*d8*d9) + 
-        rat(-4, 3*(-3 + d - n4))/(d10^2*d3*d4^n4*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-4, 3*(-3 + d - n4)))/(d10^2*d5*d6^2*d7*d8*d9) + 
-        rat(-2, -3 + d - n4)/(d10^2*d3*d4^n4*d5*d6^2*d7*d9) + 
-        (d4^(1 - n4)*rat(-2, -3 + d - n4))/(d10*d3^2*d5*d6^2*d7*d8*d9) + 
-        (d1*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5*d6^2*d7^2*d8) + 
-        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6*d7^2*d8) + 
-        rat(-2, 3*(-3 + d - n4))/(d10*d3^2*d4^n4*d5*d6^2*d7*d8) + 
-        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6^2*d7*d8*d9^2) + 
-        rat(-2, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7*d8*d9^2) + 
-        (d2*rat(-2, 3*(-3 + d - n4)))/(d10*d4^n4*d5*d6^2*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d5*d6^2*d7^2*d9) + 
-        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d5^2*d6^2*d7*d9) + 
-        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6^2*d7*d8^2*d9) + 
-        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d6^2*d7^2*d8*d9) + 
-        (d2*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d6^2*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d5*d6^2*d7^2*d8*d9) + 
-        rat(-2, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7^2*d8*d9) + 
-        (d2*rat(-2, 3*(-3 + d - n4)))/(d10*d4^n4*d5*d6^2*d7^2*d8*d9) + 
-        rat(-2, 3*(-3 + d - n4))/(d3^2*d4^n4*d5*d6^2*d7*d8*d9) + 
-        (d1*rat(-2, 3*(-3 + d - n4)))/(d3^2*d4^n4*d5*d6^2*d7*d8*d9) + 
-        (d2*rat(2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5*d6^2*d7^2*d8) + 
-        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6^2*d7*d8) + 
-        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d8*d9^2) + 
-        rat(2, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^2*d7*d8*d9^2) + 
-        (d1*rat(2, 3*(-3 + d - n4)))/(d3*d4^n4*d5*d6^2*d7*d8*d9^2) + 
-        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6^2*d7*d9) + 
-        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5^2*d6^2*d7*d9) + 
-        rat(2, 3*(-3 + d - n4))/(d10*d3^2*d4^n4*d5*d6^2*d7*d9) + 
-        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d3^2*d4^n4*d5*d6^2*d7*d9) + 
-        rat(2, 3*(-3 + d - n4))/(d10*d3^2*d4^n4*d5*d6^2*d8*d9) + 
-        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d6^2*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(2, 3*(-3 + d - n4)))/(d3*d5*d6^2*d7^2*d8*d9) + 
-        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d4^n4*d5*d6^2*d7^2*d8*d9) + 
-        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6*d7^2*d8*d9) + 
-        rat(2, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6*d7^2*d8*d9) + 
-        rat(2, 3*(-3 + d - n4))/(d10^2*d4^n4*d5*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(4, 3*(-3 + d - n4)))/(d10*d3*d5*d6^3*d7*d9) + 
-        (d4^(1 - n4)*rat(4, 3*(-3 + d - n4)))/(d10^2*d3*d5*d6^2*d7*d9) + 
-        rat(4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^2*d7*d8^2*d9) + 
-        rat(4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^3*d8*d9) + 
-        rat(4, 3*(-3 + d - n4))/(d10^2*d3*d4^n4*d5*d6^2*d8*d9) + 
-        (d1*rat(4, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d6^3*d7*d8*d9) + 
-        rat(4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^3*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(4, 3*(-3 + d - n4)))/(d3^2*d5*d6^2*d7*d8*d9) + 
-        rat(-15 + 5*d - 9*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d7*d9) + 
-        rat(-8 + 4*d - 8*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6*d8*d9^2) + 
-        rat(-10 + 4*d - 6*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d7*d8) + 
-        rat(-6 + 4*d - 6*n4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7*d8*d9) + 
-        rat(-4 + 2*d - 4*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6*d7*d8) + 
-        rat(-4 + 2*d - 2*n4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6*d7*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-4 + 2*d - 2*n4, 3*(-3 + d - n4)))/(d10*d3*d5*d6^2*d7*d8*d9) + 
-        (d4^(-1 - n4)*rat(-4*n4, 3*(-3 + d - n4)))/(d10*d3*d6^2*d7*d8*d9) + 
-        (d2*d4^(-1 - n4)*rat(-2*n4, 3*(-3 + d - n4)))/(d10*d3*d6^2*d7*d8*d9) + 
-        (d1*d4^(-1 - n4)*rat(-2*n4, 3*(-3 + d - n4)))/(d10*d5*d6^2*d7*d8*d9) + 
-        (d1*d4^(-1 - n4)*rat(2*n4, 3*(-3 + d - n4)))/(d10*d3*d5*d6^2*d8*d9) + 
-        (d4^(-1 - n4)*rat(2*n4, 3*(-3 + d - n4)))/(d10*d3*d6*d7*d8*d9) + 
-        rat(4 - 2*d + 2*n4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6*d7*d8^2*d9) + 
-        rat(4 - 2*d + 4*n4, -3 + d - n4)/(d10*d3*d4^n4*d5^2*d6*d7*d8*d9) + 
-        rat(4 - 2*d + 4*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6*d8*d9) + 
-        rat(3 - d + 5*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6^2*d7*d8*d9) + 
-        rat(8 - 4*d + 6*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d8*d9) + 
-        rat(8 - 4*d + 6*n4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^2*d7*d8*d9) + 
-        rat(8 - 4*d + 8*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6*d7*d8*d9^2) + 
+
+        -2/(3*d10^2*d3*d4^n4*d5*d6*d7*d9) +
+        2/(3*d10^2*d4^n4*d5*d6*d7*d8*d9) +
+        2/(d10*d3^2*d4^n4*d5*d6*d7*d8*d9) -
+        (d4^(-1 - n4)*n4)/(d10*d3*d5*d6*d8*d9) +
+        (d4^(-1 - n4)*n4)/(d10*d5*d6*d7*d8*d9) +
+        (d4^(-1 - n4)*n4)/(d10*d3*d5*d6*d7*d8*d9) +
+        rat(-4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^3*d7*d8) +
+        rat(-4, 3*(-3 + d - n4))/(d10^2*d3*d4^n4*d5*d6^2*d7*d8) +
+        rat(-4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^3*d7*d9) +
+        (d1*rat(-4, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5*d6^3*d7*d9) +
+        (d4^(1 - n4)*rat(-4, 3*(-3 + d - n4)))/(d10*d3^2*d5*d6^2*d7*d9) +
+        rat(-4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7*d8^2*d9) +
+        (d4^(1 - n4)*rat(-4, 3*(-3 + d - n4)))/(d10*d3*d6^3*d7*d8*d9) +
+        rat(-4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^3*d7*d8*d9) +
+        rat(-4, 3*(-3 + d - n4))/(d10^2*d3*d4^n4*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-4, 3*(-3 + d - n4)))/(d10^2*d5*d6^2*d7*d8*d9) +
+        rat(-2, -3 + d - n4)/(d10^2*d3*d4^n4*d5*d6^2*d7*d9) +
+        (d4^(1 - n4)*rat(-2, -3 + d - n4))/(d10*d3^2*d5*d6^2*d7*d8*d9) +
+        (d1*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5*d6^2*d7^2*d8) +
+        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6*d7^2*d8) +
+        rat(-2, 3*(-3 + d - n4))/(d10*d3^2*d4^n4*d5*d6^2*d7*d8) +
+        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6^2*d7*d8*d9^2) +
+        rat(-2, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7*d8*d9^2) +
+        (d2*rat(-2, 3*(-3 + d - n4)))/(d10*d4^n4*d5*d6^2*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d5*d6^2*d7^2*d9) +
+        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d5^2*d6^2*d7*d9) +
+        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6^2*d7*d8^2*d9) +
+        rat(-2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6^2*d8*d9) +
+        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d6^2*d7^2*d8*d9) +
+        (d2*rat(-2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d6^2*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(-2, 3*(-3 + d - n4)))/(d10*d5*d6^2*d7^2*d8*d9) +
+        rat(-2, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7^2*d8*d9) +
+        (d2*rat(-2, 3*(-3 + d - n4)))/(d10*d4^n4*d5*d6^2*d7^2*d8*d9) +
+        rat(-2, 3*(-3 + d - n4))/(d3^2*d4^n4*d5*d6^2*d7*d8*d9) +
+        (d1*rat(-2, 3*(-3 + d - n4)))/(d3^2*d4^n4*d5*d6^2*d7*d8*d9) +
+        (d2*rat(2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5*d6^2*d7^2*d8) +
+        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6^2*d7*d8) +
+        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d8*d9^2) +
+        rat(2, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^2*d7*d8*d9^2) +
+        (d1*rat(2, 3*(-3 + d - n4)))/(d3*d4^n4*d5*d6^2*d7*d8*d9^2) +
+        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6^2*d7*d9) +
+        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d5^2*d6^2*d7*d9) +
+        rat(2, 3*(-3 + d - n4))/(d10*d3^2*d4^n4*d5*d6^2*d7*d9) +
+        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d3^2*d4^n4*d5*d6^2*d7*d9) +
+        rat(2, 3*(-3 + d - n4))/(d10*d3^2*d4^n4*d5*d6^2*d8*d9) +
+        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d6^2*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(2, 3*(-3 + d - n4)))/(d3*d5*d6^2*d7^2*d8*d9) +
+        (d1*rat(2, 3*(-3 + d - n4)))/(d10*d4^n4*d5*d6^2*d7^2*d8*d9) +
+        rat(2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6*d7^2*d8*d9) +
+        rat(2, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6*d7^2*d8*d9) +
+        rat(2, 3*(-3 + d - n4))/(d10^2*d4^n4*d5*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(4, 3*(-3 + d - n4)))/(d10*d3*d5*d6^3*d7*d9) +
+        (d4^(1 - n4)*rat(4, 3*(-3 + d - n4)))/(d10^2*d3*d5*d6^2*d7*d9) +
+        rat(4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^2*d7*d8^2*d9) +
+        rat(4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^3*d8*d9) +
+        rat(4, 3*(-3 + d - n4))/(d10^2*d3*d4^n4*d5*d6^2*d8*d9) +
+        (d1*rat(4, 3*(-3 + d - n4)))/(d10*d3*d4^n4*d6^3*d7*d8*d9) +
+        rat(4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^3*d7*d8*d9) +
+        (d4^(1 - n4)*rat(4, 3*(-3 + d - n4)))/(d3^2*d5*d6^2*d7*d8*d9) +
+        rat(-15 + 5*d - 9*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d7*d9) +
+        rat(-8 + 4*d - 8*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6*d8*d9^2) +
+        rat(-10 + 4*d - 6*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d7*d8) +
+        rat(-6 + 4*d - 6*n4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6^2*d7*d8*d9) +
+        rat(-4 + 2*d - 4*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6*d7*d8) +
+        rat(-4 + 2*d - 2*n4, 3*(-3 + d - n4))/(d10*d4^n4*d5*d6*d7*d8^2*d9) +
+        (d4^(1 - n4)*rat(-4 + 2*d - 2*n4, 3*(-3 + d - n4)))/(d10*d3*d5*d6^2*d7*d8*d9) +
+        (d4^(-1 - n4)*rat(-4*n4, 3*(-3 + d - n4)))/(d10*d3*d6^2*d7*d8*d9) +
+        (d2*d4^(-1 - n4)*rat(-2*n4, 3*(-3 + d - n4)))/(d10*d3*d6^2*d7*d8*d9) +
+        (d1*d4^(-1 - n4)*rat(-2*n4, 3*(-3 + d - n4)))/(d10*d5*d6^2*d7*d8*d9) +
+        (d1*d4^(-1 - n4)*rat(2*n4, 3*(-3 + d - n4)))/(d10*d3*d5*d6^2*d8*d9) +
+        (d4^(-1 - n4)*rat(2*n4, 3*(-3 + d - n4)))/(d10*d3*d6*d7*d8*d9) +
+        rat(4 - 2*d + 2*n4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6*d7*d8^2*d9) +
+        rat(4 - 2*d + 4*n4, -3 + d - n4)/(d10*d3*d4^n4*d5^2*d6*d7*d8*d9) +
+        rat(4 - 2*d + 4*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5^2*d6*d8*d9) +
+        rat(3 - d + 5*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6^2*d7*d8*d9) +
+        rat(8 - 4*d + 6*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6^2*d8*d9) +
+        rat(8 - 4*d + 6*n4, 3*(-3 + d - n4))/(d3*d4^n4*d5*d6^2*d7*d8*d9) +
+        rat(8 - 4*d + 8*n4, 3*(-3 + d - n4))/(d10*d3*d4^n4*d6*d7*d8*d9^2) +
         rat(1 - d + 2*n4 + d*n4 - 3*n4^2, 3*(-3 + d - n4))/(d10*d3*d4^n4*d5*d6*d7*d8*d9);
-        
+
 * n1 == 0 && n10 == 1 && n2 == 0 && n3 == 1 && n5 == 2 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n4 != 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3/d4^n4?{>1}/d5^2/d6/d7/d8/d9/d10 =
-        
-        (d4^(1 - n4)*rat(-3, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d5^2*d6*d7*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-3, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3^2*d5*d6^2*d7*d8*d9) + 
-        rat(-1, -2 + d - n4)/(d10*d3*d4^n4*d5^2*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d7^2*d8) + 
-        (d4^(1 - n4)*rat(-1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-1, 2*(-2 + d - n4)*(-1 + n4)))/(d10*d3^2*d5^2*d6*d7*d9^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^2*d7^2*d8*d9^2) + 
-        rat(1, -2 + d - n4)/(d3*d4^n4*d5^2*d6*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d7*d9^2) + 
-        (d4^(1 - n4)*rat(1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d8*d9^2) + 
-        (d4^(1 - n4)*rat(1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d7^2*d9) + 
-        (d4^(1 - n4)*rat(1, 2*(-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^2*d6*d7^2*d9^2) + 
-        (d4^(1 - n4)*rat(1, 2*(-2 + d - n4)*(-1 + n4)))/(d3^2*d5^2*d6*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(3, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d3^2*d5^2*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(30 + 3*d - 21*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5*d6*d7*d8*d9^2) + 
-        rat(32 - d - 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3*d4^n4*d5^2*d6*d7^2*d9) + 
-        rat(32 - d - 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3^2*d4^n4*d5^2*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(32 - d - 14*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6*d7^2*d9) + 
-        (d4^(1 - n4)*rat(22 + d - 13*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d5^2*d6*d7^2*d8*d9) + 
-        rat(12 + 3*d - 12*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6*d7^2*d8*d9) + 
-        rat(18 - 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6*d7*d8*d9^2) + 
-        rat(18 - 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10^2*d4^n4*d5^2*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(20 - d - 8*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5^2*d6*d8*d9^2) + 
-        (d4^(1 - n4)*rat(8 + 2*d - 8*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d5^2*d6*d7*d8*d9^2) + 
-        rat(24 - 3*d - 6*n4, -28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)/(d10*d3*d4^n4*d5^3*d6*d8*d9) + 
-        rat(4 + d - 4*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^3*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(4 + d - 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6*d7*d8^2) + 
-        (d4^(1 - n4)*rat(4 + d - 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6^2*d7*d8) + 
-        (d4^(1 - n4)*rat(4 + d - 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d7*d8^2) + 
-        (d4^(1 - n4)*rat(4 + d - 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6^2*d7*d9) + 
-        (d4^(2 - n4)*rat(4 + d - 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6^2*d7*d8*d9) + 
-        rat(6 - 3*n4, -14 + d + 5*n4)/(d10*d3*d4^n4*d5^2*d6*d8*d9) + 
-        (d4^(1 - n4)*rat(8 - d - 2*n4, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d5^2*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(8 - d - 2*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5*d6^2*d7*d8*d9) + 
-        rat(-16 + 5*d - 2*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3*d4^n4*d5^2*d6*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-16 + 5*d - 2*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d7*d8^2*d9) + 
-        rat(10 - 2*d - n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(10 - 2*d - n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d7*d9^2) + 
-        (d4^(1 - n4)*rat(10 - 2*d - n4, 2*(-1 + n4)*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)))/(d10*d3*d5^2*d6^2*d7^2*d8) + 
-        (d4^(1 - n4)*rat(10 - 2*d - n4, 2*(-1 + n4)*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)))/(d3^2*d5^2*d6^2*d7*d8*d9) + 
-        rat(-10 + 2*d + n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^2*d6^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-10 + 2*d + n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-10 + 2*d + n4, 2*(-1 + n4)*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)))/(d10*d3*d5^2*d6^2*d7^2*d9) + 
-        (d4^(1 - n4)*rat(16 - 5*d + 2*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6^2*d7*d9) + 
-        (d4^(2 - n4)*rat(16 - 5*d + 2*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-8 + d + 2*n4, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d3*d5^2*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(-8 + d + 2*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5^2*d6^2*d7*d9) + 
-        rat(-6 + 3*n4, -14 + d + 5*n4)/(d10*d4^n4*d5^2*d6*d7*d8*d9) + 
-        rat(-4 - d + 4*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6*d7*d8^2*d9) + 
-        rat(-4 - d + 4*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^3*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-4 - d + 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-4 - d + 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-4 - d + 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-4 - d + 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6^2*d8*d9) + 
-        rat(-24 + 3*d + 6*n4, -28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)/(d10*d3*d4^n4*d5^3*d6*d7*d8) + 
-        rat(-24 + 3*d + 6*n4, 2*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2))/(d3*d4^n4*d5^2*d6*d7*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-8 - 2*d + 8*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d3*d5^2*d6*d7*d9^2) + 
-        (d4^(1 - n4)*rat(-20 + d + 8*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5*d6*d7*d8*d9^2) + 
-        rat(-18 + 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^2*d6*d8*d9^2) + 
-        rat(-18 + 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10^2*d3*d4^n4*d5^2*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(-22 - d + 13*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d3*d5^2*d6*d7^2*d9) + 
-        rat(-32 + d + 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d3*d4^n4*d5^2*d6*d7^2*d8*d9) + 
-        rat(-32 + d + 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d3^2*d4^n4*d5^2*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-32 + d + 14*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d3^2*d5^2*d6*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-30 - 3*d + 21*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6*d8*d9^2) + 
-        rat(-40 - d + 22*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3^2*d4^n4*d5^2*d6*d8*d9) + 
-        (d4^(1 - n4)*rat(24 - 20*d + d^2 + 16*n4 + 6*d*n4 - 10*n4^2, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5^2*d6*d7*d8*d9) + 
-        (d4^(-1 - n4)*rat(18*n4 - 9*n4^2, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d5^2*d6*d7*d8*d9) + 
-        (d4^(-1 - n4)*rat(-18*n4 + 9*n4^2, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3*d5^2*d6*d8*d9) + 
+
+        (d4^(1 - n4)*rat(-3, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d5^2*d6*d7*d8^2*d9) +
+        (d4^(1 - n4)*rat(-3, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3^2*d5*d6^2*d7*d8*d9) +
+        rat(-1, -2 + d - n4)/(d10*d3*d4^n4*d5^2*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(-1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d7^2*d8) +
+        (d4^(1 - n4)*rat(-1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(-1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(-1, 2*(-2 + d - n4)*(-1 + n4)))/(d10*d3^2*d5^2*d6*d7*d9^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^2*d7^2*d8*d9^2) +
+        rat(1, -2 + d - n4)/(d3*d4^n4*d5^2*d6*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d7*d9^2) +
+        (d4^(1 - n4)*rat(1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d8*d9^2) +
+        (d4^(1 - n4)*rat(1, (-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^3*d6*d7^2*d9) +
+        (d4^(1 - n4)*rat(1, 2*(-2 + d - n4)*(-1 + n4)))/(d10*d3*d5^2*d6*d7^2*d9^2) +
+        (d4^(1 - n4)*rat(1, 2*(-2 + d - n4)*(-1 + n4)))/(d3^2*d5^2*d6*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(3, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d3^2*d5^2*d6*d7*d9) +
+        (d4^(1 - n4)*rat(30 + 3*d - 21*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5*d6*d7*d8*d9^2) +
+        rat(32 - d - 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3*d4^n4*d5^2*d6*d7^2*d9) +
+        rat(32 - d - 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3^2*d4^n4*d5^2*d6*d7*d9) +
+        (d4^(1 - n4)*rat(32 - d - 14*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6*d7^2*d9) +
+        (d4^(1 - n4)*rat(22 + d - 13*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d5^2*d6*d7^2*d8*d9) +
+        rat(12 + 3*d - 12*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6*d7^2*d8*d9) +
+        rat(18 - 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6*d7*d8*d9^2) +
+        rat(18 - 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10^2*d4^n4*d5^2*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(20 - d - 8*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5^2*d6*d8*d9^2) +
+        (d4^(1 - n4)*rat(8 + 2*d - 8*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d5^2*d6*d7*d8*d9^2) +
+        rat(24 - 3*d - 6*n4, -28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)/(d10*d3*d4^n4*d5^3*d6*d8*d9) +
+        rat(4 + d - 4*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^3*d6*d7*d9) +
+        (d4^(1 - n4)*rat(4 + d - 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6*d7*d8^2) +
+        (d4^(1 - n4)*rat(4 + d - 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6^2*d7*d8) +
+        (d4^(1 - n4)*rat(4 + d - 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d7*d8^2) +
+        (d4^(1 - n4)*rat(4 + d - 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6^2*d7*d9) +
+        (d4^(2 - n4)*rat(4 + d - 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6^2*d7*d8*d9) +
+        rat(6 - 3*n4, -14 + d + 5*n4)/(d10*d3*d4^n4*d5^2*d6*d8*d9) +
+        (d4^(1 - n4)*rat(8 - d - 2*n4, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d5^2*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(8 - d - 2*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5*d6^2*d7*d8*d9) +
+        rat(-16 + 5*d - 2*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3*d4^n4*d5^2*d6*d8^2*d9) +
+        (d4^(1 - n4)*rat(-16 + 5*d - 2*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d7*d8^2*d9) +
+        rat(10 - 2*d - n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(10 - 2*d - n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d7*d9^2) +
+        (d4^(1 - n4)*rat(10 - 2*d - n4, 2*(-1 + n4)*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)))/(d10*d3*d5^2*d6^2*d7^2*d8) +
+        (d4^(1 - n4)*rat(10 - 2*d - n4, 2*(-1 + n4)*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)))/(d3^2*d5^2*d6^2*d7*d8*d9) +
+        rat(-10 + 2*d + n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^2*d6^2*d8*d9) +
+        (d4^(1 - n4)*rat(-10 + 2*d + n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d8*d9^2) +
+        (d4^(1 - n4)*rat(-10 + 2*d + n4, 2*(-1 + n4)*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)))/(d10*d3*d5^2*d6^2*d7^2*d9) +
+        (d4^(1 - n4)*rat(16 - 5*d + 2*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6^2*d7*d9) +
+        (d4^(2 - n4)*rat(16 - 5*d + 2*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(-8 + d + 2*n4, (-1 + n4)*(-14 + d + 5*n4)))/(d10^2*d3*d5^2*d6*d7*d9) +
+        (d4^(1 - n4)*rat(-8 + d + 2*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5^2*d6^2*d7*d9) +
+        rat(-6 + 3*n4, -14 + d + 5*n4)/(d10*d4^n4*d5^2*d6*d7*d8*d9) +
+        rat(-4 - d + 4*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d4^n4*d5^2*d6*d7*d8^2*d9) +
+        rat(-4 - d + 4*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^3*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-4 - d + 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6*d8^2*d9) +
+        (d4^(1 - n4)*rat(-4 - d + 4*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^3*d6^2*d8*d9) +
+        (d4^(1 - n4)*rat(-4 - d + 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3*d5^2*d6^2*d8^2*d9) +
+        (d4^(1 - n4)*rat(-4 - d + 4*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6^2*d8*d9) +
+        rat(-24 + 3*d + 6*n4, -28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2)/(d10*d3*d4^n4*d5^3*d6*d7*d8) +
+        rat(-24 + 3*d + 6*n4, 2*(-28 + 16*d - d^2 - 4*n4 - 4*d*n4 + 5*n4^2))/(d3*d4^n4*d5^2*d6*d7*d8^2*d9) +
+        (d4^(1 - n4)*rat(-8 - 2*d + 8*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d3*d5^2*d6*d7*d9^2) +
+        (d4^(1 - n4)*rat(-20 + d + 8*n4, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5*d6*d7*d8*d9^2) +
+        rat(-18 + 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10*d3*d4^n4*d5^2*d6*d8*d9^2) +
+        rat(-18 + 9*n4, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)/(d10^2*d3*d4^n4*d5^2*d6*d7*d9) +
+        (d4^(1 - n4)*rat(-22 - d + 13*n4, (-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10^2*d3*d5^2*d6*d7^2*d9) +
+        rat(-32 + d + 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d3*d4^n4*d5^2*d6*d7^2*d8*d9) +
+        rat(-32 + d + 14*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d3^2*d4^n4*d5^2*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-32 + d + 14*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d3^2*d5^2*d6*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(-30 - 3*d + 21*n4, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6*d8*d9^2) +
+        rat(-40 - d + 22*n4, 2*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3^2*d4^n4*d5^2*d6*d8*d9) +
+        (d4^(1 - n4)*rat(24 - 20*d + d^2 + 16*n4 + 6*d*n4 - 10*n4^2, 2*(-1 + n4)*(-14 + d + 5*n4)))/(d10*d3*d5^2*d6*d7*d8*d9) +
+        (d4^(-1 - n4)*rat(18*n4 - 9*n4^2, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d5^2*d6*d7*d8*d9) +
+        (d4^(-1 - n4)*rat(-18*n4 + 9*n4^2, 28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2))/(d10*d3*d5^2*d6*d8*d9) +
         (d4^(1 - n4)*rat(-136 + 66*d - 2*d^2 + 4*n4 - 25*d*n4 + 24*n4^2, 2*(-1 + n4)*(28 - 16*d + d^2 + 4*n4 + 4*d*n4 - 5*n4^2)))/(d10*d3^2*d5^2*d6*d7*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n3 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n4 != 1
         if((count(d1,1)==0) && (count(d2,1)==0)) id,only,ifmatch->sortme  1/d3/d4^n4?{>1}/d5/d6/d7/d8/d9/d10 =
-        
-        rat(-3, 2*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d6*d7*d8) + 
-        rat(-3, 2*(-8 + d + 2*n4))/(d3*d4^n4*d5*d6*d7*d8^2*d9) + 
-        (d4^(1 - n4)*rat(-3, 2*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6^2*d7^2*d9) + 
-        rat(-1, 2 - d + n4)/(d3*d4^n4*d5*d6*d7*d8*d9^2) + 
-        rat(-1, 2*(2 - d + n4))/(d10*d3*d4^n4*d5*d6^2*d8*d9) + 
-        rat(-1, 2*(2 - d + n4))/(d10*d4^n4*d5^2*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-1, (-1 + n4)*(2 - d + n4)))/(d10*d3*d6^3*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d7*d8^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7*d8^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6^2*d7*d8) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6*d7^2*d9^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7*d9^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d6^2*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d3^2*d5*d6*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7^2*d9) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d6^2*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10^2*d5*d6^2*d7*d8*d9) + 
-        (d4^(2 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3^2*d5*d6^2*d7*d8*d9) + 
-        rat(1, 2 - d + n4)/(d10*d3*d4^n4*d5*d7*d8*d9^2) + 
-        rat(1, 2 - d + n4)/(d10*d4^n4*d5*d6*d7*d8*d9^2) + 
-        rat(1, 2*(2 - d + n4))/(d10*d4^n4*d5*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(1, (-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d7*d9^2) + 
-        (d4^(1 - n4)*rat(1, (-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^3*d7*d9) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7^2*d8) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3^2*d5*d6*d7*d9^2) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d7^2*d8*d9^2) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10^2*d3*d5*d6^2*d7*d9) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d8^2*d9) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d8^2*d9) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6^2*d8*d9) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3^2*d5*d6^2*d8*d9) + 
-        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d7^2*d8*d9) + 
-        rat(3, 2*(-8 + d + 2*n4))/(d10*d4^n4*d5*d6*d7*d8^2*d9) + 
-        (d4^(1 - n4)*rat(3, (-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6*d7^2*d8*d9^2) + 
-        (d4^(1 - n4)*rat(4 - d, 2*(-2 + d - n4)*(-1 + n4)))/(d10^2*d5*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-4 + d, 2*(-2 + d - n4)*(-1 + n4)))/(d10^2*d3*d5*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(48 + 3*d - 30*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d6*d7*d8*d9^2) + 
-        rat(46 + d - 25*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d4^n4*d5*d6*d7^2*d8*d9) + 
-        rat(28 + d - 16*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10^2*d4^n4*d5*d6*d7*d8*d9) + 
-        rat(12 + 3*d - 12*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6*d7*d8*d9^2) + 
-        rat(12 + 3*d - 12*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6^2*d7*d8*d9) + 
-        rat(26 - d - 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d7^2*d9) + 
-        rat(26 - d - 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d5*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(26 - d - 11*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d5*d6*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(26 - d - 11*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d7^2*d9) + 
-        rat(18 - 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d7^2*d8) + 
-        rat(18 - 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d5*d6*d7*d8) + 
-        rat(18 - 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d7*d8^2*d9) + 
-        (d4^(1 - n4)*rat(18 - 9*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d7^2*d8) + 
-        (d4^(1 - n4)*rat(18 - 9*n4, 2*(-1 + n4)*(2 - d + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d6*d7^2*d8*d9) + 
-        (d4^(1 - n4)*rat(-4 + 5*d - 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5^2*d7*d8^2*d9) + 
-        rat(10 + d - 7*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d6*d7*d9) + 
-        rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d6*d8*d9) + 
-        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d3*d5^2*d6*d7*d9) + 
-        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6^2*d7^2*d8) + 
-        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d3^2*d5*d6^2*d7*d8*d9) + 
-        rat(4 + d - 4*n4, 2*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d8*d9) + 
-        (d4^(1 - n4)*rat(4 + d - 4*n4, (-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6*d8*d9^2) + 
-        rat(-4 - d + 4*n4, 2*(-8 + d + 2*n4))/(d10*d4^n4*d5*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-4 - d + 4*n4, (-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6*d7*d8*d9^2) + 
-        (d4^(1 - n4)*rat(-2 - 2*d + 5*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6^2*d7*d9) + 
-        (d4^(1 - n4)*rat(-2 - 2*d + 5*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d5^2*d6*d7*d8*d9) + 
-        rat(-10 - d + 7*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(4 - 5*d + 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5^2*d6*d8*d9^2) + 
-        (d4^(1 - n4)*rat(4 - 5*d + 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6^2*d7*d8^2*d9) + 
-        (d4^(2 - n4)*rat(4 - 5*d + 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d7^2*d8*d9) + 
-        rat(-18 + 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6*d7*d8^2*d9) + 
-        rat(-18 + 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6*d7^2*d8*d9) + 
-        rat(-18 + 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d6*d7*d8*d9) + 
-        rat(-26 + d + 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d3*d4^n4*d5*d6*d7^2*d8*d9) + 
-        rat(-26 + d + 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d3^2*d4^n4*d5*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-26 + d + 11*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d3*d5*d6*d7^2*d9) + 
-        (d4^(1 - n4)*rat(-26 + d + 11*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d3^2*d5*d6*d7^2*d8*d9) + 
-        rat(-12 - 3*d + 12*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6^2*d7*d9) + 
-        rat(-28 - d + 16*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d8*d9^2) + 
-        rat(-28 - d + 16*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10^2*d3*d4^n4*d5*d6*d7*d9) + 
-        rat(-50 + 4*d + 17*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d5*d6*d8*d9) + 
-        (d4^(1 - n4)*rat(-48 - 3*d + 30*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d8*d9^2) + 
-        (d4^(-1 - n4)*rat(28*n4 + d*n4 - 16*n4^2, 2*(-2 + d - n4)*(-8 + d + 2*n4)))/(d10*d5*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(-24 + 10*d - 2*d^2 + 4*n4 + 3*d*n4 - 4*n4^2, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6^2*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(24 - 14*d + d^2 + 4*n4 + 3*d*n4 - 4*n4^2, 2*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6*d7*d8*d9) + 
-        (d4^(1 - n4)*rat(24 - 10*d + 2*d^2 - 4*n4 - 3*d*n4 + 4*n4^2, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6^2*d7*d9) + 
-        (d4^(-1 - n4)*rat(-28*n4 - d*n4 + 16*n4^2, 2*(-2 + d - n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6*d8*d9) + 
+
+        rat(-3, 2*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d6*d7*d8) +
+        rat(-3, 2*(-8 + d + 2*n4))/(d3*d4^n4*d5*d6*d7*d8^2*d9) +
+        (d4^(1 - n4)*rat(-3, 2*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6^2*d7^2*d9) +
+        rat(-1, 2 - d + n4)/(d3*d4^n4*d5*d6*d7*d8*d9^2) +
+        rat(-1, 2*(2 - d + n4))/(d10*d3*d4^n4*d5*d6^2*d8*d9) +
+        rat(-1, 2*(2 - d + n4))/(d10*d4^n4*d5^2*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-1, (-1 + n4)*(2 - d + n4)))/(d10*d3*d6^3*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d7*d8^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7*d8^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6^2*d7*d8) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6*d7^2*d9^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7*d9^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d8*d9^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d6^2*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d3^2*d5*d6*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7^2*d9) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d6^2*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10^2*d5*d6^2*d7*d8*d9) +
+        (d4^(2 - n4)*rat(-1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3^2*d5*d6^2*d7*d8*d9) +
+        rat(1, 2 - d + n4)/(d10*d3*d4^n4*d5*d7*d8*d9^2) +
+        rat(1, 2 - d + n4)/(d10*d4^n4*d5*d6*d7*d8*d9^2) +
+        rat(1, 2*(2 - d + n4))/(d10*d4^n4*d5*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(1, (-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d7*d9^2) +
+        (d4^(1 - n4)*rat(1, (-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^3*d7*d9) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d7^2*d8) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3^2*d5*d6*d7*d9^2) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d7^2*d8*d9^2) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10^2*d3*d5*d6^2*d7*d9) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5*d6^2*d8^2*d9) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6*d8^2*d9) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d6^2*d8*d9) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3^2*d5*d6^2*d8*d9) +
+        (d4^(1 - n4)*rat(1, 2*(-1 + n4)*(2 - d + n4)))/(d10*d3*d5^2*d7^2*d8*d9) +
+        rat(3, 2*(-8 + d + 2*n4))/(d10*d4^n4*d5*d6*d7*d8^2*d9) +
+        (d4^(1 - n4)*rat(3, (-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6*d7^2*d8*d9^2) +
+        (d4^(1 - n4)*rat(4 - d, 2*(-2 + d - n4)*(-1 + n4)))/(d10^2*d5*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-4 + d, 2*(-2 + d - n4)*(-1 + n4)))/(d10^2*d3*d5*d6*d7*d9) +
+        (d4^(1 - n4)*rat(48 + 3*d - 30*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d6*d7*d8*d9^2) +
+        rat(46 + d - 25*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d4^n4*d5*d6*d7^2*d8*d9) +
+        rat(28 + d - 16*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10^2*d4^n4*d5*d6*d7*d8*d9) +
+        rat(12 + 3*d - 12*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6*d7*d8*d9^2) +
+        rat(12 + 3*d - 12*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6^2*d7*d8*d9) +
+        rat(26 - d - 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d7^2*d9) +
+        rat(26 - d - 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d5*d6*d7*d9) +
+        (d4^(1 - n4)*rat(26 - d - 11*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d5*d6*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(26 - d - 11*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d7^2*d9) +
+        rat(18 - 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d7^2*d8) +
+        rat(18 - 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d5*d6*d7*d8) +
+        rat(18 - 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d7*d8^2*d9) +
+        (d4^(1 - n4)*rat(18 - 9*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d7^2*d8) +
+        (d4^(1 - n4)*rat(18 - 9*n4, 2*(-1 + n4)*(2 - d + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d6*d7^2*d8*d9) +
+        (d4^(1 - n4)*rat(-4 + 5*d - 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5^2*d7*d8^2*d9) +
+        rat(10 + d - 7*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d6*d7*d9) +
+        rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d6*d8*d9) +
+        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d3*d5^2*d6*d7*d9) +
+        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6^2*d7^2*d8) +
+        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(2 + 2*d - 5*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d3^2*d5*d6^2*d7*d8*d9) +
+        rat(4 + d - 4*n4, 2*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d8*d9) +
+        (d4^(1 - n4)*rat(4 + d - 4*n4, (-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6*d8*d9^2) +
+        rat(-4 - d + 4*n4, 2*(-8 + d + 2*n4))/(d10*d4^n4*d5*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-4 - d + 4*n4, (-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6*d7*d8*d9^2) +
+        (d4^(1 - n4)*rat(-2 - 2*d + 5*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6^2*d7*d9) +
+        (d4^(1 - n4)*rat(-2 - 2*d + 5*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d5^2*d6*d7*d8*d9) +
+        rat(-10 - d + 7*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(4 - 5*d + 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5^2*d6*d8*d9^2) +
+        (d4^(1 - n4)*rat(4 - 5*d + 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6^2*d7*d8^2*d9) +
+        (d4^(2 - n4)*rat(4 - 5*d + 8*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d7^2*d8*d9) +
+        rat(-18 + 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6*d7*d8^2*d9) +
+        rat(-18 + 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d6*d7^2*d8*d9) +
+        rat(-18 + 9*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d6*d7*d8*d9) +
+        rat(-26 + d + 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d3*d4^n4*d5*d6*d7^2*d8*d9) +
+        rat(-26 + d + 11*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d3^2*d4^n4*d5*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-26 + d + 11*n4, (-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10^2*d3*d5*d6*d7^2*d9) +
+        (d4^(1 - n4)*rat(-26 + d + 11*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d3^2*d5*d6*d7^2*d8*d9) +
+        rat(-12 - 3*d + 12*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6^2*d7*d9) +
+        rat(-28 - d + 16*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3*d4^n4*d5*d6*d8*d9^2) +
+        rat(-28 - d + 16*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10^2*d3*d4^n4*d5*d6*d7*d9) +
+        rat(-50 + 4*d + 17*n4, 2*(-2 + d - n4)*(-8 + d + 2*n4))/(d10*d3^2*d4^n4*d5*d6*d8*d9) +
+        (d4^(1 - n4)*rat(-48 - 3*d + 30*n4, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d8*d9^2) +
+        (d4^(-1 - n4)*rat(28*n4 + d*n4 - 16*n4^2, 2*(-2 + d - n4)*(-8 + d + 2*n4)))/(d10*d5*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(-24 + 10*d - 2*d^2 + 4*n4 + 3*d*n4 - 4*n4^2, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d6^2*d7*d8*d9) +
+        (d4^(1 - n4)*rat(24 - 14*d + d^2 + 4*n4 + 3*d*n4 - 4*n4^2, 2*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6*d7*d8*d9) +
+        (d4^(1 - n4)*rat(24 - 10*d + 2*d^2 - 4*n4 - 3*d*n4 + 4*n4^2, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6^2*d7*d9) +
+        (d4^(-1 - n4)*rat(-28*n4 - d*n4 + 16*n4^2, 2*(-2 + d - n4)*(-8 + d + 2*n4)))/(d10*d3*d5*d6*d8*d9) +
         (d4^(1 - n4)*rat(-88 + 54*d - 2*d^2 - 20*n4 - 19*d*n4 + 24*n4^2, 2*(-2 + d - n4)*(-1 + n4)*(-8 + d + 2*n4)))/(d10*d3^2*d5*d6*d7*d8*d9);
-        
+
 * n10 == 1 && n2 == 0 && n3 == 1 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n1 != 0
         if(count(d2,1)==0) id,only,ifmatch->sortme  1/d1^n1?neg_/d3/d4/d5/d6/d7/d8/d9/d10^n10?pos_ =
-        
-        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d3*d4*d5^2*d6*d8*d9) + 
-        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d3^2*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6^2*d7*d8) + 
-        rat(1, -4 + d - n1)/(d1^n1*d10*d3*d4*d6*d7*d8*d9^2) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d4*d5*d6*d7*d8*d9^2) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9^2) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6^2*d7*d9) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d5*d6*d7^2*d8*d9) + 
-        rat(1, -4 + d - n1)/(d1^n1*d10*d3*d4*d6^2*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d5*d6^2*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d4*d5*d6^2*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6^2*d7*d8*d9) + 
-        rat(1, 4 - d + n1)/(d1^n1*d10*d3*d4*d5*d6*d8*d9^2) + 
-        rat(1, 4 - d + n1)/(d1^n1*d10*d3*d4*d5*d6^2*d7*d9) + 
-        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d8^2*d9) + 
-        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d3*d4*d5*d6^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d4*d5*d6*d7^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d3*d4*d5*d6^2*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d3*d4*d5^2*d6*d7*d8) + 
-        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d3*d5^2*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-5 + d - n1, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(-n1, 4 - d + n1))/(d10*d3*d4*d6*d7*d8*d9) + 
-        (d1^(-1 - n1)*rat(n1, 4 - d + n1))/(d10*d3*d5*d6*d7*d8*d9) + 
-        (d1^(-2 - n1)*rat(2 + 2*n1, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8) + 
-        (d1^(-2 - n1)*rat(2 + 2*n1, 4 - d + n1))/(d10*d4*d5*d6*d7*d8*d9) + 
+
+        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d3*d4*d5^2*d6*d8*d9) +
+        (d1^(-1 - n1)*rat(-2, -4 + d - n1))/(d10*d3^2*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6^2*d7*d8) +
+        rat(1, -4 + d - n1)/(d1^n1*d10*d3*d4*d6*d7*d8*d9^2) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d4*d5*d6*d7*d8*d9^2) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9^2) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6^2*d7*d9) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d3*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d5*d6*d7^2*d8*d9) +
+        rat(1, -4 + d - n1)/(d1^n1*d10*d3*d4*d6^2*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d5*d6^2*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d4*d5*d6^2*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(1, -4 + d - n1))/(d10*d3*d4*d5*d6^2*d7*d8*d9) +
+        rat(1, 4 - d + n1)/(d1^n1*d10*d3*d4*d5*d6*d8*d9^2) +
+        rat(1, 4 - d + n1)/(d1^n1*d10*d3*d4*d5*d6^2*d7*d9) +
+        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d8^2*d9) +
+        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d3*d4*d5*d6^2*d8*d9) +
+        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d4*d5*d6*d7^2*d8*d9) +
+        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7^2*d8*d9) +
+        (d1^(-1 - n1)*rat(1, 4 - d + n1))/(d3*d4*d5*d6^2*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d3*d4*d5^2*d6*d7*d8) +
+        (d1^(-1 - n1)*rat(2, -4 + d - n1))/(d10*d3*d5^2*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-5 + d - n1, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(-n1, 4 - d + n1))/(d10*d3*d4*d6*d7*d8*d9) +
+        (d1^(-1 - n1)*rat(n1, 4 - d + n1))/(d10*d3*d5*d6*d7*d8*d9) +
+        (d1^(-2 - n1)*rat(2 + 2*n1, -4 + d - n1))/(d10*d3*d4*d5*d6*d7*d8) +
+        (d1^(-2 - n1)*rat(2 + 2*n1, 4 - d + n1))/(d10*d4*d5*d6*d7*d8*d9) +
         (d1^(-2 - n1)*rat(2 + 2*n1, 4 - d + n1))/(d10*d3*d4*d5*d6*d7*d8*d9);
-        
+
 * n1 == 0 && n10 == 1 && n3 == 1 && n4 == 1 && n5 == 1 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1 && n2 != 0
         if(count(d1,1)==0) id,only,ifmatch->sortme  1/d2^n2?neg_/d3/d4/d5/d6/d7/d8/d9/d10 =
-        
-        (-2*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7*d8) - 
-        (2*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7*d9) + 
-        d2^(-1 - n2)/(d10*d3*d4*d5*d7*d8*d9) - 
-        d2^(-1 - n2)/(d10*d3*d5*d6*d7*d8*d9) + 
-        (2*d2^(-1 - n2))/(d3*d4*d5*d6*d7*d8*d9) + 
-        (2*d1*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        d2^(-1 - n2)/(d10^2*d3*d4*d5*d6*d7*d8*n2) - 
-        1/(d10*d2^n2*d3*d4*d5*d6*d8*d9^2*n2) + 
-        1/(d10*d2^n2*d3*d4*d6*d7*d8*d9^2*n2) - 
-        d2^(-1 - n2)/(d3*d4*d5*d6*d7*d8*d9^2*n2) - 
-        1/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9*n2) - 
-        d2^(-1 - n2)/(d10*d3*d4*d5*d6*d7*d8^2*d9*n2) - 
-        2/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9*n2) + 
-        d2^(-1 - n2)/(d10*d3*d5*d6*d7^2*d8*d9*n2) - 
-        d2^(-1 - n2)/(d10*d3^2*d5*d6*d7*d8*d9*n2) + 
-        2/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9*n2) + 
-        1/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9*n2) + 
-        (d2^(-1 - n2)*rat(-4, 4 - d + n2))/(d10*d3*d4^2*d5*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(-4, 4 - d + n2))/(d10*d3*d4*d5*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-4, 4 - d + n2))/(d10*d3*d4^2*d5*d6*d7*d8*d9) + 
-        rat(-4, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9^2) + 
-        rat(-4, n2*(4 - d + n2))/(d10^2*d2^n2*d3*d4*d5*d6*d7^2*d9) + 
-        rat(-4, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^3*d5*d6*d8*d9) + 
-        rat(-4, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3*d4^2*d5*d6*d7*d8) + 
-        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3*d4*d5*d6^2*d7*d9) + 
-        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3^2*d4*d5*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3*d4*d5*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10^2*d4*d5*d6*d7*d8*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9^2) + 
-        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d7*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d10^2*d2^n2*d3*d4^2*d5*d6*d7*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8^2*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7^2*d8*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d6*d7^2*d8*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d2^n2*d3*d4^2*d5*d6*d7^2*d8*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d2^n2*d3^2*d4*d5*d6*d7^2*d8*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d6*d7*d8*d9) + 
-        rat(-2, n2*(4 - d + n2))/(d2^n2*d3^2*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10*d3^2*d4*d5*d6*d7*d8) + 
-        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10^2*d3*d4*d5*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10*d3*d4*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10*d3*d4*d6^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d3*d4^2*d5*d6*d7*d8*d9) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7^2*d8) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d8) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d8) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9^2) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7^2*d9) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d9) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5^2*d6*d7*d9) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d9) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d7*d8^2*d9) + 
-        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6^2*d7*d8*d9) + 
-        rat(2, n2*(4 - d + n2))/(d10^2*d2^n2*d4^2*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(4, 4 - d + n2))/(d10*d3^2*d4*d5*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(4, 4 - d + n2))/(d10*d3*d4^2*d6*d7*d8*d9) + 
-        rat(4, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d6*d7*d8*d9^2) + 
-        rat(4, n2*(4 - d + n2))/(d10*d2^n2*d4^2*d5*d6*d7^2*d8*d9) + 
-        rat(4, n2*(4 - d + n2))/(d10^2*d2^n2*d4*d5*d6*d7^2*d8*d9) + 
-        rat(4, n2*(4 - d + n2))/(d10*d2^n2*d4^3*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-4 + d - 5*n2, n2*(4 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5*d6*d7*d8*d9^2) + 
-        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d6*d7*d8^2*d9) + 
-        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3^2*d4*d5*d6*d8*d9) + 
-        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5*d6*d7^2*d8*d9) + 
-        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5^2*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-4 + d - 3*n2, n2*(4 - d + n2)))/(d10^2*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-1 - n2)*rat(-30 + 7*d - 3*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-2 - n2)*rat(-2 - 2*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d1*d2^(-2 - n2)*rat(-2 - 2*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d8*d9) + 
-        (d2^(-2 - n2)*rat(2 + 2*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(-4 + d + 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d9) + 
-        (d2^(-1 - n2)*rat(-4 + d + 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5*d7*d8^2*d9) + 
+
+        (-2*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7*d8) -
+        (2*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7*d9) +
+        d2^(-1 - n2)/(d10*d3*d4*d5*d7*d8*d9) -
+        d2^(-1 - n2)/(d10*d3*d5*d6*d7*d8*d9) +
+        (2*d2^(-1 - n2))/(d3*d4*d5*d6*d7*d8*d9) +
+        (2*d1*d2^(-1 - n2))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        d2^(-1 - n2)/(d10^2*d3*d4*d5*d6*d7*d8*n2) -
+        1/(d10*d2^n2*d3*d4*d5*d6*d8*d9^2*n2) +
+        1/(d10*d2^n2*d3*d4*d6*d7*d8*d9^2*n2) -
+        d2^(-1 - n2)/(d3*d4*d5*d6*d7*d8*d9^2*n2) -
+        1/(d10^2*d2^n2*d3*d4*d5*d6*d7*d9*n2) -
+        d2^(-1 - n2)/(d10*d3*d4*d5*d6*d7*d8^2*d9*n2) -
+        2/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9*n2) +
+        d2^(-1 - n2)/(d10*d3*d5*d6*d7^2*d8*d9*n2) -
+        d2^(-1 - n2)/(d10*d3^2*d5*d6*d7*d8*d9*n2) +
+        2/(d10*d2^n2*d4^2*d5*d6*d7*d8*d9*n2) +
+        1/(d10^2*d2^n2*d4*d5*d6*d7*d8*d9*n2) +
+        (d2^(-1 - n2)*rat(-4, 4 - d + n2))/(d10*d3*d4^2*d5*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(-4, 4 - d + n2))/(d10*d3*d4*d5*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-4, 4 - d + n2))/(d10*d3*d4^2*d5*d6*d7*d8*d9) +
+        rat(-4, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d8*d9^2) +
+        rat(-4, n2*(4 - d + n2))/(d10^2*d2^n2*d3*d4*d5*d6*d7^2*d9) +
+        rat(-4, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^3*d5*d6*d8*d9) +
+        rat(-4, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3*d4^2*d5*d6*d7*d8) +
+        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3*d4*d5*d6^2*d7*d9) +
+        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3^2*d4*d5*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d3*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10*d3*d4*d5*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-2, 4 - d + n2))/(d10^2*d4*d5*d6*d7*d8*d9) +
+        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d8*d9^2) +
+        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6^2*d7*d9) +
+        rat(-2, n2*(4 - d + n2))/(d10^2*d2^n2*d3*d4^2*d5*d6*d7*d9) +
+        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8^2*d9) +
+        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7^2*d8*d9) +
+        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d6*d7^2*d8*d9) +
+        rat(-2, n2*(4 - d + n2))/(d2^n2*d3*d4^2*d5*d6*d7^2*d8*d9) +
+        rat(-2, n2*(4 - d + n2))/(d2^n2*d3^2*d4*d5*d6*d7^2*d8*d9) +
+        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5^2*d7*d8*d9) +
+        rat(-2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d6*d7*d8*d9) +
+        rat(-2, n2*(4 - d + n2))/(d2^n2*d3^2*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10*d3^2*d4*d5*d6*d7*d8) +
+        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10^2*d3*d4*d5*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10*d3*d4*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d10*d3*d4*d6^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(2, 4 - d + n2))/(d3*d4^2*d5*d6*d7*d8*d9) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7^2*d8) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d8) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d8) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6*d7*d8*d9^2) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d6*d7^2*d9) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d5*d6*d7^2*d9) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5^2*d6*d7*d9) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4^2*d5*d6*d7*d9) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d5*d7*d8^2*d9) +
+        rat(2, n2*(4 - d + n2))/(d10*d2^n2*d3*d4^2*d6^2*d7*d8*d9) +
+        rat(2, n2*(4 - d + n2))/(d10^2*d2^n2*d4^2*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(4, 4 - d + n2))/(d10*d3^2*d4*d5*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(4, 4 - d + n2))/(d10*d3*d4^2*d6*d7*d8*d9) +
+        rat(4, n2*(4 - d + n2))/(d10*d2^n2*d3^2*d4*d6*d7*d8*d9^2) +
+        rat(4, n2*(4 - d + n2))/(d10*d2^n2*d4^2*d5*d6*d7^2*d8*d9) +
+        rat(4, n2*(4 - d + n2))/(d10^2*d2^n2*d4*d5*d6*d7^2*d8*d9) +
+        rat(4, n2*(4 - d + n2))/(d10*d2^n2*d4^3*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-4 + d - 5*n2, n2*(4 - d + n2)))/(d10*d3^2*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5*d6*d7*d8*d9^2) +
+        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d6*d7*d8^2*d9) +
+        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3^2*d4*d5*d6*d8*d9) +
+        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5*d6*d7^2*d8*d9) +
+        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5^2*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(4 - d - 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-4 + d - 3*n2, n2*(4 - d + n2)))/(d10^2*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-1 - n2)*rat(-30 + 7*d - 3*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-2 - n2)*rat(-2 - 2*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d1*d2^(-2 - n2)*rat(-2 - 2*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d8*d9) +
+        (d2^(-2 - n2)*rat(2 + 2*n2, 4 - d + n2))/(d10*d3*d4*d5*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(-4 + d + 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5^2*d6*d7*d9) +
+        (d2^(-1 - n2)*rat(-4 + d + 3*n2, n2*(4 - d + n2)))/(d10*d3*d4*d5*d7*d8^2*d9) +
         (d2^(-1 - n2)*rat(-4 + d + 3*n2, n2*(4 - d + n2)))/(d10*d4*d5*d6*d7^2*d8*d9);
 
 * n1 == 0 && n10 == 1 && n2 == 0 && n3 == 1 && n4 == 1 && n5 == 2 && n6 == 1 && n7 == 1 && n8 == 1 && n9 == 1
 
-        if((count(d1,1)==0) && (count(d2,1)==0)) 
+        if((count(d1,1)==0) && (count(d2,1)==0))
         id,only 1/d3/d4/d5^2/d6/d7/d8/d9/d10 = 1/d3^2/d4/d5/d6/d7/d8/d9/d10;
-        
-        if((count(d1,1)==0) && (count(d2,1)==0)) 
+
+        if((count(d1,1)==0) && (count(d2,1)==0))
         id,only 1/d3^2/d4/d5/d6/d7/d8/d9/d10 = PR11d/intBMW;
-        
-        if((count(d1,1)==0) && (count(d2,1)==0)) 
+
+        if((count(d1,1)==0) && (count(d2,1)==0))
         id,only 1/d3/d4/d5/d6/d7/d8/d9/d10 = PR11/intBMW;
 
         #call zeroBMW
-        
+
         endif;
-        
-        goto endrec;         
+
+        goto endrec;
         la sortme;
         $irep = 0;
         la endrec;
-        
+
         ModuleOption,minimum,$irep;
         .sort:redBMW-`$repcount++';
         #redefine irep "`$irep'"
@@ -7350,41 +7351,41 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
 *--#] redBMW :
 
 
-* 
-* 
-*************************************************************************** 
-* 
-*   New reduction for 2-loop propagators 
+*
+*
+***************************************************************************
+*
+*   New reduction for 2-loop propagators
 *
 
 * all to 125
 *--#[ uniqueTK :
 #procedure uniqueT2new(TOPO)
-        if(count(int`TOPO',1));        
+        if(count(int`TOPO',1));
         if((count(tarC1,-1) > 0) && (count(tarC2,-1) > 0) && (count(tarC3,-1) <= 0) && (count(tarC4,-1) <= 0) && (count(tarC5,-1) > 0))
         Multiply intT2/int`TOPO';
 
         if((count(tarC1,-1) <= 0) && (count(tarC2,-1) <= 0) && (count(tarC3,-1) > 0) && (count(tarC4,-1) > 0) && (count(tarC5,-1) > 0))
         Multiply replace_(tarC4,tarC1, tarC3,tarC2, tarC2,tarC3, tarC1,tarC4)*intT2/int`TOPO';
-        endif;        
+        endif;
 #endprocedure
 *--#] uniqueTK :
 
 *--#[ uniqueTJ :
 #procedure uniqueJnew(TOPO)
-        if(count(int`TOPO',1));        
+        if(count(int`TOPO',1));
         if((count(tarC1,-1) <= 0) && (count(tarC2,-1) > 0) && (count(tarC3,-1) > 0) && (count(tarC4,-1) <= 0) && (count(tarC5,-1) > 0))
         Multiply intJ/int`TOPO';
 
         if((count(tarC1,-1) > 0) && (count(tarC2,-1) <= 0) && (count(tarC3,-1) <= 0) && (count(tarC4,-1) > 0) && (count(tarC5,-1) > 0))
         Multiply replace_(tarC3,tarC1, tarC4,tarC2, tarC1,tarC3, tarC2,tarC4)*intJ/int`TOPO';
-        endif;        
+        endif;
 #endprocedure
 *--#] uniqueTJ :
 
 *--#[ uniqueTV :
 #procedure uniqueVnew(TOPO)
-        if(count(int`TOPO',1));        
+        if(count(int`TOPO',1));
         if((count(tarC1,-1) <= 0) && (count(tarC2,-1) > 0) && (count(tarC3,-1) > 0) && (count(tarC4,-1) > 0) && (count(tarC5,-1) > 0))
         Multiply intV/int`TOPO';
         if((count(tarC1,-1) > 0) && (count(tarC2,-1) <= 0) && (count(tarC3,-1) > 0) && (count(tarC4,-1) > 0) && (count(tarC5,-1) > 0))
@@ -7396,50 +7397,50 @@ num(-1 + pp + tk1.tk1 - 2*tk1.tk2 + 2*tk1.tk4 - 2*tk1.tp + tk2.tk2 - 2*tk2.tk4 +
         if((count(tarC1,-1) > 0) && (count(tarC2,-1) > 0) && (count(tarC3,-1) > 0) && (count(tarC4,-1) <= 0) && (count(tarC5,-1) > 0))
         Multiply replace_(tarC4,tarC1, tarC1,tarC4, tarC3,tarC2, tarC2,tarC3)*intV/int`TOPO';
         endif;
-#endprocedure        
+#endprocedure
 *--#] uniqueTV :
 
 
 #procedure red01111
-#$repcount = 1;        
+#$repcount = 1;
 #do irep=1,1
-#$irep = 1;                
-* do not need partfrac=1        
-#$nopf = 1;                        
+#$irep = 1;
+* do not need partfrac=1
+#$nopf = 1;
 if(count(intV,1));
 
 *   n1 != 0 && n5 != 1
-id,ifmatch->sortme 1/tarC1^n1?neg_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?{>1} = 
+id,ifmatch->sortme 1/tarC1^n1?neg_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?{>1} =
 (n4*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC4^(-1 - n4)*tarC5^(1 - n5))/((-1 + n5)*tarC3^n3) + (tarC1^(-1 - n1)*tarC2^(1 - n2))/(tarC3^n3*tarC4^n4*tarC5^n5) + (tarC1^(-1 - n1)*tarC3^(1 - n3)*(1 - pp/(3*tmm)))/(tarC2^n2*tarC4^n4*tarC5^n5) + (tarC1^(-1 - n1)*tarC4^(1 - n4)*(-1 + pp/(3*tmm)))/(tarC2^n2*tarC3^n3*tarC5^n5) + (tarC1^(-1 - n1)*tarC2^(-1 - n2)*tarC4^(1 - n4)*tarC5^(1 - n5)*(-(n2/(-1 + n5)) + (n2*pp)/(2*(-1 + n5)*tmm)))/tarC3^n3 + (tarC1^(-1 - n1)*tarC2^(-1 - n2)*tarC5^(1 - n5)*((2*n2*pp)/(-1 + n5) - (n2*pp^2)/(2*(-1 + n5)*tmm)))/(tarC3^n3*tarC4^n4) + (n3*pp*tarC1^(-1 - n1)*tarC3^(-1 - n3)*tarC4^(1 - n4)*tarC5^(1 - n5))/(3*(-1 + n5)*tarC2^n2*tmm) + ((1 + n1)*pp*tarC1^(-2 - n1)*tarC3^(1 - n3)*tarC5^(1 - n5))/(6*(-1 + n5)*tarC2^n2*tarC4^n4*tmm) + ((1 + n1)*pp*tarC1^(-2 - n1)*tarC2^(1 - n2)*tarC5^(1 - n5))/(3*(-1 + n5)*tarC3^n3*tarC4^n4*tmm) - ((1 + n1)*pp^2*tarC1^(-2 - n1)*tarC5^(1 - n5))/(6*(-1 + n5)*tarC2^n2*tarC3^n3*tarC4^n4*tmm) - (n3*pp*tarC1^(-1 - n1)*tarC3^(-1 - n3)*tarC5^(2 - n5))/(3*(-1 + n5)*tarC2^n2*tarC4^n4*tmm) - ((1 + n1)*pp*tarC1^(-2 - n1)*tarC5^(2 - n5))/(3*(-1 + n5)*tarC2^n2*tarC3^n3*tarC4^n4*tmm) + (tarC1^(-1 - n1)*tarC5^(1 - n5)*((n2 - n4)/(-1 + n5) - (pp*rat(1 + 2*d + n1 - 3*n2 - 6*n4, 1))/(6*(-1 + n5)*tmm)))/(tarC2^n2*tarC3^n3*tarC4^n4);
 
 
 
 *   n1 != 0 && n3 != 1
-id,ifmatch->sortme 1/tarC1^n1?neg_/tarC2^n2?pos_/tarC3^n3?{>1}/tarC4^n4?pos_/tarC5^n5?pos_ = 
+id,ifmatch->sortme 1/tarC1^n1?neg_/tarC2^n2?pos_/tarC3^n3?{>1}/tarC4^n4?pos_/tarC5^n5?pos_ =
 -((n4*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC3^(1 - n3)*tarC4^(-1 - n4))/((-1 + n3)*tarC5^n5)) + (tarC1^(-2 - n1)*tarC3^(2 - n3)*((1 + n1)/(-1 + n3) - (5*(1 + n1)*pp)/(6*(-1 + n3)*tmm)))/(tarC2^n2*tarC4^n4*tarC5^n5) + (tarC1^(-1 - n1)*tarC2^(-1 - n2)*tarC3^(1 - n3)*tarC4^(1 - n4)*(n2/(-1 + n3) - (n2*pp)/(2*(-1 + n3)*tmm)))/tarC5^n5 + (tarC1^(-2 - n1)*tarC3^(1 - n3)*((-2*(1 + n1)*pp)/(-1 + n3) + (5*(1 + n1)*pp^2)/(6*(-1 + n3)*tmm)))/(tarC2^n2*tarC4^n4*tarC5^n5) + (tarC1^(-1 - n1)*tarC2^(-1 - n2)*tarC3^(1 - n3)*((-2*n2*pp)/(-1 + n3) + (n2*pp^2)/(2*(-1 + n3)*tmm)))/(tarC4^n4*tarC5^n5) + (n5*pp*tarC1^(-1 - n1)*tarC3^(1 - n3)*tarC4^(1 - n4)*tarC5^(-1 - n5))/(3*(-1 + n3)*tarC2^n2*tmm) - (n5*pp*tarC1^(-1 - n1)*tarC3^(2 - n3)*tarC5^(-1 - n5))/(3*(-1 + n3)*tarC2^n2*tarC4^n4*tmm) + (2*(1 + n1)*pp*tarC1^(-2 - n1)*tarC3^(1 - n3)*tarC5^(1 - n5))/(3*(-1 + n3)*tarC2^n2*tarC4^n4*tmm) + (2*pp*tarC1^(-1 - n1)*tarC5^(1 - n5))/(3*tarC2^n2*tarC3^n3*tarC4^n4*tmm) - (2*pp*tarC1^(-1 - n1)*tarC4^(1 - n4))/(3*tarC2^n2*tarC3^n3*tarC5^n5*tmm) - (2*(1 + n1)*pp*tarC1^(-2 - n1)*tarC2^(1 - n2)*tarC3^(1 - n3))/(3*(-1 + n3)*tarC4^n4*tarC5^n5*tmm) + (tarC1^(-1 - n1)*tarC3^(1 - n3)*((-2 - n1 - n2 + n3 + n4)/(-1 + n3) + (pp*rat(5 + 4*d - n1 - 3*n2 - 6*n3 - 6*n4, 1))/(6*(-1 + n3)*tmm)))/(tarC2^n2*tarC4^n4*tarC5^n5);
 
 
 
 *   n1 != 0 && n2 != 1
-id,ifmatch->sortme 1/tarC1^n1?neg_/tarC2^n2?{>1}/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?pos_ = 
+id,ifmatch->sortme 1/tarC1^n1?neg_/tarC2^n2?{>1}/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?pos_ =
 -((n5*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC4^(1 - n4)*tarC5^(-1 - n5))/((-1 + n2)*tarC3^n3)) + (n5*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC3^(1 - n3)*tarC5^(-1 - n5))/((-1 + n2)*tarC4^n4) + (n4*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC4^(-1 - n4)*tarC5^(1 - n5))/((-1 + n2)*tarC3^n3) - (n3*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC3^(-1 - n3)*tarC5^(1 - n5))/((-1 + n2)*tarC4^n4) - ((1 + n1)*tarC1^(-2 - n1)*tarC2^(1 - n2)*tarC5^(1 - n5))/((-1 + n2)*tarC3^n3*tarC4^n4) + (tarC1^(-1 - n1)*tarC5^(1 - n5))/(tarC2^n2*tarC3^n3*tarC4^n4) - (n4*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC3^(1 - n3)*tarC4^(-1 - n4))/((-1 + n2)*tarC5^n5) + (n3*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC3^(-1 - n3)*tarC4^(1 - n4))/((-1 + n2)*tarC5^n5) - (tarC1^(-1 - n1)*tarC4^(1 - n4))/(2*tarC2^n2*tarC3^n3*tarC5^n5) + ((1 + n1)*tarC1^(-2 - n1)*tarC2^(1 - n2)*tarC3^(1 - n3))/(2*(-1 + n2)*tarC4^n4*tarC5^n5) - ((1 + n1)*pp*tarC1^(-2 - n1)*tarC2^(1 - n2))/(2*(-1 + n2)*tarC3^n3*tarC4^n4*tarC5^n5) + ((-2 - n1 + n2)*tarC1^(-1 - n1)*tarC2^(1 - n2))/(2*(-1 + n2)*tarC3^n3*tarC4^n4*tarC5^n5) + ((1 + n1)*tarC1^(-2 - n1)*tarC2^(2 - n2))/((-1 + n2)*tarC3^n3*tarC4^n4*tarC5^n5) + (pp*tarC1^(-1 - n1))/(2*tarC2^n2*tarC3^n3*tarC4^n4*tarC5^n5);
 
 
 
 *   n5 != 1
-id,ifmatch->sortme 1/tarC1^n1?neg0_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?{>1} = 
+id,ifmatch->sortme 1/tarC1^n1?neg0_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?pos_/tarC5^n5?{>1} =
 (2*n3*tarC3^(-1 - n3)*tarC4^(1 - n4)*tarC5^(1 - n5))/(3*(-1 + n5)*tarC1^n1*tarC2^n2*tmm) + (n1*tarC1^(-1 - n1)*tarC3^(1 - n3)*tarC5^(1 - n5))/(3*(-1 + n5)*tarC2^n2*tarC4^n4*tmm) + (2*n1*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC5^(1 - n5))/(3*(-1 + n5)*tarC3^n3*tarC4^n4*tmm) - (n1*pp*tarC1^(-1 - n1)*tarC5^(1 - n5))/(3*(-1 + n5)*tarC2^n2*tarC3^n3*tarC4^n4*tmm) - (2*n3*tarC3^(-1 - n3)*tarC5^(2 - n5))/(3*(-1 + n5)*tarC1^n1*tarC2^n2*tarC4^n4*tmm) - (2*n1*tarC1^(-1 - n1)*tarC5^(2 - n5))/(3*(-1 + n5)*tarC2^n2*tarC3^n3*tarC4^n4*tmm) - tarC4^(1 - n4)/(3*tarC1^n1*tarC2^n2*tarC3^n3*tarC5^n5*tmm) + tarC3^(1 - n3)/(3*tarC1^n1*tarC2^n2*tarC4^n4*tarC5^n5*tmm) + (tarC5^(1 - n5)*rat(3 + d - n1 - 3*n5, 1))/(3*(-1 + n5)*tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4*tmm);
 
 
 
 *   n4 != 1
-id,ifmatch->sortme 1/tarC1^n1?neg0_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?{>1}/tarC5^n5?pos_ = 
+id,ifmatch->sortme 1/tarC1^n1?neg0_/tarC2^n2?pos_/tarC3^n3?pos_/tarC4^n4?{>1}/tarC5^n5?pos_ =
 (tarC2^(-1 - n2)*tarC4^(1 - n4)*(-(n2/(-1 + n4)) + (n2*pp)/(2*(-1 + n4)*tmm)))/(tarC1^n1*tarC3^n3*tarC5^n5) + (n5*tarC3^(1 - n3)*tarC4^(1 - n4)*tarC5^(-1 - n5))/(3*(-1 + n4)*tarC1^n1*tarC2^n2*tmm) - (n5*tarC4^(2 - n4)*tarC5^(-1 - n5))/(3*(-1 + n4)*tarC1^n1*tarC2^n2*tarC3^n3*tmm) + (n3*tarC3^(-1 - n3)*tarC4^(1 - n4)*tarC5^(1 - n5))/(3*(-1 + n4)*tarC1^n1*tarC2^n2*tmm) + (n1*tarC1^(-1 - n1)*tarC4^(1 - n4)*tarC5^(1 - n5))/(3*(-1 + n4)*tarC2^n2*tarC3^n3*tmm) - (n1*tarC1^(-1 - n1)*tarC3^(1 - n3)*tarC4^(1 - n4))/(6*(-1 + n4)*tarC2^n2*tarC5^n5*tmm) - (n1*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC4^(1 - n4))/(3*(-1 + n4)*tarC3^n3*tarC5^n5*tmm) + (n1*pp*tarC1^(-1 - n1)*tarC4^(1 - n4))/(6*(-1 + n4)*tarC2^n2*tarC3^n3*tarC5^n5*tmm) - (n3*tarC3^(-1 - n3)*tarC4^(2 - n4))/(3*(-1 + n4)*tarC1^n1*tarC2^n2*tarC5^n5*tmm) - (n2*tarC2^(-1 - n2)*tarC4^(2 - n4))/(2*(-1 + n4)*tarC1^n1*tarC3^n3*tarC5^n5*tmm) + (tarC4^(1 - n4)*rat(6 + 2*d + n1 - 3*n2 - 6*n4, 1))/(6*(-1 + n4)*tarC1^n1*tarC2^n2*tarC3^n3*tarC5^n5*tmm);
 
 
 
 *   n3 != 1
-id,ifmatch->sortme 1/tarC1^n1?neg0_/tarC2^n2?pos_/tarC3^n3?{>1}/tarC4^n4?pos_/tarC5^n5?pos_ = 
+id,ifmatch->sortme 1/tarC1^n1?neg0_/tarC2^n2?pos_/tarC3^n3?{>1}/tarC4^n4?pos_/tarC5^n5?pos_ =
 (tarC1^(-1 - n1)*tarC3^(1 - n3)*(-(n1/(-1 + n3)) + (2*n1*pp)/(3*(-1 + n3)*tmm)))/(tarC2^n2*tarC4^n4*tarC5^n5) + (2*n5*tarC3^(1 - n3)*tarC4^(1 - n4)*tarC5^(-1 - n5))/(3*(-1 + n3)*tarC1^n1*tarC2^n2*tmm) - (2*n5*tarC3^(2 - n3)*tarC5^(-1 - n5))/(3*(-1 + n3)*tarC1^n1*tarC2^n2*tarC4^n4*tmm) + (n1*tarC1^(-1 - n1)*tarC3^(1 - n3)*tarC5^(1 - n5))/(3*(-1 + n3)*tarC2^n2*tarC4^n4*tmm) + tarC5^(1 - n5)/(3*tarC1^n1*tarC2^n2*tarC3^n3*tarC4^n4*tmm) - tarC4^(1 - n4)/(3*tarC1^n1*tarC2^n2*tarC3^n3*tarC5^n5*tmm) - (n1*tarC1^(-1 - n1)*tarC2^(1 - n2)*tarC3^(1 - n3))/(3*(-1 + n3)*tarC4^n4*tarC5^n5*tmm) - (2*n1*tarC1^(-1 - n1)*tarC3^(2 - n3))/(3*(-1 + n3)*tarC2^n2*tarC4^n4*tarC5^n5*tmm) + (tarC3^(1 - n3)*rat(3 + d - n1 - 3*n3, 1))/(3*(-1 + n3)*tarC1^n1*tarC2^n2*tarC4^n4*tarC5^n5*tmm);
 
 
@@ -7451,31 +7452,31 @@ id,ifmatch->sortme 1/tarC1^n1?neg0_/tarC2^n2?pos_/tarC3^n3?{>1}/tarC4^n4?pos_/ta
 
 
 *   n2 == 1 && n3 == 1 && n4 == 1 && n5 == 1 && n1 != 0
-id,only,ifmatch->sortme 1/tarC1^n1?neg_/tarC2/tarC3/tarC4/tarC5 = 
+id,only,ifmatch->sortme 1/tarC1^n1?neg_/tarC2/tarC3/tarC4/tarC5 =
 (2*pp*tarC1^(-1 - n1)*rat(1, -3 + d - n1))/(tarC2*tarC3^2*tarC4) - rat(1, -3 + d - n1)/(tarC1^n1*tarC2*tarC3^2*tarC4) + (2*(1 + n1)*pp*tarC1^(-2 - n1)*rat(1, -3 + d - n1))/(tarC2*tarC3*tarC4) - (n1*tarC1^(-1 - n1)*rat(1, -3 + d - n1))/(tarC2*tarC3*tarC4) + (pp*tarC1^(-1 - n1)*rat(1, -3 + d - n1))/(tarC2*tarC3*tarC5^2) - (2*rat(1, -3 + d - n1))/(tarC1^n1*tarC2*tarC3*tarC5^2) - (pp*tarC1^(-1 - n1)*rat(1, -3 + d - n1))/(tarC2*tarC4*tarC5^2) + (2*rat(1, -3 + d - n1))/(tarC1^n1*tarC2*tarC4*tarC5^2) - (2*pp*tarC1^(-1 - n1)*rat(1, -3 + d - n1))/(tarC2*tarC3^2*tarC5) + rat(1, -3 + d - n1)/(tarC1^n1*tarC2*tarC3^2*tarC5) + (2*n1*tarC1^(-1 - n1)*rat(1, -3 + d - n1))/(tarC2*tarC4*tarC5) - (2*(1 + n1)*pp*tarC1^(-2 - n1)*rat(1, -3 + d - n1))/(tarC3*tarC4*tarC5) + (n1*tarC1^(-1 - n1)*rat(1, -3 + d - n1))/(tarC3*tarC4*tarC5) - (3*tarC1^(-1 - n1)*tmm*rat(1, -3 + d - n1))/(tarC3*tarC4^2*tarC5) + (tarC1^(-1 - n1)*((-3*pp*rat(1, -3 + d - n1))/2 + 3*tmm*rat(1, -3 + d - n1)))/(tarC2^2*tarC3*tarC5) + (tarC1^(-2 - n1)*((-5*(1 + n1)*pp*rat(1, -3 + d - n1))/2 + 3*(1 + n1)*tmm*rat(1, -3 + d - n1)))/(tarC2*tarC4*tarC5) + (tarC1^(-1 - n1)*((3*pp^2*rat(1, -3 + d - n1))/2 - 6*pp*tmm*rat(1, -3 + d - n1)))/(tarC2^2*tarC3*tarC4*tarC5) + (tarC1^(-2 - n1)*((5*(1 + n1)*pp^2*rat(1, -3 + d - n1))/2 - 6*(1 + n1)*pp*tmm*rat(1, -3 + d - n1)))/(tarC2*tarC3*tarC4*tarC5) + (pp*tarC1^(-1 - n1)*rat(-16 + 4*d - 5*n1, -3 + d - n1))/(2*tarC2*tarC3*tarC4*tarC5);
 
 
 
 *   n1 == 0 && n2 == 2 && n3 == 1 && n4 == 1 && n5 == 1
-if((count(tarC1,-1)) == 0) id,only,ifmatch->dopartfrac 1/tarC1^n1?neg0_/tarC2^2/tarC3/tarC4/tarC5 = 
+if((count(tarC1,-1)) == 0) id,only,ifmatch->dopartfrac 1/tarC1^n1?neg0_/tarC2^2/tarC3/tarC4/tarC5 =
 rat(1, -3 + d)/(2*tarC2^2*tarC3^2*tarC4) + rat(1, -3 + d)/(2*tarC2^2*tarC4*tarC5^2) - rat(1, -3 + d)/(2*tarC2*tarC3*tarC5^2*[pp-4*tmm]) + rat(1, -3 + d)/(2*tarC2*tarC4*tarC5^2*[pp-4*tmm]) - (2*tmm*rat(1, -3 + d))/(tarC2*tarC3^3*tarC4*[pp-4*tmm]) - (2*tmm*rat(1, -3 + d))/(tarC2*tarC3*tarC5^3*[pp-4*tmm]) + (2*tmm*rat(1, -3 + d))/(tarC2*tarC4*tarC5^3*[pp-4*tmm]) + (2*tmm*rat(1, -3 + d))/(tarC2*tarC3^3*tarC5*[pp-4*tmm]) + ((-3*tmm*rat(1, -3 + d))/(4*pp) + (3*tmm*rat(1, -3 + d))/(4*[pp-4*tmm]))/(tarC3*tarC4^2*tarC5^2) + ((-3*tmm*rat(1, -3 + d))/(4*pp) + (3*tmm*rat(1, -3 + d))/(4*[pp-4*tmm]))/(tarC3^2*tarC4*tarC5^2) + ((-3*tmm*rat(1, -3 + d))/(4*pp) + (3*tmm*rat(1, -3 + d))/(4*[pp-4*tmm]))/(tarC3^2*tarC4^2*tarC5) + (-rat(1, -3 + d)/2 + (3*tmm*rat(1, -3 + d))/(4*pp) + (3*tmm*rat(1, -3 + d))/(4*[pp-4*tmm]))/(tarC2^2*tarC3*tarC5^2) + (-rat(1, -3 + d)/2 + (3*tmm*rat(1, -3 + d))/(4*pp) + (3*tmm*rat(1, -3 + d))/(4*[pp-4*tmm]))/(tarC2^2*tarC3^2*tarC5) + ((3*tmm*rat(1, -3 + d))/(4*pp) + (9*tmm*rat(1, -3 + d))/(4*[pp-4*tmm]))/(tarC2*tarC3^2*tarC5^2) - rat(-3 + d, 1)/(tarC2*tarC3*tarC4*tarC5*[pp-4*tmm]) + rat(-7 + 2*d, -3 + d)/(2*tarC2*tarC3^2*tarC4*[pp-4*tmm]) - rat(-7 + 2*d, -3 + d)/(2*tarC2*tarC3^2*tarC5*[pp-4*tmm]);
 
 
 endif;
 
 * End recursion
-goto endrec;         
+goto endrec;
 la dopartfrac;
 $nopf = 0;
 la sortme;
 $irep = 0;
 la endrec;
-        
+
 ModuleOption,minimum,$irep,$nopf;
 .sort:red2l-V-`$repcount++';
 #if `$nopf'==0
-        #call partfrac        
-#endif                
+        #call partfrac
+#endif
 #redefine irep "`$irep'"
 #enddo
 #endprocedure
@@ -7483,11 +7484,11 @@ ModuleOption,minimum,$irep,$nopf;
 
 
 #procedure red01101
-#$repcount = 1;        
+#$repcount = 1;
 #do irep=1,1
 #$irep = 1;
-* do not need partfrac=1        
-#$nopf = 1;                        
+* do not need partfrac=1
+#$nopf = 1;
 if(count(intJ,1));
 
 *   n4 != 0 && n5 != 1
@@ -7591,12 +7592,12 @@ $nopf = 0;
 la sortme;
 $irep = 0;
 la endrec;
-        
+
 ModuleOption,minimum,$irep,$nopf;
 .sort:red2l-J-`$repcount++';
 #if `$nopf'==0
-        #call partfrac        
-#endif                
+        #call partfrac
+#endif
 #redefine irep "`$irep'"
 #enddo
 #endprocedure
@@ -7605,9 +7606,9 @@ ModuleOption,minimum,$irep,$nopf;
 
 
 #procedure red00111
-#$repcount = 1;        
+#$repcount = 1;
 #do irep=1,1
-#$irep = 1;                
+#$irep = 1;
 if(count(intT2,1));
 
 *   n2 != 0 && n5 != 1
@@ -7658,11 +7659,11 @@ if(count(tarC2,-1) == 0) id,only,ifmatch->sortme 1/tarC1^n1?neg_/tarC3/tarC4/tar
 
 endif;
 
-goto endrec;         
+goto endrec;
 la sortme;
 $irep = 0;
 la endrec;
-        
+
 ModuleOption,minimum,$irep;
 .sort:red2l-T2-`$repcount++';
 #redefine irep "`$irep'"
@@ -7671,27 +7672,27 @@ ModuleOption,minimum,$irep;
 
 
 
-* 
+*
 * count bad for neg num!!!!!
-* 
+*
 
 #procedure to1l(TOPO)
-        if(count(int`TOPO',1));        
-***************************************************         
-*       GxG        
+        if(count(int`TOPO',1));
+***************************************************
+*       GxG
         if(((count(tarC1,-1) > 0) || (count(tarC3,-1) > 0)) && ((count(tarC2,-1) > 0) || (count(tarC4,-1) > 0)) && (count(tarC5,1) >= 0));
-        Multiply intGxG/int`TOPO';        
+        Multiply intGxG/int`TOPO';
 
-***************************************************         
+***************************************************
 *       TxG
         elseif((count(tarC1,1) >= 0) && ((count(tarC2,-1) > 0) || (count(tarC4,-1) > 0)) && (count(tarC3,1) >= 0) && (count(tarC5,-1) > 0));
-        Multiply intTxG/int`TOPO';        
+        Multiply intTxG/int`TOPO';
 
-***************************************************         
+***************************************************
 *       GxT
         elseif(((count(tarC1,-1) > 0) || (count(tarC3,-1) > 0)) && (count(tarC2,1) >= 0) && (count(tarC4,1) >= 0) && (count(tarC5,-1) > 0));
-        Multiply intGxT/int`TOPO';        
-        endif;        
+        Multiply intGxT/int`TOPO';
+        endif;
         endif;
 #endprocedure
 
@@ -7704,14 +7705,14 @@ ModuleOption,minimum,$irep;
 
 
         #message
-        #message reduce F                
+        #message reduce F
         #message
-        #$repcount = 1;        
+        #$repcount = 1;
         #do irep=1,1
-                #$irep = 1;                
+                #$irep = 1;
                 if(count(intF,1));
                 #call redF
-                id,only intF/tarC1/tarC2/tarC3/tarC4/tarC5 = intFG*TFI(1,1,1,1,1);                
+                id,only intF/tarC1/tarC2/tarC3/tarC4/tarC5 = intFG*TFI(1,1,1,1,1);
                 endif;
 *                 #breakdo
                 goto endrec;
@@ -7719,15 +7720,15 @@ ModuleOption,minimum,$irep;
 *                 #call partfrac
                 $irep = 0;
                 la endrec;
-                
+
                 ModuleOption,minimum,$irep;
                 .sort:redF-noshift-`$repcount++';
                 #if `$irep'==0
-                        #call partfrac        
-                #endif                                
+                        #call partfrac
+                #endif
                 #redefine irep "`$irep'"
         #enddo
-        id sdim(0) = 1;        
+        id sdim(0) = 1;
         #printtimes
         .sort:red-F-done;
 
@@ -7739,32 +7740,32 @@ ModuleOption,minimum,$irep;
         #call to1l(F)
 *       reduce V
         #message
-        #message reduce V                
+        #message reduce V
         #message
         #call red01111
         #printtimes
-        .sort:red-V-done;        
-        #call zeroTFI(V)        
+        .sort:red-V-done;
+        #call zeroTFI(V)
         #call partfrac
 *       rename V
         #call uniqueVnew(V)
-        id,only intV/tarC2/tarC3/tarC4/tarC5 = intFG*TFI(0,1,1,1,1); 
+        id,only intV/tarC2/tarC3/tarC4/tarC5 = intFG*TFI(0,1,1,1,1);
         #call uniqueJnew(V)
         #call uniqueT2new(V)
         #call to1l(V)
 *       reduce J
         #message
         #message reduce J
-        #message        
+        #message
         #call red01101
         #printtimes
-        .sort:red-J-done;        
+        .sort:red-J-done;
         #call zeroTFI(J)
         #call partfrac
 *       rename J
         #call uniqueJnew(J)
         id,only intJ/tarC2^2/tarC3/tarC5 = intFG*TFI(2,0,0,1,1);
-        id,only intJ/tarC2/tarC3/tarC5   = intFG*TFI(1,0,0,1,1);                
+        id,only intJ/tarC2/tarC3/tarC5   = intFG*TFI(1,0,0,1,1);
         #call uniqueT2new(J)
         #call to1l(J)
 *       reduce T2
@@ -7773,55 +7774,55 @@ ModuleOption,minimum,$irep;
         id tarC3^n3?pos_ = (tk1.tk1 - 2*tk1.tp + pp - tmm)^n3;
         id tarC4^n4?pos_ = (tk2.tk2 - 2*tk2.tp + pp - tmm)^n4;
         id tarC5^n5?pos_ = (tk1.tk1 - 2*tk1.tk2 + tk2.tk2 - tmm)^n5;
-        
-        
-*       all tarC in num con to SP !!!        
+
+
+*       all tarC in num con to SP !!!
         #call spcontract1(T2,1)
-        
-        
+
+
         if((count(tarC1,-1) == 0) && (count(tarC3,-1) == 0)) Multiply replace_(intT2,intTxG);
         if((count(tarC2,-1) == 0) && (count(tarC4,-1) == 0)) Multiply replace_(intT2,intGxT);
-        
-        
+
+
         #call redTad125(T2)
-        
-        
+
+
 * Now reduce remaining low powers of (k1.p) and (k2.p)
-* eq B.10 in Davydychev, Smirnov, Tausk 
+* eq B.10 in Davydychev, Smirnov, Tausk
 * Nucl.Phys. B410 (1993) 325-342
-        
+
         if(count(intT2,1));
-        id tp.tk1^x?pos0_*tp.tk2^y?pos0_/tarC1^n1?pos_/tarC2^n2?pos_/tarC5^n5? = 
+        id tp.tk1^x?pos0_*tp.tk2^y?pos0_/tarC1^n1?pos_/tarC2^n2?pos_/tarC5^n5? =
         mod_(x+y+1,2)*(1/2)^(x+y)*fac_(x)*fac_(y)*pp^((x+y)/2)*PochhammerINV((x+y)/2,d/2)*
         sum_(j3,0,min_(x,y),
         mod_(x-j3+1,2)*mod_(y-j3+1,2)*tk1.tk1^((x-j3)/2)*tk2.tk2^((y-j3)/2)*(2*tk1.tk2)^j3*invfac_((x-j3)/2)*invfac_((y-j3)/2)*invfac_(j3))/tarC1^n1/tarC2^n2/tarC5^n5;
         endif;
-        
-        
+
+
         #call spcontract1(T2,1)
-        
-        
-        
-*       T2=125        
+
+
+
+*       T2=125
         if((count(tarC3,-1) == 0) && (count(tarC4,-1) == 0) && (count(tarC1,-1) > 0) && (count(tarC2,-1) > 0) && (count(tarC5,-1) == 0)) Multiply replace_(intT2,intTxT);
         if((count(tarC3,-1) == 0) && (count(tarC4,-1) == 0) && (count(tarC1,-1) > 0) && (count(tarC2,-1) == 0) && (count(tarC5,-1) > 0)) Multiply replace_(intT2,intTxT);
         if((count(tarC3,-1) == 0) && (count(tarC4,-1) == 0) && (count(tarC1,-1) == 0) && (count(tarC2,-1) > 0) && (count(tarC5,-1) > 0)) Multiply replace_(intT2,intTxT);
 
-*       T2=345        
+*       T2=345
         if((count(tarC1,-1) == 0) && (count(tarC2,-1) == 0) && (count(tarC3,-1) > 0) && (count(tarC4,-1) > 0) && (count(tarC5,-1) == 0)) Multiply replace_(intT2,intTxT);
         if((count(tarC1,-1) == 0) && (count(tarC2,-1) == 0) && (count(tarC3,-1) > 0) && (count(tarC4,-1) == 0) && (count(tarC5,-1) > 0)) Multiply replace_(intT2,intTxT);
         if((count(tarC1,-1) == 0) && (count(tarC2,-1) == 0) && (count(tarC3,-1) == 0) && (count(tarC4,-1) > 0) && (count(tarC5,-1) > 0)) Multiply replace_(intT2,intTxT);
-        
+
         if(count(tarC1,-1) == 0) Multiply replace_(intT2,intTxG);
         if(count(tarC2,-1) == 0) Multiply replace_(intT2,intGxT);
-        
+
         if((count(tk1,1) == 0) && (count(tk2,1) == 0)) id intT2/tarC1^n1?pos_/tarC2^n2?pos_/tarC5^n5?pos_ = intFG*T2(0,n1,n2,n5);
         if((count(tk1,1) == 0) && (count(tk2,1) == 0)) id intT2/tarC1^n1?pos_/tarC2^n2?pos_ = intFG*T1(0,n1)*T1(0,n2);
-        
-        
-*       Reduce T2        
+
+
+*       Reduce T2
         #message
-        #message reduce T2                
+        #message reduce T2
         #message
         #do i=1,1
                 if(count(intFG,1));
@@ -7836,45 +7837,45 @@ ModuleOption,minimum,$irep;
         id T2(dp?,n1?pos_,n2?pos_,0) = T1(dp,n1)*T1(dp,n2);
         id T2(dp?,n1?pos_,0,n3?pos_) = T1(dp,n1)*T1(dp,n3);
         id T2(dp?,0,n2?pos_,n3?pos_) = T1(dp,n2)*T1(dp,n3);
-        
+
         if(match(T2(dp?,n1?,n2?,n3?))) exit "Unreduced T2";
         endif;
 
         #call partfrac
-        
+
         .sort
         #call zeroTFI(GxG)
         #call zeroTFI(GxT)
         #call zeroTFI(TxG)
-        
-        
-*       Tensor reduction for factorized integrals         
+
+
+*       Tensor reduction for factorized integrals
         if(count(intGxG,1));
         #call tensG(tarC1,tarC3,tk1,tp)
         endif;
         .sort:intGxG-1;
         if(count(intGxG,1));
         #call tensG(tarC2,tarC4,tk2,tp)
-        id tp.tp^n? = pp^n;        
-        Multiply intFG/intGxG;        
-        endif;        
+        id tp.tp^n? = pp^n;
+        Multiply intFG/intGxG;
+        endif;
         .sort:intGxG-2;
-        
+
         if(count(intTxG,1));
-*       First integrate tadpole with tk1,tk2 in denominator:        
+*       First integrate tadpole with tk1,tk2 in denominator:
         Multiply replace_(tk1,[tk1-tk2] + tk2);
-* Mark terms wo den as zero        
+* Mark terms wo den as zero
         #call tensT1(tarC5,[tk1-tk2],0)
 *         Multiply replace_(zero,0);
         endif;
         .sort:intTxG-1;
         if(count(intTxG,1));
-*       tk1.tk2 in numerator wo denominator gives zero scale tadpole        
-        Multiply replace_([tk1-tk2],tk1 - tk2);        
+*       tk1.tk2 in numerator wo denominator gives zero scale tadpole
+        Multiply replace_([tk1-tk2],tk1 - tk2);
         #call tensG(tarC2,tarC4,tk2,tp)
-        id tp.tp^n? = pp^n;        
-        Multiply intFG/intTxG;        
-        endif;        
+        id tp.tp^n? = pp^n;
+        Multiply intFG/intTxG;
+        endif;
         .sort:intTxG-2;
 
         if(count(intGxT,1));
@@ -7883,21 +7884,21 @@ ModuleOption,minimum,$irep;
         endif;
         .sort:intGxT-1;
         if(count(intGxT,1));
-*       tk1.tk2 in numerator wo denominator gives zero scale tadpole        
-        Multiply replace_([tk1-tk2],tk1 - tk2);        
+*       tk1.tk2 in numerator wo denominator gives zero scale tadpole
+        Multiply replace_([tk1-tk2],tk1 - tk2);
         #call tensG(tarC1,tarC3,tk1,tp)
-        id tp.tp^n? = pp^n;                
-         Multiply intFG/intGxT;        
-        endif;        
+        id tp.tp^n? = pp^n;
+         Multiply intFG/intGxT;
+        endif;
         .sort:intGxT-2;
 
 
-*       One-loop tadpoles        
+*       One-loop tadpoles
         if(count(intTxT,1) && (count(tarC1,-1) > 0) && (count(tarC2,-1) > 0));
         #call tensT1(tarC1,tk1,0)
         #call tensT1(tarC2,tk2,0)
 *         Multiply replace_(zero,0);
-        Multiply intFG/intTxT;        
+        Multiply intFG/intTxT;
         endif;
         .sort:intTxT-(12);
 
@@ -7906,7 +7907,7 @@ ModuleOption,minimum,$irep;
         #call tensT1(tarC1,tk1,0)
         #call tensT1(tarC5,[tk1-tk2],0)
 *         Multiply replace_(zero,0);
-        Multiply intFG/intTxT;        
+        Multiply intFG/intTxT;
         endif;
         .sort:intTxT-(15);
 
@@ -7915,31 +7916,31 @@ ModuleOption,minimum,$irep;
         #call tensT1(tarC2,tk2,0)
         #call tensT1(tarC5,[tk1-tk2],0)
 *         Multiply replace_(zero,0);
-        Multiply intFG/intTxT;        
+        Multiply intFG/intTxT;
         endif;
         .sort:intTxT-(25);
 
         #call subpoch
-        
-*       Reducing one-loop G and T1        
+
+*       Reducing one-loop G and T1
         #message
-        #message reduce G                
+        #message reduce G
         #message
-        
+
         #call drrG(FG)
 
         #call redG(FG)
         id G(0,1,1) = Gx11;
-        
+
         if(count(intFG,1));
         id G(dp?,n1?,0) = T1(dp,n1);
         id G(dp?,0,n2?) = T1(dp,n2);
         endif;
         #printtimes
 
-*       Now reduce one-loop tadpoles        
+*       Now reduce one-loop tadpoles
         #message
-        #message drr T1                
+        #message drr T1
         #message
         #do i=1,1
                 if(count(intFG,1));
@@ -7948,10 +7949,10 @@ ModuleOption,minimum,$irep;
                 endif;
                 .sort:drr-T1;
         #enddo
-        
+
 
         #message
-        #message reduce T1                
+        #message reduce T1
         #message
         #do i=1,1
                 if(count(intFG,1));
@@ -7969,9 +7970,9 @@ ModuleOption,minimum,$irep;
 
 
 
-* 
+*
 * Planar 8 line
-* 
+*
 *--#[ redFGnew :
 #procedure redFGnew
 * Reduce factorized topology
@@ -7985,22 +7986,22 @@ ModuleOption,minimum,$irep;
 *
 *         1/|\9          _6_
 *        /  |  \        /   \
-*   ---<    3    >--5--(     )-- 
+*   ---<    3    >--5--(     )--
 *        \  |  /        \_ _/
 *         4\|/7           8
 *
-* 
+*
 * G = 6,8
 
-*         
+*
 * TARCER:
-* 
+*
 * C1 = k1^2-tm^2
 * C2 = k2^2-tm^2
 * C3 = (k1-p)^2-tm^2
 * C4 = (k2-p)^2-tm^2
 * C5 = (k1-k2)^2-tm^2
-*         
+*
 
 
 * Numerator reduction:
@@ -8014,9 +8015,9 @@ ModuleOption,minimum,$irep;
 
         if((count(d2,1) >= 0) && (count(d10,1) >= 0));
 
-*       Numerator to scalar products        
+*       Numerator to scalar products
         Multiply replace_(d2, k2.k2 - tmm, d10, k1.k1 - 2*k1.k2 + k2.k2 - 2*k1.k3 + 2*k2.k3 + k3.k3 - tmm);
-        Multiply replace_(d1,tarC1, d9,tarC2, d4,tarC3, d7,tarC4, d3,tarC5, d5,[pp-tmm]);        
+        Multiply replace_(d1,tarC1, d9,tarC2, d4,tarC3, d7,tarC4, d3,tarC5, d5,[pp-tmm]);
 
 
 *       Inverse powers of denominators to scalar products
@@ -8026,41 +8027,41 @@ ModuleOption,minimum,$irep;
         id tarC4^n4?pos_=(k3.k3 - 2*k3.k4 + k4.k4 - tmm)^n4;
         id tarC5^n5?pos_=(k3.k3 - tmm)^n5;
 
-*       Numerator to TARCER momenta definitions       
-        Multiply replace_(k1,tk1,   
-                          k2,tk1 - tk4,   
-                          k3,tk1 - tk2,   
+*       Numerator to TARCER momenta definitions
+        Multiply replace_(k1,tk1,
+                          k2,tk1 - tk4,
+                          k3,tk1 - tk2,
                           k4,tk1 - tp);
 
         endif;
         endif;
         .sort:redFG-num;
 
-*       Now reduce with dimensional shift one-loop subdiagram        
+*       Now reduce with dimensional shift one-loop subdiagram
         if(count(intFG,1));
-        Multiply replace_(tk4,-mtk4, tp,-mtp);        
+        Multiply replace_(tk4,-mtk4, tp,-mtp);
         #call tensG(d8,d6,mtk4,mtp)
-        Multiply replace_(mtk4,-tk4, mtp,-tp);        
-        id tp.tp = pp;        
-        endif;        
-        .sort:intFG-tensG;        
+        Multiply replace_(mtk4,-tk4, mtp,-tp);
+        id tp.tp = pp;
+        endif;
+        .sort:intFG-tensG;
 
-* All to tarC1...tarC5        
+* All to tarC1...tarC5
 
         id tk1.tk1^n?pos_ = (tarC1 + tmm)^n;
         id tk2.tk2^n?pos_ = (tarC2 + tmm)^n;
         id tk1.tp^n?pos_  = ((tarC1 - tarC3 + pp)/2)^n;
         id tk2.tp^n?pos_  = ((tarC2 - tarC4 + pp)/2)^n;
         id tk1.tk2^n?pos_ = ((tarC1 + tarC2 - tarC5 + tmm)/2)^n;
-        
+
         #call red2l
-        
+
 #endprocedure
 *--#] redFGnew :
 
 
 
-** 
+**
 * *
 *  *  One-dimensional recurence relations
 * *
@@ -8072,8 +8073,8 @@ ModuleOption,minimum,$irep;
 
 #do irep = 1,1
 #$irep = 1;
-                
-********************************************************************************                 
+
+********************************************************************************
    id,ifmatch->sortme m0denJ2010X11100(n?{>1}) =
 
        + theta_( - 4 + n) * (
@@ -8085,7 +8086,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m0denJ0001X01110( - 2 + n)*rat( - 2*n*d^2 + 8*n*d - 8*n + 3*d^3 - 
+          + m0denJ0001X01110( - 2 + n)*rat( - 2*n*d^2 + 8*n*d - 8*n + 3*d^3 -
          19*d^2 + 40*d - 28, - 144*n^2 + 72*n*d - 36*d + 36)
           + m0denJ0011X10110( - 2 + n)*rat( - 6*n*d^2 + 34*n*d - 48*n + 9*d^3
           - 72*d^2 + 191*d - 168, - 144*n^2 + 72*n*d - 36*d + 36)
@@ -8106,7 +8107,7 @@ ModuleOption,minimum,$irep;
           + m0denJ0001X00110( - 1 + n)*rat( - 4*n^2*d^3 + 24*n^2*d^2 - 48*n^2*
          d + 32*n^2 + 12*n*d^4 - 98*n*d^3 + 300*n*d^2 - 408*n*d + 208*n - 3*
          d^5 + 23*d^4 - 60*d^3 + 48*d^2 + 32*d - 48,288*n^4 - 288*n^3*d - 288*
-         n^3 + 72*n^2*d^2 + 360*n^2*d - 72*n^2 - 108*n*d^2 - 36*n*d + 72*n + 
+         n^3 + 72*n^2*d^2 + 360*n^2*d - 72*n^2 - 108*n*d^2 - 36*n*d + 72*n +
          36*d^2 - 36*d)
           + m0denJ0011X10110( - 1 + n)*rat(24*n*d^2 - 136*n*d + 192*n - 27*d^3
           + 228*d^2 - 641*d + 600, - 144*n^2 + 72*n*d - 36*d + 36)
@@ -8127,7 +8128,7 @@ ModuleOption,minimum,$irep;
           )
 
        + delta_( - 3 + n) * (
-          + m0denJ0011X10110(0)*rat( - 18*d^3 + 171*d^2 - 523*d + 520,900*d - 
+          + m0denJ0011X10110(0)*rat( - 18*d^3 + 171*d^2 - 523*d + 520,900*d -
          6300)
           )
 
@@ -8150,7 +8151,7 @@ ModuleOption,minimum,$irep;
        + theta_( - 2 + n) * (
           + m0denJ0001X00110( - 1 + n)*rat(2*n*d^2 - 8*n*d + 8*n - 3*d^3 + 18*
          d^2 - 36*d + 24, - 36*n^2 + 18*n*d + 36*n - 18*d)
-          + m0denJ0011X00110( - 1 + n)*rat(6*n*d^2 - 34*n*d + 48*n - 9*d^3 + 
+          + m0denJ0011X00110( - 1 + n)*rat(6*n*d^2 - 34*n*d + 48*n - 9*d^3 +
          69*d^2 - 174*d + 144, - 36*n^2 + 18*n*d + 36*n - 18*d)
           + m0denJ0021X00110( - 1 + n)*rat( - 20*n*d + 60*n + 40*d - 120,18*
          n^2 - 9*n*d - 18*n + 9*d)
@@ -8190,8 +8191,8 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m0denJ0001X01110( - 1 + n)*rat( - n*d^2 + 4*n*d - 4*n + 18*d^3 - 
-         86*d^2 + 128*d - 56,864*n^3 - 1296*n^2*d + 2592*n^2 + 648*n*d^2 - 
+          + m0denJ0001X01110( - 1 + n)*rat( - n*d^2 + 4*n*d - 4*n + 18*d^3 -
+         86*d^2 + 128*d - 56,864*n^3 - 1296*n^2*d + 2592*n^2 + 648*n*d^2 -
          2592*n*d + 2376*n - 108*d^3 + 648*d^2 - 1188*d + 648)
           + m0denJ0001X11110( - 1 + n)*rat(2*n*d - 4*n + d - 2,48*n^2 - 48*n*d
           + 120*n + 12*d^2 - 60*d + 72)
@@ -8203,7 +8204,7 @@ ModuleOption,minimum,$irep;
           - 11*d + 6,24*n^3 - 36*n^2*d + 72*n^2 + 18*n*d^2 - 72*n*d + 66*n - 3
          *d^3 + 18*d^2 - 33*d + 18)
           + m0denJ0011X10110( - 1 + n)*rat(54*n^2*d - 144*n^2 - 84*n*d^2 + 341
-         *n*d - 312*n + 36*d^3 - 201*d^2 + 325*d - 120,864*n^3 - 1296*n^2*d + 
+         *n*d - 312*n + 36*d^3 - 201*d^2 + 325*d - 120,864*n^3 - 1296*n^2*d +
          2592*n^2 + 648*n*d^2 - 2592*n*d + 2376*n - 108*d^3 + 648*d^2 - 1188*d
           + 648)
           + m0denJ0011X11100( - 1 + n)*rat( - 2*n^2*d + 4*n^2 + 4*n*d^2 - 15*n
@@ -8213,9 +8214,9 @@ ModuleOption,minimum,$irep;
          n^2 - 24*n*d + 60*n + 6*d^2 - 30*d + 36)
           + m0denJ0011X00110( - 1 + n)*rat(12*n*d^3 - 92*n*d^2 + 232*n*d - 192
          *n + 3*d^4 - 23*d^3 + 58*d^2 - 48*d,864*n^4 - 1728*n^3*d + 2592*n^3
-          + 1296*n^2*d^2 - 3888*n^2*d + 2376*n^2 - 432*n*d^3 + 1944*n*d^2 - 
+          + 1296*n^2*d^2 - 3888*n^2*d + 2376*n^2 - 432*n*d^3 + 1944*n*d^2 -
          2376*n*d + 648*n + 54*d^4 - 324*d^3 + 594*d^2 - 324*d)
-          + m0denJ0021X00110( - 1 + n)*rat( - 76*n^2*d + 152*n^2 - 4*n*d^2 + 
+          + m0denJ0021X00110( - 1 + n)*rat( - 76*n^2*d + 152*n^2 - 4*n*d^2 +
          170*n*d - 324*n - 9*d^3 + 57*d^2 - 78*d,864*n^4 - 1728*n^3*d + 2592*
          n^3 + 1296*n^2*d^2 - 3888*n^2*d + 2376*n^2 - 432*n*d^3 + 1944*n*d^2
           - 2376*n*d + 648*n + 54*d^4 - 324*d^3 + 594*d^2 - 324*d)
@@ -8236,7 +8237,7 @@ ModuleOption,minimum,$irep;
        + delta_( - 2 + n) * (
           + m0denJ0001X01110(0)*rat( - d^4 - 2*d^3 + 36*d^2 - 88*d + 64,54*d^4
           - 1188*d^3 + 9666*d^2 - 34452*d + 45360)
-          + m0denJ0011X10110(0)*rat(42*d^2 - 217*d + 280,108*d^3 - 1944*d^2 + 
+          + m0denJ0011X10110(0)*rat(42*d^2 - 217*d + 280,108*d^3 - 1944*d^2 +
          11556*d - 22680)
           + m0denJ1011X01110(0)*rat(d^2 - 5*d + 6,12*d^2 - 156*d + 504)
           + m0denJ1011X11110(0)*rat( - 3*d + 10,12*d - 84)
@@ -8251,19 +8252,19 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m0denJ0001X01110( - 1 + n)*rat(n*d - 2*n,24*n^2 - 24*n*d + 36*n + 
+          + m0denJ0001X01110( - 1 + n)*rat(n*d - 2*n,24*n^2 - 24*n*d + 36*n +
          6*d^2 - 18*d + 12)
           + m0denJ0001X11110( - 1 + n)*rat(d - 3, - 12*n + 6*d - 12)
           + m0denJ0001X00110( - 1 + n)*rat(2*n*d^2 - 8*n*d + 8*n,216*n^3 - 324
          *n^2*d + 324*n^2 + 162*n*d^2 - 324*n*d + 108*n - 27*d^3 + 81*d^2 - 54
          *d)
-          + m0denJ0011X01110( - 1 + n)*rat(n*d - 3*n - d^2 + 4*d - 3,12*n^2 - 
+          + m0denJ0011X01110( - 1 + n)*rat(n*d - 3*n - d^2 + 4*d - 3,12*n^2 -
          12*n*d + 18*n + 3*d^2 - 9*d + 6)
-          + m0denJ0011X00110( - 1 + n)*rat(6*n*d^2 - 34*n*d + 48*n,216*n^3 - 
+          + m0denJ0011X00110( - 1 + n)*rat(6*n*d^2 - 34*n*d + 48*n,216*n^3 -
          324*n^2*d + 324*n^2 + 162*n*d^2 - 324*n*d + 108*n - 27*d^3 + 81*d^2
           - 54*d)
           + m0denJ0021X00110( - 1 + n)*rat( - 76*n^2 + 36*n*d + 62*n - 9*d^2
-          + 9*d,216*n^3 - 324*n^2*d + 324*n^2 + 162*n*d^2 - 324*n*d + 108*n - 
+          + 9*d,216*n^3 - 324*n^2*d + 324*n^2 + 162*n*d^2 - 324*n*d + 108*n -
          27*d^3 + 81*d^2 - 54*d)
           + m0denJ1011X01110( - 1 + n)*rat(14*n - 11*d + 16,24*n - 12*d + 24)
           )
@@ -8277,12 +8278,12 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m0denJ1010X11100(n?{>1}) =
 
        + theta_( - 4 + n) * (
-          + m0denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,24*n^2 - 12*n*d + 
+          + m0denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,24*n^2 - 12*n*d +
          6*d - 6)
           )
 
        + theta_( - 3 + n) * (
-          + m0denJ0001X01110( - 2 + n)*rat(d^2 - 4*d + 4, - 24*n^2 + 12*n*d - 
+          + m0denJ0001X01110( - 2 + n)*rat(d^2 - 4*d + 4, - 24*n^2 + 12*n*d -
          6*d + 6)
           + m0denJ0011X10110( - 2 + n)*rat(3*d^2 - 17*d + 24, - 24*n^2 + 12*n*
          d - 6*d + 6)
@@ -8299,15 +8300,15 @@ ModuleOption,minimum,$irep;
           + m0denJ0001X00110( - 1 + n)*rat(4*n*d^3 - 24*n*d^2 + 48*n*d - 32*n
           - d^4 + 5*d^3 - 6*d^2 - 4*d + 8,48*n^4 - 48*n^3*d - 48*n^3 + 12*n^2*
          d^2 + 60*n^2*d - 12*n^2 - 18*n*d^2 - 6*n*d + 12*n + 6*d^2 - 6*d)
-          + m0denJ0011X10110( - 1 + n)*rat( - 6*n^2*d + 18*n^2 + 18*n*d^2 - 
-         109*n*d + 165*n - 18*d^2 + 112*d - 174,48*n^3 - 24*n^2*d - 48*n^2 + 
+          + m0denJ0011X10110( - 1 + n)*rat( - 6*n^2*d + 18*n^2 + 18*n*d^2 -
+         109*n*d + 165*n - 18*d^2 + 112*d - 174,48*n^3 - 24*n^2*d - 48*n^2 +
          36*n*d - 12*n - 12*d + 12)
           + m0denJ0011X00110( - 1 + n)*rat(12*n*d^3 - 92*n*d^2 + 232*n*d - 192
          *n - 3*d^4 + 20*d^3 - 35*d^2 - 10*d + 48,48*n^4 - 48*n^3*d - 48*n^3
           + 12*n^2*d^2 + 60*n^2*d - 12*n^2 - 18*n*d^2 - 6*n*d + 12*n + 6*d^2
           - 6*d)
           + m0denJ0021X00110( - 1 + n)*rat( - 20*n^2*d + 40*n^2 + 70*n*d - 140
-         *n - 10*d^2 + 40,24*n^4 - 24*n^3*d - 24*n^3 + 6*n^2*d^2 + 30*n^2*d - 
+         *n - 10*d^2 + 40,24*n^4 - 24*n^3*d - 24*n^3 + 6*n^2*d^2 + 30*n^2*d -
          6*n^2 - 9*n*d^2 - 3*n*d + 6*n + 3*d^2 - 3*d)
           + m0denJ0021X10110( - 1 + n)*rat( - 80*n + 9*d + 111,24*n^2 - 12*n*d
           + 6*d - 6)
@@ -8337,7 +8338,7 @@ ModuleOption,minimum,$irep;
           + 6*n - 3*d)
           + m0denJ0011X00110( - 1 + n)*rat( - 3*d^2 + 17*d - 24, - 6*n^2 + 3*n
          *d + 6*n - 3*d)
-          + m0denJ0021X00110( - 1 + n)*rat( - 20*n + 40,6*n^2 - 3*n*d - 6*n + 
+          + m0denJ0021X00110( - 1 + n)*rat( - 20*n + 40,6*n^2 - 3*n*d - 6*n +
          3*d)
           )
 
@@ -8348,8 +8349,8 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m0denJ1001X11110(n?{>1}) =
 
        + theta_( - 2 + n) * (
-          + m0denJ0001X01110( - 1 + n)*rat(3*n*d^2 - 12*n*d + 12*n - 3*d^3 + 
-         15*d^2 - 24*d + 12,32*n^3 - 48*n^2*d + 96*n^2 + 24*n*d^2 - 96*n*d + 
+          + m0denJ0001X01110( - 1 + n)*rat(3*n*d^2 - 12*n*d + 12*n - 3*d^3 +
+         15*d^2 - 24*d + 12,32*n^3 - 48*n^2*d + 96*n^2 + 24*n*d^2 - 96*n*d +
          88*n - 4*d^3 + 24*d^2 - 44*d + 24)
           + m0denJ0001X11110( - 1 + n)*rat(6*n*d - 12*n - 9*d^2 + 36*d - 36,32
          *n^2 - 32*n*d + 80*n + 8*d^2 - 40*d + 48)
@@ -8377,7 +8378,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m0denJ0001X01110( - 2 + n)*rat( - 2*n*d^2 + 8*n*d - 8*n + 3*d^3 - 
+          + m0denJ0001X01110( - 2 + n)*rat( - 2*n*d^2 + 8*n*d - 8*n + 3*d^3 -
          19*d^2 + 40*d - 28, - 144*n^2 + 72*n*d - 36*d + 36)
           + m0denJ0011X10110( - 2 + n)*rat( - 6*n*d^2 + 34*n*d - 48*n + 9*d^3
           - 72*d^2 + 191*d - 168, - 144*n^2 + 72*n*d - 36*d + 36)
@@ -8395,7 +8396,7 @@ ModuleOption,minimum,$irep;
           + m0denJ0001X00110( - 1 + n)*rat( - 4*n^2*d^3 + 24*n^2*d^2 - 48*n^2*
          d + 32*n^2 + 12*n*d^4 - 98*n*d^3 + 300*n*d^2 - 408*n*d + 208*n - 3*
          d^5 + 23*d^4 - 60*d^3 + 48*d^2 + 32*d - 48,288*n^4 - 288*n^3*d - 288*
-         n^3 + 72*n^2*d^2 + 360*n^2*d - 72*n^2 - 108*n*d^2 - 36*n*d + 72*n + 
+         n^3 + 72*n^2*d^2 + 360*n^2*d - 72*n^2 - 108*n*d^2 - 36*n*d + 72*n +
          36*d^2 - 36*d)
           + m0denJ0011X10110( - 1 + n)*rat(24*n*d^2 - 136*n*d + 192*n - 27*d^3
           + 228*d^2 - 641*d + 600, - 144*n^2 + 72*n*d - 36*d + 36)
@@ -8413,7 +8414,7 @@ ModuleOption,minimum,$irep;
           )
 
        + delta_( - 3 + n) * (
-          + m0denJ0011X10110(0)*rat( - 18*d^3 + 171*d^2 - 523*d + 520,900*d - 
+          + m0denJ0011X10110(0)*rat( - 18*d^3 + 171*d^2 - 523*d + 520,900*d -
          6300)
           )
 
@@ -8434,7 +8435,7 @@ ModuleOption,minimum,$irep;
        + theta_( - 2 + n) * (
           + m0denJ0001X00110( - 1 + n)*rat(2*n*d^2 - 8*n*d + 8*n - 3*d^3 + 18*
          d^2 - 36*d + 24, - 36*n^2 + 18*n*d + 36*n - 18*d)
-          + m0denJ0011X00110( - 1 + n)*rat(6*n*d^2 - 34*n*d + 48*n - 9*d^3 + 
+          + m0denJ0011X00110( - 1 + n)*rat(6*n*d^2 - 34*n*d + 48*n - 9*d^3 +
          69*d^2 - 174*d + 144, - 36*n^2 + 18*n*d + 36*n - 18*d)
           + m0denJ0021X00110( - 1 + n)*rat(20*n^2 - 30*n*d + 20*n + 60*d - 120
          ,18*n^2 - 9*n*d - 18*n + 9*d)
@@ -8447,17 +8448,17 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m0denJ0011X11110(n?{>1}) =
 
        + theta_( - 4 + n) * (
-          + m0denJ0021X10110( - 3 + n)*rat(20*n^2 - 42*n*d + 42*n + 18*d^2 - 
+          + m0denJ0021X10110( - 3 + n)*rat(20*n^2 - 42*n*d + 42*n + 18*d^2 -
          45*d + 22,576*n^3 - 576*n^2*d + 576*n^2 + 144*n*d^2 - 144*n*d - 144*n
           - 72*d^2 + 216*d - 144)
           )
 
        + theta_( - 3 + n) * (
-          + m0denJ0001X01110( - 2 + n)*rat(10*n*d^2 - 40*n*d + 40*n - 6*d^3 + 
+          + m0denJ0001X01110( - 2 + n)*rat(10*n*d^2 - 40*n*d + 40*n - 6*d^3 +
          35*d^2 - 68*d + 44,576*n^3 - 576*n^2*d + 576*n^2 + 144*n*d^2 - 144*n*
          d - 144*n - 72*d^2 + 216*d - 144)
           + m0denJ0011X10110( - 2 + n)*rat(30*n*d^2 - 170*n*d + 240*n - 18*d^3
-          + 135*d^2 - 331*d + 264,576*n^3 - 576*n^2*d + 576*n^2 + 144*n*d^2 - 
+          + 135*d^2 - 331*d + 264,576*n^3 - 576*n^2*d + 576*n^2 + 144*n*d^2 -
          144*n*d - 144*n - 72*d^2 + 216*d - 144)
           + m0denJ0021X00110( - 2 + n)*rat( - 20*n^3*d + 40*n^3 + 54*n^2*d^2
           - 142*n^2*d + 68*n^2 - 36*n*d^3 + 123*n*d^2 - 112*n*d + 20*n + 6*d^4
@@ -8465,7 +8466,7 @@ ModuleOption,minimum,$irep;
          d - 720*n^3 - 72*n^2*d^3 - 432*n^2*d^2 + 720*n^2*d + 108*n*d^3 - 108*
          n*d^2 - 216*n*d + 144*n - 36*d^3 + 108*d^2 - 72*d)
           + m0denJ0021X10110( - 2 + n)*rat( - 140*n^2 + 174*n*d - 74*n - 54*
-         d^2 + 51*d + 88,288*n^3 - 288*n^2*d + 288*n^2 + 72*n*d^2 - 72*n*d - 
+         d^2 + 51*d + 88,288*n^3 - 288*n^2*d + 288*n^2 + 72*n*d^2 - 72*n*d -
          72*n - 36*d^2 + 108*d - 72)
           )
 
@@ -8479,12 +8480,12 @@ ModuleOption,minimum,$irep;
           + 432*n^3*d^2 + 432*n^3*d - 720*n^3 - 72*n^2*d^3 - 432*n^2*d^2 + 720
          *n^2*d + 108*n*d^3 - 108*n*d^2 - 216*n*d + 144*n - 36*d^3 + 108*d^2
           - 72*d)
-          + m0denJ0011X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 - 
+          + m0denJ0011X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 -
          16*n*d + 24*n + 4*d^2 - 12*d + 8)
-          + m0denJ0011X10110( - 1 + n)*rat( - 54*n^2*d + 144*n^2 - 66*n*d^2 + 
+          + m0denJ0011X10110( - 1 + n)*rat( - 54*n^2*d + 144*n^2 - 66*n*d^2 +
          509*n*d - 888*n + 54*d^3 - 447*d^2 + 1177*d - 984,576*n^3 - 576*n^2*d
           + 576*n^2 + 144*n*d^2 - 144*n*d - 144*n - 72*d^2 + 216*d - 144)
-          + m0denJ0011X11100( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,32*n^2 - 
+          + m0denJ0011X11100( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,32*n^2 -
          32*n*d + 48*n + 8*d^2 - 24*d + 16)
           + m0denJ0011X11110( - 1 + n)*rat(2*n - 3*d + 6,8*n - 4*d + 8)
           + m0denJ0011X00110( - 1 + n)*rat( - 60*n^2*d^3 + 460*n^2*d^2 - 1160*
@@ -8493,8 +8494,8 @@ ModuleOption,minimum,$irep;
          n^4*d + 432*n^3*d^2 + 432*n^3*d - 720*n^3 - 72*n^2*d^3 - 432*n^2*d^2
           + 720*n^2*d + 108*n*d^3 - 108*n*d^2 - 216*n*d + 144*n - 36*d^3 + 108
          *d^2 - 72*d)
-          + m0denJ0021X00110( - 1 + n)*rat(100*n^3*d - 200*n^3 - 70*n^2*d^2 - 
-         90*n^2*d + 460*n^2 + 285*n*d^2 - 880*n*d + 620*n - 30*d^3 + 45*d^2 + 
+          + m0denJ0021X00110( - 1 + n)*rat(100*n^3*d - 200*n^3 - 70*n^2*d^2 -
+         90*n^2*d + 460*n^2 + 285*n*d^2 - 880*n*d + 620*n - 30*d^3 + 45*d^2 +
          150*d - 240,288*n^5 - 432*n^4*d + 216*n^3*d^2 + 216*n^3*d - 360*n^3
           - 36*n^2*d^3 - 216*n^2*d^2 + 360*n^2*d + 54*n*d^3 - 54*n*d^2 - 108*n
          *d + 72*n - 18*d^3 + 54*d^2 - 36*d)
@@ -8509,7 +8510,7 @@ ModuleOption,minimum,$irep;
           )
 
        + delta_( - 2 + n) * (
-          + m0denJ0001X01110(0)*rat( - 3*d^5 + 56*d^4 - 374*d^3 + 1140*d^2 - 
+          + m0denJ0001X01110(0)*rat( - 3*d^5 + 56*d^4 - 374*d^3 + 1140*d^2 -
          1624*d + 880,108*d^3 - 1620*d^2 + 7992*d - 12960)
           + m0denJ0011X10110(0)*rat( - 252*d^3 + 2604*d^2 - 8407*d + 8680,1080
          *d^2 - 11880*d + 32400)
@@ -8524,12 +8525,12 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m0denJ0011X10110(n?{>1}) =
 
        + theta_( - 4 + n) * (
-          + m0denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,24*n^2 - 12*n*d + 
+          + m0denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,24*n^2 - 12*n*d +
          6*d - 6)
           )
 
        + theta_( - 3 + n) * (
-          + m0denJ0001X01110( - 2 + n)*rat(d^2 - 4*d + 4, - 24*n^2 + 12*n*d - 
+          + m0denJ0001X01110( - 2 + n)*rat(d^2 - 4*d + 4, - 24*n^2 + 12*n*d -
          6*d + 6)
           + m0denJ0011X10110( - 2 + n)*rat(3*d^2 - 17*d + 24, - 24*n^2 + 12*n*
          d - 6*d + 6)
@@ -8553,7 +8554,7 @@ ModuleOption,minimum,$irep;
           + 12*n^2*d^2 + 60*n^2*d - 12*n^2 - 18*n*d^2 - 6*n*d + 12*n + 6*d^2
           - 6*d)
           + m0denJ0021X00110( - 1 + n)*rat( - 20*n^2*d + 40*n^2 + 70*n*d - 140
-         *n - 10*d^2 + 40,24*n^4 - 24*n^3*d - 24*n^3 + 6*n^2*d^2 + 30*n^2*d - 
+         *n - 10*d^2 + 40,24*n^4 - 24*n^3*d - 24*n^3 + 6*n^2*d^2 + 30*n^2*d -
          6*n^2 - 9*n*d^2 - 3*n*d + 6*n + 3*d^2 - 3*d)
           + m0denJ0021X10110( - 1 + n)*rat( - 80*n + 9*d + 111,24*n^2 - 12*n*d
           + 6*d - 6)
@@ -8607,7 +8608,7 @@ ModuleOption,minimum,$irep;
           + 6*n - 3*d)
           + m0denJ0011X00110( - 1 + n)*rat( - 3*d^2 + 17*d - 24, - 6*n^2 + 3*n
          *d + 6*n - 3*d)
-          + m0denJ0021X00110( - 1 + n)*rat( - 20*n + 40,6*n^2 - 3*n*d - 6*n + 
+          + m0denJ0021X00110( - 1 + n)*rat( - 20*n + 40,6*n^2 - 3*n*d - 6*n +
          3*d)
           )
 
@@ -8631,7 +8632,7 @@ ModuleOption,minimum,$irep;
 
    id,ifmatch->sortme m0denJ0001X00110(n?{>1}) = 0;
 
-********************************************************************************                 
+********************************************************************************
 
 goto endrec;
 
@@ -8654,8 +8655,8 @@ ModuleOption,minimum,$irep;
 
 #do irep = 1,1
 #$irep = 1;
-                
-********************************************************************************             
+
+********************************************************************************
 
    id,ifmatch->sortme m1denJ2010X11100(n?{>1}) =
 
@@ -8667,9 +8668,9 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m1denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 48*n^2 + 
+          + m1denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 48*n^2 +
          48*n*d - 48*n - 48*d + 96)
-          + m1denJ0011X10110( - 2 + n)*rat(9*n*d^2 - 51*n*d + 72*n - 12*d^3 + 
+          + m1denJ0011X10110( - 2 + n)*rat(9*n*d^2 - 51*n*d + 72*n - 12*d^3 +
          83*d^2 - 181*d + 120, - 48*n^2 + 48*n*d - 48*n - 48*d + 96)
           + m1denJ0021X00110( - 2 + n)*rat(d - 2, - 24*n + 24*d - 48)
           + m1denJ0021X10110( - 2 + n)*rat(11*n*d - 22*n - 18*d^2 + 51*d - 2,
@@ -8700,7 +8701,7 @@ ModuleOption,minimum,$irep;
 
        + delta_( - 2 + n) * (
           + m1denJ0001X01110(0)*rat(d^3 - 6*d^2 + 12*d - 8,48*d - 192)
-          + m1denJ0011X10110(0)*rat( - 24*d^3 + 226*d^2 - 687*d + 680,240*d - 
+          + m1denJ0011X10110(0)*rat( - 24*d^3 + 226*d^2 - 687*d + 680,240*d -
          960)
           );
 
@@ -8880,12 +8881,12 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m1denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 48*n^2 + 
+          + m1denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 48*n^2 +
          48*n*d - 48*n - 48*d + 96)
-          + m1denJ0011X10110( - 2 + n)*rat(9*n*d^2 - 51*n*d + 72*n - 12*d^3 + 
+          + m1denJ0011X10110( - 2 + n)*rat(9*n*d^2 - 51*n*d + 72*n - 12*d^3 +
          83*d^2 - 181*d + 120, - 48*n^2 + 48*n*d - 48*n - 48*d + 96)
           + m1denJ0021X00110( - 2 + n)*rat(d - 2, - 24*n + 24*d - 48)
-          + m1denJ0021X10110( - 2 + n)*rat(20*n^2 - 9*n*d - 42*n - 18*d^2 + 
+          + m1denJ0021X10110( - 2 + n)*rat(20*n^2 - 9*n*d - 42*n - 18*d^2 +
          111*d - 122,48*n^2 - 48*n*d + 48*n + 48*d - 96)
           )
 
@@ -8909,7 +8910,7 @@ ModuleOption,minimum,$irep;
 
        + delta_( - 2 + n) * (
           + m1denJ0001X01110(0)*rat(d^3 - 6*d^2 + 12*d - 8,48*d - 192)
-          + m1denJ0011X10110(0)*rat( - 24*d^3 + 226*d^2 - 687*d + 680,240*d - 
+          + m1denJ0011X10110(0)*rat( - 24*d^3 + 226*d^2 - 687*d + 680,240*d -
          960)
           );
 
@@ -8924,7 +8925,7 @@ ModuleOption,minimum,$irep;
          *n*d - 32*n - 32*d + 64)
           + m1denJ0011X00110( - 1 + n)*rat( - 9*n*d^2 + 51*n*d - 72*n + 9*d^3
           - 60*d^2 + 123*d - 72, - 16*n^2 + 16*n*d - 16*n - 16*d + 32)
-          + m1denJ0021X00110( - 1 + n)*rat( - 7*n^2 - 2*n*d + 27*n + 9*d^2 - 
+          + m1denJ0021X00110( - 1 + n)*rat( - 7*n^2 - 2*n*d + 27*n + 9*d^2 -
          49*d + 52,8*n^2 - 8*n*d + 8*n + 8*d - 16)
           )
 
@@ -9046,9 +9047,9 @@ ModuleOption,minimum,$irep;
 
        + theta_( - 2 + n) * (
           + m1denJ0001X00110( - 1 + n)*rat( - 2*n + d + 2,2*n - 2)
-          );    
+          );
 
-********************************************************************************                 
+********************************************************************************
 
 goto endrec;
 
@@ -9071,8 +9072,8 @@ ModuleOption,minimum,$irep;
 
 #do irep = 1,1
 #$irep = 1;
-                
-********************************************************************************                 
+
+********************************************************************************
    id,ifmatch->sortme m3denJ2010X11100(n?{>1}) =
 
        + theta_( - 5 + n) * (
@@ -9164,7 +9165,7 @@ ModuleOption,minimum,$irep;
          d - 27*d + 54)
           + m3denJ0021X00110( - 3 + n)*rat( - 4*d + 8,54*n^2 - 27*n*d + 27*d
           - 54)
-          + m3denJ0021X10110( - 3 + n)*rat(8*n + 18*d - 76,54*n^2 - 27*n*d + 
+          + m3denJ0021X10110( - 3 + n)*rat(8*n + 18*d - 76,54*n^2 - 27*n*d +
          27*d - 54)
           )
 
@@ -9175,11 +9176,11 @@ ModuleOption,minimum,$irep;
          18*n^2 - 9*n*d + 9*d - 18)
           + m3denJ0011X10110( - 2 + n)*rat( - 18*n*d + 48*n + 42*d^2 - 184*d
           + 192,54*n^2 - 27*n*d + 27*d - 54)
-          + m3denJ0011X11100( - 2 + n)*rat(2*n*d - 4*n - 2*d^2 + 4*d,18*n^2 - 
+          + m3denJ0011X11100( - 2 + n)*rat(2*n*d - 4*n - 2*d^2 + 4*d,18*n^2 -
          9*n*d + 9*d - 18)
-          + m3denJ0011X11110( - 2 + n)*rat( - 8*n*d + 24*n + 12*d^2 - 52*d + 
+          + m3denJ0011X11110( - 2 + n)*rat( - 8*n*d + 24*n + 12*d^2 - 52*d +
          48,18*n^2 - 9*n*d + 9*d - 18)
-          + m3denJ0021X00110( - 2 + n)*rat(16*d - 32,54*n^2 - 27*n*d + 27*d - 
+          + m3denJ0021X00110( - 2 + n)*rat(16*d - 32,54*n^2 - 27*n*d + 27*d -
          54)
           + m3denJ0021X10110( - 2 + n)*rat(92*n - 126*d + 100,54*n^2 - 27*n*d
           + 27*d - 54)
@@ -9197,11 +9198,11 @@ ModuleOption,minimum,$irep;
          d - 9*d + 18)
           + m3denJ0011X01110( - 1 + n)*rat(8*d^2 - 40*d + 48, - 18*n^2 + 9*n*d
           - 9*d + 18)
-          + m3denJ0011X10110( - 1 + n)*rat( - 12*n*d + 32*n + 12*d^2 - 44*d + 
+          + m3denJ0011X10110( - 1 + n)*rat( - 12*n*d + 32*n + 12*d^2 - 44*d +
          32,18*n^2 - 9*n*d + 9*d - 18)
           + m3denJ0011X11100( - 1 + n)*rat(4*n*d - 8*n - 6*d^2 + 22*d - 20,18*
          n^2 - 9*n*d + 9*d - 18)
-          + m3denJ0011X11110( - 1 + n)*rat( - 16*n*d + 48*n + 20*d^2 - 84*d + 
+          + m3denJ0011X11110( - 1 + n)*rat( - 16*n*d + 48*n + 20*d^2 - 84*d +
          72,18*n^2 - 9*n*d + 9*d - 18)
           + m3denJ0011X00110( - 1 + n)*rat(6*d^2 - 28*d + 32, - 18*n^2 + 9*n*d
           - 9*d + 18)
@@ -9257,13 +9258,13 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m3denJ0001X01110( - 1 + n)*rat( - 10*n*d + 20*n + 14*d^2 - 56*d + 
+          + m3denJ0001X01110( - 1 + n)*rat( - 10*n*d + 20*n + 14*d^2 - 56*d +
          56,18*n^2 - 9*n*d + 9*d - 18)
           + m3denJ0001X11110( - 1 + n)*rat(6*n*d - 18*n - 5*d^2 + 19*d - 12,6*
          n^2 - 3*n*d + 3*d - 6)
           + m3denJ0011X01100( - 1 + n)*rat( - 2*n*d + 4*n - 3*d^2 + 20*d - 28,
          18*n^2 - 9*n*d + 9*d - 18)
-          + m3denJ0011X01110( - 1 + n)*rat( - 16*n*d + 48*n + 8*d^2 - 16*d - 
+          + m3denJ0011X01110( - 1 + n)*rat( - 16*n*d + 48*n + 8*d^2 - 16*d -
          24,18*n^2 - 9*n*d + 9*d - 18)
           + m3denJ0011X00110( - 1 + n)*rat(6*n*d - 16*n + 3*d^2 - 32*d + 64,18
          *n^2 - 9*n*d + 9*d - 18)
@@ -9535,7 +9536,7 @@ ModuleOption,minimum,$irep;
           + m3denJ0001X00110( - 1 + n)*rat( - 2*n + d + 2,6*n - 6)
           );
 
-********************************************************************************                 
+********************************************************************************
 
 goto endrec;
 
@@ -9558,8 +9559,8 @@ ModuleOption,minimum,$irep;
 
 #do irep = 1,1
 #$irep = 1;
-                
-********************************************************************************                 
+
+********************************************************************************
    id,ifmatch->sortme m4denJ2010X11100(n?{>1}) =
 
        + theta_( - 4 + n) * (
@@ -9572,7 +9573,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m4denJ0001X01110( - 2 + n)*rat( - d^2 + 4*d - 4, - 120*n + 60*d - 
+          + m4denJ0001X01110( - 2 + n)*rat( - d^2 + 4*d - 4, - 120*n + 60*d -
          60)
           + m4denJ0001X00110( - 2 + n)*rat(d^3 - 6*d^2 + 12*d - 8, - 480*n^2
           + 240*n*d + 240*n - 240*d + 240)
@@ -9589,7 +9590,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X01110( - 1 + n)*rat( - d^2 + 4*d - 4, - 30*n + 15*d - 
+          + m4denJ0001X01110( - 1 + n)*rat( - d^2 + 4*d - 4, - 30*n + 15*d -
          15)
           + m4denJ0001X00110( - 1 + n)*rat(d^3 - 6*d^2 + 12*d - 8, - 120*n^2
           + 60*n*d + 60*n - 60*d + 60)
@@ -9652,12 +9653,12 @@ ModuleOption,minimum,$irep;
        + theta_( - 4 + n) * (
           + m4denJ0021X00110( - 3 + n)*rat(n*d - 2*n - d^2 + d + 2,48*n^3 - 72
          *n^2*d + 72*n^2 + 24*n*d^2 - 72*n - 24*d^2 + 72*d - 48)
-          + m4denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,48*n^2 - 72*n*d + 
+          + m4denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,48*n^2 - 72*n*d +
          120*n + 24*d^2 - 72*d + 48)
           )
 
        + theta_( - 3 + n) * (
-          + m4denJ0001X01110( - 2 + n)*rat( - d^2 + 4*d - 4,48*n^2 - 72*n*d + 
+          + m4denJ0001X01110( - 2 + n)*rat( - d^2 + 4*d - 4,48*n^2 - 72*n*d +
          120*n + 24*d^2 - 72*d + 48)
           + m4denJ0001X00110( - 2 + n)*rat(d^3 - 6*d^2 + 12*d - 8,96*n^3 - 144
          *n^2*d + 144*n^2 + 48*n*d^2 - 144*n - 48*d^2 + 144*d - 96)
@@ -9669,21 +9670,21 @@ ModuleOption,minimum,$irep;
          *d + 18*n^2 + 6*n*d^2 - 18*n - 6*d^2 + 18*d - 12)
           + m4denJ0021X10110( - 2 + n)*rat( - 2*n + 9*d - 20,24*n^2 - 36*n*d
           + 60*n + 12*d^2 - 36*d + 24)
-          + m4denJ1011X01110( - 2 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 - 
+          + m4denJ1011X01110( - 2 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 -
          8*n*d - 8*n + 8*d - 8)
           + m4denJ1011X11110( - 2 + n)*rat( - 2*n + 3*d - 6,8*n - 4*d + 4)
           )
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X01110( - 1 + n)*rat( - 5*n^2*d^2 + 20*n^2*d - 20*n^2 + 
-         18*n*d^3 - 125*n*d^2 + 284*n*d - 212*n - 9*d^4 + 72*d^3 - 203*d^2 + 
-         236*d - 92,96*n^4 - 288*n^3*d + 480*n^3 + 264*n^2*d^2 - 720*n^2*d + 
+          + m4denJ0001X01110( - 1 + n)*rat( - 5*n^2*d^2 + 20*n^2*d - 20*n^2 +
+         18*n*d^3 - 125*n*d^2 + 284*n*d - 212*n - 9*d^4 + 72*d^3 - 203*d^2 +
+         236*d - 92,96*n^4 - 288*n^3*d + 480*n^3 + 264*n^2*d^2 - 720*n^2*d +
          360*n^2 - 72*n*d^3 + 120*n*d^2 + 360*n*d - 600*n + 72*d^3 - 384*d^2
           + 648*d - 336)
           + m4denJ0001X11110( - 1 + n)*rat(8*n^3*d - 16*n^3 - 28*n^2*d^2 + 120
          *n^2*d - 128*n^2 + 26*n*d^3 - 150*n*d^2 + 272*n*d - 152*n - 3*d^4 + 4
          *d^3 + 67*d^2 - 220*d + 188,64*n^4 - 192*n^3*d + 320*n^3 + 176*n^2*
-         d^2 - 480*n^2*d + 240*n^2 - 48*n*d^3 + 80*n*d^2 + 240*n*d - 400*n + 
+         d^2 - 480*n^2*d + 240*n^2 - 48*n*d^3 + 80*n*d^2 + 240*n*d - 400*n +
          48*d^3 - 256*d^2 + 432*d - 224)
           + m4denJ0001X00110( - 1 + n)*rat(14*n*d^3 - 84*n*d^2 + 168*n*d - 112
          *n - 39*d^4 + 364*d^3 - 1248*d^2 + 1872*d - 1040,768*n^4 - 2304*n^3*d
@@ -9695,21 +9696,21 @@ ModuleOption,minimum,$irep;
           + m4denJ0011X01110( - 1 + n)*rat(n*d^2 - 5*n*d + 6*n - d^3 + 6*d^2
           - 11*d + 6,8*n^3 - 12*n^2*d + 12*n^2 + 4*n*d^2 - 12*n - 4*d^2 + 12*d
           - 8)
-          + m4denJ0011X10110( - 1 + n)*rat( - 9*n*d + 24*n + 15*d^2 - 67*d + 
+          + m4denJ0011X10110( - 1 + n)*rat( - 9*n*d + 24*n + 15*d^2 - 67*d +
          72,48*n^2 - 72*n*d + 120*n + 24*d^2 - 72*d + 48)
-          + m4denJ0011X11100( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 - 
+          + m4denJ0011X11100( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 -
          24*n*d + 40*n + 8*d^2 - 24*d + 16)
           + m4denJ0011X11110( - 1 + n)*rat( - 2*n*d + 6*n + 3*d^2 - 15*d + 18,
          8*n^2 - 12*n*d + 20*n + 4*d^2 - 12*d + 8)
           + m4denJ0011X00110( - 1 + n)*rat(18*n*d^2 - 84*n*d + 96*n - 21*d^3
-          + 116*d^2 - 196*d + 96,192*n^3 - 288*n^2*d + 288*n^2 + 96*n*d^2 - 
+          + 116*d^2 - 196*d + 96,192*n^3 - 288*n^2*d + 288*n^2 + 96*n*d^2 -
          288*n - 96*d^2 + 288*d - 192)
           + m4denJ0021X00110( - 1 + n)*rat( - 26*n*d + 52*n + d^2 + 76*d - 156
-         ,96*n^3 - 144*n^2*d + 144*n^2 + 48*n*d^2 - 144*n - 48*d^2 + 144*d - 
+         ,96*n^3 - 144*n^2*d + 144*n^2 + 48*n*d^2 - 144*n - 48*d^2 + 144*d -
          96)
-          + m4denJ0021X10110( - 1 + n)*rat(11*n - 6*d - 13,24*n^2 - 36*n*d + 
+          + m4denJ0021X10110( - 1 + n)*rat(11*n - 6*d - 13,24*n^2 - 36*n*d +
          60*n + 12*d^2 - 36*d + 24)
-          + m4denJ1001X11110( - 1 + n)*rat( - d^2 + 6*d - 9,8*n^2 - 16*n*d + 
+          + m4denJ1001X11110( - 1 + n)*rat( - d^2 + 6*d - 9,8*n^2 - 16*n*d +
          32*n + 6*d^2 - 20*d + 14)
           + m4denJ1011X01110( - 1 + n)*rat(2*n*d - 4*n - 5*d^2 + 18*d - 16,32*
          n^2 - 16*n*d - 16*n + 16*d - 16)
@@ -9738,7 +9739,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m4denJ0001X00110( - 2 + n)*rat(d^2 - 4*d + 4, - 48*n^2 + 24*n*d + 
+          + m4denJ0001X00110( - 2 + n)*rat(d^2 - 4*d + 4, - 48*n^2 + 24*n*d +
          24*n - 24*d + 24)
           + m4denJ0011X00110( - 2 + n)*rat(3*d^2 - 17*d + 24, - 48*n^2 + 24*n*
          d + 24*n - 24*d + 24)
@@ -9748,8 +9749,8 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X01110( - 1 + n)*rat(n^2*d - 2*n^2 - 2*n*d^2 + 9*n*d - 
-         10*n + d^3 - 6*d^2 + 11*d - 6,8*n^3 - 12*n^2*d + 12*n^2 + 4*n*d^2 - 
+          + m4denJ0001X01110( - 1 + n)*rat(n^2*d - 2*n^2 - 2*n*d^2 + 9*n*d -
+         10*n + d^3 - 6*d^2 + 11*d - 6,8*n^3 - 12*n^2*d + 12*n^2 + 4*n*d^2 -
          12*n - 4*d^2 + 12*d - 8)
           + m4denJ0001X11110( - 1 + n)*rat(d^2 - 5*d + 6, - 8*n^2 + 8*n*d - 8*
          n - 8*d + 16)
@@ -9760,7 +9761,7 @@ ModuleOption,minimum,$irep;
          *d - 16*n + 16*d - 16)
           + m4denJ0011X01110( - 1 + n)*rat( - n*d + 3*n + d^2 - 4*d + 3,4*n^2
           - 2*n*d - 2*n + 2*d - 2)
-          + m4denJ0011X00110( - 1 + n)*rat( - 18*n*d + 48*n + 21*d^2 - 74*d + 
+          + m4denJ0011X00110( - 1 + n)*rat( - 18*n*d + 48*n + 21*d^2 - 74*d +
          48,96*n^2 - 48*n*d - 48*n + 48*d - 48)
           + m4denJ0021X00110( - 1 + n)*rat(22*n - d - 74,48*n^2 - 24*n*d - 24*
          n + 24*d - 24)
@@ -9809,7 +9810,7 @@ ModuleOption,minimum,$irep;
          *n^2 - 80*n*d + 176*n + 48*d^2 - 208*d + 224)
           + m4denJ0001X00110( - 1 + n)*rat(6*n*d^3 - 36*n*d^2 + 72*n*d - 48*n
           - 3*d^4 + 12*d^3 - 48*d + 48,256*n^4 - 768*n^3*d + 1280*n^3 + 704*
-         n^2*d^2 - 1920*n^2*d + 960*n^2 - 192*n*d^3 + 320*n*d^2 + 960*n*d - 
+         n^2*d^2 - 1920*n^2*d + 960*n^2 - 192*n*d^3 + 320*n*d^2 + 960*n*d -
          1600*n + 192*d^3 - 1024*d^2 + 1728*d - 896)
           + m4denJ1001X11110( - 1 + n)*rat( - n + 2*d - 5,4*n - 6*d + 14)
           );
@@ -9817,7 +9818,7 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m4denJ1001X01110(n?{>1}) =
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,8*n^2 - 
+          + m4denJ0001X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,8*n^2 -
          12*n*d + 20*n + 4*d^2 - 12*d + 8)
           + m4denJ0001X11110( - 1 + n)*rat(n*d - 4*n + d - 2,8*n^2 - 8*n*d + 8
          *n + 8*d - 16)
@@ -9845,7 +9846,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m4denJ0001X01110( - 2 + n)*rat( - d^2 + 4*d - 4, - 120*n + 60*d - 
+          + m4denJ0001X01110( - 2 + n)*rat( - d^2 + 4*d - 4, - 120*n + 60*d -
          60)
           + m4denJ0001X00110( - 2 + n)*rat(d^3 - 6*d^2 + 12*d - 8, - 480*n^2
           + 240*n*d + 240*n - 240*d + 240)
@@ -9859,7 +9860,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X01110( - 1 + n)*rat( - d^2 + 4*d - 4, - 30*n + 15*d - 
+          + m4denJ0001X01110( - 1 + n)*rat( - d^2 + 4*d - 4, - 30*n + 15*d -
          15)
           + m4denJ0001X00110( - 1 + n)*rat(d^3 - 6*d^2 + 12*d - 8, - 120*n^2
           + 60*n*d + 60*n - 60*d + 60)
@@ -9869,7 +9870,7 @@ ModuleOption,minimum,$irep;
          n^2 + 240*n*d + 240*n - 240*d + 240)
           + m4denJ0021X00110( - 1 + n)*rat(15*n*d - 30*n + 7*d^2 - 73*d + 118,
          240*n^2 - 120*n*d - 120*n + 120*d - 120)
-          + m4denJ0021X10110( - 1 + n)*rat( - 46*n + 9*d + 50,120*n - 60*d + 
+          + m4denJ0021X10110( - 1 + n)*rat( - 46*n + 9*d + 50,120*n - 60*d +
          60)
           )
 
@@ -9912,7 +9913,7 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m4denJ0011X11110(n?{>1}) =
 
        + theta_( - 4 + n) * (
-          + m4denJ0021X00110( - 3 + n)*rat(n*d - 2*n - d^2 + d + 2,96*n^3 - 
+          + m4denJ0021X00110( - 3 + n)*rat(n*d - 2*n - d^2 + d + 2,96*n^3 -
          144*n^2*d + 144*n^2 + 48*n*d^2 - 144*n - 48*d^2 + 144*d - 96)
           + m4denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,96*n^2 - 144*n*d
           + 240*n + 48*d^2 - 144*d + 96)
@@ -9921,7 +9922,7 @@ ModuleOption,minimum,$irep;
        + theta_( - 3 + n) * (
           + m4denJ0001X01110( - 2 + n)*rat( - d^2 + 4*d - 4,96*n^2 - 144*n*d
           + 240*n + 48*d^2 - 144*d + 96)
-          + m4denJ0001X00110( - 2 + n)*rat(d^3 - 6*d^2 + 12*d - 8,192*n^3 - 
+          + m4denJ0001X00110( - 2 + n)*rat(d^3 - 6*d^2 + 12*d - 8,192*n^3 -
          288*n^2*d + 288*n^2 + 96*n*d^2 - 288*n - 96*d^2 + 288*d - 192)
           + m4denJ0011X10110( - 2 + n)*rat( - 3*d^2 + 17*d - 24,96*n^2 - 144*n
          *d + 240*n + 48*d^2 - 144*d + 96)
@@ -9934,27 +9935,27 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X01110( - 1 + n)*rat( - d^2 + 4*d - 4,24*n^2 - 36*n*d + 
+          + m4denJ0001X01110( - 1 + n)*rat( - d^2 + 4*d - 4,24*n^2 - 36*n*d +
          60*n + 12*d^2 - 36*d + 24)
           + m4denJ0001X00110( - 1 + n)*rat(d^3 - 6*d^2 + 12*d - 8,48*n^3 - 72*
          n^2*d + 72*n^2 + 24*n*d^2 - 72*n - 24*d^2 + 72*d - 48)
           + m4denJ0011X01100( - 1 + n)*rat( - 2*n*d^2 + 8*n*d - 8*n + d^3 - 2*
          d^2 - 4*d + 8,128*n^3 - 192*n^2*d + 192*n^2 + 64*n*d^2 - 192*n - 64*
          d^2 + 192*d - 128)
-          + m4denJ0011X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 - 
+          + m4denJ0011X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,16*n^2 -
          24*n*d + 40*n + 8*d^2 - 24*d + 16)
-          + m4denJ0011X10110( - 1 + n)*rat( - 9*n*d + 24*n + 15*d^2 - 67*d + 
+          + m4denJ0011X10110( - 1 + n)*rat( - 9*n*d + 24*n + 15*d^2 - 67*d +
          72,96*n^2 - 144*n*d + 240*n + 48*d^2 - 144*d + 96)
-          + m4denJ0011X11100( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,32*n^2 - 
+          + m4denJ0011X11100( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,32*n^2 -
          48*n*d + 80*n + 16*d^2 - 48*d + 32)
           + m4denJ0011X11110( - 1 + n)*rat( - 2*n + 3*d - 6,8*n - 8*d + 16)
           + m4denJ0011X00110( - 1 + n)*rat(18*n*d^2 - 84*n*d + 96*n - 21*d^3
-          + 116*d^2 - 196*d + 96,384*n^3 - 576*n^2*d + 576*n^2 + 192*n*d^2 - 
+          + 116*d^2 - 196*d + 96,384*n^3 - 576*n^2*d + 576*n^2 + 192*n*d^2 -
          576*n - 192*d^2 + 576*d - 384)
-          + m4denJ0021X00110( - 1 + n)*rat( - 38*n*d + 76*n + 13*d^2 + 28*d - 
+          + m4denJ0021X00110( - 1 + n)*rat( - 38*n*d + 76*n + 13*d^2 + 28*d -
          108,192*n^3 - 288*n^2*d + 288*n^2 + 96*n*d^2 - 288*n - 96*d^2 + 288*d
           - 192)
-          + m4denJ0021X10110( - 1 + n)*rat(23*n - 18*d + 11,48*n^2 - 72*n*d + 
+          + m4denJ0021X10110( - 1 + n)*rat(23*n - 18*d + 11,48*n^2 - 72*n*d +
          120*n + 24*d^2 - 72*d + 48)
           )
 
@@ -9997,7 +9998,7 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m4denJ0001X00110( - 2 + n)*rat(d^2 - 4*d + 4, - 96*n^2 + 48*n*d + 
+          + m4denJ0001X00110( - 2 + n)*rat(d^2 - 4*d + 4, - 96*n^2 + 48*n*d +
          48*n - 48*d + 48)
           + m4denJ0011X00110( - 2 + n)*rat(3*d^2 - 17*d + 24, - 96*n^2 + 48*n*
          d + 48*n - 48*d + 48)
@@ -10006,14 +10007,14 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X00110( - 1 + n)*rat(d^2 - 4*d + 4, - 24*n^2 + 12*n*d + 
+          + m4denJ0001X00110( - 1 + n)*rat(d^2 - 4*d + 4, - 24*n^2 + 12*n*d +
          12*n - 12*d + 12)
           + m4denJ0011X01100( - 1 + n)*rat(2*n*d - 4*n - d^2 + 4,64*n^2 - 32*n
          *d - 32*n + 32*d - 32)
           + m4denJ0011X01110( - 1 + n)*rat( - n + d - 1,4*n - 2*d + 2)
-          + m4denJ0011X00110( - 1 + n)*rat( - 18*n*d + 48*n + 21*d^2 - 74*d + 
+          + m4denJ0011X00110( - 1 + n)*rat( - 18*n*d + 48*n + 21*d^2 - 74*d +
          48,192*n^2 - 96*n*d - 96*n + 96*d - 96)
-          + m4denJ0021X00110( - 1 + n)*rat(46*n - 13*d - 62,96*n^2 - 48*n*d - 
+          + m4denJ0021X00110( - 1 + n)*rat(46*n - 13*d - 62,96*n^2 - 48*n*d -
          48*n + 48*d - 48)
           )
 
@@ -10041,7 +10042,7 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m4denJ0001X11110(n?{>1}) =
 
        + theta_( - 2 + n) * (
-          + m4denJ0001X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,8*n^2 - 
+          + m4denJ0001X01110( - 1 + n)*rat(n*d - 2*n - d^2 + 3*d - 2,8*n^2 -
          12*n*d + 20*n + 4*d^2 - 12*d + 8)
           + m4denJ0001X11110( - 1 + n)*rat( - 2*n + 3*d - 6,8*n - 8*d + 16)
           + m4denJ0001X00110( - 1 + n)*rat( - 2*n*d^2 + 8*n*d - 8*n + d^3 - 2*
@@ -10063,7 +10064,7 @@ ModuleOption,minimum,$irep;
           + m4denJ0001X00110( - 1 + n)*rat( - 2*n + d + 2,8*n - 8)
           );
 
-********************************************************************************                 
+********************************************************************************
 
 goto endrec;
 
@@ -10086,8 +10087,8 @@ ModuleOption,minimum,$irep;
 
 #do irep = 1,1
 #$irep = 1;
-                
-********************************************************************************             
+
+********************************************************************************
 
    id,ifmatch->sortme m9denJ2010X11100(n?{>1}) =
 
@@ -10099,9 +10100,9 @@ ModuleOption,minimum,$irep;
           )
 
        + theta_( - 3 + n) * (
-          + m9denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 720*n^2 + 
+          + m9denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 720*n^2 +
          720*n*d - 720*n - 720*d + 1440)
-          + m9denJ0011X10110( - 2 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 12*d^3 - 
+          + m9denJ0011X10110( - 2 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 12*d^3 -
          95*d^2 + 249*d - 216, - 2160*n^2 + 2160*n*d - 2160*n - 2160*d + 4320)
           + m9denJ0021X00110( - 2 + n)*rat(d - 2, - 360*n + 360*d - 720)
           + m9denJ0021X10110( - 2 + n)*rat(19*n*d - 70*n + 6*d^2 + 35*d - 146,
@@ -10118,10 +10119,10 @@ ModuleOption,minimum,$irep;
           + m9denJ0011X10110( - 1 + n)*rat(15*n*d^2 - 85*n*d + 120*n + 72*d^3
           - 555*d^2 + 1409*d - 1176, - 2160*n^2 + 2160*n*d - 2160*n - 2160*d
           + 4320)
-          + m9denJ0011X00110( - 1 + n)*rat( - 3*d^3 + 23*d^2 - 58*d + 48, - 
+          + m9denJ0011X00110( - 1 + n)*rat( - 3*d^3 + 23*d^2 - 58*d + 48, -
          1080*n^2 + 1080*n*d - 1080*n - 1080*d + 2160)
           + m9denJ0021X00110( - 1 + n)*rat(d - 2, - 45*n + 45*d - 90)
-          + m9denJ0021X10110( - 1 + n)*rat(41*n*d - 143*n + 15*d^2 + 31*d - 
+          + m9denJ0021X10110( - 1 + n)*rat(41*n*d - 143*n + 15*d^2 + 31*d -
          208,360*n^2 - 360*n*d + 360*n + 360*d - 720)
           + 1/( - 360 + 360*n)*m9denJ2010X11100( - 1 + n)*n*rat(-157,1)
           + 1/( - 360 + 360*n)*m9denJ2010X11100( - 1 + n)*rat(314,1)
@@ -10149,7 +10150,7 @@ ModuleOption,minimum,$irep;
        + theta_( - 2 + n) * (
           + m9denJ0001X00110( - 1 + n)*rat(d^3 - 4*d^2 + 4*d, - 288*n^2 + 288*
          n*d - 288*n - 288*d + 576)
-          + m9denJ0011X00110( - 1 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 9*d^3 - 
+          + m9denJ0011X00110( - 1 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 9*d^3 -
          72*d^2 + 191*d - 168, - 432*n^2 + 432*n*d - 432*n - 432*d + 864)
           + m9denJ0021X00110( - 1 + n)*rat(n*d - 3*n + 3*d^2 - d - 24,72*n^2
           - 72*n*d + 72*n + 72*d - 144)
@@ -10308,14 +10309,14 @@ ModuleOption,minimum,$irep;
    id,ifmatch->sortme m9denJ0021X10110(n?{>1}) =
 
        + theta_( - 4 + n) * (
-          + m9denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,720*n - 720*d + 
+          + m9denJ0021X10110( - 3 + n)*rat( - 2*n + 3*d - 2,720*n - 720*d +
          1440)
           )
 
        + theta_( - 3 + n) * (
-          + m9denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 720*n^2 + 
+          + m9denJ0001X01110( - 2 + n)*rat(d^3 - 5*d^2 + 8*d - 4, - 720*n^2 +
          720*n*d - 720*n - 720*d + 1440)
-          + m9denJ0011X10110( - 2 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 12*d^3 - 
+          + m9denJ0011X10110( - 2 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 12*d^3 -
          95*d^2 + 249*d - 216, - 2160*n^2 + 2160*n*d - 2160*n - 2160*d + 4320)
           + m9denJ0021X00110( - 2 + n)*rat(d - 2, - 360*n + 360*d - 720)
           + m9denJ0021X10110( - 2 + n)*rat( - 44*n^2 + 63*n*d - 26*n + 6*d^2
@@ -10330,7 +10331,7 @@ ModuleOption,minimum,$irep;
           + m9denJ0011X10110( - 1 + n)*rat(15*n*d^2 - 85*n*d + 120*n + 72*d^3
           - 555*d^2 + 1409*d - 1176, - 2160*n^2 + 2160*n*d - 2160*n - 2160*d
           + 4320)
-          + m9denJ0011X00110( - 1 + n)*rat( - 3*d^3 + 23*d^2 - 58*d + 48, - 
+          + m9denJ0011X00110( - 1 + n)*rat( - 3*d^3 + 23*d^2 - 58*d + 48, -
          1080*n^2 + 1080*n*d - 1080*n - 1080*d + 2160)
           + m9denJ0021X00110( - 1 + n)*rat(d - 2, - 45*n + 45*d - 90)
           + m9denJ0021X10110( - 1 + n)*rat( - 157*n^2 + 198*n*d - 143*n + 15*
@@ -10356,9 +10357,9 @@ ModuleOption,minimum,$irep;
        + theta_( - 2 + n) * (
           + m9denJ0001X00110( - 1 + n)*rat(d^3 - 4*d^2 + 4*d, - 288*n^2 + 288*
          n*d - 288*n - 288*d + 576)
-          + m9denJ0011X00110( - 1 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 9*d^3 - 
+          + m9denJ0011X00110( - 1 + n)*rat(3*n*d^2 - 17*n*d + 24*n + 9*d^3 -
          72*d^2 + 191*d - 168, - 432*n^2 + 432*n*d - 432*n - 432*d + 864)
-          + m9denJ0021X00110( - 1 + n)*rat( - 17*n^2 + 18*n*d - 3*n + 3*d^2 - 
+          + m9denJ0021X00110( - 1 + n)*rat( - 17*n^2 + 18*n*d - 3*n + 3*d^2 -
          35*d + 44,72*n^2 - 72*n*d + 72*n + 72*d - 144)
           )
 
@@ -10482,7 +10483,7 @@ ModuleOption,minimum,$irep;
           + m9denJ0001X00110( - 1 + n)*rat( - 2*n + d + 2,18*n - 18)
           );
 
-********************************************************************************                 
+********************************************************************************
 
 goto endrec;
 
@@ -10505,8 +10506,8 @@ ModuleOption,minimum,$irep;
 
 #do irep = 1,1
 #$irep = 1;
-                
-********************************************************************************                 
+
+********************************************************************************
    id,ifmatch->sortme numJ2010X11100(n?pos_) =
 
        + theta_( - 3 + n) * (
@@ -10522,10 +10523,10 @@ ModuleOption,minimum,$irep;
        + theta_( - 2 + n) * (
           + numJ0001X01110( - 2 + n)*rat( - 16 + 16*d - 4*d^2, - 8 + 3*d + 2*n
          )
-          + numJ0011X10110( - 2 + n)*rat( - 168 + 119*d - 21*d^2, - 8 + 3*d + 
+          + numJ0011X10110( - 2 + n)*rat( - 168 + 119*d - 21*d^2, - 8 + 3*d +
          2*n)
           + numJ0021X00110( - 2 + n)*rat(40 - 20*d, - 8 + 3*d + 2*n)
-          + numJ0021X10110( - 2 + n)*rat(512 - 138*d - 468*n + 156*n*d, - 8 + 
+          + numJ0021X10110( - 2 + n)*rat(512 - 138*d - 468*n + 156*n*d, - 8 +
          3*d - 6*n + 3*n*d + 2*n^2)
           + 49/(1 + n)*numJ2010X11100( - 2 + n)
           - 49/(1 + n)*numJ2010X11100( - 2 + n)*n
@@ -10563,7 +10564,7 @@ ModuleOption,minimum,$irep;
        + theta_( - 1 + n) * (
           + numJ0001X00110( - 1 + n)*rat(4 - 4*d + d^2, - 4 + 2*d + 2*n)
           + numJ0011X00110( - 1 + n)*rat(24 - 17*d + 3*d^2, - 4 + 2*d + 2*n)
-          + numJ0021X00110( - 1 + n)*rat(30*n - 10*n*d, - 2 + d - n + n*d + 
+          + numJ0021X00110( - 1 + n)*rat(30*n - 10*n*d, - 2 + d - n + n*d +
          n^2)
           + 10/(1 + n)*numJ2010X01100( - 1 + n)*n
           );
@@ -10717,7 +10718,7 @@ ModuleOption,minimum,$irep;
        + theta_( - 2 + n) * (
           + numJ0001X01110( - 2 + n)*rat( - 16 + 16*d - 4*d^2, - 8 + 3*d + 2*n
          )
-          + numJ0011X10110( - 2 + n)*rat( - 168 + 119*d - 21*d^2, - 8 + 3*d + 
+          + numJ0011X10110( - 2 + n)*rat( - 168 + 119*d - 21*d^2, - 8 + 3*d +
          2*n)
           + numJ0021X00110( - 2 + n)*rat(40 - 20*d, - 8 + 3*d + 2*n)
           + numJ0021X10110( - 2 + n)*rat(120 + 9*d - 98*n, - 8 + 3*d + 2*n)
@@ -10859,7 +10860,7 @@ ModuleOption,minimum,$irep;
 
    id,ifmatch->sortme numJ0001X00110(n?pos_) = 0;
 
-********************************************************************************                 
+********************************************************************************
 
 goto endrec;
 
@@ -10881,13 +10882,13 @@ ModuleOption,minimum,$irep;
 *--#[ fmft :
 #procedure fmft
 
-*       Only if massive denominators present in TERM        
-        if((count(d1,1) != 0) || (count(d2,1) != 0) || (count(d3,1) != 0) || (count(d4,1) != 0) || (count(d5,1) != 0) || (count(d6,1) != 0) || (count(d7,1) != 0) || (count(d8,1) != 0) || (count(d9,1) != 0) || (count(d10,1) != 0)) 
+*       Only if massive denominators present in TERM
+        if((count(d1,1) != 0) || (count(d2,1) != 0) || (count(d3,1) != 0) || (count(d4,1) != 0) || (count(d5,1) != 0) || (count(d6,1) != 0) || (count(d7,1) != 0) || (count(d8,1) != 0) || (count(d9,1) != 0) || (count(d10,1) != 0))
         Multiply intFMFT;
 
 
-*       rewrite scalar products in terms of denominators        
-        #call sp2den(FMFT)        
+*       rewrite scalar products in terms of denominators
+        #call sp2den(FMFT)
 
         if(count(intFMFT,1));
 
@@ -10911,13 +10912,13 @@ ModuleOption,minimum,$irep;
         exit "We can not map topology with 9 or higher number of lines on H or X";
         endif;
 
-*       First we remap to simpler topologies BMW and FG        
+*       First we remap to simpler topologies BMW and FG
         #call mapBMW(X)
         #call mapFG(X)
 
-*       Only after mapping on simpler we start to reduce top level topologies        
+*       Only after mapping on simpler we start to reduce top level topologies
         #message
-        #message reduction X started                 
+        #message reduction X started
         #message
         #call redX
         #call mapBMW(X)
@@ -10929,7 +10930,7 @@ ModuleOption,minimum,$irep;
 
 
         #message
-        #message reduction H started                 
+        #message reduction H started
         #message
         #call redH
         #printtimes
@@ -10937,163 +10938,163 @@ ModuleOption,minimum,$irep;
         #call mapBMW(H)
         #call mapFG(H)
         #message
-        #message reduction BMW started                 
+        #message reduction BMW started
         #message
         #call redBMW
         #call mapFG(BMW)
         #printtimes
-        
+
         if(count(intX,1,intH,1,intBMW,1) > 0);
         exit "High-level topologies X,H,BMW not reduced";
         endif;
         .sort:redX-H-BMW;
 
-*       TODO:        
-*       Improved power expand in numerator        
+*       TODO:
+*       Improved power expand in numerator
         id num(x?,y?)=x^y;
         .sort:mapFG;
 
 
-        
+
         #message
-        #message reduction FG started                 
+        #message reduction FG started
         #message
         #call redFGnew
         #printtimes
 
-*       Numerator reduction is based on topology with (pp^n5)        
+*       Numerator reduction is based on topology with (pp^n5)
 
 *       Integrals with denominator with power n5 now have argument (n5), n5 > 0
-*       If there is no denominator integral is ...num(0)       
+*       If there is no denominator integral is ...num(0)
 
 
         if(count(intFG,1));
-*       Rewrite in numerater everithing in terms of pp        
-        id [pp-tmm]^n5?pos_ = (pp - tmm)^n5; 
-*       Set mass to one        
-        Multiply replace_(tmm,1);        
+*       Rewrite in numerater everithing in terms of pp
+        id [pp-tmm]^n5?pos_ = (pp - tmm)^n5;
+*       Set mass to one
+        Multiply replace_(tmm,1);
         endif;
 
-*         
+*
 *       FxG
-*         
+*
         id intFG*TFI(1,1,1,1,1)*Gx11/pp^n5?pos_          = int1d*m0denJ1011X11110(n5);
         id intFG*TFI(1,1,1,1,1)*Gx11/[pp-tmm]^n5?pos_    = int1d*m1denJ1011X11110(n5);
         id intFG*TFI(1,1,1,1,1)*Gx11/[pp-3*tmm]^n5?pos_  = int1d*m3denJ1011X11110(n5);
         id intFG*TFI(1,1,1,1,1)*Gx11/[pp-4*tmm]^n5?pos_  = int1d*m4denJ1011X11110(n5);
         id intFG*TFI(1,1,1,1,1)*Gx11/[pp-9*tmm]^n5?pos_  = int1d*m9denJ1011X11110(n5);
         id intFG*TFI(1,1,1,1,1)*Gx11*pp^n5?pos0_         =   int1d*numJ1011X11110(n5);
-*         
+*
 *       VxG
-*         
+*
         id intFG*TFI(0,1,1,1,1)*Gx11/pp^n5?pos_          = int1d*m0denJ0011X11110(n5);
         id intFG*TFI(0,1,1,1,1)*Gx11/[pp-tmm]^n5?pos_    = int1d*m1denJ0011X11110(n5);
         id intFG*TFI(0,1,1,1,1)*Gx11/[pp-3*tmm]^n5?pos_  = int1d*m3denJ0011X11110(n5);
         id intFG*TFI(0,1,1,1,1)*Gx11/[pp-4*tmm]^n5?pos_  = int1d*m4denJ0011X11110(n5);
         id intFG*TFI(0,1,1,1,1)*Gx11/[pp-9*tmm]^n5?pos_  = int1d*m9denJ0011X11110(n5);
         id intFG*TFI(0,1,1,1,1)*Gx11*pp^n5?pos0_         =   int1d*numJ0011X11110(n5);
-*         
+*
 *       J2xG
-*         
+*
         id intFG*TFI(2,0,0,1,1)*Gx11/pp^n5?pos_          = int1d*m0denJ2010X11100(n5);
         id intFG*TFI(2,0,0,1,1)*Gx11/[pp-tmm]^n5?pos_    = int1d*m1denJ2010X11100(n5);
         id intFG*TFI(2,0,0,1,1)*Gx11/[pp-3*tmm]^n5?pos_  = int1d*m3denJ2010X11100(n5);
         id intFG*TFI(2,0,0,1,1)*Gx11/[pp-4*tmm]^n5?pos_  = int1d*m4denJ2010X11100(n5);
         id intFG*TFI(2,0,0,1,1)*Gx11/[pp-9*tmm]^n5?pos_  = int1d*m9denJ2010X11100(n5);
         id intFG*TFI(2,0,0,1,1)*Gx11*pp^n5?pos0_         =   int1d*numJ2010X11100(n5);
-*         
-*       J1xG        
-*         
+*
+*       J1xG
+*
         id intFG*TFI(1,0,0,1,1)*Gx11/pp^n5?pos_          = int1d*m0denJ1010X11100(n5);
         id intFG*TFI(1,0,0,1,1)*Gx11/[pp-tmm]^n5?pos_    = int1d*m1denJ1010X11100(n5);
         id intFG*TFI(1,0,0,1,1)*Gx11/[pp-3*tmm]^n5?pos_  = int1d*m3denJ1010X11100(n5);
         id intFG*TFI(1,0,0,1,1)*Gx11/[pp-4*tmm]^n5?pos_  = int1d*m4denJ1010X11100(n5);
         id intFG*TFI(1,0,0,1,1)*Gx11/[pp-9*tmm]^n5?pos_  = int1d*m9denJ1010X11100(n5);
         id intFG*TFI(1,0,0,1,1)*Gx11*pp^n5?pos0_         =   int1d*numJ1010X11100(n5);
-*         
-*       FxT1        
-*         
+*
+*       FxT1
+*
         id intFG*TFI(1,1,1,1,1)*T1x1/pp^n5?pos_          = int1d*m0denJ1011X01110(n5);
         id intFG*TFI(1,1,1,1,1)*T1x1/[pp-tmm]^n5?pos_    = int1d*m1denJ1011X01110(n5);
         id intFG*TFI(1,1,1,1,1)*T1x1/[pp-3*tmm]^n5?pos_  = int1d*m3denJ1011X01110(n5);
         id intFG*TFI(1,1,1,1,1)*T1x1/[pp-4*tmm]^n5?pos_  = int1d*m4denJ1011X01110(n5);
         id intFG*TFI(1,1,1,1,1)*T1x1/[pp-9*tmm]^n5?pos_  = int1d*m9denJ1011X01110(n5);
         id intFG*TFI(1,1,1,1,1)*T1x1*pp^n5?pos0_         =   int1d*numJ1011X01110(n5);
-*         
+*
 *       VxT1
-*         
+*
         id intFG*TFI(0,1,1,1,1)*T1x1/pp^n5?pos_          = int1d*m0denJ0011X01110(n5);
         id intFG*TFI(0,1,1,1,1)*T1x1/[pp-tmm]^n5?pos_    = int1d*m1denJ0011X01110(n5);
         id intFG*TFI(0,1,1,1,1)*T1x1/[pp-3*tmm]^n5?pos_  = int1d*m3denJ0011X01110(n5);
         id intFG*TFI(0,1,1,1,1)*T1x1/[pp-4*tmm]^n5?pos_  = int1d*m4denJ0011X01110(n5);
         id intFG*TFI(0,1,1,1,1)*T1x1/[pp-9*tmm]^n5?pos_  = int1d*m9denJ0011X01110(n5);
         id intFG*TFI(0,1,1,1,1)*T1x1*pp^n5?pos0_         =   int1d*numJ0011X01110(n5);
-*         
-*       J2xT1        
-*         
+*
+*       J2xT1
+*
         id intFG*TFI(2,0,0,1,1)*T1x1/pp^n5?pos_          = int1d*m0denJ2010X01100(n5);
         id intFG*TFI(2,0,0,1,1)*T1x1/[pp-tmm]^n5?pos_    = int1d*m1denJ2010X01100(n5);
         id intFG*TFI(2,0,0,1,1)*T1x1/[pp-3*tmm]^n5?pos_  = int1d*m3denJ2010X01100(n5);
         id intFG*TFI(2,0,0,1,1)*T1x1/[pp-4*tmm]^n5?pos_  = int1d*m4denJ2010X01100(n5);
         id intFG*TFI(2,0,0,1,1)*T1x1/[pp-9*tmm]^n5?pos_  = int1d*m9denJ2010X01100(n5);
         id intFG*TFI(2,0,0,1,1)*T1x1*pp^n5?pos0_         =   int1d*numJ2010X01100(n5);
-*         
-*       J1xT1        
-*         
+*
+*       J1xT1
+*
         id intFG*TFI(1,0,0,1,1)*T1x1/pp^n5?pos_          = int1d*m0denJ1010X01100(n5);
         id intFG*TFI(1,0,0,1,1)*T1x1/[pp-tmm]^n5?pos_    = int1d*m1denJ1010X01100(n5);
         id intFG*TFI(1,0,0,1,1)*T1x1/[pp-3*tmm]^n5?pos_  = int1d*m3denJ1010X01100(n5);
         id intFG*TFI(1,0,0,1,1)*T1x1/[pp-4*tmm]^n5?pos_  = int1d*m4denJ1010X01100(n5);
         id intFG*TFI(1,0,0,1,1)*T1x1/[pp-9*tmm]^n5?pos_  = int1d*m9denJ1010X01100(n5);
         id intFG*TFI(1,0,0,1,1)*T1x1*pp^n5?pos0_         =   int1d*numJ1010X01100(n5);
-*         
-*       GxGxG 
-*         
+*
+*       GxGxG
+*
         id intFG*Gx11^3/pp^n5?pos_                       = int1d*m0denJ1001X11110(n5);
         id intFG*Gx11^3/[pp-tmm]^n5?pos_                 = int1d*m1denJ1001X11110(n5);
         id intFG*Gx11^3/[pp-3*tmm]^n5?pos_               = int1d*m3denJ1001X11110(n5);
         id intFG*Gx11^3/[pp-4*tmm]^n5?pos_               = int1d*m4denJ1001X11110(n5);
         id intFG*Gx11^3/[pp-9*tmm]^n5?pos_               = int1d*m9denJ1001X11110(n5);
         id intFG*Gx11^3*pp^n5?pos0_                      =   int1d*numJ1001X11110(n5);
-*         
+*
 *       GxGxT1
-*         
+*
         id intFG*Gx11^2*T1x1/pp^n5?pos_                  = int1d*m0denJ1001X01110(n5);
         id intFG*Gx11^2*T1x1/[pp-tmm]^n5?pos_            = int1d*m1denJ1001X01110(n5);
         id intFG*Gx11^2*T1x1/[pp-3*tmm]^n5?pos_          = int1d*m3denJ1001X01110(n5);
         id intFG*Gx11^2*T1x1/[pp-4*tmm]^n5?pos_          = int1d*m4denJ1001X01110(n5);
         id intFG*Gx11^2*T1x1/[pp-9*tmm]^n5?pos_          = int1d*m9denJ1001X01110(n5);
         id intFG*Gx11^2*T1x1*pp^n5?pos0_                 =   int1d*numJ1001X01110(n5);
-*         
+*
 *       GxT1xT1
-*         
+*
         id intFG*Gx11*T1x1^2/pp^n5?pos_                  = int1d*m0denJ0001X01110(n5);
         id intFG*Gx11*T1x1^2/[pp-tmm]^n5?pos_            = int1d*m1denJ0001X01110(n5);
         id intFG*Gx11*T1x1^2/[pp-3*tmm]^n5?pos_          = int1d*m3denJ0001X01110(n5);
         id intFG*Gx11*T1x1^2/[pp-4*tmm]^n5?pos_          = int1d*m4denJ0001X01110(n5);
         id intFG*Gx11*T1x1^2/[pp-9*tmm]^n5?pos_          = int1d*m9denJ0001X01110(n5);
-        id intFG*Gx11*T1x1^2*pp^n5?pos0_                 =   int1d*numJ0001X01110(n5);   
-*         
+        id intFG*Gx11*T1x1^2*pp^n5?pos0_                 =   int1d*numJ0001X01110(n5);
+*
 *       T2xG
-*         
+*
         id intFG*T2x111*Gx11/pp^n5?pos_                  = int1d*m0denJ0011X11100(n5);
         id intFG*T2x111*Gx11/[pp-tmm]^n5?pos_            = int1d*m1denJ0011X11100(n5);
         id intFG*T2x111*Gx11/[pp-3*tmm]^n5?pos_          = int1d*m3denJ0011X11100(n5);
         id intFG*T2x111*Gx11/[pp-4*tmm]^n5?pos_          = int1d*m4denJ0011X11100(n5);
         id intFG*T2x111*Gx11/[pp-9*tmm]^n5?pos_          = int1d*m9denJ0011X11100(n5);
         id intFG*T2x111*Gx11*pp^n5?pos0_                 =   int1d*numJ0011X11100(n5);
-*         
+*
 *       T2xT1
-*         
+*
         id intFG*T2x111*T1x1/pp^n5?pos_                  = int1d*m0denJ0011X01100(n5);
         id intFG*T2x111*T1x1/[pp-tmm]^n5?pos_            = int1d*m1denJ0011X01100(n5);
         id intFG*T2x111*T1x1/[pp-3*tmm]^n5?pos_          = int1d*m3denJ0011X01100(n5);
         id intFG*T2x111*T1x1/[pp-4*tmm]^n5?pos_          = int1d*m4denJ0011X01100(n5);
         id intFG*T2x111*T1x1/[pp-9*tmm]^n5?pos_          = int1d*m9denJ0011X01100(n5);
         id intFG*T2x111*T1x1*pp^n5?pos0_                 =   int1d*numJ0011X01100(n5);
-*         
+*
 *       T1xT1xT1
-*         
+*
         id intFG*T1x1^3/pp^n5?pos_                       = int1d*m0denJ1000X01100(n5);
         id intFG*T1x1^3/[pp-tmm]^n5?pos_                 = int1d*m1denJ1000X01100(n5);
         id intFG*T1x1^3/[pp-3*tmm]^n5?pos_               = int1d*m3denJ1000X01100(n5);
@@ -11104,7 +11105,7 @@ ModuleOption,minimum,$irep;
         .sort:toJ;
 
         #message
-        #message Started 1d reduction        
+        #message Started 1d reduction
         #message
 
         #call rec1dm9
@@ -11122,7 +11123,7 @@ ModuleOption,minimum,$irep;
         id int1d*m9denJ0001X11110(0) = PR2;
         id int1d*m9denJ0011X01100(0) = 0;
         id int1d*m9denJ0011X01110(0) = PR3;
-        id int1d*m9denJ0011X10110(0) = PR4; 
+        id int1d*m9denJ0011X10110(0) = PR4;
         id int1d*m9denJ0011X11100(0) = PR3;
         id int1d*m9denJ0011X11110(0) = PR7;
         id int1d*m9denJ0021X00110(1) = PR1*rat(-(-2 + d)^2, 16*(-3 + d)) + int1d*m9denJ0001X00110(1)*rat((-2 + d)^2, 16*(-3 + d)) + int1d*m9denJ0011X00110(1)*rat(-8 + 3*d, 24);
@@ -11133,7 +11134,7 @@ ModuleOption,minimum,$irep;
         id int1d*m9denJ1001X01110(0) = PR2;
         id int1d*m9denJ1001X11110(0) = PR5;
         id int1d*m9denJ1001X01110(1) = int1d*m9denJ0001X11110(1);
-        id int1d*m9denJ1010X01100(0) = PR1; 
+        id int1d*m9denJ1010X01100(0) = PR1;
         id int1d*m9denJ1010X11100(0) = PR4;
         id int1d*m9denJ1010X01100(1) = int1d*m9denJ0011X00110(1);
         id int1d*m9denJ1010X11100(1) = int1d*m9denJ0011X10110(1);
@@ -11277,7 +11278,7 @@ ModuleOption,minimum,$irep;
         id int1d*m0denJ2010X11100(1) = (-5*PR4d)/2 + PR4*rat((-5 + 2*d)*(-13 + 3*d), 30) + int1d*m0denJ0011X00110(1)*rat((-2 + d)*(-8 + 3*d), 12);
         id int1d*m0denJ2011X11110(0) = PR9x;
 
-*       Integrals with numerators from n5        
+*       Integrals with numerators from n5
         id int1d*numJ0001X00110(0) = 0;
         id int1d*numJ0001X01110(0) = PR1;
         id int1d*numJ0001X11110(0) = PR2;
@@ -11301,31 +11302,31 @@ ModuleOption,minimum,$irep;
         id int1d*numJ2010X11100(0) = PR4*rat(-5 + 2*d, 5);
         id int1d*numJ2011X11110(0) = PR9x;
 
-*         
+*
 *       9x = [0002111111] -> 9d = [0110211110]
-*         
-        id PR9x = PR4d*rat(-5, 8*(-3 + d)) + PR9d*rat(-1, 1) + 
-        PR5*rat(3 - d, 3) + PR9*rat(-4 + d, 2) + 
-        PR3*rat(-(-2 + d)^2, 16*(-3 + d)) + 
+*
+        id PR9x = PR4d*rat(-5, 8*(-3 + d)) + PR9d*rat(-1, 1) +
+        PR5*rat(3 - d, 3) + PR9*rat(-4 + d, 2) +
+        PR3*rat(-(-2 + d)^2, 16*(-3 + d)) +
         PR4*rat((-7 + 2*d)*(-5 + 2*d), 40*(-3 + d)) + PR7*rat(-8 + 3*d, 8);
-        
+
         .sort:sub-int1d;
-*         
-*       Now we check that all terms with m^2 != tmm in denominator are eliminated       
-*         
+*
+*       Now we check that all terms with m^2 != tmm in denominator are eliminated
+*
         if(count(int1d,1)) Print "Uneliminated integral with aux mass in term %t";
-        
-        
+
+
 #endprocedure
 *--#] fmft :
 
 
 *--#[ submi :
 #procedure submi
-*         
-* Expansion of integrals from  
-* hep-ph/0411261 Nucl.Phys. B710 (2005) 485-498.        
-*         
+*
+* Expansion of integrals from
+* hep-ph/0411261 Nucl.Phys. B710 (2005) 485-498.
+*
    id PR0 =
        + PR0ep0
 
@@ -11837,17 +11838,17 @@ ModuleOption,minimum,$irep;
           )
         ;
 
-        
-#endprocedure        
+
+#endprocedure
 *--#] submi :
 
 
 *--#[ exp4d :
 #procedure exp4d(maxeppow)
-* <1>   Expansion near d=4-2*ep      
+* <1>   Expansion near d=4-2*ep
         Multiply replace_(d,4-2*ep);
-        
-* <2>   substituting master integrals        
+
+* <2>   substituting master integrals
         #call submi
 *
 *	Expands the PolyRatFun to sufficient powers in ep.
@@ -11870,9 +11871,9 @@ endrepeat;
 .sort:expansion-3;
 Symbol ep(:`maxeppow');
         .sort
-* Switch back to ep without truncation        
-S ep;        
-#endprocedure        
+* Switch back to ep without truncation
+S ep;
+#endprocedure
 *--#] exp4d :
 
 *end-file

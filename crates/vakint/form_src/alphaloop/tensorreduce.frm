@@ -8,7 +8,7 @@ Autodeclare V Q,p,q;
 
 CF vx,vxx,vxxs(s),vxxx,K,f,gg,gg1,TASK,dotacc,map,ex,ex1,exx,acc,acc1,acc2,loops,flip,DI,replace,
     cutv,fnum,fnum1,origct,f1,...,f7,vec,vec1,vec2,tmp,tmp1,g(s),accs(s),map,
-    map1,map2,deg,REM,coeff,ext;
+    map1,map2,deg,REM,coeff,ext, vakintFloat;
 
 CF tt,tt1;
 Set ns:n1,...,n32;

@@ -131,7 +131,7 @@ pub static S: LazyLock<VakintSymbols> = LazyLock::new(|| VakintSymbols {
     vec1: vk_symbol!("vec1"),
     form_epsilon: vk_symbol!("ep"),
     form_dimension: vk_symbol!("d"),
-    float_marker: vk_symbol!("float"),
+    float_marker: vk_symbol!("vakintFloat"),
 });
 
 pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
