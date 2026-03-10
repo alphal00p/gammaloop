@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-use ahash::HashSet;
+use ahash::{HashMap, HashSet};
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -685,8 +685,6 @@ impl CrossSectionGraph {
         self.build_lmbs();
         debug!("building multi channeling channels");
 
-        self.determine_raisings()?;
-
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
         }
@@ -702,184 +700,6 @@ impl CrossSectionGraph {
             self.build_threshold_counterterm(settings, vk)?;
             self.build_subspace_data()?;
         }
-
-        Ok(())
-    }
-
-    pub(crate) fn determine_raisings(&mut self) -> Result<()> {
-        let raised_edges = self.graph.get_raised_edge_groups();
-
-        println!("raised edges: {:?}", raised_edges);
-
-        let normalized_cut_esurfaces = self
-            .cut_esurface
-            .iter()
-            .map(|esurface| {
-                let mut new_esurface = esurface.clone();
-                for energy in new_esurface.energies.iter_mut() {
-                    let group_index_of_energy =
-                        raised_edges.iter().position(|group| group.contains(energy));
-
-                    if let Some(found_group_index) = group_index_of_energy {
-                        *energy = *raised_edges[found_group_index].first().unwrap();
-                    }
-                }
-                new_esurface.energies.sort();
-                new_esurface
-            })
-            .collect::<TiVec<CutId, _>>();
-
-        let mut raised_groups = TiVec::<RaisedCutId, Vec<CutId>>::new();
-
-        for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
-            let raised_cut_id =
-                raised_groups
-                    .iter_enumerated()
-                    .find_map(|(raised_cut_id, cuts)| {
-                        if cuts.iter().all(|cut_in_raised_group_id| {
-                            normalized_cut_esurfaces[*cut_in_raised_group_id].energies
-                                == normalized_cut_esurface.energies
-                        }) {
-                            Some(raised_cut_id)
-                        } else {
-                            None
-                        }
-                    });
-
-            if let Some(found_raised_cut_id) = raised_cut_id {
-                raised_groups[found_raised_cut_id].push(cut_id);
-            } else {
-                raised_groups.push(vec![cut_id]);
-            }
-        }
-
-        println!("raised groups: {:?}", raised_groups);
-
-        let mut crossed_pairs = Vec::<(CutId, CutId)>::new();
-        for cut_pair in self.cuts.iter_enumerated().combinations(2) {
-            if cut_pair[0].1.left.includes(&cut_pair[1].1.left)
-                || cut_pair[1].1.left.includes(&cut_pair[0].1.left)
-                || cut_pair[0].1.right.includes(&cut_pair[1].1.right)
-                || cut_pair[1].1.right.includes(&cut_pair[0].1.right)
-            {
-                continue;
-            } else if cut_pair[0].0.0 < cut_pair[1].0.0 {
-                crossed_pairs.push((cut_pair[0].0, cut_pair[1].0));
-            } else {
-                crossed_pairs.push((cut_pair[1].0, cut_pair[0].0));
-            }
-        }
-
-        let cross_free_powersets = raised_groups
-            .iter()
-            .map(|group| {
-                group
-                    .iter()
-                    .powerset()
-                    .filter_map(|subset| {
-                        if subset.is_empty() {
-                            None
-                        } else {
-                            let has_crossing = subset.iter().combinations(2).any(|combination| {
-                                let combination_tuple = if combination[0].0 < combination[1].0 {
-                                    (**combination[0], **combination[1])
-                                } else {
-                                    (**combination[1], **combination[0])
-                                };
-                                crossed_pairs.contains(&combination_tuple)
-                            });
-
-                            if has_crossing {
-                                None
-                            } else {
-                                // sort by number of vertices on left side, for non crossing cuts, this will sort them from left to right.
-                                let sorted_subset = subset
-                                    .iter()
-                                    .sorted_by(|cut_id_a, cut_id_b| {
-                                        let left_of_cut_a = &self.cuts[***cut_id_a].left;
-                                        let left_of_cut_b = &self.cuts[***cut_id_b].left;
-                                        let n_vertices_a = self
-                                            .graph
-                                            .underlying
-                                            .iter_nodes_of(left_of_cut_a)
-                                            .count();
-                                        let n_vertices_b = self
-                                            .graph
-                                            .underlying
-                                            .iter_nodes_of(left_of_cut_b)
-                                            .count();
-                                        n_vertices_a.cmp(&n_vertices_b)
-                                    })
-                                    .copied()
-                                    .copied()
-                                    .collect_vec();
-
-                                if sorted_subset == vec![CutId(3), CutId(0)] {
-                                    return None;
-                                }
-
-                                let all_sandwiches_connected =
-                                    sorted_subset.windows(2).all(|sequential_cuts| {
-                                        let right_of_first_cut =
-                                            &self.cuts[sequential_cuts[0]].right;
-                                        let left_of_second_cut =
-                                            &self.cuts[sequential_cuts[1]].left;
-
-                                        let sandwich =
-                                            right_of_first_cut.intersection(left_of_second_cut);
-
-                                        self.graph.is_connected(&sandwich)
-                                    });
-
-                                if all_sandwiches_connected {
-                                    Some(sorted_subset)
-                                } else {
-                                    None
-                                }
-                            }
-                        }
-                    })
-                    .collect_vec()
-            })
-            .collect::<TiVec<RaisedCutId, _>>();
-
-        // now check all sandwiches and check for connectedness
-        println!("cross free powersets: {:?}", cross_free_powersets);
-
-        let dual_shapes = cross_free_powersets
-            .iter()
-            .map(|powerset| {
-                powerset
-                    .iter()
-                    .map(|subset| {
-                        if subset.len() > 1 {
-                            Some(shape_for_t_derivatives(subset.len() - 1))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
-
-        let max_order = cross_free_powersets
-            .iter()
-            .map(|powerset| powerset.iter().map(|subset| subset.len()).max().unwrap())
-            .max()
-            .unwrap();
-
-        let pass_two_evaluators = (1..=max_order)
-            .map(|order| build_derivative_structure(order as u8))
-            .collect();
-
-        let result = RaisedCutData {
-            raised_cut_groups: raised_groups,
-            cross_free_powersets,
-            dual_shapes,
-            pass_two_evaluators,
-        };
-
-        self.derived_data.raised_data = result;
 
         Ok(())
     }
@@ -2058,8 +1878,8 @@ pub struct CrossSectionDerivedData {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedCutData {
     pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
-    pub cross_free_powersets: TiVec<RaisedCutId, Vec<Vec<CutId>>>,
-    pub dual_shapes: TiVec<RaisedCutId, Vec<Option<Vec<Vec<usize>>>>>,
+    pub max_occurances: TiVec<RaisedCutId, usize>,
+    pub dual_shapes: Vec<Vec<Vec<usize>>>,
     pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
@@ -2073,9 +1893,61 @@ impl RaisedCutData {
     pub fn new() -> Self {
         RaisedCutData {
             raised_cut_groups: TiVec::new(),
-            cross_free_powersets: TiVec::new(),
-            dual_shapes: TiVec::new(),
+            max_occurances: TiVec::new(),
+            dual_shapes: vec![],
             pass_two_evaluators: vec![],
+        }
+    }
+
+    pub fn new_from_esurface(
+        raised_esurface_data: &RaisedEsurfaceData,
+        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+    ) -> Self {
+        let reversed_map = cut_esurface_map
+            .iter_enumerated()
+            .map(|(cut_id, esurface_id)| (esurface_id, cut_id))
+            .collect::<HashMap<_, _>>();
+
+        let mut raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>> = TiVec::new();
+        let mut max_occurances: TiVec<RaisedCutId, usize> = TiVec::new();
+
+        for (cut_id, esurface_id) in cut_esurface_map.iter_enumerated() {
+            let raised_esurface_id = raised_esurface_data
+                .raised_groups
+                .iter_enumerated()
+                .find_map(|(raised_cut_id, group)| {
+                    if group.contains(esurface_id) {
+                        Some(raised_cut_id)
+                    } else {
+                        None
+                    }
+                })
+                .unwrap();
+
+            let esurfaces = raised_esurface_data.raised_groups[raised_esurface_id]
+                .iter()
+                .map(|esurface_id| reversed_map[esurface_id])
+                .collect_vec();
+
+            raised_cut_groups.push(esurfaces);
+            max_occurances.push(raised_esurface_data.max_occurence[raised_esurface_id]);
+        }
+
+        let full_max_occurance = max_occurances.iter().max().cloned().unwrap_or(0);
+
+        let pass_two_evaluators = (1..=full_max_occurance)
+            .map(|order| build_derivative_structure(order as u8))
+            .collect_vec();
+
+        let dual_structures = (2..full_max_occurance)
+            .map(|order| shape_for_t_derivatives(order - 1))
+            .collect_vec();
+
+        RaisedCutData {
+            raised_cut_groups,
+            max_occurances,
+            dual_shapes: dual_structures,
+            pass_two_evaluators,
         }
     }
 }
