@@ -384,6 +384,17 @@ where
                     &HybridSurfaceID::Esurface(reprentative_esurface_id),
                     occurence,
                 );
+
+                orientation
+                    .expression
+                    .map_mut(|hybrid_surface_id| match hybrid_surface_id {
+                        HybridSurfaceID::Esurface(esurface_id)
+                            if *esurface_id == reprentative_esurface_id =>
+                        {
+                            *hybrid_surface_id = HybridSurfaceID::Unit;
+                        }
+                        _ => (),
+                    });
             }
 
             result.push(new_expression);
