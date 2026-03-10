@@ -16,7 +16,6 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::color::ColorSimplifier;
-use libc::POLLERR;
 use std::hash::Hash;
 use tracing::debug;
 
