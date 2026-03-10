@@ -28,6 +28,7 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         cut_expression::SuperGraphOrientationID,
+        esurface::RaisedEsurfaceData,
         expression::{AmplitudeOrientationID, CFFExpression, SubgraphOrientationID},
         generation::{
             ConstraintData, EsurfaceRewritingInstructions, PostProcessingSetup,
@@ -871,7 +872,7 @@ impl CrossSectionGraph {
             .map(|order| build_derivative_structure(order as u8))
             .collect();
 
-        let result = RaisedData {
+        let result = RaisedCutData {
             raised_cut_groups: raised_groups,
             cross_free_powersets,
             dual_shapes,
@@ -901,24 +902,25 @@ impl CrossSectionGraph {
     }
 
     fn generate_cff(&mut self, _settings: &GenerationSettings) -> Result<()> {
-        // hardcorde 1 to n for now
-        debug!("generating cff");
-
-        let shift_rewrite = self
+        let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_cut_expression = generate_cff_with_cuts(
-            &self.graph.underlying,
-            &self.graph.get_edges_in_initial_state_cut(),
-            &shift_rewrite,
-            &self.cuts,
-        )?;
+        let contract_edges = self
+            .graph
+            .iter_edges_of(&self.graph.tree_edges)
+            .map(|x| x.1)
+            .collect_vec();
 
-        let global_cff = generate_supergraph_cff(&self.graph)?;
+        let global_cff = self
+            .graph
+            .generate_cff(&contract_edges, &canonize_esurface)?;
 
-        self.derived_data.cff_expression = Some(cff_cut_expression);
-        self.derived_data.global_cff_expression = Some(global_cff);
+        let esurface_raised_data = self
+            .graph
+            .determine_raised_esurfaces_from_expression(&global_cff);
+
+        // hardcorde 1 to n for now
 
         Ok(())
     }
@@ -2049,27 +2051,27 @@ pub struct CrossSectionDerivedData {
     pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
     pub threshold_counterterms: TiVec<CutId, LUCounterTermData>,
     pub subspace_data: TiVec<CutId, (SubspaceData, SubspaceData)>,
-    pub raised_data: RaisedData,
+    pub raised_data: RaisedCutData,
 }
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct RaisedData {
+pub struct RaisedCutData {
     pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
     pub cross_free_powersets: TiVec<RaisedCutId, Vec<Vec<CutId>>>,
     pub dual_shapes: TiVec<RaisedCutId, Vec<Option<Vec<Vec<usize>>>>>,
     pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
-impl Default for RaisedData {
+impl Default for RaisedCutData {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RaisedData {
+impl RaisedCutData {
     pub fn new() -> Self {
-        RaisedData {
+        RaisedCutData {
             raised_cut_groups: TiVec::new(),
             cross_free_powersets: TiVec::new(),
             dual_shapes: TiVec::new(),
@@ -2090,7 +2092,7 @@ impl CrossSectionDerivedData {
             tensor_network_cache: TiVec::new(),
             threshold_counterterms: TiVec::new(),
             subspace_data: TiVec::new(),
-            raised_data: RaisedData::new(),
+            raised_data: RaisedCutData::new(),
         }
     }
 }

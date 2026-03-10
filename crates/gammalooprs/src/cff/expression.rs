@@ -3,7 +3,7 @@
 use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
 use crate::{
-    cff::esurface::{self, EsurfaceID},
+    cff::esurface::{self, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceId},
     processes::{CutId, RaisedCutData, RaisedCutId},
     settings::global::OrientationPattern,
     utils::{W_, ose_atom_from_index},
@@ -366,25 +366,17 @@ where
             .collect()
     }
 
-    pub(crate) fn select_raised_cut(
+    pub(crate) fn select_esurface_residue(
         mut self,
-        raised_cut_id: RaisedCutId,
-        raised_data: &RaisedCutData,
-        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+        raised_esurface_id: RaisedEsurfaceId,
+        raised_data: &RaisedEsurfaceData,
     ) -> Vec<CFFExpression<O>> {
-        self.normalize_wrt_raisings(raised_data, cut_esurface_map);
+        self.normalize_wrt_raisings(raised_data);
 
-        let max_occurrence = raised_data.cross_free_powersets[raised_cut_id]
-            .iter()
-            .map(|set| set.len())
-            .max()
-            .unwrap();
-
-        let reprentative_esurface_id =
-            cut_esurface_map[raised_data.raised_cut_groups[raised_cut_id][0]];
+        let reprentative_esurface_id = raised_data.raised_groups[raised_esurface_id][0];
 
         let mut result = vec![];
-        for occurence in 1..=max_occurrence {
+        for occurence in 1..=raised_data.max_occurence[raised_esurface_id] {
             let mut new_expression = self.clone();
 
             for orientation in new_expression.orientations.iter_mut() {
@@ -400,19 +392,14 @@ where
         result
     }
 
-    pub(crate) fn normalize_wrt_raisings(
-        &mut self,
-        raised_data: &RaisedCutData,
-        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
-    ) {
+    pub(crate) fn normalize_wrt_raisings(&mut self, raised_data: &RaisedEsurfaceData) {
         let mut esurface_mappings = HashMap::new();
 
-        for cut_group in raised_data.raised_cut_groups.iter() {
-            let esurface_id_of_first = cut_esurface_map[cut_group[0]];
+        for cut_group in raised_data.raised_groups.iter() {
+            let esurface_id_of_first = cut_group[0];
 
-            for cut_id in cut_group.iter() {
-                let esurface_id = cut_esurface_map[*cut_id];
-                esurface_mappings.insert(esurface_id, esurface_id_of_first);
+            for esurface_id in cut_group.iter() {
+                esurface_mappings.insert(*esurface_id, esurface_id_of_first);
             }
         }
 

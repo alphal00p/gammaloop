@@ -22,6 +22,8 @@ use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 
+use crate::cff::cut_expression::{CFFCutsExpression, SuperGraphOrientationID};
+use crate::cff::expression::CFFExpression;
 use crate::define_index;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 
@@ -929,6 +931,61 @@ pub struct RaisedEsurfaceData {
     pub raised_groups: TiVec<RaisedEsurfaceId, Vec<EsurfaceID>>,
     pub max_occurence: TiVec<RaisedEsurfaceId, usize>,
     pub pass_two_evaluator: Option<Vec<GenericEvaluator>>,
+}
+
+impl Graph {
+    pub(crate) fn determine_raised_esurfaces_from_expression(
+        &self,
+        expr: &CFFExpression<SuperGraphOrientationID>,
+    ) -> RaisedEsurfaceData {
+        let raised_edges = self.get_raised_edge_groups();
+
+        println!("raised edges: {:?}", raised_edges);
+
+        let normalized_cut_esurfaces = self
+            .surface_cache
+            .esurface_cache
+            .iter()
+            .map(|esurface| {
+                let mut new_esurface = esurface.clone();
+                for energy in new_esurface.energies.iter_mut() {
+                    let group_index_of_energy =
+                        raised_edges.iter().position(|group| group.contains(energy));
+
+                    if let Some(found_group_index) = group_index_of_energy {
+                        *energy = *raised_edges[found_group_index].first().unwrap();
+                    }
+                }
+                new_esurface.energies.sort();
+                new_esurface
+            })
+            .collect::<TiVec<EsurfaceID, _>>();
+
+        let mut raised_groups = TiVec::<RaisedEsurfaceId, Vec<EsurfaceID>>::new();
+
+        for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
+            let raised_cut_id =
+                raised_groups
+                    .iter_enumerated()
+                    .find_map(|(raised_cut_id, cuts)| {
+                        if cuts.iter().all(|cut_in_raised_group_id| {
+                            normalized_cut_esurfaces[*cut_in_raised_group_id].energies
+                                == normalized_cut_esurface.energies
+                        }) {
+                            Some(raised_cut_id)
+                        } else {
+                            None
+                        }
+                    });
+
+            if let Some(found_raised_cut_id) = raised_cut_id {
+                raised_groups[found_raised_cut_id].push(cut_id);
+            } else {
+                raised_groups.push(vec![cut_id]);
+            }
+        }
+        todo!();
+    }
 }
 
 #[cfg(test)]
