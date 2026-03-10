@@ -704,9 +704,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         debug!("loop moms: {}", momentum_sample.loop_moms());
 
-        for (raised_cut, cross_free_subsets) in
-            self.raised_data.cross_free_powersets.iter_enumerated()
-        {
+        for (raised_cut, &max_occurance) in self.raised_data.max_occurances.iter_enumerated() {
             debug!("\n =====START EVALUTAION FOR CUT {}=====", raised_cut.0);
             let representative_esurface =
                 &self.cut_esurface[self.raised_data.raised_cut_groups[raised_cut][0]];
@@ -745,26 +743,17 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             debug!("solution: {:?}", solution);
 
-            for (subset_id, subset) in cross_free_subsets.iter().enumerate() {
-                debug!("\n--- Evaluating subset {} ---", subset_id);
-                debug!("subset: {:?}", subset);
-                debug!("cuts {:?}", subset);
-                for cut in subset {
-                    let edges_in_cut = self.cuts[*cut]
-                        .cut
-                        .iter_edges(&self.graph)
-                        .map(|(_, e)| e.data.name.clone())
-                        .collect_vec();
-
-                    debug!("edges in cut {}: {:?}", cut.0, edges_in_cut);
-                }
-
-                let dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
-                    .clone()
-                    .map(HyperDual::<F<T>>::new);
+            for num_esurfaces in 1..=max_occurance {
+                let dual_shape = if num_esurfaces > 1 {
+                    Some(HyperDual::<F<T>>::new(
+                        self.raised_data.dual_shapes[num_esurfaces - 1].clone(),
+                    ))
+                } else {
+                    None
+                };
 
                 let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
-                    if let Some(dual_shape) = &dual_shape {
+                    if let Some(dual_shape) = dual_shape {
                         let dual_t_for_integrand =
                             dual_shape.variable(0, solution.solution.clone());
                         let dual_h_function =
@@ -774,7 +763,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             .rescale_with_hyper_dual(&dual_t_for_integrand, None);
 
                         let dual_shape_for_esurface =
-                            HyperDual::<F<T>>::new(shape_for_t_derivatives(subset.len()));
+                            HyperDual::<F<T>>::new(shape_for_t_derivatives(num_esurfaces));
 
                         let dual_t_for_esurface =
                             dual_shape_for_esurface.variable(0, solution.solution.clone());
@@ -863,23 +852,29 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let iterative = self.iterative_integrand.as_mut().map(|ev| {
                     evaluate_evaluator(
-                        &mut ev[raised_cut][subset_id],
+                        &mut ev[raised_cut][num_esurfaces - 1],
                         params.as_slice(),
                         evaluation_metadata,
                         record_primary_timing,
                     )
                 });
 
-                let complex_dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
-                    .clone()
-                    .map(HyperDual::<Complex<F<T>>>::new);
+                let complex_dual_shape = {
+                    if num_esurfaces > 1 {
+                        Some(self.raised_data.dual_shapes[num_esurfaces - 1].clone())
+                    } else {
+                        None
+                    }
+                }
+                .clone()
+                .map(HyperDual::<Complex<F<T>>>::new);
 
                 let mut result = complex_dual_shape
                     .clone()
                     .map(DualOrNot::Dual)
                     .unwrap_or(DualOrNot::NonDual(Complex::new_re(momentum_sample.zero())));
 
-                let multiplicative_offset = subset.len();
+                let multiplicative_offset = num_esurfaces;
 
                 for (i, e) in orientations.iter() {
                     if let Some(iterative) = &iterative {
@@ -893,8 +888,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                                 .get(i.0 * multiplicative_offset..(i.0 + 1) * multiplicative_offset)
                                 .unwrap_or_else(|| {
                                     println!(
-                                        "raised_cut id: {}, subset id: {}",
-                                        raised_cut.0, subset_id
+                                        "raised_cut id: {}, num_esurfaces: {}",
+                                        raised_cut.0, num_esurfaces
                                     );
 
                                     println!("orientation id: {}", i.0);
@@ -933,7 +928,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         result += DualOrNot::new_from_slice(
                             &complex_dual_shape,
                             &evaluate_evaluator(
-                                &mut self.parametric_integrand[raised_cut][subset_id],
+                                &mut self.parametric_integrand[raised_cut][num_esurfaces - 1],
                                 a.as_slice(),
                                 evaluation_metadata,
                                 record_primary_timing,
@@ -975,7 +970,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
 
                 let pass_two_evaluator =
-                    &mut self.raised_data.pass_two_evaluators[subset.len() - 1];
+                    &mut self.raised_data.pass_two_evaluators[num_esurfaces - 1];
 
                 let pass_two_result = evaluate_evaluator_single(
                     pass_two_evaluator,
