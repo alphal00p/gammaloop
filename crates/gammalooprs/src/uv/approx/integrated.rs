@@ -194,7 +194,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             &a,
             graph,
             &reduced,
-            current.subgraph(),
+            given.subgraph(),
             &settings.vakint,
             true,
         );

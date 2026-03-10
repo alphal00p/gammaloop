@@ -65,7 +65,7 @@ impl Forest {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.topo_order = i;
-                    self.dag.nodes[n].data.root(graph, cut_data, settings);
+                    self.dag.nodes[n].data.root(graph, cut_data, settings)?;
                 }
                 1 => {
                     // debug!("")
@@ -92,7 +92,7 @@ impl Forest {
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
                     current
                         .data
-                        .compute(graph, cut_data, &parent.data, settings);
+                        .compute(graph, cut_data, &parent.data, settings)?;
                 }
                 _ => {
                     unimplemented!("Union not implemented");
@@ -148,7 +148,7 @@ impl Forest {
                 continue;
             }
 
-            let (atom, sign) = n.data.integrated_pole_part.expr().ok_or(eyre!(
+            let (atom, sign) = n.data.integrated_4d.expr().ok_or(eyre!(
                 "Integrated pole part not computed for {} of graph {}",
                 n.data
                     .simple_approx

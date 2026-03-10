@@ -25,9 +25,8 @@ use symbolica::{
 use crate::{
     feyngen::diagram_generator::EdgeColor,
     integrands::process::ParamBuilder,
-    model::{ArcParticle, Model, UFOSymbol},
-    momentum::Helicity,
-    momentum::sample::LoopIndex,
+    model::{ArcParticle, Model, ParameterName, UFOSymbol},
+    momentum::{Helicity, sample::LoopIndex},
     numerator::aind::{Aind, NewAind},
     utils::{F, FloatLike, GS},
     uv::uv_graph::UVE,
@@ -386,9 +385,11 @@ impl From<&Edge> for DotEdgeData {
 pub struct ParseEdge {
     pub name: Option<String>,
     pub particle: PossibleParticle,
+
     pub dod: Option<i32>,
     pub is_dummy: bool,
     pub lmb_id: Option<LoopIndex>,
+
     /// User provided numerator
     pub num: Option<Atom>,
     /// Specifies the incoming initial state hedge

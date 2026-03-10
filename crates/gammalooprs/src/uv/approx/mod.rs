@@ -16,6 +16,7 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::color::ColorSimplifier;
+use libc::POLLERR;
 use std::hash::Hash;
 use tracing::debug;
 
@@ -162,8 +163,7 @@ pub struct Approximation {
     pub lmb: LoopMomentumBasis,
     pub local_3d: CFFapprox, //3d denoms
     pub final_integrand: Option<Vec<Atom>>,
-    pub integrated_4d: ApproxOp, //4d
-    pub integrated_pole_part: ApproxOp,
+    pub integrated_4d: ApproxOp,
     pub topo_order: usize,
     pub simple_approx: Option<SimpleApprox>,
 }
@@ -247,11 +247,14 @@ impl Approximation {
         cuts: &CutSet,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        self.local_3d = CFFapprox::root(graph, cuts, settings)?;
-        self.integrated_4d = ApproxOp::Root;
-        self.integrated_pole_part = ApproxOp::Root;
         self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
-        self.final_integrand = Some(self.final_integrand(graph, cuts, settings)?);
+        if settings.only_integrated {
+            self.integrated_4d = ApproxOp::Root;
+        } else {
+            self.local_3d = CFFapprox::root(graph, cuts, settings)?;
+            self.final_integrand = Some(self.final_integrand(graph, cuts, settings)?);
+        }
+
         Ok(())
     }
 
@@ -274,10 +277,10 @@ impl Approximation {
             simple_approx: None,
             local_3d: CFFapprox::NotComputed,
             integrated_4d: ApproxOp::NotComputed,
-            integrated_pole_part: ApproxOp::NotComputed,
         }
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn compute_integrated(
         &mut self,
         graph: &Graph,
@@ -293,6 +296,14 @@ impl Approximation {
         let Some((current, sign)) = &dependent.integrated_4d.expr() else {
             return Err(eyre!("integrated_4d not computed"));
         };
+
+        debug!(pole_part = %settings.pole_part,
+            simple = % self.simple_approx
+                .as_ref()
+                .unwrap()
+                .expr(&graph.full_filter()).log_print(),
+            "Computing Integrated",
+        );
 
         let integrands = current
             .iter()
