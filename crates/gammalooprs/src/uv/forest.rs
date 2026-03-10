@@ -31,7 +31,7 @@ pub struct CutForests {
 impl CutForests {
     pub(crate) fn compute(
         &mut self,
-        graph: &Graph,
+        graph: &mut Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
         settings: &UVgenerationSettings,
     ) -> Result<()> {
@@ -54,7 +54,7 @@ impl Forest {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn compute(
         &mut self,
-        graph: &Graph,
+        graph: &mut Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
         cut_data: &CutSet,
         settings: &UVgenerationSettings,
@@ -64,6 +64,7 @@ impl Forest {
         for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
                 0 => {
+                    self.dag.nodes[n].data.topo_order = i;
                     self.dag.nodes[n].data.root(graph, cut_data, settings);
                 }
                 1 => {
@@ -79,14 +80,11 @@ impl Forest {
                     };
                     current.data.simple_approx = Some(a.dependent(current.data.subgraph.clone()));
 
+                    current.data.topo_order = i;
                     if settings.generate_integrated {
-                        current.data.compute_integrated(
-                            graph,
-                            vakint,
-                            &parent.data,
-                            i,
-                            settings,
-                        )?;
+                        current
+                            .data
+                            .compute_integrated(graph, vakint, &parent.data, settings)?;
                     }
                     if settings.only_integrated {
                         continue;
@@ -150,7 +148,7 @@ impl Forest {
                 continue;
             }
 
-            let (mut atom, sign) = n.data.integrated_pole_part.expr().ok_or(eyre!(
+            let (atom, sign) = n.data.integrated_pole_part.expr().ok_or(eyre!(
                 "Integrated pole part not computed for {} of graph {}",
                 n.data
                     .simple_approx
@@ -159,6 +157,8 @@ impl Forest {
                     .expr(&graph.full_filter()),
                 graph.name
             ))?;
+
+            let mut atom = atom[0].clone();
 
             atom = sign * atom;
 
@@ -230,46 +230,75 @@ impl Forest {
         cut_edges: Option<&SuBitGraph>,
         graph: &Graph,
         add_sigma: bool,
-    ) -> Atom {
-        let mut sum = Atom::Zero;
+    ) -> Result<Vec<Atom>> {
+        let mut sum = None;
 
         for (_, n) in &self.dag.nodes {
-            let mut net = n.data.final_integrand.clone().unwrap();
+            n.data.final_integrand.clone().unwrap();
 
-            if add_sigma {
-                debug!(
-                    "{}",
-                    n.data
-                        .simple_approx
-                        .as_ref()
-                        .unwrap()
-                        .expr(&graph.full_filter())
-                );
-                net = net
-                    * function!(
-                        GS.if_sigma,
+            let mut first = false;
+
+            if sum.is_none() {
+                first = true;
+                sum = Some(vec![]);
+            }
+
+            let sum = sum.as_mut().unwrap();
+
+            for (i, integrand) in n
+                .data
+                .final_integrand
+                .as_ref()
+                .ok_or(eyre!("Final integrand not computed"))?
+                .iter()
+                .enumerate()
+            {
+                let a = if add_sigma {
+                    debug!(
+                        "{}",
                         n.data
                             .simple_approx
                             .as_ref()
                             .unwrap()
                             .expr(&graph.full_filter())
-                    )
-            };
-
-            sum += net;
+                    );
+                    integrand
+                        * function!(
+                            GS.if_sigma,
+                            n.data
+                                .simple_approx
+                                .as_ref()
+                                .unwrap()
+                                .expr(&graph.full_filter())
+                        )
+                } else {
+                    integrand.clone()
+                };
+                if first {
+                    sum.push(a);
+                } else {
+                    sum[i] += a;
+                }
+            }
         }
+
+        let mut sum = sum.ok_or(eyre!("No terms in forest"))?;
 
         if let Some(cut) = cut_edges {
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in graph.iter_edges_of(cut) {
-                sum *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
-                    .wrap_color(GS.color_wrap);
+                for s in &mut sum {
+                    *s *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
+                        .wrap_color(GS.color_wrap);
+                }
             }
         }
         for (_, edge_index, _) in graph.iter_edges() {
-            sum = sum.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
+            for s in &mut sum {
+                *s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
+            }
         }
-        sum
+        Ok(sum)
     }
 
     pub(crate) fn graphs(&self, graph: &Graph) -> String {

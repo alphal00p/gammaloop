@@ -4,25 +4,21 @@ use std::{
     fs::{self, File},
     io::Write,
     iter,
-    ops::Deref,
     path::Path,
 };
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::{Result, Section};
+use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::gamma::GammaSimplifier;
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{
-    algebra::complex::Complex,
-    network::{Sequential, SmallestDegree},
-};
+use spenso::algebra::complex::Complex;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -31,31 +27,27 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::GroupEsurfaceId,
-        expression::{
-            AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
-        },
+        expression::{AmplitudeOrientationID, CFFExpression, OrientationData},
         generation::{
             PostProcessingSetup, generate_cff_expression, get_orientations_from_subgraph,
         },
     },
     disable,
-    graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
+    graph::{
+        GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis, cuts::CutSet,
+    },
     integrands::process::{
         LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
-    numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{
-        F, FUN_LIB, GS, Length, TENSORLIB, W_,
-        symbolica_ext::{LOGPRINTOPTS, LogPrint},
-    },
+    utils::{F, GS, Length, W_},
     uv::{
-        UVgenerationSettings, UltravioletGraph, approx::to_vakint_integrand,
+        UVgenerationSettings, UltravioletGraph, approx::integrated::to_vakint_integrand,
         settings::VakintSettings,
     },
 };
@@ -457,47 +449,9 @@ impl AmplitudeGraph {
 
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-        if self.derived_data.cff_expression.is_none() {
-            debug!("Generating Cff");
-            self.generate_cff()?;
-        }
-
-        let canonize_esurface = self
-            .graph
-            .get_esurface_canonization(&self.graph.loop_momentum_basis);
-
-        let orientations: TiVec<AmplitudeOrientationID, OrientationData> = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-            .map(|a| a.data.clone())
-            .collect();
-
         let vk = (crate::utils::vakint()?, &vk_settings);
-
-        let post = PostProcessingSetup {
-            constraint_data: None,
-            rewrite_esurfaces: None,
-        };
-
-        // forest.compute(
-        //     &self.graph,
-        //     &self.graph.tree_edges,
-        //     &self.graph.no_dummy(),
-        //     vk,
-        //     &orientations,
-        //     &canonize_esurface,
-        //     &[],
-        //     &[],
-        //     post,
-        //     &settings,
-        //     false,
-        // )?;
-
-        todo!("compute forest");
+        let cuts = CutSet::empty(self.graph.n_hedges());
+        forest.compute(&mut self.graph, vk, &cuts, settings)?;
 
         forest.pole_part_of_ends(&self.graph)
     }

@@ -220,6 +220,8 @@ pub struct UVgenerationSettings {
     #[serde(skip_serializing_if = "is_false")]
     pub only_integrated: bool,
     #[serde(skip_serializing_if = "is_false")]
+    pub pole_part: bool,
+    #[serde(skip_serializing_if = "is_false")]
     pub add_sigma: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub inner_products: bool,
@@ -232,6 +234,7 @@ impl Default for UVgenerationSettings {
         UVgenerationSettings {
             softct: true,
             generate_integrated: true,
+            pole_part: false,
             only_integrated: false,
             inner_products: true,
             add_sigma: false,
