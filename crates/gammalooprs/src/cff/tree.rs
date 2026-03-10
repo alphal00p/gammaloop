@@ -265,6 +265,26 @@ impl<T> Tree<T> {
             node.update_node_ids(&nodes_to_remove);
         }
     }
+
+    pub(crate) fn max_value_count_on_branch(&self, value: &T) -> usize
+    where
+        T: Eq,
+    {
+        if self.nodes.is_empty() {
+            return 0;
+        }
+
+        self.get_bottom_layer()
+            .into_iter()
+            .map(|leaf| {
+                self.path_to_root(leaf)
+                    .into_iter()
+                    .filter(|&node_id| self.nodes[node_id].data == *value)
+                    .count()
+            })
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 impl<T> Tree<T>
@@ -412,5 +432,27 @@ mod tests {
         expected_tree.insert_node(NodeId(2), 5);
 
         assert_eq!(tree, expected_tree);
+    }
+
+    #[test]
+    fn test_max_value_count_on_branch() {
+        let mut tree = Tree::from_root(1);
+        tree.insert_node(NodeId(0), 1);
+        tree.insert_node(NodeId(1), 2);
+        tree.insert_node(NodeId(2), 1);
+        tree.insert_node(NodeId(0), 3);
+        tree.insert_node(NodeId(4), 1);
+
+        assert_eq!(tree.max_value_count_on_branch(&1), 3);
+    }
+
+    #[test]
+    fn test_max_value_count_on_branch_value_absent() {
+        let mut tree = Tree::from_root(0);
+        tree.insert_node(NodeId(0), 2);
+        tree.insert_node(NodeId(1), 3);
+        tree.insert_node(NodeId(0), 4);
+
+        assert_eq!(tree.max_value_count_on_branch(&1), 0);
     }
 }

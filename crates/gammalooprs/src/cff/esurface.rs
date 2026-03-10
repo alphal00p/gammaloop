@@ -984,7 +984,30 @@ impl Graph {
                 raised_groups.push(vec![cut_id]);
             }
         }
-        todo!();
+
+        let mut max_occurence = TiVec::new();
+        for (raised_cut_id, cut_group) in raised_groups.iter_enumerated() {
+            let representative_esurface_id = cut_group[0];
+
+            let max_occurence_for_this_id = expr
+                .orientations
+                .iter()
+                .map(|orientation_expression| {
+                    orientation_expression.expression.max_value_count_on_branch(
+                        &crate::cff::surface::HybridSurfaceID::Esurface(representative_esurface_id),
+                    )
+                })
+                .max()
+                .unwrap_or(0);
+
+            max_occurence.push(max_occurence_for_this_id);
+        }
+
+        RaisedEsurfaceData {
+            raised_groups,
+            max_occurence,
+            pass_two_evaluator: None,
+        }
     }
 }
 
