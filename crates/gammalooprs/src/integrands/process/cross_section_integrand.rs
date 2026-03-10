@@ -292,28 +292,29 @@ impl CrossSectionGraphTerm {
             .map(|data| data.orientation.clone())
             .collect();
 
-        println!(
-            "parameteric integrands len: {}",
-            graph.derived_data.cut_paramatric_integrand.len()
-        );
-        println!(
-            "dual shapes len: {}",
-            graph.derived_data.raised_data.dual_shapes.len()
-        );
         let parametric_integrand = graph
             .derived_data
             .cut_paramatric_integrand
             .iter()
-            .zip(&graph.derived_data.raised_data.dual_shapes)
-            .map(|(integrand_for_cut, dual_shapes)| {
+            .zip(&graph.derived_data.raised_data.max_occurances)
+            .map(|(integrand_for_cut, max_occurances)| {
                 integrand_for_cut
                     .iter()
-                    .zip(dual_shapes)
-                    .map(|(integrand_for_subset, dual_shape)| {
+                    .enumerate()
+                    .map(|(num_derivatives, integrand_for_subset)| {
+                        let dual_shape = if num_derivatives > 0 {
+                            Some(
+                                graph.derived_data.raised_data.dual_shapes[num_derivatives - 1]
+                                    .clone(),
+                            )
+                        } else {
+                            None
+                        };
+
                         GenericEvaluator::new_from_builder(
                             [integrand_for_subset.clone()],
                             &graph.graph.param_builder,
-                            dual_shape.clone(),
+                            dual_shape,
                             OptimizationSettings::default(),
                             settings.generation.evaluator.store_atom,
                         )
@@ -337,14 +338,24 @@ impl CrossSectionGraphTerm {
                     .map(|(integrand_for_cut, dual_shapes)| {
                         integrand_for_cut
                             .iter()
-                            .zip(dual_shapes)
-                            .map(|(integrand_for_subset, dual_shape)| {
+                            .enumerate()
+                            .map(|(num_derivatives, integrand_for_subset)| {
+                                let dual_shape = if num_derivatives > 0 {
+                                    Some(
+                                        graph.derived_data.raised_data.dual_shapes
+                                            [num_derivatives - 1]
+                                            .clone(),
+                                    )
+                                } else {
+                                    None
+                                };
+
                                 GenericEvaluator::new_from_builder(
                                     orientations
                                         .iter()
                                         .map(|or| or.select(integrand_for_subset)),
                                     &graph.graph.param_builder,
-                                    dual_shape.clone(),
+                                    dual_shape,
                                     OptimizationSettings::default(),
                                     settings.generation.evaluator.store_atom,
                                 )
