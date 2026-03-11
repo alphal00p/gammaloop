@@ -928,9 +928,13 @@ define_index!(
 );
 
 pub struct RaisedEsurfaceData {
-    pub raised_groups: TiVec<RaisedEsurfaceId, Vec<EsurfaceID>>,
-    pub max_occurence: TiVec<RaisedEsurfaceId, usize>,
+    pub raised_groups: TiVec<RaisedEsurfaceId, RaisedEsurfaceGroup>,
     pub pass_two_evaluator: Option<Vec<GenericEvaluator>>,
+}
+
+pub struct RaisedEsurfaceGroup {
+    pub esurface_ids: Vec<EsurfaceID>,
+    pub max_occurence: usize,
 }
 
 impl Graph {
@@ -961,14 +965,14 @@ impl Graph {
             })
             .collect::<TiVec<EsurfaceID, _>>();
 
-        let mut raised_groups = TiVec::<RaisedEsurfaceId, Vec<EsurfaceID>>::new();
+        let mut raised_groups = TiVec::<RaisedEsurfaceId, RaisedEsurfaceGroup>::new();
 
         for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
             let raised_cut_id =
                 raised_groups
                     .iter_enumerated()
                     .find_map(|(raised_cut_id, cuts)| {
-                        if cuts.iter().all(|cut_in_raised_group_id| {
+                        if cuts.esurface_ids.iter().all(|cut_in_raised_group_id| {
                             normalized_cut_esurfaces[*cut_in_raised_group_id].energies
                                 == normalized_cut_esurface.energies
                         }) {
@@ -979,15 +983,25 @@ impl Graph {
                     });
 
             if let Some(found_raised_cut_id) = raised_cut_id {
-                raised_groups[found_raised_cut_id].push(cut_id);
+                raised_groups[found_raised_cut_id].esurface_ids.push(cut_id);
             } else {
-                raised_groups.push(vec![cut_id]);
+                raised_groups.push(RaisedEsurfaceGroup {
+                    esurface_ids: vec![cut_id],
+                    max_occurence: 0,
+                });
             }
         }
 
-        let mut max_occurence = TiVec::new();
-        for (raised_cut_id, cut_group) in raised_groups.iter_enumerated() {
-            let representative_esurface_id = cut_group[0];
+        let mut result = RaisedEsurfaceData {
+            raised_groups,
+            pass_two_evaluator: None,
+        };
+
+        let mut expression_copy = expr.clone();
+        expression_copy.normalize_wrt_all_raisings(&result);
+
+        for cut_group in result.raised_groups.iter_mut() {
+            let representative_esurface_id = cut_group.esurface_ids[0];
 
             let max_occurence_for_this_id = expr
                 .orientations
@@ -1000,14 +1014,10 @@ impl Graph {
                 .max()
                 .unwrap_or(0);
 
-            max_occurence.push(max_occurence_for_this_id);
+            cut_group.max_occurence = max_occurence_for_this_id;
         }
 
-        RaisedEsurfaceData {
-            raised_groups,
-            max_occurence,
-            pass_two_evaluator: None,
-        }
+        result
     }
 }
 

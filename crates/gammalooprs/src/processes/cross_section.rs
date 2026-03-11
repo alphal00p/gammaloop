@@ -37,7 +37,8 @@ use crate::{
     },
     define_index, disable,
     graph::{
-        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
+        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, cuts::CutSet,
+        parse::complete_group_parsing,
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup,
@@ -49,7 +50,10 @@ use crate::{
     processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives},
-    uv::{UltravioletGraph, uv_graph::UVE},
+    uv::{
+        UltravioletGraph, approx::CutStructure, forest::ParametricIntegrands, uv_graph::UVE,
+        wood::CutWoods,
+    },
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
@@ -899,6 +903,57 @@ impl CrossSectionGraph {
         .unwrap();
 
         (initial_state_tree_expr, replacements)
+    }
+
+    fn build_integrand(
+        &mut self,
+        settings: &GenerationSettings,
+        vakint: (&Vakint, &vakint::VakintSettings),
+    ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        let max_order = self
+            .derived_data
+            .raised_data
+            .max_occurances
+            .iter()
+            .max()
+            .unwrap();
+
+        self.graph
+            .param_builder
+            .initialize_t_derivatives(max_order - 1);
+
+        let cuts = self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .map(|cuts| CutSet {
+                esurfaces: cuts
+                    .iter()
+                    .map(|cut_id| self.cut_esurface_id_map[*cut_id])
+                    .collect(),
+                union: cuts
+                    .iter()
+                    .map(|cut_id| {
+                        self.cuts[*cut_id]
+                            .cut
+                            .left
+                            .union(&self.cuts[*cut_id].cut.right)
+                    })
+                    .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
+                    .unwrap_or_else(|| self.graph.empty_subgraph()),
+            })
+            .collect();
+
+        let cut_structure = CutStructure { cuts };
+
+        let cut_woods = CutWoods::new(cut_structure, &self.graph);
+
+        let mut cut_forests = cut_woods.unfold(&self.graph);
+        cut_forests.compute(&mut self.graph, vakint, &settings.uv);
+        cut_forests
+            .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)
+            .map(|vec| vec.into())
     }
 
     fn build_parametric_integrand_raised_cuts(
@@ -1912,12 +1967,12 @@ impl RaisedCutData {
         let mut max_occurances: TiVec<RaisedCutId, usize> = TiVec::new();
 
         for (cut_id, esurface_id) in cut_esurface_map.iter_enumerated() {
-            let raised_esurface_id = raised_esurface_data
+            let (raised_esurface_id, max_occurence) = raised_esurface_data
                 .raised_groups
                 .iter_enumerated()
                 .find_map(|(raised_cut_id, group)| {
-                    if group.contains(esurface_id) {
-                        Some(raised_cut_id)
+                    if group.esurface_ids.contains(esurface_id) {
+                        Some((raised_cut_id, group.max_occurence))
                     } else {
                         None
                     }
@@ -1925,12 +1980,13 @@ impl RaisedCutData {
                 .unwrap();
 
             let esurfaces = raised_esurface_data.raised_groups[raised_esurface_id]
+                .esurface_ids
                 .iter()
                 .map(|esurface_id| reversed_map[esurface_id])
                 .collect_vec();
 
             raised_cut_groups.push(esurfaces);
-            max_occurances.push(raised_esurface_data.max_occurence[raised_esurface_id]);
+            max_occurances.push(max_occurence);
         }
 
         let full_max_occurance = max_occurances.iter().max().cloned().unwrap_or(0);
