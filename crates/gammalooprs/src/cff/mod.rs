@@ -2,7 +2,7 @@ use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::SubSetLike,
 };
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
     cff::expression::GraphOrientation,
@@ -21,7 +21,7 @@ pub mod surface;
 pub mod tree;
 
 pub struct CFFTerm {
-    // One per
+    // One per orientation
     pub expression: Vec<Atom>,
     pub orientations: Vec<EdgeVec<Orientation>>,
 }
@@ -60,9 +60,30 @@ impl Graph {
             }
         }
 
-        self.generate_cff(&contract_edges, &canonize_esurface);
+        let cff = self.generate_cff(&contract_edges, &canonize_esurface)?;
+        let residue = cff.select_esurface_residue(&cutset.esurfaces);
 
-        todo!("post_processing");
-        Err(eyre!("not implemented"))
+        let mut terms = vec![];
+
+        let replacement_rules = self.surface_cache.get_all_replacements(&[]);
+
+        for expr in residue.into_iter() {
+            let mut cff_term = CFFTerm {
+                expression: vec![],
+                orientations: vec![],
+            };
+            for orientation in expr.orientations.iter() {
+                let eta_expr = orientation.expression.to_atom_inv();
+                let ose_expr = eta_expr.replace_multiple(&replacement_rules);
+                cff_term.expression.push(ose_expr);
+                cff_term
+                    .orientations
+                    .push(orientation.data.orientation.clone());
+            }
+            terms.push(cff_term);
+        }
+
+        let cut_cff = CutCFF { terms };
+        Ok(cut_cff)
     }
 }
