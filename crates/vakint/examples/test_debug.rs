@@ -1,7 +1,9 @@
 use ahash::HashMap;
 use std::fs;
 use test_log::env_logger;
-use vakint::{Vakint, VakintExpression, VakintSettings};
+use vakint::{
+    InputFloatRationalizationPrecision, MATADOptions, Vakint, VakintExpression, VakintSettings,
+};
 
 fn main() {
     env_logger::init();
@@ -16,17 +18,27 @@ fn main() {
         mu_r_sq_symbol: "gammalooprs::μᵣ²".to_string(),
         epsilon_symbol: "gammalooprs::ε".to_string(),
         verify_numerator_identification: false,
-        evaluation_order: vakint::EvaluationOrder::analytic_only(),
+        precision_for_input_float_rationalization:
+            InputFloatRationalizationPrecision::FullPrecision,
+        evaluation_order: vakint::EvaluationOrder::matad_only(None),
         ..VakintSettings::default()
     };
 
     println!("{:#?}", settings);
 
-    let input = fs::read_to_string("./examples/test_debug_input_lucien.txt")
-        .expect("failed to read ./examples/test_debug_input_lucien.txt");
+    // let input = fs::read_to_string("./examples/test_debug_input_lucien.txt")
+    //     .expect("failed to read ./examples/test_debug_input_lucien.txt");
 
-    let mut integral = //symbolica::atom::Atom::Zero;
-    symbolica::parse!(input.trim());
+    // let mut integral = //symbolica::atom::Atom::Zero;
+    // symbolica::parse!(input.trim());
+
+    let mut integral = symbolica::parse!(
+        "(
+             1.1243423413786486276348761294716297346178236`100
+        )*vakint::topo(\
+        vakint::prop(9,vakint::edge(66,66),vakint::k(3),MUVsq,1)\
+    )"
+    );
 
     let full = vakint.evaluate(&settings, integral.as_view()).unwrap();
 

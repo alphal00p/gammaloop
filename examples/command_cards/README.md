@@ -83,7 +83,7 @@ Showcases advanced integration and evaluation capabilities:
 
 # Then manually execute commands from the examples:
 > import model sm-default
-> generate amplitude e+ e- > mu+ mu- QED=2
+> generate amp e+ e- > mu+ mu- QED==2
 > display processes
 > save dot ee_to_mumu
 ```
@@ -91,8 +91,8 @@ Showcases advanced integration and evaluation capabilities:
 ### Command-Line Execution
 ```bash
 # Execute single commands directly
-./bin/gammaloop -c "import model sm-default"
-./bin/gammaloop -c "generate amplitude e+ e- > mu+ mu- QED=2; display processes"
+./bin/gammaloop run -c "import model sm-default"
+./bin/gammaloop run -c "generate amp e+ e- > mu+ mu- QED==2; display processes"
 ```
 
 ## Creating Custom Command Files
@@ -103,7 +103,7 @@ Showcases advanced integration and evaluation capabilities:
 
 commands = [
     "import model sm-default",
-    "generate amplitude <process_definition>",
+    "generate amp <process_definition>",
     "display processes"
 ]
 
@@ -122,7 +122,7 @@ display_directive = "info"
 commands = [
     "import model sm-default",                    # Load Standard Model
     "display model",                             # Show model details
-    "generate amplitude e+ e- > mu+ mu- QED=2",  # Generate QED process
+    "generate amp e+ e- > mu+ mu- QED==2",  # Generate QED process
     "generate xs e+ e- > d d~ QCD=1",            # Generate QCD cross-section
     "display processes",                         # List all processes
     "save dot my_diagrams"                       # Export Feynman diagrams
@@ -133,11 +133,11 @@ commands = [
 ```toml
 commands = [
     "import model sm-default",
-    "generate amplitude e+ e- > mu+ mu- QED=2",
+    "generate amp e+ e- > mu+ mu- QED==2",
     "set kinematics.e_cm 91.1876",              # Set center-of-mass energy
     "set integrator.n_max 1000000",             # Set max evaluations
-    "integrate --process-id 0 --n-cores 4",     # Run integration
-    "inspect --process-id 0 -p 0.1 0.2 0.3"    # Inspect specific point
+    "integrate -p 0 --n-cores 4",               # Run integration
+    "inspect -p 0 -x 0.1 0.2 0.3"               # Inspect specific point
 ]
 ```
 

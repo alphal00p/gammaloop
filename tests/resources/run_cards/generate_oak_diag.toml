@@ -5,7 +5,7 @@ commands = [
   "generate",
   "save dot OAK_DIAG_PROCESSED",
   "quit"
-  # "inspect --process-id 0 --name box -m -p 0.1 0.2 0.3",
+  # "inspect -p 0 -i box -m -x 0.1 0.2 0.3",
 ]
 
 [default_runtime_settings.kinematics]

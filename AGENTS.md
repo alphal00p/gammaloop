@@ -74,6 +74,8 @@
 ## Agent Instructions
 - API stability is currently a non-goal for internal development: prioritize maintainability and structure over preserving external-facing module paths.
 - Breaking Rust/Python API changes are acceptable when they simplify architecture; document major moves in the change description.
+- Backward compatibility with old on-disk GammaLoop states is also currently a non-goal: it is acceptable to rename/remove legacy state files, layouts, and loaders when that simplifies the implementation.
+- Do not keep compatibility fallbacks for old state formats/names unless the task explicitly asks for migration support.
 
 ## Configuration & State Tips
 - CLI runs create a `gammaloop_state/` directory by default; keep it out of commits unless intentionally sharing a reproducible state.

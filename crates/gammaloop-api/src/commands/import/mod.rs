@@ -22,7 +22,7 @@ pub enum Import {
         #[arg(short = 'p', long = "process", value_name = "PROCESS")]
         process: Option<ProcessRef>,
 
-        #[arg(short = 'i')]
+        #[arg(short = 'i', long = "integrand-name")]
         integrand_name: Option<String>,
 
         #[arg(short = 'o', default_value_t = false, conflicts_with = "append")]

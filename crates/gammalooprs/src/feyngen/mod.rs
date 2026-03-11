@@ -323,6 +323,7 @@ impl FeynGenFilters {
                 | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
                 | FeynGenFilter::BlobRange(_)
                 | FeynGenFilter::SpectatorRange(_)
+                | FeynGenFilter::VertexAllow(_)
                 | FeynGenFilter::VertexVeto(_)
                 | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
             }
@@ -450,6 +451,7 @@ pub enum FeynGenFilter {
     SewedFilter(SewedFilterOptions),
     /// A list of vetoed pdgs
     ParticleVeto(Vec<i64>),
+    VertexAllow(Vec<String>),
     VertexVeto(Vec<String>),
     MaxNumberOfBridges(usize),
     /// A map between the coupling order name and a range of orders, inclusive, with an optional upper bound
@@ -481,6 +483,14 @@ impl fmt::Display for FeynGenFilter {
                 Self::VertexVeto(vetos) => format!(
                     "VertexVeto({})",
                     vetos
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<String>>()
+                        .join("|")
+                ),
+                Self::VertexAllow(allowed) => format!(
+                    "VertexAllow({})",
+                    allowed
                         .iter()
                         .map(|x| x.to_string())
                         .collect::<Vec<String>>()

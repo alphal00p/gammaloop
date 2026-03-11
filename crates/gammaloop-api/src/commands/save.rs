@@ -16,7 +16,7 @@ use tracing::{info, warn};
 use crate::{
     state::{set_serialize_commands_as_strings, RunHistory, State},
     templates::Assets,
-    write_schemas, CLISettings,
+    write_schemas, CLISettings, DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -249,10 +249,10 @@ impl SaveState {
 
         SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
         default_runtime_settings.to_file(
-            selected_root_folder.join("default_runtime_settings.toml"),
+            selected_root_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
             true,
         )?;
-        global_settings.to_file(selected_root_folder.join("cli_settings.toml"), true)?;
+        global_settings.to_file(selected_root_folder.join(GLOBAL_SETTINGS_FILENAME), true)?;
 
         SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
 

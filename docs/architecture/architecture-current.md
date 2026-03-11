@@ -96,7 +96,7 @@ Primary persisted state lives under `gammaloop_state/` (default):
 - `processes/` (amplitudes/cross_sections + integrands)
 - `run.toml`
 - `default_runtime_settings.toml`
-- `cli_settings.toml`
+- `global_settings.toml`
 - `logs/`
 
 For local experimentation, prefer an isolated path such as `.local/scratch/<run>/gammaloop_state` to keep repository root output minimal.

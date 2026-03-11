@@ -12,7 +12,7 @@ commands = [
     "display processes",
 
     # Generate a simple QED process: electron-positron to muon pair
-    "generate amplitude e+ e- > mu+ mu- QED=2",
+    "generate amp e+ e- > mu+ mu- QED==2",
 
     # Display the generated processes
     "display processes",

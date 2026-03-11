@@ -35,7 +35,8 @@ pub struct Renormalize {
     pub print_namespaces: bool,
 
     /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    /// The amplitude name to renormalize
+    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
     pub integrand_name: Option<String>,
 
     /// The directory to store per-graph results in

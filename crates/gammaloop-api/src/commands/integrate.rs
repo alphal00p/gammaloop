@@ -31,8 +31,8 @@ pub struct Integrate {
     #[arg(short = 'p', long = "process", value_name = "PROCESS")]
     pub process: Option<ProcessRef>,
 
-    /// The name of the process to inspect
-    #[arg(short = 'i', long = "name", value_name = "NAME")]
+    /// The integrand name to integrate
+    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
     pub integrand_name: Option<String>,
 
     /// The path to store results in

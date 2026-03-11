@@ -50,6 +50,7 @@ pub enum GenerateCmd {
     Xs(SpecArgs),
 
     /// Amplitude generation
+    #[command(alias = "amplitude")]
     Amp(SpecArgs),
 
     /// Reuse an already generated process
@@ -172,6 +173,10 @@ pub struct SpecArgs {
     /// Veto vertex interactions
     #[arg(long = "veto-vertex-interactions", num_args = 0..)]
     pub veto_vertex_interactions: Option<Vec<String>>,
+
+    /// Restrict generation to an allow-list of vertex interactions
+    #[arg(long = "allowed-vertex-interactions", num_args = 0..)]
+    pub allowed_vertex_interactions: Option<Vec<String>>,
 
     /// Cross-section tadpole filtering when sewing
     #[arg(long = "filter-cross-section-tadpoles")]
@@ -1550,6 +1555,16 @@ fn feyngen_from_spec_args(
         }
     }
 
+    if let Some(vertex_interactions_allowed) = a.allowed_vertex_interactions.as_ref() {
+        if !vertex_interactions_allowed.is_empty() {
+            let filt = FeynGenFilter::VertexAllow(vertex_interactions_allowed.clone());
+            if fg.generation_type == GenerationType::Amplitude {
+                amp_filters.push(filt);
+            } else {
+                xs_filters.push(filt);
+            }
+        }
+    }
     if let Some(vertex_interactions_vetoed) = a.veto_vertex_interactions.as_ref() {
         let filt = FeynGenFilter::VertexVeto(vertex_interactions_vetoed.clone());
         if fg.generation_type == GenerationType::Amplitude {
@@ -1794,6 +1809,7 @@ mod tests {
             append: false,
             integrand_name: None,
             only_diagrams: true,
+            allowed_vertex_interactions: None,
             veto_vertex_interactions: None,
             global_prefactor_num: None,
             global_prefactor_projector: None,
@@ -1811,6 +1827,26 @@ mod tests {
         let model = &load_generic_model("sm");
         let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
+    }
+
+    #[test]
+    fn allowed_vertex_interactions_are_added_to_generation_filters() {
+        let model = &load_generic_model("sm");
+        let mut args = base_args("e+ e- > d d~");
+        args.allowed_vertex_interactions = Some(vec!["V_6".to_string(), "V_9".to_string()]);
+
+        let spec = parse_spec_with_model(&args, GenerationType::Amplitude, model).unwrap();
+
+        assert!(spec
+            .process_definition
+            .amplitude_filters
+            .0
+            .iter()
+            .any(|filter| matches!(
+                filter,
+                FeynGenFilter::VertexAllow(vertex_names)
+                    if vertex_names == &vec!["V_6".to_string(), "V_9".to_string()]
+            )));
     }
 
     #[test]

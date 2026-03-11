@@ -34,8 +34,8 @@ pub struct UltraVioletProfile {
     #[arg(short = 'p', long = "process", value_name = "PROCESS")]
     pub process: Option<ProcessRef>,
 
-    /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    /// The amplitude name to inspect
+    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
     pub integrand_name: Option<String>,
 
     /// Number of scaling points to sample
@@ -62,7 +62,7 @@ pub struct UltraVioletProfile {
     pub seed: Option<u64>,
 
     /// Output file for results (optional)
-    #[arg(short = 'o', long = "output")]
+    #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 }
 
@@ -72,8 +72,8 @@ pub struct InfraRedProfile {
     #[arg(short = 'p', long = "process", value_name = "PROCESS")]
     pub process: Option<ProcessRef>,
 
-    /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    /// The cross-section name to inspect
+    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
     pub integrand_name: Option<String>,
 
     /// Number of scaling points to sample
@@ -93,7 +93,7 @@ pub struct InfraRedProfile {
     pub seed: Option<u64>,
 
     /// Output file for results (optional)
-    #[arg(short = 'o', long = "output")]
+    #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 
     /// restrict test to particular graphs or limits

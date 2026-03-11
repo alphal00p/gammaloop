@@ -6,7 +6,7 @@ commands = [
     "import graphs ./zeno_IR.dot",
     "generate",
     "set global kv stderr_directive=gammalooprs=info",
-    "inspect --process-id 0 --name zeno_IR -p 0.1 0.2 0.3 -m",
+    "inspect -p 0 -i zeno_IR -x 0.1 0.2 0.3 -m",
 ]
 
 [default_runtime_settings.general]

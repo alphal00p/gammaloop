@@ -30,8 +30,8 @@ pub struct Evaluate {
     #[arg(short = 'p', long = "process", value_name = "PROCESS")]
     pub process: Option<ProcessRef>,
 
-    /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    /// The integrand name to evaluate
+    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
     pub graphs_group_name: Option<String>,
 
     /// The path to store results in

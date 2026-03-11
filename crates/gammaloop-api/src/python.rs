@@ -20,6 +20,7 @@ use crate::{
         inspect::{BatchedInspect, Inspect},
         Commands, Evaluate,
     },
+    session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
     CLISettings, OneShot,
 };
@@ -359,6 +360,7 @@ struct GammaLoopAPI {
     #[allow(unused)]
     run_history: RunHistory,
     default_runtime_settings: RuntimeSettings,
+    session_state: CliSessionState,
 }
 
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
@@ -378,8 +380,7 @@ impl GammaLoopAPI {
             exceptions::PyException::new_err(format!("Could not initialize GammaLoop API: {}", e))
         })?;
         let mut one_shot = OneShot {
-            // Don't actually run anything, just build up run card
-            dry_run: false,
+            boot_commands_path: None,
             // Path to the state folder
             state_folder,
             // Python API takes an explicit state folder argument.
@@ -394,6 +395,8 @@ impl GammaLoopAPI {
             trace_logs_filename: log_file_name,
             // Set log level for current session
             level: log_level,
+            settings_global_path: None,
+            settings_runtime_defaults_path: None,
             // Try to serialize using strings when saving run history
             no_try_strings: false,
             command: None,
@@ -411,6 +414,7 @@ impl GammaLoopAPI {
             run_history,
             cli_settings,
             default_runtime_settings,
+            session_state: CliSessionState::default(),
         })
     }
 
@@ -850,21 +854,24 @@ impl GammaLoopAPI {
 
     #[pyo3(name="run", signature = (command,))]
     pub(crate) fn run_command(&mut self, command: String) -> PyResult<()> {
-        let cmd = Commands::from_str(&command)?;
-
-        cmd.run(
+        let command_history = crate::state::CommandHistory::from_raw_string(&command)?;
+        let mut session = CliSession::new(
             &mut self.gammaloop_state,
             &mut self.run_history,
             &mut self.cli_settings,
             &mut self.default_runtime_settings,
-        )
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Execution of command '{}' failed: {}",
-                command, e
-            ))
-        })
-        .map(|_| ())
+            &mut self.session_state,
+        );
+
+        session
+            .execute_top_level(command_history)
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Execution of command '{}' failed: {}",
+                    command, e
+                ))
+            })
+            .map(|_| ())
     }
 
     #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]

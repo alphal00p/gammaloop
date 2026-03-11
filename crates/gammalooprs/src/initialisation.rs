@@ -18,7 +18,8 @@ pub fn initialise() -> Result<()> {
             .into_hooks();
         // println!("Installing panic and eyre hooks");
         panic.install();
-        eyre.install().unwrap();
+        // Tests and embedded entry points may have already installed an eyre hook.
+        let _ = eyre.install();
 
         // println!("Initializing symbols");
         let _ = GS.delta_vec;

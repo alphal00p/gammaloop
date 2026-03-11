@@ -22,7 +22,7 @@ commands = [
   # "set process -p qqx_aaa -i pentagon_user_numerator kv general.additional_param_values=[1.0,1.0,1.0]",
   ## # INSPECTION: START ###
   # inspection in momentum space is onlu possible for invertible parameterisations (i.e not tropical sampling)
-  "inspect --process qqx_aaa -i pentagon_dario -m -p 1.0 2.0 3.0",
+  "inspect --process qqx_aaa -i pentagon_dario -m -x 1.0 2.0 3.0",
   ## # INSPECTION: END ###
   ## # INTEGRATION: START ###
   # This does a default simple sampling with spherical parameterisation. Uncomment the two lines below if you instead want to rely on the

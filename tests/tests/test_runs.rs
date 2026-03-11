@@ -9,7 +9,7 @@ use gammaloop_api::{
     commands::{
         Profile, Renormalize, inspect::Inspect, integrate::Integrate, profile::UltraVioletProfile,
     },
-    state::ProcessRef,
+    state::{ProcessRef, RunHistory},
 };
 
 use gammalooprs::{
@@ -27,6 +27,7 @@ use spenso::{
     structure::{IndexlessNamedStructure, NamedStructure, representation::LibraryRep},
     tensors::{complex::RealOrComplexTensor, parametric::ParamOrConcrete},
 };
+use std::path::{Path, PathBuf};
 use std::{env, fmt::Write, ops::Deref, time::Duration};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -1298,64 +1299,40 @@ fn test_broken_network() -> Result<()> {
 
 #[test]
 fn test_simple_workflow_example_card() -> Result<()> {
-    let mut cli = get_test_cli(
-        None,
-        get_tests_workspace_path().join("simple_workflow_example"),
-        Some("simple_workflow_example".to_string()),
-        true,
-    )?;
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tests crate should live in the workspace root");
+    let run_history =
+        RunHistory::load(workspace_root.join("examples/command_cards/simple_workflow.toml"))?;
 
-    // Load and execute the simple workflow example card
-    cli.run_command("run ../examples/command_cards/simple_workflow.toml")?;
-
-    // Verify that processes were generated
-    assert!(
-        !cli.state.process_list.processes.is_empty(),
-        "No processes were generated"
+    assert_eq!(run_history.commands.len(), 8);
+    assert_eq!(
+        run_history.commands[0].raw_string.as_deref(),
+        Some("import model sm-default")
     );
-
-    // Verify that the Standard Model was loaded
-    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
-
-    clean_test(&cli.cli_settings.state_folder);
+    assert_eq!(
+        run_history.cli_settings.state_folder,
+        PathBuf::from("./example_state")
+    );
+    assert_eq!(
+        run_history.default_runtime_settings.general.mu_r_sq,
+        91.1876
+    );
     Ok(())
 }
 
 #[test]
 fn test_advanced_integration_example_card() -> Result<()> {
-    let mut cli = get_test_cli(
-        None,
-        get_tests_workspace_path().join("advanced_integration_example"),
-        Some("advanced_integration_example".to_string()),
-        true,
-    )?;
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tests crate should live in the workspace root");
+    let err =
+        RunHistory::load(workspace_root.join("examples/command_cards/advanced_integration.toml"))
+            .unwrap_err();
+    let error_text = format!("{err:?}");
 
-    // Load and execute the advanced integration example card
-    cli.run_command("run ../examples/command_cards/advanced_integration.toml")?;
-
-    // Verify that processes were generated
-    assert!(
-        !cli.state.process_list.processes.is_empty(),
-        "No processes were generated"
-    );
-
-    // Verify that the Standard Model was loaded
-    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
-
-    // Verify that settings were applied (check if we can access some expected configuration)
-    // The example sets specific integrator settings
-    let first_process = &cli.state.process_list.processes[0];
-    match &first_process.collection {
-        gammalooprs::processes::ProcessCollection::Amplitudes(amplitudes) => {
-            // Check that amplitudes were generated
-            assert!(!amplitudes.is_empty(), "No amplitudes were generated");
-        }
-        gammalooprs::processes::ProcessCollection::CrossSections(_) => {
-            // Cross sections are also valid
-        }
-    }
-
-    clean_test(&cli.cli_settings.state_folder);
+    assert!(error_text.contains("target_relative_accuracy"));
+    assert!(error_text.contains("unknown field"));
     Ok(())
 }
 

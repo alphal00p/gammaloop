@@ -4,7 +4,7 @@ commands = [
   "import model scalars-default.json",
   "import graphs ./tests/resources/graphs/scalar_bubble.dot",
   "generate",
-  # "inspect --process-id 0 --name box -m -p 0.1 0.2 0.3",
+  # "inspect -p 0 -i box -m -x 0.1 0.2 0.3",
 ]
 
 [default_runtime_settings.kinematics.externals]

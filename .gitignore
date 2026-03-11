@@ -52,10 +52,16 @@ find-baseline.svg
 *.data
 *.old
 eval.cpp
+improved_cli.md
 evaluate.cpp
 perf.data
 # logos
 logos/
+tests/tests/workspace
+
+examples/cli/epem_a_ttxh
+crates/gammalooprs/src/old_observables
+crates/vakint/tests_workspace/*
 
 # C compiled objects
 *.o

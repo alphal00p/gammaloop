@@ -1,0 +1,453 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
+use std::{
+    fs,
+    ops::{ControlFlow, Deref, DerefMut},
+    path::PathBuf,
+    sync::{Mutex, MutexGuard, OnceLock},
+};
+
+use color_eyre::Result;
+use gammaloop_api::{
+    CLISettings, OneShot,
+    commands::Commands,
+    session::CliSessionState,
+    state::{CommandHistory, CommandsBlock, RunHistory},
+};
+use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
+use gammalooprs::settings::RuntimeSettings;
+use serial_test::serial;
+
+static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
+
+struct SharedCli<'a>(MutexGuard<'a, CLIState>);
+
+impl Deref for SharedCli<'_> {
+    type Target = CLIState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for SharedCli<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+fn cli_state_path(name: &str) -> PathBuf {
+    get_tests_workspace_path().join("cli_refactor").join(name)
+}
+
+fn run_card_path(name: &str) -> PathBuf {
+    get_tests_workspace_path()
+        .join("cli_refactor")
+        .join("run_cards")
+        .join(name)
+}
+
+fn new_cli(name: &str) -> Result<SharedCli<'static>> {
+    let template = TEMPLATE_CLI.get_or_init(|| {
+        Mutex::new(
+            get_test_cli(None, cli_state_path("_template"), None, true)
+                .expect("template CLI should initialize"),
+        )
+    });
+    let mut cli = SharedCli(template.lock().unwrap());
+    let state_folder = cli_state_path(name);
+    clean_test(&state_folder);
+    cli.cli_settings = CLISettings::default();
+    cli.cli_settings.state_folder = state_folder;
+    cli.default_runtime_settings = RuntimeSettings::default();
+    cli.run_history = RunHistory::default();
+    cli.session_state = CliSessionState::default();
+    Ok(cli)
+}
+
+fn command(raw: &str) -> CommandHistory {
+    CommandHistory::from_raw_string(raw).unwrap()
+}
+
+fn block(name: &str, commands: &[&str]) -> CommandsBlock {
+    CommandsBlock {
+        name: name.to_string(),
+        commands: commands.iter().map(|raw| command(raw)).collect(),
+    }
+}
+
+fn history_strings(run_history: &RunHistory) -> Vec<String> {
+    run_history
+        .commands
+        .iter()
+        .map(|command| {
+            command
+                .raw_string
+                .clone()
+                .unwrap_or_else(|| format!("{:?}", command.command))
+        })
+        .collect()
+}
+
+fn run_without_arguments_is_a_noop() -> Result<()> {
+    let mut cli = new_cli("run_without_arguments_is_a_noop")?;
+
+    cli.run_command("run")?;
+
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn run_records_only_the_wrapper_command() -> Result<()> {
+    let mut cli = new_cli("run_records_only_the_wrapper_command")?;
+    cli.run_history.commands_blocks = vec![
+        block(
+            "set_display",
+            &["set global kv global.display_directive=warn"],
+        ),
+        block(
+            "set_runtime",
+            &["set default-runtime kv general.mu_r_sq=12.0"],
+        ),
+    ];
+
+    cli.run_command(
+        "run set_display set_runtime -c \"set global kv global.logfile_directive=error\"",
+    )?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(cli.default_runtime_settings.general.mu_r_sq, 12.0);
+    assert_eq!(cli.cli_settings.global.logfile_directive, "error");
+    assert_eq!(cli.run_history.commands.len(), 1);
+    assert!(matches!(
+        cli.run_history.commands[0].command,
+        Commands::Run(_)
+    ));
+    Ok(())
+}
+
+fn run_prevalidation_is_all_or_nothing_for_inline_commands() -> Result<()> {
+    let mut cli = new_cli("run_prevalidation_is_all_or_nothing_for_inline_commands")?;
+    let original_display = cli.cli_settings.global.display_directive.clone();
+
+    let err = cli
+        .run_command("run -c \"set global kv global.display_directive=warn; no_such_command\"")
+        .unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Failed to parse run -c command #2"));
+    assert_eq!(cli.cli_settings.global.display_directive, original_display);
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn run_prevalidation_is_all_or_nothing_for_nested_block_failures() -> Result<()> {
+    let mut cli = new_cli("run_prevalidation_is_all_or_nothing_for_nested_block_failures")?;
+    let original_display = cli.cli_settings.global.display_directive.clone();
+    cli.run_history.commands_blocks = vec![
+        block("first", &["set global kv global.display_directive=warn"]),
+        block("broken", &["run missing_block"]),
+    ];
+
+    let err = cli.run_command("run first broken").unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("command block 'broken' command #1"));
+    assert!(error_text.contains("Unknown command block 'missing_block'"));
+    assert_eq!(cli.cli_settings.global.display_directive, original_display);
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn nested_run_records_only_the_top_level_run() -> Result<()> {
+    let mut cli = new_cli("nested_run_records_only_the_top_level_run")?;
+    cli.run_history.commands_blocks = vec![
+        block("inner", &["set global kv global.display_directive=warn"]),
+        block("outer", &["run inner"]),
+    ];
+
+    cli.run_command("run outer")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(history_strings(&cli.run_history), vec!["run outer"]);
+    Ok(())
+}
+
+fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
+    let mut cli = new_cli("boot_run_history_merges_blocks_and_persists_commands_once")?;
+    let boot_run_history = RunHistory {
+        commands_blocks: vec![block(
+            "boot_block",
+            &["set global kv global.display_directive=warn"],
+        )],
+        commands: vec![
+            command("run boot_block"),
+            command("set default-runtime kv general.mu_r_sq=24.0"),
+        ],
+        ..RunHistory::default()
+    };
+
+    let flow = cli.apply_boot_run_history(&boot_run_history)?;
+
+    assert!(matches!(flow, ControlFlow::Continue(())));
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(cli.default_runtime_settings.general.mu_r_sq, 24.0);
+    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(history_strings(&cli.run_history).len(), 2);
+
+    cli.save_state()?;
+
+    let persisted = RunHistory::load(cli.cli_settings.state_folder.join("run.toml"))?;
+    assert_eq!(persisted.commands_blocks.len(), 1);
+    assert_eq!(persisted.commands.len(), 2);
+    Ok(())
+}
+
+fn boot_run_history_rejects_conflicting_block_redefinitions() -> Result<()> {
+    let mut cli = new_cli("boot_run_history_rejects_conflicting_block_redefinitions")?;
+    cli.run_history.commands_blocks = vec![block(
+        "shared",
+        &["set global kv global.display_directive=warn"],
+    )];
+    let boot_run_history = RunHistory {
+        commands_blocks: vec![block(
+            "shared",
+            &["set global kv global.display_directive=error"],
+        )],
+        ..RunHistory::default()
+    };
+
+    let err = cli.apply_boot_run_history(&boot_run_history).unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("redefines an existing block with different commands"));
+    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn boot_run_history_allows_identical_semantic_redefinitions() -> Result<()> {
+    let mut cli = new_cli("boot_run_history_allows_identical_semantic_redefinitions")?;
+    cli.run_history.commands_blocks = vec![block(
+        "shared",
+        &["set global kv global.display_directive=warn"],
+    )];
+    let boot_run_history = RunHistory {
+        commands_blocks: vec![CommandsBlock {
+            name: "shared".to_string(),
+            commands: vec![CommandHistory::new_with_raw(
+                command("set global kv global.display_directive=warn").command,
+                "set global kv   global.display_directive = warn".to_string(),
+            )],
+        }],
+        ..RunHistory::default()
+    };
+
+    let flow = cli.apply_boot_run_history(&boot_run_history)?;
+
+    assert!(matches!(flow, ControlFlow::Continue(())));
+    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn command_block_definition_mode_defers_execution_and_omits_history() -> Result<()> {
+    let mut cli = new_cli("command_block_definition_mode_defers_execution_and_omits_history")?;
+    let original_display = cli.cli_settings.global.display_directive.clone();
+
+    cli.run_command("start_commands_block demo")?;
+    cli.run_command("set global kv global.display_directive=warn")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, original_display);
+    assert!(cli.run_history.commands.is_empty());
+
+    cli.run_command("finish_commands_block")?;
+
+    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.commands_blocks[0].name, "demo");
+    assert!(cli.run_history.commands.is_empty());
+
+    cli.run_command("run demo")?;
+
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    assert_eq!(history_strings(&cli.run_history), vec!["run demo"]);
+    Ok(())
+}
+
+fn finish_commands_block_without_active_definition_fails() -> Result<()> {
+    let mut cli = new_cli("finish_commands_block_without_active_definition_fails")?;
+
+    let err = cli.run_command("finish_commands_block").unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("No command block definition is currently being recorded"));
+    Ok(())
+}
+
+fn start_commands_block_cannot_nest() -> Result<()> {
+    let mut cli = new_cli("start_commands_block_cannot_nest")?;
+
+    cli.run_command("start_commands_block first")?;
+    let err = cli.run_command("start_commands_block second").unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Cannot start a new command block definition"));
+
+    cli.run_command("finish_commands_block")?;
+
+    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.commands_blocks[0].name, "first");
+    Ok(())
+}
+
+fn quit_during_block_definition_dismisses_the_pending_block() -> Result<()> {
+    let mut cli = new_cli("quit_during_block_definition_dismisses_the_pending_block")?;
+
+    cli.run_command("start_commands_block demo")?;
+    cli.run_command("set global kv global.display_directive=warn")?;
+
+    let flow = cli.run_command_flow("quit -o")?;
+
+    assert!(matches!(flow, ControlFlow::Continue(())));
+    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.commands.is_empty());
+
+    let err = cli.run_command("finish_commands_block").unwrap_err();
+    assert!(format!("{err:?}").contains("No command block definition is currently being recorded"));
+    Ok(())
+}
+
+fn ctrl_c_dismisses_pending_block_definition() -> Result<()> {
+    let mut cli = new_cli("ctrl_c_dismisses_pending_block_definition")?;
+
+    cli.run_command("start_commands_block demo")?;
+    cli.run_command("set global kv global.display_directive=warn")?;
+
+    assert!(cli.dismiss_pending_commands_block("Ctrl-C"));
+    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn ctrl_d_dismisses_pending_block_definition() -> Result<()> {
+    let mut cli = new_cli("ctrl_d_dismisses_pending_block_definition")?;
+
+    cli.run_command("start_commands_block demo")?;
+    cli.run_command("set global kv global.display_directive=warn")?;
+
+    assert!(cli.dismiss_pending_commands_block("Ctrl-D"));
+    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn recursive_run_limit_is_enforced() -> Result<()> {
+    let mut cli = new_cli("recursive_run_limit_is_enforced")?;
+    cli.run_history.commands_blocks = vec![block("loop", &["run loop"])];
+
+    let err = cli.run_command("run loop").unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Maximum nested run depth of 100 reached"));
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn save_state_writes_global_settings_file() -> Result<()> {
+    let mut cli = new_cli("save_state_writes_global_settings_file")?;
+
+    cli.save_state()?;
+
+    let global_settings_path = cli.cli_settings.state_folder.join("global_settings.toml");
+    let global_settings_contents = fs::read_to_string(&global_settings_path)?;
+
+    assert!(global_settings_path.exists());
+    assert!(!global_settings_contents.contains("dummy"));
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn cli_stateful_workflow_behaviors() -> Result<()> {
+    run_without_arguments_is_a_noop()?;
+    run_records_only_the_wrapper_command()?;
+    run_prevalidation_is_all_or_nothing_for_inline_commands()?;
+    run_prevalidation_is_all_or_nothing_for_nested_block_failures()?;
+    nested_run_records_only_the_top_level_run()?;
+    boot_run_history_merges_blocks_and_persists_commands_once()?;
+    boot_run_history_rejects_conflicting_block_redefinitions()?;
+    boot_run_history_allows_identical_semantic_redefinitions()?;
+    command_block_definition_mode_defers_execution_and_omits_history()?;
+    finish_commands_block_without_active_definition_fails()?;
+    start_commands_block_cannot_nest()?;
+    quit_during_block_definition_dismisses_the_pending_block()?;
+    ctrl_c_dismisses_pending_block_definition()?;
+    ctrl_d_dismisses_pending_block_definition()?;
+    recursive_run_limit_is_enforced()?;
+    save_state_writes_global_settings_file()?;
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn run_history_load_reports_detailed_parse_errors() {
+    let run_card_path = run_card_path("run_history_load_reports_detailed_parse_errors.toml");
+    if let Some(parent) = run_card_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&run_card_path, "commands = [\"no_such_command\"]\n").unwrap();
+
+    let err = RunHistory::load(&run_card_path).unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Failed to parse top-level command #1 'no_such_command'"));
+    assert!(error_text.contains("error:"));
+}
+
+#[test]
+#[serial]
+fn run_history_load_reports_block_command_context() {
+    let run_card_path = run_card_path("run_history_load_reports_block_command_context.toml");
+    if let Some(parent) = run_card_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(
+        &run_card_path,
+        r#"
+[[commands_blocks]]
+name = "demo"
+commands = ["no_such_command"]
+"#,
+    )
+    .unwrap();
+
+    let err = RunHistory::load(&run_card_path).unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("command block 'demo' command #1"));
+    assert!(error_text.contains("no_such_command"));
+}
+
+#[test]
+#[serial]
+fn existing_invalid_state_folder_fails_to_load_instead_of_falling_back() -> Result<()> {
+    let state_path =
+        cli_state_path("existing_invalid_state_folder_fails_to_load_instead_of_falling_back");
+    clean_test(&state_path);
+    fs::create_dir_all(&state_path)?;
+    fs::write(state_path.join("state_manifest.toml"), "version = 999\n")?;
+
+    let mut cli = OneShot::new_test(state_path.clone());
+    let err = match cli.load() {
+        Ok(_) => panic!("expected load to fail"),
+        Err(err) => err,
+    };
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Failed to load existing state"));
+    assert!(error_text.contains("State version 999"));
+
+    clean_test(&state_path);
+    Ok(())
+}

@@ -1,0 +1,444 @@
+use std::ops::ControlFlow;
+
+use color_eyre::{eyre::eyre, Result};
+use colored::Colorize;
+use gammalooprs::processes::ProcessCollection;
+use gammalooprs::settings::RuntimeSettings;
+use tracing::info;
+
+use crate::{
+    commands::{
+        run::{prepare_command_histories_with_context, PreparedCommand, PreparedRun},
+        save::SaveState,
+        Commands, StartCommandsBlock,
+    },
+    repl::{ProcessCompletionEntry, ProcessKind},
+    state::{CommandHistory, CommandsBlock, RunHistory, State},
+    CLISettings,
+};
+
+#[derive(Debug, Clone, Default)]
+pub struct CliSessionState {
+    pending_commands_block: Option<PendingCommandsBlock>,
+}
+
+#[derive(Debug, Clone)]
+struct PendingCommandsBlock {
+    name: String,
+    commands: Vec<CommandHistory>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistoryMode {
+    Record,
+    Suppress,
+}
+
+pub struct CliSession<'a> {
+    state: &'a mut State,
+    run_history: &'a mut RunHistory,
+    cli_settings: &'a mut CLISettings,
+    default_runtime_settings: &'a mut RuntimeSettings,
+    session_state: &'a mut CliSessionState,
+}
+
+impl<'a> CliSession<'a> {
+    pub fn new(
+        state: &'a mut State,
+        run_history: &'a mut RunHistory,
+        cli_settings: &'a mut CLISettings,
+        default_runtime_settings: &'a mut RuntimeSettings,
+        session_state: &'a mut CliSessionState,
+    ) -> Self {
+        Self {
+            state,
+            run_history,
+            cli_settings,
+            default_runtime_settings,
+            session_state,
+        }
+    }
+
+    pub fn execute_top_level(&mut self, command: CommandHistory) -> Result<ControlFlow<SaveState>> {
+        let prepared = PreparedCommand::prepare(command, self.run_history, 1)?;
+        self.execute_prepared(prepared, HistoryMode::Record)
+    }
+
+    pub fn replay_run_history(&mut self) -> Result<ControlFlow<SaveState>> {
+        self.run_history
+            .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;
+        let prepared = prepare_command_histories_with_context(
+            &self.run_history.commands.clone(),
+            self.run_history,
+            1,
+            "run history",
+        )?;
+        self.execute_prepared_commands(prepared, HistoryMode::Suppress)
+    }
+
+    pub fn apply_boot_run_history(
+        &mut self,
+        boot_run_history: &RunHistory,
+    ) -> Result<ControlFlow<SaveState>> {
+        boot_run_history.validate()?;
+
+        let mut merged_history = self.run_history.clone();
+        merged_history.merge_commands_blocks(&boot_run_history.commands_blocks)?;
+
+        for block in &boot_run_history.commands_blocks {
+            let block_context = format!("command block '{}'", block.name);
+            let _ = prepare_command_histories_with_context(
+                &block.commands,
+                &merged_history,
+                2,
+                &block_context,
+            )?;
+        }
+
+        let prepared = prepare_command_histories_with_context(
+            &boot_run_history.commands,
+            &merged_history,
+            1,
+            "boot",
+        )?;
+
+        self.run_history
+            .merge_commands_blocks(&boot_run_history.commands_blocks)?;
+        boot_run_history
+            .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;
+        self.execute_prepared_commands(prepared, HistoryMode::Record)
+    }
+
+    pub fn has_pending_commands_block(&self) -> bool {
+        self.session_state.pending_commands_block.is_some()
+    }
+
+    pub fn current_commands_block_names(&self) -> Vec<String> {
+        self.run_history
+            .commands_blocks
+            .iter()
+            .map(|block| block.name.clone())
+            .collect()
+    }
+
+    pub fn current_process_entries(&self) -> Vec<ProcessCompletionEntry> {
+        self.state
+            .process_list
+            .processes
+            .iter()
+            .enumerate()
+            .map(|(id, process)| ProcessCompletionEntry {
+                id,
+                name: process.definition.folder_name.clone(),
+                kind: match &process.collection {
+                    ProcessCollection::Amplitudes(_) => ProcessKind::Amplitude,
+                    ProcessCollection::CrossSections(_) => ProcessKind::CrossSection,
+                },
+                integrand_names: process
+                    .collection
+                    .get_integrand_names()
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+            })
+            .collect()
+    }
+
+    pub fn current_model_parameter_names(&self) -> Vec<String> {
+        let mut names = self
+            .state
+            .model_parameters
+            .keys()
+            .map(|name| name.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    }
+
+    pub fn current_model_particle_names(&self) -> Vec<String> {
+        let mut names = self
+            .state
+            .model
+            .particles
+            .iter()
+            .flat_map(|particle| [particle.name.to_string(), particle.antiname.to_string()])
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    pub fn current_model_coupling_names(&self) -> Vec<String> {
+        let mut names = self
+            .state
+            .model
+            .orders
+            .iter()
+            .map(|order| order.name.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    pub fn current_model_vertex_names(&self) -> Vec<String> {
+        let mut names = self
+            .state
+            .model
+            .vertex_rules
+            .iter()
+            .map(|vertex_rule| vertex_rule.0.name.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    pub fn dismiss_pending_commands_block(&mut self, trigger: &str) -> bool {
+        let Some(pending) = self.session_state.pending_commands_block.take() else {
+            return false;
+        };
+
+        info!(
+            "{} {} {} {}",
+            "Dismissing command block definition".blue(),
+            pending.name.green(),
+            "after".blue(),
+            trigger.green()
+        );
+        true
+    }
+
+    fn execute_prepared_commands(
+        &mut self,
+        commands: Vec<PreparedCommand>,
+        history_mode: HistoryMode,
+    ) -> Result<ControlFlow<SaveState>> {
+        for command in commands {
+            if let ControlFlow::Break(save_state) = self.execute_prepared(command, history_mode)? {
+                return Ok(ControlFlow::Break(save_state));
+            }
+        }
+        Ok(ControlFlow::Continue(()))
+    }
+
+    fn execute_prepared(
+        &mut self,
+        command: PreparedCommand,
+        history_mode: HistoryMode,
+    ) -> Result<ControlFlow<SaveState>> {
+        match command {
+            PreparedCommand::Plain(command) => self.execute_plain(command, history_mode),
+            PreparedCommand::Run { command, plan } => self.execute_run(command, plan, history_mode),
+        }
+    }
+
+    fn execute_plain(
+        &mut self,
+        command: CommandHistory,
+        history_mode: HistoryMode,
+    ) -> Result<ControlFlow<SaveState>> {
+        if self.session_state.pending_commands_block.is_some() {
+            return self.handle_recording_mode(command);
+        }
+
+        let display_text = display_command(&command);
+        info!("{} {}", "Running command".blue(), display_text.green());
+
+        let record = match &command.command {
+            Commands::StartCommandsBlock(start) => {
+                self.start_commands_block(start.clone())?;
+                false
+            }
+            Commands::FinishCommandsBlock => {
+                self.finish_commands_block()?;
+                false
+            }
+            _ => {
+                if let ControlFlow::Break(save_state) = command.command.clone().run(
+                    self.state,
+                    self.run_history,
+                    self.cli_settings,
+                    self.default_runtime_settings,
+                )? {
+                    if history_mode == HistoryMode::Record {
+                        self.record_command(&command);
+                    }
+                    return Ok(ControlFlow::Break(save_state));
+                }
+                history_mode == HistoryMode::Record
+            }
+        };
+
+        if record {
+            self.record_command(&command);
+        }
+
+        Ok(ControlFlow::Continue(()))
+    }
+
+    fn execute_run(
+        &mut self,
+        command: CommandHistory,
+        plan: PreparedRun,
+        history_mode: HistoryMode,
+    ) -> Result<ControlFlow<SaveState>> {
+        if self.session_state.pending_commands_block.is_some() {
+            return self.handle_recording_mode(command);
+        }
+
+        if plan.is_empty() {
+            return Ok(ControlFlow::Continue(()));
+        }
+
+        let display_text = display_command(&command);
+        info!("{} {}", "Running command".blue(), display_text.green());
+
+        for block in plan.blocks {
+            info!("{} {}", "Starting command block".blue(), block.name.green());
+            if let ControlFlow::Break(save_state) =
+                self.execute_prepared_commands(block.commands, HistoryMode::Suppress)?
+            {
+                return Ok(ControlFlow::Break(save_state));
+            }
+        }
+
+        if !plan.commands.is_empty() {
+            info!(
+                "{} {}",
+                "Starting commands supplied with".blue(),
+                "--commands/-c".green()
+            );
+        }
+
+        if let ControlFlow::Break(save_state) =
+            self.execute_prepared_commands(plan.commands, HistoryMode::Suppress)?
+        {
+            return Ok(ControlFlow::Break(save_state));
+        }
+
+        if history_mode == HistoryMode::Record {
+            self.record_command(&command);
+        }
+
+        Ok(ControlFlow::Continue(()))
+    }
+
+    fn handle_recording_mode(&mut self, command: CommandHistory) -> Result<ControlFlow<SaveState>> {
+        match command.command.clone() {
+            Commands::StartCommandsBlock(_) => Err(eyre!(
+                "Cannot start a new command block definition before finishing the current one"
+            )),
+            Commands::FinishCommandsBlock => {
+                self.finish_commands_block()?;
+                Ok(ControlFlow::Continue(()))
+            }
+            Commands::Quit(_) => {
+                self.dismiss_pending_commands_block("quit");
+                Ok(ControlFlow::Continue(()))
+            }
+            _ => {
+                let stored = normalize_command_history(&command);
+                let pending = self
+                    .session_state
+                    .pending_commands_block
+                    .as_mut()
+                    .expect("recording mode requires a pending block");
+                pending.commands.push(stored);
+                Ok(ControlFlow::Continue(()))
+            }
+        }
+    }
+
+    fn start_commands_block(&mut self, start: StartCommandsBlock) -> Result<()> {
+        if self.session_state.pending_commands_block.is_some() {
+            return Err(eyre!(
+                "Cannot start a new command block definition before finishing the current one"
+            ));
+        }
+
+        if self.run_history.command_block(&start.name).is_some() {
+            info!(
+                "{} {}",
+                "Overwriting existing command block definition".blue(),
+                start.name.green()
+            );
+        } else {
+            info!(
+                "{} {}",
+                "Defining new command block definition".blue(),
+                start.name.green()
+            );
+        }
+
+        self.session_state.pending_commands_block = Some(PendingCommandsBlock {
+            name: start.name,
+            commands: Vec::new(),
+        });
+        Ok(())
+    }
+
+    fn finish_commands_block(&mut self) -> Result<()> {
+        let Some(pending) = self.session_state.pending_commands_block.take() else {
+            return Err(eyre!(
+                "No command block definition is currently being recorded"
+            ));
+        };
+
+        let block = CommandsBlock {
+            name: pending.name.clone(),
+            commands: pending.commands,
+        };
+
+        if let Some(existing_index) = self
+            .run_history
+            .commands_blocks
+            .iter()
+            .position(|existing| existing.name == pending.name)
+        {
+            self.run_history.commands_blocks[existing_index] = block;
+        } else {
+            self.run_history.commands_blocks.push(block);
+        }
+
+        self.run_history.validate()?;
+        Ok(())
+    }
+
+    fn record_command(&mut self, command: &CommandHistory) {
+        let normalized = normalize_command_history(command);
+        self.run_history
+            .push_with_raw(normalized.command, normalized.raw_string);
+    }
+}
+
+fn normalize_command_history(command: &CommandHistory) -> CommandHistory {
+    let raw_string = command
+        .raw_string
+        .as_deref()
+        .filter(|raw| raw_round_trips(raw, &command.command))
+        .map(str::to_string)
+        .or_else(|| match &command.command {
+            Commands::Run(run) => Some(run.canonical_raw_string()),
+            _ => None,
+        });
+
+    CommandHistory {
+        command: command.command.clone(),
+        raw_string,
+    }
+}
+
+fn raw_round_trips(raw: &str, command: &Commands) -> bool {
+    CommandHistory::from_raw_string(raw)
+        .map(|parsed| parsed.command == *command)
+        .unwrap_or(false)
+}
+
+fn display_command(command: &CommandHistory) -> String {
+    if let Some(raw_string) = normalize_command_history(command).raw_string {
+        raw_string
+    } else {
+        format!("{:?}", command.command)
+    }
+}

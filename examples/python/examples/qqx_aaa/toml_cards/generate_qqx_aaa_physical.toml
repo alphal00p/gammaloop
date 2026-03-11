@@ -4,7 +4,7 @@ commands = [
     "import model sm-default",
     "import graphs ./dot_graphs/loop_graphs/qqx_aaa_subtracted.dot",
     "generate",
-    "inspect -m -p 0.1 0.2 0.3",
+    "inspect -m -x 0.1 0.2 0.3",
 	"quit -o"
 ]
 

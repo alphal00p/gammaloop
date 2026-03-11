@@ -27,16 +27,16 @@ commands = [
   "set stability.check_on_norm true",
 
   # Run Monte Carlo integration with multiple cores
-  "integrate --process-id 0 --n-cores 8 --workspace-path ./integration_workspace --result-path ./results.txt",
+  "integrate -p 0 --n-cores 8 --workspace-path ./integration_workspace --result-path ./results.txt",
 
   # Inspect specific phase-space points
-  "inspect --process-id 0 --discrete-dim 0 -p 0.1 0.2 0.3 0.4 0.5 --momentum-space",
+  "inspect -p 0 --discrete-dim 0 -x 0.1 0.2 0.3 0.4 0.5 --momentum-space",
 
   # Benchmark performance
-  "bench --samples 100000 --process-id 0 --name generated_process --n-cores 4",
+  "bench --samples 100000 -p 0 -i generated_process --n-cores 4",
 
   # Evaluate at multiple points for validation
-  "evaluate --process-id 0 --n-points 1000 --output evaluation_results.json"
+  "evaluate -p 0 -i generated_process --output evaluation_results.json"
 ]
 
 # CLI settings for advanced workflows

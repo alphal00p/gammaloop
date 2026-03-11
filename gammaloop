@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+profile_override=""
+if [ "${1-}" = "--release" ]; then
+    profile_override="release"
+    shift
+elif [ "${1-}" = "--dev-optim" ]; then
+    profile_override="dev-optim"
+    shift
+elif [ "${1-}" = "--debug" ]; then
+    profile_override="debug"
+    shift
+fi
+
+select_binary() {
+    if [ -n "$profile_override" ]; then
+        printf '%s/target/%s/gammaloop\n' "$script_dir" "$profile_override"
+        return
+    fi
+
+    local candidate
+    for candidate in \
+        "$script_dir/target/release/gammaloop" \
+        "$script_dir/target/dev-optim/gammaloop" \
+        "$script_dir/target/debug/gammaloop"
+    do
+        if [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return
+        fi
+    done
+
+    printf '%s/target/release/gammaloop\n' "$script_dir"
+}
+
+binary="$(select_binary)"
+
+if [ ! -x "$binary" ]; then
+    cat >&2 <<EOF
+Could not find an executable gammaloop binary.
+Expected one of:
+  $script_dir/target/release/gammaloop
+  $script_dir/target/dev-optim/gammaloop
+  $script_dir/target/debug/gammaloop
+
+Build one first with, for example:
+  just build-cli
+  just build-cli-release
+EOF
+    exit 1
+fi
+
+exec "$binary" "$@"

@@ -294,13 +294,20 @@ mod test {
 
     use clap::Parser;
     use figment::{providers::Serialized, Figment};
-    use gammalooprs::utils::F;
+    use gammalooprs::{
+        model::{ParameterNature, UFOSymbol},
+        settings::RuntimeSettings,
+        utils::{test_utils::load_generic_model, F},
+    };
     use serde::{Deserialize, Serialize};
     use spenso::algebra::complex::Complex;
 
-    use crate::{state::ProcessRef, Repl};
+    use crate::{
+        state::{ProcessRef, State},
+        CLISettings, Repl,
+    };
 
-    use super::{super::Commands, Set, SetArgs};
+    use super::{super::Commands, KvPair, Set, SetArgs};
 
     #[test]
     fn serialize_complex() {
@@ -553,5 +560,41 @@ integrate = 10
         assert_eq!(merged.cli_settings.global.n_cores.generate, 1);
         assert_eq!(merged.cli_settings.global.n_cores.compile, 10);
         assert_eq!(merged.cli_settings.global.n_cores.integrate, 10);
+    }
+
+    #[test]
+    fn set_model_rejects_internal_parameters() {
+        let model = load_generic_model("sm");
+        let internal_param = model
+            .parameters
+            .values()
+            .find(|param| param.nature == ParameterNature::Internal)
+            .expect("SM model must contain internal parameters")
+            .name
+            .to_string();
+
+        let mut state = State::new_test();
+        state.model = model;
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        assert!(!state
+            .model_parameters
+            .contains_key(&UFOSymbol::from(internal_param.as_str())));
+
+        let err = Set::Model {
+            pairs: vec![KvPair {
+                key: internal_param.clone(),
+                value: "1.0".to_string(),
+            }],
+        }
+        .run(
+            &mut state,
+            &mut CLISettings::default(),
+            &mut RuntimeSettings::default(),
+        )
+        .unwrap_err();
+
+        let err_text = format!("{err:?}");
+        assert!(!err_text.is_empty());
     }
 }

@@ -7,14 +7,13 @@ use tabled::{builder::Builder, settings::Style};
 use tracing::info;
 
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::Context;
 use gammalooprs::processes::{Amplitude, CrossSection, Process, ProcessCollection};
 use gammalooprs::settings::RuntimeSettings;
-use gammalooprs::utils::serde_utils::SHOWDEFAULTS;
-use std::sync::atomic::Ordering;
 
 use crate::{
     commands::generate::ProcessArgs,
+    settings_tree::{serialize_settings_with_defaults, value_at_path},
     state::{ProcessRef, State},
     CLISettings,
 };
@@ -454,89 +453,6 @@ fn render_settings_table(title: &str, root: &JsonValue, key_path: Option<&str>) 
     }
     info!("\n{table}");
     Ok(())
-}
-
-fn serialize_settings_with_defaults<T: Serialize>(
-    settings: &T,
-    context: &str,
-) -> Result<JsonValue> {
-    let _show_defaults_guard = ShowDefaultsGuard::new(true);
-    serde_json::to_value(settings).context(format!("While serializing {context}"))
-}
-
-struct ShowDefaultsGuard {
-    previous: bool,
-}
-
-impl ShowDefaultsGuard {
-    fn new(show_defaults: bool) -> Self {
-        let previous = SHOWDEFAULTS.swap(show_defaults, Ordering::Relaxed);
-        Self { previous }
-    }
-}
-
-impl Drop for ShowDefaultsGuard {
-    fn drop(&mut self) {
-        SHOWDEFAULTS.store(self.previous, Ordering::Relaxed);
-    }
-}
-
-fn value_at_path<'a>(root: &'a JsonValue, path: &str) -> Result<&'a JsonValue> {
-    let mut current = root;
-    for segment in path.split('.') {
-        if segment.is_empty() {
-            continue;
-        }
-        current = match current {
-            JsonValue::Object(map) => map.get(segment).ok_or_else(|| {
-                let mut available: Vec<_> = map.keys().cloned().collect();
-                available.sort();
-                eyre!(
-                    "Key segment '{}' not found while resolving '{}'. Available keys: {}",
-                    segment,
-                    path,
-                    available.join(", ")
-                )
-            })?,
-            JsonValue::Array(items) => {
-                let index = segment.parse::<usize>().map_err(|_| {
-                    eyre!(
-                        "Array segment '{}' is not a valid index while resolving '{}'",
-                        segment,
-                        path
-                    )
-                })?;
-                items.get(index).ok_or_else(|| {
-                    eyre!(
-                        "Array index {} out of bounds while resolving '{}', len={}",
-                        index,
-                        path,
-                        items.len()
-                    )
-                })?
-            }
-            _ => {
-                return Err(eyre!(
-                    "Cannot descend into segment '{}' while resolving '{}': current value is {}",
-                    segment,
-                    path,
-                    json_type_name(current)
-                ));
-            }
-        };
-    }
-    Ok(current)
-}
-
-fn json_type_name(value: &JsonValue) -> &'static str {
-    match value {
-        JsonValue::Null => "null",
-        JsonValue::Bool(_) => "boolean",
-        JsonValue::Number(_) => "number",
-        JsonValue::String(_) => "string",
-        JsonValue::Array(_) => "array",
-        JsonValue::Object(_) => "object",
-    }
 }
 
 fn format_json_value(value: &JsonValue) -> String {

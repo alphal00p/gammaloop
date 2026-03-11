@@ -8,6 +8,86 @@ pub fn split_command_line(input: &str) -> Result<Vec<String>, CommandLineParseEr
     shlex::split(&normalized).ok_or(CommandLineParseError::IncompleteShellSyntax)
 }
 
+pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseError> {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum Mode {
+        Unquoted,
+        SingleQuoted,
+        DoubleQuoted,
+    }
+
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut chars = input.chars().peekable();
+    let mut mode = Mode::Unquoted;
+    let mut unquoted_escape = false;
+    let mut double_quoted_escape = false;
+
+    while let Some(ch) = chars.next() {
+        match mode {
+            Mode::Unquoted => {
+                if unquoted_escape {
+                    current.push(ch);
+                    unquoted_escape = false;
+                    continue;
+                }
+
+                match ch {
+                    '\\' => {
+                        current.push(ch);
+                        unquoted_escape = true;
+                    }
+                    '\'' => {
+                        current.push(ch);
+                        mode = Mode::SingleQuoted;
+                    }
+                    '"' => {
+                        current.push(ch);
+                        mode = Mode::DoubleQuoted;
+                    }
+                    ';' => {
+                        let trimmed = current.trim();
+                        if !trimmed.is_empty() {
+                            parts.push(trimmed.to_string());
+                        }
+                        current.clear();
+                    }
+                    _ => current.push(ch),
+                }
+            }
+            Mode::SingleQuoted => {
+                current.push(ch);
+                if ch == '\'' {
+                    mode = Mode::Unquoted;
+                }
+            }
+            Mode::DoubleQuoted => {
+                current.push(ch);
+                if double_quoted_escape {
+                    double_quoted_escape = false;
+                    continue;
+                }
+                match ch {
+                    '\\' => double_quoted_escape = true,
+                    '"' => mode = Mode::Unquoted,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if unquoted_escape || double_quoted_escape || mode != Mode::Unquoted {
+        return Err(CommandLineParseError::IncompleteShellSyntax);
+    }
+
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        parts.push(trimmed.to_string());
+    }
+
+    Ok(parts)
+}
+
 fn escape_process_ref_hash_ids(input: &str) -> String {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Mode {
@@ -96,7 +176,7 @@ fn escape_process_ref_hash_ids(input: &str) -> String {
 
 #[cfg(test)]
 mod test {
-    use super::split_command_line;
+    use super::{split_command_line, split_command_list};
 
     #[test]
     fn split_supports_multiline_quoted_values() {
@@ -129,5 +209,41 @@ mod test {
         let line = "display processes # trailing comment";
         let parts = split_command_line(line).unwrap();
         assert_eq!(parts, vec!["display", "processes"]);
+    }
+
+    #[test]
+    fn split_command_list_handles_top_level_semicolons() {
+        let parts = split_command_list("display processes; display settings global ;display model")
+            .unwrap();
+        assert_eq!(
+            parts,
+            vec![
+                "display processes",
+                "display settings global",
+                "display model"
+            ]
+        );
+    }
+
+    #[test]
+    fn split_command_list_preserves_quoted_semicolons() {
+        let parts = split_command_list(
+            "set process -p foo string 'a; b'; run block_a -c \"display settings global; display model -a\"",
+        )
+        .unwrap();
+        assert_eq!(
+            parts,
+            vec![
+                "set process -p foo string 'a; b'",
+                "run block_a -c \"display settings global; display model -a\"",
+            ]
+        );
+    }
+
+    #[test]
+    fn split_command_list_rejects_incomplete_shell_syntax() {
+        let err =
+            split_command_list("display processes; set process string 'unterminated").unwrap_err();
+        assert_eq!(err, super::CommandLineParseError::IncompleteShellSyntax);
     }
 }

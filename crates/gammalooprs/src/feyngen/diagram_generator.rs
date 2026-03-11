@@ -2826,6 +2826,17 @@ impl ProcessDefinition {
                 }
             })
             .next();
+        let vertex_allowed_filter = filters
+            .0
+            .iter()
+            .filter_map(|f| {
+                if let FeynGenFilter::VertexAllow(filter) = f {
+                    Some(filter)
+                } else {
+                    None
+                }
+            })
+            .next();
 
         const SB_INCOMING: bool = true;
         const SB_OUTGOING: bool = false;
@@ -2838,6 +2849,11 @@ impl ProcessDefinition {
             Vec<SmartString<LazyCompact>>,
         > = HashMap::default();
         'add_vertex_rules: for vertex_rule in model.vertex_rules.iter() {
+            if let Some(allowed) = vertex_allowed_filter {
+                if !allowed.contains(&vertex_rule.0.name.clone().into()) {
+                    continue 'add_vertex_rules;
+                }
+            }
             if let Some(veto) = vertex_vetoes_filter {
                 if veto.contains(&vertex_rule.0.name.clone().into()) {
                     continue 'add_vertex_rules;
