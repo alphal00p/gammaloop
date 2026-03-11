@@ -283,17 +283,20 @@ impl OneShot {
     fn normalize_cli_shortcuts(argv: &[OsString]) -> Vec<OsString> {
         argv.iter()
             .map(|arg| {
-                let arg = arg.to_string_lossy();
-                if arg == SETTINGS_GLOBAL_SHORTCUT {
+                if arg == std::ffi::OsStr::new(SETTINGS_GLOBAL_SHORTCUT) {
                     OsString::from("--settings-global")
-                } else if let Some(value) = arg.strip_prefix("-sg=") {
-                    OsString::from(format!("--settings-global={value}"))
-                } else if arg == SETTINGS_RUNTIME_DEFAULTS_SHORTCUT {
+                } else if arg == std::ffi::OsStr::new(SETTINGS_RUNTIME_DEFAULTS_SHORTCUT) {
                     OsString::from("--settings-runtime-defaults")
-                } else if let Some(value) = arg.strip_prefix("-sr=") {
-                    OsString::from(format!("--settings-runtime-defaults={value}"))
+                } else if let Some(arg) = arg.to_str() {
+                    if let Some(value) = arg.strip_prefix("-sg=") {
+                        OsString::from(format!("--settings-global={value}"))
+                    } else if let Some(value) = arg.strip_prefix("-sr=") {
+                        OsString::from(format!("--settings-runtime-defaults={value}"))
+                    } else {
+                        arg.into()
+                    }
                 } else {
-                    OsString::from(arg.as_ref())
+                    arg.clone()
                 }
             })
             .collect()
