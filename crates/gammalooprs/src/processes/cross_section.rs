@@ -28,7 +28,7 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         cut_expression::SuperGraphOrientationID,
-        esurface::RaisedEsurfaceData,
+        esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup},
         expression::{AmplitudeOrientationID, CFFExpression, SubgraphOrientationID},
         generation::{
             ConstraintData, EsurfaceRewritingInstructions, PostProcessingSetup,
@@ -913,8 +913,9 @@ impl CrossSectionGraph {
         let max_order = self
             .derived_data
             .raised_data
-            .max_occurances
+            .raised_cut_groups
             .iter()
+            .map(|cut_group| cut_group.related_esurface_group.max_occurence)
             .max()
             .unwrap();
 
@@ -928,11 +929,9 @@ impl CrossSectionGraph {
             .raised_cut_groups
             .iter()
             .map(|cuts| CutSet {
-                esurfaces: cuts
-                    .iter()
-                    .map(|cut_id| self.cut_esurface_id_map[*cut_id])
-                    .collect(),
+                esurfaces: cuts.related_esurface_group.clone(),
                 union: cuts
+                    .cuts
                     .iter()
                     .map(|cut_id| {
                         self.cuts[*cut_id]
@@ -1932,10 +1931,16 @@ pub struct CrossSectionDerivedData {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedCutData {
-    pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
-    pub max_occurances: TiVec<RaisedCutId, usize>,
+    pub raised_cut_groups: TiVec<RaisedCutId, RaisedCutGroup>,
     pub dual_shapes: Vec<Vec<Vec<usize>>>,
     pub pass_two_evaluators: Vec<GenericEvaluator>,
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct RaisedCutGroup {
+    pub cuts: Vec<CutId>,
+    pub related_esurface_group: RaisedEsurfaceGroup,
 }
 
 impl Default for RaisedCutData {
@@ -1948,7 +1953,6 @@ impl RaisedCutData {
     pub fn new() -> Self {
         RaisedCutData {
             raised_cut_groups: TiVec::new(),
-            max_occurances: TiVec::new(),
             dual_shapes: vec![],
             pass_two_evaluators: vec![],
         }
@@ -1960,49 +1964,49 @@ impl RaisedCutData {
     ) -> Self {
         let reversed_map = cut_esurface_map
             .iter_enumerated()
-            .map(|(cut_id, esurface_id)| (esurface_id, cut_id))
-            .collect::<HashMap<_, _>>();
+            .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
+            .collect::<HashMap<EsurfaceID, CutId>>();
 
-        let mut raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>> = TiVec::new();
-        let mut max_occurances: TiVec<RaisedCutId, usize> = TiVec::new();
+        let mut groups = TiVec::new();
 
-        for (cut_id, esurface_id) in cut_esurface_map.iter_enumerated() {
-            let (raised_esurface_id, max_occurence) = raised_esurface_data
-                .raised_groups
-                .iter_enumerated()
-                .find_map(|(raised_cut_id, group)| {
-                    if group.esurface_ids.contains(esurface_id) {
-                        Some((raised_cut_id, group.max_occurence))
-                    } else {
-                        None
-                    }
-                })
-                .unwrap();
+        for (raised_esurface_id, raised_esurface_group) in
+            raised_esurface_data.raised_groups.iter_enumerated()
+        {
+            if cut_esurface_map.contains(&raised_esurface_group.esurface_ids[0]) {
+                let cuts = raised_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .map(|esurface_id| reversed_map[esurface_id])
+                    .collect::<Vec<_>>();
 
-            let esurfaces = raised_esurface_data.raised_groups[raised_esurface_id]
-                .esurface_ids
-                .iter()
-                .map(|esurface_id| reversed_map[esurface_id])
-                .collect_vec();
+                let raised_cut_group = RaisedCutGroup {
+                    cuts,
+                    related_esurface_group: raised_esurface_group.clone(),
+                };
 
-            raised_cut_groups.push(esurfaces);
-            max_occurances.push(max_occurence);
+                groups.push(raised_cut_group);
+            } else {
+                continue;
+            }
         }
 
-        let full_max_occurance = max_occurances.iter().max().cloned().unwrap_or(0);
+        let global_max_occurence = groups
+            .iter()
+            .map(|group| group.related_esurface_group.max_occurence)
+            .max()
+            .unwrap();
 
-        let pass_two_evaluators = (1..=full_max_occurance)
-            .map(|order| build_derivative_structure(order as u8))
-            .collect_vec();
+        let dual_shapes = (1..global_max_occurence)
+            .map(|i| shape_for_t_derivatives(i))
+            .collect();
 
-        let dual_structures = (2..full_max_occurance)
-            .map(|order| shape_for_t_derivatives(order - 1))
-            .collect_vec();
+        let pass_two_evaluators = (1..=global_max_occurence)
+            .map(|i| build_derivative_structure(i as u8))
+            .collect();
 
-        RaisedCutData {
-            raised_cut_groups,
-            max_occurances,
-            dual_shapes: dual_structures,
+        Self {
+            raised_cut_groups: groups,
+            dual_shapes,
             pass_two_evaluators,
         }
     }

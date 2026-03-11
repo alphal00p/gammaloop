@@ -368,9 +368,9 @@ where
 
     pub(crate) fn select_esurface_residue(
         mut self,
-        raised_esurface_group: RaisedEsurfaceGroup,
+        raised_esurface_group: &RaisedEsurfaceGroup,
     ) -> Vec<CFFExpression<O>> {
-        self.normalize_single_raising(&raised_esurface_group);
+        self.normalize_single_raising(raised_esurface_group);
 
         let reprentative_esurface_id = raised_esurface_group.esurface_ids[0];
 

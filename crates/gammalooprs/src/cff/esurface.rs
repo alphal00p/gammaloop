@@ -932,6 +932,7 @@ pub struct RaisedEsurfaceData {
     pub pass_two_evaluator: Option<Vec<GenericEvaluator>>,
 }
 
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct RaisedEsurfaceGroup {
     pub esurface_ids: Vec<EsurfaceID>,
     pub max_occurence: usize,

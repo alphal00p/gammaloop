@@ -3761,7 +3761,7 @@ impl<'py> pyo3::IntoPyObject<'py> for &F<f64> {
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for F<f64> {
     type Error = pyo3::PyErr;
 
-    fn extract(obj: pyo3::Borrowed<'a, 'py, pyo3::types::PyAny>) -> pyo3::PyResult<Self> {
-        <f64 as pyo3::FromPyObject<'a, 'py>>::extract(obj).map(F)
+    fn extract(obj: pyo3::Borrowed<'a, 'py, pyo3::types::PyAny>) -> Result<Self, Self::Error> {
+        obj.extract::<f64>().map(F)
     }
 }

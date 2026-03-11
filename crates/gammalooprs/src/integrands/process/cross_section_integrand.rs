@@ -296,8 +296,7 @@ impl CrossSectionGraphTerm {
             .derived_data
             .cut_paramatric_integrand
             .iter()
-            .zip(&graph.derived_data.raised_data.max_occurances)
-            .map(|(integrand_for_cut, max_occurances)| {
+            .map(|integrand_for_cut| {
                 integrand_for_cut
                     .iter()
                     .enumerate()
@@ -334,8 +333,7 @@ impl CrossSectionGraphTerm {
                     .derived_data
                     .cut_paramatric_integrand
                     .iter()
-                    .zip(&graph.derived_data.raised_data.dual_shapes)
-                    .map(|(integrand_for_cut, dual_shapes)| {
+                    .map(|integrand_for_cut| {
                         integrand_for_cut
                             .iter()
                             .enumerate()
@@ -704,10 +702,10 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         debug!("loop moms: {}", momentum_sample.loop_moms());
 
-        for (raised_cut, &max_occurance) in self.raised_data.max_occurances.iter_enumerated() {
+        for (raised_cut, raised_cut_group) in self.raised_data.raised_cut_groups.iter_enumerated() {
+            let max_occurance = raised_cut_group.related_esurface_group.max_occurence;
             debug!("\n =====START EVALUTAION FOR CUT {}=====", raised_cut.0);
-            let representative_esurface =
-                &self.cut_esurface[self.raised_data.raised_cut_groups[raised_cut][0]];
+            let representative_esurface = &self.cut_esurface[raised_cut_group.cuts[0]];
 
             debug!("representative esurface: {:#?}", representative_esurface);
 
