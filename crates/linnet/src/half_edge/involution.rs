@@ -1079,6 +1079,13 @@ impl Flow {
             Flow::Sink => "blue",
         }
     }
+
+    pub fn is_source(&self) -> bool {
+        matches!(self, Flow::Source)
+    }
+    pub fn is_sink(&self) -> bool {
+        matches!(self, Flow::Sink)
+    }
 }
 
 impl Neg for Flow {

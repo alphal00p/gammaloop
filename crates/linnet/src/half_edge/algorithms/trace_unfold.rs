@@ -41,12 +41,16 @@ where
     fn trace_unfold<M: NodeStorageOps<NodeData = usize>>(
         &self,
         start: NodeIndex,
-    ) -> HedgeGraph<NoData, TraceKey<Key, EdgeIndex>, NoData, M::OpStorage<TraceKey<Key, EdgeIndex>>>
-    {
+    ) -> HedgeGraph<
+        EdgeIndex,
+        TraceKey<Key, EdgeIndex>,
+        NoData,
+        M::OpStorage<TraceKey<Key, EdgeIndex>>,
+    > {
         let root = (start, TraceKey::empty());
         let mut q = VecDeque::new();
         let mut traces: IndexSet<(NodeIndex, TraceKey<Key, EdgeIndex>)> = IndexSet::new();
-        let mut builder: HedgeGraphBuilder<NoData, usize, NoData> = HedgeGraphBuilder::new();
+        let mut builder: HedgeGraphBuilder<EdgeIndex, usize, NoData> = HedgeGraphBuilder::new();
         let (ind, _) = traces.insert_full(root);
         let nid = builder.add_node(ind);
         q.push_back((nid, start, TraceKey::empty()));
@@ -73,7 +77,7 @@ where
                             q.push_back((bbnid, to_node, new_key.clone()))
                         }
 
-                        builder.add_edge(bnid, NodeIndex(ind), NoData {}, true);
+                        builder.add_edge(bnid, NodeIndex(ind), g[&hedge], true);
                     }
                 }
             }
@@ -375,11 +379,7 @@ mod tests {
         })
         .unwrap();
 
-        let g: HedgeGraph<NoData, TraceKey<String, EdgeIndex>> = graph
-            .graph
-            .transitive_closure()
-            .unwrap()
-            .trace_unfold::<DefaultNodeStore<usize>>(NodeIndex(0));
+        let g = graph.graph.transitive_closure().unwrap();
         let mut output = String::new();
         g.dot_impl_fmt(
             &mut output,
@@ -387,6 +387,47 @@ mod tests {
             "start=2;\n",
             &|_| None,
             &|a| None,
+            &|v| Some(format!("label=\"{}\"", v.name.clone().unwrap_or_default())),
+        );
+        insta::assert_snapshot!(output, @r#"
+        digraph {
+          node	 [shape=circle,height=0.1,label=""];
+          overlap = "scale";
+          layout = "neato";
+          start=2;
+          1	 [label="AB"];
+          2	 [label="ABCD"];
+          4	 [label="ABCEF"];
+          3	 [label="ABCDEF"];
+          5	 [label="BCDEF"];
+          6	 [label="CD"];
+          0	 [label="empty"];
+          0:14:s	-> 1:15:s	 [id=0  color="red:blue;0.5"];
+          0:16:s	-> 6:17:s	 [id=1  color="red:blue;0.5"];
+          1:0:s	-> 2:1:s	 [id=2  color="red:blue;0.5"];
+          1:2:s	-> 4:3:s	 [id=3  color="red:blue;0.5"];
+          6:12:s	-> 5:13:s	 [id=4  color="red:blue;0.5"];
+          6:10:s	-> 2:11:s	 [id=5  color="red:blue;0.5"];
+          2:4:s	-> 3:5:s	 [id=6  color="red:blue;0.5"];
+          5:8:s	-> 3:9:s	 [id=7  color="red:blue;0.5"];
+          4:6:s	-> 3:7:s	 [id=8  color="red:blue;0.5"];
+          0:18:s	-> 4:19:s	 [id=9  color="red:blue;0.5"];
+          0:20:s	-> 2:21:s	 [id=10  color="red:blue;0.5"];
+          0:22:s	-> 5:23:s	 [id=11  color="red:blue;0.5"];
+          0:24:s	-> 3:25:s	 [id=12  color="red:blue;0.5"];
+          1:26:s	-> 3:27:s	 [id=13  color="red:blue;0.5"];
+          6:28:s	-> 3:29:s	 [id=14  color="red:blue;0.5"];
+        }
+        "#);
+
+        let g = g.trace_unfold::<DefaultNodeStore<usize>>(NodeIndex(0));
+        let mut output = String::new();
+        g.dot_impl_fmt(
+            &mut output,
+            &g.full_filter(),
+            "start=2;\n",
+            &|_| None,
+            &|a| Some(format!("label=\"{a}\"")),
             &|v| Some(format!("label=\"{v}\"")),
         )
         .unwrap();
@@ -415,24 +456,24 @@ mod tests {
           15	 [label="{AB,CD} · {EF}"];
           16	 [label="{AB,CEF} · {D}"];
           17	 [label="{BEF,CD} · {A}"];
-          0:0:s	-> 1:1:s	 [id=0  color="red:blue;0.5"];
-          0:2:s	-> 2:3:s	 [id=1  color="red:blue;0.5"];
-          0:4:s	-> 3:5:s	 [id=2  color="red:blue;0.5"];
-          0:6:s	-> 4:7:s	 [id=3  color="red:blue;0.5"];
-          0:8:s	-> 5:9:s	 [id=4  color="red:blue;0.5"];
-          0:10:s	-> 6:11:s	 [id=5  color="red:blue;0.5"];
-          1:12:s	-> 7:13:s	 [id=6  color="red:blue;0.5"];
-          1:14:s	-> 8:15:s	 [id=7  color="red:blue;0.5"];
-          1:16:s	-> 9:17:s	 [id=8  color="red:blue;0.5"];
-          2:18:s	-> 7:19:s	 [id=9  color="red:blue;0.5"];
-          2:20:s	-> 10:21:s	 [id=10  color="red:blue;0.5"];
-          2:22:s	-> 11:23:s	 [id=11  color="red:blue;0.5"];
-          3:24:s	-> 12:25:s	 [id=12  color="red:blue;0.5"];
-          4:26:s	-> 13:27:s	 [id=13  color="red:blue;0.5"];
-          5:28:s	-> 14:29:s	 [id=14  color="red:blue;0.5"];
-          7:30:s	-> 15:31:s	 [id=15  color="red:blue;0.5"];
-          8:32:s	-> 16:33:s	 [id=16  color="red:blue;0.5"];
-          10:34:s	-> 17:35:s	 [id=17  color="red:blue;0.5"];
+          0:0:s	-> 1:1:s	 [id=0  color="red:blue;0.5" label="e0"];
+          0:2:s	-> 2:3:s	 [id=1  color="red:blue;0.5" label="e1"];
+          0:4:s	-> 3:5:s	 [id=2  color="red:blue;0.5" label="e9"];
+          0:6:s	-> 4:7:s	 [id=3  color="red:blue;0.5" label="e10"];
+          0:8:s	-> 5:9:s	 [id=4  color="red:blue;0.5" label="e11"];
+          0:10:s	-> 6:11:s	 [id=5  color="red:blue;0.5" label="e12"];
+          1:12:s	-> 7:13:s	 [id=6  color="red:blue;0.5" label="e2"];
+          1:14:s	-> 8:15:s	 [id=7  color="red:blue;0.5" label="e3"];
+          1:16:s	-> 9:17:s	 [id=8  color="red:blue;0.5" label="e13"];
+          2:18:s	-> 7:19:s	 [id=9  color="red:blue;0.5" label="e5"];
+          2:20:s	-> 10:21:s	 [id=10  color="red:blue;0.5" label="e4"];
+          2:22:s	-> 11:23:s	 [id=11  color="red:blue;0.5" label="e14"];
+          3:24:s	-> 12:25:s	 [id=12  color="red:blue;0.5" label="e8"];
+          4:26:s	-> 13:27:s	 [id=13  color="red:blue;0.5" label="e6"];
+          5:28:s	-> 14:29:s	 [id=14  color="red:blue;0.5" label="e7"];
+          7:30:s	-> 15:31:s	 [id=15  color="red:blue;0.5" label="e6"];
+          8:32:s	-> 16:33:s	 [id=16  color="red:blue;0.5" label="e8"];
+          10:34:s	-> 17:35:s	 [id=17  color="red:blue;0.5" label="e7"];
         }
         "#);
     }

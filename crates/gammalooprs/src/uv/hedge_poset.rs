@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Display};
 
 use ahash::{AHashMap, AHashSet};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -14,12 +15,17 @@ use symbolica::{
     atom::{Atom, FunctionBuilder},
     function, symbol,
 };
+use vakint::Vakint;
 
 use crate::{
-    graph::{LMBext, LoopMomentumBasis},
+    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     numerator::ParsingNet,
-    uv::{UltravioletGraph, approx::ForestNodeLike},
+    uv::{
+        UVgenerationSettings, UltravioletGraph,
+        approx::{ApproximationKernel, ForestNodeLike, UVCtx, integrated::Integrated},
+    },
 };
+use color_eyre::Result;
 
 #[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Debug, Hash, Eq)]
@@ -39,6 +45,13 @@ impl Spinney {
 
             subgraph: g.as_ref().empty_subgraph(),
             lmb: g.empty_lmb(),
+        }
+    }
+
+    pub fn forest_node<'a>(&'a self, topo_order: usize) -> ForestNode<'a> {
+        ForestNode {
+            spinney: self,
+            topo_order,
         }
     }
     pub fn new<E, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
@@ -219,7 +232,7 @@ impl Display for SpinneyWood {
 // }
 
 pub struct SpinneyForest {
-    pub graph: HedgeGraph<NoData, OperationNode>,
+    pub graph: HedgeGraph<EdgeIndex, OperationNode>,
     pub root: NodeIndex,
     pub compute_store: AHashMap<OperationNode, ComputeNode>,
 }
@@ -358,15 +371,100 @@ impl OperationNode {
     // fn simple_op()
 }
 
+pub enum Integrand {
+    NotComputed,
+    Single(Atom),
+}
+pub enum Integrands {
+    NotComputed,
+    Multiple(Vec<Atom>),
+}
+
 pub struct ComputeNode {
-    pub local_3d: Atom, //3d denoms
-    pub final_integrand: Option<ParsingNet>,
-    pub integrated_4d: Atom, //4d
-    pub integrated_pole_part: Atom,
+    pub local_3d: Integrands, //3d denoms
+    pub final_integrand: Integrands,
+    pub integrated_4d: Integrand, //4d
+    pub simple: Integrand,
+}
+
+impl Default for ComputeNode {
+    fn default() -> Self {
+        ComputeNode {
+            local_3d: Integrands::NotComputed,
+            final_integrand: Integrands::NotComputed,
+            integrated_4d: Integrand::NotComputed,
+            simple: Integrand::NotComputed,
+        }
+    }
 }
 
 impl SpinneyForest {
-    pub fn walk(&self) {
+    pub fn integrate(
+        &mut self,
+        graph: &mut Graph,
+        wood: &SpinneyWood,
+        vakint: (&Vakint, &vakint::VakintSettings),
+        settings: &UVgenerationSettings,
+    ) -> Result<()> {
+        let integrated_orchestrator = Integrated::new(vakint.0, vakint.1);
+        let uvctx = UVCtx {
+            graph: &*graph,
+            settings,
+        };
+        for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
+            let mut integrand = Atom::num(1);
+            let mut current = None;
+            let mut is_union = false;
+            for h in self.graph.iter_crown(*nidx) {
+                if self.graph.flow(h).is_source() {
+                    continue;
+                }
+
+                let wood_eid = self.graph[self.graph[&self.graph[&h]].0];
+
+                let HedgePair::Paired { source, sink } = wood.graph[&wood_eid].1 else {
+                    panic!("edge in wood is not paired");
+                };
+
+                let given = wood.graph[wood.graph.node_id(source)].forest_node(order);
+                let current_for_h = wood.graph.node_id(sink);
+                if let Some(current) = &current {
+                    if current != &current_for_h {
+                        return Err(eyre!("Mismatched current nodes"));
+                    } else {
+                        is_union = true;
+                    }
+                } else {
+                    current = Some(current_for_h);
+                }
+                let current = wood.graph[current_for_h].forest_node(order);
+
+                let parent_node = self.graph.node_id(h);
+                let parent_key = &self.graph[parent_node];
+                let computed = self
+                    .compute_store
+                    .get(parent_key)
+                    .ok_or(eyre!("{} not yet added to store", parent_key))?;
+                let Integrand::Single(a) = &computed.integrated_4d else {
+                    return Err(eyre!("{} integrated_4d not computed yet", parent_key));
+                };
+                if is_union {
+                    integrand *= a;
+                } else {
+                    integrand = integrated_orchestrator.kernel(&uvctx, &current, &given, a)?;
+                }
+            }
+
+            self.compute_store
+                .entry(self.graph[*nidx].clone())
+                .or_insert(ComputeNode::default())
+                .integrated_4d = Integrand::Single(integrand);
+        }
+
+        Ok(())
+    }
+
+    pub fn debug_walk(&self) {
         let mut cover_groups: BTreeMap<SuBitGraph, Vec<NodeIndex>> = BTreeMap::new();
 
         self.graph
@@ -521,7 +619,7 @@ mod tests {
                 println!("{}", ff.dot(&g));
 
                 let f = f.unfold();
-                f.walk();
+                f.debug_walk();
                 println!("{}", f);
                 assert_eq!(
                     152,

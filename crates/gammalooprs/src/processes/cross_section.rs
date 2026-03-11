@@ -950,19 +950,12 @@ impl CrossSectionGraph {
         let lu_prefactor = self.lu_prefactor_helper_new();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        cut_forests.compute(&mut self.graph, vakint, &settings.uv);
-        cut_forests
-            .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)
-            .map(|mut vec| {
-                vec.iter_mut().for_each(|parametric_integrands| {
-                    parametric_integrands
-                        .integrands
-                        .iter_mut()
-                        .for_each(|integrand| *integrand *= lu_prefactor.clone())
-                });
-
-                vec.into()
-            })
+        cut_forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        Ok(cut_forests
+            .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
+            .into_iter()
+            .map(|integrand| integrand.map(|a| a * &lu_prefactor))
+            .collect())
     }
 
     fn build_parametric_integrand_raised_cuts(
