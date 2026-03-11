@@ -16,6 +16,7 @@ use reedline::{Prompt, Reedline, Signal, Span, Suggestion, ValidationResult};
 use crate::{
     command_parser::split_command_line,
     commands::import::model::builtin_json_model_names,
+    completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
     settings_tree::{serialize_settings_with_defaults, value_at_path},
     CLISettings,
 };
@@ -277,13 +278,6 @@ struct FlagValueContext<'a> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SelectorKind {
-    Any,
-    Amplitude,
-    CrossSection,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SettingsCatalogKind {
     Global,
     Runtime,
@@ -372,35 +366,6 @@ fn is_path_argument(arg: &clap::Arg) -> bool {
         | clap::ValueHint::AnyPath
         | clap::ValueHint::ExecutablePath => true,
         _ => false,
-    }
-}
-
-fn process_selector_kind(cmd: &clap::Command, arg: &clap::Arg) -> Option<SelectorKind> {
-    if arg.get_long() != Some("process") {
-        return None;
-    }
-
-    Some(selector_kind_for_command(cmd))
-}
-
-fn integrand_selector_kind(cmd: &clap::Command, arg: &clap::Arg) -> Option<SelectorKind> {
-    if arg.get_long() != Some("integrand-name") {
-        return None;
-    }
-
-    match cmd.get_name() {
-        "integrate" | "inspect" | "bench" | "existing" | "process" => Some(SelectorKind::Any),
-        "evaluate" | "renormalize" | "ultra-violet" => Some(SelectorKind::Amplitude),
-        "infra-red" => Some(SelectorKind::CrossSection),
-        _ => None,
-    }
-}
-
-fn selector_kind_for_command(cmd: &clap::Command) -> SelectorKind {
-    match cmd.get_name() {
-        "evaluate" | "renormalize" | "ultra-violet" => SelectorKind::Amplitude,
-        "infra-red" => SelectorKind::CrossSection,
-        _ => SelectorKind::Any,
     }
 }
 
@@ -494,26 +459,32 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
         let arg = flag_value_context.arg;
         if is_path_argument(arg) {
             add_path_suggestions(&mut suggestions, &mut seen, &value_request, pos);
-        } else if let Some(kind) = process_selector_kind(context.cmd, arg) {
-            add_process_suggestions(
-                completion_state,
-                &value_request,
-                kind,
-                pos,
-                &mut suggestions,
-                &mut seen,
-            );
-        } else if let Some(kind) = integrand_selector_kind(context.cmd, arg) {
-            add_integrand_suggestions(
-                completion_state,
-                context.completed_tokens,
-                context.cmd,
-                &value_request,
-                kind,
-                pos,
-                &mut suggestions,
-                &mut seen,
-            );
+        } else if let Some(completion) = arg_value_completion(arg) {
+            match completion {
+                ArgValueCompletion::ProcessSelector(kind) => {
+                    add_process_suggestions(
+                        completion_state,
+                        &value_request,
+                        kind,
+                        pos,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::IntegrandSelector(kind) => {
+                    add_integrand_suggestions(
+                        completion_state,
+                        context.completed_tokens,
+                        context.cmd,
+                        &value_request,
+                        kind,
+                        pos,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::Disabled => {}
+            }
         } else if is_generate_vertex_interactions_argument(arg) {
             add_generate_vertex_suggestions(
                 completion_state,
@@ -2376,9 +2347,13 @@ fn shell_escape_unquoted(path: &str) -> String {
 mod tests {
     use std::fs;
 
+    use clap::CommandFactory;
     use tempfile::tempdir;
 
-    use crate::Repl;
+    use crate::{
+        completion::{arg_value_completion, ArgValueCompletion},
+        Repl,
+    };
 
     use super::{collect_completions, CompletionState, ProcessCompletionEntry, ProcessKind};
 
@@ -2565,6 +2540,21 @@ mod tests {
         assert!(values.contains(&"#0".to_string()));
         assert!(values.contains(&"#1".to_string()));
         assert!(values.contains(&"#2".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_integrands_for_reset_processes() {
+        let mut completion_state = CompletionState::default();
+        completion_state.set_process_entries(sample_process_entries());
+
+        let values = completion_values(
+            "reset processes --process epem_a_tth --integrand-name ",
+            &completion_state,
+        );
+
+        assert!(values.contains(&"LO".to_string()));
+        assert!(values.contains(&"virtual".to_string()));
+        assert!(!values.contains(&"subtracted".to_string()));
     }
 
     #[test]
@@ -2810,6 +2800,60 @@ mod tests {
             "{values:?}"
         );
         assert!(!values.contains(&"--allowed-vertex-interactions".to_string()));
+    }
+
+    fn visit_args(
+        cmd: &clap::Command,
+        command_path: &mut Vec<String>,
+        visit: &mut impl FnMut(&[String], &clap::Arg),
+    ) {
+        for arg in cmd.get_arguments() {
+            visit(command_path, arg);
+        }
+
+        for subcommand in cmd.get_subcommands() {
+            command_path.push(subcommand.get_name().to_string());
+            visit_args(subcommand, command_path, visit);
+            command_path.pop();
+        }
+    }
+
+    #[test]
+    fn completion_metadata_covers_all_process_and_integrand_name_args() {
+        let command = Repl::command();
+        let mut command_path = vec![command.get_name().to_string()];
+        let mut missing = Vec::new();
+        let mut invalid_process_metadata = Vec::new();
+
+        visit_args(
+            &command,
+            &mut command_path,
+            &mut |path, arg| match arg.get_long() {
+                Some("process") => match arg_value_completion(arg) {
+                    Some(ArgValueCompletion::ProcessSelector(_)) => {}
+                    other => invalid_process_metadata.push(format!(
+                        "{} --process => {:?}",
+                        path.join(" "),
+                        other
+                    )),
+                },
+                Some("integrand-name") => {
+                    if arg_value_completion(arg).is_none() {
+                        missing.push(format!("{} --integrand-name", path.join(" ")));
+                    }
+                }
+                _ => {}
+            },
+        );
+
+        assert!(
+            missing.is_empty(),
+            "missing completion metadata: {missing:?}"
+        );
+        assert!(
+            invalid_process_metadata.is_empty(),
+            "invalid process completion metadata: {invalid_process_metadata:?}"
+        );
     }
 }
 

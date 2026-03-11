@@ -16,6 +16,7 @@ use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
 use crate::{
+    completion::CompletionArgExt,
     state::{ProcessRef, State},
     CLISettings,
 };
@@ -27,11 +28,21 @@ use crate::{
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Evaluate {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub process: Option<ProcessRef>,
 
     /// The integrand name to evaluate
-    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub graphs_group_name: Option<String>,
 
     /// The path to store results in

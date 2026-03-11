@@ -1,40 +1,60 @@
+commands = [
+  "run generate",
+  "quit -o"
+]
+
 [cli_settings]
-state_folder = "./examples/cli/gg_hhh/2L/state"
+[cli_settings.state]
+folder = "./examples/cli/gg_hhh/2L/state"
+name = "gg_hhh_2l"
 
 [[commands_blocks]]
 name = "generate"
 commands = [
-"import model ./models/json/sm/sm-default.json",
-"set global kv global.n_cores.feyngen=10",
 
-"reset processes",
-"""generate amp g g > h h h | g h t t~ QED==3 [{2}]
-       --veto-vertex-interactions V_6 V_9 V_36 V_37
-       --number-of-fermion-loops 1 1
-       --only-diagrams
-       --numerator-grouping only_detect_zeroes
-       --select-graphs GL303
-       --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
-                                       * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
-                                       * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
-       -p gg_hhh -i 2L
-""",
-"generate",
-"save dot",
+    "import model sm-default.json",
+    "set global kv global.n_cores.feyngen=10",
 
-"save state",
+    "reset processes",
+    """generate amp g g > h h h | g h t t~ QED==3 [{2}]
+           --veto-vertex-interactions V_6 V_9 V_36 V_37
+           --number-of-fermion-loops 1 1
+           --only-diagrams
+           --numerator-grouping only_detect_zeroes
+           --select-graphs GL303
+           --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+                                           * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
+                                           * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+           -p gg_hhh
+           -i 2L
+    """,
+    "generate",
+    "save dot",
+    "save state -o",
+
+]
+
+[[commands_blocks]]
+name = "setup_euclidean_configuration"
+commands = [
+    "set model MT={re:1000.0,im:0.0}",
+    "set model WT={re:0.0,im:0.0}",
+    "set model ymt={re:1000.0,im:0.0}",
+]
+
+[[commands_blocks]]
+name = "setup_physical_configuration"
+commands = [
+    "set model MT={re:173.0,im:0.0}",
+    "set model WT={re:0.0,im:0.0}",
+    "set model ymt={re:173.0,im:0.0}",
 ]
 
 [[commands_blocks]]
 name = "integrate"
 commands = [
-
-    "set model MT={re:173.0,im:0.0}",
-    "set model WT={re:0.0,im:0.0}",
-    "set model ymt={re:173.0,im:0.0}",
-
     "set process -p gg_hhh -i 2L defaults",
-    """ set process -p gg_hhh -i 2L string '
+    """set process -p gg_hhh -i 2L string '
     [sampling]
     type = "discrete_graph_sampling"
     sample_orientations = true
@@ -44,7 +64,7 @@ commands = [
     "display settings process -p gg_hhh -i 2L",
 
     # Disable stability checks
-    # "set process -p gg_hhh -i 1L stability.rotation_axis []",
+    # "set process -p gg_hhh -i 2L stability.rotation_axis []",
 
     "set process -p gg_hhh -i 2L kv integrator.n_start=100 integrator.n_max=1000000",
 
@@ -56,11 +76,9 @@ commands = [
 
 ]
 
-[[commands_blocks]]
-name = "quit"
-commands = [
-  "quit -o",
-]
+[default_runtime_settings.general]
+enable_cache = true
+debug_cache = false
 
 [default_runtime_settings.kinematics.externals]
 type = "constant"
@@ -81,11 +99,7 @@ helicities = [
 	0
 ]
 
-[default_runtime_settings.general]
-enable_cache = true
-debug_cache = false
-
-#Default "naive" parameterization
+# Default "naive" parameterization
 # [default_runtime_settings.sampling]
 # type = "default"
 # mode = "spherical"
@@ -139,7 +153,7 @@ disable_tropical_generation = false
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
-store_atom = true
+store_atom = false
 compile = true
 summed = false
 summed_function_map = true

@@ -22,14 +22,12 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use commands::save::SaveState;
 use commands::Commands;
 
-use gammalooprs::utils::serde_utils::SerdeFileError;
-use reedline::DefaultPrompt;
-use reedline::DefaultPromptSegment;
+use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
 use reedline::FileBackedHistory;
 use repl::ClapEditor;
 use repl::ReadCommandOutput;
 use session::{CliSession, CliSessionState};
-use tracing::get_stderr_log_filter;
+use tracing::{get_stderr_log_filter, set_log_format_override};
 
 // use clap_repl::{
 //     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
@@ -38,11 +36,12 @@ use tracing::get_stderr_log_filter;
 
 use color_eyre::Result;
 use colored::Colorize;
-use console::style;
+use console::{measure_text_width, style};
 use dirs::home_dir;
 use eyre::Context;
 use gammalooprs::{
     initialisation::initialise,
+    processes::ProcessCollection,
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
@@ -51,16 +50,19 @@ use gammalooprs::{
         GIT_VERSION,
     },
 };
+use reedline::{Prompt, PromptEditMode, PromptHistorySearch};
 use schemars::{schema_for, JsonSchema};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use state::{CommandHistory, RunHistory, State, SyncSettings};
-use std::{ffi::OsString, path::PathBuf};
-use std::{fs::File, ops::ControlFlow};
+use std::{borrow::Cow, ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
+use std::{fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use symbolica::activate_oem_license;
+use walkdir::WalkDir;
 
 // use tracing::LogLevel;
 mod command_parser;
+pub(crate) mod completion;
 #[cfg(feature = "python_api")]
 pub mod python;
 pub mod repl;
@@ -75,6 +77,14 @@ pub(crate) const GLOBAL_SETTINGS_FILENAME: &str = "global_settings.toml";
 pub(crate) const DEFAULT_RUNTIME_SETTINGS_FILENAME: &str = "default_runtime_settings.toml";
 const SETTINGS_GLOBAL_SHORTCUT: &str = "-sg";
 const SETTINGS_RUNTIME_DEFAULTS_SHORTCUT: &str = "-sr";
+const BANNER_ART: &str = r"              ██         ▄████████▄  ▄████████▄  ██████████▄
+  ██          ▀▀         ▀▀      ▀▀  ▀▀      ▀▀  ▀▀       ██
+    ██  ▄██████████████████████████████████████████████████▀
+     ▀██▀     ▄▄         ▄▄      ▄▄  ▄▄      ▄▄  ▄▄
+    ██  ██    █████████  ▀████████▀  ▀████████▀  ██
+   ██    ██
+   ██    ██
+";
 
 #[derive(Parser, Debug)]
 #[command(name = "gammaLoop", version, about)]
@@ -129,6 +139,10 @@ pub struct OneShot {
     #[arg(short = 'l')]
     level: Option<LogLevel>,
 
+    /// Type of prefix for the logging format
+    #[arg(short = 'p', long = "logging_prefix")]
+    logging_prefix: Option<LogFormat>,
+
     /// Path to a global settings TOML file. Also accepts `-sg`.
     #[arg(long = "settings-global", value_hint = clap::ValueHint::FilePath)]
     settings_global_path: Option<PathBuf>,
@@ -159,9 +173,74 @@ pub struct CLISettings {
     pub try_strings: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub override_state: bool,
-    pub state_folder: PathBuf,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub state: StateSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub global: GlobalSettings,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct StateSettings {
+    pub folder: PathBuf,
+    #[serde(
+        default,
+        skip_serializing_if = "skip_optional_nonempty_string",
+        serialize_with = "serialize_optional_nonempty_string",
+        deserialize_with = "deserialize_optional_nonempty_string"
+    )]
+    pub name: Option<String>,
+}
+
+impl Default for StateSettings {
+    fn default() -> Self {
+        Self {
+            folder: "./gammaloop_state".into(),
+            name: None,
+        }
+    }
+}
+
+impl StateSettings {
+    pub fn prompt_label(&self) -> String {
+        self.name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.folder.display().to_string())
+    }
+}
+
+fn deserialize_optional_nonempty_string<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = Option::<String>::deserialize(deserializer)?;
+    Ok(value.and_then(|name| {
+        let trimmed = name.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_string())
+    }))
+}
+
+fn skip_optional_nonempty_string(value: &Option<String>) -> bool {
+    value.is_none() && !SHOWDEFAULTS.load(Ordering::Relaxed)
+}
+
+fn serialize_optional_nonempty_string<S>(
+    value: &Option<String>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match value {
+        Some(name) => serializer.serialize_str(name),
+        None if SHOWDEFAULTS.load(Ordering::Relaxed) => serializer.serialize_str(""),
+        None => serializer.serialize_none(),
+    }
 }
 
 impl Default for CLISettings {
@@ -169,7 +248,7 @@ impl Default for CLISettings {
         CLISettings {
             try_strings: true,
             override_state: false,
-            state_folder: "./gammaloop_state".into(),
+            state: StateSettings::default(),
             global: GlobalSettings::default(),
         }
     }
@@ -181,7 +260,7 @@ impl CLISettings {
 
         self.override_state = cli.override_state;
 
-        self.state_folder = cli.state_folder.clone();
+        self.state.folder = cli.state_folder.clone();
     }
 }
 
@@ -227,12 +306,179 @@ impl SettingsFileOverrides {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct StateLoadSummary {
+    elapsed: Duration,
+    serialized_size_bytes: Option<u64>,
+    total_graphs: usize,
+}
+
+#[derive(Clone)]
+struct SessionPrompt {
+    left_prompt: String,
+}
+
+impl Prompt for SessionPrompt {
+    fn render_prompt_left(&self) -> Cow<'_, str> {
+        Cow::Borrowed(&self.left_prompt)
+    }
+
+    fn render_prompt_right(&self) -> Cow<'_, str> {
+        Cow::Borrowed("")
+    }
+
+    fn render_prompt_indicator(&self, _prompt_mode: PromptEditMode) -> Cow<'_, str> {
+        Cow::Borrowed("> ")
+    }
+
+    fn render_prompt_multiline_indicator(&self) -> Cow<'_, str> {
+        Cow::Borrowed("::: ")
+    }
+
+    fn render_prompt_history_search_indicator(
+        &self,
+        history_search: PromptHistorySearch,
+    ) -> Cow<'_, str> {
+        Cow::Owned(format!("(reverse-search: {}) ", history_search.term))
+    }
+}
+
+fn make_repl_prompt(state_label: &str, pending_block_name: Option<&str>) -> Box<dyn Prompt> {
+    let left_prompt = match pending_block_name {
+        Some(name) => format!(
+            "{} | γloop {} ",
+            state_label,
+            format!("[defining: {name}]").blue()
+        ),
+        None => format!("{} | γloop ", state_label),
+    };
+    Box::new(SessionPrompt { left_prompt })
+}
+
+fn format_duration_human(duration: Duration) -> String {
+    if duration.as_secs() >= 60 {
+        let minutes = duration.as_secs() / 60;
+        let seconds = duration.as_secs_f64() - (minutes * 60) as f64;
+        format!("{minutes}m {seconds:.1}s")
+    } else if duration.as_secs_f64() >= 1.0 {
+        format!("{:.2}s", duration.as_secs_f64())
+    } else {
+        format!("{}ms", duration.as_millis())
+    }
+}
+
+fn format_size_human(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
+
+    let mut value = bytes as f64;
+    let mut unit = 0usize;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+
+    if unit == 0 {
+        format!("{bytes} {}", UNITS[unit])
+    } else {
+        format!("{value:.2} {}", UNITS[unit])
+    }
+}
+
+fn serialized_size_of_path(path: &Path) -> Option<u64> {
+    let mut total = 0u64;
+    for entry in WalkDir::new(path) {
+        let entry = entry.ok()?;
+        if entry.file_type().is_file() {
+            total = total.checked_add(entry.metadata().ok()?.len())?;
+        }
+    }
+    Some(total)
+}
+
+fn total_graph_count(state: &State) -> usize {
+    state
+        .process_list
+        .processes
+        .iter()
+        .map(|process| match &process.collection {
+            ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                .values()
+                .map(|amplitude| amplitude.graphs.len())
+                .sum::<usize>(),
+            ProcessCollection::CrossSections(cross_sections) => cross_sections
+                .values()
+                .map(|cross_section| cross_section.supergraphs.len())
+                .sum::<usize>(),
+        })
+        .sum::<usize>()
+}
+
+fn banner_footer_line(spec: &str) -> String {
+    format!(
+        r#"   ▀██████▀   version:{:<15} log level:{}         "#,
+        GIT_VERSION, spec,
+    )
+}
+
+fn banner_width(spec: &str) -> usize {
+    BANNER_ART
+        .lines()
+        .map(measure_text_width)
+        .chain(std::iter::once(measure_text_width(&banner_footer_line(
+            spec,
+        ))))
+        .max()
+        .unwrap_or_default()
+}
+
+fn print_state_load_summary(summary: &StateLoadSummary) {
+    let spec = get_stderr_log_filter();
+    let banner_width = banner_width(&spec);
+    let plain_summary = format!(
+        "State: load {} | disk {} | #graphs {}",
+        format_duration_human(summary.elapsed),
+        summary
+            .serialized_size_bytes
+            .map(format_size_human)
+            .unwrap_or_else(|| "unknown".to_string()),
+        summary.total_graphs
+    );
+    let left_padding =
+        " ".repeat(banner_width.saturating_sub(measure_text_width(&plain_summary)) / 2);
+    let state_label = "State:".blue();
+    let load_label = "load".blue();
+    let disk_label = "disk".blue();
+    let graphs_label = "#graphs".blue();
+    let load_value = format_duration_human(summary.elapsed).green();
+    let disk_value = summary
+        .serialized_size_bytes
+        .map(format_size_human)
+        .unwrap_or_else(|| "unknown".to_string())
+        .green();
+    let graph_value = summary.total_graphs.to_string().green();
+
+    println!(
+        "{}{} {} {} | {} {} | {} {}\n",
+        left_padding,
+        state_label,
+        load_label,
+        load_value,
+        disk_label,
+        disk_value,
+        graphs_label,
+        graph_value
+    );
+}
+
 impl OneShot {
     pub fn new_cli_settings(&self, global: GlobalSettings) -> CLISettings {
         CLISettings {
             try_strings: !self.no_try_strings,
             override_state: self.override_state,
-            state_folder: self.state_folder.clone(),
+            state: StateSettings {
+                folder: self.state_folder.clone(),
+                ..StateSettings::default()
+            },
             global,
         }
     }
@@ -247,6 +493,7 @@ impl OneShot {
             override_state: false,
             command: None,
             level: Some(LogLevel::Info),
+            logging_prefix: None,
             settings_global_path: None,
             settings_runtime_defaults_path: None,
             no_try_strings: false,
@@ -373,17 +620,26 @@ impl OneShot {
         }
 
         if let Some(run_history) = boot_run_history {
-            return Ok(run_history.cli_settings.state_folder.clone());
+            return Ok(run_history.cli_settings.state.folder.clone());
         }
 
         Ok(self.state_folder.clone())
     }
 
-    pub fn load(&mut self) -> Result<(State, RunHistory, CLISettings, RuntimeSettings)> {
+    pub fn load(
+        &mut self,
+    ) -> Result<(
+        State,
+        RunHistory,
+        CLISettings,
+        RuntimeSettings,
+        Option<StateLoadSummary>,
+    )> {
         let state_exists = self.state_folder.exists();
 
-        let (state, run_history, cli_settings, default_runtime_settings) =
+        let (state, run_history, cli_settings, default_runtime_settings, load_summary) =
             if !self.fresh_state && state_exists {
+                let load_started = Instant::now();
                 let state = State::load(
                     self.state_folder.clone(),
                     self.model_file.clone(),
@@ -417,7 +673,19 @@ impl OneShot {
                     RunHistory::default()
                 };
 
-                (state, run_history, global, default_runtime)
+                let load_summary = StateLoadSummary {
+                    elapsed: load_started.elapsed(),
+                    serialized_size_bytes: serialized_size_of_path(&self.state_folder),
+                    total_graphs: total_graph_count(&state),
+                };
+
+                (
+                    state,
+                    run_history,
+                    global,
+                    default_runtime,
+                    Some(load_summary),
+                )
             } else {
                 if self.fresh_state && state_exists {
                     info!(
@@ -438,12 +706,19 @@ impl OneShot {
                     RunHistory::default(),
                     self.new_cli_settings(GlobalSettings::default()),
                     RuntimeSettings::default(),
+                    None,
                 )
             };
 
         cli_settings.sync_settings()?;
 
-        Ok((state, run_history, cli_settings, default_runtime_settings))
+        Ok((
+            state,
+            run_history,
+            cli_settings,
+            default_runtime_settings,
+            load_summary,
+        ))
     }
 
     pub fn run(mut self, raw: String) -> Result<()> {
@@ -451,19 +726,22 @@ impl OneShot {
             activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
         };
         initialise()?;
+        set_log_format_override(self.logging_prefix);
 
         let boot_run_history = self.load_boot_run_history()?;
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
 
-        let (mut state, mut run_history, mut cli_settings, mut default_runtime_settings) =
-            self.load()?;
+        let (
+            mut state,
+            mut run_history,
+            mut cli_settings,
+            mut default_runtime_settings,
+            state_load_summary,
+        ) = self.load()?;
         settings_file_overrides.apply(&mut cli_settings, &mut default_runtime_settings)?;
 
-        println!(":{}", cli_settings.global.display_directive);
-
         let mut save_state = SaveState::default();
-        let prompt_state_folder = cli_settings.state_folder.clone();
         let mut session_state = CliSessionState::default();
         let mut session = CliSession::new(
             &mut state,
@@ -499,14 +777,9 @@ impl OneShot {
                 }
             } else {
                 print_banner();
-                let prompt = DefaultPrompt {
-                    left_prompt: DefaultPromptSegment::Basic(format!(
-                        "{} | γloop ",
-                        prompt_state_folder.display()
-                    )),
-                    ..DefaultPrompt::default()
-                };
-
+                if let Some(summary) = state_load_summary.as_ref() {
+                    print_state_load_summary(summary);
+                }
                 // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
                 let completion_state = repl::new_completion_state();
                 repl::set_commands_block_names(
@@ -531,7 +804,7 @@ impl OneShot {
                     session.current_model_vertex_names(),
                 );
                 let mut repl = ClapEditor::<Repl>::builder()
-                    .with_prompt(Box::new(prompt))
+                    .with_prompt(make_repl_prompt(&session.prompt_state_label(), None))
                     .with_completion_state(completion_state.clone());
 
                 if let Some(home) = home_dir() {
@@ -579,6 +852,12 @@ impl OneShot {
                                         &completion_state,
                                         session.current_model_vertex_names(),
                                     );
+                                    let prompt_state_label = session.prompt_state_label();
+                                    let pending_block_name = session.pending_commands_block_name();
+                                    r.set_prompt(make_repl_prompt(
+                                        &prompt_state_label,
+                                        pending_block_name.as_deref(),
+                                    ));
                                     save_state = a;
                                     break;
                                 }
@@ -607,6 +886,12 @@ impl OneShot {
                                         &completion_state,
                                         session.current_model_vertex_names(),
                                     );
+                                    let prompt_state_label = session.prompt_state_label();
+                                    let pending_block_name = session.pending_commands_block_name();
+                                    r.set_prompt(make_repl_prompt(
+                                        &prompt_state_label,
+                                        pending_block_name.as_deref(),
+                                    ));
                                 }
                             }
                         }
@@ -625,12 +910,14 @@ impl OneShot {
                         }
                         ReadCommandOutput::CtrlC => {
                             if session.dismiss_pending_commands_block("Ctrl-C") {
+                                r.set_prompt(make_repl_prompt(&session.prompt_state_label(), None));
                                 continue;
                             }
                             continue;
                         }
                         ReadCommandOutput::CtrlD => {
                             if session.dismiss_pending_commands_block("Ctrl-D") {
+                                r.set_prompt(make_repl_prompt(&session.prompt_state_label(), None));
                                 continue;
                             }
                             break;
@@ -681,24 +968,12 @@ pub(crate) fn print_banner() {
     let spec = get_stderr_log_filter();
     println!(
         "\n{}{}\n",
-        r"              ██         ▄████████▄  ▄████████▄  ██████████▄
-  ██          ▀▀         ▀▀      ▀▀  ▀▀      ▀▀  ▀▀       ██
-    ██  ▄██████████████████████████████████████████████████▀
-     ▀██▀     ▄▄         ▄▄      ▄▄  ▄▄      ▄▄  ▄▄
-    ██  ██    █████████  ▀████████▀  ▀████████▀  ██
-   ██    ██
-   ██    ██
-"
-        .to_string()
-        .bold()
-        .blue(),
-        format!(
-            r#"   ▀██████▀   version:{:<15} log level:{}         "#,
-            GIT_VERSION.green(),
-            spec.green(),
-        )
-        .bold()
-        .blue(),
+        BANNER_ART.to_string().bold().blue(),
+        banner_footer_line(&spec)
+            .replace(GIT_VERSION, &GIT_VERSION.green().to_string())
+            .replace(&spec, &spec.green().to_string())
+            .bold()
+            .blue(),
     );
 }
 
@@ -727,13 +1002,19 @@ mod tests {
     use std::{ffi::OsString, fs, path::PathBuf};
 
     use clap::Parser;
+    use serde_json::Value as JsonValue;
     use tempfile::tempdir;
 
     use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
+    use crate::commands::Reset;
+    use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
 
-    use super::{CLISettings, Commands, OneShot, Repl, RunHistory, GLOBAL_SETTINGS_FILENAME};
+    use super::{
+        CLISettings, Commands, LogFormat, OneShot, Repl, RunHistory, StateSettings,
+        GLOBAL_SETTINGS_FILENAME,
+    };
 
     fn parse_with_shortcuts(args: &[&str]) -> OneShot {
         let argv: Vec<OsString> = args.iter().map(OsString::from).collect();
@@ -743,7 +1024,10 @@ mod tests {
     fn write_run_card(path: &PathBuf, state_folder: &str) {
         let run_history = RunHistory {
             cli_settings: CLISettings {
-                state_folder: state_folder.into(),
+                state: StateSettings {
+                    folder: state_folder.into(),
+                    ..StateSettings::default()
+                },
                 ..CLISettings::default()
             },
             ..RunHistory::default()
@@ -866,6 +1150,18 @@ mod tests {
     }
 
     #[test]
+    fn oneshot_leaves_logging_prefix_unspecified_by_default() {
+        let parsed = OneShot::try_parse_from(["gammaloop"]).unwrap();
+        assert_eq!(parsed.logging_prefix, None);
+    }
+
+    #[test]
+    fn oneshot_accepts_logging_prefix_override() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "-p", "long"]).unwrap();
+        assert_eq!(parsed.logging_prefix, Some(LogFormat::Long));
+    }
+
+    #[test]
     fn oneshot_accepts_settings_global_shortcut() {
         let parsed = parse_with_shortcuts(&["gammaloop", "-sg", "global.toml"]);
         assert_eq!(
@@ -926,13 +1222,40 @@ mod tests {
     }
 
     #[test]
+    fn repl_parses_reset_processes_with_normalized_selectors() {
+        let parsed = Repl::try_parse_from([
+            "gammaloop",
+            "reset",
+            "processes",
+            "-p",
+            "triangle",
+            "-i",
+            "LO",
+        ])
+        .unwrap();
+
+        let Commands::Reset(Reset::Processes {
+            process,
+            integrand_name,
+        }) = parsed.command
+        else {
+            panic!("expected reset processes command");
+        };
+        assert_eq!(
+            process,
+            Some(ProcessRef::Unqualified("triangle".to_string()))
+        );
+        assert_eq!(integrand_name, Some("LO".to_string()));
+    }
+
+    #[test]
     fn settings_file_overrides_apply_without_touching_state_folder() {
         let temp = tempdir().unwrap();
         let global_path = temp.path().join("global.toml");
         let runtime_path = temp.path().join("runtime.toml");
 
         let mut global_file_settings = CLISettings::default();
-        global_file_settings.state_folder = "./ignored".into();
+        global_file_settings.state.folder = "./ignored".into();
         global_file_settings.global.display_directive = "warn".into();
         fs::write(
             &global_path,
@@ -959,7 +1282,7 @@ mod tests {
 
         let overrides = cli.load_settings_file_overrides().unwrap();
         let mut cli_settings = CLISettings::default();
-        cli_settings.state_folder = "./keep".into();
+        cli_settings.state.folder = "./keep".into();
         cli_settings.global = GlobalSettings::default();
         let mut runtime_settings = RuntimeSettings::default();
 
@@ -967,9 +1290,55 @@ mod tests {
             .apply(&mut cli_settings, &mut runtime_settings)
             .unwrap();
 
-        assert_eq!(cli_settings.state_folder, PathBuf::from("./keep"));
+        assert_eq!(cli_settings.state.folder, PathBuf::from("./keep"));
         assert_eq!(cli_settings.global.display_directive, "warn");
         assert_eq!(runtime_settings.general.mu_r_sq, 37.0);
+    }
+
+    #[test]
+    fn state_name_empty_string_deserializes_to_none() {
+        let settings: CLISettings = toml::from_str(
+            r#"
+                [state]
+                folder = "./named_state"
+                name = ""
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(settings.state.folder, PathBuf::from("./named_state"));
+        assert_eq!(settings.state.name, None);
+    }
+
+    #[test]
+    fn state_prompt_label_prefers_name_and_falls_back_to_folder() {
+        let named = StateSettings {
+            folder: "./named_state".into(),
+            name: Some("demo".into()),
+        };
+        assert_eq!(named.prompt_label(), "demo");
+
+        let unnamed = StateSettings {
+            folder: "./named_state".into(),
+            name: Some("   ".into()),
+        };
+        assert_eq!(unnamed.prompt_label(), "./named_state");
+    }
+
+    #[test]
+    fn state_name_is_present_in_completion_serialization() {
+        let serialized =
+            serialize_settings_with_defaults(&CLISettings::default(), "CLI settings").unwrap();
+        let state = serialized
+            .get("state")
+            .and_then(JsonValue::as_object)
+            .expect("state object must be present");
+
+        assert_eq!(
+            state.get("name").and_then(JsonValue::as_str),
+            Some(""),
+            "state.name should stay visible to settings completion even when unset"
+        );
     }
 
     #[test]

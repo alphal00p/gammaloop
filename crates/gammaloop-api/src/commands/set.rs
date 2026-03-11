@@ -108,7 +108,7 @@ impl Set {
                 warn!(
                     "Ignoring base-dir change request to '{}': state folder is fixed for the current session ('{}')",
                     path.display(),
-                    global_settings.state_folder.display()
+                    global_settings.state.folder.display()
                 );
             }
             Self::Global { input } => {

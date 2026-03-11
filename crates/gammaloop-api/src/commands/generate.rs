@@ -32,6 +32,7 @@ use gammalooprs::processes::{CrossSection, Process, ProcessDefinition, ProcessLi
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
 use crate::commands::set::KvPair;
+use crate::completion::CompletionArgExt;
 use crate::state::{ProcessRef, State};
 
 // =================== CLI containers (kept close to your structure) ===================
@@ -156,7 +157,11 @@ pub struct SpecArgs {
     #[arg(long = "process-name", short = 'p')]
     pub process_name: Option<String>,
 
-    #[arg(long = "integrand-name", short = 'i')]
+    #[arg(
+        long = "integrand-name",
+        short = 'i',
+        completion_disable_special_value()
+    )]
     pub integrand_name: Option<String>,
 
     #[arg(long = "only-diagrams", short = 'o', default_value_t = false)]
@@ -485,11 +490,20 @@ impl Generate {
 #[derive(Args, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct ProcessArgs {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(long = "process", short = 'p', value_name = "PROCESS")]
+    #[arg(
+        long = "process",
+        short = 'p',
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Any)
+    )]
     pub process: Option<ProcessRef>,
 
     /// Optional human name
-    #[arg(long = "integrand-name", short = 'i')]
+    #[arg(
+        long = "integrand-name",
+        short = 'i',
+        completion_integrand_selector(crate::completion::SelectorKind::Any)
+    )]
     pub integrand_name: Option<String>,
 }
 

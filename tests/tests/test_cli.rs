@@ -13,10 +13,10 @@ use gammaloop_api::{
     CLISettings, OneShot,
     commands::Commands,
     session::CliSessionState,
-    state::{CommandHistory, CommandsBlock, RunHistory},
+    state::{CommandHistory, CommandsBlock, RunHistory, State},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
-use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::{processes::ProcessCollection, settings::RuntimeSettings};
 use serial_test::serial;
 
 static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
@@ -59,7 +59,7 @@ fn new_cli(name: &str) -> Result<SharedCli<'static>> {
     let state_folder = cli_state_path(name);
     clean_test(&state_folder);
     cli.cli_settings = CLISettings::default();
-    cli.cli_settings.state_folder = state_folder;
+    cli.cli_settings.state.folder = state_folder;
     cli.default_runtime_settings = RuntimeSettings::default();
     cli.run_history = RunHistory::default();
     cli.session_state = CliSessionState::default();
@@ -88,6 +88,53 @@ fn history_strings(run_history: &RunHistory) -> Vec<String> {
                 .unwrap_or_else(|| format!("{:?}", command.command))
         })
         .collect()
+}
+
+fn load_example_state(relative_path: &str) -> Result<State> {
+    State::load(PathBuf::from(relative_path), None, None)
+}
+
+fn duplicate_loaded_process(cli: &mut SharedCli<'_>, new_name: &str) {
+    let mut cloned = cli.state.process_list.processes[0].clone();
+    cloned.definition.folder_name = new_name.to_string();
+    cloned.definition.process_id = cli.state.process_list.processes.len();
+    cli.state.process_list.processes.push(cloned);
+}
+
+fn add_duplicate_integrand(
+    cli: &mut SharedCli<'_>,
+    process_index: usize,
+    new_integrand_name: &str,
+) {
+    let process = &mut cli.state.process_list.processes[process_index];
+    match &mut process.collection {
+        ProcessCollection::Amplitudes(amplitudes) => {
+            let source_name = amplitudes
+                .keys()
+                .next()
+                .expect("fixture process should contain at least one amplitude")
+                .clone();
+            let mut duplicate = amplitudes
+                .get(&source_name)
+                .expect("fixture amplitude should exist")
+                .clone();
+            duplicate.name = new_integrand_name.to_string();
+            amplitudes.insert(new_integrand_name.to_string(), duplicate);
+        }
+        ProcessCollection::CrossSections(cross_sections) => {
+            let source_name = cross_sections
+                .keys()
+                .next()
+                .expect("fixture process should contain at least one cross section")
+                .clone();
+            let mut duplicate = cross_sections
+                .get(&source_name)
+                .expect("fixture cross section should exist")
+                .clone();
+            duplicate.name = new_integrand_name.to_string();
+            cross_sections.insert(new_integrand_name.to_string(), duplicate);
+        }
+    }
 }
 
 fn run_without_arguments_is_a_noop() -> Result<()> {
@@ -198,7 +245,7 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
 
     cli.save_state()?;
 
-    let persisted = RunHistory::load(cli.cli_settings.state_folder.join("run.toml"))?;
+    let persisted = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
     assert_eq!(persisted.commands_blocks.len(), 1);
     assert_eq!(persisted.commands.len(), 2);
     Ok(())
@@ -359,11 +406,57 @@ fn save_state_writes_global_settings_file() -> Result<()> {
 
     cli.save_state()?;
 
-    let global_settings_path = cli.cli_settings.state_folder.join("global_settings.toml");
+    let global_settings_path = cli.cli_settings.state.folder.join("global_settings.toml");
     let global_settings_contents = fs::read_to_string(&global_settings_path)?;
 
     assert!(global_settings_path.exists());
     assert!(!global_settings_contents.contains("dummy"));
+    Ok(())
+}
+
+fn reset_processes_with_process_selector_removes_only_that_process() -> Result<()> {
+    let mut cli = new_cli("reset_processes_with_process_selector_removes_only_that_process")?;
+    cli.state = load_example_state("./examples/cli/gg_hhh/1L/state")?;
+    duplicate_loaded_process(&mut cli, "second_process");
+
+    cli.run_command("reset processes -p second_process")?;
+
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    assert_eq!(
+        cli.state.process_list.processes[0].definition.folder_name,
+        "gg_hhh"
+    );
+    Ok(())
+}
+
+fn reset_processes_with_integrand_selector_removes_only_that_integrand() -> Result<()> {
+    let mut cli = new_cli("reset_processes_with_integrand_selector_removes_only_that_integrand")?;
+    cli.state = load_example_state("./examples/cli/gg_hhh/1L/state")?;
+    add_duplicate_integrand(&mut cli, 0, "virtual_copy");
+
+    cli.run_command("reset processes -p gg_hhh -i virtual_copy")?;
+
+    let remaining = cli.state.process_list.processes[0]
+        .collection
+        .get_integrand_names();
+    assert_eq!(remaining, vec!["1L"]);
+    Ok(())
+}
+
+fn reset_processes_removing_last_integrand_drops_empty_process() -> Result<()> {
+    let mut cli = new_cli("reset_processes_removing_last_integrand_drops_empty_process")?;
+    cli.state = load_example_state("./examples/cli/gg_hhh/1L/state")?;
+
+    cli.run_command("reset processes -p gg_hhh -i 1L")?;
+
+    assert!(cli.state.process_list.processes.is_empty());
+    Ok(())
+}
+
+fn reset_processes_rejects_integrand_without_process() -> Result<()> {
+    let mut cli = new_cli("reset_processes_rejects_integrand_without_process")?;
+    let err = cli.run_command("reset processes -i 1L").unwrap_err();
+    assert!(format!("{err:?}").contains("--integrand-name requires --process"));
     Ok(())
 }
 
@@ -385,6 +478,10 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     ctrl_c_dismisses_pending_block_definition()?;
     ctrl_d_dismisses_pending_block_definition()?;
     recursive_run_limit_is_enforced()?;
+    reset_processes_with_process_selector_removes_only_that_process()?;
+    reset_processes_with_integrand_selector_removes_only_that_integrand()?;
+    reset_processes_removing_last_integrand_drops_empty_process()?;
+    reset_processes_rejects_integrand_without_process()?;
     save_state_writes_global_settings_file()?;
     Ok(())
 }

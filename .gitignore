@@ -63,6 +63,9 @@ examples/cli/epem_a_ttxh
 crates/gammalooprs/src/old_observables
 crates/vakint/tests_workspace/*
 
+# I prefer to require forcefully adding changes to that file as it often contains user-specific customizations
+.zed/settings.json
+
 # C compiled objects
 *.o
 

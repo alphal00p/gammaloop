@@ -864,6 +864,43 @@ impl State {
         Ok(())
     }
 
+    pub fn remove_process(&mut self, process: Option<&ProcessRef>) -> Result<RemovedProcess> {
+        let process_id = self.resolve_process_ref(process)?;
+        let removed = self.process_list.processes.remove(process_id);
+        Ok(RemovedProcess {
+            process_id,
+            process_name: removed.definition.folder_name,
+        })
+    }
+
+    pub fn remove_integrand(
+        &mut self,
+        process: &ProcessRef,
+        integrand_name: &str,
+    ) -> Result<RemovedIntegrand> {
+        let process_id = process.resolve(&self.process_list)?;
+        let process_entry = &mut self.process_list.processes[process_id];
+        let process_name = process_entry.definition.folder_name.clone();
+        let canonical_integrand_name = process_entry
+            .collection
+            .find_integrand(Some(integrand_name.to_string()))?;
+        process_entry
+            .collection
+            .remove_integrand(&canonical_integrand_name)?;
+
+        let removed_empty_process = process_entry.collection.get_integrand_names().is_empty();
+        if removed_empty_process {
+            self.process_list.processes.remove(process_id);
+        }
+
+        Ok(RemovedIntegrand {
+            process_id,
+            process_name,
+            integrand_name: canonical_integrand_name,
+            removed_empty_process,
+        })
+    }
+
     pub fn resolve_process_ref(&self, process: Option<&ProcessRef>) -> Result<usize> {
         match process {
             Some(process_ref) => process_ref.resolve(&self.process_list),
@@ -1201,6 +1238,20 @@ impl State {
             model_parameters: InputParamCard::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemovedProcess {
+    pub process_id: usize,
+    pub process_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemovedIntegrand {
+    pub process_id: usize,
+    pub process_name: String,
+    pub integrand_name: String,
+    pub removed_empty_process: bool,
 }
 
 impl State {

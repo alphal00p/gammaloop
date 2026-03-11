@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
+    completion::CompletionArgExt,
     state::{ProcessListExt, ProcessRef, State},
     CLISettings,
 };
@@ -31,11 +32,21 @@ pub enum Profile {
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct UltraVioletProfile {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub process: Option<ProcessRef>,
 
     /// The amplitude name to inspect
-    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub integrand_name: Option<String>,
 
     /// Number of scaling points to sample
@@ -69,11 +80,21 @@ pub struct UltraVioletProfile {
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct InfraRedProfile {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::CrossSection)
+    )]
     pub process: Option<ProcessRef>,
 
     /// The cross-section name to inspect
-    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::CrossSection)
+    )]
     pub integrand_name: Option<String>,
 
     /// Number of scaling points to sample

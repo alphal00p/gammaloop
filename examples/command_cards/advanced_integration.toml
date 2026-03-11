@@ -41,7 +41,8 @@ commands = [
 
 # CLI settings for advanced workflows
 [cli_settings]
-state_folder = "./advanced_integration_state"
+[cli_settings.state]
+folder = "./advanced_integration_state"
 override_state = false
 try_strings = true
 

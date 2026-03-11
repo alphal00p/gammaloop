@@ -113,6 +113,17 @@ impl<'a> CliSession<'a> {
         self.session_state.pending_commands_block.is_some()
     }
 
+    pub fn pending_commands_block_name(&self) -> Option<String> {
+        self.session_state
+            .pending_commands_block
+            .as_ref()
+            .map(|pending| pending.name.clone())
+    }
+
+    pub fn prompt_state_label(&self) -> String {
+        self.cli_settings.state.prompt_label()
+    }
+
     pub fn current_commands_block_names(&self) -> Vec<String> {
         self.run_history
             .commands_blocks

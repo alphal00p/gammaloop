@@ -157,7 +157,7 @@ fn trees() -> Result<()> {
 
     assert_snapshot!(format!("{a:.8e}"),@"(1.4727604164105595e-4+-1.1503139369130214e-3i)");
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -206,7 +206,7 @@ fn photons_1l_integrate() -> Result<()> {
     assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
     assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -247,7 +247,7 @@ fn photons_1l_inspect() -> Result<()> {
     // The old test at a very bad value of e_cm, so I created a new value using the example card in the old main
     assert_snapshot!(format!("{inspect:.8e}"),@"(-4.2365441831364175e-12+-3.71072895861423e-12i)");
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -310,7 +310,7 @@ fn photons_2l_inspect() -> Result<()> {
     // wrong result
     assert_snapshot!(format!("{inspect:.8e}"));
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -678,7 +678,7 @@ fn test_grouped_subtraction() -> Result<()> {
         &F(1e-1),
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -745,7 +745,7 @@ fn scalar_bubble() -> Result<()> {
 
     println!("{}", res[0]);
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -809,7 +809,7 @@ fn scalar_sunrise() -> Result<()> {
     let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;
 
     println!("{}", res[0]);
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -870,7 +870,7 @@ fn scalar_mercedes() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -937,7 +937,7 @@ fn scalar_basketball() -> Result<()> {
     //     "Not compatible: {integral_no_cache}",
     // );
 
-    // clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -1002,7 +1002,7 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -1140,7 +1140,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
     4.62050e-12+i-0.00000e0
     -3.63173e-19+i-0.00000e0
     ");
-    // clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -1213,7 +1213,7 @@ fn scalar_box() -> Result<()> {
         &F(1e-4),
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -1311,7 +1311,7 @@ fn test_simple_workflow_example_card() -> Result<()> {
         Some("import model sm-default")
     );
     assert_eq!(
-        run_history.cli_settings.state_folder,
+        run_history.cli_settings.state.folder,
         PathBuf::from("./example_state")
     );
     assert_eq!(

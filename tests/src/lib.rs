@@ -147,7 +147,7 @@ pub fn get_test_cli(
         RunHistory::default()
     };
     let mut global_settings = cmds.cli_settings.clone();
-    global_settings.state_folder = state_path.as_ref().to_path_buf();
+    global_settings.state.folder = state_path.as_ref().to_path_buf();
     global_settings.sync_settings()?;
     let default_runtime_settings = cmds.default_runtime_settings.clone();
     SaveState {

@@ -17,6 +17,7 @@ use gammalooprs::{
 use tracing::{info, warn};
 
 use crate::{
+    completion::CompletionArgExt,
     state::{ProcessRef, State},
     CLISettings,
 };
@@ -28,11 +29,21 @@ use crate::{
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Integrate {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Any)
+    )]
     pub process: Option<ProcessRef>,
 
     /// The integrand name to integrate
-    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Any)
+    )]
     pub integrand_name: Option<String>,
 
     /// The path to store results in
@@ -67,7 +78,8 @@ impl Integrate {
         global_cli_settings: &CLISettings,
     ) -> Result<IntegrationResult> {
         let default_workspace_path = global_cli_settings
-            .state_folder
+            .state
+            .folder
             .join("integration_workspace");
         let workspace_path = if let Some(p) = self.workspace_path.clone() {
             p

@@ -74,7 +74,7 @@ impl Save {
                 with_uv,
             } => {
                 // Use original default location (state folder) or custom path if provided
-                let target_dir = path.unwrap_or(global_settings.state_folder.clone());
+                let target_dir = path.unwrap_or(global_settings.state.folder.clone());
                 info!("Saving dot files to {}", target_dir.display());
 
                 // Extract embedded templates to drawings/templates relative to target directory
@@ -127,7 +127,7 @@ impl Save {
                 json,
                 binary,
             } => {
-                let target_dir = path.unwrap_or(global_settings.state_folder.clone());
+                let target_dir = path.unwrap_or(global_settings.state.folder.clone());
                 let mode = match (python, rust) {
                     (true, false) => StandaloneExportMode::Python,
                     (false, true) | (false, false) => StandaloneExportMode::Rust,
@@ -194,7 +194,7 @@ impl SaveState {
         let mut selected_root_folder = self
             .path
             .clone()
-            .unwrap_or(global_settings.state_folder.clone());
+            .unwrap_or(global_settings.state.folder.clone());
         if !selected_root_folder.exists() {
             fs::create_dir_all(&selected_root_folder)?;
         } else {

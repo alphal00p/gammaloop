@@ -9,7 +9,8 @@ commands = [
 ]
 
 [cli_settings]
-state_folder = "./GL_OUTPUT/epem_a_ttxh/LO/state_no_thresholds"
+[cli_settings.state]
+folder = "./GL_OUTPUT/epem_a_ttxh/LO/state_no_thresholds"
 
 [cli_settings.global.generation.compile]
 inline_asm = true

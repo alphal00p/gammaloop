@@ -108,7 +108,7 @@ commands = [
 ]
 
 [cli_settings]
-state_folder = "./my_custom_state"
+state.folder = "./my_custom_state"
 
 [cli_settings.global]
 logfile_directive = "info"
@@ -144,7 +144,7 @@ commands = [
 ## Configuration Options
 
 ### CLI Settings
-- `state_folder`: Directory for persistent state storage
+- `state.folder`: Directory for persistent state storage
 - `override_state`: Automatically overwrite existing files
 - `try_strings`: Use string serialization when possible
 

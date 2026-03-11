@@ -13,6 +13,7 @@ use gammalooprs::settings::RuntimeSettings;
 
 use crate::{
     commands::generate::ProcessArgs,
+    completion::CompletionArgExt,
     settings_tree::{serialize_settings_with_defaults, value_at_path},
     state::{ProcessRef, State},
     CLISettings,
@@ -35,7 +36,12 @@ pub enum Display {
     Processes,
     Integrands {
         /// Process reference: #<id>, name:<name>, or <id>/<name>
-        #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+        #[arg(
+            short = 'p',
+            long = "process",
+            value_name = "PROCESS",
+            completion_process_selector(crate::completion::SelectorKind::Any)
+        )]
         process: Option<ProcessRef>,
     },
     Settings {

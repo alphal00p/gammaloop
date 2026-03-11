@@ -6,17 +6,30 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
-use crate::state::{ProcessRef, State};
+use crate::{
+    completion::CompletionArgExt,
+    state::{ProcessRef, State},
+};
 use color_eyre::Result;
 use tracing::info;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Inspect {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Any)
+    )]
     pub process: Option<ProcessRef>,
     /// The integrand name to inspect
-    #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Any)
+    )]
     pub integrand_name: Option<String>,
     /// The point to inspect (x y) or (p0 px ...)
     #[arg(short = 'x', long = "point", num_args = 2.., value_name = "POINT",

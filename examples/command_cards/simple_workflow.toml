@@ -32,7 +32,8 @@ commands = [
 
 # Default CLI settings for this workflow
 [cli_settings]
-state_folder = "./example_state"
+[cli_settings.state]
+folder = "./example_state"
 
 [cli_settings.global]
 logfile_directive = "info"

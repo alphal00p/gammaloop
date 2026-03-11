@@ -8,6 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    completion::CompletionArgExt,
     state::{CommandHistory, ProcessRef, RunHistory, State},
     CLISettings,
 };
@@ -80,11 +81,21 @@ pub enum Commands {
         #[arg(short = 's', long, value_name = "SAMPLES")]
         samples: usize,
         /// Process reference: #<id>, name:<name>, or <id>/<name>
-        #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+        #[arg(
+            short = 'p',
+            long = "process",
+            value_name = "PROCESS",
+            completion_process_selector(crate::completion::SelectorKind::Any)
+        )]
         process: ProcessRef,
 
         /// The integrand name to benchmark
-        #[arg(short = 'i', long = "integrand-name", value_name = "NAME")]
+        #[arg(
+            short = 'i',
+            long = "integrand-name",
+            value_name = "NAME",
+            completion_integrand_selector(crate::completion::SelectorKind::Any)
+        )]
         integrand_name: String,
         /// Number of cores to parallelize over
         #[arg(short = 'c', long)]
@@ -152,7 +163,7 @@ impl Commands {
             Commands::Set(s) => s.run(state, global_cli_settings, default_runtime_settings)?,
             Commands::Generate(g) => g.run(
                 state,
-                &global_cli_settings.state_folder,
+                &global_cli_settings.state.folder,
                 global_cli_settings.override_state,
                 &global_cli_settings.global,
                 default_runtime_settings,

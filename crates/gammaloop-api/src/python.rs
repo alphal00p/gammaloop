@@ -395,6 +395,7 @@ impl GammaLoopAPI {
             trace_logs_filename: log_file_name,
             // Set log level for current session
             level: log_level,
+            logging_prefix: None,
             settings_global_path: None,
             settings_runtime_defaults_path: None,
             // Try to serialize using strings when saving run history
@@ -402,7 +403,7 @@ impl GammaLoopAPI {
             command: None,
             fresh_state: false,
         };
-        let (state, run_history, cli_settings, default_runtime_settings) =
+        let (state, run_history, cli_settings, default_runtime_settings, _) =
             one_shot.load().map_err(|e| {
                 exceptions::PyException::new_err(format!(
                     "Could not load or create GammaLoop state: {}",

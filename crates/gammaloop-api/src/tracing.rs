@@ -293,10 +293,31 @@ pub(crate) fn init_tracing(
     handles.file_handle.clone()
 }
 
-pub static LOG_STYLE: LazyLock<Mutex<LogStyle>> = LazyLock::new(|| Mutex::new(LogStyle::default()));
+#[derive(Debug, Clone, Default)]
+struct LogStyleState {
+    base_style: LogStyle,
+    format_override: Option<LogFormat>,
+}
+
+impl LogStyleState {
+    fn effective_style(&self) -> LogStyle {
+        let mut style = self.base_style.clone();
+        if let Some(log_format) = self.format_override {
+            style.log_format = log_format;
+        }
+        style
+    }
+}
+
+static LOG_STYLE_STATE: LazyLock<Mutex<LogStyleState>> =
+    LazyLock::new(|| Mutex::new(LogStyleState::default()));
 
 pub fn set_log_style(style: LogStyle) {
-    *LOG_STYLE.lock().unwrap() = style;
+    LOG_STYLE_STATE.lock().unwrap().base_style = style;
+}
+
+pub fn set_log_format_override(log_format: Option<LogFormat>) {
+    LOG_STYLE_STATE.lock().unwrap().format_override = log_format;
 }
 
 /// Collect the event's formatted "message" field.
@@ -372,7 +393,7 @@ where
     ) -> std::fmt::Result {
         let now = Local::now();
         let meta = event.metadata();
-        let style = LOG_STYLE.lock().unwrap().clone();
+        let style = LOG_STYLE_STATE.lock().unwrap().effective_style();
 
         let mut v = MessageVisitor::default();
         event.record(&mut v);
@@ -422,11 +443,6 @@ where
         } else {
             format_target(meta.module_path().unwrap_or("").to_string(), *meta.level())
         };
-        let short_source = if style.full_line_source {
-            Some(format_full_source(meta))
-        } else {
-            None
-        };
 
         match style.log_format {
             LogFormat::Long => {
@@ -445,44 +461,19 @@ where
                 )?;
             }
             LogFormat::Short => {
-                if let Some(source) = short_source {
-                    write!(
-                        w,
-                        "[{}] @{} {}: {}",
-                        ts_short,
-                        source,
-                        format_level(*meta.level()),
-                        rendered
-                    )?;
-                } else {
-                    write!(
-                        w,
-                        "[{}] {}: {}",
-                        ts_short,
-                        format_level(*meta.level()),
-                        rendered
-                    )?;
-                }
+                write!(
+                    w,
+                    "[{}] {}: {}",
+                    ts_short,
+                    format_level(*meta.level()),
+                    rendered
+                )?;
             }
             LogFormat::Min => {
-                if let Some(source) = short_source {
-                    write!(
-                        w,
-                        "@{} {}: {}",
-                        source,
-                        format_level(*meta.level()),
-                        rendered
-                    )?;
-                } else {
-                    write!(w, "{}: {}", format_level(*meta.level()), rendered)?;
-                }
+                write!(w, "{}: {}", format_level(*meta.level()), rendered)?;
             }
             LogFormat::None => {
-                if let Some(source) = short_source {
-                    write!(w, "@{} {}", source, rendered)?;
-                } else {
-                    write!(w, "{}", rendered)?;
-                }
+                write!(w, "{}", rendered)?;
             }
         }
         writeln!(w)

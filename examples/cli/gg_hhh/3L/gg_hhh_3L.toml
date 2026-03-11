@@ -1,13 +1,51 @@
 commands = [
+  "run generate",
+  "quit -o"
+]
 
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/gg_hhh/3L/state"
+name = "gg_hhh_3l"
+
+[[commands_blocks]]
+name = "generate"
+commands = [
+
+    "import model sm-default.json",
+
+    "reset processes",
+    "import graphs ./examples/cli/gg_hhh/3L/3L_graph.dot -p gg_hhh -i 3L",
+    "generate",
+    "save dot",
+    "save state -o",
+
+]
+
+[[commands_blocks]]
+name = "setup_euclidean_configuration"
+commands = [
     "set model MT={re:1000.0,im:0.0}",
     "set model WT={re:0.0,im:0.0}",
     "set model ymt={re:1000.0,im:0.0}",
+]
+
+[[commands_blocks]]
+name = "setup_physical_configuration"
+commands = [
+    "set model MT={re:173.0,im:0.0}",
+    "set model WT={re:0.0,im:0.0}",
+    "set model ymt={re:173.0,im:0.0}",
+]
+
+[[commands_blocks]]
+name = "integrate"
+commands = [
 
     "set process -p gg_hhh -i 3L defaults",
 
     # Disable stability checks
-    # "set process -p gg_hhh -i 1L stability.rotation_axis []",
+    # "set process -p gg_hhh -i 3L stability.rotation_axis []",
 
     "set process -p gg_hhh -i 3L kv integrator.n_start=1000 integrator.n_max=10000",
 
@@ -16,8 +54,6 @@ commands = [
         --result-path ./GL_OUTPUT/gg_hhh/3L/integration_workspace/result.txt
         --restart
     """,
-
-    "quit -o",
 
 ]
 
@@ -75,3 +111,42 @@ subtype = "discrete_multi_channeling"
 #sample_orientations = true
 #[default_runtime_settings.sampling.sampling_type]
 #subtype = "discrete_multi_channeling"
+
+[cli_settings.global.generation.compile]
+inline_asm = true
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+# Disable thresholds with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+# Otherwise leave them enabled with
+# [cli_settings.global.generation.threshold_subtraction]
+# enable_thresholds = true
+# # The option below specifies the generation of threshold for the kinematics supplied
+# check_esurface_at_generation = true
+
+# [default_runtime_settings.subtraction]
+# disable_threshold_subtraction = false

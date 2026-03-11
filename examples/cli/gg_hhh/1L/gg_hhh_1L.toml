@@ -5,7 +5,9 @@ commands = [
 ]
 
 [cli_settings]
-state_folder = "./examples/cli/gg_hhh/1L/state"
+[cli_settings.state]
+folder = "./examples/cli/gg_hhh/1L/state"
+name = "gg_hhh_1l"
 
 [[commands_blocks]]
 name = "generate"
@@ -85,7 +87,7 @@ commands = [
     "set model MT={re:173.0,im:0.0}",
     "set model WT={re:0.0,im:0.0}",
     "set model ymt={re:173.0,im:0.0}",
-    "set process -p gg_hhh -i 1L kv integrator.n_start=100000 integrator.n_max=1000000",	
+    "set process -p gg_hhh -i 1L kv integrator.n_start=100000 integrator.n_max=1000000",
     """integrate --process gg_hhh -i 1L --n-cores 10
         --target 1.89203604685291554e-6 -5.46603099163412881e-6
         --workspace-path ./GL_OUTPUT/gg_hhh/1L/state/integration_workspace
@@ -169,7 +171,7 @@ disable_tropical_generation = false
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
-store_atom = true
+store_atom = false
 compile = true
 summed = false
 summed_function_map = true
