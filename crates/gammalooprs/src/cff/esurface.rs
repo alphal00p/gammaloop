@@ -24,8 +24,8 @@ use crate::cff::cff_graph::VertexSet;
 
 use crate::cff::cut_expression::{CFFCutsExpression, SuperGraphOrientationID};
 use crate::cff::expression::CFFExpression;
-use crate::define_index;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
+use crate::{GammaLoopContext, define_index};
 
 use crate::integrands::process::GenericEvaluator;
 use crate::momentum::ThreeMomentum;
@@ -927,6 +927,8 @@ define_index!(
     pub struct RaisedEsurfaceId;
 );
 
+#[derive(Debug, Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedEsurfaceData {
     pub raised_groups: TiVec<RaisedEsurfaceId, RaisedEsurfaceGroup>,
     pub pass_two_evaluator: Option<Vec<GenericEvaluator>>,
@@ -976,6 +978,8 @@ impl Graph {
                         if cuts.esurface_ids.iter().all(|cut_in_raised_group_id| {
                             normalized_cut_esurfaces[*cut_in_raised_group_id].energies
                                 == normalized_cut_esurface.energies
+                                && normalized_cut_esurfaces[*cut_in_raised_group_id].external_shift
+                                    == normalized_cut_esurface.external_shift
                         }) {
                             Some(raised_cut_id)
                         } else {

@@ -732,19 +732,62 @@ impl CrossSectionGraph {
 
         let contract_edges = self
             .graph
-            .iter_edges_of(&self.graph.tree_edges)
+            .iter_edges_of(
+                &self.graph.tree_edges.subtract(
+                    &self
+                        .graph
+                        .initial_state_cut
+                        .left
+                        .union(&self.graph.initial_state_cut.right),
+                ),
+            )
             .map(|x| x.1)
             .collect_vec();
 
+        print!("contract edges: {:?}", contract_edges);
         let global_cff = self
             .graph
             .generate_cff(&contract_edges, &canonize_esurface)?;
+
+        let cut_esurface_map = self
+            .cut_esurface
+            .iter()
+            .map(|esurface| {
+                self.graph
+                    .surface_cache
+                    .esurface_cache
+                    .iter()
+                    .position(|e_sf| e_sf == esurface)
+                    .unwrap_or_else(|| {
+                        println!("esurfaces corruped");
+
+                        println!("cut esurfaces: {:?}", self.cut_esurface);
+                        println!(
+                            "graph esurfaces: {:?}",
+                            self.graph.surface_cache.esurface_cache
+                        );
+                        println!(
+                            "graph hsurfaces: {:?}",
+                            self.graph.surface_cache.hsurface_cache
+                        );
+                        panic!()
+                    })
+                    .into()
+            })
+            .collect();
+
+        self.cut_esurface_id_map = cut_esurface_map;
 
         let esurface_raised_data = self
             .graph
             .determine_raised_esurfaces_from_expression(&global_cff);
 
-        // hardcorde 1 to n for now
+        let raised_cut_data =
+            RaisedCutData::new_from_esurface(&esurface_raised_data, &self.cut_esurface_id_map);
+
+        info!("raised cut data: {:?}", raised_cut_data);
+        self.derived_data.global_cff_expression = Some(global_cff);
+        self.derived_data.raised_data = raised_cut_data;
 
         Ok(())
     }
@@ -909,6 +952,8 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        println!("raised data: {:?}", self.derived_data.raised_data);
+
         let max_order = self
             .derived_data
             .raised_data
@@ -942,6 +987,8 @@ impl CrossSectionGraph {
                     .unwrap_or_else(|| self.graph.empty_subgraph()),
             })
             .collect();
+
+        println!("cut sets: {:?}", cuts);
 
         let cut_structure = CutStructure { cuts };
 
@@ -1931,7 +1978,7 @@ pub struct CrossSectionDerivedData {
     pub raised_data: RaisedCutData,
 }
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedCutData {
     pub raised_cut_groups: TiVec<RaisedCutId, RaisedCutGroup>,
@@ -1939,7 +1986,7 @@ pub struct RaisedCutData {
     pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct RaisedCutGroup {
     pub cuts: Vec<CutId>,
@@ -1970,6 +2017,10 @@ impl RaisedCutData {
             .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
             .collect::<HashMap<EsurfaceID, CutId>>();
 
+        println!("cut_esurface_map: {:?}", cut_esurface_map);
+        println!("reversed_map: {:?}", reversed_map);
+        println!("raised_esurface_data: {:?}", raised_esurface_data);
+
         let mut groups = TiVec::new();
 
         for (raised_esurface_id, raised_esurface_group) in
@@ -1997,7 +2048,10 @@ impl RaisedCutData {
             .iter()
             .map(|group| group.related_esurface_group.max_occurence)
             .max()
-            .unwrap();
+            .unwrap_or_else(|| {
+                println!("corrupted groups");
+                panic!();
+            });
 
         let dual_shapes = (1..global_max_occurence)
             .map(|i| shape_for_t_derivatives(i))

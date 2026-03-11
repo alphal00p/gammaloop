@@ -284,12 +284,12 @@ impl CrossSectionGraphTerm {
     ) -> Result<Self> {
         let orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>> = graph
             .derived_data
-            .cff_expression
+            .global_cff_expression
             .as_ref()
             .unwrap()
-            .orientation_data
+            .orientations
             .iter()
-            .map(|data| data.orientation.clone())
+            .map(|data| data.orientation().clone())
             .collect();
 
         let parametric_integrand = graph

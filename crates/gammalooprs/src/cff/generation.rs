@@ -488,12 +488,17 @@ impl Graph {
             seed_graph = seed_graph.contract_edge(*edge);
         }
 
+        println!("seed graph: {:#?}", seed_graph);
         let edges_in_initial_state_cut = self
             .iter_edges_of(&self.initial_state_cut)
             .map(|x| x.1)
             .collect_vec();
 
         let virtual_edges_of_contracted_graph = seed_graph.num_virtual_edges();
+        println!(
+            "virtual edges of contracted graph: {}",
+            virtual_edges_of_contracted_graph
+        );
 
         let orientations = iterate_possible_orientations(virtual_edges_of_contracted_graph);
 
@@ -508,6 +513,8 @@ impl Graph {
                 } else {
                     if contract_edges.contains(&edge_id) {
                         Orientation::Undirected
+                    } else if edges_in_initial_state_cut.contains(&edge_id) {
+                        Orientation::Default
                     } else {
                         orientation_iterator
                             .next()
