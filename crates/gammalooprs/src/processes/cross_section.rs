@@ -836,8 +836,7 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<()> {
-        self.derived_data.cut_paramatric_integrand =
-            self.build_parametric_integrand_raised_cuts(settings, vakint)?;
+        self.derived_data.cut_paramatric_integrand = self.build_integrand(settings, vakint)?;
         Ok(())
     }
 
@@ -948,11 +947,22 @@ impl CrossSectionGraph {
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph);
 
+        let lu_prefactor = self.lu_prefactor_helper_new();
+
         let mut cut_forests = cut_woods.unfold(&self.graph);
         cut_forests.compute(&mut self.graph, vakint, &settings.uv);
         cut_forests
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)
-            .map(|vec| vec.into())
+            .map(|mut vec| {
+                vec.iter_mut().for_each(|parametric_integrands| {
+                    parametric_integrands
+                        .integrands
+                        .iter_mut()
+                        .for_each(|integrand| *integrand *= lu_prefactor.clone())
+                });
+
+                vec.into()
+            })
     }
 
     fn build_parametric_integrand_raised_cuts(
@@ -1917,7 +1927,7 @@ impl CrossSectionGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
-    pub cut_paramatric_integrand: TiVec<RaisedCutId, Vec<Atom>>,
+    pub cut_paramatric_integrand: TiVec<RaisedCutId, ParametricIntegrands>,
     pub global_cff_expression: Option<CFFExpression<SuperGraphOrientationID>>,
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,

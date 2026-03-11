@@ -1,8 +1,9 @@
+use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 
-use crate::cff::esurface::{EsurfaceID, RaisedEsurfaceGroup};
+use crate::cff::esurface::RaisedEsurfaceGroup;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct CutSet {
     pub esurfaces: RaisedEsurfaceGroup,
     pub union: SuBitGraph,

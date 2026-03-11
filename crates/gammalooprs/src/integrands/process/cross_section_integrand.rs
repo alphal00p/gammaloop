@@ -298,6 +298,7 @@ impl CrossSectionGraphTerm {
             .iter()
             .map(|integrand_for_cut| {
                 integrand_for_cut
+                    .integrands
                     .iter()
                     .enumerate()
                     .map(|(num_derivatives, integrand_for_subset)| {
@@ -335,6 +336,7 @@ impl CrossSectionGraphTerm {
                     .iter()
                     .map(|integrand_for_cut| {
                         integrand_for_cut
+                            .integrands
                             .iter()
                             .enumerate()
                             .map(|(num_derivatives, integrand_for_subset)| {

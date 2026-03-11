@@ -1,8 +1,10 @@
 use crate::{
+    GammaLoopContext,
     graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_, ose_atom_from_index, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure},
 };
+use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
@@ -28,6 +30,8 @@ pub struct CutForests {
     pub forests: Vec<Forest>,
 }
 
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct ParametricIntegrands {
     pub integrands: Vec<Atom>,
     pub cuts: CutSet,
