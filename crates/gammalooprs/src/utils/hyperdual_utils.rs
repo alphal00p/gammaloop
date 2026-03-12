@@ -76,9 +76,19 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
 pub enum DualOrNot<T> {
     Dual(HyperDual<T>),
     NonDual(T),
+}
+
+impl<T> DualOrNot<T> {
+    pub fn unwrap_real(self) -> T {
+        match self {
+            DualOrNot::Dual(_dual) => panic!("Cannot unwrap real value from Dual variant"),
+            DualOrNot::NonDual(value) => value,
+        }
+    }
 }
 
 impl<T: LowerExp> Display for DualOrNot<T> {

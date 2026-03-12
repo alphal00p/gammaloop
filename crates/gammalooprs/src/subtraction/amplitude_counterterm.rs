@@ -1,6 +1,7 @@
 use std::{cell::RefCell, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
+use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use symbolica::{
@@ -19,14 +20,18 @@ use crate::{
         expression::AmplitudeOrientationID,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
-    integrands::evaluation::EvaluationMetaData,
-    integrands::process::{
-        ParamBuilder, ThresholdParams,
-        evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
+    integrands::{
+        evaluation::EvaluationMetaData,
+        process::{
+            ParamBuilder, ThresholdParams,
+            evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
+        },
     },
     model::Model,
-    momentum::Rotation,
-    momentum::sample::{LoopMomenta, MomentumSample},
+    momentum::{
+        Rotation,
+        sample::{LoopMomenta, MomentumSample},
+    },
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
@@ -34,6 +39,7 @@ use crate::{
     },
     utils::{
         F, FloatLike,
+        hyperdual_utils::DualOrNot,
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };
@@ -461,7 +467,10 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 evaluation_metadata,
                 record_primary_timing,
             )
-            .expect("Amplitude counterterm evaluator stack failed");
+            .expect("Amplitude counterterm evaluator stack failed")
+            .into_iter()
+            .map(DualOrNot::unwrap_real)
+            .collect_vec();
 
         let final_result = if results.len() >= 2 {
             debug!(

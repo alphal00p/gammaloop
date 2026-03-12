@@ -9,16 +9,20 @@ use crate::{
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
     },
-    integrands::HasIntegrand,
-    integrands::evaluation::{EvaluationMetaData, EvaluationResult},
-    integrands::process::{
-        ChannelIndex, ParamBuilder,
-        evaluators::{evaluate_evaluator, evaluate_evaluator_single},
-        param_builder::LUParams,
+    integrands::{
+        HasIntegrand,
+        evaluation::{EvaluationMetaData, EvaluationResult},
+        process::{
+            ChannelIndex, ParamBuilder,
+            evaluators::{EvaluatorStack, evaluate_evaluator, evaluate_evaluator_single},
+            param_builder::LUParams,
+        },
     },
     model::Model,
-    momentum::sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
-    momentum::{Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum},
+    momentum::{
+        Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
+        sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
+    },
     processes::{
         CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId,
         StandaloneExportSettings,
@@ -260,8 +264,7 @@ pub struct OrientationEvaluator {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
-    pub iterative_integrand: Option<TiVec<RaisedCutId, Vec<GenericEvaluator>>>,
-    pub parametric_integrand: TiVec<RaisedCutId, Vec<GenericEvaluator>>,
+    pub integrand: TiVec<RaisedCutId, Vec<EvaluatorStack>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
@@ -292,7 +295,7 @@ impl CrossSectionGraphTerm {
             .map(|data| data.orientation().clone())
             .collect();
 
-        let parametric_integrand = graph
+        let integrand = graph
             .derived_data
             .cut_paramatric_integrand
             .iter()
@@ -311,18 +314,18 @@ impl CrossSectionGraphTerm {
                             None
                         };
 
-                        GenericEvaluator::new_from_builder(
-                            [integrand_for_subset.clone()],
+                        EvaluatorStack::new(
+                            &[integrand_for_subset.clone()],
                             &graph.graph.param_builder,
+                            &orientations.raw,
                             dual_shape,
-                            OptimizationSettings::default(),
-                            settings.generation.evaluator.store_atom,
+                            &settings.generation.evaluator,
                         )
                         .unwrap()
                     })
                     .collect()
             })
-            .collect::<TiVec<RaisedCutId, Vec<GenericEvaluator>>>();
+            .collect::<TiVec<RaisedCutId, Vec<EvaluatorStack>>>();
 
         let iterative_integrand = if settings
             .generation
@@ -424,8 +427,7 @@ impl CrossSectionGraphTerm {
             .collect();
 
         Ok(Self {
-            iterative_integrand,
-            parametric_integrand,
+            integrand,
             graph: graph.graph.clone(),
             cut_esurface: graph.cut_esurface.clone(),
             cuts: graph.cuts.clone(),
@@ -461,42 +463,16 @@ impl CrossSectionGraphTerm {
             )
         })?;
 
-        for (cut_id, integrand) in self.parametric_integrand.iter_mut_enumerated() {
-            if integrand.len() == 1 {
-                integrand[0].compile(
-                    graph_path
-                        .join(format!("orientation_parametric_integrand_cut_{}", cut_id.0))
-                        .with_extension("cpp"),
+        for (raised_cut_id, integrands) in self.integrand.iter_mut().enumerate() {
+            for (n_derivatives, integrand) in integrands.iter_mut().enumerate() {
+                integrand.compile(
                     format!(
-                        "{}_orientation_paramatric_integrand_cut_{}",
-                        self.graph.name, cut_id.0
+                        "integrand_zen_cut_{}_deriv_{}",
+                        raised_cut_id, n_derivatives
                     ),
-                    graph_path
-                        .join(format!("orientation_parametric_integrand_cut_{}", cut_id.0))
-                        .with_extension("so"),
-                    settings.generation.compile.export_settings(),
+                    graph_path.clone(),
+                    settings,
                 );
-            } else {
-                return Err(eyre!("can not use compiled with duals yet"));
-            }
-        }
-
-        if let Some(iterative) = self.iterative_integrand.as_mut() {
-            for (cut_id, integrand) in iterative.iter_mut_enumerated() {
-                if integrand.len() == 1 {
-                    integrand[0].compile(
-                        graph_path
-                            .join(format!("iterative_cut_{}", cut_id.0))
-                            .with_extension("cpp"),
-                        format!("{}_iterative_cut_{}", self.graph.name, cut_id.0),
-                        graph_path
-                            .join(format!("iterative_cut_{}", cut_id.0))
-                            .with_extension("so"),
-                        settings.generation.compile.export_settings(),
-                    );
-                } else {
-                    return Err(eyre!("can not use compiled with duals yet"));
-                }
             }
         }
 

@@ -240,7 +240,8 @@ impl AmplitudeGraphTerm {
                 record_primary_timing,
             )?
             .pop()
-            .unwrap();
+            .unwrap()
+            .unwrap_real();
         // debug!("parambuilder 244: {}", self.param_builder);
         let sum_of_cts = self.threshold_counterterm.evaluate(
             &momentum_sample,
