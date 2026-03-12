@@ -1,4 +1,3 @@
-use bitvec::vec::BitVec;
 use log::trace;
 use std::{cmp::Ordering, collections::HashMap};
 // use num::Zero;
@@ -12,11 +11,13 @@ use crate::{
         ResetableIterator,
     },
     structure::{
-        HasStructure, StructureContract, TensorStructure,
+        HasStructure, SlotIndex, StructureContract, TensorStructure,
         concrete_index::{ExpandedIndex, FlatIndex},
     },
     tensors::data::{DataIterator, DenseTensor, SparseTensor},
 };
+
+use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 
 use std::iter::Iterator;
 
@@ -304,13 +305,16 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &DenseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         // Assume we're contracting the first positions for now - this needs to be updated
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
+
+        let pos_self_inv = !&pos_self;
+        let pos_other_inv = !&pos_other;
         // println!("Interleaving dense dense multi"); // Initialize result tensor with default values
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
 
@@ -336,14 +340,14 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| resulting_partition[*i]);
+                        .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
-                for (i, v) in pos_self.iter_zeros().zip(expa) {
-                    exp_self.indices[i] = v;
+                for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                    exp_self.indices[i.0] = v;
                 }
 
-                for (i, v) in pos_other.iter_zeros().zip(expb) {
-                    exp_other.indices[i] = v;
+                for (i, v) in pos_other.included_iter().zip(expb) {
+                    exp_other.indices[i.0] = v;
                 }
                 // And now we flatten
                 let shift_a = self.structure().flat_index(&exp_self).unwrap();
@@ -389,10 +393,10 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &DenseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = if let Some((_, s)) = self.flat_iter().next() {
             s.try_upgrade().unwrap().as_ref().ref_zero()
@@ -401,6 +405,8 @@ where
         } else {
             return Err(ContractionError::EmptySparse);
         };
+        let pos_self_inv = !&pos_self;
+        let pos_other_inv = !&pos_other;
 
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
 
@@ -425,15 +431,15 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| resulting_partition[*i]);
+                        .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
                 // println!("expa: {:?}", expa);
-                for (i, v) in pos_self.iter_zeros().zip(expa) {
-                    exp_self.indices[i] = v;
+                for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                    exp_self.indices[i.0] = v;
                 }
 
-                for (i, v) in pos_other.iter_zeros().zip(expb) {
-                    exp_other.indices[i] = v;
+                for (i, v) in pos_other_inv.included_iter().zip(expb) {
+                    exp_other.indices[i.0] = v;
                 }
 
                 // println!("exp_self: {:?}", exp_self);
@@ -484,14 +490,15 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &SparseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let zero = self.data[0].try_upgrade().unwrap().into_owned().ref_zero();
         let mut result_data = vec![zero.clone(); resulting_structure.size()?];
-
+        let pos_self_inv = !&pos_self;
+        let pos_other_inv = !&pos_other;
         let self_fiber_class = Fiber::from(&resulting_partition, &resulting_structure); //We use the partition as a filter here, for indices that belong to self, vs those that belong to other
         let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
             CoreFlatFiberIterator::new_paired_conjugates(&self_fiber_class); // these are iterators over the open indices of self and other, except expressed in the flat indices of the resulting structure
@@ -514,15 +521,15 @@ where
                         .expanded_index(result_index)?
                         .into_iter()
                         .enumerate()
-                        .partition(|(i, _)| resulting_partition[*i]);
+                        .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
                 // println!("expa: {:?}", expa);
-                for (i, v) in pos_self.iter_zeros().zip(expa) {
-                    exp_self.indices[i] = v;
+                for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                    exp_self.indices[i.0] = v;
                 }
 
-                for (i, v) in pos_other.iter_zeros().zip(expb) {
-                    exp_other.indices[i] = v;
+                for (i, v) in pos_other_inv.included_iter().zip(expb) {
+                    exp_other.indices[i.0] = v;
                 }
 
                 // println!("exp_self: {:?}", exp_self);
@@ -573,13 +580,15 @@ where
     fn multi_contract_interleaved(
         &self,
         other: &SparseTensor<T, I>,
-        pos_self: BitVec,
-        pos_other: BitVec,
+        pos_self: SubSet<SlotIndex>,
+        pos_other: SubSet<SlotIndex>,
         resulting_structure: <Self::LCM as HasStructure>::Structure,
-        resulting_partition: bitvec::prelude::BitVec,
+        resulting_partition: SubSet<SlotIndex>,
     ) -> Result<Self::LCM, ContractionError> {
         let mut result_data = HashMap::default();
         let zero = self.zero.try_upgrade().unwrap().as_ref().ref_zero();
+        let pos_self_inv = !&pos_self;
+        let pos_other_inv = !&pos_other;
         if self.flat_iter().next().is_some() {
             let self_fiber_class = Fiber::from(&resulting_partition, &resulting_structure); //We use the partition as a filter here, for indices that belong to self, vs those that belong to other
             let (mut self_fiber_class_iter, mut other_fiber_class_iter) =
@@ -603,15 +612,15 @@ where
                             .expanded_index(result_index)?
                             .into_iter()
                             .enumerate()
-                            .partition(|(i, _)| resulting_partition[*i]);
+                            .partition(|(i, _)| resulting_partition[SlotIndex(*i)]);
 
                     // println!("expa: {:?}", expa);
-                    for (i, v) in pos_self.iter_zeros().zip(expa) {
-                        exp_self.indices[i] = v;
+                    for (i, v) in pos_self_inv.included_iter().zip(expa) {
+                        exp_self.indices[i.0] = v;
                     }
 
-                    for (i, v) in pos_other.iter_zeros().zip(expb) {
-                        exp_other.indices[i] = v;
+                    for (i, v) in pos_other_inv.included_iter().zip(expb) {
+                        exp_other.indices[i.0] = v;
                     }
 
                     // println!("exp_self: {:?}", exp_self);

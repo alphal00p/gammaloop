@@ -19,6 +19,7 @@ use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
 use store::{NetworkStore, TensorScalarStore, TensorScalarStoreMapping};
 use thiserror::Error;
 // use log::trace;
+
 use crate::{
     contraction::ContractionError,
     structure::{CastStructure, HasStructure, ScalarTensor, TensorStructure},

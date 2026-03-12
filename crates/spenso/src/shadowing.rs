@@ -1,15 +1,14 @@
 use crate::{
-    network::parsing::ShadowedStructure,
     shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     structure::{
         HasName, HasStructure, TensorShell, TensorStructure, ToSymbolic,
         concrete_index::FlatIndex,
-        slot::{AbsInd, IsAbstractSlot, ParseableAind},
+        slot::{IsAbstractSlot, ParseableAind},
     },
     tensors::{
         data::{DataTensor, DenseTensor},
         parametric::{MixedTensor, ParamTensor, TensorCoefficient},
-        symbolic::SymbolicTensor,
+        // symbolic::SymbolicTensor,
     },
 };
 use eyre::Result;
@@ -56,42 +55,6 @@ where
 
 pub trait Concretize<T> {
     fn concretize(self, perm: Option<Permutation>) -> T;
-}
-
-impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>> for ShadowedStructure<Aind> {
-    fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
-        SymbolicTensor {
-            expression: self.to_symbolic(perm).unwrap(),
-            structure: self.structure,
-        }
-    }
-}
-
-impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
-    for TensorShell<ShadowedStructure<Aind>>
-{
-    fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
-        SymbolicTensor {
-            expression: self.to_symbolic(perm).unwrap(),
-            structure: self.structure.structure,
-        }
-    }
-}
-
-impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
-    for TensorShell<SymbolicTensor<Aind>>
-{
-    fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
-        if let Some(p) = perm {
-            if p.is_identity() {
-                self.structure
-            } else {
-                panic!("Cannot concretize with a permuation")
-            }
-        } else {
-            self.structure
-        }
-    }
 }
 
 impl<S: Shadowable> Concretize<DenseTensor<Atom, S::Structure>> for S
