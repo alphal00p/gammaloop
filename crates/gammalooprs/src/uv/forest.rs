@@ -317,10 +317,9 @@ impl Forest {
         let mut sum = sum.ok_or(eyre!("No terms in forest"))?;
 
         // add Feynman rules of cut edges
-        for (_p, edge_index, d) in graph.iter_edges_of(&cut_edges.union) {
+        for (_p, _edge_index, d) in graph.iter_edges_of(&cut_edges.union) {
             for s in &mut sum {
-                *s *= (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
-                    .wrap_color(GS.color_wrap);
+                *s *= (&d.data.num).wrap_color(GS.color_wrap);
             }
         }
 

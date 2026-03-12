@@ -30,7 +30,7 @@ impl CFFTerm {
     pub fn expression_with_selectors(&self) -> Atom {
         let mut result = Atom::Zero;
         for (expr, orient) in self.expression.iter().zip(self.orientations.iter()) {
-            result *= expr.clone() * orient.orientation_thetas();
+            result += expr.clone() * orient.orientation_thetas();
         }
         result
     }

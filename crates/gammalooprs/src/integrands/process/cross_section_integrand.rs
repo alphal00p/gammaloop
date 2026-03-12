@@ -746,7 +746,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             for num_esurfaces in 1..=max_occurance {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
-                        self.raised_data.dual_shapes[num_esurfaces - 1].clone(),
+                        self.raised_data.dual_shapes[num_esurfaces - 2].clone(),
                     ))
                 } else {
                     None
@@ -861,7 +861,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let complex_dual_shape = {
                     if num_esurfaces > 1 {
-                        Some(self.raised_data.dual_shapes[num_esurfaces - 1].clone())
+                        Some(self.raised_data.dual_shapes[num_esurfaces - 2].clone())
                     } else {
                         None
                     }

@@ -485,9 +485,6 @@ impl Graph {
     ) -> Result<CFFExpression<SuperGraphOrientationID>> {
         let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
 
-        println!("graph before contraction: {:#?}", seed_graph);
-
-        println!("contracting edges: {:?}", contract_edges);
         for edge in contract_edges {
             seed_graph = seed_graph.contract_edge(*edge);
         }
