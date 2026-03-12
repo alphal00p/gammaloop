@@ -947,8 +947,6 @@ impl Graph {
     ) -> RaisedEsurfaceData {
         let raised_edges = self.get_raised_edge_groups();
 
-        println!("raised edges: {:?}", raised_edges);
-
         let normalized_cut_esurfaces = self
             .surface_cache
             .esurface_cache
@@ -1008,13 +1006,15 @@ impl Graph {
         for cut_group in result.raised_groups.iter_mut() {
             let representative_esurface_id = cut_group.esurface_ids[0];
 
-            let max_occurence_for_this_id = expr
+            let max_occurence_for_this_id = expression_copy
                 .orientations
                 .iter()
                 .map(|orientation_expression| {
-                    orientation_expression.expression.max_value_count_on_branch(
+                    let res = orientation_expression.expression.max_value_count_on_branch(
                         &crate::cff::surface::HybridSurfaceID::Esurface(representative_esurface_id),
-                    )
+                    );
+
+                    res
                 })
                 .max()
                 .unwrap_or(0);

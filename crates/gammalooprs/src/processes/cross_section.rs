@@ -785,7 +785,6 @@ impl CrossSectionGraph {
         let raised_cut_data =
             RaisedCutData::new_from_esurface(&esurface_raised_data, &self.cut_esurface_id_map);
 
-        info!("raised cut data: {:?}", raised_cut_data);
         self.derived_data.global_cff_expression = Some(global_cff);
         self.derived_data.raised_data = raised_cut_data;
 

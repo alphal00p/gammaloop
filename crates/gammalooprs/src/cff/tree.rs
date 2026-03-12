@@ -234,6 +234,7 @@ impl<T> Tree<T> {
 
         let leaves = self.get_bottom_layer();
         let mut nodes_to_keep = HashSet::new();
+        let mut has_match = false;
 
         for leaf in leaves {
             let path = self.path_to_root(leaf);
@@ -243,11 +244,15 @@ impl<T> Tree<T> {
                 .count();
 
             if count == n {
+                has_match = true;
                 nodes_to_keep.extend(path);
             }
         }
 
-        nodes_to_keep.insert(NodeId::root());
+        if !has_match {
+            self.nodes.clear();
+            return;
+        }
 
         let nodes_to_remove: Vec<NodeId> = self
             .nodes
@@ -393,9 +398,7 @@ mod tests {
 
         tree.keep_branches_with_value_count_mut(&1, 3);
 
-        let expected_tree = Tree::from_root(0);
-
-        assert_eq!(tree, expected_tree);
+        assert_eq!(tree.get_num_nodes(), 0);
     }
 
     #[test]
@@ -454,5 +457,13 @@ mod tests {
         tree.insert_node(NodeId(0), 4);
 
         assert_eq!(tree.max_value_count_on_branch(&1), 0);
+    }
+
+    #[test]
+    fn test_max_value_count_on_branch_single_branch() {
+        let mut tree = Tree::from_root(1);
+        tree.insert_node(NodeId(0), 1);
+
+        assert_eq!(tree.max_value_count_on_branch(&1), 2);
     }
 }
