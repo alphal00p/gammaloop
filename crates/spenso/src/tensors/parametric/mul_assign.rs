@@ -2,7 +2,7 @@ use std::ops::MulAssign;
 
 use symbolica::atom::{Atom, AtomView};
 
-use super::{ConcreteOrParam, ConcreteOrParamRef, to_param::ToAtom};
+use super::{to_param::ToAtom, ConcreteOrParam, ConcreteOrParamRef};
 
 // Scalars
 

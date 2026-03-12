@@ -6,7 +6,7 @@ use crate::{
     iterators::{DenseTensorLinearIterator, SparseTensorLinearIterator},
     structure::{
         CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, StructureContract, TensorStructure, TracksCount,
+        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
         permuted::PermuteTensor,
         representation::RepName,
@@ -465,10 +465,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }

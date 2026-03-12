@@ -7,10 +7,10 @@ use library_tensor::AtomsOrFloats;
 use network::SpensoNet;
 
 use pyo3::{
-    PyClass,
     exceptions::{self, PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError},
     prelude::*,
     types::{PyComplex, PyFloat, PySlice, PyType},
+    PyClass,
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -21,11 +21,11 @@ use pyo3_stub_gen::{
 };
 
 use spenso::{
-    algebra::complex::{Complex, RealOrComplex, symbolica_traits::CompiledComplexEvaluatorSpenso},
+    algebra::complex::{symbolica_traits::CompiledComplexEvaluatorSpenso, Complex, RealOrComplex},
     tensors::{
         data::{DenseTensor, GetTensorData, SetTensorData, SparseOrDense, SparseTensor},
         parametric::{
-            ConcreteOrParam, EvalTensor, ParamOrConcrete, ParamTensor, atomcore::TensorAtomOps,
+            atomcore::TensorAtomOps, ConcreteOrParam, EvalTensor, ParamOrConcrete, ParamTensor,
         },
     },
 };
@@ -33,8 +33,8 @@ use spenso::{
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
-        HasStructure, PermutedStructure, ScalarTensor, TensorStructure,
-        abstract_index::AbstractIndex, permuted::Perm,
+        abstract_index::AbstractIndex, permuted::Perm, HasStructure, PermutedStructure,
+        ScalarTensor, TensorStructure,
     },
     tensors::{
         complex::RealOrComplexTensor,
@@ -54,7 +54,7 @@ use symbolica::{
 use symbolica::api::python::PythonExpression;
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{PyStubType, TypeInfo, define_stub_info_gatherer, derive::*};
+use pyo3_stub_gen::{define_stub_info_gatherer, derive::*, PyStubType, TypeInfo};
 
 pub mod library;
 pub mod library_tensor;
