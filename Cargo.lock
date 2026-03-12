@@ -1046,6 +1046,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delegate"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "780eb241654bf097afb00fc5f054a09b687dad862e485fdcf8399bb056565370"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "deltae"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1573,7 +1584,7 @@ dependencies = [
  "colored 3.1.1",
  "criterion",
  "ctrlc",
- "delegate",
+ "delegate 0.12.0",
  "derive_more 0.99.20",
  "dirs",
  "dot-parser",
@@ -1840,8 +1851,11 @@ checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
 name = "idenso"
 version = "0.3.0"
 dependencies = [
+ "base64 0.22.1",
  "bincode 2.0.1",
  "bincode-trait-derive",
+ "blake3",
+ "delegate 0.13.5",
  "eyre",
  "insta",
  "itertools 0.14.0",
@@ -4124,7 +4138,7 @@ dependencies = [
  "colored 3.1.1",
  "constcat",
  "criterion",
- "delegate",
+ "delegate 0.12.0",
  "derive_more 0.99.20",
  "duplicate 1.0.0",
  "dyn-clone",

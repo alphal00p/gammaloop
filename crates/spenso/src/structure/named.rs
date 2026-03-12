@@ -1,22 +1,21 @@
-use linnet::permutation::Permutation;
+use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
 use tabled::{builder::Builder, settings::Style};
 
 use super::{
-    HasName, MergeInfo, OrderedStructure, PermutedStructure, ScalarStructure, StructureContract,
-    StructureError, TensorStructure,
     abstract_index::AbstractIndex,
     dimension::Dimension,
     permuted::PermuteTensor,
     representation::{LibraryRep, RepName, Representation},
     slot::{AbsInd, DummyAind, IsAbstractSlot, Slot},
+    HasName, MergeInfo, OrderedStructure, PermutedStructure, ScalarStructure, StructureContract,
+    StructureError, TensorStructure,
 };
-use bitvec::vec::BitVec;
 
 use delegate::delegate;
-use eyre::Result;
 
 #[cfg(feature = "shadowing")]
 use crate::shadowing::symbolica_utils::SerializableSymbol;
+use crate::structure::SlotIndex;
 #[cfg(feature = "shadowing")]
 use symbolica::atom::Atom;
 
@@ -254,10 +253,10 @@ impl<N, A, R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for NamedStructur
             fn external_dims_iter(&self)->impl Iterator<Item=Dimension>;
             fn external_structure_iter(&self) -> impl Iterator<Item = Self::Slot>;
             fn order(&self) -> usize;
-            fn get_slot(&self, i: usize) -> Option<Self::Slot>;
-            fn get_rep(&self, i: usize) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_aind(&self,i:usize)->Option<Aind>;
-            fn get_dim(&self, i: usize) -> Option<Dimension>;
+            fn get_slot(&self,i: impl Into<SlotIndex>) -> Option<Self::Slot>;
+            fn get_rep(&self,i: impl Into<SlotIndex>) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_aind(&self,i: impl Into<SlotIndex>)->Option<Aind>;
+            fn get_dim(&self,i: impl Into<SlotIndex>) -> Option<Dimension>;
         }
     }
 }
@@ -383,7 +382,10 @@ impl<N, A, R: RepName<Dual = R>, Aind: AbsInd> StructureContract for NamedStruct
         }
     }
 
-    fn merge(&self, other: &Self) -> Result<(Self, BitVec, BitVec, MergeInfo), StructureError> {
+    fn merge(
+        &self,
+        other: &Self,
+    ) -> Result<(Self, SubSet<SlotIndex>, SubSet<SlotIndex>, MergeInfo), StructureError> {
         let (structure, pos_self, pos_other, mergeinfo) = self.structure.merge(&other.structure)?;
         Ok((
             Self {

@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use base64::{Engine, engine::general_purpose::URL_SAFE};
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
 use metric::{
@@ -21,10 +22,10 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, UserData},
     function,
     id::Replacement,
-    symbol,
+    symbol, tag,
 };
 use thiserror::Error;
 
@@ -33,7 +34,10 @@ use crate::{
     metric::MetricSimplifier,
     rep_symbols::RS,
     representations::Bispinor,
+    tensor::{SymbolicNetExt, SymbolicNetParse},
 };
+
+pub mod tensor;
 
 pub mod color;
 pub mod gamma;
@@ -102,6 +106,10 @@ pub trait IndexTooling {
     /// `Err(CookingError)` if the input cannot be cooked.
     fn cook_function(&self) -> Result<Atom, CookingError>;
 
+    fn cook(&self) -> Atom;
+
+    fn uncook(&self) -> Atom;
+
     /// Computes the physics-aware conjugate of the expression.
     ///
     /// Applies conjugation rules specific to physics objects like spinors, gamma matrices,
@@ -130,6 +138,14 @@ impl IndexTooling for Atom {
         new_dummy: impl FnMut(usize) -> Aind,
     ) -> Atom {
         self.as_view().canonize(new_dummy)
+    }
+
+    fn cook(&self) -> Atom {
+        self.as_view().cook()
+    }
+
+    fn uncook(&self) -> Atom {
+        self.as_view().uncook()
     }
     fn spenso_conj(&self) -> Atom {
         self.as_view().spenso_conj()
@@ -167,6 +183,33 @@ pub enum AdjointError {
 }
 
 impl IndexTooling for AtomView<'_> {
+    fn cook(&self) -> Atom {
+        self.replace_map(|a, _, out| {
+            if let AtomView::Fun(f) = a {
+                let hash = blake3::hash(a.get_data());
+                let bytes12 = &hash.as_bytes()[..12];
+                let a = symbol!(
+                    URL_SAFE.encode(bytes12) + f.get_symbol().get_name(),
+                    data = UserData::Atom(a.to_owned()),
+                    tag = tag!("cooked")
+                );
+                **out = Atom::var(a);
+            }
+        })
+    }
+
+    fn uncook(&self) -> Atom {
+        self.replace_map(|a, _, out| {
+            if let AtomView::Var(s) = a {
+                let s = s.get_symbol();
+                if s.has_tag("idenso::cooked")
+                    && let UserData::Atom(a) = s.get_data()
+                {
+                    **out = a.clone();
+                }
+            }
+        })
+    }
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
@@ -225,7 +268,7 @@ impl IndexTooling for AtomView<'_> {
             }
         }
 
-        let expr = net.simple_execute();
+        let expr = net.simple_execute::<()>();
 
         let a = expr.canonize_tensors(dummies).unwrap();
 

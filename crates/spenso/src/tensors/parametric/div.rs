@@ -2,7 +2,7 @@ use std::ops::Div;
 
 use symbolica::atom::{Atom, AtomView};
 
-use crate::tensors::parametric::{ConcreteOrParam, ConcreteOrParamRef, to_param::ToAtom};
+use crate::tensors::parametric::{to_param::ToAtom, ConcreteOrParam, ConcreteOrParamRef};
 
 impl<T, U, Out> Div<ConcreteOrParamRef<'_, U>> for ConcreteOrParam<T>
 where

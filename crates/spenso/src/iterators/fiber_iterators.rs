@@ -8,15 +8,15 @@ use linnet::permutation::Permutation;
 use std::fmt::Debug;
 
 use crate::{
-    structure::{TensorStructure, representation::LibraryRep, slot::IsAbstractSlot},
+    structure::{representation::LibraryRep, slot::IsAbstractSlot, TensorStructure},
     tensors::data::{DenseTensor, GetTensorData, SparseTensor},
 };
 
 use super::{
-    FiberIteratorItem, IteratesAlongFibers, IteratesAlongPermutedFibers,
     core_iterators::CoreFlatFiberIterator,
     fiber::{Fiber, FiberClass, FiberMut},
     traits::ResetableIterator,
+    FiberIteratorItem, IteratesAlongFibers, IteratesAlongPermutedFibers,
 };
 
 /// Iterator for traversing tensor fibers
@@ -112,12 +112,12 @@ impl<I: IteratesAlongFibers<LibraryRep>> Iterator
 }
 
 impl<
-    'a,
-    I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>,
-    S: TensorStructure,
-    T,
-    It,
-> Iterator for FiberIterator<'a, DenseTensor<T, S>, I>
+        'a,
+        I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>,
+        S: TensorStructure,
+        T,
+        It,
+    > Iterator for FiberIterator<'a, DenseTensor<T, S>, I>
 where
     It: FiberIteratorItem,
 {
@@ -143,12 +143,12 @@ where
 }
 
 impl<
-    'a,
-    I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>,
-    S: TensorStructure,
-    T,
-    It,
-> Iterator for FiberIterator<'a, SparseTensor<T, S>, I>
+        'a,
+        I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>,
+        S: TensorStructure,
+        T,
+        It,
+    > Iterator for FiberIterator<'a, SparseTensor<T, S>, I>
 where
     It: FiberIteratorItem,
 {
@@ -184,8 +184,12 @@ pub struct MutFiberIterator<
     skipped: usize,
 }
 
-impl<I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>, S: TensorStructure, T, It>
-    LendingIterator for MutFiberIterator<'_, SparseTensor<T, S>, I>
+impl<
+        I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>,
+        S: TensorStructure,
+        T,
+        It,
+    > LendingIterator for MutFiberIterator<'_, SparseTensor<T, S>, I>
 where
     It: FiberIteratorItem,
 {
@@ -213,8 +217,12 @@ where
     }
 }
 
-impl<I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>, S: TensorStructure, T, It>
-    LendingIterator for MutFiberIterator<'_, DenseTensor<T, S>, I>
+impl<
+        I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R, Item = It>,
+        S: TensorStructure,
+        T,
+        It,
+    > LendingIterator for MutFiberIterator<'_, DenseTensor<T, S>, I>
 where
     It: FiberIteratorItem,
 {
@@ -353,10 +361,10 @@ impl<'b, N: TensorStructure, I: IteratesAlongPermutedFibers<<N::Slot as IsAbstra
 }
 
 impl<
-    'a,
-    S: TensorStructure + 'a,
-    I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R> + Clone + Debug,
-> Iterator for FiberClassIterator<'a, S, I>
+        'a,
+        S: TensorStructure + 'a,
+        I: IteratesAlongFibers<<S::Slot as IsAbstractSlot>::R> + Clone + Debug,
+    > Iterator for FiberClassIterator<'a, S, I>
 {
     type Item = FiberIterator<'a, S, I>;
 
@@ -388,8 +396,8 @@ impl<'a, S: TensorStructure + 'a, I: IteratesAlongFibers<<S::Slot as IsAbstractS
 mod tests {
 
     use crate::structure::{
-        OrderedStructure, PermutedStructure,
         representation::{Euclidean, RepName},
+        OrderedStructure, PermutedStructure,
     };
 
     use super::*;

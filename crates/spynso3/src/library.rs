@@ -1,21 +1,21 @@
 use eyre::eyre;
-use pyo3::{FromPyObject, PyErr, exceptions};
+use pyo3::{exceptions, FromPyObject, PyErr};
 
-use pyo3::{PyResult, pyclass, pymethods};
+use pyo3::{pyclass, pymethods, PyResult};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
-    PyStubType,
     derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
+    PyStubType,
 };
 
 use spenso::network::library::function_lib::{PanicMissingConcrete, SymbolLib};
-use spenso::network::parsing::{SPENSO_TAG, ShadowedStructure};
+use spenso::network::parsing::{ShadowedStructure, SPENSO_TAG};
 use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
 use spenso::{
     network::library::symbolic::{ExplicitKey, TensorLibrary},
-    structure::{HasStructure, PermutedStructure, abstract_index::AbstractIndex},
+    structure::{abstract_index::AbstractIndex, HasStructure, PermutedStructure},
     tensors::parametric::MixedTensor,
 };
 use symbolica::atom::Atom;
@@ -28,7 +28,7 @@ use symbolica::{
 
 use crate::structure::SpensoName;
 
-use super::{Spensor, library_tensor::LibrarySpensor, structure::SpensoStructure};
+use super::{library_tensor::LibrarySpensor, structure::SpensoStructure, Spensor};
 
 use super::ModuleInit;
 
@@ -319,7 +319,7 @@ impl SpensorLibrary {
     /// --------
     /// >>> import symbolica
     /// >>> from symbolica.community.spenso import TensorLibrary, TensorName
-    /// >>> hep_lib = TensorLibrary.hep_lib()
+    /// >>> hep_lib = TensorLibrary.hep_lib_atom()
     /// >>> gamma_structure = hep_lib[symbolica.S("spenso::gamma")]
     pub fn hep_lib_atom() -> Self {
         Self {
