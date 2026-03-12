@@ -17,7 +17,7 @@ use ahash::HashSet;
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
-use eyre::{Ok, eyre};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
@@ -484,6 +484,10 @@ impl Graph {
         canonize_esurface: &Option<ShiftRewrite>,
     ) -> Result<CFFExpression<SuperGraphOrientationID>> {
         let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
+
+        println!("graph before contraction: {:#?}", seed_graph);
+
+        println!("contracting edges: {:?}", contract_edges);
         for edge in contract_edges {
             seed_graph = seed_graph.contract_edge(*edge);
         }
@@ -531,12 +535,18 @@ impl Graph {
             }
         }
 
-        generate_cff_from_orientations(
+        let result = generate_cff_from_orientations(
             oriented_acyclic_graphs,
             &mut self.surface_cache,
             &edges_in_initial_state_cut,
             canonize_esurface,
-        )
+        );
+
+        if let Ok(result) = &result {
+            println!("generated cff expression: {:#?}", result);
+        }
+
+        result
     }
 }
 

@@ -27,7 +27,7 @@ use symbolica::{
 
 use linnet::half_edge::{
     HedgeGraph,
-    subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
+    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
 
 use tracing::instrument;
@@ -214,7 +214,15 @@ impl CFFapprox {
         _settings: &UVgenerationSettings,
     ) -> Result<CFFapprox> {
         let cff = graph
-            .cff(&to_contract.union(&graph.tree_edges), cuts)?
+            .cff(
+                &to_contract.union(
+                    &graph
+                        .tree_edges
+                        .subtract(&graph.initial_state_cut.left)
+                        .subtract(&graph.initial_state_cut.right),
+                ),
+                cuts,
+            )?
             .expression_with_selectors();
 
         let fourddenoms = GS.wrap_tree_denoms(graph.denominator(&graph.tree_edges, |_| -1));

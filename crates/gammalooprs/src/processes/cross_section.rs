@@ -1001,7 +1001,13 @@ impl CrossSectionGraph {
         Ok(cut_forests
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
             .into_iter()
-            .map(|integrand| integrand.map(|a| a * &lu_prefactor))
+            .map(|integrand| {
+                integrand.map(|a| {
+                    let res = a * &lu_prefactor;
+                    println!("result integrand: {}", res);
+                    res
+                })
+            })
             .collect())
     }
 
