@@ -99,6 +99,7 @@ impl AmplitudeGraphTerm {
             &[&graph.derived_data.all_mighty_integrand],
             &graph.graph.param_builder,
             orientations.as_slice().as_ref(),
+            None,
             &settings.generation.evaluator,
         )?;
 

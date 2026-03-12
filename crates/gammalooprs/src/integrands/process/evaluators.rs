@@ -212,6 +212,7 @@ impl EvaluatorStack {
     fn new_single_parametric<A: AtomCore>(
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let opt_settings = settings.optimization_settings();
@@ -221,7 +222,7 @@ impl EvaluatorStack {
                 .iter()
                 .map(|atom| GS.collect_orientation_if(atom.as_atom_view(), false)),
             &param_builder,
-            None,
+            dual_shape.clone(),
             opt_settings.clone(),
             settings.store_atom,
         )
@@ -236,6 +237,7 @@ impl EvaluatorStack {
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(GenericEvaluator, usize)> {
         // let  n_orientations=;
@@ -253,7 +255,7 @@ impl EvaluatorStack {
                     })
                     .flatten(),
                 &param_builder,
-                None,
+                dual_shape.clone(),
                 settings.optimization_settings(),
                 settings.store_atom,
             )?,
@@ -271,6 +273,7 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let params: Vec<Atom> = (&param_builder.pairs)
@@ -339,7 +342,7 @@ impl EvaluatorStack {
             &fn_map,
             entries,
             settings.optimization_settings(),
-            None,
+            dual_shape.clone(),
             settings.store_atom,
         )
     }
@@ -354,6 +357,7 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let sum = atoms.iter().map(|atom| {
@@ -383,7 +387,7 @@ impl EvaluatorStack {
         GenericEvaluator::new_from_builder(
             sum,
             &param_builder,
-            None,
+            dual_shape.clone(),
             settings.optimization_settings(),
             settings.store_atom,
         )
@@ -397,6 +401,7 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
         let iterative = if settings.iterative_orientation_optimization {
@@ -404,6 +409,7 @@ impl EvaluatorStack {
                 atoms,
                 param_builder,
                 orientations,
+                &dual_shape,
                 settings,
             )?)
         } else {
@@ -415,6 +421,7 @@ impl EvaluatorStack {
                 atoms,
                 param_builder,
                 orientations,
+                &dual_shape,
                 settings,
             )?)
         } else {
@@ -426,13 +433,15 @@ impl EvaluatorStack {
                 atoms,
                 param_builder,
                 orientations,
+                &dual_shape,
                 settings,
             )?)
         } else {
             None
         };
 
-        let single_parametric = Self::new_single_parametric(atoms, param_builder, settings)?;
+        let single_parametric =
+            Self::new_single_parametric(atoms, param_builder, &dual_shape, settings)?;
 
         Ok(EvaluatorStack {
             single_parametric,

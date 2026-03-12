@@ -74,6 +74,7 @@ impl AmplitudeCountertermAtom {
                     &[&self.parametric_local, &self.parametric_integrated],
                     param_builder,
                     orientations.as_slice().as_ref(),
+                    None,
                     &global_settings.generation.evaluator,
                 )
                 .unwrap(),
