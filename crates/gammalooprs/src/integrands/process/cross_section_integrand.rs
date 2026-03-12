@@ -826,92 +826,17 @@ impl GraphTerm for CrossSectionGraphTerm {
                     Some(&lu_params),
                 );
 
-                let iterative = self.iterative_integrand.as_mut().map(|ev| {
-                    evaluate_evaluator(
-                        &mut ev[raised_cut][num_esurfaces - 1],
-                        params.as_slice(),
+                let result = self.integrand[raised_cut][num_esurfaces - 1]
+                    .evaluate(
+                        params,
+                        orientations,
+                        settings,
                         evaluation_metadata,
                         record_primary_timing,
                     )
-                });
-
-                let complex_dual_shape = {
-                    if num_esurfaces > 1 {
-                        Some(self.raised_data.dual_shapes[num_esurfaces - 2].clone())
-                    } else {
-                        None
-                    }
-                }
-                .clone()
-                .map(HyperDual::<Complex<F<T>>>::new);
-
-                let mut result = complex_dual_shape
-                    .clone()
-                    .map(DualOrNot::Dual)
-                    .unwrap_or(DualOrNot::NonDual(Complex::new_re(momentum_sample.zero())));
-
-                let multiplicative_offset = num_esurfaces;
-
-                for (i, e) in orientations.iter() {
-                    if let Some(iterative) = &iterative {
-                        //if subset_id == 2 {
-                        //    println!("iterative len: {}", iterative.len());
-                        //}
-
-                        result += DualOrNot::new_from_slice(
-                            &complex_dual_shape,
-                            iterative
-                                .get(i.0 * multiplicative_offset..(i.0 + 1) * multiplicative_offset)
-                                .unwrap_or_else(|| {
-                                    println!(
-                                        "raised_cut id: {}, num_esurfaces: {}",
-                                        raised_cut.0, num_esurfaces
-                                    );
-
-                                    println!("orientation id: {}", i.0);
-
-                                    println!("multiplicative_offset: {}", multiplicative_offset);
-
-                                    println!(
-                                        "expected range: {}..{}",
-                                        i.0 * multiplicative_offset,
-                                        (i.0 + 1) * multiplicative_offset
-                                    );
-
-                                    println!("iterative evaluator len: {}", iterative.len());
-
-                                    println!("num orientations: {}", orientations.len());
-
-                                    println!("loop momenta \n: {}", momentum_sample.loop_moms());
-
-                                    panic!("result corrupted")
-                                }),
-                        );
-                    } else {
-                        self.param_builder
-                            .orientation_value(e, multiplicative_offset);
-                        let a = T::get_parameters(
-                            &mut self.param_builder,
-                            (settings.general.enable_cache, settings.general.debug_cache),
-                            &self.graph,
-                            &rescaled_momenta,
-                            hel,
-                            &settings.additional_params(),
-                            None,
-                            None,
-                            Some(&lu_params),
-                        );
-                        result += DualOrNot::new_from_slice(
-                            &complex_dual_shape,
-                            &evaluate_evaluator(
-                                &mut self.parametric_integrand[raised_cut][num_esurfaces - 1],
-                                a.as_slice(),
-                                evaluation_metadata,
-                                record_primary_timing,
-                            ),
-                        );
-                    }
-                }
+                    .expect("evaluation failed")
+                    .pop()
+                    .unwrap();
 
                 let ct_result = if settings.subtraction.disable_threshold_subtraction {
                     Complex::new_re(momentum_sample.zero())
