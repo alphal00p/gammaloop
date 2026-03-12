@@ -225,7 +225,15 @@ impl CFFapprox {
             )?
             .expression_with_selectors();
 
-        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(&graph.tree_edges, |_| -1));
+        let fourddenoms = GS.wrap_tree_denoms(
+            graph.denominator(
+                &graph
+                    .tree_edges
+                    .subtract(&graph.initial_state_cut.left)
+                    .subtract(&graph.initial_state_cut.right),
+                |_| -1,
+            ),
+        );
 
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
