@@ -3,6 +3,7 @@ use std::{mem::transmute, ops::Neg, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetIter, SubSetLike, subset::SubSet},
@@ -46,7 +47,7 @@ use crate::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::{
         ArbPrec, F, FloatLike, GS, Length, W_, f128,
-        hyperdual_utils::DualOrNot,
+        hyperdual_utils::{DualOrNot, new_from_values},
         symbolica_ext::{CallSymbol, LogPrint},
     },
 };
@@ -1059,7 +1060,13 @@ impl GenericEvaluatorFloat for f64 {
                 }
 
                 if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                    todo!("Handle dual shape for compiled evaluator")
+                    let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
+                    let dual_size = dual_builder.values.len();
+
+                    out.chunks(dual_size)
+                        .into_iter()
+                        .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                        .collect()
                 } else {
                     out.into_iter().map(DualOrNot::NonDual).collect()
                 }
@@ -1068,7 +1075,13 @@ impl GenericEvaluatorFloat for f64 {
                 generic_evaluator.f64_eager.evaluate(params, &mut out);
 
                 if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                    todo!()
+                    let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
+                    let dual_size = dual_builder.values.len();
+
+                    out.chunks(dual_size)
+                        .into_iter()
+                        .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                        .collect()
                 } else {
                     out.into_iter().map(DualOrNot::NonDual).collect()
                 }
@@ -1159,7 +1172,13 @@ impl GenericEvaluatorFloat for f128 {
             generic_evaluator.f128.evaluate(params, &mut out);
 
             if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                todo!()
+                let dual_builder = HyperDual::<Complex<F<f128>>>::new(dual_shape.clone());
+                let dual_size = dual_builder.values.len();
+
+                out.chunks(dual_size)
+                    .into_iter()
+                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                    .collect()
             } else {
                 out.into_iter().map(DualOrNot::NonDual).collect()
             }
@@ -1207,7 +1226,13 @@ impl GenericEvaluatorFloat for ArbPrec {
             generic_evaluator.arb.evaluate(params, &mut out);
 
             if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                todo!()
+                let dual_builder = HyperDual::<Complex<F<ArbPrec>>>::new(dual_shape.clone());
+                let dual_size = dual_builder.values.len();
+
+                out.chunks(dual_size)
+                    .into_iter()
+                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                    .collect()
             } else {
                 out.into_iter().map(DualOrNot::NonDual).collect()
             }
