@@ -4,7 +4,10 @@ use std::{
     env,
     io::Write,
     path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        Mutex, MutexGuard,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use color_eyre::{Result, Section};
@@ -235,11 +238,36 @@ pub trait IsDefault {
 
 pub static SHOWDEFAULTS: AtomicBool = AtomicBool::new(false);
 
-fn show_defaults_helper(condition: bool) -> bool {
+pub(crate) fn show_defaults_helper(condition: bool) -> bool {
     if SHOWDEFAULTS.load(Ordering::Relaxed) {
         false
     } else {
         condition
+    }
+}
+
+pub struct ShowDefaultsGuard {
+    _lock: MutexGuard<'static, ()>,
+    previous: bool,
+}
+
+impl ShowDefaultsGuard {
+    pub fn new(show_defaults: bool) -> Self {
+        static SHOWDEFAULTS_MUTEX: Mutex<()> = Mutex::new(());
+        let lock = SHOWDEFAULTS_MUTEX
+            .lock()
+            .expect("SHOWDEFAULTS serialization mutex must not be poisoned");
+        let previous = SHOWDEFAULTS.swap(show_defaults, Ordering::Relaxed);
+        Self {
+            _lock: lock,
+            previous,
+        }
+    }
+}
+
+impl Drop for ShowDefaultsGuard {
+    fn drop(&mut self) {
+        SHOWDEFAULTS.store(self.previous, Ordering::Relaxed);
     }
 }
 

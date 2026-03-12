@@ -2,6 +2,7 @@ use std::ops::ControlFlow;
 
 use color_eyre::{eyre::eyre, Result};
 use colored::Colorize;
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::processes::ProcessCollection;
 use gammalooprs::settings::RuntimeSettings;
 use tracing::info;
@@ -12,7 +13,7 @@ use crate::{
         save::SaveState,
         Commands, StartCommandsBlock,
     },
-    repl::{ProcessCompletionEntry, ProcessKind},
+    repl::{IrProfileCompletionEntry, ProcessCompletionEntry, ProcessKind},
     state::{CommandHistory, CommandsBlock, RunHistory, State},
     CLISettings,
 };
@@ -152,6 +153,58 @@ impl<'a> CliSession<'a> {
                     .map(str::to_string)
                     .collect(),
             })
+            .collect()
+    }
+
+    pub fn current_ir_profile_entries(&self) -> Vec<IrProfileCompletionEntry> {
+        self.state
+            .process_list
+            .processes
+            .iter()
+            .filter_map(|process| {
+                let ProcessCollection::CrossSections(cross_sections) = &process.collection else {
+                    return None;
+                };
+
+                Some(
+                    cross_sections
+                        .iter()
+                        .filter_map(|(integrand_name, cross_section)| {
+                            let ProcessIntegrand::CrossSection(integrand) =
+                                cross_section.integrand.as_ref()?
+                            else {
+                                return None;
+                            };
+                            let completion_entries = integrand.ir_profile_completion_entries();
+                            let mut graph_names = completion_entries
+                                .iter()
+                                .map(|(graph_name, _)| graph_name.clone())
+                                .collect::<Vec<_>>();
+                            graph_names.sort();
+                            graph_names.dedup();
+
+                            let mut graph_limit_entries = completion_entries
+                                .into_iter()
+                                .flat_map(|(graph_name, limits)| {
+                                    limits
+                                        .into_iter()
+                                        .map(move |limit| format!("{graph_name} {limit}"))
+                                })
+                                .collect::<Vec<_>>();
+                            graph_limit_entries.sort();
+                            graph_limit_entries.dedup();
+
+                            Some(IrProfileCompletionEntry {
+                                process_name: process.definition.folder_name.clone(),
+                                integrand_name: integrand_name.clone(),
+                                graph_names,
+                                graph_limit_entries,
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .flatten()
             .collect()
     }
 

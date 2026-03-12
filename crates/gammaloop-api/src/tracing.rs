@@ -16,6 +16,7 @@ use tracing_appender::{
 };
 use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, IndicatifLayer};
 use tracing_subscriber::field::RecordFields;
+use tracing_subscriber::Layer;
 use tracing_subscriber::{
     filter::Filtered,
     fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
@@ -25,7 +26,6 @@ use tracing_subscriber::{
     util::SubscriberInitExt,
     EnvFilter, Registry,
 };
-use tracing_subscriber::{fmt::format::FmtSpan, Layer};
 
 use color_eyre::Result;
 
@@ -35,7 +35,7 @@ fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
         .with_default_directive(LevelFilter::WARN.into()) // global floor
         .parse_lossy(""); // no user rules yet
 
-    // for req in ["gammalooprs=debug", "_gammaloop=info", "symbolica=off"] {
+    // for req in ["gammalooprs=debug", "gammaloop_api=info", "symbolica=off"] {
     //     let Ok(d) = req.parse() else {
     //         continue;
     //     };
@@ -76,6 +76,40 @@ const ENV_NO_GL_HARD_WARNINGS: &str = "GL_NO_HARD_WARNINGS";
 const ENV_DISPLAY_LOG_FILTER: &str = "GL_DISPLAY_FILTER";
 const ENV_ALL_LOG_FILTER: &str = "GL_ALL_LOG_FILTER";
 
+#[derive(Debug, Clone)]
+struct StderrLogSpecState {
+    base_spec: String,
+    override_spec: Option<String>,
+}
+
+impl Default for StderrLogSpecState {
+    fn default() -> Self {
+        let base_spec = if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
+            all
+        } else {
+            std::env::var(ENV_DISPLAY_LOG_FILTER)
+                .ok()
+                .unwrap_or_default()
+        };
+        Self {
+            base_spec,
+            override_spec: None,
+        }
+    }
+}
+
+impl StderrLogSpecState {
+    fn effective_spec(&self) -> &str {
+        self.override_spec
+            .as_deref()
+            .unwrap_or(self.base_spec.as_str())
+    }
+
+    fn effective_spec_string(&self) -> String {
+        self.effective_spec().to_string()
+    }
+}
+
 // Statics to hold the current log specifications
 static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
     if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
@@ -87,15 +121,8 @@ static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
         .unwrap_or("".to_string());
     Mutex::new(directive)
 });
-static STDERR_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
-    if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
-        return Mutex::new(all);
-    }
-    let directive = std::env::var(ENV_DISPLAY_LOG_FILTER)
-        .ok()
-        .unwrap_or("".to_string());
-    Mutex::new(directive)
-});
+static STDERR_LOG_SPEC: LazyLock<Mutex<StderrLogSpecState>> =
+    LazyLock::new(|| Mutex::new(StderrLogSpecState::default()));
 
 struct FilterHandles {
     file_handle: reload::Handle<EnvFilter, Registry>,
@@ -121,9 +148,6 @@ static FILTER_HANDLES: OnceLock<FilterHandles> = OnceLock::new();
 
 /// Set the file log filter at runtime while preserving required targets.
 pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
-    let Some(handles) = FILTER_HANDLES.get() else {
-        return Ok(());
-    };
     let user_spec = if let Ok(file) = std::env::var(ENV_FILE_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
             println!(
@@ -137,6 +161,9 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     };
     *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
 
+    let Some(handles) = FILTER_HANDLES.get() else {
+        return Ok(());
+    };
     let full_spec = file_filter_from(&user_spec)?;
     // println!(
     //     "Modifying file filter to: {} with userspec {}",
@@ -148,9 +175,6 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
 
 /// Set the stderr log filter at runtime.
 pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
-    let Some(handles) = FILTER_HANDLES.get() else {
-        return Ok(());
-    };
     let user_spec = if let Ok(display) = std::env::var(ENV_DISPLAY_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
             println!(
@@ -162,9 +186,33 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     } else {
         user_spec.as_ref().to_string()
     };
-    let full_spec = display_filter_from(&user_spec)?;
-    *STDERR_LOG_SPEC.lock().unwrap() = user_spec;
+
+    let effective_spec = {
+        let mut state = STDERR_LOG_SPEC.lock().unwrap();
+        state.base_spec = user_spec;
+        state.effective_spec_string()
+    };
+
+    let Some(handles) = FILTER_HANDLES.get() else {
+        return Ok(());
+    };
+    let full_spec = display_filter_from(&effective_spec)?;
     // println!("Modifying display filter to: {}", full_spec);
+    handles.stderr_handle.modify(|f| *f = full_spec)?;
+    Ok(())
+}
+
+pub fn set_stderr_log_filter_override(user_spec: Option<String>) -> Result<()> {
+    let effective_spec = {
+        let mut state = STDERR_LOG_SPEC.lock().unwrap();
+        state.override_spec = user_spec;
+        state.effective_spec_string()
+    };
+
+    let Some(handles) = FILTER_HANDLES.get() else {
+        return Ok(());
+    };
+    let full_spec = display_filter_from(&effective_spec)?;
     handles.stderr_handle.modify(|f| *f = full_spec)?;
     Ok(())
 }
@@ -176,7 +224,19 @@ pub fn get_file_log_filter() -> String {
 
 /// Get the current stderr log filter specification.
 pub fn get_stderr_log_filter() -> String {
-    STDERR_LOG_SPEC.lock().unwrap().clone()
+    STDERR_LOG_SPEC.lock().unwrap().effective_spec_string()
+}
+
+pub fn get_stderr_log_filter_label() -> String {
+    let spec = get_stderr_log_filter();
+    collapse_scoped_gamma_level(&spec).unwrap_or(spec)
+}
+
+fn collapse_scoped_gamma_level(spec: &str) -> Option<String> {
+    let (left, right) = spec.split_once(',')?;
+    let left = left.trim().strip_prefix("gammaloop_api=")?;
+    let right = right.trim().strip_prefix("gammalooprs=")?;
+    (left == right).then(|| left.to_string())
 }
 
 fn elapsed_subsec(state: &ProgressState, writer: &mut dyn std::fmt::Write) {
@@ -199,7 +259,8 @@ pub(crate) fn init_tracing(
         //     "File filter: {file_filter},:{}",
         //     FILE_LOG_SPEC.lock().unwrap().as_str()
         // );
-        let stderr_filter = EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().as_str());
+        let stderr_filter =
+            EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().effective_spec_string());
         // println!(
         //     "Stderr filter: {stderr_filter},:{}",
         //     STDERR_LOG_SPEC.lock().unwrap().as_str()
@@ -264,12 +325,13 @@ pub(crate) fn init_tracing(
                       "color_end",
                       |state: &ProgressState, writer: &mut dyn std::fmt::Write| {
                           if state.elapsed() > Duration::from_secs(4) {
-                              let _ =write!(writer, "\x1b[0m");
+                              let _ = write!(writer, "\x1b[0m");
                           }
                       },
                   ),
-              ).with_span_child_prefix_symbol("↳ ").with_span_child_prefix_indent(" ");
-;
+              )
+              .with_span_child_prefix_symbol("↳ ")
+              .with_span_child_prefix_indent(" ");
 
         // Pretty status layer for stderr - only show status events
         let status_layer = fmt::layer()
@@ -529,4 +591,60 @@ pub(crate) fn format_full_source(meta: &tracing::Metadata<'_>) -> ColoredString 
     };
 
     source.bright_blue()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::{
+        collapse_scoped_gamma_level, get_stderr_log_filter, get_stderr_log_filter_label,
+        set_stderr_log_filter, set_stderr_log_filter_override,
+    };
+
+    #[test]
+    fn stderr_filter_override_supersedes_base_and_can_be_cleared() {
+        static TEST_MUTEX: Mutex<()> = Mutex::new(());
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        set_stderr_log_filter("warn").unwrap();
+        set_stderr_log_filter_override(Some("debug".to_string())).unwrap();
+        assert_eq!(get_stderr_log_filter(), "debug");
+
+        set_stderr_log_filter("error").unwrap();
+        assert_eq!(get_stderr_log_filter(), "debug");
+
+        set_stderr_log_filter_override(None).unwrap();
+        assert_eq!(get_stderr_log_filter(), "error");
+    }
+
+    #[test]
+    fn scoped_gamma_directive_collapses_to_plain_level_label() {
+        assert_eq!(
+            collapse_scoped_gamma_level("gammaloop_api=debug,gammalooprs=debug"),
+            Some("debug".to_string())
+        );
+        assert_eq!(
+            collapse_scoped_gamma_level("gammaloop_api=debug,gammalooprs=info"),
+            None
+        );
+        assert_eq!(
+            collapse_scoped_gamma_level("symbolica=debug,gammalooprs=debug"),
+            None
+        );
+    }
+
+    #[test]
+    fn stderr_filter_label_prefers_collapsed_scoped_gamma_directive() {
+        static TEST_MUTEX: Mutex<()> = Mutex::new(());
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        set_stderr_log_filter("warn").unwrap();
+        set_stderr_log_filter_override(Some("gammaloop_api=trace,gammalooprs=trace".to_string()))
+            .unwrap();
+        assert_eq!(get_stderr_log_filter_label(), "trace");
+
+        set_stderr_log_filter_override(None).unwrap();
+        assert_eq!(get_stderr_log_filter_label(), "warn");
+    }
 }

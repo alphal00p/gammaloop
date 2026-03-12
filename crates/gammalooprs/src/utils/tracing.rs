@@ -107,6 +107,17 @@ impl LogLevel {
             LogLevel::Trace => "gammalooprs=trace",
         }
     }
+
+    pub fn to_cli_display_directive_spec(self) -> &'static str {
+        match self {
+            LogLevel::Off => "gammaloop_api=off,gammalooprs=off",
+            LogLevel::Error => "gammaloop_api=error,gammalooprs=error",
+            LogLevel::Warn => "gammaloop_api=warn,gammalooprs=warn",
+            LogLevel::Info => "gammaloop_api=info,gammalooprs=info",
+            LogLevel::Debug => "gammaloop_api=debug,gammalooprs=debug",
+            LogLevel::Trace => "gammaloop_api=trace,gammalooprs=trace",
+        }
+    }
 }
 
 // Global one-time slots
@@ -150,14 +161,14 @@ pub fn init_bench_tracing() -> reload::Handle<EnvFilter, Registry> {
     FILTER_HANDLE
         .get_or_init(|| {
             // Use EnvFilter for reload compatibility
-            let env_filter = EnvFilter::new("_gammaloop=warn,status=trace,status_data=trace");
+            let env_filter = EnvFilter::new("gammaloop_api=warn,status=trace,status_data=trace");
             let (filter_layer, handle) = reload::Layer::new(env_filter);
 
             // 4) pretty status to stderr, opt-in via `target="status"`
             // Add strict filtering to status layer
             let bench_status_filter = filter_fn(|metadata| {
                 let target = metadata.target();
-                target.starts_with("_gammaloop") || target == "status" || target == "status_data"
+                target.starts_with("gammaloop_api") || target == "status" || target == "status_data"
             });
 
             let status_layer = fmt::layer()

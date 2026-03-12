@@ -7,7 +7,7 @@ use gammalooprs::{
         DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
     },
     settings::RuntimeSettings,
-    utils::serde_utils::{SmartSerde, SHOWDEFAULTS},
+    utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -247,14 +247,12 @@ impl SaveState {
         run_history.save_toml(&selected_root_folder, true, false)?;
         set_serialize_commands_as_strings(false);
 
-        SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _show_defaults_guard = ShowDefaultsGuard::new(true);
         default_runtime_settings.to_file(
             selected_root_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
             true,
         )?;
         global_settings.to_file(selected_root_folder.join(GLOBAL_SETTINGS_FILENAME), true)?;
-
-        SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
 
         Ok(())
     }

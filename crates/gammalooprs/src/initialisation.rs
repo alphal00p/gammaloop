@@ -1,6 +1,7 @@
 use color_eyre::{Result, config::HookBuilder};
 use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::parsing::SPENSO_TAG;
+use symbolica::activate_oem_license;
 
 use crate::utils::init_vakint;
 use crate::{model::UFOSymbol, numerator::ufo::UFO, utils::GS};
@@ -8,10 +9,9 @@ static INITIALISED: std::sync::Once = std::sync::Once::new();
 
 pub fn initialise() -> Result<()> {
     INITIALISED.call_once(|| {
-        // Here it would not match the crate name
-        // if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-        //     activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        // };
+        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
+            activate_oem_license!("SYMBOLICA_OEM_KEY_ba2512eb");
+        };
 
         let (panic, eyre) = HookBuilder::default()
             .capture_span_trace_by_default(cfg!(debug_assertions))

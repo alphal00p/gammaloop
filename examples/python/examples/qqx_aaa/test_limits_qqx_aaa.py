@@ -177,7 +177,7 @@ def get_integrand_results(log_file_path):
         all_evals[g_name]["threshold_CT"] = -extract_complex(eval_str)
 
     # inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
-    inspect_df = df.filter(pl.col("target") == "_gammaloop::commands::inspect")
+    inspect_df = df.filter(pl.col("target") == "gammaloop_api::commands::inspect")
 
     total_df = inspect_df.filter(pl.col("message").str.contains("Result:"))
     if total_df.is_empty():
@@ -188,7 +188,7 @@ def get_integrand_results(log_file_path):
     total = extract_complex(total_str)
 
     # inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
-    inspect_df = df.filter(pl.col("target") == "_gammaloop::commands::inspect")
+    inspect_df = df.filter(pl.col("target") == "gammaloop_api::commands::inspect")
 
     jac_df = inspect_df.filter(pl.col("message").str.contains("Jacobian for this point:"))
     if jac_df.is_empty():

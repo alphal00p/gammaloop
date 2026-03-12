@@ -8,7 +8,6 @@ use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::utils::symbolica_ext::TypstFormat;
-use gammalooprs::uv::UVgenerationSettings;
 use idenso::color::{ColorSimplifier, CS};
 use idenso::metric::MetricSimplifier;
 use schemars::JsonSchema;

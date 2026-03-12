@@ -5,6 +5,7 @@ use eyre::{eyre, Context};
 use gammalooprs::utils::F;
 #[cfg(feature = "ufo_support")]
 use pyo3::sync::PyOnceLock;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
@@ -23,6 +24,7 @@ use crate::state::State;
 
 static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/models/json");
 static BUILTIN_MODEL_NAMES: OnceLock<Vec<String>> = OnceLock::new();
+static BUILTIN_MODEL_RESTRICTIONS: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 /// Generate integrands
@@ -262,6 +264,13 @@ impl ImportModel {
 
 pub(crate) fn builtin_json_model_names() -> &'static [String] {
     BUILTIN_MODEL_NAMES.get_or_init(scan_builtin_json_model_names)
+}
+
+pub(crate) fn builtin_json_model_restriction_names(model: &str) -> Option<&'static [String]> {
+    BUILTIN_MODEL_RESTRICTIONS
+        .get_or_init(scan_builtin_json_model_restriction_names)
+        .get(model)
+        .map(Vec::as_slice)
 }
 
 #[derive(Debug, Clone)]
@@ -623,6 +632,39 @@ fn scan_builtin_json_model_names() -> Vec<String> {
     names.sort();
     names.dedup();
     names
+}
+
+fn scan_builtin_json_model_restriction_names() -> BTreeMap<String, Vec<String>> {
+    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/models/json");
+    let Ok(entries) = fs::read_dir(base) else {
+        return BTreeMap::new();
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let file_type = entry.file_type().ok()?;
+            if !file_type.is_dir() {
+                return None;
+            }
+
+            let model_name = entry.file_name().to_string_lossy().to_string();
+            let mut restrictions = fs::read_dir(entry.path())
+                .ok()?
+                .flatten()
+                .filter_map(|file_entry| {
+                    let file_name = file_entry.file_name().to_string_lossy().to_string();
+                    file_name
+                        .strip_prefix("restrict_")
+                        .and_then(|name| name.strip_suffix(".json"))
+                        .map(|name| name.to_string())
+                })
+                .collect::<Vec<_>>();
+            restrictions.sort();
+            restrictions.dedup();
+            Some((model_name, restrictions))
+        })
+        .collect()
 }
 
 fn ensure_builtin_model(model: &str) -> Result<File<'static>> {

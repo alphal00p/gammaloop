@@ -90,6 +90,37 @@ Notes:
 - `just build-cli-release` builds the release CLI at `./target/release/gammaloop`
 - the repo-root `./gammaloop` wrapper executes the built binary for you during development
 
+## Shell completion
+
+The CLI can emit static shell-completion scripts from its Clap command definition:
+
+```bash
+./gammaloop --completions bash
+./gammaloop --completions fish
+./gammaloop --completions nushell
+```
+
+For an interactive session, the simplest way to load them is:
+
+```bash
+# bash
+source <(./gammaloop --completions bash)
+
+# zsh
+source <(./gammaloop --completions zsh)
+
+# fish
+./gammaloop --completions fish | source
+```
+
+```nu
+# nushell
+./gammaloop --completions nushell | save --force /tmp/gammaloop-completions.nu
+source /tmp/gammaloop-completions.nu
+```
+
+These completions cover the executable command surface (subcommands, flags, enum values, and path hints). The richer state-aware completion remains available inside the GammaLoop REPL. Bash and Fish also bind completion to the repository wrapper path `./gammaloop`.
+
 ## CLI model
 
 The current CLI revolves around a persistent state folder.

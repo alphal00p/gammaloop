@@ -30,11 +30,7 @@ pub enum Import {
         )]
         process: Option<ProcessRef>,
 
-        #[arg(
-            short = 'i',
-            long = "integrand-name",
-            completion_disable_special_value()
-        )]
+        #[arg(short = 'i', completion_disable_special_value())]
         integrand_name: Option<String>,
 
         #[arg(short = 'o', default_value_t = false, conflicts_with = "append")]

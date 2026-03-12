@@ -22,12 +22,16 @@ use tracing::{debug, warn};
 
 static SET_WORKSPACE_CWD: Once = Once::new();
 
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("integration-tests must live in <workspace>/tests")
+        .to_path_buf()
+}
+
 fn ensure_workspace_cwd() {
     SET_WORKSPACE_CWD.call_once(|| {
-        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("integration-tests must live in <workspace>/tests")
-            .to_path_buf();
+        let workspace_root = workspace_root();
         std::env::set_current_dir(&workspace_root).unwrap_or_else(|e| {
             panic!(
                 "Failed to set working directory to workspace root '{}': {e}",
@@ -44,7 +48,7 @@ pub fn run_card(resource_path: impl AsRef<Path>) -> Result<RunHistory> {
     RunHistory::load(PathBuf::from("./tests/resources/run_cards").join(resource_path))
 }
 
-pub const TESTS_WORKSPACE: &str = "./tests/workspace";
+pub const TESTS_ARTIFACTS: &str = "tests/artifacts";
 
 #[derive(Clone)]
 pub struct CLIState {
@@ -205,11 +209,11 @@ pub fn clean_test(save_path: impl AsRef<Path>) {
 pub fn get_tests_workspace_path() -> PathBuf {
     if let Ok(user_specified_state_path) = env::var("TESTS_GAMMALOOP_STATE_PATH") {
         if user_specified_state_path.eq_ignore_ascii_case("AUTO") {
-            env::temp_dir().join("gammaloop_tests_workspace")
+            env::temp_dir().join("gammaloop_test_artifacts")
         } else {
             std::path::PathBuf::from(user_specified_state_path)
         }
     } else {
-        PathBuf::from(TESTS_WORKSPACE)
+        workspace_root().join(TESTS_ARTIFACTS)
     }
 }

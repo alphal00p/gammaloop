@@ -18,7 +18,9 @@ use ::tracing::debug;
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
 use clap::parser::ValueSource;
-use clap::{CommandFactory, FromArgMatches, Parser};
+use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
+use clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh};
+use clap_complete_nushell::Nushell;
 use commands::save::SaveState;
 use commands::Commands;
 
@@ -27,7 +29,9 @@ use reedline::FileBackedHistory;
 use repl::ClapEditor;
 use repl::ReadCommandOutput;
 use session::{CliSession, CliSessionState};
-use tracing::{get_stderr_log_filter, set_log_format_override};
+use tracing::{
+    get_stderr_log_filter_label, set_log_format_override, set_stderr_log_filter_override,
+};
 
 // use clap_repl::{
 //     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
@@ -57,7 +61,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use state::{CommandHistory, RunHistory, State, SyncSettings};
 use std::{borrow::Cow, ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
 use std::{fs::File, ops::ControlFlow, time::Duration, time::Instant};
-use symbolica::activate_oem_license;
 use walkdir::WalkDir;
 
 // use tracing::LogLevel;
@@ -75,8 +78,6 @@ pub mod tracing;
 
 pub(crate) const GLOBAL_SETTINGS_FILENAME: &str = "global_settings.toml";
 pub(crate) const DEFAULT_RUNTIME_SETTINGS_FILENAME: &str = "default_runtime_settings.toml";
-const SETTINGS_GLOBAL_SHORTCUT: &str = "-sg";
-const SETTINGS_RUNTIME_DEFAULTS_SHORTCUT: &str = "-sr";
 const BANNER_ART: &str = r"              ██         ▄████████▄  ▄████████▄  ██████████▄
   ██          ▀▀         ▀▀      ▀▀  ▀▀      ▀▀  ▀▀       ██
     ██  ▄██████████████████████████████████████████████████▀
@@ -143,12 +144,13 @@ pub struct OneShot {
     #[arg(short = 'p', long = "logging_prefix")]
     logging_prefix: Option<LogFormat>,
 
-    /// Path to a global settings TOML file. Also accepts `-sg`.
-    #[arg(long = "settings-global", value_hint = clap::ValueHint::FilePath)]
+    /// Path to a global settings TOML file.
+    #[arg(short = 'g', long = "settings-global", value_hint = clap::ValueHint::FilePath)]
     settings_global_path: Option<PathBuf>,
 
-    /// Path to a default runtime settings TOML file. Also accepts `-sr`.
+    /// Path to a default runtime settings TOML file.
     #[arg(
+        short = 'r',
         long = "settings-runtime-defaults",
         value_hint = clap::ValueHint::FilePath
     )]
@@ -158,12 +160,26 @@ pub struct OneShot {
     #[arg(long)]
     no_try_strings: bool,
 
+    /// Generate a shell completion script for the gammaloop executable
+    #[arg(long = "completions", value_enum)]
+    completions: Option<CompletionShell>,
+
     // /// Debug level
     // #[arg(short = 'd', long, value_enum, default_value_t = LogLevel::Info)]
     // debug_level: LogLevel,
     /// Optional sub‑command
     #[command(subcommand)]
     pub command: Option<Commands>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+enum CompletionShell {
+    Bash,
+    Elvish,
+    Fish,
+    PowerShell,
+    Zsh,
+    Nushell,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq)]
@@ -432,8 +448,8 @@ fn banner_width(spec: &str) -> usize {
 }
 
 fn print_state_load_summary(summary: &StateLoadSummary) {
-    let spec = get_stderr_log_filter();
-    let banner_width = banner_width(&spec);
+    let spec_label = get_stderr_log_filter_label();
+    let banner_width = banner_width(&spec_label);
     let plain_summary = format!(
         "State: load {} | disk {} | #graphs {}",
         format_duration_human(summary.elapsed),
@@ -492,11 +508,12 @@ impl OneShot {
             no_save_state: true,
             override_state: false,
             command: None,
-            level: Some(LogLevel::Info),
+            level: None,
             logging_prefix: None,
             settings_global_path: None,
             settings_runtime_defaults_path: None,
             no_try_strings: false,
+            completions: None,
             fresh_state: false,
             trace_logs_filename: None,
         }
@@ -525,28 +542,6 @@ impl OneShot {
             global,
             default_runtime_settings,
         })
-    }
-
-    fn normalize_cli_shortcuts(argv: &[OsString]) -> Vec<OsString> {
-        argv.iter()
-            .map(|arg| {
-                if arg == std::ffi::OsStr::new(SETTINGS_GLOBAL_SHORTCUT) {
-                    OsString::from("--settings-global")
-                } else if arg == std::ffi::OsStr::new(SETTINGS_RUNTIME_DEFAULTS_SHORTCUT) {
-                    OsString::from("--settings-runtime-defaults")
-                } else if let Some(arg) = arg.to_str() {
-                    if let Some(value) = arg.strip_prefix("-sg=") {
-                        OsString::from(format!("--settings-global={value}"))
-                    } else if let Some(value) = arg.strip_prefix("-sr=") {
-                        OsString::from(format!("--settings-runtime-defaults={value}"))
-                    } else {
-                        arg.into()
-                    }
-                } else {
-                    arg.clone()
-                }
-            })
-            .collect()
     }
 
     fn load_global_settings_file(state_folder: &std::path::Path) -> Result<CLISettings> {
@@ -591,11 +586,10 @@ impl OneShot {
     /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
     pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
         let argv: Vec<OsString> = std::env::args_os().collect();
-        let normalized_argv = Self::normalize_cli_shortcuts(&argv);
 
         // Build a Command (same as derive(Parser)) and get matches
         let mut cmd = <OneShot as CommandFactory>::command();
-        let matches = cmd.clone().try_get_matches_from(&normalized_argv)?;
+        let matches = cmd.clone().try_get_matches_from(&argv)?;
 
         let cli = <OneShot as FromArgMatches>::from_arg_matches(&matches)
             .map_err(|e| e.format(&mut cmd))?;
@@ -722,11 +716,17 @@ impl OneShot {
     }
 
     pub fn run(mut self, raw: String) -> Result<()> {
-        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        };
+        if let Some(shell) = self.completions {
+            print!("{}", generate_completion_script(shell));
+            return Ok(());
+        }
+
         initialise()?;
         set_log_format_override(self.logging_prefix);
+        set_stderr_log_filter_override(
+            self.level
+                .map(|level| level.to_cli_display_directive_spec().to_string()),
+        )?;
 
         let boot_run_history = self.load_boot_run_history()?;
         let settings_file_overrides = self.load_settings_file_overrides()?;
@@ -781,28 +781,8 @@ impl OneShot {
                     print_state_load_summary(summary);
                 }
                 // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
-                let completion_state = repl::new_completion_state();
-                repl::set_commands_block_names(
-                    &completion_state,
-                    session.current_commands_block_names(),
-                );
-                repl::set_process_entries(&completion_state, session.current_process_entries());
-                repl::set_model_parameter_names(
-                    &completion_state,
-                    session.current_model_parameter_names(),
-                );
-                repl::set_model_particle_names(
-                    &completion_state,
-                    session.current_model_particle_names(),
-                );
-                repl::set_model_coupling_names(
-                    &completion_state,
-                    session.current_model_coupling_names(),
-                );
-                repl::set_model_vertex_names(
-                    &completion_state,
-                    session.current_model_vertex_names(),
-                );
+                let completion_state = repl::SharedCompletionState::new();
+                completion_state.update_from_session(&session);
                 let mut repl = ClapEditor::<Repl>::builder()
                     .with_prompt(make_repl_prompt(&session.prompt_state_label(), None))
                     .with_completion_state(completion_state.clone());
@@ -816,6 +796,16 @@ impl OneShot {
                     })
                 }
                 let mut r = repl.build();
+                let refresh_repl_state =
+                    |r: &mut repl::ClapEditor<Repl>, session: &session::CliSession<'_>| {
+                        completion_state.update_from_session(session);
+                        let prompt_state_label = session.prompt_state_label();
+                        let pending_block_name = session.pending_commands_block_name();
+                        r.set_prompt(make_repl_prompt(
+                            &prompt_state_label,
+                            pending_block_name.as_deref(),
+                        ));
+                    };
 
                 loop {
                     match r.read_command() {
@@ -828,70 +818,12 @@ impl OneShot {
                                     eprintln!("{e:?}");
                                 }
                                 Ok(ControlFlow::Break(a)) => {
-                                    repl::set_commands_block_names(
-                                        &completion_state,
-                                        session.current_commands_block_names(),
-                                    );
-                                    repl::set_process_entries(
-                                        &completion_state,
-                                        session.current_process_entries(),
-                                    );
-                                    repl::set_model_parameter_names(
-                                        &completion_state,
-                                        session.current_model_parameter_names(),
-                                    );
-                                    repl::set_model_particle_names(
-                                        &completion_state,
-                                        session.current_model_particle_names(),
-                                    );
-                                    repl::set_model_coupling_names(
-                                        &completion_state,
-                                        session.current_model_coupling_names(),
-                                    );
-                                    repl::set_model_vertex_names(
-                                        &completion_state,
-                                        session.current_model_vertex_names(),
-                                    );
-                                    let prompt_state_label = session.prompt_state_label();
-                                    let pending_block_name = session.pending_commands_block_name();
-                                    r.set_prompt(make_repl_prompt(
-                                        &prompt_state_label,
-                                        pending_block_name.as_deref(),
-                                    ));
+                                    refresh_repl_state(&mut r, &session);
                                     save_state = a;
                                     break;
                                 }
                                 Ok(ControlFlow::Continue(())) => {
-                                    repl::set_commands_block_names(
-                                        &completion_state,
-                                        session.current_commands_block_names(),
-                                    );
-                                    repl::set_process_entries(
-                                        &completion_state,
-                                        session.current_process_entries(),
-                                    );
-                                    repl::set_model_parameter_names(
-                                        &completion_state,
-                                        session.current_model_parameter_names(),
-                                    );
-                                    repl::set_model_particle_names(
-                                        &completion_state,
-                                        session.current_model_particle_names(),
-                                    );
-                                    repl::set_model_coupling_names(
-                                        &completion_state,
-                                        session.current_model_coupling_names(),
-                                    );
-                                    repl::set_model_vertex_names(
-                                        &completion_state,
-                                        session.current_model_vertex_names(),
-                                    );
-                                    let prompt_state_label = session.prompt_state_label();
-                                    let pending_block_name = session.pending_commands_block_name();
-                                    r.set_prompt(make_repl_prompt(
-                                        &prompt_state_label,
-                                        pending_block_name.as_deref(),
-                                    ));
+                                    refresh_repl_state(&mut r, &session);
                                 }
                             }
                         }
@@ -944,6 +876,100 @@ impl OneShot {
     // pub fn initialize(&self) {}
 }
 
+fn generate_completion_script(shell: CompletionShell) -> String {
+    let mut command = OneShot::command();
+    let mut output = Vec::new();
+    match shell {
+        CompletionShell::Bash => {
+            clap_complete::generate(Bash, &mut command, "gammaloop", &mut output)
+        }
+        CompletionShell::Elvish => {
+            clap_complete::generate(Elvish, &mut command, "gammaloop", &mut output)
+        }
+        CompletionShell::Fish => {
+            clap_complete::generate(Fish, &mut command, "gammaloop", &mut output)
+        }
+        CompletionShell::PowerShell => {
+            clap_complete::generate(PowerShell, &mut command, "gammaloop", &mut output)
+        }
+        CompletionShell::Zsh => {
+            clap_complete::generate(Zsh, &mut command, "gammaloop", &mut output)
+        }
+        CompletionShell::Nushell => {
+            clap_complete::generate(Nushell, &mut command, "gammaloop", &mut output)
+        }
+    }
+    let script = String::from_utf8(output).expect("clap completion script must be valid UTF-8");
+    match shell {
+        CompletionShell::Bash => patch_bash_completion_for_repo_wrapper(script),
+        CompletionShell::Fish => {
+            patch_fish_completion_for_repo_wrapper(normalize_fish_completion(script))
+        }
+        _ => script,
+    }
+}
+
+fn patch_bash_completion_for_repo_wrapper(mut script: String) -> String {
+    script.push_str(
+        "\n# Support the repository wrapper script path as well.\n\
+if [[ $(type -t _gammaloop) == function ]]; then\n\
+    complete -F _gammaloop -o bashdefault -o default ./gammaloop\n\
+fi\n",
+    );
+    script
+}
+
+fn patch_fish_completion_for_repo_wrapper(script: String) -> String {
+    let mut wrapper_lines = Vec::new();
+    for line in script.lines() {
+        if line.starts_with("complete -c gammaloop") {
+            wrapper_lines.push(line.replacen(
+                "complete -c gammaloop",
+                "complete -c './gammaloop'",
+                1,
+            ));
+        }
+    }
+    if wrapper_lines.is_empty() {
+        script
+    } else {
+        format!(
+            "{script}\n# Support the repository wrapper script path as well.\n{}\n",
+            wrapper_lines.join("\n")
+        )
+    }
+}
+
+fn normalize_fish_completion(script: String) -> String {
+    let mut normalized = String::with_capacity(script.len());
+    let bytes = script.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i..].starts_with(b"-a \"") {
+            normalized.push_str("-a \"");
+            i += 4;
+            while i < bytes.len() {
+                let b = bytes[i];
+                if b == b'"' {
+                    normalized.push('"');
+                    i += 1;
+                    break;
+                }
+                if b == b'\n' {
+                    normalized.push(' ');
+                } else {
+                    normalized.push(b as char);
+                }
+                i += 1;
+            }
+        } else {
+            normalized.push(bytes[i] as char);
+            i += 1;
+        }
+    }
+    normalized
+}
+
 pub mod commands;
 
 pub enum Log {
@@ -965,7 +991,7 @@ pub enum Log {
 // }
 
 pub(crate) fn print_banner() {
-    let spec = get_stderr_log_filter();
+    let spec = get_stderr_log_filter_label();
     println!(
         "\n{}{}\n",
         BANNER_ART.to_string().bold().blue(),
@@ -999,27 +1025,25 @@ pub fn write_schemas() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{ffi::OsString, fs, path::PathBuf};
+    use std::{fs, path::PathBuf};
 
     use clap::Parser;
     use serde_json::Value as JsonValue;
     use tempfile::tempdir;
 
-    use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
+    use gammalooprs::{
+        settings::{GlobalSettings, RuntimeSettings},
+        utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
+    };
 
     use crate::commands::Reset;
     use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
 
     use super::{
-        CLISettings, Commands, LogFormat, OneShot, Repl, RunHistory, StateSettings,
-        GLOBAL_SETTINGS_FILENAME,
+        generate_completion_script, CLISettings, Commands, CompletionShell, LogFormat, OneShot,
+        Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
     };
-
-    fn parse_with_shortcuts(args: &[&str]) -> OneShot {
-        let argv: Vec<OsString> = args.iter().map(OsString::from).collect();
-        OneShot::try_parse_from(OneShot::normalize_cli_shortcuts(&argv)).unwrap()
-    }
 
     fn write_run_card(path: &PathBuf, state_folder: &str) {
         let run_history = RunHistory {
@@ -1162,8 +1186,8 @@ mod tests {
     }
 
     #[test]
-    fn oneshot_accepts_settings_global_shortcut() {
-        let parsed = parse_with_shortcuts(&["gammaloop", "-sg", "global.toml"]);
+    fn oneshot_accepts_settings_global_short_flag() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "-g", "global.toml"]).unwrap();
         assert_eq!(
             parsed.settings_global_path,
             Some(PathBuf::from("global.toml"))
@@ -1171,12 +1195,46 @@ mod tests {
     }
 
     #[test]
-    fn oneshot_accepts_settings_runtime_defaults_shortcut() {
-        let parsed = parse_with_shortcuts(&["gammaloop", "-sr", "runtime.toml"]);
+    fn oneshot_accepts_settings_runtime_defaults_short_flag() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "-r", "runtime.toml"]).unwrap();
         assert_eq!(
             parsed.settings_runtime_defaults_path,
             Some(PathBuf::from("runtime.toml"))
         );
+    }
+
+    #[test]
+    fn oneshot_accepts_completions_flag() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "--completions", "bash"]).unwrap();
+        assert_eq!(parsed.completions, Some(CompletionShell::Bash));
+    }
+
+    #[test]
+    fn bash_completion_script_binds_repo_wrapper_path() {
+        let script = generate_completion_script(CompletionShell::Bash);
+        assert!(script.contains("complete -F _gammaloop -o bashdefault -o default gammaloop"));
+        assert!(script.contains("complete -F _gammaloop -o bashdefault -o default ./gammaloop"));
+    }
+
+    #[test]
+    fn fish_completion_script_binds_repo_wrapper_path() {
+        let script = generate_completion_script(CompletionShell::Fish);
+        assert!(script.contains("complete -c gammaloop"));
+        assert!(script.contains("complete -c './gammaloop'"));
+        assert!(!script.contains("-a \"true\\t''\nfalse\\t''\""));
+    }
+
+    #[test]
+    fn oneshot_accepts_nushell_completions_flag() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "--completions", "nushell"]).unwrap();
+        assert_eq!(parsed.completions, Some(CompletionShell::Nushell));
+    }
+
+    #[test]
+    fn nushell_completion_script_is_exportable_module() {
+        let script = generate_completion_script(CompletionShell::Nushell);
+        assert!(script.contains("module completions"));
+        assert!(script.contains("export use completions *"));
     }
 
     #[test]
@@ -1339,6 +1397,60 @@ mod tests {
             Some(""),
             "state.name should stay visible to settings completion even when unset"
         );
+    }
+
+    #[test]
+    fn global_settings_defaults_stay_visible_in_completion_serialization() {
+        let serialized =
+            serialize_settings_with_defaults(&CLISettings::default(), "CLI settings").unwrap();
+        let global = serialized
+            .get("global")
+            .and_then(JsonValue::as_object)
+            .expect("global object must be present");
+
+        assert_eq!(
+            global.get("display_directive").and_then(JsonValue::as_str),
+            Some("info")
+        );
+        assert_eq!(
+            global.get("logfile_directive").and_then(JsonValue::as_str),
+            Some("off")
+        );
+        assert_eq!(
+            global
+                .get("generation")
+                .and_then(JsonValue::as_object)
+                .and_then(|generation| generation.get("compile"))
+                .and_then(JsonValue::as_object)
+                .and_then(|compile| compile.get("compiler"))
+                .and_then(JsonValue::as_str),
+            Some("g++")
+        );
+    }
+
+    #[test]
+    fn runtime_settings_custom_defaults_stay_visible_in_completion_serialization() {
+        let serialized = serialize_settings_with_defaults(
+            &RuntimeSettings::default(),
+            "default runtime settings",
+        )
+        .unwrap();
+        let serialized_text = serde_json::to_string(&serialized).unwrap();
+        assert!(serialized_text.contains("large_deformation_check"));
+    }
+
+    #[test]
+    fn saved_global_settings_file_keeps_default_directives_visible() {
+        let temp = tempdir().unwrap();
+        let _show_defaults_guard = ShowDefaultsGuard::new(true);
+        CLISettings::default()
+            .to_file(temp.path().join(GLOBAL_SETTINGS_FILENAME), true)
+            .unwrap();
+        let saved = fs::read_to_string(temp.path().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
+
+        assert!(saved.contains("display_directive = \"info\""), "{saved}");
+        assert!(saved.contains("logfile_directive = \"off\""), "{saved}");
+        assert!(saved.contains("compiler = \"g++\""), "{saved}");
     }
 
     #[test]

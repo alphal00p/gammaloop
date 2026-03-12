@@ -1,4 +1,4 @@
-use _gammaloop::OneShot;
+use gammaloop_api::OneShot;
 
 use color_eyre::Report;
 

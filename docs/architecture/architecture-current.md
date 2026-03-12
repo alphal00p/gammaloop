@@ -40,8 +40,25 @@ Infrastructure
 ### 1. Entry Points and Interfaces
 - CLI entry point: `crates/gammaloop-api/src/cli.rs`.
 - Main app orchestration: `crates/gammaloop-api/src/lib.rs` (`OneShot::load`, `OneShot::run`).
-- Python module entry: `crates/gammaloop-api/src/python.rs` (`#[pymodule] fn _gammaloop`).
+- Python module entry: `crates/gammaloop-api/src/python.rs` (`#[pymodule(name = "_gammaloop")]`).
 - Python package shim: `crates/gammaloop-api/python/gammaloop/__init__.py`.
+
+### 1.1 CLI architecture
+- The CLI is state-centric: every session operates on one active state folder and one active in-memory `RunHistory`.
+- Startup is orchestrated by `OneShot`:
+  - resolve the state folder from CLI / boot card / defaults
+  - load or create the state
+  - load persisted settings and run history
+  - optionally apply a boot card before entering the REPL or running a one-shot subcommand
+- Command execution is centralized in `crates/gammaloop-api/src/session.rs` (`CliSession`):
+  - top-level commands
+  - boot-card replay
+  - nested `run` execution
+  - command-history recording policy
+  - command-block-definition mode
+- The REPL layer in `crates/gammaloop-api/src/repl.rs` is state-aware:
+  - prompt text reflects the active state settings
+  - tab completion is driven from the active state, active command blocks, and clap argument metadata
 
 ### 2. Application State and Command Model
 - Central mutable app state: `crates/gammaloop-api/src/state.rs` (`State`).

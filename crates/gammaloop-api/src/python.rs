@@ -18,7 +18,7 @@ use crate::{
     commands::{
         import::model::ImportModel,
         inspect::{BatchedInspect, Inspect},
-        Commands, Evaluate,
+        Evaluate,
     },
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
@@ -39,9 +39,9 @@ use gammalooprs::feyngen::{
 use git_version::git_version;
 use itertools::{self, Itertools};
 use pyo3::types::PyFloat;
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-use symbolica::{activate_oem_license, atom::AtomCore, parse};
+use symbolica::{atom::AtomCore, parse};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -52,7 +52,7 @@ use pyo3::{
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyComplex, PyModule, PyTuple, PyType},
-    wrap_pyfunction, FromPyObject, PyObject, PyRef, Python,
+    wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
 #[pyfunction]
@@ -69,8 +69,8 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
-#[pymodule]
-fn _gammaloop(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+#[pymodule(name = "_gammaloop")]
+fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     gammalooprs::initialisation::initialise().expect("initialization failed");
     gammalooprs::set_interrupt_handler();
     m.add_class::<GammaLoopAPI>()?;
@@ -373,9 +373,6 @@ impl GammaLoopAPI {
         log_file_name: Option<String>,
         log_level: Option<LogLevel>,
     ) -> Result<Self> {
-        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        };
         initialise().map_err(|e| {
             exceptions::PyException::new_err(format!("Could not initialize GammaLoop API: {}", e))
         })?;
@@ -526,7 +523,7 @@ impl GammaLoopAPI {
                 return Err(eyre!(
                     "Unknown graph import format: {}. Supported formats are 'yaml' and 'json'",
                     other
-                ))
+                ));
             }
         };
 
@@ -574,7 +571,7 @@ impl GammaLoopAPI {
                 return Err(eyre!(
                     "Unknown graph import format: {}. Supported formats are sting and dot",
                     other
-                ))
+                ));
             }
         };
 
@@ -855,7 +852,13 @@ impl GammaLoopAPI {
 
     #[pyo3(name="run", signature = (command,))]
     pub(crate) fn run_command(&mut self, command: String) -> PyResult<()> {
-        let command_history = crate::state::CommandHistory::from_raw_string(&command)?;
+        let command_history =
+            crate::state::CommandHistory::from_raw_string(&command).map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Failed to parse command '{}': {}",
+                    command, e
+                ))
+            })?;
         let mut session = CliSession::new(
             &mut self.gammaloop_state,
             &mut self.run_history,

@@ -15,9 +15,13 @@ use reedline::{Prompt, Reedline, Signal, Span, Suggestion, ValidationResult};
 
 use crate::{
     command_parser::split_command_line,
-    commands::import::model::builtin_json_model_names,
+    commands::import::model::{builtin_json_model_names, builtin_json_model_restriction_names},
     completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
-    settings_tree::{serialize_settings_with_defaults, value_at_path},
+    session::CliSession,
+    settings_tree::{
+        schema_at_path, schema_enum_values, serialize_schema, serialize_settings_with_defaults,
+        value_at_path,
+    },
     CLISettings,
 };
 
@@ -25,6 +29,7 @@ use crate::{
 pub struct CompletionState {
     commands_block_names: Vec<String>,
     process_entries: Vec<ProcessCompletionEntry>,
+    ir_profile_entries: Vec<IrProfileCompletionEntry>,
     model_parameter_names: Vec<String>,
     model_particle_names: Vec<String>,
     model_coupling_names: Vec<String>,
@@ -54,95 +59,42 @@ pub struct ProcessCompletionEntry {
     pub integrand_names: Vec<String>,
 }
 
-pub type SharedCompletionState = Arc<RwLock<CompletionState>>;
-
-pub fn new_completion_state() -> SharedCompletionState {
-    Arc::new(RwLock::new(CompletionState::default()))
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IrProfileCompletionEntry {
+    pub process_name: String,
+    pub integrand_name: String,
+    pub graph_names: Vec<String>,
+    pub graph_limit_entries: Vec<String>,
 }
 
-pub fn set_commands_block_names(
-    completion_state: &SharedCompletionState,
-    commands_block_names: impl IntoIterator<Item = String>,
-) {
-    if let Ok(mut state) = completion_state.write() {
-        state.set_commands_block_names(commands_block_names);
-    }
-}
+#[derive(Debug, Clone, Default)]
+pub struct SharedCompletionState(Arc<RwLock<CompletionState>>);
 
-pub fn set_process_entries(
-    completion_state: &SharedCompletionState,
-    process_entries: impl IntoIterator<Item = ProcessCompletionEntry>,
-) {
-    if let Ok(mut state) = completion_state.write() {
-        state.set_process_entries(process_entries);
-    }
-}
-
-pub fn set_model_parameter_names(
-    completion_state: &SharedCompletionState,
-    model_parameter_names: impl IntoIterator<Item = String>,
-) {
-    if let Ok(mut state) = completion_state.write() {
-        state.set_model_parameter_names(model_parameter_names);
-    }
-}
-
-pub fn set_model_particle_names(
-    completion_state: &SharedCompletionState,
-    model_particle_names: impl IntoIterator<Item = String>,
-) {
-    if let Ok(mut state) = completion_state.write() {
-        state.set_model_particle_names(model_particle_names);
-    }
-}
-
-pub fn set_model_coupling_names(
-    completion_state: &SharedCompletionState,
-    model_coupling_names: impl IntoIterator<Item = String>,
-) {
-    if let Ok(mut state) = completion_state.write() {
-        state.set_model_coupling_names(model_coupling_names);
-    }
-}
-
-pub fn set_model_vertex_names(
-    completion_state: &SharedCompletionState,
-    model_vertex_names: impl IntoIterator<Item = String>,
-) {
-    if let Ok(mut state) = completion_state.write() {
-        state.set_model_vertex_names(model_vertex_names);
-    }
-}
-
-impl CompletionState {
-    fn set_commands_block_names(&mut self, commands_block_names: impl IntoIterator<Item = String>) {
-        self.commands_block_names = commands_block_names.into_iter().collect();
+impl SharedCompletionState {
+    pub fn new() -> Self {
+        Self(Arc::new(RwLock::new(CompletionState::default())))
     }
 
-    fn set_process_entries(
-        &mut self,
-        process_entries: impl IntoIterator<Item = ProcessCompletionEntry>,
-    ) {
-        self.process_entries = process_entries.into_iter().collect();
+    fn snapshot(&self) -> CompletionState {
+        self.0.read().map(|state| state.clone()).unwrap_or_default()
     }
 
-    fn set_model_parameter_names(
-        &mut self,
-        model_parameter_names: impl IntoIterator<Item = String>,
-    ) {
-        self.model_parameter_names = model_parameter_names.into_iter().collect();
+    fn write(&self, update: impl FnOnce(&mut CompletionState)) {
+        if let Ok(mut state) = self.0.write() {
+            update(&mut state);
+        }
     }
 
-    fn set_model_particle_names(&mut self, model_particle_names: impl IntoIterator<Item = String>) {
-        self.model_particle_names = model_particle_names.into_iter().collect();
-    }
-
-    fn set_model_coupling_names(&mut self, model_coupling_names: impl IntoIterator<Item = String>) {
-        self.model_coupling_names = model_coupling_names.into_iter().collect();
-    }
-
-    fn set_model_vertex_names(&mut self, model_vertex_names: impl IntoIterator<Item = String>) {
-        self.model_vertex_names = model_vertex_names.into_iter().collect();
+    pub fn update_from_session(&self, session: &CliSession<'_>) {
+        self.write(|state| {
+            state.commands_block_names = session.current_commands_block_names();
+            state.process_entries = session.current_process_entries();
+            state.ir_profile_entries = session.current_ir_profile_entries();
+            state.model_parameter_names = session.current_model_parameter_names();
+            state.model_particle_names = session.current_model_particle_names();
+            state.model_coupling_names = session.current_model_coupling_names();
+            state.model_vertex_names = session.current_model_vertex_names();
+        });
     }
 }
 
@@ -183,7 +135,7 @@ mod builder {
                     Box::new(Emacs::new(keybindings))
                 },
                 hook: Box::new(|e| e),
-                completion_state: crate::repl::new_completion_state(),
+                completion_state: SharedCompletionState::new(),
                 c_phantom: PhantomData,
             }
         }
@@ -349,11 +301,7 @@ impl reedline::Validator for ShellLikeValidator {
 
 impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C> {
     fn complete(&mut self, line: &str, pos: usize) -> Vec<reedline::Suggestion> {
-        let completion_state = self
-            .completion_state
-            .read()
-            .map(|state| state.clone())
-            .unwrap_or_default();
+        let completion_state = self.completion_state.snapshot();
         collect_completions::<C>(line, pos, &completion_state)
     }
 }
@@ -377,11 +325,27 @@ fn global_settings_root() -> &'static JsonValue {
     })
 }
 
+fn global_settings_schema() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        serialize_schema::<CLISettings>("CLI settings completion")
+            .expect("CLI settings schema must serialize for completion")
+    })
+}
+
 fn runtime_settings_root() -> &'static JsonValue {
     static ROOT: OnceLock<JsonValue> = OnceLock::new();
     ROOT.get_or_init(|| {
         serialize_settings_with_defaults(&RuntimeSettings::default(), "runtime settings completion")
             .expect("default runtime settings must serialize for completion")
+    })
+}
+
+fn runtime_settings_schema() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        serialize_schema::<RuntimeSettings>("runtime settings completion")
+            .expect("runtime settings schema must serialize for completion")
     })
 }
 
@@ -485,6 +449,16 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                 }
                 ArgValueCompletion::Disabled => {}
             }
+        } else if is_ir_profile_select_argument(&context, arg) {
+            add_ir_profile_select_suggestions(
+                completion_state,
+                context.completed_tokens,
+                context.cmd,
+                value_request,
+                pos,
+                &mut suggestions,
+                &mut seen,
+            );
         } else if is_generate_vertex_interactions_argument(arg) {
             add_generate_vertex_suggestions(
                 completion_state,
@@ -1044,6 +1018,19 @@ fn add_builtin_model_suggestions(
         return;
     }
 
+    if let Some((model_name, restriction_prefix)) = builtin_model_restriction_request(prefix) {
+        add_builtin_model_restriction_suggestions(
+            model_name,
+            restriction_prefix,
+            context.current_token.quote_style,
+            context.current_token.start,
+            pos,
+            suggestions,
+            seen,
+        );
+        return;
+    }
+
     for name in builtin_json_model_names() {
         let rendered = render_value_completion(name, context.current_token.quote_style);
         if (prefix.is_empty() || name.starts_with(prefix)) && seen.insert(rendered.clone()) {
@@ -1056,6 +1043,56 @@ fn add_builtin_model_suggestions(
                 append_whitespace: true,
             });
         }
+    }
+}
+
+fn builtin_model_restriction_request(prefix: &str) -> Option<(&str, &str)> {
+    let (model_name, restriction_prefix) = prefix.split_once('-')?;
+    (!model_name.is_empty()).then_some((model_name, restriction_prefix))
+}
+
+fn add_builtin_model_restriction_suggestions(
+    model_name: &str,
+    restriction_prefix: &str,
+    quote_style: QuoteStyle,
+    span_start: usize,
+    pos: usize,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    if !builtin_json_model_names()
+        .iter()
+        .any(|candidate| candidate == model_name)
+    {
+        return;
+    }
+
+    let mut candidates = builtin_json_model_restriction_names(model_name)
+        .unwrap_or(&[])
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    candidates.push("full".to_string());
+    candidates.sort();
+    candidates.dedup();
+
+    for restriction in candidates {
+        if !restriction_prefix.is_empty() && !restriction.starts_with(restriction_prefix) {
+            continue;
+        }
+        let value = format!("{model_name}-{restriction}");
+        let rendered = render_value_completion(&value, quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(Suggestion {
+            value: rendered,
+            description: Some("Built-in JSON model restriction".to_string()),
+            style: None,
+            extra: None,
+            span: Span::new(span_start, pos),
+            append_whitespace: true,
+        });
     }
 }
 
@@ -1538,9 +1575,21 @@ fn add_settings_kv_suggestions(
         SettingsCatalogKind::Global => global_settings_root(),
         SettingsCatalogKind::Runtime => runtime_settings_root(),
     };
+    let schema = match catalog_kind {
+        SettingsCatalogKind::Global => global_settings_schema(),
+        SettingsCatalogKind::Runtime => runtime_settings_schema(),
+    };
 
     if let Some(value_request) = value_request {
-        add_settings_value_suggestions(root, &key_request, &value_request, pos, suggestions, seen);
+        add_settings_value_suggestions(
+            root,
+            schema,
+            &key_request,
+            &value_request,
+            pos,
+            suggestions,
+            seen,
+        );
         return;
     }
 
@@ -1703,6 +1752,85 @@ fn add_integrand_suggestions(
     }
 }
 
+fn is_ir_profile_select_argument(context: &CommandContext<'_>, arg: &clap::Arg) -> bool {
+    matches_command_path(context, &["profile", "infra-red"]) && arg.get_long() == Some("select")
+}
+
+fn add_ir_profile_select_suggestions(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    cmd: &clap::Command,
+    request: &PathCompletionRequest,
+    pos: usize,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let process_filter = find_last_flag_value(cmd, completed_tokens, "process");
+    let integrand_filter = find_last_flag_value(cmd, completed_tokens, "integrand-name");
+    let prefix = request.partial_path.as_str();
+
+    for entry in &completion_state.ir_profile_entries {
+        if let Some(process_value) = process_filter.as_deref() {
+            let Some(process_entry) =
+                resolve_process_reference(&completion_state.process_entries, process_value)
+            else {
+                continue;
+            };
+            if entry.process_name != process_entry.name {
+                continue;
+            }
+        }
+
+        if let Some(integrand_name) = integrand_filter.as_deref() {
+            if entry.integrand_name != integrand_name {
+                continue;
+            }
+        }
+
+        for graph_name in &entry.graph_names {
+            if !prefix.is_empty() && !graph_name.starts_with(prefix) {
+                continue;
+            }
+            let rendered = render_value_completion(graph_name, request.quote_style);
+            if !seen.insert(rendered.clone()) {
+                continue;
+            }
+            suggestions.push(reedline::Suggestion {
+                value: rendered,
+                description: Some(format!(
+                    "IR profile graph in {} / {}",
+                    entry.process_name, entry.integrand_name
+                )),
+                style: None,
+                extra: None,
+                span: Span::new(request.span_start, pos),
+                append_whitespace: true,
+            });
+        }
+
+        for value in &entry.graph_limit_entries {
+            if !prefix.is_empty() && !value.starts_with(prefix) {
+                continue;
+            }
+            let rendered = render_value_completion(value, request.quote_style);
+            if !seen.insert(rendered.clone()) {
+                continue;
+            }
+            suggestions.push(reedline::Suggestion {
+                value: rendered,
+                description: Some(format!(
+                    "IR profile selection in {} / {}",
+                    entry.process_name, entry.integrand_name
+                )),
+                style: None,
+                extra: None,
+                span: Span::new(request.span_start, pos),
+                append_whitespace: true,
+            });
+        }
+    }
+}
+
 fn split_kv_completion_request(
     current_token: &CompletionToken,
 ) -> (String, Option<ValueCompletionRequest>) {
@@ -1774,6 +1902,7 @@ fn add_settings_path_suggestions(
 
 fn add_settings_value_suggestions(
     root: &JsonValue,
+    schema: &JsonValue,
     key_request: &str,
     value_request: &ValueCompletionRequest,
     pos: usize,
@@ -1783,6 +1912,31 @@ fn add_settings_value_suggestions(
     let Ok(value) = value_at_path(root, key_request) else {
         return;
     };
+
+    if let Some(schema_node) = schema_at_path(schema, key_request) {
+        let enum_values = schema_enum_values(schema, schema_node);
+        if !enum_values.is_empty() {
+            for candidate in enum_values {
+                if !candidate.starts_with(&value_request.partial_value) {
+                    continue;
+                }
+                let rendered = render_value_completion(&candidate, value_request.quote_style);
+                if !seen.insert(rendered.clone()) {
+                    continue;
+                }
+                suggestions.push(Suggestion {
+                    value: rendered,
+                    description: Some("expects one of the allowed enum variants".to_string()),
+                    style: None,
+                    extra: None,
+                    span: Span::new(value_request.span_start, pos),
+                    append_whitespace: true,
+                });
+            }
+            return;
+        }
+    }
+
     let kind = settings_value_kind(value);
 
     if kind == SettingsValueKind::Boolean {
@@ -1978,7 +2132,7 @@ fn tokenize_completion_input(line: &str, pos: usize) -> Vec<CompletionToken> {
     let prefix = &line[..pos];
     let mut tokens = tokenize_shell_prefix(prefix, 0);
 
-    if prefix.is_empty() || prefix.chars().last().is_some_and(char::is_whitespace) {
+    if prefix.is_empty() || prefix_ends_with_separator_whitespace(prefix) {
         tokens.push(CompletionToken {
             raw: String::new(),
             cooked: String::new(),
@@ -1989,6 +2143,65 @@ fn tokenize_completion_input(line: &str, pos: usize) -> Vec<CompletionToken> {
     }
 
     tokens
+}
+
+fn prefix_ends_with_separator_whitespace(prefix: &str) -> bool {
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum ParseMode {
+        Unquoted,
+        SingleQuoted,
+        DoubleQuoted,
+    }
+
+    let mut mode = ParseMode::Unquoted;
+    let mut chars = prefix.char_indices().peekable();
+    let mut ended_with_separator = false;
+
+    while let Some((_, ch)) = chars.next() {
+        match mode {
+            ParseMode::Unquoted => match ch {
+                '\\' => {
+                    ended_with_separator = false;
+                    let _ = chars.next();
+                }
+                '\'' => {
+                    ended_with_separator = false;
+                    mode = ParseMode::SingleQuoted;
+                }
+                '"' => {
+                    ended_with_separator = false;
+                    mode = ParseMode::DoubleQuoted;
+                }
+                _ if ch.is_whitespace() => {
+                    ended_with_separator = true;
+                }
+                _ => {
+                    ended_with_separator = false;
+                }
+            },
+            ParseMode::SingleQuoted => {
+                ended_with_separator = false;
+                if ch == '\'' {
+                    mode = ParseMode::Unquoted;
+                }
+            }
+            ParseMode::DoubleQuoted => match ch {
+                '\\' => {
+                    ended_with_separator = false;
+                    let _ = chars.next();
+                }
+                '"' => {
+                    ended_with_separator = false;
+                    mode = ParseMode::Unquoted;
+                }
+                _ => {
+                    ended_with_separator = false;
+                }
+            },
+        }
+    }
+
+    ended_with_separator
 }
 
 fn tokenize_shell_prefix(prefix: &str, base_offset: usize) -> Vec<CompletionToken> {
@@ -2355,10 +2568,13 @@ mod tests {
         Repl,
     };
 
-    use super::{collect_completions, CompletionState, ProcessCompletionEntry, ProcessKind};
+    use super::{
+        collect_completions, CompletionState, IrProfileCompletionEntry, ProcessCompletionEntry,
+        ProcessKind,
+    };
 
-    fn sample_process_entries() -> [ProcessCompletionEntry; 3] {
-        [
+    fn sample_process_entries() -> Vec<ProcessCompletionEntry> {
+        vec![
             ProcessCompletionEntry {
                 id: 0,
                 name: "triangle".to_string(),
@@ -2380,21 +2596,31 @@ mod tests {
         ]
     }
 
+    fn sample_ir_profile_entries() -> Vec<IrProfileCompletionEntry> {
+        vec![IrProfileCompletionEntry {
+            process_name: "epem_xs".to_string(),
+            integrand_name: "subtracted".to_string(),
+            graph_names: vec!["GL1".to_string(), "GL2".to_string()],
+            graph_limit_entries: vec![
+                "GL1 C[1,2]".to_string(),
+                "GL1 S(3)".to_string(),
+                "GL2 C[4,5]".to_string(),
+            ],
+        }]
+    }
+
     fn generate_completion_state() -> CompletionState {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_model_particle_names([
-            "g".to_string(),
-            "h".to_string(),
-            "e+".to_string(),
-            "e-".to_string(),
-        ]);
-        completion_state.set_model_coupling_names(["QCD".to_string(), "QED".to_string()]);
-        completion_state.set_model_vertex_names([
-            "V_6".to_string(),
-            "V_9".to_string(),
-            "V_36".to_string(),
-        ]);
-        completion_state
+        CompletionState {
+            model_particle_names: vec![
+                "g".to_string(),
+                "h".to_string(),
+                "e+".to_string(),
+                "e-".to_string(),
+            ],
+            model_coupling_names: vec!["QCD".to_string(), "QED".to_string()],
+            model_vertex_names: vec!["V_6".to_string(), "V_9".to_string(), "V_36".to_string()],
+            ..CompletionState::default()
+        }
     }
 
     fn completion_values(line: &str, completion_state: &CompletionState) -> Vec<String> {
@@ -2428,8 +2654,10 @@ mod tests {
 
     #[test]
     fn completion_offers_run_block_names_and_commands_flag() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_commands_block_names(["alpha".to_string(), "beta".to_string()]);
+        let completion_state = CompletionState {
+            commands_block_names: vec!["alpha".to_string(), "beta".to_string()],
+            ..CompletionState::default()
+        };
 
         let values = completion_values("run ", &completion_state);
 
@@ -2441,8 +2669,10 @@ mod tests {
 
     #[test]
     fn completion_does_not_offer_run_blocks_while_typing_commands_value() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_commands_block_names(["alpha".to_string()]);
+        let completion_state = CompletionState {
+            commands_block_names: vec!["alpha".to_string()],
+            ..CompletionState::default()
+        };
 
         let values = completion_values("run -c ", &completion_state);
 
@@ -2495,8 +2725,10 @@ mod tests {
 
     #[test]
     fn completion_offers_external_model_parameters_for_set_model() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_model_parameter_names(["alpha".to_string(), "beta".to_string()]);
+        let completion_state = CompletionState {
+            model_parameter_names: vec!["alpha".to_string(), "beta".to_string()],
+            ..CompletionState::default()
+        };
 
         let values = completion_values("set model a", &completion_state);
 
@@ -2505,12 +2737,14 @@ mod tests {
 
     #[test]
     fn completion_skips_already_assigned_model_parameters() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_model_parameter_names([
-            "alpha".to_string(),
-            "beta".to_string(),
-            "gamma".to_string(),
-        ]);
+        let completion_state = CompletionState {
+            model_parameter_names: vec![
+                "alpha".to_string(),
+                "beta".to_string(),
+                "gamma".to_string(),
+            ],
+            ..CompletionState::default()
+        };
 
         let values = completion_values("set model alpha=1 b", &completion_state);
 
@@ -2520,8 +2754,10 @@ mod tests {
 
     #[test]
     fn completion_offers_process_names_for_process_selectors() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let values = completion_values("integrate -p e", &completion_state);
 
@@ -2532,8 +2768,10 @@ mod tests {
 
     #[test]
     fn completion_offers_process_ids_when_process_prefix_requests_them() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let values = completion_values("integrate --process #", &completion_state);
 
@@ -2544,8 +2782,10 @@ mod tests {
 
     #[test]
     fn completion_offers_integrands_for_reset_processes() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let values = completion_values(
             "reset processes --process epem_a_tth --integrand-name ",
@@ -2559,8 +2799,10 @@ mod tests {
 
     #[test]
     fn completion_filters_integrands_by_selected_process() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let values = completion_values(
             "integrate --process epem_a_tth --integrand-name ",
@@ -2574,8 +2816,10 @@ mod tests {
 
     #[test]
     fn completion_filters_integrands_by_selector_kind() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let uv_values = completion_values("profile ultra-violet -i ", &completion_state);
         assert!(uv_values.contains(&"LO".to_string()));
@@ -2590,8 +2834,10 @@ mod tests {
 
     #[test]
     fn completion_filters_processes_by_selector_kind() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let values = completion_values("evaluate --process ", &completion_state);
 
@@ -2602,8 +2848,10 @@ mod tests {
 
     #[test]
     fn completion_supports_inline_process_value_when_filtering_integrands() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let values = completion_values(
             "integrate --process=name:epem_xs --integrand-name=s",
@@ -2615,8 +2863,10 @@ mod tests {
 
     #[test]
     fn completion_does_not_offer_existing_integrands_for_free_form_names() {
-        let mut completion_state = CompletionState::default();
-        completion_state.set_process_entries(sample_process_entries());
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
 
         let values = completion_values("generate amp --integrand-name ", &completion_state);
 
@@ -2631,6 +2881,14 @@ mod tests {
         );
 
         assert!(values.contains(&"global.generation.evaluator.".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_global_log_directive_paths() {
+        let values = completion_values("set global kv global.", &CompletionState::default());
+
+        assert!(values.contains(&"global.display_directive=".to_string()));
+        assert!(values.contains(&"global.logfile_directive=".to_string()));
     }
 
     #[test]
@@ -2659,6 +2917,19 @@ mod tests {
 
         assert!(values.contains(&"false".to_string()));
         assert!(values.contains(&"true".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_enum_values_for_settings_leaf() {
+        let values = completion_values(
+            "set global kv global.log_style.log_format=",
+            &CompletionState::default(),
+        );
+
+        assert!(values.contains(&"Long".to_string()), "{values:?}");
+        assert!(values.contains(&"Short".to_string()), "{values:?}");
+        assert!(values.contains(&"Min".to_string()), "{values:?}");
+        assert!(values.contains(&"None".to_string()), "{values:?}");
     }
 
     #[test]
@@ -2800,6 +3071,48 @@ mod tests {
             "{values:?}"
         );
         assert!(!values.contains(&"--allowed-vertex-interactions".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_builtin_model_restriction_suffixes() {
+        let values = completion_values("import model sm-d", &CompletionState::default());
+
+        assert!(values.contains(&"sm-default".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_ir_profile_select_graphs_and_limits() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ir_profile_entries: sample_ir_profile_entries(),
+            ..CompletionState::default()
+        };
+
+        let graph_values = completion_values(
+            "profile infra-red -p epem_xs -i subtracted --select GL",
+            &completion_state,
+        );
+        assert!(
+            graph_values.contains(&"GL1".to_string()),
+            "{graph_values:?}"
+        );
+        assert!(
+            graph_values.contains(&"GL2".to_string()),
+            "{graph_values:?}"
+        );
+
+        let limit_values = completion_values(
+            "profile infra-red -p epem_xs -i subtracted --select GL1\\ ",
+            &completion_state,
+        );
+        assert!(
+            limit_values.contains(&"GL1\\ C\\[1,2\\]".to_string()),
+            "{limit_values:?}"
+        );
+        assert!(
+            limit_values.contains(&"GL1\\ S\\(3\\)".to_string()),
+            "{limit_values:?}"
+        );
     }
 
     fn visit_args(

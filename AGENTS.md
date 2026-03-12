@@ -44,6 +44,7 @@
 - Rust: use `rustfmt` formatting and address `clippy` warnings before merging.
 - Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
 - Python (bindings and helpers): 4-space indentation; `black` is listed in `pyproject.toml` dev deps.
+- Aggressively use pub(crate) except when absolutely necessary to have fully public exposure (helps monitor unused components with clippy)
 
 ## Testing Guidelines
 - Rust integration tests live in `tests/` (files like `test_runs.rs`).
@@ -76,6 +77,8 @@
 - Breaking Rust/Python API changes are acceptable when they simplify architecture; document major moves in the change description.
 - Backward compatibility with old on-disk GammaLoop states is also currently a non-goal: it is acceptable to rename/remove legacy state files, layouts, and loaders when that simplifies the implementation.
 - Do not keep compatibility fallbacks for old state formats/names unless the task explicitly asks for migration support.
+- The settings serialization model relies on the `SHOWDEFAULTS` escape hatch in `gammalooprs::utils::serde_utils` when writing persisted state defaults and when building completion catalogs from serialized settings.
+- When adding or changing settings fields, verify that `Default::default()` and the corresponding `skip_serializing_if` helper stay aligned; custom helpers must route through `show_defaults_helper(...)` (or `IsDefault::is_default`) or the field will disappear from saved `global_settings.toml` / `default_runtime_settings.toml` and from completion.
 
 ## Configuration & State Tips
 - CLI runs create a `gammaloop_state/` directory by default; keep it out of commits unless intentionally sharing a reproducible state.

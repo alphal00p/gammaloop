@@ -9,7 +9,7 @@ use gammaloop_api::{
     commands::{
         Profile, Renormalize, inspect::Inspect, integrate::Integrate, profile::UltraVioletProfile,
     },
-    state::{ProcessRef, RunHistory},
+    state::{ProcessRef, RunHistory, SyncSettings},
 };
 
 use gammalooprs::{
@@ -38,7 +38,9 @@ use symbolica::{
 use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
-use gammaloop_integration_tests::{clean_test, get_test_cli, get_tests_workspace_path};
+use gammaloop_integration_tests::{
+    clean_test, get_test_cli, get_tests_workspace_path, new_cli_for_test,
+};
 
 #[test]
 fn oak() -> Result<()> {
@@ -1302,22 +1304,32 @@ fn test_simple_workflow_example_card() -> Result<()> {
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("tests crate should live in the workspace root");
-    let run_history =
+    let mut run_history =
         RunHistory::load(workspace_root.join("examples/command_cards/simple_workflow.toml"))?;
+    let state_path = get_tests_workspace_path().join("simple_workflow_example");
 
-    assert_eq!(run_history.commands.len(), 8);
-    assert_eq!(
-        run_history.commands[0].raw_string.as_deref(),
-        Some("import model sm-default")
+    clean_test(&state_path);
+
+    let mut state = new_cli_for_test(&state_path, None);
+    run_history.cli_settings.state.folder = state_path.clone();
+    let mut cli_settings = run_history.cli_settings.clone();
+    cli_settings.sync_settings()?;
+    let mut default_runtime_settings = run_history.default_runtime_settings.clone();
+
+    let _ = run_history.run(&mut state, &mut cli_settings, &mut default_runtime_settings)?;
+
+    assert!(
+        !state.process_list.processes.is_empty(),
+        "No processes were generated"
     );
-    assert_eq!(
-        run_history.cli_settings.state.folder,
-        PathBuf::from("./example_state")
+    assert_eq!(state.model.name, "sm", "Expected SM model to be loaded");
+    assert!(
+        state_path.join("justfile").exists(),
+        "Expected dot export helper files to be created in {}",
+        state_path.display()
     );
-    assert_eq!(
-        run_history.default_runtime_settings.general.mu_r_sq,
-        91.1876
-    );
+
+    clean_test(&state_path);
     Ok(())
 }
 
@@ -1326,13 +1338,18 @@ fn test_advanced_integration_example_card() -> Result<()> {
     let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("tests crate should live in the workspace root");
-    let err =
-        RunHistory::load(workspace_root.join("examples/command_cards/advanced_integration.toml"))
-            .unwrap_err();
-    let error_text = format!("{err:?}");
+    let run_history =
+        RunHistory::load(workspace_root.join("examples/command_cards/advanced_integration.toml"))?;
 
-    assert!(error_text.contains("target_relative_accuracy"));
-    assert!(error_text.contains("unknown field"));
+    assert_eq!(
+        run_history.commands[0].raw_string.as_deref(),
+        Some("import model sm-default")
+    );
+    assert_eq!(
+        run_history.cli_settings.state.folder,
+        PathBuf::from("./advanced_integration_state")
+    );
+    assert_eq!(run_history.default_runtime_settings.kinematics.e_cm, 500.0);
     Ok(())
 }
 

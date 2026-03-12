@@ -9,11 +9,10 @@ path = "src/lib.rs"
 
 [dependencies]
 bincode = { workspace = true, features = ["serde"] }
-clap = { workspace = true }
 color-eyre = "0.6"
 colored = "*"
 eyre = {workspace = true}
-gammaloop_api = { package = "gammaloop-api", path = "../crates/gammaloop-api" }
+gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }
 insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
 itertools = "0.14"

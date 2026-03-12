@@ -387,7 +387,7 @@ pub struct StabilitySettings {
     pub escalate_if_exact_zero: bool,
     #[serde(skip_serializing_if = "is_float::<-1>")]
     pub loop_momenta_norm_escalation_factor: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub recording: Option<StabilityRecordingSettings>,
 }
 

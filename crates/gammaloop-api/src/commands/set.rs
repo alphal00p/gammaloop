@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{fs, path::PathBuf, str::FromStr};
 
 use clap::Subcommand;
 use color_eyre::Result;
@@ -12,6 +12,7 @@ use gammalooprs::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use spenso::algebra::complex::Complex;
 use tracing::warn;
 
@@ -113,8 +114,12 @@ impl Set {
             }
             Self::Global { input } => {
                 let fig = Figment::from(Serialized::defaults(&global_settings));
+                let updates_display_directive = input.updates_global_display_directive()?;
 
                 *global_settings = input.merge_figment(fig)?.extract()?;
+                if updates_display_directive {
+                    crate::tracing::set_stderr_log_filter_override(None)?;
+                }
                 global_settings.sync_settings()?;
             }
             Self::DefaultRuntime { input } => {
@@ -217,6 +222,52 @@ impl FromStr for KvPair {
     }
 }
 impl SetArgs {
+    pub fn updates_global_display_directive(&self) -> Result<bool> {
+        match self {
+            SetArgs::Kv { pairs } => Ok(pairs
+                .iter()
+                .any(|pair| pair.key == "global.display_directive")),
+            SetArgs::String { string } => {
+                let value: toml::Value = toml::from_str(string).with_context(|| {
+                    "Failed parsing TOML payload while checking for global.display_directive"
+                })?;
+                Ok(toml_contains_path(&value, &["global", "display_directive"]))
+            }
+            SetArgs::File { file } => {
+                let ext = file
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                let contents = fs::read_to_string(file).with_context(|| {
+                    format!("Failed reading settings file '{}'", file.display())
+                })?;
+                match ext.as_str() {
+                    "toml" => {
+                        let value: toml::Value = toml::from_str(&contents).with_context(|| {
+                            format!(
+                                "Failed parsing TOML settings file '{}' while checking for global.display_directive",
+                                file.display()
+                            )
+                        })?;
+                        Ok(toml_contains_path(&value, &["global", "display_directive"]))
+                    }
+                    "json" => {
+                        let value: JsonValue = serde_json::from_str(&contents).with_context(|| {
+                            format!(
+                                "Failed parsing JSON settings file '{}' while checking for global.display_directive",
+                                file.display()
+                            )
+                        })?;
+                        Ok(json_contains_path(&value, &["global", "display_directive"]))
+                    }
+                    _ => Ok(false),
+                }
+            }
+            SetArgs::Stored | SetArgs::Defaults => Ok(false),
+        }
+    }
+
     pub fn merge_figment(&self, fig: Figment) -> Result<Figment> {
         match self {
             SetArgs::File { file } => {
@@ -254,6 +305,26 @@ impl SetArgs {
 use serde_json::Value as J;
 use serde_yaml::Value as Y;
 
+fn toml_contains_path(value: &toml::Value, path: &[&str]) -> bool {
+    match path.split_first() {
+        None => true,
+        Some((head, tail)) => value
+            .as_table()
+            .and_then(|table| table.get(*head))
+            .is_some_and(|next| toml_contains_path(next, tail)),
+    }
+}
+
+fn json_contains_path(value: &JsonValue, path: &[&str]) -> bool {
+    match path.split_first() {
+        None => true,
+        Some((head, tail)) => value
+            .as_object()
+            .and_then(|table| table.get(*head))
+            .is_some_and(|next| json_contains_path(next, tail)),
+    }
+}
+
 fn infer_cli_value(raw: &str) -> Result<J> {
     // 1) Try strict JSON (numbers/bools work; strings need quotes)
     if let Ok(v) = json5::from_str::<J>(raw) {
@@ -290,7 +361,7 @@ fn yaml_to_json(v: Y) -> Result<J> {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Mutex};
 
     use clap::Parser;
     use figment::{providers::Serialized, Figment};
@@ -304,6 +375,7 @@ mod test {
 
     use crate::{
         state::{ProcessRef, State},
+        tracing::{get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override},
         CLISettings, Repl,
     };
 
@@ -596,5 +668,83 @@ integrate = 10
 
         let err_text = format!("{err:?}");
         assert!(!err_text.is_empty());
+    }
+
+    #[test]
+    fn updates_global_display_directive_detects_kv_string_and_file_inputs() {
+        let tmp_name = format!(
+            "gammaloop_set_display_directive_{}_{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let file_path = std::env::temp_dir().join(tmp_name);
+        std::fs::write(
+            &file_path,
+            "[global]\ndisplay_directive = \"warn\"\nlogfile_directive = \"off\"\n",
+        )
+        .unwrap();
+
+        assert!(SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.display_directive".to_string(),
+                value: "warn".to_string(),
+            }]
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        assert!(SetArgs::String {
+            string: "[global]\ndisplay_directive = \"warn\"\n".to_string(),
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        assert!(SetArgs::File {
+            file: file_path.clone(),
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        assert!(!SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.n_cores.generate".to_string(),
+                value: "4".to_string(),
+            }]
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        let _ = std::fs::remove_file(file_path);
+    }
+
+    #[test]
+    fn set_global_display_directive_clears_cli_stderr_override() {
+        static TEST_MUTEX: Mutex<()> = Mutex::new(());
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+
+        set_stderr_log_filter("info").unwrap();
+        set_stderr_log_filter_override(Some("gammaloop_api=debug,gammalooprs=debug".to_string()))
+            .unwrap();
+
+        Set::Global {
+            input: SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.display_directive".to_string(),
+                    value: "warn".to_string(),
+                }],
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut runtime_settings)
+        .unwrap();
+
+        assert_eq!(cli_settings.global.display_directive, "warn");
+        assert_eq!(get_stderr_log_filter(), "warn");
     }
 }

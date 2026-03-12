@@ -15,7 +15,7 @@ use crate::{
     processes::EvaluatorSettings,
     utils::{
         GS, W_,
-        serde_utils::{IsDefault, is_false, is_float, is_true, is_usize},
+        serde_utils::{IsDefault, is_false, is_float, is_true, is_usize, show_defaults_helper},
         symbolica_ext::StringSerializedAtom,
     },
     uv::UVgenerationSettings,
@@ -109,7 +109,7 @@ pub fn gpp() -> String {
 }
 
 pub fn is_gpp(compiler: &str) -> bool {
-    "g++" == compiler
+    show_defaults_helper("g++" == compiler)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]

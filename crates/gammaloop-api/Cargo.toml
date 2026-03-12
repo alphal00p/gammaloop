@@ -16,7 +16,6 @@ build = "build.rs"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-name = "_gammaloop"
 path = "src/lib.rs"
 
 [[bin]]
@@ -52,14 +51,15 @@ linnet = { workspace = true, features = [
   "serde",
   "symbolica",
 ] }
-ndarray = { version = "0.16" }
+ndarray = { version = "0.17" }
 nu-ansi-term = { workspace = true }
 numpy = { workspace = true , optional = true }
 pyo3-stub-gen = { workspace = true, optional = true }
 rand = { workspace = true, features = ["small_rng"] }
 rayon = { workspace = true }
 reedline = "0.42.0"
-# clap_complete = { version = "4.5.57", features = ["unstable-dynamic"] }
+clap_complete = "4.5.57"
+clap_complete_nushell = "4.5.10"
 regex = "1.11.2"
 rust-embed = { version = "8.4", features = ["interpolate-folder-path"] }
 schemars = { workspace = true }
