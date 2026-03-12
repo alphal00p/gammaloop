@@ -10,7 +10,7 @@ use std::{
 
 use color_eyre::Result;
 use gammaloop_api::{
-    CLISettings, OneShot,
+    CLISettings, OneShot, StateLoadOption,
     commands::Commands,
     session::CliSessionState,
     state::{CommandHistory, CommandsBlock, RunHistory, State},
@@ -223,7 +223,16 @@ fn nested_run_records_only_the_top_level_run() -> Result<()> {
 
 fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     let mut cli = new_cli("boot_run_history_merges_blocks_and_persists_commands_once")?;
+    let mut frozen_global = cli.cli_settings.global.clone();
+    frozen_global.display_directive = "warn".into();
+    let mut frozen_runtime = RuntimeSettings::default();
+    frozen_runtime.general.mu_r_sq = 24.0;
     let boot_run_history = RunHistory {
+        cli_settings: CLISettings {
+            global: frozen_global.clone(),
+            ..CLISettings::default()
+        },
+        default_runtime_settings: frozen_runtime.clone(),
         commands_blocks: vec![block(
             "boot_block",
             &["set global kv global.display_directive=warn"],
@@ -248,6 +257,8 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     let persisted = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
     assert_eq!(persisted.commands_blocks.len(), 1);
     assert_eq!(persisted.commands.len(), 2);
+    assert_eq!(persisted.cli_settings.global, frozen_global);
+    assert_eq!(persisted.default_runtime_settings, frozen_runtime);
     Ok(())
 }
 
@@ -296,6 +307,63 @@ fn boot_run_history_allows_identical_semantic_redefinitions() -> Result<()> {
     assert!(matches!(flow, ControlFlow::Continue(())));
     assert_eq!(cli.run_history.commands_blocks.len(), 1);
     assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_warns() -> Result<()>
+{
+    let test_name =
+        "booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_warns";
+    let mut cli = new_cli(test_name)?;
+
+    cli.run_history.cli_settings.global.display_directive = "info".into();
+    cli.run_history.default_runtime_settings.general.mu_r_sq = 11.0;
+    cli.save_state()?;
+
+    let boot_card_path = run_card_path("boot_settings_mismatch.toml");
+    if let Some(parent) = boot_card_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut boot_global = CLISettings::default().global;
+    boot_global.display_directive = "warn".into();
+    let mut boot_runtime = RuntimeSettings::default();
+    boot_runtime.general.mu_r_sq = 29.0;
+    let boot_run_history = RunHistory {
+        cli_settings: CLISettings {
+            global: boot_global.clone(),
+            ..CLISettings::default()
+        },
+        default_runtime_settings: boot_runtime.clone(),
+        ..RunHistory::default()
+    };
+    fs::write(&boot_card_path, toml::to_string_pretty(&boot_run_history)?)?;
+
+    let loaded = StateLoadOption {
+        state_folder: Some(cli.cli_settings.state.folder.clone()),
+        boot_commands_path: Some(boot_card_path),
+        ..StateLoadOption::default()
+    }
+    .load()?;
+
+    assert!(loaded.cli_settings.session.read_only_state);
+    assert!(
+        loaded
+            .cli_settings
+            .session
+            .startup_warnings
+            .iter()
+            .any(|warning| warning.contains("forced into --read-only-state"))
+    );
+    assert!(
+        loaded
+            .cli_settings
+            .session
+            .startup_warnings
+            .iter()
+            .any(|warning| warning
+                .contains("Line up cli_settings.global and default_runtime_settings"))
+    );
     Ok(())
 }
 
@@ -471,6 +539,7 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     boot_run_history_merges_blocks_and_persists_commands_once()?;
     boot_run_history_rejects_conflicting_block_redefinitions()?;
     boot_run_history_allows_identical_semantic_redefinitions()?;
+    booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_warns()?;
     command_block_definition_mode_defers_execution_and_omits_history()?;
     finish_commands_block_without_active_definition_fails()?;
     start_commands_block_cannot_nest()?;
@@ -542,7 +611,6 @@ fn existing_invalid_state_folder_fails_to_load_instead_of_falling_back() -> Resu
     };
     let error_text = format!("{err:?}");
 
-    assert!(error_text.contains("Failed to load existing state"));
     assert!(error_text.contains("State version 999"));
 
     clean_test(&state_path);

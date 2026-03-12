@@ -8,6 +8,7 @@ use std::{
 
 use clap::Parser;
 use console::style;
+use gammalooprs::model::ParameterType;
 use gammalooprs::settings::RuntimeSettings;
 use serde_json::Value as JsonValue;
 
@@ -30,10 +31,16 @@ pub struct CompletionState {
     commands_block_names: Vec<String>,
     process_entries: Vec<ProcessCompletionEntry>,
     ir_profile_entries: Vec<IrProfileCompletionEntry>,
-    model_parameter_names: Vec<String>,
+    model_parameter_entries: Vec<ModelParameterCompletionEntry>,
     model_particle_names: Vec<String>,
     model_coupling_names: Vec<String>,
     model_vertex_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelParameterCompletionEntry {
+    pub name: String,
+    pub parameter_type: ParameterType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,7 +97,7 @@ impl SharedCompletionState {
             state.commands_block_names = session.current_commands_block_names();
             state.process_entries = session.current_process_entries();
             state.ir_profile_entries = session.current_ir_profile_entries();
-            state.model_parameter_names = session.current_model_parameter_names();
+            state.model_parameter_entries = session.current_model_parameter_entries();
             state.model_particle_names = session.current_model_particle_names();
             state.model_coupling_names = session.current_model_coupling_names();
             state.model_vertex_names = session.current_model_vertex_names();
@@ -1105,6 +1112,7 @@ fn add_model_parameter_suggestions(
 ) {
     let current = context.current_token.cooked.as_str();
     if current.contains('=') {
+        add_model_parameter_value_hint(context, completion_state, pos, suggestions, seen);
         return;
     }
 
@@ -1122,7 +1130,8 @@ fn add_model_parameter_suggestions(
         assigned.insert(key.trim().to_string());
     }
 
-    for name in &completion_state.model_parameter_names {
+    for entry in &completion_state.model_parameter_entries {
+        let name = &entry.name;
         if assigned.contains(name) || !(current.is_empty() || name.starts_with(current)) {
             continue;
         }
@@ -1140,6 +1149,44 @@ fn add_model_parameter_suggestions(
             append_whitespace: false,
         });
     }
+}
+
+fn add_model_parameter_value_hint(
+    context: &CommandContext<'_>,
+    completion_state: &CompletionState,
+    pos: usize,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let parameter_type = context
+        .current_token
+        .cooked
+        .split_once('=')
+        .and_then(|(name, _)| {
+            completion_state
+                .model_parameter_entries
+                .iter()
+                .find(|entry| entry.name == name.trim())
+                .map(|entry| entry.parameter_type.clone())
+        });
+    let hint = crate::commands::set::model_value_format_hint(parameter_type);
+    let rendered = render_value_completion(
+        context.current_token.cooked.as_str(),
+        context.current_token.quote_style,
+    );
+    let marker = format!("{}::{hint}", rendered);
+    if !seen.insert(marker) {
+        return;
+    }
+
+    suggestions.push(Suggestion {
+        value: rendered,
+        description: Some(hint.to_string()),
+        style: None,
+        extra: None,
+        span: Span::new(context.current_token.start, pos),
+        append_whitespace: false,
+    });
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2561,6 +2608,7 @@ mod tests {
     use std::fs;
 
     use clap::CommandFactory;
+    use gammalooprs::model::ParameterType;
     use tempfile::tempdir;
 
     use crate::{
@@ -2569,8 +2617,8 @@ mod tests {
     };
 
     use super::{
-        collect_completions, CompletionState, IrProfileCompletionEntry, ProcessCompletionEntry,
-        ProcessKind,
+        collect_completions, CompletionState, IrProfileCompletionEntry,
+        ModelParameterCompletionEntry, ProcessCompletionEntry, ProcessKind,
     };
 
     fn sample_process_entries() -> Vec<ProcessCompletionEntry> {
@@ -2726,7 +2774,16 @@ mod tests {
     #[test]
     fn completion_offers_external_model_parameters_for_set_model() {
         let completion_state = CompletionState {
-            model_parameter_names: vec!["alpha".to_string(), "beta".to_string()],
+            model_parameter_entries: vec![
+                ModelParameterCompletionEntry {
+                    name: "alpha".to_string(),
+                    parameter_type: ParameterType::Real,
+                },
+                ModelParameterCompletionEntry {
+                    name: "beta".to_string(),
+                    parameter_type: ParameterType::Imaginary,
+                },
+            ],
             ..CompletionState::default()
         };
 
@@ -2738,10 +2795,19 @@ mod tests {
     #[test]
     fn completion_skips_already_assigned_model_parameters() {
         let completion_state = CompletionState {
-            model_parameter_names: vec![
-                "alpha".to_string(),
-                "beta".to_string(),
-                "gamma".to_string(),
+            model_parameter_entries: vec![
+                ModelParameterCompletionEntry {
+                    name: "alpha".to_string(),
+                    parameter_type: ParameterType::Real,
+                },
+                ModelParameterCompletionEntry {
+                    name: "beta".to_string(),
+                    parameter_type: ParameterType::Real,
+                },
+                ModelParameterCompletionEntry {
+                    name: "gamma".to_string(),
+                    parameter_type: ParameterType::Imaginary,
+                },
             ],
             ..CompletionState::default()
         };
@@ -2750,6 +2816,46 @@ mod tests {
 
         assert_eq!(values, vec!["beta=".to_string()]);
         assert!(!values.contains(&"alpha=".to_string()));
+    }
+
+    #[test]
+    fn completion_shows_real_format_hint_for_set_model_values() {
+        let suggestions = completion_suggestions(
+            "set model alpha=",
+            &CompletionState {
+                model_parameter_entries: vec![ModelParameterCompletionEntry {
+                    name: "alpha".to_string(),
+                    parameter_type: ParameterType::Real,
+                }],
+                ..CompletionState::default()
+            },
+        );
+
+        assert!(suggestions.iter().any(|suggestion| {
+            suggestion.description.as_deref()
+                == Some(crate::commands::set::MODEL_REAL_VALUE_FORMAT_HINT)
+                && suggestion.value == "alpha="
+        }));
+    }
+
+    #[test]
+    fn completion_shows_complex_format_hint_for_complex_set_model_values() {
+        let suggestions = completion_suggestions(
+            "set model beta=",
+            &CompletionState {
+                model_parameter_entries: vec![ModelParameterCompletionEntry {
+                    name: "beta".to_string(),
+                    parameter_type: ParameterType::Imaginary,
+                }],
+                ..CompletionState::default()
+            },
+        );
+
+        assert!(suggestions.iter().any(|suggestion| {
+            suggestion.description.as_deref()
+                == Some(crate::commands::set::MODEL_COMPLEX_VALUE_FORMAT_HINT)
+                && suggestion.value == "beta="
+        }));
     }
 
     #[test]

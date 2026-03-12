@@ -9,10 +9,19 @@ profile_override=""
 if [ "${1-}" = "--release" ]; then
     profile_override="release"
     shift
+elif [ "${1-}" = "-r" ]; then
+    profile_override="release"
+    shift
 elif [ "${1-}" = "--dev-optim" ]; then
     profile_override="dev-optim"
     shift
+elif [ "${1-}" = "-o" ]; then
+    profile_override="dev-optim"
+    shift
 elif [ "${1-}" = "--debug" ]; then
+    profile_override="debug"
+    shift
+elif [ "${1-}" = "-d" ]; then
     profile_override="debug"
     shift
 fi

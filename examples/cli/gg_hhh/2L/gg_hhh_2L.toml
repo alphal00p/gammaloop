@@ -37,17 +37,17 @@ commands = [
 [[commands_blocks]]
 name = "setup_euclidean_configuration"
 commands = [
-    "set model MT={re:1000.0,im:0.0}",
-    "set model WT={re:0.0,im:0.0}",
-    "set model ymt={re:1000.0,im:0.0}",
+    "set model MT=1000.0",
+    "set model WT=0.0",
+    "set model ymt=1000.0",
 ]
 
 [[commands_blocks]]
 name = "setup_physical_configuration"
 commands = [
-    "set model MT={re:173.0,im:0.0}",
-    "set model WT={re:0.0,im:0.0}",
-    "set model ymt={re:173.0,im:0.0}",
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
 ]
 
 [[commands_blocks]]

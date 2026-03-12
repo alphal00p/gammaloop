@@ -5,7 +5,7 @@ use colored::Colorize;
 use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::processes::ProcessCollection;
 use gammalooprs::settings::RuntimeSettings;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     commands::{
@@ -80,13 +80,35 @@ impl<'a> CliSession<'a> {
     pub fn apply_boot_run_history(
         &mut self,
         boot_run_history: &RunHistory,
+        effective_boot_run_history: &RunHistory,
+        booted_existing_state: bool,
     ) -> Result<ControlFlow<SaveState>> {
         boot_run_history.validate()?;
 
-        let mut merged_history = self.run_history.clone();
-        merged_history.merge_commands_blocks(&boot_run_history.commands_blocks)?;
+        if booted_existing_state
+            && !self
+                .run_history
+                .frozen_boot_settings_match(boot_run_history)
+        {
+            let warning = format!(
+                "Boot card settings differ from the frozen settings stored in {}. This session is forced into --read-only-state. Line up cli_settings.global and default_runtime_settings in the boot card with the frozen settings in run.toml if you want to boot this state without read-only mode.",
+                self.cli_settings.state.folder.join("run.toml").display()
+            );
+            self.cli_settings.session.read_only_state = true;
+            self.cli_settings
+                .session
+                .startup_warnings
+                .push(warning.clone());
+            warn!("{warning}");
+        }
+        if !booted_existing_state {
+            self.run_history.freeze_boot_settings_from(boot_run_history);
+        }
 
-        for block in &boot_run_history.commands_blocks {
+        let mut merged_history = self.run_history.clone();
+        merged_history.merge_commands_blocks(&effective_boot_run_history.commands_blocks)?;
+
+        for block in &effective_boot_run_history.commands_blocks {
             let block_context = format!("command block '{}'", block.name);
             let _ = prepare_command_histories_with_context(
                 &block.commands,
@@ -97,15 +119,15 @@ impl<'a> CliSession<'a> {
         }
 
         let prepared = prepare_command_histories_with_context(
-            &boot_run_history.commands,
+            &effective_boot_run_history.commands,
             &merged_history,
             1,
             "boot",
         )?;
 
         self.run_history
-            .merge_commands_blocks(&boot_run_history.commands_blocks)?;
-        boot_run_history
+            .merge_commands_blocks(&effective_boot_run_history.commands_blocks)?;
+        effective_boot_run_history
             .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;
         self.execute_prepared_commands(prepared, HistoryMode::Record)
     }
@@ -208,15 +230,25 @@ impl<'a> CliSession<'a> {
             .collect()
     }
 
-    pub fn current_model_parameter_names(&self) -> Vec<String> {
-        let mut names = self
+    pub fn current_model_parameter_entries(
+        &self,
+    ) -> Vec<crate::repl::ModelParameterCompletionEntry> {
+        let mut entries = self
             .state
             .model_parameters
             .keys()
-            .map(|name| name.to_string())
+            .filter_map(|name| {
+                self.state
+                    .model
+                    .get_parameter_opt(name.to_string())
+                    .map(|parameter| crate::repl::ModelParameterCompletionEntry {
+                        name: name.to_string(),
+                        parameter_type: parameter.parameter_type.clone(),
+                    })
+            })
             .collect::<Vec<_>>();
-        names.sort();
-        names
+        entries.sort_by(|left, right| left.name.cmp(&right.name));
+        entries
     }
 
     pub fn current_model_particle_names(&self) -> Vec<String> {

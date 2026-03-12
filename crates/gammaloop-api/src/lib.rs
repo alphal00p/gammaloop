@@ -30,7 +30,9 @@ use repl::ClapEditor;
 use repl::ReadCommandOutput;
 use session::{CliSession, CliSessionState};
 use tracing::{
-    get_stderr_log_filter_label, set_log_format_override, set_stderr_log_filter_override,
+    configure_file_log_boot_mode, get_stderr_log_filter_label, set_file_log_filter,
+    set_file_log_filter_override, set_log_format_override, set_log_style, set_stderr_log_filter,
+    set_stderr_log_filter_override,
 };
 
 // use clap_repl::{
@@ -58,7 +60,9 @@ use reedline::{Prompt, PromptEditMode, PromptHistorySearch};
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use state::{CommandHistory, RunHistory, State, SyncSettings};
+use state::{
+    classify_state_folder, CommandHistory, RunHistory, State, StateFolderKind, SyncSettings,
+};
 use std::{borrow::Cow, ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
 use std::{fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use walkdir::WalkDir;
@@ -140,9 +144,17 @@ pub struct OneShot {
     #[arg(short = 'l')]
     level: Option<LogLevel>,
 
+    /// Set logfile log level for current session
+    #[arg(short = 'L', long = "logfile-level")]
+    logfile_level: Option<LogLevel>,
+
     /// Type of prefix for the logging format
     #[arg(short = 'p', long = "logging_prefix")]
     logging_prefix: Option<LogFormat>,
+
+    /// Prevent writes into the state folder for the lifetime of this session
+    #[arg(long, default_value_t = false)]
+    read_only_state: bool,
 
     /// Path to a global settings TOML file.
     #[arg(short = 'g', long = "settings-global", value_hint = clap::ValueHint::FilePath)]
@@ -182,7 +194,7 @@ enum CompletionShell {
     Nushell,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct CLISettings {
     #[serde(skip_serializing_if = "is_true")]
@@ -193,6 +205,9 @@ pub struct CLISettings {
     pub state: StateSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub global: GlobalSettings,
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub session: SessionSettings,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
@@ -206,6 +221,17 @@ pub struct StateSettings {
         deserialize_with = "deserialize_optional_nonempty_string"
     )]
     pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
+#[serde(default, deny_unknown_fields)]
+pub struct SessionSettings {
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub read_only_state: bool,
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub startup_warnings: Vec<String>,
 }
 
 impl Default for StateSettings {
@@ -266,7 +292,17 @@ impl Default for CLISettings {
             override_state: false,
             state: StateSettings::default(),
             global: GlobalSettings::default(),
+            session: SessionSettings::default(),
         }
+    }
+}
+
+impl PartialEq for CLISettings {
+    fn eq(&self, other: &Self) -> bool {
+        self.try_strings == other.try_strings
+            && self.override_state == other.override_state
+            && self.state == other.state
+            && self.global == other.global
     }
 }
 
@@ -277,15 +313,97 @@ impl CLISettings {
         self.override_state = cli.override_state;
 
         self.state.folder = cli.state_folder.clone();
+        self.session.read_only_state = cli.read_only_state;
     }
 }
 
 impl SmartSerde for CLISettings {}
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct StateLoadOption {
+    pub fresh_state: bool,
+    pub boot_commands_path: Option<PathBuf>,
+    pub state_folder: Option<PathBuf>,
+    pub model_file: Option<PathBuf>,
+    pub trace_logs_filename: Option<String>,
+    pub level: Option<LogLevel>,
+    pub logfile_level: Option<LogLevel>,
+    pub logging_prefix: Option<LogFormat>,
+    pub read_only_state: bool,
+    pub settings_global_path: Option<PathBuf>,
+    pub settings_runtime_defaults_path: Option<PathBuf>,
+}
+
+impl Default for StateLoadOption {
+    fn default() -> Self {
+        Self {
+            fresh_state: false,
+            boot_commands_path: None,
+            state_folder: None,
+            model_file: None,
+            trace_logs_filename: None,
+            level: None,
+            logfile_level: None,
+            logging_prefix: None,
+            read_only_state: false,
+            settings_global_path: None,
+            settings_runtime_defaults_path: None,
+        }
+    }
+}
+
+pub struct LoadedState {
+    pub state: State,
+    pub run_history: RunHistory,
+    pub cli_settings: CLISettings,
+    pub default_runtime_settings: RuntimeSettings,
+    pub session_state: CliSessionState,
+    pub state_load_summary: Option<StateLoadSummary>,
+}
+
 pub struct Parsed {
     pub cli: OneShot,
     pub input_string: String,
     pub matches: clap::ArgMatches,
+}
+
+impl StateLoadOption {
+    fn into_oneshot(self) -> OneShot {
+        let state_folder_explicitly_set = self.state_folder.is_some();
+        OneShot {
+            fresh_state: self.fresh_state,
+            boot_commands_path: self.boot_commands_path,
+            state_folder: self
+                .state_folder
+                .unwrap_or_else(|| PathBuf::from("./gammaloop_state")),
+            state_folder_explicitly_set,
+            model_file: self.model_file,
+            no_save_state: true,
+            override_state: false,
+            trace_logs_filename: self.trace_logs_filename,
+            level: self.level,
+            logfile_level: self.logfile_level,
+            logging_prefix: self.logging_prefix,
+            read_only_state: self.read_only_state,
+            settings_global_path: self.settings_global_path,
+            settings_runtime_defaults_path: self.settings_runtime_defaults_path,
+            no_try_strings: false,
+            completions: None,
+            command: None,
+        }
+    }
+
+    pub fn load(self) -> Result<LoadedState> {
+        initialise()?;
+        let mut one_shot = self.into_oneshot();
+        let (loaded_state, boot_exit) = one_shot.bootstrap_session()?;
+        if boot_exit.is_some() {
+            return Err(eyre::eyre!(
+                "Boot run history requested to exit, which is not supported by the API state-load entry point"
+            ));
+        }
+        Ok(loaded_state)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -324,9 +442,9 @@ impl SettingsFileOverrides {
 
 #[derive(Debug, Clone)]
 pub struct StateLoadSummary {
-    elapsed: Duration,
-    serialized_size_bytes: Option<u64>,
-    total_graphs: usize,
+    pub elapsed: Duration,
+    pub serialized_size_bytes: Option<u64>,
+    pub total_graphs: usize,
 }
 
 #[derive(Clone)]
@@ -496,6 +614,10 @@ impl OneShot {
                 ..StateSettings::default()
             },
             global,
+            session: SessionSettings {
+                read_only_state: self.read_only_state,
+                ..SessionSettings::default()
+            },
         }
     }
 
@@ -509,7 +631,9 @@ impl OneShot {
             override_state: false,
             command: None,
             level: None,
+            logfile_level: None,
             logging_prefix: None,
+            read_only_state: false,
             settings_global_path: None,
             settings_runtime_defaults_path: None,
             no_try_strings: false,
@@ -517,6 +641,77 @@ impl OneShot {
             fresh_state: false,
             trace_logs_filename: None,
         }
+    }
+
+    fn current_state_folder_kind(&self) -> Result<StateFolderKind> {
+        if self.fresh_state {
+            return Ok(StateFolderKind::Missing);
+        }
+        classify_state_folder(&self.state_folder)
+    }
+
+    fn initial_cli_settings_for_startup(
+        &self,
+        state_folder_kind: &StateFolderKind,
+        boot_run_history: Option<&RunHistory>,
+        settings_file_overrides: &SettingsFileOverrides,
+    ) -> Result<CLISettings> {
+        let mut cli_settings = match state_folder_kind {
+            StateFolderKind::Saved => Self::load_global_settings_file(&self.state_folder)?,
+            StateFolderKind::Missing | StateFolderKind::Scratch => boot_run_history
+                .map(|run_history| run_history.cli_settings.clone())
+                .unwrap_or_else(|| self.new_cli_settings(GlobalSettings::default())),
+            StateFolderKind::Invalid(reason) => {
+                return Err(eyre::eyre!(reason.clone()));
+            }
+        };
+        cli_settings.override_with(self);
+        if let Some(global) = &settings_file_overrides.global {
+            cli_settings.global = global.clone();
+        }
+        Ok(cli_settings)
+    }
+
+    fn configure_startup_tracing(&self, cli_settings: &CLISettings) -> Result<()> {
+        if self.read_only_state && !matches!(self.logfile_level, None | Some(LogLevel::Off)) {
+            return Err(eyre::eyre!(
+                "--read-only-state is incompatible with enabling logfile output"
+            ));
+        }
+
+        set_file_log_filter(&cli_settings.global.logfile_directive)?;
+        set_stderr_log_filter(&cli_settings.global.display_directive)?;
+        set_log_style(cli_settings.global.log_style.clone());
+        set_log_format_override(self.logging_prefix);
+        set_stderr_log_filter_override(
+            self.level
+                .map(|level| level.to_cli_display_directive_spec().to_string()),
+        )?;
+
+        let (file_override, hard_disable_file_logs, hard_disable_reason) = if self.read_only_state {
+            (
+                Some(LogLevel::Off.to_cli_logfile_directive_spec().to_string()),
+                true,
+                Some("--read-only-state"),
+            )
+        } else if matches!(self.logfile_level, Some(LogLevel::Off)) {
+            (
+                Some(LogLevel::Off.to_cli_logfile_directive_spec().to_string()),
+                true,
+                Some("--logfile-level off"),
+            )
+        } else {
+            (
+                self.logfile_level
+                    .map(|level| level.to_cli_logfile_directive_spec().to_string()),
+                false,
+                None,
+            )
+        };
+
+        set_file_log_filter_override(file_override)?;
+        configure_file_log_boot_mode(hard_disable_file_logs, hard_disable_reason)?;
+        Ok(())
     }
 
     fn load_boot_run_history(&self) -> Result<Option<RunHistory>> {
@@ -620,8 +815,11 @@ impl OneShot {
         Ok(self.state_folder.clone())
     }
 
-    pub fn load(
+    fn load_with_boot_context(
         &mut self,
+        state_folder_kind: StateFolderKind,
+        boot_run_history: Option<&RunHistory>,
+        settings_file_overrides: &SettingsFileOverrides,
     ) -> Result<(
         State,
         RunHistory,
@@ -629,79 +827,86 @@ impl OneShot {
         RuntimeSettings,
         Option<StateLoadSummary>,
     )> {
-        let state_exists = self.state_folder.exists();
+        let startup_cli_settings = self.initial_cli_settings_for_startup(
+            &state_folder_kind,
+            boot_run_history,
+            settings_file_overrides,
+        )?;
+        self.configure_startup_tracing(&startup_cli_settings)?;
 
         let (state, run_history, cli_settings, default_runtime_settings, load_summary) =
-            if !self.fresh_state && state_exists {
-                let load_started = Instant::now();
-                let state = State::load(
-                    self.state_folder.clone(),
-                    self.model_file.clone(),
-                    self.trace_logs_filename.clone(),
-                )
-                .wrap_err_with(|| {
-                    format!(
-                        "Failed to load existing state from {}",
-                        self.state_folder.display()
+            match state_folder_kind {
+                StateFolderKind::Saved => {
+                    let load_started = Instant::now();
+                    let state = State::load(
+                        self.state_folder.clone(),
+                        self.model_file.clone(),
+                        self.trace_logs_filename.clone(),
                     )
-                })?;
+                    .wrap_err_with(|| {
+                        format!(
+                            "Failed to load existing state from {}",
+                            self.state_folder.display()
+                        )
+                    })?;
 
-                let mut global = match Self::load_global_settings_file(&self.state_folder) {
-                    Ok(a) => a,
-                    Err(e) => return Err(e),
-                };
+                    let default_runtime = match RuntimeSettings::from_file_typed(
+                        self.state_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
+                    ) {
+                        Ok(a) => a,
+                        Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
+                        Err(e) => return Err(e.into()),
+                    };
+                    let run_path = self.state_folder.join("run.toml");
+                    let run_history = if run_path.exists() {
+                        RunHistory::load(run_path)?
+                    } else {
+                        RunHistory::default()
+                    };
 
-                global.override_with(self);
+                    let load_summary = StateLoadSummary {
+                        elapsed: load_started.elapsed(),
+                        serialized_size_bytes: serialized_size_of_path(&self.state_folder),
+                        total_graphs: total_graph_count(&state),
+                    };
 
-                let default_runtime = match RuntimeSettings::from_file_typed(
-                    self.state_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
-                ) {
-                    Ok(a) => a,
-                    Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
-                    Err(e) => return Err(e.into()),
-                };
-                let run_path = self.state_folder.join("run.toml");
-                let run_history = if run_path.exists() {
-                    RunHistory::load(run_path)?
-                } else {
-                    RunHistory::default()
-                };
-
-                let load_summary = StateLoadSummary {
-                    elapsed: load_started.elapsed(),
-                    serialized_size_bytes: serialized_size_of_path(&self.state_folder),
-                    total_graphs: total_graph_count(&state),
-                };
-
-                (
-                    state,
-                    run_history,
-                    global,
-                    default_runtime,
-                    Some(load_summary),
-                )
-            } else {
-                if self.fresh_state && state_exists {
-                    info!(
-                        "{} {}",
-                        "Starting fresh state in".blue(),
-                        self.state_folder.display().to_string().green()
-                    );
-                } else {
-                    info!(
-                        "{} {}",
-                        "Initializing new state in".blue(),
-                        self.state_folder.display().to_string().green()
-                    );
+                    (
+                        state,
+                        run_history,
+                        startup_cli_settings,
+                        default_runtime,
+                        Some(load_summary),
+                    )
                 }
+                StateFolderKind::Missing | StateFolderKind::Scratch => {
+                    if self.fresh_state && self.state_folder.exists() {
+                        info!(
+                            "{} {}",
+                            "Starting fresh state in".blue(),
+                            self.state_folder.display().to_string().green()
+                        );
+                    } else {
+                        info!(
+                            "{} {}",
+                            "Initializing new state in".blue(),
+                            self.state_folder.display().to_string().green()
+                        );
+                    }
 
-                (
-                    State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
-                    RunHistory::default(),
-                    self.new_cli_settings(GlobalSettings::default()),
-                    RuntimeSettings::default(),
-                    None,
-                )
+                    let mut run_history = RunHistory::default();
+                    if let Some(boot_run_history) = boot_run_history {
+                        run_history.freeze_boot_settings_from(boot_run_history);
+                    }
+
+                    (
+                        State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
+                        run_history,
+                        startup_cli_settings,
+                        RuntimeSettings::default(),
+                        None,
+                    )
+                }
+                StateFolderKind::Invalid(_) => unreachable!(),
             };
 
         cli_settings.sync_settings()?;
@@ -715,22 +920,38 @@ impl OneShot {
         ))
     }
 
-    pub fn run(mut self, raw: String) -> Result<()> {
-        if let Some(shell) = self.completions {
-            print!("{}", generate_completion_script(shell));
-            return Ok(());
-        }
-
-        initialise()?;
-        set_log_format_override(self.logging_prefix);
-        set_stderr_log_filter_override(
-            self.level
-                .map(|level| level.to_cli_display_directive_spec().to_string()),
-        )?;
-
+    pub fn load(
+        &mut self,
+    ) -> Result<(
+        State,
+        RunHistory,
+        CLISettings,
+        RuntimeSettings,
+        Option<StateLoadSummary>,
+    )> {
         let boot_run_history = self.load_boot_run_history()?;
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
+        let state_folder_kind = self.current_state_folder_kind()?;
+        if let StateFolderKind::Invalid(reason) = &state_folder_kind {
+            return Err(eyre::eyre!(reason.clone()));
+        }
+        self.load_with_boot_context(
+            state_folder_kind,
+            boot_run_history.as_ref(),
+            &settings_file_overrides,
+        )
+    }
+
+    fn bootstrap_session(&mut self) -> Result<(LoadedState, Option<SaveState>)> {
+        let boot_run_history = self.load_boot_run_history()?;
+        let settings_file_overrides = self.load_settings_file_overrides()?;
+        self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
+        let state_folder_kind = self.current_state_folder_kind()?;
+        if let StateFolderKind::Invalid(reason) = &state_folder_kind {
+            return Err(eyre::eyre!(reason.clone()));
+        }
+        let booted_existing_state = matches!(state_folder_kind, StateFolderKind::Saved);
 
         let (
             mut state,
@@ -738,10 +959,13 @@ impl OneShot {
             mut cli_settings,
             mut default_runtime_settings,
             state_load_summary,
-        ) = self.load()?;
+        ) = self.load_with_boot_context(
+            state_folder_kind,
+            boot_run_history.as_ref(),
+            &settings_file_overrides,
+        )?;
         settings_file_overrides.apply(&mut cli_settings, &mut default_runtime_settings)?;
 
-        let mut save_state = SaveState::default();
         let mut session_state = CliSessionState::default();
         let mut session = CliSession::new(
             &mut state,
@@ -751,17 +975,63 @@ impl OneShot {
             &mut session_state,
         );
 
-        let mut boot_requested_exit = false;
+        let mut boot_exit = None;
         if let Some(boot_run_history) = boot_run_history.as_ref() {
             let effective_boot_run_history =
                 settings_file_overrides.apply_to_run_history(boot_run_history);
-            if let ControlFlow::Break(a) =
-                session.apply_boot_run_history(&effective_boot_run_history)?
-            {
-                save_state = a;
-                boot_requested_exit = true;
+            if let ControlFlow::Break(save_state) = session.apply_boot_run_history(
+                boot_run_history,
+                &effective_boot_run_history,
+                booted_existing_state,
+            )? {
+                boot_exit = Some(save_state);
             }
         }
+
+        drop(session);
+
+        Ok((
+            LoadedState {
+                state,
+                run_history,
+                cli_settings,
+                default_runtime_settings,
+                session_state,
+                state_load_summary,
+            },
+            boot_exit,
+        ))
+    }
+
+    pub fn run(mut self, raw: String) -> Result<()> {
+        if let Some(shell) = self.completions {
+            print!("{}", generate_completion_script(shell));
+            return Ok(());
+        }
+
+        initialise()?;
+
+        let (
+            LoadedState {
+                mut state,
+                mut run_history,
+                mut cli_settings,
+                mut default_runtime_settings,
+                mut session_state,
+                state_load_summary,
+            },
+            boot_exit,
+        ) = self.bootstrap_session()?;
+
+        let boot_requested_exit = boot_exit.is_some();
+        let mut save_state = boot_exit.unwrap_or_default();
+        let mut session = CliSession::new(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut default_runtime_settings,
+            &mut session_state,
+        );
 
         if !boot_requested_exit {
             if let Some(a) = self.command.take() {
@@ -861,7 +1131,9 @@ impl OneShot {
 
         drop(session);
 
-        if !self.no_save_state {
+        let implicit_read_only_exit =
+            cli_settings.session.read_only_state && save_state == SaveState::default();
+        if !self.no_save_state && !implicit_read_only_exit {
             debug!("Saving State, override: {}", self.override_state);
             save_state.save(
                 &mut state,
@@ -1041,8 +1313,8 @@ mod tests {
     use crate::state::ProcessRef;
 
     use super::{
-        generate_completion_script, CLISettings, Commands, CompletionShell, LogFormat, OneShot,
-        Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
+        generate_completion_script, CLISettings, Commands, CompletionShell, LogFormat, LogLevel,
+        OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
     };
 
     fn write_run_card(path: &PathBuf, state_folder: &str) {
@@ -1201,6 +1473,15 @@ mod tests {
             parsed.settings_runtime_defaults_path,
             Some(PathBuf::from("runtime.toml"))
         );
+    }
+
+    #[test]
+    fn oneshot_accepts_logfile_level_and_read_only_state_flags() {
+        let parsed =
+            OneShot::try_parse_from(["gammaloop", "--read-only-state", "--logfile-level", "off"])
+                .unwrap();
+        assert!(parsed.read_only_state);
+        assert_eq!(parsed.logfile_level, Some(LogLevel::Off));
     }
 
     #[test]
@@ -1495,5 +1776,20 @@ mod tests {
         fs::remove_file(temp.path().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
         let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
         assert_eq!(loaded, CLISettings::default());
+    }
+
+    #[test]
+    fn load_treats_logs_only_folder_as_blank_state() {
+        let temp = tempdir().unwrap();
+        std::fs::create_dir_all(temp.path().join("logs")).unwrap();
+        std::fs::write(temp.path().join("logs").join("gammalog.jsonl"), "").unwrap();
+
+        let mut cli = OneShot::new_test(temp.path().to_path_buf());
+        let (_state, run_history, cli_settings, runtime_settings, summary) = cli.load().unwrap();
+
+        assert!(summary.is_none());
+        assert!(run_history.commands.is_empty());
+        assert_eq!(cli_settings.state.folder, temp.path().to_path_buf());
+        assert_eq!(runtime_settings, RuntimeSettings::default());
     }
 }

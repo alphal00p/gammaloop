@@ -1,30 +1,34 @@
 use std::{
+    fs::{self, OpenOptions},
+    io,
     path::Path,
-    sync::{LazyLock, Mutex, OnceLock},
+    path::PathBuf,
+    sync::{Arc, LazyLock, Mutex, OnceLock},
     time::Duration,
 };
 
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
 use eyre::Context;
-use gammalooprs::utils::tracing::{LogFormat, LogStyle, LOG_GUARD};
+use gammalooprs::utils::tracing::{LogFormat, LogStyle};
 use indicatif::ProgressState;
 use tracing::{level_filters::LevelFilter, Event, Subscriber};
-use tracing_appender::{
-    non_blocking::NonBlockingBuilder,
-    rolling::{RollingFileAppender, Rotation},
-};
 use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, IndicatifLayer};
 use tracing_subscriber::field::RecordFields;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{
     filter::Filtered,
-    fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
+    fmt::{
+        self,
+        format::Writer,
+        writer::{BoxMakeWriter, MakeWriter},
+        FmtContext, FormatEvent, FormatFields,
+    },
     layer::SubscriberExt,
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter, Registry,
+    EnvFilter,
 };
 
 use color_eyre::Result;
@@ -110,41 +114,152 @@ impl StderrLogSpecState {
     }
 }
 
-// Statics to hold the current log specifications
-static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
-    if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
-        // println!("All:{all}");
-        return Mutex::new(all);
+#[derive(Debug, Clone, Default)]
+struct FileLogSpecState {
+    base_spec: String,
+    override_spec: Option<String>,
+    hard_disabled_reason: Option<String>,
+}
+
+impl FileLogSpecState {
+    fn effective_spec(&self) -> &str {
+        self.override_spec
+            .as_deref()
+            .unwrap_or(self.base_spec.as_str())
     }
-    let directive = std::env::var(ENV_FILE_LOG_FILTER)
-        .ok()
-        .unwrap_or("".to_string());
-    Mutex::new(directive)
+
+    fn effective_spec_string(&self) -> String {
+        self.effective_spec().to_string()
+    }
+
+    fn hard_disabled(&self) -> bool {
+        self.hard_disabled_reason.is_some()
+    }
+}
+
+// Statics to hold the current log specifications
+static FILE_LOG_SPEC: LazyLock<Mutex<FileLogSpecState>> = LazyLock::new(|| {
+    let base_spec = if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
+        all
+    } else {
+        std::env::var(ENV_FILE_LOG_FILTER).ok().unwrap_or_default()
+    };
+    Mutex::new(FileLogSpecState {
+        base_spec,
+        ..FileLogSpecState::default()
+    })
 });
 static STDERR_LOG_SPEC: LazyLock<Mutex<StderrLogSpecState>> =
     LazyLock::new(|| Mutex::new(StderrLogSpecState::default()));
 
+type ReloadFilterFn = Box<dyn Fn(EnvFilter) -> Result<()> + Send + Sync>;
+
 struct FilterHandles {
-    file_handle: reload::Handle<EnvFilter, Registry>,
-    stderr_handle: reload::Handle<
-        EnvFilter,
-        tracing_subscriber::layer::Layered<
-            Filtered<
-                fmt::Layer<
-                    Registry,
-                    fmt::format::JsonFields,
-                    fmt::format::Format<fmt::format::Json>,
-                    tracing_appender::non_blocking::NonBlocking,
-                >,
-                reload::Layer<EnvFilter, Registry>,
-                Registry,
-            >,
-            Registry,
-        >,
-    >,
+    file_reload: Option<ReloadFilterFn>,
+    stderr_reload: ReloadFilterFn,
 }
 
 static FILTER_HANDLES: OnceLock<FilterHandles> = OnceLock::new();
+
+struct LazyJsonWriterState {
+    dir: PathBuf,
+    filename: String,
+    file: Mutex<Option<fs::File>>,
+}
+
+#[derive(Clone)]
+struct LazyJsonMakeWriter {
+    state: Arc<LazyJsonWriterState>,
+}
+
+struct LazyJsonWriter {
+    state: Arc<LazyJsonWriterState>,
+}
+
+impl LazyJsonMakeWriter {
+    fn new(dir: PathBuf, filename: String) -> Self {
+        Self {
+            state: Arc::new(LazyJsonWriterState {
+                dir,
+                filename,
+                file: Mutex::new(None),
+            }),
+        }
+    }
+}
+
+impl<'a> MakeWriter<'a> for LazyJsonMakeWriter {
+    type Writer = LazyJsonWriter;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        LazyJsonWriter {
+            state: Arc::clone(&self.state),
+        }
+    }
+}
+
+impl io::Write for LazyJsonWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut file = self.state.file.lock().unwrap();
+        if file.is_none() {
+            fs::create_dir_all(&self.state.dir)?;
+            let opened = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.state.dir.join(&self.state.filename))?;
+            *file = Some(opened);
+        }
+        file.as_mut().unwrap().write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if let Some(file) = self.state.file.lock().unwrap().as_mut() {
+            file.flush()
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn directive_is_effectively_off(spec: &str) -> bool {
+    let parts: Vec<_> = spec
+        .split(',')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+    !parts.is_empty()
+        && parts
+            .iter()
+            .all(|part| *part == "off" || part.ends_with("=off"))
+}
+
+fn file_log_disabled_error(reason: &str) -> color_eyre::Report {
+    eyre::eyre!(
+        "Cannot enable logfile logging because this session was started with the logfile logger disabled ({reason})"
+    )
+}
+
+pub fn configure_file_log_boot_mode(disabled: bool, reason: Option<&str>) -> Result<()> {
+    let mut state = FILE_LOG_SPEC.lock().unwrap();
+    state.hard_disabled_reason = if disabled {
+        Some(reason.unwrap_or("CLI boot option").to_string())
+    } else {
+        None
+    };
+    if state.hard_disabled() && !directive_is_effectively_off(state.effective_spec()) {
+        return Err(file_log_disabled_error(
+            state
+                .hard_disabled_reason
+                .as_deref()
+                .unwrap_or("CLI boot option"),
+        ));
+    }
+    Ok(())
+}
+
+pub fn file_log_boot_disabled_reason() -> Option<String> {
+    FILE_LOG_SPEC.lock().unwrap().hard_disabled_reason.clone()
+}
 
 /// Set the file log filter at runtime while preserving required targets.
 pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
@@ -159,18 +274,59 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     } else {
         user_spec.as_ref().to_string()
     };
-    *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
+    let effective_spec = {
+        let mut state = FILE_LOG_SPEC.lock().unwrap();
+        let old_base = state.base_spec.clone();
+        state.base_spec = user_spec;
+        let effective = state.effective_spec_string();
+        if let Some(reason) = state.hard_disabled_reason.clone() {
+            if !directive_is_effectively_off(&effective) {
+                state.base_spec = old_base;
+                return Err(file_log_disabled_error(&reason));
+            }
+        }
+        effective
+    };
 
     let Some(handles) = FILTER_HANDLES.get() else {
         return Ok(());
     };
-    let full_spec = file_filter_from(&user_spec)?;
-    // println!(
-    //     "Modifying file filter to: {} with userspec {}",
-    //     full_spec, user_spec
-    // );
-    handles.file_handle.modify(|f| *f = full_spec)?;
+    let Some(reload) = handles.file_reload.as_ref() else {
+        return Ok(());
+    };
+    let full_spec = file_filter_from(&effective_spec)?;
+    reload(full_spec)?;
     Ok(())
+}
+
+pub fn set_file_log_filter_override(user_spec: Option<String>) -> Result<()> {
+    let effective_spec = {
+        let mut state = FILE_LOG_SPEC.lock().unwrap();
+        let old_override = state.override_spec.clone();
+        state.override_spec = user_spec;
+        let effective = state.effective_spec_string();
+        if let Some(reason) = state.hard_disabled_reason.clone() {
+            if !directive_is_effectively_off(&effective) {
+                state.override_spec = old_override;
+                return Err(file_log_disabled_error(&reason));
+            }
+        }
+        effective
+    };
+
+    let Some(handles) = FILTER_HANDLES.get() else {
+        return Ok(());
+    };
+    let Some(reload) = handles.file_reload.as_ref() else {
+        return Ok(());
+    };
+    let full_spec = file_filter_from(&effective_spec)?;
+    reload(full_spec)?;
+    Ok(())
+}
+
+pub fn clear_file_log_filter_override_on_settings_change() -> Result<()> {
+    set_file_log_filter_override(None)
 }
 
 /// Set the stderr log filter at runtime.
@@ -198,7 +354,7 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     };
     let full_spec = display_filter_from(&effective_spec)?;
     // println!("Modifying display filter to: {}", full_spec);
-    handles.stderr_handle.modify(|f| *f = full_spec)?;
+    (handles.stderr_reload)(full_spec)?;
     Ok(())
 }
 
@@ -213,13 +369,13 @@ pub fn set_stderr_log_filter_override(user_spec: Option<String>) -> Result<()> {
         return Ok(());
     };
     let full_spec = display_filter_from(&effective_spec)?;
-    handles.stderr_handle.modify(|f| *f = full_spec)?;
+    (handles.stderr_reload)(full_spec)?;
     Ok(())
 }
 
 /// Get the current file log filter specification.
 pub fn get_file_log_filter() -> String {
-    FILE_LOG_SPEC.lock().unwrap().clone()
+    FILE_LOG_SPEC.lock().unwrap().effective_spec_string()
 }
 
 /// Get the current stderr log filter specification.
@@ -245,16 +401,13 @@ fn elapsed_subsec(state: &ProgressState, writer: &mut dyn std::fmt::Write) {
     let _ = writer.write_str(&format!("{}.{}s", seconds, sub_seconds));
 }
 
-pub(crate) fn init_tracing(
-    dir: impl AsRef<Path>,
-    log_file_name: Option<String>,
-) -> reload::Handle<EnvFilter, Registry> {
+pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>) {
     symbolica::GLOBAL_SETTINGS
         .initialize_tracing
         .store(false, std::sync::atomic::Ordering::Relaxed);
-    // println!("Init tracing");
-    let handles = FILTER_HANDLES.get_or_init(|| {
-        let file_filter = EnvFilter::new(FILE_LOG_SPEC.lock().unwrap().as_str());
+    FILTER_HANDLES.get_or_init(|| {
+        let file_state = FILE_LOG_SPEC.lock().unwrap().clone();
+        let file_filter = EnvFilter::new(file_state.effective_spec_string());
         // println!(
         //     "File filter: {file_filter},:{}",
         //     FILE_LOG_SPEC.lock().unwrap().as_str()
@@ -269,8 +422,6 @@ pub(crate) fn init_tracing(
         let (file_filter_layer, file_handle) = reload::Layer::new(file_filter.clone());
         let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter.clone());
 
-        let _ = std::fs::create_dir_all(dir.as_ref());
-
         // e.g. "2025-08-26T21-05-33.123"
         let ts = Local::now()
             .to_rfc3339_opts(SecondsFormat::Millis, true)
@@ -281,21 +432,16 @@ pub(crate) fn init_tracing(
         } else {
             format!("gammalog-{ts}.jsonl")
         };
+        let file_writer = BoxMakeWriter::new(LazyJsonMakeWriter::new(
+            dir.as_ref().to_path_buf(),
+            filename,
+        ));
 
-        // One file per state (per process), no rotation
-        let file = RollingFileAppender::new(Rotation::NEVER, dir.as_ref(), &filename);
-        let (nb, guard) = NonBlockingBuilder::default()
-            .buffered_lines_limit(200_000)
-            .lossy(false)
-            .finish(file);
-        LOG_GUARD.set(guard).ok();
-
-        // JSON layer for file output with its own filter
         let json = fmt::layer()
             .json()
             .flatten_event(true)
             .with_current_span(true)
-            .with_writer(nb);
+            .with_writer(file_writer);
 
         let indicatif_layer = IndicatifLayer::new()
             .with_span_field_formatter(IndicatifPbMsgFields::default())
@@ -339,20 +485,35 @@ pub(crate) fn init_tracing(
             .event_format(StatusFmt)
             .with_writer(indicatif_layer.get_stderr_writer());
 
-        _ = tracing_subscriber::registry()
-            .with(Filtered::new(json, file_filter_layer))
+        let subscriber = tracing_subscriber::registry()
             .with(Filtered::new(status_layer, stderr_filter_layer))
-            .with(indicatif_layer.with_filter(IndicatifFilter::new(false)))
-            .try_init();
+            .with(indicatif_layer.with_filter(IndicatifFilter::new(false)));
+
+        if file_state.hard_disabled() {
+            _ = subscriber.try_init();
+        } else {
+            _ = subscriber
+                .with(Filtered::new(json, file_filter_layer))
+                .try_init();
+        }
+
+        let stderr_handle = stderr_handle.clone();
+        let file_reload = (!file_state.hard_disabled()).then_some(Box::new(move |filter| {
+            file_handle
+                .modify(|f| *f = filter)
+                .map_err(color_eyre::Report::from)
+        }) as ReloadFilterFn);
+        let stderr_reload = Box::new(move |filter| {
+            stderr_handle
+                .modify(|f| *f = filter)
+                .map_err(color_eyre::Report::from)
+        }) as ReloadFilterFn;
 
         FilterHandles {
-            file_handle,
-            stderr_handle,
+            file_reload,
+            stderr_reload,
         }
     });
-
-    // Return the file handle for backward compatibility
-    handles.file_handle.clone()
 }
 
 #[derive(Debug, Clone, Default)]

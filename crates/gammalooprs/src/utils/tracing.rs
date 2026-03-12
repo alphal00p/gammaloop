@@ -118,6 +118,10 @@ impl LogLevel {
             LogLevel::Trace => "gammaloop_api=trace,gammalooprs=trace",
         }
     }
+
+    pub fn to_cli_logfile_directive_spec(self) -> &'static str {
+        self.to_cli_display_directive_spec()
+    }
 }
 
 // Global one-time slots

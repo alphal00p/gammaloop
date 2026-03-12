@@ -98,7 +98,7 @@ impl CLIState {
         &mut self,
         run_history: &RunHistory,
     ) -> Result<ControlFlow<SaveState>> {
-        self.with_session(|session| session.apply_boot_run_history(run_history))
+        self.with_session(|session| session.apply_boot_run_history(run_history, run_history, false))
     }
 
     pub fn dismiss_pending_commands_block(&mut self, trigger: &str) -> bool {

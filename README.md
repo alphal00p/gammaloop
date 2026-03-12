@@ -134,19 +134,80 @@ The current CLI revolves around a persistent state folder.
 By default the state contains, among other files:
 - `global_settings.toml`
 - `default_runtime_settings.toml`
-- `run.toml`
+- `run.toml` — a high-level audit log of the session, including the frozen boot settings, command-block definitions, and the top-level commands that built the current state
 - `processes/`
 
-## Python API
+In particular, `run.toml` is intended to be replayable: running
 
-The Rust CLI is the primary interface under active iteration.
-The Python bindings are still available and can be built with:
+```bash
+./gammaloop <STATE_FOLDER>/run.toml
+```
+
+should rerun the recorded commands and rebuild the current state from scratch to the same point.
+
+## Rust and Python API
+
+The CLI remains the primary interface, but the same state-loading entry point is also exposed from Rust and Python. In both cases the entry point only handles static load-time options such as:
+- state folder
+- boot card
+- logging overrides
+- read-only mode
+- optional settings override files
+
+Once a state is loaded, there are dedicated API methods available for some tasks. The generic fallback is to run the same command strings that the CLI accepts.
+
+Python:
+
+```python
+from gammaloop import GammaLoopAPI
+
+gl = GammaLoopAPI(
+    state_folder="./examples/cli/gg_hhh/1L/state",
+    boot_commands_path="./examples/cli/gg_hhh/1L/gg_hhh_1L.toml",
+)
+
+gl.run("display settings global")
+gl.run("run integrate_physical")
+```
+
+The Python bindings can be built with:
 
 ```bash
 just build-api
 ```
 
 The Python package source is under `crates/gammaloop-api/python/gammaloop`.
+
+Rust:
+
+```rust
+use std::path::PathBuf;
+
+use gammaloop_api::{session::CliSession, state::CommandHistory, StateLoadOption};
+
+fn main() -> color_eyre::Result<()> {
+    let mut loaded = StateLoadOption {
+        state_folder: Some(PathBuf::from("./examples/cli/gg_hhh/1L/state")),
+        boot_commands_path: Some(PathBuf::from("./examples/cli/gg_hhh/1L/gg_hhh_1L.toml")),
+        ..StateLoadOption::default()
+    }
+    .load()?;
+
+    let command = CommandHistory::from_raw_string("display settings global")?;
+    let mut session = CliSession::new(
+        &mut loaded.state,
+        &mut loaded.run_history,
+        &mut loaded.cli_settings,
+        &mut loaded.default_runtime_settings,
+        &mut loaded.session_state,
+    );
+    let _ = session.execute_top_level(command)?;
+
+    Ok(())
+}
+```
+
+In Rust, the API entry point is `StateLoadOption::load()`. After loading, you can either use dedicated command/data structures directly or keep using string commands through `CommandHistory::from_raw_string(...)` and `CliSession::execute_top_level(...)`.
 
 ## Examples and tests
 

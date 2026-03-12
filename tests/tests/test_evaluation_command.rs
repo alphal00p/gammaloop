@@ -63,7 +63,7 @@ fn evaluate_1l_scalar_vacuum() -> Result<()> {
 
     cli.run_command("import graphs ./tests/resources/graphs/1l_vacuum.dot")?;
     cli.run_command("set default-runtime kv general.mu_r_sq=12.0")?;
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
 
     #[rustfmt::skip]
     cli.run_command(&format!(

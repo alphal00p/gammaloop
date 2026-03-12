@@ -39,9 +39,9 @@ commands = [
 name = "integrate_euclidean"
 commands = [
 
-    "set model MT={re:1000.0,im:0.0}",
-    "set model WT={re:0.0,im:0.0}",
-    "set model ymt={re:1000.0,im:0.0}",
+    "set model MT=1000.0",
+    "set model WT=0.0",
+    "set model ymt=1000.0",
 
     "set process -p gg_hhh -i 1L defaults",
 
@@ -84,9 +84,9 @@ commands = [
     '""",
 
     # Target for the physical top mass of 173 GeV is also confirmed with MadLoop
-    "set model MT={re:173.0,im:0.0}",
-    "set model WT={re:0.0,im:0.0}",
-    "set model ymt={re:173.0,im:0.0}",
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
     "set process -p gg_hhh -i 1L kv integrator.n_start=100000 integrator.n_max=1000000",
     """integrate --process gg_hhh -i 1L --n-cores 10
         --target 1.89203604685291554e-6 -5.46603099163412881e-6

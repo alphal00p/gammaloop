@@ -1282,6 +1282,14 @@ impl std::fmt::Display for Parameter {
     }
 }
 
+fn parameter_display_sort_key(parameter: &Parameter) -> (u8, String) {
+    let nature_rank = match parameter.nature {
+        ParameterNature::External => 0,
+        ParameterNature::Internal => 1,
+    };
+    (nature_rank, parameter.name.to_string())
+}
+
 impl PartialEq for Parameter {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
@@ -1544,7 +1552,10 @@ impl Model {
                 "Value".normal().to_string(),
                 "Expression".to_string(),
             ]);
-            for param in self.parameters.values() {
+            let mut parameters = self.parameters.values().collect_vec();
+            parameters.sort_by_key(|parameter| parameter_display_sort_key(parameter));
+
+            for param in parameters {
                 parameter_table.push_record(&[
                     param.name.to_string().green().to_string(),
                     if param.nature == ParameterNature::External {
@@ -2534,12 +2545,14 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 mod tests {
 
     use crate::{
-        model::{ArcPropagator, ArcVertexRule},
+        model::{
+            ArcPropagator, ArcVertexRule, Parameter, ParameterName, ParameterNature, ParameterType,
+        },
         momentum::{Helicity, ThreeMomentum},
         utils::{F, test_utils::load_generic_model},
     };
 
-    use super::ArcParticle;
+    use super::{ArcParticle, Model, UFOSymbol, parameter_display_sort_key};
 
     #[test]
     fn test_encode_decode_arc_particle() {
@@ -2636,5 +2649,41 @@ mod tests {
         println!("hel{hel}");
         println!("{}", mom.pol(hel));
         println!("{}", mom.pol(hel).bar());
+    }
+
+    #[test]
+    fn display_orders_external_parameters_first() {
+        let mut model = Model::default();
+        let external = Parameter {
+            name: UFOSymbol::from("zeta"),
+            lhablock: None,
+            lhacode: None,
+            nature: ParameterNature::External,
+            parameter_type: ParameterType::Real,
+            value: None,
+            expression: None,
+        };
+        let internal = Parameter {
+            name: UFOSymbol::from("alpha"),
+            lhablock: None,
+            lhacode: None,
+            nature: ParameterNature::Internal,
+            parameter_type: ParameterType::Real,
+            value: None,
+            expression: None,
+        };
+        model
+            .parameters
+            .insert(ParameterName(external.name.clone()), external.clone());
+        model
+            .parameters
+            .insert(ParameterName(internal.name.clone()), internal.clone());
+
+        assert!(parameter_display_sort_key(&external) < parameter_display_sort_key(&internal));
+
+        let description = model.get_description(false, true, false, false);
+        let external_index = description.find("zeta").unwrap();
+        let internal_index = description.find("alpha").unwrap();
+        assert!(external_index < internal_index);
     }
 }

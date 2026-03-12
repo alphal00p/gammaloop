@@ -43,7 +43,7 @@ examples/**/state/
 examples/**/gammaloop_state/
 integration-tests/workspace/
 crates/integration-tests/workspace/
-tests/workspace/
+tests/artifacts/
 benches/**/tests_gammaloop_state/
 out.yaml
 outmap.yaml
@@ -57,7 +57,6 @@ evaluate.cpp
 perf.data
 # logos
 logos/
-tests/tests/workspace
 
 examples/cli/epem_a_ttxh
 crates/gammalooprs/src/old_observables

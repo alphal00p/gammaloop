@@ -25,8 +25,6 @@ use symbolica::numerical_integration::Sample;
 use toml::Value as TomlValue;
 use tracing::debug;
 use tracing::info;
-use tracing::warn;
-use tracing_subscriber::{reload, EnvFilter, Registry};
 
 use gammalooprs::{
     feyngen::GenerationType,
@@ -524,6 +522,16 @@ impl SmartSerde for RunHistory {
 }
 
 impl RunHistory {
+    pub fn freeze_boot_settings_from(&mut self, boot_run_history: &RunHistory) {
+        self.cli_settings.global = boot_run_history.cli_settings.global.clone();
+        self.default_runtime_settings = boot_run_history.default_runtime_settings.clone();
+    }
+
+    pub fn frozen_boot_settings_match(&self, boot_run_history: &RunHistory) -> bool {
+        self.cli_settings.global == boot_run_history.cli_settings.global
+            && self.default_runtime_settings == boot_run_history.default_runtime_settings
+    }
+
     /// Add a command to the run history
     pub fn push(&mut self, command: Commands) {
         self.push_with_raw(command, None);
@@ -745,7 +753,6 @@ pub struct State {
     pub model: Model,
     pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
-    pub log_filter: reload::Handle<EnvFilter, Registry>,
 }
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
@@ -765,17 +772,7 @@ impl Default for StateManifest {
     }
 }
 
-impl StateManifest {
-    fn legacy() -> Self {
-        Self { version: 0 }
-    }
-}
-
-fn run_state_migration_checks(
-    manifest: &StateManifest,
-    save_path: &Path,
-    has_external_model_override: bool,
-) -> Result<()> {
+fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Result<()> {
     if manifest.version > CURRENT_STATE_MANIFEST_VERSION {
         return Err(eyre!(
             "State version {} is newer than this binary supports (max {}). Please upgrade gammaloop.",
@@ -785,28 +782,27 @@ fn run_state_migration_checks(
     }
 
     match manifest.version {
-        0 => {
+        1 => {
             if !save_path.join("symbolica_state.bin").exists() {
                 return Err(eyre!(
-                    "Legacy state at '{}' is missing required file symbolica_state.bin",
+                    "Saved state at '{}' is missing required file symbolica_state.bin",
                     save_path.display()
                 ));
             }
             if !save_path.join("processes").exists() {
                 return Err(eyre!(
-                    "Legacy state at '{}' is missing required folder processes/",
+                    "Saved state at '{}' is missing required folder processes/",
                     save_path.display()
                 ));
             }
-            if !has_external_model_override && !save_path.join("model.json").exists() {
+            if !save_path.join("model.json").exists() {
                 return Err(eyre!(
-                    "Legacy state at '{}' is missing required file model.json",
+                    "Saved state at '{}' is missing required file model.json",
                     save_path.display()
                 ));
             }
             Ok(())
         }
-        1 => Ok(()),
         _ => Err(eyre!(
             "State version {} is not supported by this binary.",
             manifest.version
@@ -814,34 +810,72 @@ fn run_state_migration_checks(
     }
 }
 
-fn load_state_manifest(
-    save_path: &Path,
-    has_external_model_override: bool,
-) -> Result<StateManifest> {
-    let manifest_path = save_path.join(STATE_MANIFEST_FILE);
-    let manifest = if manifest_path.exists() {
-        let raw_manifest = fs::read_to_string(&manifest_path).with_context(|| {
-            format!(
-                "Trying to read state manifest file {}",
-                manifest_path.display()
-            )
-        })?;
-        toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
-            format!(
-                "Trying to parse state manifest file {}",
-                manifest_path.display()
-            )
-        })?
-    } else {
-        warn!(
-            "No {} found in '{}'. Treating state as legacy version 0.",
-            STATE_MANIFEST_FILE,
-            save_path.display()
-        );
-        StateManifest::legacy()
-    };
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StateFolderKind {
+    Missing,
+    Scratch,
+    Saved,
+    Invalid(String),
+}
 
-    run_state_migration_checks(&manifest, save_path, has_external_model_override)?;
+fn is_scratch_state_entry(entry: &fs::DirEntry) -> bool {
+    entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
+        && entry.file_name().to_string_lossy() == "logs"
+}
+
+pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
+    if !save_path.exists() {
+        return Ok(StateFolderKind::Missing);
+    }
+    if !save_path.is_dir() {
+        return Ok(StateFolderKind::Invalid(format!(
+            "'{}' exists but is not a directory",
+            save_path.display()
+        )));
+    }
+
+    let manifest_path = save_path.join(STATE_MANIFEST_FILE);
+    if manifest_path.exists() {
+        let manifest = load_state_manifest(save_path)?;
+        return Ok(match run_state_migration_checks(&manifest, save_path) {
+            Ok(()) => StateFolderKind::Saved,
+            Err(err) => StateFolderKind::Invalid(err.to_string()),
+        });
+    }
+
+    let mut entries = fs::read_dir(save_path)
+        .with_context(|| format!("Trying to read state folder '{}'", save_path.display()))?;
+    if entries.by_ref().all(|entry| {
+        entry
+            .map(|entry| is_scratch_state_entry(&entry))
+            .unwrap_or(false)
+    }) {
+        return Ok(StateFolderKind::Scratch);
+    }
+
+    Ok(StateFolderKind::Invalid(format!(
+        "State folder '{}' is missing required file {}",
+        save_path.display(),
+        STATE_MANIFEST_FILE
+    )))
+}
+
+fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
+    let manifest_path = save_path.join(STATE_MANIFEST_FILE);
+    let raw_manifest = fs::read_to_string(&manifest_path).with_context(|| {
+        format!(
+            "Trying to read state manifest file {}",
+            manifest_path.display()
+        )
+    })?;
+    let manifest = toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
+        format!(
+            "Trying to parse state manifest file {}",
+            manifest_path.display()
+        )
+    })?;
+
+    run_state_migration_checks(&manifest, save_path)?;
     Ok(manifest)
 }
 
@@ -1207,10 +1241,9 @@ impl State {
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
         let _ = initialise();
-        let handle = super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
+        super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
 
         Self {
-            log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1218,10 +1251,9 @@ impl State {
     }
 
     pub fn new_test() -> Self {
-        let handle = init_test_tracing();
+        let _ = init_test_tracing();
 
         Self {
-            log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1229,10 +1261,9 @@ impl State {
     }
 
     pub fn new_bench() -> Self {
-        let handle = init_bench_tracing();
+        let _ = init_bench_tracing();
 
         Self {
-            log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1261,7 +1292,7 @@ impl State {
         trace_logs_filename: Option<String>,
     ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
-        let manifest = load_state_manifest(&save_path, model_path.is_some())?;
+        let manifest = load_state_manifest(&save_path)?;
         debug!("Loading state manifest version {}", manifest.version);
 
         let mut model = if let Some(model_path) = &model_path {
@@ -1873,7 +1904,7 @@ commands = ["quit -n"]
         let temp = tempdir().unwrap();
         save_state_manifest(temp.path()).unwrap();
 
-        let manifest = load_state_manifest(temp.path(), false).unwrap();
+        let manifest = load_state_manifest(temp.path()).unwrap();
         assert_eq!(manifest.version, CURRENT_STATE_MANIFEST_VERSION);
     }
 
@@ -1889,19 +1920,34 @@ commands = ["quit -n"]
         )
         .unwrap();
 
-        let err = load_state_manifest(temp.path(), false).unwrap_err();
+        let err = load_state_manifest(temp.path()).unwrap_err();
         assert!(format!("{err}").contains("newer than this binary supports"));
     }
 
     #[test]
-    fn legacy_state_layout_check_requires_expected_files() {
+    fn state_folder_classifies_saved_layout() {
         let temp = tempdir().unwrap();
+        save_state_manifest(temp.path()).unwrap();
         fs::write(temp.path().join("model.json"), "{}").unwrap();
         fs::write(temp.path().join("symbolica_state.bin"), []).unwrap();
         fs::create_dir_all(temp.path().join("processes")).unwrap();
 
-        let manifest = load_state_manifest(temp.path(), false).unwrap();
-        assert_eq!(manifest.version, 0);
+        assert_eq!(
+            classify_state_folder(temp.path()).unwrap(),
+            StateFolderKind::Saved
+        );
+    }
+
+    #[test]
+    fn state_folder_classifies_logs_only_folder_as_scratch() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("logs")).unwrap();
+        fs::write(temp.path().join("logs").join("gammalog.jsonl"), "").unwrap();
+
+        assert_eq!(
+            classify_state_folder(temp.path()).unwrap(),
+            StateFolderKind::Scratch
+        );
     }
 }
 

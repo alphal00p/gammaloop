@@ -2,10 +2,9 @@ use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
-    initialisation::initialise,
     processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
-    utils::tracing::LogLevel,
+    utils::tracing::{LogFormat, LogLevel},
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
@@ -22,7 +21,7 @@ use crate::{
     },
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
-    CLISettings, OneShot,
+    CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
 
@@ -367,52 +366,65 @@ struct GammaLoopAPI {
 #[pymethods]
 impl GammaLoopAPI {
     #[new]
-    #[pyo3(signature = (state_folder=PathBuf::from("./gammaloop_state"), log_file_name=None, log_level=None))]
+    #[pyo3(signature = (
+        state_folder=None,
+        boot_commands_path=None,
+        model_file=None,
+        trace_logs_filename=None,
+        level=None,
+        logfile_level=None,
+        logging_prefix=None,
+        read_only_state=false,
+        settings_global_path=None,
+        settings_runtime_defaults_path=None,
+        fresh_state=false
+    ))]
     pub fn new_python(
-        state_folder: PathBuf,
-        log_file_name: Option<String>,
-        log_level: Option<LogLevel>,
+        state_folder: Option<PathBuf>,
+        boot_commands_path: Option<PathBuf>,
+        model_file: Option<PathBuf>,
+        trace_logs_filename: Option<String>,
+        level: Option<LogLevel>,
+        logfile_level: Option<LogLevel>,
+        logging_prefix: Option<LogFormat>,
+        read_only_state: bool,
+        settings_global_path: Option<PathBuf>,
+        settings_runtime_defaults_path: Option<PathBuf>,
+        fresh_state: bool,
     ) -> Result<Self> {
-        initialise().map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not initialize GammaLoop API: {}", e))
-        })?;
-        let mut one_shot = OneShot {
-            boot_commands_path: None,
-            // Path to the state folder
+        let LoadedState {
+            state,
+            run_history,
+            cli_settings,
+            default_runtime_settings,
+            session_state,
+            ..
+        } = StateLoadOption {
+            fresh_state,
+            boot_commands_path,
             state_folder,
-            // Python API takes an explicit state folder argument.
-            state_folder_explicitly_set: true,
-            // Path to the model file
-            model_file: None,
-            // Skip saving state on exit
-            no_save_state: false,
-            // Save state to file after each call
-            override_state: false,
-            // Set the name of the file containing all traces from gammaloop (logs) for current session
-            trace_logs_filename: log_file_name,
-            // Set log level for current session
-            level: log_level,
-            logging_prefix: None,
-            settings_global_path: None,
-            settings_runtime_defaults_path: None,
-            // Try to serialize using strings when saving run history
-            no_try_strings: false,
-            command: None,
-            fresh_state: false,
-        };
-        let (state, run_history, cli_settings, default_runtime_settings, _) =
-            one_shot.load().map_err(|e| {
-                exceptions::PyException::new_err(format!(
-                    "Could not load or create GammaLoop state: {}",
-                    e
-                ))
-            })?;
+            model_file,
+            trace_logs_filename,
+            level,
+            logfile_level,
+            logging_prefix,
+            read_only_state,
+            settings_global_path,
+            settings_runtime_defaults_path,
+        }
+        .load()
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not load or create GammaLoop state: {}",
+                e
+            ))
+        })?;
         Ok(GammaLoopAPI {
             gammaloop_state: state,
             run_history,
             cli_settings,
             default_runtime_settings,
-            session_state: CliSessionState::default(),
+            session_state,
         })
     }
 

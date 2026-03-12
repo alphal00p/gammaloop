@@ -726,7 +726,7 @@ fn scalar_bubble() -> Result<()> {
 
     // from Kaapo: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
 
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -734,11 +734,11 @@ fn scalar_bubble() -> Result<()> {
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.03838e-02)), 1));
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.16050e-02)), 1));
 
-    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.46968e-03)), 1));
     let renorm_command = Renormalize::default();
@@ -780,7 +780,7 @@ fn scalar_sunrise() -> Result<()> {
         ..Default::default()
     });
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -793,7 +793,7 @@ fn scalar_sunrise() -> Result<()> {
 
     // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-4.359e-3");
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -802,7 +802,7 @@ fn scalar_sunrise() -> Result<()> {
     // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-2.474e-3");
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.48100e-03)), 1));
 
-    // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    // cli.run_command("set model mass_scalar_1=3.0")?;
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     // assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-4.5184321377520566e-4+0e0i)");
 
@@ -847,7 +847,7 @@ fn scalar_mercedes() -> Result<()> {
     //5.89551e-06	3.35645e-06	1.87120e-06
 
     // from Kaapo: m=1 muv=5 5.89551e-06 m=2 muv=5 	3.35645e-06	 m=3 muv=5 1.87120e-06
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -858,14 +858,14 @@ fn scalar_mercedes() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(3.35645e-06)), 3),
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.87120e-06)), 3),
@@ -910,7 +910,7 @@ fn scalar_basketball() -> Result<()> {
     //1.47240e-03	7.15184e-04	2.27485e-04
 
     // from Kaapo: m=1 muv=5 1.47240e-03 m=2 muv=5 	7.15184e-04	 m=3 muv=5 2.27485e-04
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -921,7 +921,7 @@ fn scalar_basketball() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    // cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    // cli.run_command("set model mass_scalar_1=2.0")?;
     // let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
     // assert_eq!(res.pass_fail(-0.9).failed, 0);
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -930,7 +930,7 @@ fn scalar_basketball() -> Result<()> {
     //     "Not compatible: {integral_no_cache}",
     // );
 
-    // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    // cli.run_command("set model mass_scalar_1=3.0")?;
     // let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
     // assert_eq!(res.pass_fail(-0.9).failed, 0);
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -978,7 +978,7 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
     //2.90078e-06	1.59168e-06	6.86001e-07
 
     // from Kaapo: m=1 muv=5 2.90078e-06 m=2 muv=5 	1.59168e-06	 m=3 muv=5 6.86001e-07
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -990,14 +990,14 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.59168e-06)), 3),
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.86001e-07)), 3),
@@ -1033,7 +1033,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
     };
 
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
 
     fn string_with_prefactor(rs: &[Complex<f64>]) -> String {
         let mut out = String::new();
