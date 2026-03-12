@@ -1,12 +1,12 @@
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
-    subgraph::SubSetLike,
+    subgraph::{SubSetLike, SubSetOps},
 };
 use symbolica::atom::{Atom, AtomCore};
 
 use crate::{
     cff::expression::GraphOrientation,
-    graph::{FeynmanGraph, Graph, cuts::CutSet},
+    graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
 };
 use color_eyre::Result;
 use eyre::eyre;
@@ -63,6 +63,13 @@ impl Graph {
         let cff = self.generate_cff(&contract_edges, &canonize_esurface)?;
         let residue = cff.select_esurface_residue(&cutset.esurfaces);
 
+        println!("residue orders: {}", residue.len());
+
+        let graph_without_is_cut = self
+            .underlying
+            .full_filter()
+            .subtract(&self.initial_state_cut.left)
+            .subtract(&self.initial_state_cut.right);
         let mut terms = vec![];
 
         let replacement_rules = self.surface_cache.get_all_replacements(&[]);
@@ -74,7 +81,17 @@ impl Graph {
             };
             for orientation in expr.orientations.iter() {
                 let eta_expr = orientation.expression.to_atom_inv();
-                let ose_expr = eta_expr.replace_multiple(&replacement_rules);
+                let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
+
+                let inverse_energies = get_cff_inverse_energy_product_impl(
+                    self,
+                    &graph_without_is_cut,
+                    &contract_edges,
+                );
+
+                ose_expr *= inverse_energies;
+
+                println!("ose expr :{}", ose_expr);
                 cff_term.expression.push(ose_expr);
                 cff_term
                     .orientations
