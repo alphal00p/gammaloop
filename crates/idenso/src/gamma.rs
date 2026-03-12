@@ -1,7 +1,5 @@
 use std::sync::LazyLock;
 
-use crate::{IndexTooling, color::SelectiveExpand, metric::MetricSimplifier, rep_symbols::RS};
-use eyre::Result;
 use spenso::{
     network::library::symbolic::{ETS, ExplicitKey},
     shadowing::symbolica_utils::SpensoPrintSettings,
@@ -20,6 +18,9 @@ use symbolica::{
     symbol,
     utils::Settable,
 };
+
+use crate::{IndexTooling, color::SelectiveExpand, metric::MetricSimplifier, rep_symbols::RS};
+use eyre::Result;
 
 use super::representations::Bispinor;
 
@@ -1193,11 +1194,10 @@ mod test {
 
     use crate::color::ColorSimplifier;
     use crate::id;
+    use crate::tensor::SymbolicNetParse;
+    use crate::tensor::SymbolicTensor;
     use crate::test::test_initialize;
-    use spenso::{
-        structure::{abstract_index::AbstractIndex, permuted::Perm},
-        tensors::symbolic::SymbolicTensor,
-    };
+    use spenso::structure::{abstract_index::AbstractIndex, permuted::Perm};
     use symbolica::{
         atom::{Atom, AtomCore},
         parse_lit,
@@ -2226,7 +2226,10 @@ mod test {
             default_namespace = "spenso"
         );
 
-        let res = parse_lit!(7776 * G ^ 6 * dot(P(2), P(3)), default_namespace = "spenso");
+        let res = parse_lit!(
+            7776 * G ^ 6 * g(mink(4), P(2), P(3)),
+            default_namespace = "spenso"
+        );
         assert_eq!(
             res,
             expr.simplify_gamma().to_dots(),

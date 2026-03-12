@@ -15,7 +15,7 @@ use spenso::{
         permuted::Perm,
         representation::{Minkowski, RepName},
     },
-    tensors::{parametric::ParamTensor, symbolic::SymbolicTensor},
+    tensors::parametric::ParamTensor,
 };
 use spenso_hep_lib::{FUN_LIB, HEP_LIB, HepNet, HepTensor};
 use symbolica::{
