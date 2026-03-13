@@ -1,13 +1,13 @@
 use std::{env, path::PathBuf, time::Duration};
 
-use _gammaloop::{
+use criterion::{Criterion, criterion_group, criterion_main};
+use gammaloop_api::{
+    GammaloopCompileOptions, GenerationSettings, TropicalSubgraphTableSettings,
     graph::Graph,
     numerator::ContractionSettings,
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
-    GammaloopCompileOptions, GenerationSettings, TropicalSubgraphTableSettings,
 };
-use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 

@@ -1,4 +1,4 @@
-use std::{path::PathBuf, str::FromStr};
+use std::{fs, path::PathBuf, str::FromStr};
 
 use clap::Subcommand;
 use color_eyre::Result;
@@ -8,10 +8,14 @@ use figment::{
     Figment,
 };
 use gammalooprs::{
-    model::UFOSymbol, processes::ProcessCollection, settings::RuntimeSettings, utils::F,
+    model::{ParameterNature, ParameterType, UFOSymbol},
+    processes::ProcessCollection,
+    settings::RuntimeSettings,
+    utils::F,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use spenso::algebra::complex::Complex;
 use tracing::warn;
 
@@ -19,8 +23,115 @@ use crate::{
     commands::generate::ProcessArgs,
     commands::Commands,
     state::{State, SyncSettings},
+    tracing::{clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason},
     CLISettings,
 };
+
+pub(crate) const MODEL_COMPLEX_VALUE_FORMAT_HINT: &str =
+    "expects complex like 1.0, -1.0e13, 1.0+2.0i, or 1.0-2.0j";
+pub(crate) const MODEL_REAL_VALUE_FORMAT_HINT: &str = "expects real like 1.0, -1.0, or 1.0e13";
+
+pub(crate) fn model_value_format_hint(parameter_type: Option<ParameterType>) -> &'static str {
+    match parameter_type {
+        Some(ParameterType::Real) => MODEL_REAL_VALUE_FORMAT_HINT,
+        _ => MODEL_COMPLEX_VALUE_FORMAT_HINT,
+    }
+}
+
+fn parse_model_parameter_value(value: &str) -> Result<Complex<F<f64>>> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(eyre!("Model parameter value cannot be empty"));
+    }
+    if value.starts_with('{') || value.starts_with('[') {
+        return Err(eyre!(
+            "Legacy model-parameter syntax like '{{re:...,im:...}}' or '[re,im]' is deprecated; use {MODEL_COMPLEX_VALUE_FORMAT_HINT}"
+        ));
+    }
+
+    let (re, im) = parse_complex_literal(value)?;
+    Ok(Complex::new(F(re), F(im)))
+}
+
+fn parse_complex_literal(value: &str) -> Result<(f64, f64)> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(eyre!("Complex literal cannot be empty"));
+    }
+
+    if let Some(unit) = value.chars().last() {
+        if matches!(unit, 'i' | 'j' | 'I' | 'J') {
+            let body = &value[..value.len() - unit.len_utf8()];
+            let body = body.trim();
+            if body.is_empty() {
+                return Err(eyre!(
+                    "Missing coefficient before imaginary unit in '{value}'"
+                ));
+            }
+
+            if let Some(index) = find_imaginary_separator(body) {
+                let re = parse_float_literal(&body[..index], value)?;
+                let im = parse_imaginary_literal(&body[index..], value)?;
+                return Ok((re, im));
+            }
+
+            let im = parse_imaginary_literal(body, value)?;
+            return Ok((0.0, im));
+        }
+    }
+
+    Ok((parse_float_literal(value, value)?, 0.0))
+}
+
+fn find_imaginary_separator(value: &str) -> Option<usize> {
+    let bytes = value.as_bytes();
+    for index in (1..bytes.len()).rev() {
+        let current = bytes[index] as char;
+        if !matches!(current, '+' | '-') {
+            continue;
+        }
+        let previous = bytes[index - 1] as char;
+        if matches!(previous, 'e' | 'E') {
+            continue;
+        }
+        return Some(index);
+    }
+    None
+}
+
+fn parse_float_literal(value: &str, full_value: &str) -> Result<f64> {
+    value
+        .trim()
+        .parse::<f64>()
+        .with_context(|| format!("Failed to parse real part of complex literal '{full_value}'"))
+}
+
+fn parse_imaginary_literal(value: &str, full_value: &str) -> Result<f64> {
+    let value = value.trim();
+    if value == "+" {
+        return Ok(1.0);
+    }
+    if value == "-" {
+        return Ok(-1.0);
+    }
+    value.parse::<f64>().with_context(|| {
+        format!("Failed to parse imaginary part of complex literal '{full_value}'")
+    })
+}
+
+fn validate_model_parameter_type(
+    parameter_name: &str,
+    parameter_type: ParameterType,
+    value: &Complex<F<f64>>,
+) -> Result<()> {
+    if parameter_type == ParameterType::Real && value.im.0 != 0.0 {
+        return Err(eyre!(
+            "Model parameter '{parameter_name}' is Real and cannot be assigned an imaginary component; {}",
+            MODEL_REAL_VALUE_FORMAT_HINT
+        ));
+    }
+    Ok(())
+}
 
 impl FromStr for Set {
     type Err = Report;
@@ -54,8 +165,8 @@ pub enum Set {
 
     /// Set Model parameters
     Model {
-        /// Any number of KEY=VALUE pairs
-        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        /// Any number of PARAM=COMPLEX pairs
+        #[arg(value_name = "PARAM=COMPLEX", num_args = 1.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
 
@@ -78,17 +189,11 @@ impl Set {
         match self {
             Set::Model { pairs } => {
                 for KvPair { key, value } in pairs.iter() {
-                    let value = json5::from_str::<Complex<F<f64>>>(value).with_context(|| {
-                        format!("While parsing JSON value {value} for key '{key}'")
-                    })?;
-
-                    if let Some(p) = state
-                        .model_parameters
-                        .get_mut(&UFOSymbol::from(key.as_str()))
-                    {
-                        *p = value;
-                        continue;
-                    } else {
+                    let parameter = state
+                        .model
+                        .get_parameter_opt(key)
+                        .filter(|parameter| parameter.nature == ParameterNature::External);
+                    if parameter.is_none() {
                         let possiblilities: Vec<String> = state
                             .model_parameters
                             .keys()
@@ -101,6 +206,30 @@ impl Set {
                             )
                         });
                     }
+                    let parameter_type = parameter.unwrap().parameter_type.clone();
+                    let value = parse_model_parameter_value(value).with_context(|| {
+                        format!("While parsing model parameter value {value} for key '{key}'")
+                    })?;
+                    validate_model_parameter_type(key, parameter_type, &value)?;
+
+                    if let Some(p) = state
+                        .model_parameters
+                        .get_mut(&UFOSymbol::from(key.as_str()))
+                    {
+                        *p = value;
+                        continue;
+                    }
+                    let possiblilities: Vec<String> = state
+                        .model_parameters
+                        .keys()
+                        .map(|s| s.to_string())
+                        .collect();
+                    return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
+                        format!(
+                            "Possible model parameters are: {}",
+                            possiblilities.join(", ")
+                        )
+                    });
                 }
                 state.model_parameters.apply_to_model(&mut state.model)?;
             }
@@ -108,13 +237,29 @@ impl Set {
                 warn!(
                     "Ignoring base-dir change request to '{}': state folder is fixed for the current session ('{}')",
                     path.display(),
-                    global_settings.state_folder.display()
+                    global_settings.state.folder.display()
                 );
             }
             Self::Global { input } => {
                 let fig = Figment::from(Serialized::defaults(&global_settings));
+                let updates_display_directive = input.updates_global_display_directive()?;
+                let updates_logfile_directive = input.updates_global_logfile_directive()?;
+
+                if updates_logfile_directive {
+                    if let Some(reason) = file_log_boot_disabled_reason() {
+                        return Err(eyre!(
+                            "Cannot change global.logfile_directive because this session was started with the logfile logger disabled ({reason})"
+                        ));
+                    }
+                }
 
                 *global_settings = input.merge_figment(fig)?.extract()?;
+                if updates_display_directive {
+                    crate::tracing::set_stderr_log_filter_override(None)?;
+                }
+                if updates_logfile_directive {
+                    clear_file_log_filter_override_on_settings_change()?;
+                }
                 global_settings.sync_settings()?;
             }
             Self::DefaultRuntime { input } => {
@@ -217,6 +362,60 @@ impl FromStr for KvPair {
     }
 }
 impl SetArgs {
+    pub fn updates_global_display_directive(&self) -> Result<bool> {
+        self.updates_global_path(&["global", "display_directive"], "global.display_directive")
+    }
+
+    pub fn updates_global_logfile_directive(&self) -> Result<bool> {
+        self.updates_global_path(&["global", "logfile_directive"], "global.logfile_directive")
+    }
+
+    fn updates_global_path(&self, path: &[&str], label: &str) -> Result<bool> {
+        let dotted_path = path.join(".");
+        match self {
+            SetArgs::Kv { pairs } => Ok(pairs.iter().any(|pair| pair.key == dotted_path)),
+            SetArgs::String { string } => {
+                let value: toml::Value = toml::from_str(string).with_context(|| {
+                    format!("Failed parsing TOML payload while checking for {label}")
+                })?;
+                Ok(toml_contains_path(&value, path))
+            }
+            SetArgs::File { file } => {
+                let ext = file
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                let contents = fs::read_to_string(file).with_context(|| {
+                    format!("Failed reading settings file '{}'", file.display())
+                })?;
+                match ext.as_str() {
+                    "toml" => {
+                        let value: toml::Value = toml::from_str(&contents).with_context(|| {
+                            format!(
+                                "Failed parsing TOML settings file '{}' while checking for {label}",
+                                file.display()
+                            )
+                        })?;
+                        Ok(toml_contains_path(&value, path))
+                    }
+                    "json" => {
+                        let value: JsonValue =
+                            serde_json::from_str(&contents).with_context(|| {
+                                format!(
+                                "Failed parsing JSON settings file '{}' while checking for {label}",
+                                file.display()
+                            )
+                            })?;
+                        Ok(json_contains_path(&value, path))
+                    }
+                    _ => Ok(false),
+                }
+            }
+            SetArgs::Stored | SetArgs::Defaults => Ok(false),
+        }
+    }
+
     pub fn merge_figment(&self, fig: Figment) -> Result<Figment> {
         match self {
             SetArgs::File { file } => {
@@ -254,6 +453,26 @@ impl SetArgs {
 use serde_json::Value as J;
 use serde_yaml::Value as Y;
 
+fn toml_contains_path(value: &toml::Value, path: &[&str]) -> bool {
+    match path.split_first() {
+        None => true,
+        Some((head, tail)) => value
+            .as_table()
+            .and_then(|table| table.get(*head))
+            .is_some_and(|next| toml_contains_path(next, tail)),
+    }
+}
+
+fn json_contains_path(value: &JsonValue, path: &[&str]) -> bool {
+    match path.split_first() {
+        None => true,
+        Some((head, tail)) => value
+            .as_object()
+            .and_then(|table| table.get(*head))
+            .is_some_and(|next| json_contains_path(next, tail)),
+    }
+}
+
 fn infer_cli_value(raw: &str) -> Result<J> {
     // 1) Try strict JSON (numbers/bools work; strings need quotes)
     if let Ok(v) = json5::from_str::<J>(raw) {
@@ -290,23 +509,103 @@ fn yaml_to_json(v: Y) -> Result<J> {
 
 #[cfg(test)]
 mod test {
-    use std::str::FromStr;
+    use std::{str::FromStr, sync::Mutex};
 
     use clap::Parser;
     use figment::{providers::Serialized, Figment};
-    use gammalooprs::utils::F;
+    use gammalooprs::{
+        model::{ParameterNature, ParameterType, UFOSymbol},
+        settings::RuntimeSettings,
+        utils::{test_utils::load_generic_model, F},
+    };
     use serde::{Deserialize, Serialize};
     use spenso::algebra::complex::Complex;
 
-    use crate::{state::ProcessRef, Repl};
+    use crate::{
+        state::{ProcessRef, State},
+        tracing::{get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override},
+        CLISettings, Repl,
+    };
 
-    use super::{super::Commands, Set, SetArgs};
+    use super::{
+        super::Commands, model_value_format_hint, validate_model_parameter_type, KvPair, Set,
+        SetArgs,
+    };
+    use super::{
+        parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT, MODEL_REAL_VALUE_FORMAT_HINT,
+    };
 
     #[test]
     fn serialize_complex() {
         let s = Complex::new(F(1.), F(-2.));
         let j = serde_json::to_string(&s).unwrap();
         assert_eq!(j, r#"{"re":1.0,"im":-2.0}"#.to_string());
+    }
+
+    #[test]
+    fn parse_model_parameter_value_supports_real_literals() {
+        let parsed = parse_model_parameter_value("-1.0e12").unwrap();
+        assert_eq!(parsed, Complex::new(F(-1.0e12), F(0.0)));
+    }
+
+    #[test]
+    fn parse_model_parameter_value_supports_i_and_j_suffixes() {
+        let with_i = parse_model_parameter_value("-1.0e13-33.0e12i").unwrap();
+        let with_j = parse_model_parameter_value("-1.0e13+33.0e12j").unwrap();
+        let pure_imag = parse_model_parameter_value("-2.5j").unwrap();
+
+        assert_eq!(with_i, Complex::new(F(-1.0e13), F(-33.0e12)));
+        assert_eq!(with_j, Complex::new(F(-1.0e13), F(33.0e12)));
+        assert_eq!(pure_imag, Complex::new(F(0.0), F(-2.5)));
+    }
+
+    #[test]
+    fn parse_model_parameter_value_rejects_legacy_json_style() {
+        let err = parse_model_parameter_value("{re:1.0,im:0.0}").unwrap_err();
+        assert!(err.to_string().contains(MODEL_COMPLEX_VALUE_FORMAT_HINT));
+
+        let err = parse_model_parameter_value("[1.0,0.0]").unwrap_err();
+        assert!(err.to_string().contains(MODEL_COMPLEX_VALUE_FORMAT_HINT));
+    }
+
+    #[test]
+    fn model_value_format_hint_depends_on_parameter_type() {
+        assert_eq!(
+            model_value_format_hint(Some(ParameterType::Real)),
+            MODEL_REAL_VALUE_FORMAT_HINT
+        );
+        assert_eq!(
+            model_value_format_hint(Some(ParameterType::Imaginary)),
+            MODEL_COMPLEX_VALUE_FORMAT_HINT
+        );
+        assert_eq!(
+            model_value_format_hint(None),
+            MODEL_COMPLEX_VALUE_FORMAT_HINT
+        );
+    }
+
+    #[test]
+    fn validate_model_parameter_type_rejects_imaginary_part_for_real_parameters() {
+        let err = validate_model_parameter_type(
+            "alpha",
+            ParameterType::Real,
+            &Complex::new(F(1.0), F(2.0)),
+        )
+        .unwrap_err();
+        assert!(err
+            .to_string()
+            .contains("cannot be assigned an imaginary component"));
+        assert!(err.to_string().contains(MODEL_REAL_VALUE_FORMAT_HINT));
+    }
+
+    #[test]
+    fn validate_model_parameter_type_accepts_complex_values_for_imaginary_parameters() {
+        validate_model_parameter_type(
+            "alpha",
+            ParameterType::Imaginary,
+            &Complex::new(F(1.0), F(2.0)),
+        )
+        .unwrap();
     }
 
     #[test]
@@ -553,5 +852,269 @@ integrate = 10
         assert_eq!(merged.cli_settings.global.n_cores.generate, 1);
         assert_eq!(merged.cli_settings.global.n_cores.compile, 10);
         assert_eq!(merged.cli_settings.global.n_cores.integrate, 10);
+    }
+
+    #[test]
+    fn set_model_rejects_internal_parameters() {
+        let model = load_generic_model("sm");
+        let internal_param = model
+            .parameters
+            .values()
+            .find(|param| param.nature == ParameterNature::Internal)
+            .expect("SM model must contain internal parameters")
+            .name
+            .to_string();
+
+        let mut state = State::new_test();
+        state.model = model;
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        assert!(!state
+            .model_parameters
+            .contains_key(&UFOSymbol::from(internal_param.as_str())));
+
+        let err = Set::Model {
+            pairs: vec![KvPair {
+                key: internal_param.clone(),
+                value: "1.0".to_string(),
+            }],
+        }
+        .run(
+            &mut state,
+            &mut CLISettings::default(),
+            &mut RuntimeSettings::default(),
+        )
+        .unwrap_err();
+
+        let err_text = format!("{err:?}");
+        assert!(!err_text.is_empty());
+    }
+
+    #[test]
+    fn set_model_accepts_python_style_complex_literals() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("sm");
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        let parameter = state
+            .model_parameters
+            .keys()
+            .next()
+            .expect("expected at least one external model parameter")
+            .to_string();
+
+        Set::Model {
+            pairs: vec![KvPair {
+                key: parameter.clone(),
+                value: "-1.0e13-33.0e12i".to_string(),
+            }],
+        }
+        .run(
+            &mut state,
+            &mut CLISettings::default(),
+            &mut RuntimeSettings::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            state.model_parameters[&UFOSymbol::from(parameter.as_str())],
+            Complex::new(F(-1.0e13), F(-33.0e12))
+        );
+    }
+
+    #[test]
+    fn set_model_rejects_imaginary_component_for_real_parameters() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("sm");
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        let parameter = state
+            .model
+            .parameters
+            .values()
+            .find(|parameter| {
+                parameter.nature == ParameterNature::External
+                    && parameter.parameter_type == ParameterType::Real
+            })
+            .expect("expected at least one external real model parameter")
+            .name
+            .to_string();
+
+        let err = Set::Model {
+            pairs: vec![KvPair {
+                key: parameter,
+                value: "1.0+2.0i".to_string(),
+            }],
+        }
+        .run(
+            &mut state,
+            &mut CLISettings::default(),
+            &mut RuntimeSettings::default(),
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("cannot be assigned an imaginary component"));
+    }
+
+    #[test]
+    fn updates_global_display_directive_detects_kv_string_and_file_inputs() {
+        let tmp_name = format!(
+            "gammaloop_set_display_directive_{}_{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let file_path = std::env::temp_dir().join(tmp_name);
+        std::fs::write(
+            &file_path,
+            "[global]\ndisplay_directive = \"warn\"\nlogfile_directive = \"off\"\n",
+        )
+        .unwrap();
+
+        assert!(SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.display_directive".to_string(),
+                value: "warn".to_string(),
+            }]
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        assert!(SetArgs::String {
+            string: "[global]\ndisplay_directive = \"warn\"\n".to_string(),
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        assert!(SetArgs::File {
+            file: file_path.clone(),
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        assert!(!SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.n_cores.generate".to_string(),
+                value: "4".to_string(),
+            }]
+        }
+        .updates_global_display_directive()
+        .unwrap());
+
+        let _ = std::fs::remove_file(file_path);
+    }
+
+    #[test]
+    fn updates_global_logfile_directive_detects_kv_string_and_file_inputs() {
+        let tmp_name = format!(
+            "gammaloop_set_logfile_directive_{}_{}.toml",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        let file_path = std::env::temp_dir().join(tmp_name);
+        std::fs::write(
+            &file_path,
+            "[global]\ndisplay_directive = \"warn\"\nlogfile_directive = \"debug\"\n",
+        )
+        .unwrap();
+
+        assert!(SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.logfile_directive".to_string(),
+                value: "debug".to_string(),
+            }]
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
+
+        assert!(SetArgs::String {
+            string: "[global]\nlogfile_directive = \"debug\"\n".to_string(),
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
+
+        assert!(SetArgs::File {
+            file: file_path.clone(),
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
+
+        assert!(!SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.display_directive".to_string(),
+                value: "warn".to_string(),
+            }]
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
+
+        let _ = std::fs::remove_file(file_path);
+    }
+
+    #[test]
+    fn set_global_display_directive_clears_cli_stderr_override() {
+        static TEST_MUTEX: Mutex<()> = Mutex::new(());
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+
+        set_stderr_log_filter("info").unwrap();
+        set_stderr_log_filter_override(Some("gammaloop_api=debug,gammalooprs=debug".to_string()))
+            .unwrap();
+
+        Set::Global {
+            input: SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.display_directive".to_string(),
+                    value: "warn".to_string(),
+                }],
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut runtime_settings)
+        .unwrap();
+
+        assert_eq!(cli_settings.global.display_directive, "warn");
+        assert_eq!(get_stderr_log_filter(), "warn");
+    }
+
+    #[test]
+    fn set_global_logfile_directive_errors_when_file_logger_was_boot_disabled() {
+        static TEST_MUTEX: Mutex<()> = Mutex::new(());
+        let _guard = TEST_MUTEX.lock().unwrap();
+
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+
+        crate::tracing::set_file_log_filter("off").unwrap();
+        crate::tracing::set_file_log_filter_override(Some(
+            "gammaloop_api=off,gammalooprs=off".to_string(),
+        ))
+        .unwrap();
+        crate::tracing::configure_file_log_boot_mode(true, Some("--logfile-level off")).unwrap();
+
+        let err = Set::Global {
+            input: SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.logfile_directive".to_string(),
+                    value: "debug".to_string(),
+                }],
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut runtime_settings)
+        .unwrap_err();
+
+        assert!(format!("{err:?}").contains("logfile logger disabled"));
+        crate::tracing::configure_file_log_boot_mode(false, None).unwrap();
+        crate::tracing::set_file_log_filter_override(None).unwrap();
     }
 }

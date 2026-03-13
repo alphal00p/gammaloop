@@ -155,7 +155,7 @@ fn from_symbolica() -> Result<()> {
     }
     "#);
 
-    // clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -171,7 +171,7 @@ fn from_symbolica() -> Result<()> {
 
 //     cli.run_command("generate amp e+ e- > d d~")?;
 
-//     clean_test(&cli.cli_settings.state_folder);
+//     clean_test(&cli.cli_settings.state.folder);
 
 //     Ok(())
 // }

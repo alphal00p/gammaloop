@@ -1,6 +1,6 @@
 commands = [
   "import model sm-default",
-  "set model aEWM1=[128.93,0.]",
+  "set model aEWM1=128.93",
   "import graphs ./tests/resources/graphs/physical_1L_6photons.dot",
   "generate",
   "quit"

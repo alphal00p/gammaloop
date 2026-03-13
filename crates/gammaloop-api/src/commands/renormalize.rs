@@ -1,13 +1,13 @@
 use std::fs::File;
 use std::{fs, path::PathBuf};
 
+use crate::completion::CompletionArgExt;
 use crate::state::{ProcessListExt, ProcessRef, State};
 use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::utils::symbolica_ext::TypstFormat;
-use gammalooprs::uv::UVgenerationSettings;
 use idenso::color::{ColorSimplifier, CS};
 use idenso::metric::MetricSimplifier;
 use schemars::JsonSchema;
@@ -25,7 +25,12 @@ use tracing::info;
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Renormalize {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub process: Option<ProcessRef>,
 
     #[arg(short = 'a', long = "align-to-rqft", default_value_t = false)]
@@ -35,7 +40,13 @@ pub struct Renormalize {
     pub print_namespaces: bool,
 
     /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    /// The amplitude name to renormalize
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub integrand_name: Option<String>,
 
     /// The directory to store per-graph results in

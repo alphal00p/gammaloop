@@ -5,7 +5,7 @@ commands = [
   "import model sm-default",
   "import graphs ./tests/resources/graphs/trees/qqx_aaa.dot",
   "generate",
-  # "inspect --process-id 0 --name default",
+  # "inspect -p 0 -i default",
 ]
 
 [default_runtime_settings.kinematics.externals]

@@ -9,7 +9,7 @@ use gammaloop_api::{
     commands::{
         Profile, Renormalize, inspect::Inspect, integrate::Integrate, profile::UltraVioletProfile,
     },
-    state::ProcessRef,
+    state::{ProcessRef, RunHistory, SyncSettings},
 };
 
 use gammalooprs::{
@@ -27,6 +27,7 @@ use spenso::{
     structure::{IndexlessNamedStructure, NamedStructure, representation::LibraryRep},
     tensors::{complex::RealOrComplexTensor, parametric::ParamOrConcrete},
 };
+use std::path::{Path, PathBuf};
 use std::{env, fmt::Write, ops::Deref, time::Duration};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -37,7 +38,9 @@ use symbolica::{
 use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
-use gammaloop_integration_tests::{clean_test, get_test_cli, get_tests_workspace_path};
+use gammaloop_integration_tests::{
+    clean_test, get_test_cli, get_tests_workspace_path, new_cli_for_test,
+};
 
 #[test]
 fn oak() -> Result<()> {
@@ -156,7 +159,7 @@ fn trees() -> Result<()> {
 
     assert_snapshot!(format!("{a:.8e}"),@"(1.4727604164105595e-4+-1.1503139369130214e-3i)");
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -205,7 +208,7 @@ fn photons_1l_integrate() -> Result<()> {
     assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
     assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -246,7 +249,7 @@ fn photons_1l_inspect() -> Result<()> {
     // The old test at a very bad value of e_cm, so I created a new value using the example card in the old main
     assert_snapshot!(format!("{inspect:.8e}"),@"(-4.2365441831364175e-12+-3.71072895861423e-12i)");
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -309,7 +312,7 @@ fn photons_2l_inspect() -> Result<()> {
     // wrong result
     assert_snapshot!(format!("{inspect:.8e}"));
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -677,7 +680,7 @@ fn test_grouped_subtraction() -> Result<()> {
         &F(1e-1),
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -723,7 +726,7 @@ fn scalar_bubble() -> Result<()> {
 
     // from Kaapo: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
 
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -731,11 +734,11 @@ fn scalar_bubble() -> Result<()> {
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.03838e-02)), 1));
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.16050e-02)), 1));
 
-    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.46968e-03)), 1));
     let renorm_command = Renormalize::default();
@@ -744,7 +747,7 @@ fn scalar_bubble() -> Result<()> {
 
     println!("{}", res[0]);
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -777,7 +780,7 @@ fn scalar_sunrise() -> Result<()> {
         ..Default::default()
     });
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -790,7 +793,7 @@ fn scalar_sunrise() -> Result<()> {
 
     // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-4.359e-3");
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -799,7 +802,7 @@ fn scalar_sunrise() -> Result<()> {
     // assert_snapshot!(format!("{integral_no_cache:.3}"),@"-2.474e-3");
     assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.48100e-03)), 1));
 
-    // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    // cli.run_command("set model mass_scalar_1=3.0")?;
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     // assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-4.5184321377520566e-4+0e0i)");
 
@@ -808,7 +811,7 @@ fn scalar_sunrise() -> Result<()> {
     let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;
 
     println!("{}", res[0]);
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -844,7 +847,7 @@ fn scalar_mercedes() -> Result<()> {
     //5.89551e-06	3.35645e-06	1.87120e-06
 
     // from Kaapo: m=1 muv=5 5.89551e-06 m=2 muv=5 	3.35645e-06	 m=3 muv=5 1.87120e-06
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -855,21 +858,21 @@ fn scalar_mercedes() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(3.35645e-06)), 3),
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.87120e-06)), 3),
         "Not compatible: {integral_no_cache}",
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -907,7 +910,7 @@ fn scalar_basketball() -> Result<()> {
     //1.47240e-03	7.15184e-04	2.27485e-04
 
     // from Kaapo: m=1 muv=5 1.47240e-03 m=2 muv=5 	7.15184e-04	 m=3 muv=5 2.27485e-04
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -918,7 +921,7 @@ fn scalar_basketball() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    // cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    // cli.run_command("set model mass_scalar_1=2.0")?;
     // let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
     // assert_eq!(res.pass_fail(-0.9).failed, 0);
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -927,7 +930,7 @@ fn scalar_basketball() -> Result<()> {
     //     "Not compatible: {integral_no_cache}",
     // );
 
-    // cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    // cli.run_command("set model mass_scalar_1=3.0")?;
     // let res = profile_cmd.run(&mut cli.state, &cli.cli_settings)?;
     // assert_eq!(res.pass_fail(-0.9).failed, 0);
     // let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -936,7 +939,7 @@ fn scalar_basketball() -> Result<()> {
     //     "Not compatible: {integral_no_cache}",
     // );
 
-    // clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -975,7 +978,7 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
     //2.90078e-06	1.59168e-06	6.86001e-07
 
     // from Kaapo: m=1 muv=5 2.90078e-06 m=2 muv=5 	1.59168e-06	 m=3 muv=5 6.86001e-07
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
     let res = profile_cmd
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_uv();
@@ -987,21 +990,21 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.59168e-06)), 3),
         "Not compatible: {integral_no_cache}",
     );
 
-    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
         integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.86001e-07)), 3),
         "Not compatible: {integral_no_cache}",
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -1030,7 +1033,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
     };
 
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
-    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    cli.run_command("set model mass_scalar_1=1.0")?;
 
     fn string_with_prefactor(rs: &[Complex<f64>]) -> String {
         let mut out = String::new();
@@ -1139,7 +1142,7 @@ fn scalar_sunrise_inspect() -> Result<()> {
     4.62050e-12+i-0.00000e0
     -3.63173e-19+i-0.00000e0
     ");
-    // clean_test(&cli.cli_settings.state_folder);
+    // clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -1212,7 +1215,7 @@ fn scalar_box() -> Result<()> {
         &F(1e-4),
     );
 
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&cli.cli_settings.state.folder);
 
     Ok(())
 }
@@ -1298,64 +1301,55 @@ fn test_broken_network() -> Result<()> {
 
 #[test]
 fn test_simple_workflow_example_card() -> Result<()> {
-    let mut cli = get_test_cli(
-        None,
-        get_tests_workspace_path().join("simple_workflow_example"),
-        Some("simple_workflow_example".to_string()),
-        true,
-    )?;
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tests crate should live in the workspace root");
+    let mut run_history =
+        RunHistory::load(workspace_root.join("examples/command_cards/simple_workflow.toml"))?;
+    let state_path = get_tests_workspace_path().join("simple_workflow_example");
 
-    // Load and execute the simple workflow example card
-    cli.run_command("run ../examples/command_cards/simple_workflow.toml")?;
+    clean_test(&state_path);
 
-    // Verify that processes were generated
+    let mut state = new_cli_for_test(&state_path, None);
+    run_history.cli_settings.state.folder = state_path.clone();
+    let mut cli_settings = run_history.cli_settings.clone();
+    cli_settings.sync_settings()?;
+    let mut default_runtime_settings = run_history.default_runtime_settings.clone();
+
+    let _ = run_history.run(&mut state, &mut cli_settings, &mut default_runtime_settings)?;
+
     assert!(
-        !cli.state.process_list.processes.is_empty(),
+        !state.process_list.processes.is_empty(),
         "No processes were generated"
     );
+    assert_eq!(state.model.name, "sm", "Expected SM model to be loaded");
+    assert!(
+        state_path.join("justfile").exists(),
+        "Expected dot export helper files to be created in {}",
+        state_path.display()
+    );
 
-    // Verify that the Standard Model was loaded
-    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
-
-    clean_test(&cli.cli_settings.state_folder);
+    clean_test(&state_path);
     Ok(())
 }
 
 #[test]
 fn test_advanced_integration_example_card() -> Result<()> {
-    let mut cli = get_test_cli(
-        None,
-        get_tests_workspace_path().join("advanced_integration_example"),
-        Some("advanced_integration_example".to_string()),
-        true,
-    )?;
+    let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tests crate should live in the workspace root");
+    let run_history =
+        RunHistory::load(workspace_root.join("examples/command_cards/advanced_integration.toml"))?;
 
-    // Load and execute the advanced integration example card
-    cli.run_command("run ../examples/command_cards/advanced_integration.toml")?;
-
-    // Verify that processes were generated
-    assert!(
-        !cli.state.process_list.processes.is_empty(),
-        "No processes were generated"
+    assert_eq!(
+        run_history.commands[0].raw_string.as_deref(),
+        Some("import model sm-default")
     );
-
-    // Verify that the Standard Model was loaded
-    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
-
-    // Verify that settings were applied (check if we can access some expected configuration)
-    // The example sets specific integrator settings
-    let first_process = &cli.state.process_list.processes[0];
-    match &first_process.collection {
-        gammalooprs::processes::ProcessCollection::Amplitudes(amplitudes) => {
-            // Check that amplitudes were generated
-            assert!(!amplitudes.is_empty(), "No amplitudes were generated");
-        }
-        gammalooprs::processes::ProcessCollection::CrossSections(_) => {
-            // Cross sections are also valid
-        }
-    }
-
-    clean_test(&cli.cli_settings.state_folder);
+    assert_eq!(
+        run_history.cli_settings.state.folder,
+        PathBuf::from("./advanced_integration_state")
+    );
+    assert_eq!(run_history.default_runtime_settings.kinematics.e_cm, 500.0);
     Ok(())
 }
 

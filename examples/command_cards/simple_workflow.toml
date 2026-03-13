@@ -11,28 +11,23 @@ commands = [
     # Display available processes (should be empty initially)
     "display processes",
 
-    # Generate a simple QED process: electron-positron to muon pair
-    "generate amplitude e+ e- > mu+ mu- QED=2",
+    # Generate a simple tree-level decay process
+    "generate xs z > d d~ --only-diagrams",
 
-    # Display the generated processes
-    "display processes",
-
-    # Save Feynman diagrams as DOT files for visualization
-    "save dot ee_to_mumu_diagrams",
-
-    # Generate a more complex process with QCD corrections
-    "generate xs e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping",
+    # Generate another simple decay process
+    "generate xs z > b b~ --only-diagrams",
 
     # Display all processes again
     "display processes",
 
     # Save all diagrams
-    "save dot all_processes"
+    "save dot"
 ]
 
 # Default CLI settings for this workflow
 [cli_settings]
-state_folder = "./example_state"
+[cli_settings.state]
+folder = "./example_state"
 
 [cli_settings.global]
 logfile_directive = "info"

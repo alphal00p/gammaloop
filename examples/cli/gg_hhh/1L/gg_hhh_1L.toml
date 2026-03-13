@@ -1,12 +1,13 @@
 commands = [
   "run generate",
+  "run integrate_euclidean",
   "quit -o"
 ]
 
 [cli_settings]
 [cli_settings.state]
-folder = "./examples/cli/gg_hhh/2L/state"
-name = "gg_hhh_2l"
+folder = "./examples/cli/gg_hhh/1L/state"
+name = "gg_hhh_1l"
 
 [[commands_blocks]]
 name = "generate"
@@ -16,61 +17,81 @@ commands = [
     "set global kv global.n_cores.feyngen=10",
 
     "reset processes",
-    """generate amp g g > h h h | g h t t~ QED==3 [{2}]
-           --veto-vertex-interactions V_6 V_9 V_36 V_37
-           --number-of-fermion-loops 1 1
+    """generate amp g g > h h h / u d c s b QED==3 [{1}]
            --only-diagrams
            --numerator-grouping only_detect_zeroes
-           --select-graphs GL303
+           --select-graphs GL15
+           --loop-momentum-bases GL15=8
            --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
                                            * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
                                            * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
            -p gg_hhh
-           -i 2L
+           -i 1L
     """,
     "generate",
     "save dot",
+
     "save state -o",
 
 ]
 
 [[commands_blocks]]
-name = "setup_euclidean_configuration"
+name = "integrate_euclidean"
 commands = [
+
     "set model MT=1000.0",
     "set model WT=0.0",
     "set model ymt=1000.0",
+
+    "set process -p gg_hhh -i 1L defaults",
+
+    # Disable stability checks
+    """set process -p gg_hhh -i 1L string '
+    [stability]
+    rotation_axis = [ ]
+    '""",
+
+    # Add stability checks
+    # """set process -p gg_hhh -i 1L string '
+    # [[stability.rotation_axis]]
+    # type = "z"
+    # [[stability.rotation_axis]]
+    # type = "x"
+    # [[stability.rotation_axis]]
+    # type = "y"
+    # '""",
+
+    "set process -p gg_hhh -i 1L kv integrator.n_start=100000 integrator.n_max=1000000",
+    # Target for "euclidean" point confirmed with MadLoop
+    """integrate --process gg_hhh -i 1L --n-cores 10
+        --target 6.56089133881216768e-4 -4.17078968913725420e-6
+        --restart
+    """,
+
 ]
 
+
 [[commands_blocks]]
-name = "setup_physical_configuration"
+name = "integrate_physical"
 commands = [
+
+    "set process -p gg_hhh -i 1L defaults",
+
+    # Disable stability checks
+    """set process -p gg_hhh -i 1L string '
+    [stability]
+    rotation_axis = [ ]
+    '""",
+
+    # Target for the physical top mass of 173 GeV is also confirmed with MadLoop
     "set model MT=173.0",
     "set model WT=0.0",
     "set model ymt=173.0",
-]
-
-[[commands_blocks]]
-name = "integrate"
-commands = [
-    "set process -p gg_hhh -i 2L defaults",
-    """set process -p gg_hhh -i 2L string '
-    [sampling]
-    type = "discrete_graph_sampling"
-    sample_orientations = true
-    [sampling.sampling_type]
-    subtype = "discrete_multi_channeling"
-    '""",
-    "display settings process -p gg_hhh -i 2L",
-
-    # Disable stability checks
-    # "set process -p gg_hhh -i 2L stability.rotation_axis []",
-
-    "set process -p gg_hhh -i 2L kv integrator.n_start=100 integrator.n_max=1000000",
-
-    """integrate --process gg_hhh -i 2L --n-cores 10
-        --workspace-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace
-        --result-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace/result.txt
+    "set process -p gg_hhh -i 1L kv integrator.n_start=100000 integrator.n_max=1000000",
+    """integrate --process gg_hhh -i 1L --n-cores 10
+        --target 1.89203604685291554e-6 -5.46603099163412881e-6
+        --workspace-path ./GL_OUTPUT/gg_hhh/1L/state/integration_workspace
+        --result-path ./GL_OUTPUT/gg_hhh/1L/state/integration_workspace/result.txt
         --restart
     """,
 
@@ -107,10 +128,10 @@ helicities = [
 # b = 10.0
 
 ## a) Tropical sampling run.
-# [default_runtime_settings.sampling]
-# type = "discrete_graph_sampling"
-# [default_runtime_settings.sampling.sampling_type]
-# subtype = "tropical"
+#[default_runtime_settings.sampling]
+#type = "discrete_graph_sampling"
+#[default_runtime_settings.sampling.sampling_type]
+#subtype = "tropical"
 
 ##b) MC over LMB with explicit sum per sample point.
 #[default_runtime_settings.sampling]
@@ -130,9 +151,6 @@ subtype = "discrete_multi_channeling"
 #sample_orientations = true
 #[default_runtime_settings.sampling.sampling_type]
 #subtype = "discrete_multi_channeling"
-
-[default_runtime_settings.subtraction]
-disable_threshold_subtraction = false
 
 [cli_settings.global.generation.compile]
 inline_asm = true
@@ -169,3 +187,6 @@ summed_function_map = true
 enable_thresholds = true
 # The option below specifies the generation of threshold for the kinematics supplied
 check_esurface_at_generation = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false

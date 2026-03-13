@@ -8,7 +8,7 @@ use crate::{
     utils::{F, FloatLike, newton_solver::newton_iteration_and_derivative},
 };
 
-use crate::utils::serde_utils::{IsDefault, is_false};
+use crate::utils::serde_utils::{IsDefault, is_false, show_defaults_helper};
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use itertools::Itertools;
@@ -35,7 +35,7 @@ pub struct PhaseSpaceImprovementSettings {
 }
 
 fn _default_large_def_check(val: &Option<F<f64>>) -> bool {
-    *val == Some(F(1e-12))
+    show_defaults_helper(*val == Some(F(1e-12)))
 }
 
 impl Default for PhaseSpaceImprovementSettings {

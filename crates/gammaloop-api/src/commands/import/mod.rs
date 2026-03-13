@@ -6,7 +6,10 @@ use model::ImportModel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::state::{ProcessRef, State};
+use crate::{
+    completion::CompletionArgExt,
+    state::{ProcessRef, State},
+};
 use color_eyre::Result;
 use eyre::eyre;
 
@@ -19,10 +22,15 @@ pub enum Import {
         path: PathBuf,
 
         /// Process reference: #<id>, name:<name>, or <id>/<name>
-        #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+        #[arg(
+            short = 'p',
+            long = "process",
+            value_name = "PROCESS",
+            completion_process_selector(crate::completion::SelectorKind::Any)
+        )]
         process: Option<ProcessRef>,
 
-        #[arg(short = 'i')]
+        #[arg(short = 'i', completion_disable_special_value())]
         integrand_name: Option<String>,
 
         #[arg(short = 'o', default_value_t = false, conflicts_with = "append")]

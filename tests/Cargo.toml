@@ -12,7 +12,7 @@ bincode = { workspace = true, features = ["serde"] }
 color-eyre = "0.6"
 colored = "*"
 eyre = {workspace = true}
-gammaloop-api = { package = "gammaloop-api", workspace = true }
+gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }
 insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
 itertools = "0.14"
@@ -23,6 +23,8 @@ symbolica = { workspace = true, default-features = false, features = [
   "serde"
 ] }
 tabled = { version = "0.20.0", features = ["ansi"] }
+toml = { workspace = true }
 tracing = { version = "0.1.41", features = ["release_max_level_info"] }
 vakint = {workspace=true}
 which = "8.0.0"
+serial_test = "3.2.0"

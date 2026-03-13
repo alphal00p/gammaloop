@@ -3,7 +3,7 @@ commands = [
     "import model sm-default",
     "import graphs ./qqx_aaa_tree_user_numerator.dot",
     "generate",
-    "inspect --process-id 0 --name default",
+    "inspect -p 0 -i default",
 ]
 
 [default_runtime_settings.Kinematics.externals]

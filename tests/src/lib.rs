@@ -6,28 +6,32 @@ use color_eyre::Result;
 
 use gammaloop_api::{
     CLISettings,
-    commands::{Commands, save::SaveState},
+    commands::save::SaveState,
+    session::{CliSession, CliSessionState},
     state::{RunHistory, State, SyncSettings},
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
 use std::{
     env,
-    ops::{Deref, DerefMut},
+    ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Once,
 };
 use tracing::{debug, warn};
 
 static SET_WORKSPACE_CWD: Once = Once::new();
 
+fn workspace_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("integration-tests must live in <workspace>/tests")
+        .to_path_buf()
+}
+
 fn ensure_workspace_cwd() {
     SET_WORKSPACE_CWD.call_once(|| {
-        let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("integration-tests must live in <workspace>/tests")
-            .to_path_buf();
+        let workspace_root = workspace_root();
         std::env::set_current_dir(&workspace_root).unwrap_or_else(|e| {
             panic!(
                 "Failed to set working directory to workspace root '{}': {e}",
@@ -44,13 +48,15 @@ pub fn run_card(resource_path: impl AsRef<Path>) -> Result<RunHistory> {
     RunHistory::load(PathBuf::from("./tests/resources/run_cards").join(resource_path))
 }
 
-pub const TESTS_WORKSPACE: &str = "./tests/workspace";
+pub const TESTS_ARTIFACTS: &str = "tests/artifacts";
 
+#[derive(Clone)]
 pub struct CLIState {
     pub state: State,
     pub cli_settings: CLISettings,
     pub default_runtime_settings: gammalooprs::settings::RuntimeSettings,
     pub run_history: RunHistory,
+    pub session_state: CliSessionState,
 }
 
 impl Deref for CLIState {
@@ -68,16 +74,49 @@ impl DerefMut for CLIState {
 }
 
 impl CLIState {
-    pub fn run_command(&mut self, command: &str) -> Result<()> {
-        let cmd = Commands::from_str(command)?;
-
-        cmd.run(
+    fn with_session<T>(&mut self, f: impl FnOnce(&mut CliSession<'_>) -> Result<T>) -> Result<T> {
+        let mut session = CliSession::new(
             &mut self.state,
             &mut self.run_history,
             &mut self.cli_settings,
             &mut self.default_runtime_settings,
+            &mut self.session_state,
+        );
+        f(&mut session)
+    }
+
+    pub fn run_command_flow(&mut self, command: &str) -> Result<ControlFlow<SaveState>> {
+        let command_history = gammaloop_api::state::CommandHistory::from_raw_string(command)?;
+        self.with_session(|session| session.execute_top_level(command_history))
+    }
+
+    pub fn run_command(&mut self, command: &str) -> Result<()> {
+        self.run_command_flow(command).map(|_| ())
+    }
+
+    pub fn apply_boot_run_history(
+        &mut self,
+        run_history: &RunHistory,
+    ) -> Result<ControlFlow<SaveState>> {
+        self.with_session(|session| session.apply_boot_run_history(run_history, run_history, false))
+    }
+
+    pub fn dismiss_pending_commands_block(&mut self, trigger: &str) -> bool {
+        self.with_session(|session| Ok(session.dismiss_pending_commands_block(trigger)))
+            .unwrap_or(false)
+    }
+
+    pub fn save_state(&mut self) -> Result<()> {
+        SaveState {
+            override_state: Some(true),
+            ..Default::default()
+        }
+        .save(
+            &mut self.state,
+            &self.run_history,
+            &self.default_runtime_settings,
+            &self.cli_settings,
         )
-        .map(|_| ())
     }
 }
 
@@ -112,7 +151,7 @@ pub fn get_test_cli(
         RunHistory::default()
     };
     let mut global_settings = cmds.cli_settings.clone();
-    global_settings.state_folder = state_path.as_ref().to_path_buf();
+    global_settings.state.folder = state_path.as_ref().to_path_buf();
     global_settings.sync_settings()?;
     let default_runtime_settings = cmds.default_runtime_settings.clone();
     SaveState {
@@ -131,6 +170,7 @@ pub fn get_test_cli(
         cli_settings: global_settings,
         default_runtime_settings,
         run_history: cmds,
+        session_state: CliSessionState::default(),
     })
 }
 
@@ -169,11 +209,11 @@ pub fn clean_test(save_path: impl AsRef<Path>) {
 pub fn get_tests_workspace_path() -> PathBuf {
     if let Ok(user_specified_state_path) = env::var("TESTS_GAMMALOOP_STATE_PATH") {
         if user_specified_state_path.eq_ignore_ascii_case("AUTO") {
-            env::temp_dir().join("gammaloop_tests_workspace")
+            env::temp_dir().join("gammaloop_test_artifacts")
         } else {
             std::path::PathBuf::from(user_specified_state_path)
         }
     } else {
-        PathBuf::from(TESTS_WORKSPACE)
+        workspace_root().join(TESTS_ARTIFACTS)
     }
 }

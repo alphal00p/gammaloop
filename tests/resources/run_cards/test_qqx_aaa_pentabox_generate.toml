@@ -22,7 +22,7 @@ commands = [
   ## # INSPECTION: START ###
   # inspection in momentum space is onlu possible for invertible parameterisations (i.e not tropical sampling)
   # "set process -p qqx_aaa -i pentabox kv sampling={\"type\":\"default\",\"mode\":\"spherical\",\"mapping\":\"linear\",\"b\":10.0}",
-  ## #"inspect --process qqx_aaa -i pentabox -m -p 1.0 2.0 3.0",
+  ## #"inspect -p qqx_aaa -i pentabox -m -x 1.0 2.0 3.0",
   ## # INSPECTION: END ###
   ## # INTEGRATION: START ###
   # This does a default simple sampling with spherical parameterisation. Uncomment the two lines below if you instead want to rely on the

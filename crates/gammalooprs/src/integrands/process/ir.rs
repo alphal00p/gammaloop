@@ -268,6 +268,18 @@ impl Display for SingleLimitReport {
 }
 
 impl CrossSectionIntegrand {
+    pub fn ir_profile_completion_entries(&self) -> Vec<(String, Vec<String>)> {
+        self.enumerate_ir_limits()
+            .into_iter()
+            .map(|(graph_name, limits)| {
+                (
+                    graph_name,
+                    limits.into_iter().map(|limit| limit.to_string()).collect(),
+                )
+            })
+            .collect()
+    }
+
     pub fn test_ir(
         &mut self,
         ir_profile_settings: &IRProfileSetting,

@@ -2815,17 +2815,28 @@ impl ProcessDefinition {
             GenerationType::CrossSection => &self.cross_section_filters,
         };
 
-        let vertex_vetoes_filter = filters
+        let vertex_vetoes_filter: Option<HashSet<&str>> = filters
             .0
             .iter()
-            .filter_map(|f| {
+            .find_map(|f| {
                 if let FeynGenFilter::VertexVeto(filter) = f {
                     Some(filter)
                 } else {
                     None
                 }
             })
-            .next();
+            .map(|filter| filter.iter().map(String::as_str).collect());
+        let vertex_allowed_filter: Option<HashSet<&str>> = filters
+            .0
+            .iter()
+            .find_map(|f| {
+                if let FeynGenFilter::VertexAllow(filter) = f {
+                    Some(filter)
+                } else {
+                    None
+                }
+            })
+            .map(|filter| filter.iter().map(String::as_str).collect());
 
         const SB_INCOMING: bool = true;
         const SB_OUTGOING: bool = false;
@@ -2838,8 +2849,14 @@ impl ProcessDefinition {
             Vec<SmartString<LazyCompact>>,
         > = HashMap::default();
         'add_vertex_rules: for vertex_rule in model.vertex_rules.iter() {
-            if let Some(veto) = vertex_vetoes_filter {
-                if veto.contains(&vertex_rule.0.name.clone().into()) {
+            let vertex_name = vertex_rule.0.name.as_str();
+            if let Some(ref allowed) = vertex_allowed_filter {
+                if !allowed.contains(vertex_name) {
+                    continue 'add_vertex_rules;
+                }
+            }
+            if let Some(ref veto) = vertex_vetoes_filter {
+                if veto.contains(vertex_name) {
                     continue 'add_vertex_rules;
                 }
             }

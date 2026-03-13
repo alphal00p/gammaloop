@@ -491,6 +491,83 @@ impl CrossSectionGraphTerm {
 
         Ok(())
     }
+
+    // fn generate_event_for_cut<T: FloatLike>(
+    //     &self,
+    //     model: &Model,
+    //     t_scaling_solution: &NewtonIterationResult<T>,
+    //     momentum_sample: &MomentumSample<T>,
+    //     cut: &CrossSectionCut,
+    // ) -> Event<T> {
+    //     let rescaled_momenta =
+    //         momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
+
+    //     let mut new_event = Event::<T>::default();
+    //     // Set initial momenta and PDGs for the event
+    //     new_event
+    //         .kinematic_configuration
+    //         .0
+    //         .extend(rescaled_momenta.external_moms().clone());
+
+    //     new_event.particle_pdgs.0.extend(
+    //         self.graph
+    //             .get_external_partcles()
+    //             .iter()
+    //             .map(|p| p.pdg_code),
+    //     );
+
+    //     //let tt = self.graph.loop_momentum_basis.ext_edges.sort_by(|(ext_id_a, _),(ext_id_b, _)| );
+    //     // for (_, ext_edge_id) in self.graph.loop_momentum_basis.ext_edges.sort_by(|(ext_id_a, _),(ext_id_b, _)| -> ext_id_a.cmp(ext_id_b)) {
+    //     // }
+    //     // new_event.particle_pdgs.0
+    //     for (p, eid, d) in self.graph.iter_edges_of(&cut.left) {
+    //         let HedgePair::Split {
+    //             source: _,
+    //             sink: _,
+    //             split,
+    //         } = p
+    //         else {
+    //             panic!("Non-split edge in cut");
+    //         };
+
+    //         let mut edge_spatial_momentum = self.graph.loop_momentum_basis.edge_signatures[eid]
+    //             .compute_three_momentum_from_four(
+    //                 rescaled_momenta.loop_moms(),
+    //                 momentum_sample.external_moms(),
+    //             );
+
+    //         let cut_pdg = match split {
+    //             Flow::Source => {
+    //                 //o--> - - o
+    //                 d.pdg()
+    //             }
+    //             Flow::Sink => {
+    //                 //o - - >--o
+    //                 edge_spatial_momentum = -edge_spatial_momentum;
+    //                 model
+    //                     .get_particle_from_pdg(d.pdg())
+    //                     .get_anti_particle(&model)
+    //                     .pdg_code
+    //             }
+    //         };
+
+    //         let mass_value = if let Some(mass) = d.data.mass.value(model, &self.param_builder) {
+    //             if !mass.im.is_fully_zero() {
+    //                 panic!("Cut particles should have real-values masses ({})", d.pdg());
+    //             }
+    //             Some(mass.re)
+    //         } else {
+    //             None
+    //         };
+
+    //         let cut_four_momentum = edge_spatial_momentum.into_on_shell_four_momentum(mass_value);
+
+    //         new_event.kinematic_configuration.1.push(cut_four_momentum);
+    //         new_event.particle_pdgs.1.push(cut_pdg)
+    //     }
+
+    //     Event::<T>::default()
+    // }
 }
 
 impl GraphTerm for CrossSectionGraphTerm {

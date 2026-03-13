@@ -43,7 +43,7 @@ examples/**/state/
 examples/**/gammaloop_state/
 integration-tests/workspace/
 crates/integration-tests/workspace/
-tests/workspace/
+tests/artifacts/
 benches/**/tests_gammaloop_state/
 out.yaml
 outmap.yaml
@@ -52,10 +52,18 @@ find-baseline.svg
 *.data
 *.old
 eval.cpp
+improved_cli.md
 evaluate.cpp
 perf.data
 # logos
 logos/
+
+examples/cli/epem_a_ttxh
+crates/gammalooprs/src/old_observables
+crates/vakint/tests_workspace/*
+
+# I prefer to require forcefully adding changes to that file as it often contains user-specific customizations
+.zed/settings.json
 
 # C compiled objects
 *.o

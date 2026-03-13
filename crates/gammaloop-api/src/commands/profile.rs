@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
+    completion::CompletionArgExt,
     state::{ProcessListExt, ProcessRef, State},
     CLISettings,
 };
@@ -31,11 +32,21 @@ pub enum Profile {
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct UltraVioletProfile {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub process: Option<ProcessRef>,
 
-    /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    /// The amplitude name to inspect
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Amplitude)
+    )]
     pub integrand_name: Option<String>,
 
     /// Number of scaling points to sample
@@ -62,18 +73,28 @@ pub struct UltraVioletProfile {
     pub seed: Option<u64>,
 
     /// Output file for results (optional)
-    #[arg(short = 'o', long = "output")]
+    #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 }
 
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct InfraRedProfile {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::CrossSection)
+    )]
     pub process: Option<ProcessRef>,
 
-    /// The name of the process to inspect
-    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    /// The cross-section name to inspect
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::CrossSection)
+    )]
     pub integrand_name: Option<String>,
 
     /// Number of scaling points to sample
@@ -93,7 +114,7 @@ pub struct InfraRedProfile {
     pub seed: Option<u64>,
 
     /// Output file for results (optional)
-    #[arg(short = 'o', long = "output")]
+    #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::FilePath)]
     pub output_file: Option<PathBuf>,
 
     /// restrict test to particular graphs or limits

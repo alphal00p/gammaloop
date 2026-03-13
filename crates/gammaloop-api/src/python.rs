@@ -2,10 +2,9 @@ use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
-    initialisation::initialise,
     processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
-    utils::tracing::LogLevel,
+    utils::tracing::{LogFormat, LogLevel},
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
@@ -18,10 +17,11 @@ use crate::{
     commands::{
         import::model::ImportModel,
         inspect::{BatchedInspect, Inspect},
-        Commands, Evaluate,
+        Evaluate,
     },
+    session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
-    CLISettings, OneShot,
+    CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
 
@@ -38,9 +38,9 @@ use gammalooprs::feyngen::{
 use git_version::git_version;
 use itertools::{self, Itertools};
 use pyo3::types::PyFloat;
-use std::{path::PathBuf, str::FromStr};
+use std::path::PathBuf;
 
-use symbolica::{activate_oem_license, atom::AtomCore, parse};
+use symbolica::{atom::AtomCore, parse};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -51,7 +51,7 @@ use pyo3::{
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyComplex, PyModule, PyTuple, PyType},
-    wrap_pyfunction, FromPyObject, PyObject, PyRef, Python,
+    wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
 #[pyfunction]
@@ -68,8 +68,8 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
-#[pymodule]
-fn _gammaloop(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+#[pymodule(name = "_gammaloop")]
+fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     gammalooprs::initialisation::initialise().expect("initialization failed");
     gammalooprs::set_interrupt_handler();
     m.add_class::<GammaLoopAPI>()?;
@@ -359,58 +359,72 @@ struct GammaLoopAPI {
     #[allow(unused)]
     run_history: RunHistory,
     default_runtime_settings: RuntimeSettings,
+    session_state: CliSessionState,
 }
 
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
 #[pymethods]
 impl GammaLoopAPI {
     #[new]
-    #[pyo3(signature = (state_folder=PathBuf::from("./gammaloop_state"), log_file_name=None, log_level=None))]
+    #[pyo3(signature = (
+        state_folder=None,
+        boot_commands_path=None,
+        model_file=None,
+        trace_logs_filename=None,
+        level=None,
+        logfile_level=None,
+        logging_prefix=None,
+        read_only_state=false,
+        settings_global_path=None,
+        settings_runtime_defaults_path=None,
+        fresh_state=false
+    ))]
     pub fn new_python(
-        state_folder: PathBuf,
-        log_file_name: Option<String>,
-        log_level: Option<LogLevel>,
+        state_folder: Option<PathBuf>,
+        boot_commands_path: Option<PathBuf>,
+        model_file: Option<PathBuf>,
+        trace_logs_filename: Option<String>,
+        level: Option<LogLevel>,
+        logfile_level: Option<LogLevel>,
+        logging_prefix: Option<LogFormat>,
+        read_only_state: bool,
+        settings_global_path: Option<PathBuf>,
+        settings_runtime_defaults_path: Option<PathBuf>,
+        fresh_state: bool,
     ) -> Result<Self> {
-        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        };
-        initialise().map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not initialize GammaLoop API: {}", e))
-        })?;
-        let mut one_shot = OneShot {
-            // Don't actually run anything, just build up run card
-            dry_run: false,
-            // Path to the state folder
+        let LoadedState {
+            state,
+            run_history,
+            cli_settings,
+            default_runtime_settings,
+            session_state,
+            ..
+        } = StateLoadOption {
+            fresh_state,
+            boot_commands_path,
             state_folder,
-            // Python API takes an explicit state folder argument.
-            state_folder_explicitly_set: true,
-            // Path to the model file
-            model_file: None,
-            // Skip saving state on exit
-            no_save_state: false,
-            // Save state to file after each call
-            override_state: false,
-            // Set the name of the file containing all traces from gammaloop (logs) for current session
-            trace_logs_filename: log_file_name,
-            // Set log level for current session
-            level: log_level,
-            // Try to serialize using strings when saving run history
-            no_try_strings: false,
-            command: None,
-            fresh_state: false,
-        };
-        let (state, run_history, cli_settings, default_runtime_settings) =
-            one_shot.load().map_err(|e| {
-                exceptions::PyException::new_err(format!(
-                    "Could not load or create GammaLoop state: {}",
-                    e
-                ))
-            })?;
+            model_file,
+            trace_logs_filename,
+            level,
+            logfile_level,
+            logging_prefix,
+            read_only_state,
+            settings_global_path,
+            settings_runtime_defaults_path,
+        }
+        .load()
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not load or create GammaLoop state: {}",
+                e
+            ))
+        })?;
         Ok(GammaLoopAPI {
             gammaloop_state: state,
             run_history,
             cli_settings,
             default_runtime_settings,
+            session_state,
         })
     }
 
@@ -521,7 +535,7 @@ impl GammaLoopAPI {
                 return Err(eyre!(
                     "Unknown graph import format: {}. Supported formats are 'yaml' and 'json'",
                     other
-                ))
+                ));
             }
         };
 
@@ -569,7 +583,7 @@ impl GammaLoopAPI {
                 return Err(eyre!(
                     "Unknown graph import format: {}. Supported formats are sting and dot",
                     other
-                ))
+                ));
             }
         };
 
@@ -850,21 +864,30 @@ impl GammaLoopAPI {
 
     #[pyo3(name="run", signature = (command,))]
     pub(crate) fn run_command(&mut self, command: String) -> PyResult<()> {
-        let cmd = Commands::from_str(&command)?;
-
-        cmd.run(
+        let command_history =
+            crate::state::CommandHistory::from_raw_string(&command).map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Failed to parse command '{}': {}",
+                    command, e
+                ))
+            })?;
+        let mut session = CliSession::new(
             &mut self.gammaloop_state,
             &mut self.run_history,
             &mut self.cli_settings,
             &mut self.default_runtime_settings,
-        )
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Execution of command '{}' failed: {}",
-                command, e
-            ))
-        })
-        .map(|_| ())
+            &mut self.session_state,
+        );
+
+        session
+            .execute_top_level(command_history)
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Execution of command '{}' failed: {}",
+                    command, e
+                ))
+            })
+            .map(|_| ())
     }
 
     #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]

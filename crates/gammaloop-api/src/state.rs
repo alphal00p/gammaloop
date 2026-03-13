@@ -22,10 +22,9 @@ use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
+use toml::Value as TomlValue;
 use tracing::debug;
 use tracing::info;
-use tracing::warn;
-use tracing_subscriber::{reload, EnvFilter, Registry};
 
 use gammalooprs::{
     feyngen::GenerationType,
@@ -308,7 +307,10 @@ fn is_commands_blocks_empty(commands_blocks: &Vec<CommandsBlock>) -> bool {
 }
 
 fn should_persist_command(command: &Commands) -> bool {
-    !matches!(command, Commands::Quit(_) | Commands::Run(_))
+    !matches!(
+        command,
+        Commands::Quit(_) | Commands::StartCommandsBlock(_) | Commands::FinishCommandsBlock
+    )
 }
 
 /// Set whether CommandHistory should serialize as strings when the raw_string is available
@@ -372,8 +374,12 @@ impl<'de> Deserialize<'de> for CommandHistory {
             where
                 E: de::Error,
             {
-                CommandHistory::from_raw_string(value)
-                    .map_err(|_| E::custom(format!("Failed to parse command string: '{}'", value)))
+                CommandHistory::from_raw_string(value).map_err(|err| {
+                    E::custom(format!(
+                        "Failed to parse command string '{}': {}",
+                        value, err
+                    ))
+                })
             }
 
             fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
@@ -481,6 +487,34 @@ pub struct CommandsBlock {
     pub commands: Vec<CommandHistory>,
 }
 
+#[derive(Debug, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+struct RawRunHistoryToml {
+    default_runtime_settings: RuntimeSettings,
+    cli_settings: CLISettings,
+    commands_blocks: Vec<RawCommandsBlockToml>,
+    commands: Vec<TomlValue>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
+struct RawCommandsBlockToml {
+    name: String,
+    commands: Vec<TomlValue>,
+}
+
+impl CommandsBlock {
+    pub fn semantically_eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.commands.len() == other.commands.len()
+            && self
+                .commands
+                .iter()
+                .zip(other.commands.iter())
+                .all(|(left, right)| left.command == right.command)
+    }
+}
+
 impl SmartSerde for RunHistory {
     fn has_schema_path(&self, online: bool) -> Option<Result<PathBuf>> {
         Some(get_schema_folder(online).map(|f| f.join("runhistory.json")))
@@ -488,6 +522,16 @@ impl SmartSerde for RunHistory {
 }
 
 impl RunHistory {
+    pub fn freeze_boot_settings_from(&mut self, boot_run_history: &RunHistory) {
+        self.cli_settings.global = boot_run_history.cli_settings.global.clone();
+        self.default_runtime_settings = boot_run_history.default_runtime_settings.clone();
+    }
+
+    pub fn frozen_boot_settings_match(&self, boot_run_history: &RunHistory) -> bool {
+        self.cli_settings.global == boot_run_history.cli_settings.global
+            && self.default_runtime_settings == boot_run_history.default_runtime_settings
+    }
+
     /// Add a command to the run history
     pub fn push(&mut self, command: Commands) {
         self.push_with_raw(command, None);
@@ -510,25 +554,7 @@ impl RunHistory {
         schema_for!(RunHistory)
     }
 
-    fn select_commands_blocks(&mut self, selected_block_names: Option<&[String]>) -> Result<()> {
-        if !self.commands.is_empty() && !self.commands_blocks.is_empty() {
-            return Err(eyre!(
-                "Run card defines both `commands` and `commands_blocks`; use only one of them"
-            ));
-        }
-
-        if self.commands_blocks.is_empty() {
-            if let Some(selected_block_names) =
-                selected_block_names.filter(|names| !names.is_empty())
-            {
-                return Err(eyre!(
-                    "Run card block selection requested ({}) but this run card only defines `commands`",
-                    selected_block_names.join(", ")
-                ));
-            }
-            return Ok(());
-        }
-
+    pub fn validate(&self) -> Result<()> {
         let mut seen_names = HashSet::with_capacity(self.commands_blocks.len());
         for block in &self.commands_blocks {
             if block.name.trim().is_empty() {
@@ -543,71 +569,64 @@ impl RunHistory {
                 ));
             }
         }
-
-        let selected_blocks = if let Some(selected_block_names) =
-            selected_block_names.filter(|names| !names.is_empty())
-        {
-            let mut selected = Vec::with_capacity(selected_block_names.len());
-            for name in selected_block_names {
-                let block = self
-                    .commands_blocks
-                    .iter()
-                    .find(|block| block.name == *name)
-                    .ok_or_else(|| {
-                        eyre!(
-                            "Unknown command block '{name}'. Available command blocks: {}",
-                            self.commands_blocks
-                                .iter()
-                                .map(|block| block.name.as_str())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
-                    })?;
-                selected.push(block.clone());
-            }
-            selected
-        } else {
-            self.commands_blocks.clone()
-        };
-
-        if selected_blocks.is_empty() {
-            warn!("Run card defines `commands_blocks` but no blocks were selected");
-        }
-
-        self.commands = selected_blocks
-            .iter()
-            .flat_map(|block| block.commands.clone())
-            .collect();
-        self.commands_blocks = selected_blocks;
         Ok(())
     }
 
-    fn run_commands(
-        &mut self,
-        commands: Vec<CommandHistory>,
-        state: &mut State,
-        global_settings: &mut CLISettings,
-        default_runtime_settings: &mut RuntimeSettings,
-    ) -> Result<ControlFlow<SaveState>> {
-        for command_history in commands {
-            info!(
-                "Running command: {}",
-                if let Some(rs) = command_history.raw_string {
-                    rs.green()
-                } else {
-                    format!("{:?}", command_history.command).normal()
+    pub fn command_block(&self, name: &str) -> Option<&CommandsBlock> {
+        self.commands_blocks.iter().find(|block| block.name == name)
+    }
+
+    pub fn select_commands_blocks(
+        &self,
+        selected_block_names: &[String],
+    ) -> Result<Vec<CommandsBlock>> {
+        let mut selected = Vec::with_capacity(selected_block_names.len());
+        for name in selected_block_names {
+            let block = self.command_block(name).ok_or_else(|| {
+                eyre!(
+                    "Unknown command block '{}'. Available command blocks: {}",
+                    name,
+                    self.commands_blocks
+                        .iter()
+                        .map(|block| block.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            selected.push(block.clone());
+        }
+        Ok(selected)
+    }
+
+    pub fn merge_commands_blocks(&mut self, commands_blocks: &[CommandsBlock]) -> Result<()> {
+        for new_block in commands_blocks {
+            match self.command_block(&new_block.name) {
+                Some(existing_block) if existing_block.semantically_eq(new_block) => {}
+                Some(_) => {
+                    return Err(eyre!(
+                        "Run card command block '{}' redefines an existing block with different commands",
+                        new_block.name
+                    ));
                 }
-            );
-            if let ControlFlow::Break(a) = command_history.command.run(
-                state,
-                self,
-                global_settings,
-                default_runtime_settings,
-            )? {
-                return Ok(ControlFlow::Break(a));
+                None => self.commands_blocks.push(new_block.clone()),
             }
         }
-        Ok(ControlFlow::Continue(()))
+        self.validate()
+    }
+
+    pub fn apply_session_settings(
+        &self,
+        global_settings: &mut CLISettings,
+        default_runtime_settings: &mut RuntimeSettings,
+    ) -> Result<()> {
+        if self.cli_settings.global != GlobalSettings::default() {
+            global_settings.global = self.cli_settings.global.clone();
+            global_settings.sync_settings()?;
+        }
+        if self.default_runtime_settings != RuntimeSettings::default() {
+            *default_runtime_settings = self.default_runtime_settings.clone();
+        }
+        Ok(())
     }
 
     pub fn run(
@@ -616,77 +635,34 @@ impl RunHistory {
         global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<SaveState>> {
-        // A run card can carry runtime/global defaults that should be active before
-        // executing any command (e.g. before `set process ... defaults`).
-        if self.cli_settings.global != GlobalSettings::default() {
-            global_settings.global = self.cli_settings.global.clone();
-            global_settings.sync_settings()?;
-        }
-        if self.default_runtime_settings != RuntimeSettings::default() {
-            *default_runtime_settings = self.default_runtime_settings.clone();
-        }
-
-        if !self.commands_blocks.is_empty() {
-            for block in self.commands_blocks.clone() {
-                info!(
-                    "> {} {}",
-                    "Starting command block".blue(),
-                    block.name.green()
-                );
-                if let ControlFlow::Break(a) = self.run_commands(
-                    block.commands,
-                    state,
-                    global_settings,
-                    default_runtime_settings,
-                )? {
-                    return Ok(ControlFlow::Break(a));
-                }
-            }
-            return Ok(ControlFlow::Continue(()));
-        }
-
-        self.run_commands(
-            self.commands.clone(),
+        let mut session_state = crate::session::CliSessionState::default();
+        let mut session = crate::session::CliSession::new(
             state,
+            self,
             global_settings,
             default_runtime_settings,
-        )
-    }
-    pub fn merge(&mut self, other: Self) {
-        self.commands.extend(other.commands);
+            &mut session_state,
+        );
+        session.replay_run_history()
     }
 
-    fn flattened_for_save(&self) -> Self {
-        let mut flattened = self.clone();
-        if flattened.commands.is_empty() && !flattened.commands_blocks.is_empty() {
-            flattened.commands = flattened
-                .commands_blocks
-                .iter()
-                .flat_map(|block| block.commands.clone())
-                .collect();
-        }
-        flattened
+    fn filtered_for_save(&self) -> Self {
+        let mut filtered = self.clone();
+        filtered
             .commands
             .retain(|command_history| should_persist_command(&command_history.command));
-        flattened.commands_blocks.clear();
-        flattened
+        filtered
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
-        Self::load_with_block_selection(path, None)
-    }
-
-    pub fn load_with_block_selection(
-        path: impl AsRef<Path>,
-        selected_block_names: Option<&[String]>,
-    ) -> Result<Self> {
         let path = path.as_ref();
         debug!("Loaded run history from file {}", path.display());
 
-        let mut runhistory = Self::from_file(path, "run history")?;
-        runhistory.cli_settings.sync_settings()?;
-        runhistory.select_commands_blocks(selected_block_names)?;
-
+        let runhistory = match path.extension().and_then(|ext| ext.to_str()) {
+            Some("toml") => Self::load_toml(path)?,
+            _ => Self::from_file(path, "run history")?,
+        };
+        runhistory.validate()?;
         Ok(runhistory)
     }
 
@@ -696,7 +672,7 @@ impl RunHistory {
         override_state_file: bool,
         _strict: bool,
     ) -> Result<()> {
-        self.flattened_for_save()
+        self.filtered_for_save()
             .to_file(root_folder.join("run.toml"), override_state_file)?;
 
         //Self::schema().to_file(root_folder.join("run_schema.json"))?;
@@ -709,10 +685,62 @@ impl RunHistory {
         override_state_file: bool,
         _strict: bool,
     ) -> Result<()> {
-        self.flattened_for_save()
+        self.filtered_for_save()
             .to_file(root_folder.join("run.yaml"), override_state_file)?;
         //Self::schema().to_file(root_folder.join("run_schema.json"))?;
         Ok(())
+    }
+
+    fn load_toml(path: &Path) -> Result<Self> {
+        let raw = fs::read_to_string(path)
+            .with_context(|| format!("Could not open run history file {}", path.display()))?;
+        let raw_run_history: RawRunHistoryToml =
+            toml::from_str(&raw).wrap_err("Error parsing run history toml")?;
+
+        let commands = raw_run_history
+            .commands
+            .into_iter()
+            .enumerate()
+            .map(|(index, value)| {
+                parse_toml_command_history(value, &format!("top-level command #{}", index + 1))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let commands_blocks = raw_run_history
+            .commands_blocks
+            .into_iter()
+            .map(|block| {
+                let RawCommandsBlockToml { name, commands } = block;
+                let commands = commands
+                    .into_iter()
+                    .enumerate()
+                    .map(|(index, value)| {
+                        parse_toml_command_history(
+                            value,
+                            &format!("command block '{}' command #{}", name, index + 1),
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(CommandsBlock { name, commands })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(Self {
+            default_runtime_settings: raw_run_history.default_runtime_settings,
+            cli_settings: raw_run_history.cli_settings,
+            commands_blocks,
+            commands,
+        })
+    }
+}
+
+fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<CommandHistory> {
+    match value {
+        TomlValue::String(raw) => CommandHistory::from_raw_string(&raw)
+            .map_err(|err| eyre!("Failed to parse {} '{}': {}", context, raw, err)),
+        other => other
+            .try_into::<CommandHistory>()
+            .map_err(|err| eyre!("Failed to parse {}: {}", context, err)),
     }
 }
 
@@ -725,7 +753,6 @@ pub struct State {
     pub model: Model,
     pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
-    pub log_filter: reload::Handle<EnvFilter, Registry>,
 }
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
@@ -745,17 +772,7 @@ impl Default for StateManifest {
     }
 }
 
-impl StateManifest {
-    fn legacy() -> Self {
-        Self { version: 0 }
-    }
-}
-
-fn run_state_migration_checks(
-    manifest: &StateManifest,
-    save_path: &Path,
-    has_external_model_override: bool,
-) -> Result<()> {
+fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Result<()> {
     if manifest.version > CURRENT_STATE_MANIFEST_VERSION {
         return Err(eyre!(
             "State version {} is newer than this binary supports (max {}). Please upgrade gammaloop.",
@@ -765,28 +782,27 @@ fn run_state_migration_checks(
     }
 
     match manifest.version {
-        0 => {
+        1 => {
             if !save_path.join("symbolica_state.bin").exists() {
                 return Err(eyre!(
-                    "Legacy state at '{}' is missing required file symbolica_state.bin",
+                    "Saved state at '{}' is missing required file symbolica_state.bin",
                     save_path.display()
                 ));
             }
             if !save_path.join("processes").exists() {
                 return Err(eyre!(
-                    "Legacy state at '{}' is missing required folder processes/",
+                    "Saved state at '{}' is missing required folder processes/",
                     save_path.display()
                 ));
             }
-            if !has_external_model_override && !save_path.join("model.json").exists() {
+            if !save_path.join("model.json").exists() {
                 return Err(eyre!(
-                    "Legacy state at '{}' is missing required file model.json",
+                    "Saved state at '{}' is missing required file model.json",
                     save_path.display()
                 ));
             }
             Ok(())
         }
-        1 => Ok(()),
         _ => Err(eyre!(
             "State version {} is not supported by this binary.",
             manifest.version
@@ -794,34 +810,72 @@ fn run_state_migration_checks(
     }
 }
 
-fn load_state_manifest(
-    save_path: &Path,
-    has_external_model_override: bool,
-) -> Result<StateManifest> {
-    let manifest_path = save_path.join(STATE_MANIFEST_FILE);
-    let manifest = if manifest_path.exists() {
-        let raw_manifest = fs::read_to_string(&manifest_path).with_context(|| {
-            format!(
-                "Trying to read state manifest file {}",
-                manifest_path.display()
-            )
-        })?;
-        toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
-            format!(
-                "Trying to parse state manifest file {}",
-                manifest_path.display()
-            )
-        })?
-    } else {
-        warn!(
-            "No {} found in '{}'. Treating state as legacy version 0.",
-            STATE_MANIFEST_FILE,
-            save_path.display()
-        );
-        StateManifest::legacy()
-    };
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StateFolderKind {
+    Missing,
+    Scratch,
+    Saved,
+    Invalid(String),
+}
 
-    run_state_migration_checks(&manifest, save_path, has_external_model_override)?;
+fn is_scratch_state_entry(entry: &fs::DirEntry) -> bool {
+    entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false)
+        && entry.file_name().to_string_lossy() == "logs"
+}
+
+pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
+    if !save_path.exists() {
+        return Ok(StateFolderKind::Missing);
+    }
+    if !save_path.is_dir() {
+        return Ok(StateFolderKind::Invalid(format!(
+            "'{}' exists but is not a directory",
+            save_path.display()
+        )));
+    }
+
+    let manifest_path = save_path.join(STATE_MANIFEST_FILE);
+    if manifest_path.exists() {
+        let manifest = load_state_manifest(save_path)?;
+        return Ok(match run_state_migration_checks(&manifest, save_path) {
+            Ok(()) => StateFolderKind::Saved,
+            Err(err) => StateFolderKind::Invalid(err.to_string()),
+        });
+    }
+
+    let mut entries = fs::read_dir(save_path)
+        .with_context(|| format!("Trying to read state folder '{}'", save_path.display()))?;
+    if entries.by_ref().all(|entry| {
+        entry
+            .map(|entry| is_scratch_state_entry(&entry))
+            .unwrap_or(false)
+    }) {
+        return Ok(StateFolderKind::Scratch);
+    }
+
+    Ok(StateFolderKind::Invalid(format!(
+        "State folder '{}' is missing required file {}",
+        save_path.display(),
+        STATE_MANIFEST_FILE
+    )))
+}
+
+fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
+    let manifest_path = save_path.join(STATE_MANIFEST_FILE);
+    let raw_manifest = fs::read_to_string(&manifest_path).with_context(|| {
+        format!(
+            "Trying to read state manifest file {}",
+            manifest_path.display()
+        )
+    })?;
+    let manifest = toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
+        format!(
+            "Trying to parse state manifest file {}",
+            manifest_path.display()
+        )
+    })?;
+
+    run_state_migration_checks(&manifest, save_path)?;
     Ok(manifest)
 }
 
@@ -842,6 +896,43 @@ impl State {
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.model = Model::from_file(path)?;
         Ok(())
+    }
+
+    pub fn remove_process(&mut self, process: Option<&ProcessRef>) -> Result<RemovedProcess> {
+        let process_id = self.resolve_process_ref(process)?;
+        let removed = self.process_list.processes.remove(process_id);
+        Ok(RemovedProcess {
+            process_id,
+            process_name: removed.definition.folder_name,
+        })
+    }
+
+    pub fn remove_integrand(
+        &mut self,
+        process: &ProcessRef,
+        integrand_name: &str,
+    ) -> Result<RemovedIntegrand> {
+        let process_id = process.resolve(&self.process_list)?;
+        let process_entry = &mut self.process_list.processes[process_id];
+        let process_name = process_entry.definition.folder_name.clone();
+        let canonical_integrand_name = process_entry
+            .collection
+            .find_integrand(Some(integrand_name.to_string()))?;
+        process_entry
+            .collection
+            .remove_integrand(&canonical_integrand_name)?;
+
+        let removed_empty_process = process_entry.collection.get_integrand_names().is_empty();
+        if removed_empty_process {
+            self.process_list.processes.remove(process_id);
+        }
+
+        Ok(RemovedIntegrand {
+            process_id,
+            process_name,
+            integrand_name: canonical_integrand_name,
+            removed_empty_process,
+        })
     }
 
     pub fn resolve_process_ref(&self, process: Option<&ProcessRef>) -> Result<usize> {
@@ -1150,10 +1241,9 @@ impl State {
 
     pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
         let _ = initialise();
-        let handle = super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
+        super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
 
         Self {
-            log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1161,10 +1251,9 @@ impl State {
     }
 
     pub fn new_test() -> Self {
-        let handle = init_test_tracing();
+        let _ = init_test_tracing();
 
         Self {
-            log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1172,15 +1261,28 @@ impl State {
     }
 
     pub fn new_bench() -> Self {
-        let handle = init_bench_tracing();
+        let _ = init_bench_tracing();
 
         Self {
-            log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemovedProcess {
+    pub process_id: usize,
+    pub process_name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemovedIntegrand {
+    pub process_id: usize,
+    pub process_name: String,
+    pub integrand_name: String,
+    pub removed_empty_process: bool,
 }
 
 impl State {
@@ -1190,7 +1292,7 @@ impl State {
         trace_logs_filename: Option<String>,
     ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
-        let manifest = load_state_manifest(&save_path, model_path.is_some())?;
+        let manifest = load_state_manifest(&save_path)?;
         debug!("Loading state manifest version {}", manifest.version);
 
         let mut model = if let Some(model_path) = &model_path {
@@ -1515,25 +1617,42 @@ subtype = "tropical"
     }
 
     #[test]
-    fn run_history_push_with_raw_skips_quit_and_run_wrapper_commands() {
-        use super::{CommandHistory, RunHistory};
+    fn run_history_push_with_raw_skips_quit_and_definition_commands() {
+        use super::RunHistory;
+        use crate::commands::{run::Run, StartCommandsBlock};
 
         let mut run_history = RunHistory::default();
-        let run_command = CommandHistory::from_raw_string("run card.toml")
-            .unwrap()
-            .command;
-
-        run_history.push_with_raw(run_command, Some("run card.toml".to_string()));
+        run_history.push_with_raw(
+            Commands::Run(Run {
+                block_names: vec!["block_a".to_string()],
+                commands: None,
+            }),
+            Some("run block_a".to_string()),
+        );
         run_history.push_with_raw(
             Commands::Quit(SaveState::default()),
             Some("quit".to_string()),
         );
+        run_history.push_with_raw(
+            Commands::StartCommandsBlock(StartCommandsBlock {
+                name: "block_a".to_string(),
+            }),
+            Some("start_commands_block block_a".to_string()),
+        );
+        run_history.push_with_raw(
+            Commands::FinishCommandsBlock,
+            Some("finish_commands_block".to_string()),
+        );
 
-        assert!(run_history.commands.is_empty());
+        assert_eq!(run_history.commands.len(), 1);
+        assert_eq!(
+            run_history.commands[0].raw_string.as_deref(),
+            Some("run block_a")
+        );
     }
 
     #[test]
-    fn run_history_flattened_for_save_omits_commands_blocks() {
+    fn run_history_filtered_for_save_preserves_commands_blocks() {
         let mut run_history = RunHistory::default();
         run_history.commands_blocks = vec![
             CommandsBlock {
@@ -1558,15 +1677,15 @@ subtype = "tropical"
             Some("display processes".to_string()),
         );
 
-        let flattened = run_history.flattened_for_save();
+        let filtered = run_history.filtered_for_save();
         set_serialize_commands_as_strings(true);
-        let toml = toml::to_string_pretty(&flattened).unwrap();
+        let toml = toml::to_string_pretty(&filtered).unwrap();
         set_serialize_commands_as_strings(false);
 
-        assert!(flattened.commands_blocks.is_empty());
+        assert_eq!(filtered.commands_blocks.len(), 2);
         assert!(toml.contains("commands = ["));
-        assert!(!toml.contains("[[commands_blocks]]"));
-        assert!(!toml.contains("quit -o"));
+        assert!(toml.contains("[[commands_blocks]]"));
+        assert!(toml.contains("quit -o"));
     }
 
     #[test]
@@ -1633,7 +1752,7 @@ use_picobarns = true
     }
 
     #[test]
-    fn run_history_load_selects_all_commands_blocks_by_default() {
+    fn run_history_load_preserves_commands_blocks() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
@@ -1650,20 +1769,13 @@ commands = ["quit -o"]
         )
         .unwrap();
 
-        let run_history = RunHistory::load_with_block_selection(&run_path, None).unwrap();
-        assert_eq!(run_history.commands.len(), 2);
-        assert_eq!(
-            run_history.commands[0].raw_string.as_deref(),
-            Some("quit -n")
-        );
-        assert_eq!(
-            run_history.commands[1].raw_string.as_deref(),
-            Some("quit -o")
-        );
+        let run_history = RunHistory::load(&run_path).unwrap();
+        assert!(run_history.commands.is_empty());
+        assert_eq!(run_history.commands_blocks.len(), 2);
     }
 
     #[test]
-    fn run_history_load_selects_named_commands_blocks_in_order() {
+    fn run_history_selects_named_commands_blocks_in_order() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
@@ -1681,21 +1793,23 @@ commands = ["quit -o"]
         .unwrap();
 
         let requested = vec!["second".to_string(), "first".to_string()];
-        let run_history =
-            RunHistory::load_with_block_selection(&run_path, Some(requested.as_slice())).unwrap();
-        assert_eq!(run_history.commands.len(), 2);
+        let run_history = RunHistory::load(&run_path).unwrap();
+        let selected = run_history
+            .select_commands_blocks(requested.as_slice())
+            .unwrap();
+        assert_eq!(selected.len(), 2);
         assert_eq!(
-            run_history.commands[0].raw_string.as_deref(),
+            selected[0].commands[0].raw_string.as_deref(),
             Some("quit -o")
         );
         assert_eq!(
-            run_history.commands[1].raw_string.as_deref(),
+            selected[1].commands[0].raw_string.as_deref(),
             Some("quit -n")
         );
     }
 
     #[test]
-    fn run_history_load_rejects_unknown_command_block() {
+    fn run_history_selection_rejects_unknown_command_block() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
@@ -1709,7 +1823,9 @@ commands = ["quit -n"]
         .unwrap();
 
         let requested = vec!["missing".to_string()];
-        let err = RunHistory::load_with_block_selection(&run_path, Some(requested.as_slice()))
+        let run_history = RunHistory::load(&run_path).unwrap();
+        let err = run_history
+            .select_commands_blocks(requested.as_slice())
             .unwrap_err();
         let message = format!("{err}");
         assert!(message.contains("Unknown command block 'missing'"));
@@ -1717,7 +1833,7 @@ commands = ["quit -n"]
     }
 
     #[test]
-    fn run_history_load_rejects_selection_when_only_legacy_commands_exist() {
+    fn run_history_selection_rejects_missing_command_block_when_only_legacy_commands_exist() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
@@ -1729,33 +1845,15 @@ commands = ["quit -o"]
         .unwrap();
 
         let requested = vec!["first".to_string()];
-        let err = RunHistory::load_with_block_selection(&run_path, Some(requested.as_slice()))
+        let run_history = RunHistory::load(&run_path).unwrap();
+        let err = run_history
+            .select_commands_blocks(requested.as_slice())
             .unwrap_err();
-        assert!(format!("{err}").contains("only defines `commands`"));
+        assert!(format!("{err}").contains("Unknown command block"));
     }
 
     #[test]
-    fn run_history_load_accepts_legacy_commands_without_selection() {
-        let temp = tempdir().unwrap();
-        let run_path = temp.path().join("run.toml");
-        fs::write(
-            &run_path,
-            r#"
-commands = ["quit -o"]
-"#,
-        )
-        .unwrap();
-
-        let run_history = RunHistory::load_with_block_selection(&run_path, None).unwrap();
-        assert_eq!(run_history.commands.len(), 1);
-        assert_eq!(
-            run_history.commands[0].raw_string.as_deref(),
-            Some("quit -o")
-        );
-    }
-
-    #[test]
-    fn run_history_load_rejects_commands_and_commands_blocks_together() {
+    fn run_history_load_accepts_commands_and_commands_blocks_together() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
@@ -1770,8 +1868,13 @@ commands = ["quit -n"]
         )
         .unwrap();
 
-        let err = RunHistory::load_with_block_selection(&run_path, None).unwrap_err();
-        assert!(format!("{err}").contains("both `commands` and `commands_blocks`"));
+        let run_history = RunHistory::load(&run_path).unwrap();
+        assert_eq!(run_history.commands.len(), 1);
+        assert_eq!(run_history.commands_blocks.len(), 1);
+        assert_eq!(
+            run_history.commands[0].raw_string.as_deref(),
+            Some("quit -o")
+        );
     }
 
     #[test]
@@ -1792,7 +1895,7 @@ commands = ["quit -n"]
         )
         .unwrap();
 
-        let err = RunHistory::load_with_block_selection(&run_path, None).unwrap_err();
+        let err = RunHistory::load(&run_path).unwrap_err();
         assert!(format!("{err}").contains("duplicate block name"));
     }
 
@@ -1801,7 +1904,7 @@ commands = ["quit -n"]
         let temp = tempdir().unwrap();
         save_state_manifest(temp.path()).unwrap();
 
-        let manifest = load_state_manifest(temp.path(), false).unwrap();
+        let manifest = load_state_manifest(temp.path()).unwrap();
         assert_eq!(manifest.version, CURRENT_STATE_MANIFEST_VERSION);
     }
 
@@ -1817,19 +1920,34 @@ commands = ["quit -n"]
         )
         .unwrap();
 
-        let err = load_state_manifest(temp.path(), false).unwrap_err();
+        let err = load_state_manifest(temp.path()).unwrap_err();
         assert!(format!("{err}").contains("newer than this binary supports"));
     }
 
     #[test]
-    fn legacy_state_layout_check_requires_expected_files() {
+    fn state_folder_classifies_saved_layout() {
         let temp = tempdir().unwrap();
+        save_state_manifest(temp.path()).unwrap();
         fs::write(temp.path().join("model.json"), "{}").unwrap();
         fs::write(temp.path().join("symbolica_state.bin"), []).unwrap();
         fs::create_dir_all(temp.path().join("processes")).unwrap();
 
-        let manifest = load_state_manifest(temp.path(), false).unwrap();
-        assert_eq!(manifest.version, 0);
+        assert_eq!(
+            classify_state_folder(temp.path()).unwrap(),
+            StateFolderKind::Saved
+        );
+    }
+
+    #[test]
+    fn state_folder_classifies_logs_only_folder_as_scratch() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("logs")).unwrap();
+        fs::write(temp.path().join("logs").join("gammalog.jsonl"), "").unwrap();
+
+        assert_eq!(
+            classify_state_folder(temp.path()).unwrap(),
+            StateFolderKind::Scratch
+        );
     }
 }
 

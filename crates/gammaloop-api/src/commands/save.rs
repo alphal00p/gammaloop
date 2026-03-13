@@ -7,16 +7,19 @@ use gammalooprs::{
         DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
     },
     settings::RuntimeSettings,
-    utils::serde_utils::{SmartSerde, SHOWDEFAULTS},
+    utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::{
-    state::{set_serialize_commands_as_strings, RunHistory, State},
+    state::{
+        classify_state_folder, set_serialize_commands_as_strings, RunHistory, State,
+        StateFolderKind,
+    },
     templates::Assets,
-    write_schemas, CLISettings,
+    write_schemas, CLISettings, DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -74,7 +77,7 @@ impl Save {
                 with_uv,
             } => {
                 // Use original default location (state folder) or custom path if provided
-                let target_dir = path.unwrap_or(global_settings.state_folder.clone());
+                let target_dir = path.unwrap_or(global_settings.state.folder.clone());
                 info!("Saving dot files to {}", target_dir.display());
 
                 // Extract embedded templates to drawings/templates relative to target directory
@@ -127,7 +130,7 @@ impl Save {
                 json,
                 binary,
             } => {
-                let target_dir = path.unwrap_or(global_settings.state_folder.clone());
+                let target_dir = path.unwrap_or(global_settings.state.folder.clone());
                 let mode = match (python, rust) {
                     (true, false) => StandaloneExportMode::Python,
                     (false, true) | (false, false) => StandaloneExportMode::Rust,
@@ -194,8 +197,17 @@ impl SaveState {
         let mut selected_root_folder = self
             .path
             .clone()
-            .unwrap_or(global_settings.state_folder.clone());
-        if !selected_root_folder.exists() {
+            .unwrap_or(global_settings.state.folder.clone());
+        if global_settings.session.read_only_state
+            && selected_root_folder == global_settings.state.folder
+        {
+            return Err(eyre!(
+                "Cannot save to the active state folder '{}' because this session was started with --read-only-state. Use `save state -p <other_path>` or restart without `--read-only-state`.",
+                global_settings.state.folder.display()
+            ));
+        }
+        let state_folder_kind = classify_state_folder(&selected_root_folder)?;
+        if matches!(state_folder_kind, StateFolderKind::Missing) {
             fs::create_dir_all(&selected_root_folder)?;
         } else {
             if self.strict.unwrap_or(false) {
@@ -204,9 +216,10 @@ impl SaveState {
                 ));
             }
 
-            if !self
-                .override_state
-                .unwrap_or(global_settings.override_state)
+            if !matches!(state_folder_kind, StateFolderKind::Scratch)
+                && !self
+                    .override_state
+                    .unwrap_or(global_settings.override_state)
             {
                 while selected_root_folder.clone().exists() {
                     eprint!(
@@ -247,15 +260,40 @@ impl SaveState {
         run_history.save_toml(&selected_root_folder, true, false)?;
         set_serialize_commands_as_strings(false);
 
-        SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _show_defaults_guard = ShowDefaultsGuard::new(true);
         default_runtime_settings.to_file(
-            selected_root_folder.join("default_runtime_settings.toml"),
+            selected_root_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
             true,
         )?;
-        global_settings.to_file(selected_root_folder.join("cli_settings.toml"), true)?;
-
-        SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+        global_settings.to_file(selected_root_folder.join(GLOBAL_SETTINGS_FILENAME), true)?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SaveState;
+    use crate::{state::RunHistory, CLISettings};
+    use gammalooprs::settings::RuntimeSettings;
+    use std::path::PathBuf;
+
+    #[test]
+    fn save_state_rejects_default_state_path_in_read_only_mode() {
+        let mut state = crate::state::State::new_test();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = SaveState::default()
+            .save(
+                &mut state,
+                &RunHistory::default(),
+                &RuntimeSettings::default(),
+                &cli_settings,
+            )
+            .unwrap_err();
+
+        assert!(format!("{err:?}").contains("--read-only-state"));
     }
 }

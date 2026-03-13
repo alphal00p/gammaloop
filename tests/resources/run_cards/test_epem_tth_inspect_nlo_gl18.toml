@@ -1,7 +1,7 @@
 commands = [
 "import model ./assets/models/json/sm/sm-default.json",
 "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD] --select-graphs GL18 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true --clear-existing-processes",
-"inspect -p 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.823 0.214",
+"inspect -x 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.823 0.214",
 ]
 
 [default_runtime_settings.general]

@@ -8,7 +8,11 @@ use crate::{
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
     settings::runtime::HFunctionSettings,
-    utils::{F, FloatLike, serde_utils::IsDefault, tracing::LogStyle},
+    utils::{
+        F, FloatLike,
+        serde_utils::{IsDefault, show_defaults_helper},
+        tracing::LogStyle,
+    },
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
@@ -78,11 +82,11 @@ fn default_display_directive() -> String {
 }
 
 fn is_default_logfile_directive(val: &String) -> bool {
-    val == &default_logfile_directive()
+    show_defaults_helper(val == &default_logfile_directive())
 }
 
 fn is_default_display_directive(val: &String) -> bool {
-    val == &default_display_directive()
+    show_defaults_helper(val == &default_display_directive())
 }
 
 impl Default for GlobalSettings {

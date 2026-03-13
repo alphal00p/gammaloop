@@ -17,6 +17,7 @@ use gammalooprs::{
 use tracing::{info, warn};
 
 use crate::{
+    completion::CompletionArgExt,
     state::{ProcessRef, State},
     CLISettings,
 };
@@ -28,11 +29,21 @@ use crate::{
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Integrate {
     /// Process reference: #<id>, name:<name>, or <id>/<name>
-    #[arg(short = 'p', long = "process", value_name = "PROCESS")]
+    #[arg(
+        short = 'p',
+        long = "process",
+        value_name = "PROCESS",
+        completion_process_selector(crate::completion::SelectorKind::Any)
+    )]
     pub process: Option<ProcessRef>,
 
-    /// The name of the process to inspect
-    #[arg(short = 'i', long = "name", value_name = "NAME")]
+    /// The integrand name to integrate
+    #[arg(
+        short = 'i',
+        long = "integrand-name",
+        value_name = "NAME",
+        completion_integrand_selector(crate::completion::SelectorKind::Any)
+    )]
     pub integrand_name: Option<String>,
 
     /// The path to store results in
@@ -61,14 +72,31 @@ pub struct Integrate {
 }
 
 impl Integrate {
+    fn default_workspace_path(&self, global_cli_settings: &CLISettings) -> PathBuf {
+        if global_cli_settings.session.read_only_state {
+            let workspace_name = global_cli_settings
+                .state
+                .name
+                .as_deref()
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+                .map(|name| format!("{name}_integration_workspace"))
+                .unwrap_or_else(|| "integration_workspace".to_string());
+            PathBuf::from(".").join(workspace_name)
+        } else {
+            global_cli_settings
+                .state
+                .folder
+                .join("integration_workspace")
+        }
+    }
+
     pub fn run(
         &self,
         state: &mut State,
         global_cli_settings: &CLISettings,
     ) -> Result<IntegrationResult> {
-        let default_workspace_path = global_cli_settings
-            .state_folder
-            .join("integration_workspace");
+        let default_workspace_path = self.default_workspace_path(global_cli_settings);
         let workspace_path = if let Some(p) = self.workspace_path.clone() {
             p
         } else {
@@ -181,5 +209,37 @@ impl Integrate {
         fs::write(&result_path, serde_json::to_string(&result)?)?;
 
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Integrate;
+    use crate::{CLISettings, SessionSettings, StateSettings};
+    use std::path::PathBuf;
+
+    #[test]
+    fn read_only_state_uses_cwd_workspace_default() {
+        let integrate = Integrate::default();
+        let mut settings = CLISettings::default();
+        settings.state = StateSettings {
+            folder: PathBuf::from("/tmp/saved_state"),
+            name: Some("gg_hhh_1l".to_string()),
+        };
+        settings.session = SessionSettings {
+            read_only_state: true,
+            ..SessionSettings::default()
+        };
+
+        assert_eq!(
+            integrate.default_workspace_path(&settings),
+            PathBuf::from("./gg_hhh_1l_integration_workspace")
+        );
+
+        settings.state.name = None;
+        assert_eq!(
+            integrate.default_workspace_path(&settings),
+            PathBuf::from("./integration_workspace")
+        );
     }
 }

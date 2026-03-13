@@ -1,8 +1,8 @@
 commands = [
   "import model sm-default",
   "import graphs ./tests/resources/graphs/physical_1L_6photons.dot",
-  "set model MT={re:173.0,im:0.0}",
-  "set model aEWM1={re:128.93,im:0.0}",
+  "set model MT=173.0",
+  "set model aEWM1=128.93",
 ]
 
 [default_runtime_settings.general]
