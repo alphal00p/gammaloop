@@ -1,5 +1,3 @@
-use std::{mem::transmute, ops::Neg, path::Path};
-
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
@@ -11,10 +9,15 @@ use linnet::half_edge::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spenso::algebra::{
-    algebraic_traits::RefOne,
-    complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
+use spenso::{
+    algebra::{
+        algebraic_traits::RefOne,
+        complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
+    },
+    network::{ExecutionResult, Sequential, SmallestDegree},
 };
+use std::ops::Deref;
+use std::{mem::transmute, ops::Neg, path::Path};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
     domains::{
@@ -43,10 +46,11 @@ use crate::{
         },
     },
     momentum::{Helicity, sample::MomentumSample},
+    numerator::symbolica_ext::AtomCoreExt,
     processes::EvaluatorSettings,
     settings::{GlobalSettings, RuntimeSettings},
     utils::{
-        ArbPrec, F, FloatLike, GS, Length, W_, f128,
+        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
         symbolica_ext::{CallSymbol, LogPrint},
     },
@@ -407,9 +411,27 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        let parsed_atoms = atoms
+            .iter()
+            .map(|a| {
+                let mut net = a.as_atom_view().parse_into_net()?;
+
+                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+
+                Ok(net.result_scalar().map(|a| match a {
+                    ExecutionResult::One => Atom::num(1),
+                    ExecutionResult::Zero => Atom::Zero,
+                    ExecutionResult::Val(v) => v.into_owned(),
+                })?)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
         let iterative = if settings.iterative_orientation_optimization {
             Some(Self::new_iterative(
-                atoms,
+                &parsed_atoms,
                 param_builder,
                 orientations,
                 &dual_shape,
@@ -421,7 +443,7 @@ impl EvaluatorStack {
 
         let summed_function_map = if settings.summed_function_map {
             Some(Self::new_summed_function_map(
-                atoms,
+                &parsed_atoms,
                 param_builder,
                 orientations,
                 &dual_shape,
@@ -433,7 +455,7 @@ impl EvaluatorStack {
 
         let summed = if settings.summed {
             Some(Self::new_summed(
-                atoms,
+                &parsed_atoms,
                 param_builder,
                 orientations,
                 &dual_shape,
@@ -444,7 +466,7 @@ impl EvaluatorStack {
         };
 
         let single_parametric =
-            Self::new_single_parametric(atoms, param_builder, &dual_shape, settings)?;
+            Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)?;
 
         Ok(EvaluatorStack {
             single_parametric,

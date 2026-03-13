@@ -327,51 +327,6 @@ impl CrossSectionGraphTerm {
             })
             .collect::<TiVec<RaisedCutId, Vec<EvaluatorStack>>>();
 
-        let iterative_integrand = if settings
-            .generation
-            .evaluator
-            .iterative_orientation_optimization
-        {
-            Some(
-                graph
-                    .derived_data
-                    .cut_paramatric_integrand
-                    .iter()
-                    .map(|integrand_for_cut| {
-                        integrand_for_cut
-                            .integrands
-                            .iter()
-                            .enumerate()
-                            .map(|(num_derivatives, integrand_for_subset)| {
-                                let dual_shape = if num_derivatives > 0 {
-                                    Some(
-                                        graph.derived_data.raised_data.dual_shapes
-                                            [num_derivatives - 1]
-                                            .clone(),
-                                    )
-                                } else {
-                                    None
-                                };
-
-                                GenericEvaluator::new_from_builder(
-                                    orientations
-                                        .iter()
-                                        .map(|or| or.select(integrand_for_subset)),
-                                    &graph.graph.param_builder,
-                                    dual_shape,
-                                    OptimizationSettings::default(),
-                                    settings.generation.evaluator.store_atom,
-                                )
-                                .unwrap()
-                            })
-                            .collect()
-                    })
-                    .collect::<TiVec<RaisedCutId, Vec<GenericEvaluator>>>(),
-            )
-        } else {
-            None
-        };
-
         let ct_evaluators = graph
             .derived_data
             .threshold_counterterms

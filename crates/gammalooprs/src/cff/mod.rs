@@ -63,7 +63,7 @@ impl Graph {
         let cff = self.generate_cff(&contract_edges, &canonize_esurface)?;
         let residue = cff.select_esurface_residue(&cutset.esurfaces);
 
-        println!("residue orders: {}", residue.len());
+        // println!("residue orders: {}", residue.len());
 
         let graph_without_is_cut = self
             .underlying
@@ -91,7 +91,7 @@ impl Graph {
 
                 ose_expr *= inverse_energies;
 
-                println!("ose expr :{}", ose_expr);
+                // println!("ose expr :{}", ose_expr);
                 cff_term.expression.push(ose_expr);
                 cff_term
                     .orientations

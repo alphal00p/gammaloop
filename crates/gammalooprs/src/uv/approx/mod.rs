@@ -266,6 +266,7 @@ impl Approximation {
         if settings.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
+            self.integrated_4d = ApproxOp::Root;
             self.local_3d = CFFapprox::root(graph, cuts, settings)?;
             self.final_integrand = Some(self.final_integrand(graph, cuts, settings)?);
         }

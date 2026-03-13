@@ -73,15 +73,20 @@ impl Graph {
         DotGraph::from(self).debug_dot()
     }
 
+    pub(crate) fn global_atom(&self) -> Atom {
+        &self.global_prefactor.num
+            * &self.global_prefactor.projector
+            * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
     /// With wrapped color, so that it doesn't enter the network as a tensor. Can unwrap using `unwrap_function`
     /// Contains the parametric sign on the OSE
     pub(crate) fn global_network(&self) -> ParsingNet {
-        let net = (&self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * evaluate_overall_factor(self.overall_factor.as_view()))
-        .wrap_color(GS.color_wrap)
-        .parse_into_net()
-        .unwrap();
+        let net = self
+            .global_atom()
+            .wrap_color(GS.color_wrap)
+            .parse_into_net()
+            .unwrap();
 
         let mut reps = Vec::new();
         for (p, eid, _) in self.iter_edges() {
