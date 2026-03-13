@@ -953,6 +953,19 @@ impl CrossSectionGraph {
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
         println!("raised data: {:?}", self.derived_data.raised_data);
 
+        let mut global_num = self.graph.global_network();
+        global_num
+            .execute::<Sequential, SmallestDegree, _, _, _>(
+                TENSORLIB.read().unwrap().deref(),
+                FUN_LIB.deref(),
+            )
+            .unwrap();
+
+        let scalar_global_num: Atom = global_num
+            .result_scalar()
+            .with_context(|| "non-scalar global numerator not yet supported")?
+            .into();
+
         let max_order = self
             .derived_data
             .raised_data
@@ -1002,7 +1015,9 @@ impl CrossSectionGraph {
             .into_iter()
             .map(|integrand| {
                 integrand.map(|a| {
-                    let res = a * &lu_prefactor;
+                    let res = (a * &lu_prefactor * &scalar_global_num)
+                        .unwrap_function(GS.color_wrap)
+                        .unwrap_function(GS.tree_denom_wrapper);
                     println!("result integrand: {}", res);
                     res
                 })

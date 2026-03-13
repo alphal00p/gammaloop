@@ -13,7 +13,7 @@ use symbolica::{
     function,
 };
 
-use linnet::half_edge::subgraph::SubSetLike;
+use linnet::half_edge::subgraph::{ModifySubSet, SubSetLike, SubSetOps};
 use std::fmt::Write;
 use tracing::{debug, instrument};
 
@@ -323,7 +323,12 @@ impl Forest {
             }
         }
 
-        for (_, edge_index, _) in graph.iter_edges() {
+        for (_, edge_index, _) in graph.iter_edges_of(
+            &graph
+                .full_filter()
+                .subtract(&graph.initial_state_cut.left)
+                .subtract(&graph.initial_state_cut.right),
+        ) {
             for s in &mut sum {
                 *s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
