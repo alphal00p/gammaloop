@@ -9,7 +9,8 @@ use delegate::delegate;
 use dimension::Dimension;
 use eyre::Result;
 use eyre::eyre;
-
+use linnet::half_edge::subgraph::subset::SubSet;
+use linnet::half_edge::swap::Swap;
 use thiserror::Error;
 
 #[cfg(feature = "shadowing")]
@@ -337,6 +338,21 @@ pub trait ToSymbolic {
 pub trait ScalarStructure {
     fn scalar_structure() -> Self;
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct SlotIndex(pub usize);
+
+impl From<usize> for SlotIndex {
+    fn from(value: usize) -> Self {
+        SlotIndex(value)
+    }
+}
+
+impl From<SlotIndex> for usize {
+    fn from(value: SlotIndex) -> Self {
+        value.0
+    }
+}
+
 pub trait TensorStructure {
     type Slot: IsAbstractSlot + DualSlotTo<Dual = Self::Slot>;
     type Indexed: TensorStructure<Indexed = Self::Indexed, Slot = Self::Slot>;
@@ -363,10 +379,13 @@ pub trait TensorStructure {
     ) -> impl Iterator<Item = Representation<<Self::Slot as IsAbstractSlot>::R>>;
 
     fn external_indices_iter(&self) -> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
-    fn get_aind(&self, i: usize) -> Option<<Self::Slot as IsAbstractSlot>::Aind>;
-    fn get_rep(&self, i: usize) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-    fn get_dim(&self, i: usize) -> Option<Dimension>;
-    fn get_slot(&self, i: usize) -> Option<Self::Slot>;
+    fn get_aind(&self, i: impl Into<SlotIndex>) -> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+    fn get_rep(
+        &self,
+        i: impl Into<SlotIndex>,
+    ) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+    fn get_dim(&self, i: impl Into<SlotIndex>) -> Option<Dimension>;
+    fn get_slot(&self, i: impl Into<SlotIndex>) -> Option<Self::Slot>;
     fn order(&self) -> usize;
     /// returns the list of slots that are the external indices of the tensor
     fn external_structure(&self) -> Vec<Self::Slot> {
@@ -719,17 +738,17 @@ pub enum MergeInfo {
     /// Clean merge where all elements of second structure come before first structure
     SecondBeforeFirst,
     /// No clean merge, elements are interleaved with the following partition (first is true)
-    Interleaved(BitVec),
+    Interleaved(SubSet<SlotIndex>),
 }
 
-impl From<BitVec> for MergeInfo {
-    fn from(bitvec: BitVec) -> Self {
+impl From<SubSet<SlotIndex>> for MergeInfo {
+    fn from(bitvec: SubSet<SlotIndex>) -> Self {
         let mut n_transitions = 0;
-        if bitvec.is_empty() {
+        if bitvec.is_zero_length() {
             return MergeInfo::FirstBeforeSecond;
         }
-        for i in 0..(bitvec.len() - 1) {
-            if bitvec[i] != bitvec[i + 1] {
+        for i in 0..(bitvec.len().0 - 1) {
+            if bitvec[SlotIndex(i)] != bitvec[SlotIndex(i + 1)] {
                 n_transitions += 1;
             }
 
@@ -738,14 +757,10 @@ impl From<BitVec> for MergeInfo {
             }
         }
 
-        if let Some(first) = bitvec.first() {
-            if *first {
-                MergeInfo::FirstBeforeSecond
-            } else {
-                MergeInfo::SecondBeforeFirst
-            }
-        } else {
+        if bitvec[SlotIndex(0)] {
             MergeInfo::FirstBeforeSecond
+        } else {
+            MergeInfo::SecondBeforeFirst
         }
     }
 }
@@ -764,7 +779,10 @@ pub trait StructureContract: Sized {
     ///
     /// Otherwise returns a new structure without any common indices, the positions of the common indices self, and the positions in other, along with a MergeInfo specifying whether the merger is clean or not.
     ///
-    fn merge(&self, other: &Self) -> Result<(Self, BitVec, BitVec, MergeInfo), StructureError>;
+    fn merge(
+        &self,
+        other: &Self,
+    ) -> Result<(Self, SubSet<SlotIndex>, SubSet<SlotIndex>, MergeInfo), StructureError>;
 
     // fn concat(&mut self, other: Self);
 
@@ -852,7 +870,7 @@ pub trait HasName {
     bincode_trait_derive::Decode,
 )]
 pub struct TensorShell<S> {
-    pub(crate) structure: S,
+    pub structure: S,
 }
 
 impl<S: TensorStructure + ScalarStructure> ScalarTensor for TensorShell<S> {
@@ -896,10 +914,10 @@ where
             fn external_indices_iter(&self)-> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
             fn external_dims_iter(&self)-> impl Iterator<Item = Dimension>;
             fn external_structure_iter(&self)-> impl Iterator<Item = Self::Slot>;
-            fn get_slot(&self, i: usize)-> Option<Self::Slot>;
-            fn get_rep(&self, i: usize)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_dim(&self, i: usize)-> Option<Dimension>;
-            fn get_aind(&self, i: usize)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+            fn get_slot(&self, i: impl Into<SlotIndex>)-> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>)-> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_dim(&self, i: impl Into<SlotIndex>)-> Option<Dimension>;
+            fn get_aind(&self, i: impl Into<SlotIndex>)-> Option<<Self::Slot as IsAbstractSlot>::Aind>;
             fn order(&self)-> usize;
         }
     }

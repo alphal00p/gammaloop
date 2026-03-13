@@ -1,10 +1,16 @@
-use bitvec::vec::BitVec;
 use indexmap::IndexMap;
-use linnet::permutation::Permutation;
+use linnet::{
+    half_edge::{
+        subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
+        swap::Swap,
+    },
+    permutation::Permutation,
+};
 use std::cmp::Ordering;
 use std::hash::Hash;
 use tabled::{builder::Builder, settings::Style};
 
+use crate::structure::SlotIndex;
 #[cfg(feature = "shadowing")]
 use crate::{
     shadowing::symbolica_utils::IntoSymbol,
@@ -212,20 +218,23 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for OrderedStructure<R,
         self.structure.len()
     }
 
-    fn get_slot(&self, i: usize) -> Option<Slot<R, Aind>> {
-        self.structure.get(i).cloned()
+    fn get_slot(&self, i: impl Into<SlotIndex>) -> Option<Slot<R, Aind>> {
+        self.structure.get(i.into().0).cloned()
     }
 
-    fn get_rep(&self, i: usize) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>> {
-        self.structure.get(i).map(|s| s.rep())
+    fn get_rep(
+        &self,
+        i: impl Into<SlotIndex>,
+    ) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>> {
+        self.structure.get(i.into().0).map(|s| s.rep())
     }
 
-    fn get_dim(&self, i: usize) -> Option<Dimension> {
-        self.structure.get(i).map(|s| s.dim())
+    fn get_dim(&self, i: impl Into<SlotIndex>) -> Option<Dimension> {
+        self.structure.get(i.into().0).map(|s| s.dim())
     }
 
-    fn get_aind(&self, i: usize) -> Option<Aind> {
-        self.structure.get(i).map(|s| s.aind())
+    fn get_aind(&self, i: impl Into<SlotIndex>) -> Option<Aind> {
+        self.structure.get(i.into().0).map(|s| s.aind())
     }
 }
 
@@ -591,7 +600,10 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
             .structure;
     }
 
-    fn merge(&self, other: &Self) -> Result<(Self, BitVec, BitVec, MergeInfo), StructureError> {
+    fn merge(
+        &self,
+        other: &Self,
+    ) -> Result<(Self, SubSet<SlotIndex>, SubSet<SlotIndex>, MergeInfo), StructureError> {
         // println!("Merge called with self: {} and other: {}", self, other);
         debug_assert!(
             self.self_dual_slice().windows(3).all(|w| w[0] <= w[1]
@@ -629,10 +641,8 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
             other.base_slice()
         );
 
-        let mut common_indices_self = BitVec::with_capacity(self.order()); // BitVec for common slots in self
-        common_indices_self.resize(self.order(), false);
-        let mut common_indices_other = BitVec::with_capacity(other.order()); // BitVec for common slots in other
-        common_indices_other.resize(other.order(), false);
+        let mut common_indices_self = SubSet::empty(self.order());
+        let mut common_indices_other = SubSet::empty(other.order());
 
         if self.is_scalar() || other.is_scalar() {
             // If either is empty, there are no common slots
@@ -653,8 +663,8 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
             }
         }
 
-        let mut partition = BitVec::new(); // For interleaved mergeinfo
-        partition.reserve(self.order() + other.order());
+        let mut partition: SubSet<SlotIndex> = SubSet::empty(0); // For interleaved mergeinfo
+        // partition.reserve(self.order() + other.order());
 
         let mut i = 0;
         let mut j = 0;
@@ -678,8 +688,8 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
                 std::cmp::Ordering::Equal => {
                     if self.structure[i].matches(&other.structure[j]) {
                         // Common item
-                        common_indices_self.set(i, true); // Set bit for index in first vector
-                        common_indices_other.set(j, true); // Set bit for index in second vector
+                        common_indices_self.add(SlotIndex(i)); //, true); // Set bit for index in first vector
+                        common_indices_other.add(SlotIndex(j)); // Set bit for index in second vector
                         i += 1;
                         j += 1;
                         continue; // Skip transition check for common items since they're not added to result_non_common
@@ -702,7 +712,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
             j += 1;
         }
 
-        let base_start = partition.len();
+        let base_start = partition.len().0;
 
         //Merge base with dual
 
@@ -716,10 +726,10 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
 
         let find_match_in_duals = |base_slot: &Slot<R, Aind>,
                                    base_slot_index: usize,
-                                   common_indices_base: &mut BitVec,
+                                   common_indices_base: &mut SubSet<SlotIndex>,
                                    dual_structure: &Self,
                                    dual_cursor: &mut usize,
-                                   common_indices_dual: &mut BitVec,
+                                   common_indices_dual: &mut SubSet<SlotIndex>,
                                    dual_offset: usize|
          -> bool {
             let mut found_match = false;
@@ -742,8 +752,8 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
                     }
                     std::cmp::Ordering::Equal => {
                         if base_slot.matches(dual_slot) {
-                            common_indices_base.set(base_slot_index, true);
-                            common_indices_dual.set(dual_slot_index, true);
+                            common_indices_base.add(SlotIndex(base_slot_index));
+                            common_indices_dual.add(SlotIndex(dual_slot_index));
                             found_match = true;
                             *dual_cursor += 1;
                             break;
@@ -835,7 +845,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
             jbase += 1;
         }
 
-        let dual_start = partition.len();
+        let dual_start = partition.len().0;
 
         let mut idual = 0;
         let mut jdual = 0;
@@ -843,14 +853,14 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
         while idual < self.n_dual() && jdual < other.n_dual() {
             match self.structure[i + ibase + idual].cmp(&other.structure[j + jbase + jdual]) {
                 Ordering::Less => {
-                    if !common_indices_self[i + ibase + idual] {
+                    if !common_indices_self[SlotIndex(i + ibase + idual)] {
                         resulting_structure.push(self.structure[i + ibase + idual]);
                         partition.push(true);
                     }
                     idual += 1;
                 }
                 Ordering::Greater => {
-                    if !common_indices_other[j + jbase + jdual] {
+                    if !common_indices_other[SlotIndex(j + jbase + jdual)] {
                         resulting_structure.push(other.structure[j + jbase + jdual]);
                         partition.push(false);
                     }
@@ -863,7 +873,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
         }
 
         while idual < self.n_dual() {
-            if !common_indices_self[i + ibase + idual] {
+            if !common_indices_self[SlotIndex(i + ibase + idual)] {
                 resulting_structure.push(self.structure[i + ibase + idual]);
                 partition.push(true);
             }
@@ -871,7 +881,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
         }
 
         while jdual < other.n_dual() {
-            if !common_indices_other[j + jbase + jdual] {
+            if !common_indices_other[SlotIndex(j + jbase + jdual)] {
                 resulting_structure.push(other.structure[j + jbase + jdual]);
                 partition.push(false);
             }
@@ -931,6 +941,8 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
 }
 #[cfg(test)]
 pub mod test {
+    use linnet::half_edge::subgraph::SubSetLike;
+
     use crate::structure::{
         MergeInfo, PermutedStructure, StructureContract, TensorStructure,
         representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName},
@@ -953,11 +965,11 @@ pub mod test {
         .structure;
 
         if let MergeInfo::Interleaved(filter) = a.merge(&b).unwrap().3 {
-            assert_eq!(filter.count_ones(), a.order());
+            assert_eq!(filter.n_included(), a.order());
         }
 
         if let MergeInfo::Interleaved(filter) = b.merge(&a).unwrap().3 {
-            assert_eq!(filter.count_ones(), b.order());
+            assert_eq!(filter.n_included(), b.order());
         }
 
         // if let a

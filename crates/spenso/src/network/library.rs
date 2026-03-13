@@ -4,9 +4,9 @@ use crate::{
     algebra::complex::{Complex, RealOrComplex},
     network::StructureLessDisplay,
     structure::{
-        HasStructure, PermutedStructure, StructureError, TensorStructure,
         concrete_index::ConcreteIndex, dimension::Dimension, representation::Representation,
-        slot::IsAbstractSlot,
+        slot::IsAbstractSlot, HasStructure, PermutedStructure, SlotIndex, StructureError,
+        TensorStructure,
     },
     tensors::{
         complex::RealOrComplexTensor,
@@ -184,16 +184,19 @@ impl<T: TensorStructure> TensorStructure for DummyLibraryTensor<T> {
     fn external_indices_iter(&self) -> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind> {
         DummyIter::<<Self::Slot as IsAbstractSlot>::Aind>::None
     }
-    fn get_aind(&self, _i: usize) -> Option<<Self::Slot as IsAbstractSlot>::Aind> {
+    fn get_aind(&self, _i: impl Into<SlotIndex>) -> Option<<Self::Slot as IsAbstractSlot>::Aind> {
         unimplemented!()
     }
-    fn get_rep(&self, _i: usize) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>> {
+    fn get_rep(
+        &self,
+        _i: impl Into<SlotIndex>,
+    ) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>> {
         unimplemented!()
     }
-    fn get_dim(&self, _i: usize) -> Option<Dimension> {
+    fn get_dim(&self, _i: impl Into<SlotIndex>) -> Option<Dimension> {
         unimplemented!()
     }
-    fn get_slot(&self, _i: usize) -> Option<Self::Slot> {
+    fn get_slot(&self, _i: impl Into<SlotIndex>) -> Option<Self::Slot> {
         unimplemented!()
     }
     fn order(&self) -> usize {

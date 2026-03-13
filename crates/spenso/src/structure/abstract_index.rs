@@ -9,6 +9,8 @@ use std::ops::AddAssign;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 #[cfg(feature = "shadowing")]
+use symbolica::atom::AtomOrView;
+#[cfg(feature = "shadowing")]
 use symbolica::{
     atom::Symbol,
     atom::{Atom, AtomCore, AtomView},
@@ -104,6 +106,13 @@ mod test {
 
         assert_eq!(rep, tgt, "{rep} not equal to {tgt}");
         assert_eq!(rep2, tgt, "{rep2} not equal to {tgt}");
+    }
+}
+
+#[cfg(feature = "shadowing")]
+impl AindSymbols {
+    pub fn dual<'a, A: Into<AtomOrView<'a>>>(&self, arg: A) -> Atom {
+        symbolica::function!(self.dind, arg.into().as_view())
     }
 }
 #[cfg(feature = "shadowing")]
@@ -211,11 +220,12 @@ let args = arg.pos().map(to-eq).join("")
                     && dind1.get_nargs() == 1
                 {
                     let arg = dind1.iter().next().unwrap();
-                    if let AtomView::Fun(arg) = arg
-                        && arg.get_nargs() == 1
-                        && arg.get_symbol() == symbol!(DOWNIND)
-                    {
-                        **out = arg.iter().next().unwrap().to_owned();
+                    if let AtomView::Fun(inarg) = arg {
+                        if (inarg.get_nargs() == 1 && inarg.get_symbol() == symbol!(DOWNIND)) {
+                            **out = inarg.iter().next().unwrap().to_owned();
+                        } else if inarg.get_symbol().has_tag(&SPENSO_TAG.self_dual) {
+                            **out = arg.to_owned();
+                        }
                     }
                 }
             },

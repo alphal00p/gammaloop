@@ -1,8 +1,8 @@
 use crate::{
-    algebra::ScalarMul,
     algebra::algebraic_traits::RefZero,
     algebra::complex::{Complex, RealOrComplex},
     algebra::upgrading_arithmetic::{FallibleMul, TrySmallestUpgrade},
+    algebra::ScalarMul,
     shadowing::symbolica_utils::SerializableAtom,
     structure::TensorStructure,
     tensors::complex::RealOrComplexTensor,
@@ -196,6 +196,7 @@ where
 impl<U, S> ScalarMul<Atom> for RealOrComplexTensor<U, S>
 where
     DataTensor<U, S>: ScalarMul<Atom, Output = DataTensor<Atom, S>>,
+
     DataTensor<Complex<U>, S>: ScalarMul<Atom, Output = DataTensor<Atom, S>>,
     S: TensorStructure + Clone,
 {

@@ -1,4 +1,4 @@
-use linnet::permutation::Permutation;
+use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
 
 use delegate::delegate;
 
@@ -18,6 +18,7 @@ use eyre::Result;
 
 #[cfg(feature = "shadowing")]
 use crate::shadowing::symbolica_utils::{IntoArgs, IntoSymbol};
+use crate::structure::SlotIndex;
 
 #[cfg(not(feature = "shadowing"))]
 use serde::{Deserialize, Serialize};
@@ -266,10 +267,10 @@ impl<N, A, R: RepName<Dual = R>> TensorStructure for SmartShadowStructure<N, A, 
             fn external_dims_iter(&self)->impl Iterator<Item=Dimension>;
             fn external_structure_iter(&self) -> impl Iterator<Item = Self::Slot>;
             fn order(&self) -> usize;
-            fn get_slot(&self, i: usize) -> Option<Self::Slot>;
-            fn get_rep(&self, i: usize) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
-            fn get_aind(&self,i:usize)->Option<AbstractIndex>;
-            fn get_dim(&self, i: usize) -> Option<Dimension>;
+            fn get_slot(&self, i: impl Into<SlotIndex>) -> Option<Self::Slot>;
+            fn get_rep(&self, i: impl Into<SlotIndex>) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+            fn get_aind(&self,i: impl Into<SlotIndex>)->Option<AbstractIndex>;
+            fn get_dim(&self, i: impl Into<SlotIndex>) -> Option<Dimension>;
         }
     }
 }
@@ -281,7 +282,10 @@ impl<N, A, R: RepName> TracksCount for SmartShadowStructure<N, A, R> {
 }
 
 impl<N, A, R: RepName<Dual = R>> StructureContract for SmartShadowStructure<N, A, R> {
-    fn merge(&self, other: &Self) -> Result<(Self, BitVec, BitVec, MergeInfo), StructureError> {
+    fn merge(
+        &self,
+        other: &Self,
+    ) -> Result<(Self, SubSet<SlotIndex>, SubSet<SlotIndex>, MergeInfo), StructureError> {
         let contractions = self.contractions + other.contractions;
         let (structure, pos_self, pos_other, mergeinfo) = self.structure.merge(&other.structure)?;
         Ok((

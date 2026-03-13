@@ -3,9 +3,10 @@
 //! Contains tests for fiber behavior and operations.
 
 use crate::iterators::{AbstractFiber, AbstractFiberIndex, Fiber, FiberClass, FiberIndex};
-use crate::structure::TensorStructure;
 use crate::structure::representation::RepName;
 use crate::structure::{OrderedStructure, representation::Euclidean};
+use crate::structure::{SlotIndex, TensorStructure};
+use linnet::half_edge::swap::Swap;
 
 #[test]
 fn test_fiber_creation() {
@@ -22,7 +23,7 @@ fn test_fiber_creation() {
     let fiber = Fiber::from_filter(&filter, &structure);
 
     // Check that the pattern of fixed/free indices matches the filter
-    assert_eq!(fiber.bitvec().len(), filter.len());
+    assert_eq!(usize::from(fiber.bitvec().len()), filter.len());
     for (i, &is_free) in filter.iter().enumerate() {
         assert_eq!(fiber[i].is_free(), is_free);
     }
@@ -109,8 +110,11 @@ fn test_fiber_class_conversion() {
     let class_bits = fiber_class.bitvec();
 
     assert_eq!(fiber_bits.len(), class_bits.len());
-    for i in 0..fiber_bits.len() {
-        assert_eq!(fiber_bits[i], !class_bits[i]);
+    for i in 0..fiber_bits.len().into() {
+        assert_eq!(
+            fiber_bits[SlotIndex::from(i)],
+            !class_bits[SlotIndex::from(i)]
+        );
     }
 
     // Convert back to fiber

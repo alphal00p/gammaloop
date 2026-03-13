@@ -10,11 +10,12 @@ use super::traits::{
     AbstractFiber, FiberIteratorItem, IteratesAlongFibers, IteratesAlongPermutedFibers,
     ResetableIterator, ShiftableIterator,
 };
+use crate::structure::SlotIndex;
 use crate::structure::{
     concrete_index::ConcreteIndex, concrete_index::FlatIndex, dimension::Dimension,
     representation::RepName, representation::Representation,
 };
-use bitvec::vec::BitVec;
+use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::permutation::Permutation;
 
 /// Represents a single stride and shift for fiber iteration
@@ -464,10 +465,10 @@ impl<R: RepName> CoreExpandedFiberIterator<R> {
     }
 
     /// Filters elements from a vector based on a bitvector filter
-    fn filter<T: Clone>(filter: &BitVec, vec: &[T], conj: bool) -> Vec<T> {
+    fn filter<T: Clone>(filter: &SubSet<SlotIndex>, vec: &[T], conj: bool) -> Vec<T> {
         let mut res = vec![];
         for (i, x) in filter.iter().enumerate() {
-            if conj ^ *x {
+            if conj ^ x {
                 res.push(vec[i].clone());
             }
         }

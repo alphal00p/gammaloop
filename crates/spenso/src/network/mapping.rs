@@ -9,11 +9,11 @@ use graph::{NAdd, NMul, NetworkGraph, NetworkLeaf};
 use linnet::half_edge::involution::EdgeData;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubgraph, SubGraph};
 use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::half_edge::{HedgeGraph, HedgeGraphError, NodeIndex};
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, Hedge, Orientation},
 };
-use linnet::half_edge::{HedgeGraph, HedgeGraphError, NodeIndex};
 use linnet::tree::child_pointer::ParentChildStore;
 use rayon::iter::IntoParallelIterator;
 use ref_ops::{RefAdd, RefMul};
@@ -32,26 +32,25 @@ use crate::structure::representation::LibraryRep;
 use crate::structure::slot::{IsAbstractSlot, Slot};
 // use log::trace;
 use serde::{Deserialize, Serialize};
-use slotmap::{new_key_type, DenseSlotMap, Key, SecondaryMap};
 #[cfg(feature = "shadowing")]
 use symbolica::{
-    atom::{representation::FunView, AddView, Atom, AtomView, MulView, Symbol},
+    atom::{AddView, Atom, AtomView, MulView, Symbol, representation::FunView},
     coefficient::ConvertToRing,
     domains::{
+        EuclideanDomain,
         factorized_rational_polynomial::{
             FactorizedRationalPolynomial, FromNumeratorAndFactorizedDenominator,
         },
         float::{Complex as SymComplex, NumericalFloatLike, Real, SingleFloat},
         rational::Rational,
         rational_polynomial::{FromNumeratorAndDenominator, RationalPolynomial},
-        EuclideanDomain,
     },
     evaluate::{
         CompileOptions, CompiledCode, CompiledEvaluator, EvalTree, EvaluationFn, ExportedCode,
         ExpressionEvaluator, FunctionMap, InlineASM,
     },
     id::Pattern,
-    poly::{factor::Factorize, gcd::PolynomialGCD, polynomial::MultivariatePolynomial, Variable},
+    poly::{Variable, factor::Factorize, gcd::PolynomialGCD, polynomial::MultivariatePolynomial},
     utils::BorrowedOrOwned,
 };
 
@@ -71,9 +70,9 @@ use crate::{
     iterators::IteratableTensor,
     parametric::atomcore::ReplaceBuilderGeneric,
     parametric::{
-        atomcore::PatternReplacement, AtomViewOrConcrete, CompiledEvalTensor, EvalTensor,
-        EvalTreeTensor, MixedTensor, ParamTensor, SerializableCompiledCode,
-        SerializableCompiledEvaluator, SerializableExportedCode,
+        AtomViewOrConcrete, CompiledEvalTensor, EvalTensor, EvalTreeTensor, MixedTensor,
+        ParamTensor, SerializableCompiledCode, SerializableCompiledEvaluator,
+        SerializableExportedCode, atomcore::PatternReplacement,
     },
     shadowing::{ShadowMapping, Shadowable},
     structure::{StructureContract, ToSymbolic},
@@ -87,9 +86,9 @@ use crate::{
     contraction::{Contract, ContractionError, Trace},
     data::{DataTensor, GetTensorData, HasTensorData},
     structure::{
+        CastStructure, HasName, HasStructure, ScalarTensor, TensorStructure, TracksCount,
         representation::{LibrarySlot, RepName},
         slot::DualSlotTo,
-        CastStructure, HasName, HasStructure, ScalarTensor, TensorStructure, TracksCount,
     },
     upgrading_arithmetic::FallibleMul,
 };
@@ -100,5 +99,5 @@ use crate::{
     parametric::atomcore::{TensorAtomMaps, TensorAtomOps},
 };
 
-use super::store::TensorScalarStore;
 use super::Network;
+use super::store::TensorScalarStore;
