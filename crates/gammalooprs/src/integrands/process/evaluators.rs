@@ -1,8 +1,7 @@
-use std::{mem::transmute, ops::Neg, path::Path};
-
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetIter, SubSetLike, subset::SubSet},
@@ -10,10 +9,15 @@ use linnet::half_edge::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spenso::algebra::{
-    algebraic_traits::RefOne,
-    complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
+use spenso::{
+    algebra::{
+        algebraic_traits::RefOne,
+        complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
+    },
+    network::{ExecutionResult, Sequential, SmallestDegree},
 };
+use std::ops::Deref;
+use std::{mem::transmute, ops::Neg, path::Path};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Indeterminate, Symbol},
     domains::{
@@ -34,17 +38,20 @@ use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
     graph::Graph,
-    integrands::evaluation::EvaluationMetaData,
-    integrands::process::{
-        amplitude::load::set_override_if,
-        param_builder::{FnMapEntry, LUParams},
+    integrands::{
+        evaluation::EvaluationMetaData,
+        process::{
+            amplitude::load::set_override_if,
+            param_builder::{FnMapEntry, LUParams},
+        },
     },
-    momentum::Helicity,
-    momentum::sample::MomentumSample,
+    momentum::{Helicity, sample::MomentumSample},
+    numerator::symbolica_ext::AtomCoreExt,
     processes::EvaluatorSettings,
     settings::{GlobalSettings, RuntimeSettings},
     utils::{
-        ArbPrec, F, FloatLike, GS, Length, W_, f128,
+        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
+        hyperdual_utils::{DualOrNot, new_from_values},
         symbolica_ext::{CallSymbol, LogPrint},
     },
 };
@@ -120,7 +127,7 @@ pub(crate) fn evaluate_evaluator<T: FloatLike + GenericEvaluatorFloat>(
     params: &[Complex<F<T>>],
     evaluation_metadata: &mut EvaluationMetaData,
     record_primary_timing: bool,
-) -> Vec<Complex<F<T>>> {
+) -> Vec<DualOrNot<Complex<F<T>>>> {
     if !record_primary_timing {
         return <T as GenericEvaluatorFloat>::get_evaluator(generic_evaluator)(params);
     }
@@ -212,6 +219,7 @@ impl EvaluatorStack {
     fn new_single_parametric<A: AtomCore>(
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let opt_settings = settings.optimization_settings();
@@ -221,7 +229,7 @@ impl EvaluatorStack {
                 .iter()
                 .map(|atom| GS.collect_orientation_if(atom.as_atom_view(), false)),
             &param_builder,
-            None,
+            dual_shape.clone(),
             opt_settings.clone(),
             settings.store_atom,
         )
@@ -236,6 +244,7 @@ impl EvaluatorStack {
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(GenericEvaluator, usize)> {
         // let  n_orientations=;
@@ -253,7 +262,7 @@ impl EvaluatorStack {
                     })
                     .flatten(),
                 &param_builder,
-                None,
+                dual_shape.clone(),
                 settings.optimization_settings(),
                 settings.store_atom,
             )?,
@@ -271,6 +280,7 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let params: Vec<Atom> = (&param_builder.pairs)
@@ -339,7 +349,7 @@ impl EvaluatorStack {
             &fn_map,
             entries,
             settings.optimization_settings(),
-            None,
+            dual_shape.clone(),
             settings.store_atom,
         )
     }
@@ -354,6 +364,7 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let sum = atoms.iter().map(|atom| {
@@ -383,7 +394,7 @@ impl EvaluatorStack {
         GenericEvaluator::new_from_builder(
             sum,
             &param_builder,
-            None,
+            dual_shape.clone(),
             settings.optimization_settings(),
             settings.store_atom,
         )
@@ -397,13 +408,33 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        let parsed_atoms = atoms
+            .iter()
+            .map(|a| {
+                let mut net = a.as_atom_view().parse_into_net()?;
+
+                net.execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )?;
+
+                Ok(net.result_scalar().map(|a| match a {
+                    ExecutionResult::One => Atom::num(1),
+                    ExecutionResult::Zero => Atom::Zero,
+                    ExecutionResult::Val(v) => v.into_owned(),
+                })?)
+            })
+            .collect::<Result<Vec<_>>>()?;
+
         let iterative = if settings.iterative_orientation_optimization {
             Some(Self::new_iterative(
-                atoms,
+                &parsed_atoms,
                 param_builder,
                 orientations,
+                &dual_shape,
                 settings,
             )?)
         } else {
@@ -412,9 +443,10 @@ impl EvaluatorStack {
 
         let summed_function_map = if settings.summed_function_map {
             Some(Self::new_summed_function_map(
-                atoms,
+                &parsed_atoms,
                 param_builder,
                 orientations,
+                &dual_shape,
                 settings,
             )?)
         } else {
@@ -423,16 +455,18 @@ impl EvaluatorStack {
 
         let summed = if settings.summed {
             Some(Self::new_summed(
-                atoms,
+                &parsed_atoms,
                 param_builder,
                 orientations,
+                &dual_shape,
                 settings,
             )?)
         } else {
             None
         };
 
-        let single_parametric = Self::new_single_parametric(atoms, param_builder, settings)?;
+        let single_parametric =
+            Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)?;
 
         Ok(EvaluatorStack {
             single_parametric,
@@ -448,11 +482,11 @@ impl EvaluatorStack {
         orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Vec<Complex<F<T>>>
+    ) -> Vec<DualOrNot<Complex<F<T>>>>
     where
         usize: From<OID>,
     {
-        let mut result: Option<Vec<Complex<F<T>>>> = None;
+        let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
         for (_, e) in orientations.iter() {
             input.set_orientation_values(e);
             let output = evaluate_evaluator(
@@ -478,7 +512,7 @@ impl EvaluatorStack {
         orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Result<Vec<Complex<F<T>>>>
+    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
     where
         usize: From<OID>,
     {
@@ -554,7 +588,7 @@ impl EvaluatorStack {
         orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Result<Vec<Complex<F<T>>>>
+    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
     where
         usize: From<OID>,
     {
@@ -579,7 +613,7 @@ impl EvaluatorStack {
                 record_primary_timing,
             ))
         } else {
-            let mut result: Option<Vec<Complex<F<T>>>> = None;
+            let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
             for (_, e) in orientations.iter() {
                 input.set_orientation_values(e);
                 let output = evaluate_evaluator(
@@ -606,7 +640,7 @@ impl EvaluatorStack {
         orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Result<Vec<Complex<F<T>>>>
+    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
     where
         usize: From<OID>,
     {
@@ -626,7 +660,7 @@ impl EvaluatorStack {
                 record_primary_timing,
             ))
         } else {
-            let mut result: Option<Vec<Complex<F<T>>>> = None;
+            let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
             for (_, e) in orientations.iter() {
                 input.set_orientation_values(e);
                 let output = evaluate_evaluator(
@@ -669,7 +703,7 @@ impl EvaluatorStack {
         settings: &RuntimeSettings,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Result<Vec<Complex<F<T>>>>
+    ) -> Result<Vec<DualOrNot<Complex<F<T>>>>>
     where
         usize: From<OID>,
     {
@@ -991,7 +1025,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
     #[allow(clippy::type_complexity)]
     fn get_evaluator(
         generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<T>>]) -> Vec<Complex<F<T>>>;
+    ) -> impl FnMut(&[Complex<F<T>>]) -> Vec<DualOrNot<Complex<F<T>>>>;
 
     #[allow(clippy::too_many_arguments)]
     fn get_parameters<'a>(
@@ -1034,7 +1068,7 @@ impl GenericEvaluatorFloat for f64 {
 
     fn get_evaluator(
         generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<Complex<F<Self>>> {
+    ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<DualOrNot<Complex<F<Self>>>> {
         |params: &[Complex<F<f64>>]| {
             let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
@@ -1046,11 +1080,33 @@ impl GenericEvaluatorFloat for f64 {
                         transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
                     );
                 }
-                out
+
+                if let Some(dual_shape) = &generic_evaluator.dual_shape {
+                    let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
+                    let dual_size = dual_builder.values.len();
+
+                    out.chunks(dual_size)
+                        .into_iter()
+                        .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                        .collect()
+                } else {
+                    out.into_iter().map(DualOrNot::NonDual).collect()
+                }
             } else {
                 // info!("USING EAGER COMPLEX SINGLE");
                 generic_evaluator.f64_eager.evaluate(params, &mut out);
-                out
+
+                if let Some(dual_shape) = &generic_evaluator.dual_shape {
+                    let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
+                    let dual_size = dual_builder.values.len();
+
+                    out.chunks(dual_size)
+                        .into_iter()
+                        .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                        .collect()
+                } else {
+                    out.into_iter().map(DualOrNot::NonDual).collect()
+                }
             }
         }
     }
@@ -1131,12 +1187,23 @@ impl GenericEvaluatorFloat for f128 {
 
     fn get_evaluator(
         generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
+    ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<DualOrNot<Complex<F<f128>>>> {
         |params: &[Complex<F<f128>>]| {
             // info!("USING COMPLEX F128 MULTIPLE");
             let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             generic_evaluator.f128.evaluate(params, &mut out);
-            out
+
+            if let Some(dual_shape) = &generic_evaluator.dual_shape {
+                let dual_builder = HyperDual::<Complex<F<f128>>>::new(dual_shape.clone());
+                let dual_size = dual_builder.values.len();
+
+                out.chunks(dual_size)
+                    .into_iter()
+                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                    .collect()
+            } else {
+                out.into_iter().map(DualOrNot::NonDual).collect()
+            }
         }
     }
 
@@ -1175,11 +1242,22 @@ impl GenericEvaluatorFloat for ArbPrec {
 
     fn get_evaluator(
         generic_evaluator: &mut GenericEvaluator,
-    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<Complex<F<ArbPrec>>> {
+    ) -> impl FnMut(&[Complex<F<ArbPrec>>]) -> Vec<DualOrNot<Complex<F<ArbPrec>>>> {
         |params: &[Complex<F<ArbPrec>>]| {
             let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
             generic_evaluator.arb.evaluate(params, &mut out);
-            out
+
+            if let Some(dual_shape) = &generic_evaluator.dual_shape {
+                let dual_builder = HyperDual::<Complex<F<ArbPrec>>>::new(dual_shape.clone());
+                let dual_size = dual_builder.values.len();
+
+                out.chunks(dual_size)
+                    .into_iter()
+                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                    .collect()
+            } else {
+                out.into_iter().map(DualOrNot::NonDual).collect()
+            }
         }
     }
 

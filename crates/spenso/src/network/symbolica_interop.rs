@@ -68,7 +68,7 @@ impl<'a> From<ExecutionResult<Cow<'a, Atom>>> for Atom {
 }
 
 impl<
-    Store: TensorScalarStore<Tensor = MixedTensor<T, S>, Scalar: AtomCore>,
+    Store: TensorScalarStore<Tensor = MixedTensor<T, S>, Scalar: AtomCore<Output = Store::Scalar>>,
     T,
     S,
     K,
@@ -90,7 +90,7 @@ where
     pub fn replace_multiple<R: BorrowReplacement>(
         &self,
         replacements: &[R],
-    ) -> Network<Store::Store<MixedTensor<T, S>, Atom>, K, FK, Aind>
+    ) -> Network<Store::Store<MixedTensor<T, S>, Store::Scalar>, K, FK, Aind>
     where
         K: Clone,
         FK: Clone,

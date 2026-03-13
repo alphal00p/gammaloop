@@ -17,7 +17,7 @@ use ahash::HashSet;
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
-use eyre::{Ok, eyre};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
@@ -474,8 +474,68 @@ pub(crate) fn generate_cff_expression<E, V, H>(
     )?;
 
     // patch the surface cache
-    surface_cache.set_subspaces(&graph.full_graph());
     Ok(graph_cff)
+}
+
+impl Graph {
+    pub(crate) fn generate_cff(
+        &mut self,
+        contract_edges: &[EdgeIndex],
+        canonize_esurface: &Option<ShiftRewrite>,
+    ) -> Result<CFFExpression<SuperGraphOrientationID>> {
+        let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
+
+        for edge in contract_edges {
+            seed_graph = seed_graph.contract_edge(*edge);
+        }
+
+        let edges_in_initial_state_cut = self
+            .iter_edges_of(&self.initial_state_cut)
+            .map(|x| x.1)
+            .collect_vec();
+
+        let virtual_edges_of_contracted_graph = seed_graph.num_virtual_edges();
+
+        let orientations = iterate_possible_orientations(virtual_edges_of_contracted_graph);
+
+        let mut oriented_acyclic_graphs = vec![];
+
+        for orientation in orientations {
+            let mut orientation_iterator = orientation.into_iter();
+
+            let global_orientation = self.new_edgevec(|_, edge_id, hedge_pair| {
+                if hedge_pair.is_unpaired() {
+                    Orientation::Undirected
+                } else {
+                    if contract_edges.contains(&edge_id) {
+                        Orientation::Undirected
+                    } else if edges_in_initial_state_cut.contains(&edge_id) {
+                        Orientation::Default
+                    } else {
+                        orientation_iterator
+                            .next()
+                            .expect("orientation generation corrupted, not enough edges")
+                    }
+                }
+            });
+
+            let mut cff_graph = seed_graph.clone();
+            cff_graph.apply_orientation(global_orientation)?;
+
+            if !cff_graph.has_directed_cycle_initial() {
+                oriented_acyclic_graphs.push(cff_graph);
+            }
+        }
+
+        let result = generate_cff_from_orientations(
+            oriented_acyclic_graphs,
+            &mut self.surface_cache,
+            &edges_in_initial_state_cut,
+            canonize_esurface,
+        );
+
+        result
+    }
 }
 
 pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
@@ -1056,12 +1116,6 @@ impl SurfaceCache {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
             hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
-        }
-    }
-
-    pub(crate) fn set_subspaces(&mut self, _subspace_graph: &InternalSubGraph) {
-        for _esurface in self.esurface_cache.iter_mut() {
-            //esurface.subspace_graph = subspace_graph.clone();
         }
     }
 }

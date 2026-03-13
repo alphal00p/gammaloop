@@ -201,12 +201,6 @@ impl SubGraphOps for ContractedSubGraph {
     }
 }
 impl SubSetOps for ContractedSubGraph {
-    fn union_with_iter(&mut self, other: impl Iterator<Item = Hedge>) {
-        for h in other {
-            self.allhedges.add(h);
-        }
-    }
-
     fn union_with(&mut self, other: &Self) {
         // union is the intersection of the internal graphs, and the union of the external graph.
         self.internal_graph.intersect_with(&other.internal_graph);

@@ -47,7 +47,7 @@ pub struct OrientedCut {
 
 impl Display for OrientedCut {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for h in self.left.union(&self.right).included_iter() {
+        for h in self.as_subgraph().included_iter() {
             if self.left.includes(&h) {
                 write!(f, "+{}", h.0)?;
             }
@@ -78,6 +78,10 @@ pub enum CutError {
 }
 
 impl OrientedCut {
+    pub fn as_subgraph(&self) -> SuBitGraph {
+        self.left.union(&self.right)
+    }
+
     /// disregards identity edges
     pub fn from_underlying_coerce<E, V, H, N: NodeStorageOps<NodeData = V>>(
         cut: SuBitGraph,
@@ -347,6 +351,36 @@ impl OrientedCut {
         }
 
         edge
+    }
+}
+
+impl SubSetOps<Hedge, OrientedCut> for SuBitGraph {
+    fn intersect_with(&mut self, other: &OrientedCut) {
+        let cut = other.as_subgraph();
+        self.intersect_with(&cut);
+    }
+
+    fn union_with(&mut self, other: &OrientedCut) {
+        self.union_with(&other.left);
+        self.union_with(&other.right);
+    }
+
+    fn sym_diff_with(&mut self, other: &OrientedCut) {
+        self.sym_diff_with(&other.left);
+        self.sym_diff_with(&other.right);
+    }
+
+    fn empty_intersection(&self, other: &OrientedCut) -> bool {
+        self.empty_intersection(&other.left) && self.empty_intersection(&other.right)
+    }
+
+    fn empty_union(&self, other: &OrientedCut) -> bool {
+        self.is_empty() && other.left.is_empty() && other.right.is_empty()
+    }
+
+    fn subtract_with(&mut self, other: &OrientedCut) {
+        self.subtract_with(&other.left);
+        self.subtract_with(&other.right);
     }
 }
 
@@ -954,6 +988,29 @@ mod tests {
     use crate::{dot, parser::DotGraph};
 
     use super::*;
+
+    fn subset(size: usize, hedges: &[usize]) -> SuBitGraph {
+        let mut subgraph = SuBitGraph::empty(size);
+        for hedge in hedges {
+            subgraph.add(Hedge(*hedge));
+        }
+        subgraph
+    }
+
+    #[test]
+    fn subgraph_binary_ops_with_oriented_cut_use_both_sides() {
+        let subgraph = subset(8, &[0, 4, 6]);
+        let cut = OrientedCut {
+            left: subset(8, &[1, 3]),
+            right: subset(8, &[2, 4]),
+        };
+
+        assert_eq!(cut.as_subgraph(), subset(8, &[1, 2, 3, 4]));
+        assert_eq!(subgraph.union(&cut), subset(8, &[0, 1, 2, 3, 4, 6]));
+        assert_eq!(subgraph.intersection(&cut), subset(8, &[4]));
+        assert_eq!(subgraph.sym_diff(&cut), subset(8, &[0, 1, 2, 3, 6]));
+        assert_eq!(subgraph.subtract(&cut), subset(8, &[0, 6]));
+    }
 
     #[test]
     fn test_roundtrip() {

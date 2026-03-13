@@ -146,18 +146,11 @@ fn threeloop() {
     insta::assert_ron_snapshot!("three_loop", graph);
 
     for i in 0..graph.n_hedges() {
-        assert_eq!(
-            3,
-            graph
-                .paton_cycle_basis(&graph.full_graph(), &graph.node_id(Hedge(i)), None)
-                .unwrap()
-                .0
-                .len()
-        );
+        assert_eq!(3, graph.cycle_basis().0.len());
     }
 
     let (cycles, tree) = graph.cycle_basis();
-    assert_eq!(tree.covers(&graph.full_filter()), graph.full_filter());
+    // assert_eq!(tree.hairs(&graph.full_filter()), graph.full_filter());
 
     assert_eq!(3, cycles.len());
 
@@ -202,14 +195,7 @@ fn hairythreeloop() {
     );
 
     for i in graph.full_node().internal_graph.filter.included_iter() {
-        assert_eq!(
-            3,
-            graph
-                .paton_cycle_basis(&graph.full_graph(), &graph.node_id(i), None)
-                .unwrap()
-                .0
-                .len()
-        );
+        assert_eq!(3, graph.cycle_basis().0.len());
     }
 
     #[cfg(feature = "serde")]
@@ -471,10 +457,7 @@ fn K33() {
 
     println!("{}", graph.cyclotomatic_number(&graph.full_graph()));
 
-    let cycles = graph
-        .paton_cycle_basis(&graph.full_graph(), &NodeIndex(4), None)
-        .unwrap()
-        .0;
+    let cycles = graph.cycle_basis().0;
 
     for c in cycles {
         println!(

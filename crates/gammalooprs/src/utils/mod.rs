@@ -42,7 +42,7 @@ use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::{MixedTensor, ParamTensor};
-use spenso_hep_lib::hep_lib;
+use spenso_hep_lib::{hep_lib, hep_lib_atom};
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::{Constructible, FloatLike as SymFloatLike, RealLike, SingleFloat};
@@ -3551,8 +3551,7 @@ type TensorLibStore = RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>
 type FunLibStore =
     SymbolLib<RealOrComplexTensor<F<f64>, ShadowedStructure<Aind>>, PanicMissingConcrete>;
 
-pub static TENSORLIB: LazyLock<TensorLibStore> =
-    LazyLock::new(|| RwLock::new(hep_lib(F(1.), F(0.))));
+pub static TENSORLIB: LazyLock<TensorLibStore> = LazyLock::new(|| RwLock::new(hep_lib_atom()));
 
 pub static FUN_LIB: LazyLock<FunLibStore> = LazyLock::new(|| {
     let mut lib = PanicMissingConcrete::new_lib();
@@ -3761,7 +3760,7 @@ impl<'py> pyo3::IntoPyObject<'py> for &F<f64> {
 impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for F<f64> {
     type Error = pyo3::PyErr;
 
-    fn extract(obj: pyo3::Borrowed<'a, 'py, pyo3::types::PyAny>) -> pyo3::PyResult<Self> {
-        <f64 as pyo3::FromPyObject<'a, 'py>>::extract(obj).map(F)
+    fn extract(obj: pyo3::Borrowed<'a, 'py, pyo3::types::PyAny>) -> Result<Self, Self::Error> {
+        obj.extract::<f64>().map(F)
     }
 }

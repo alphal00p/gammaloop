@@ -8,20 +8,20 @@ authors = ["Lucien Huber"]
 repository = "https://github.com/lcnbr/linnet"
 publish = false
 
-[features]
-custom = []
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ciborium = "0.2.2"
-linnet = { version = "0.17", features = ["serde", "drawing"] }
-serde = {version="1.0", features=["derive"]}
+linnet = { workspace = true, features = ["drawing", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
 
 cgmath = { version = "0.18.0", features = ["serde"] }
-wasm-minimal-protocol = { git = "https://github.com/astrale-sharp/wasm-minimal-protocol" }
-getrandom = { version = "0.2", default-features = false, features = ["custom"] }
-thiserror = "2.0.16"
-rand = "0.8.5"
 figment = "0.10.19"
+getrandom = { version = "0.2", default-features = false, features = ["custom"] }
+rand = "0.8.5"
+thiserror = "2.0.16"
+wasm-minimal-protocol = { git = "https://github.com/astrale-sharp/wasm-minimal-protocol" }
 
-[lib]
-crate-type = ["cdylib", "rlib"]
+[features]
+custom = []

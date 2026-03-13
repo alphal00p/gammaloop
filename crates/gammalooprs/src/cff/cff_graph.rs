@@ -9,7 +9,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike},
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -255,6 +255,18 @@ impl Hash for CFFGenerationGraph {
 }
 
 impl CFFGenerationGraph {
+    pub(crate) fn num_virtual_edges(&self) -> usize {
+        let mut unique_edges = HashSet::default();
+        for vertex in self.vertices.iter() {
+            for edge in vertex.iter_all_edges() {
+                if edge.edge_type == CFFEdgeType::Virtual {
+                    unique_edges.insert(edge.edge_id);
+                }
+            }
+        }
+
+        unique_edges.len()
+    }
     fn has_impossible_edge(&self) -> bool {
         self.vertices
             .iter()

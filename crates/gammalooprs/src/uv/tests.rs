@@ -1,7 +1,6 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
-use crate::DependentMomentaConstructor;
-use crate::cff::expression::{AmplitudeOrientationID, GraphOrientation};
+use crate::cff::expression::AmplitudeOrientationID;
 
 use crate::graph::edge::ParseEdge;
 use crate::graph::global::ParseData;
@@ -10,27 +9,20 @@ use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
-use crate::integrands::inspect::inspect;
-use crate::model::Model;
-use crate::momentum::ThreeMomentum;
-use crate::momentum::sample::{ExternalIndex, LoopIndex};
+use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
-use crate::settings::runtime::DiscreteGraphSamplingSettings;
 use crate::utils::W_;
 use crate::utils::symbolica_ext::TypstFormat;
 use crate::uv::profile::{ProfileSettings, UVProfileable};
-use idenso::color::{CS, ColorSimplifier};
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
-use spenso::shadowing::symbolica_utils::AtomCoreExt as _;
 use symbolica::atom::Symbol;
 use symbolica::symbol;
-use tabled::settings::Settings;
 
 use crate::{
     dot,
@@ -81,7 +73,7 @@ fn four_photon_one_loop_amp() {
     let vk = (crate::utils::vakint().unwrap(), &vk_settings);
 
     amp.generate_cff().unwrap();
-    amp.build_parametric_integrand(&set, vk).unwrap();
+    amp.build_integrands(&set, vk).unwrap();
 
     println!("{}", amp.derived_data.all_mighty_integrand);
 }

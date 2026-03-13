@@ -10,7 +10,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
 };
-use numpy::{Complex64, IntoPyArray, PyArray1, PyReadonlyArray2};
+use numpy::{Complex64, PyArray1, PyReadonlyArray2};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -37,6 +37,7 @@ use gammalooprs::feyngen::{
 
 use git_version::git_version;
 use itertools::{self, Itertools};
+use ndarray::Array2;
 use pyo3::types::PyFloat;
 use std::path::PathBuf;
 
@@ -468,24 +469,35 @@ impl GammaLoopAPI {
         Bound<'py, PyArray1<Complex64>>,
         Option<Bound<'py, PyArray1<f64>>>,
     )> {
-        let points_rust = points.as_array();
-        let discrete_dims_rust = discrete_dims.as_array();
+        let points_array = points.as_array();
+        let points_shape = points_array.dim();
+        let points_data = points_array.iter().copied().collect_vec();
+        let points_rust: Array2<f64> = Array2::from_shape_vec(points_shape, points_data)
+            .map_err(|e| eyre!("Invalid points shape/data: {e}"))?;
+
+        let discrete_dims_array = discrete_dims.as_array();
+        let discrete_dims_shape = discrete_dims_array.dim();
+        let discrete_dims_data = discrete_dims_array.iter().copied().collect_vec();
+        let discrete_dims_rust: Array2<usize> =
+            Array2::from_shape_vec(discrete_dims_shape, discrete_dims_data)
+                .map_err(|e| eyre!("Invalid discrete_dims shape/data: {e}"))?;
 
         let batched_inspect = BatchedInspect {
             process_id,
             integrand_name,
             use_arb_prec,
             momentum_space,
-            points: points_rust,
-            discrete_dims: discrete_dims_rust,
+            points: points_rust.view(),
+            discrete_dims: discrete_dims_rust.view(),
         };
 
         let (res, res_jac) = batched_inspect.run(&mut self.gammaloop_state).unwrap();
-        let res_map = res
-            .mapv_into_any(|c| Complex64::new(c.re, c.im))
-            .into_pyarray(py);
+        let res_map = PyArray1::from_vec(
+            py,
+            res.iter().map(|c| Complex64::new(c.re, c.im)).collect_vec(),
+        );
 
-        let res_jac_map = res_jac.map(|r| r.into_pyarray(py));
+        let res_jac_map = res_jac.map(|r| PyArray1::from_vec(py, r.to_vec()));
 
         Ok((res_map, res_jac_map))
     }

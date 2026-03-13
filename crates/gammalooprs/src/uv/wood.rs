@@ -1,13 +1,14 @@
-#![allow(dead_code)]
-
-use crate::graph::{Edge, LoopMomentumBasis, Vertex};
+use crate::{
+    graph::{Edge, Graph, LoopMomentumBasis, Vertex},
+    uv::{approx::CutStructure, forest::CutForests},
+};
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
 use std::fmt::Write;
 
 use linnet::half_edge::{
     HedgeGraph,
-    subgraph::{InternalSubGraph, SubSetLike},
+    subgraph::{InternalSubGraph, SubSetLike, SubSetOps},
 };
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
@@ -17,6 +18,37 @@ use super::{
     approx::Approximation,
     poset::{DAG, DagNode, PosetNode},
 };
+
+pub struct CutWoods {
+    pub cuts: CutStructure,
+    pub woods: Vec<Wood>,
+}
+
+impl CutWoods {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph) -> Self {
+        let mut woods = vec![];
+        for cut in cuts.cuts.iter() {
+            let mut subgraph = graph.full_filter();
+            subgraph.subtract_with(&graph.initial_state_cut.left);
+            subgraph.subtract_with(&cut.union);
+
+            let wood = Wood::from_spinneys(graph.spinneys(&subgraph).iter().cloned(), graph);
+            woods.push(wood);
+        }
+        CutWoods { cuts, woods }
+    }
+
+    pub(crate) fn unfold(self, graph: &Graph) -> CutForests {
+        CutForests {
+            cuts: self.cuts,
+            forests: self
+                .woods
+                .iter()
+                .map(|a| a.unfold(graph, &graph.loop_momentum_basis))
+                .collect(),
+        }
+    }
+}
 
 pub struct Wood {
     poset: Poset<InternalSubGraph, ()>,

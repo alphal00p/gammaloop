@@ -30,7 +30,7 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntegrandExpr {
-    integrand: Atom,
+    integrands: Vec<Atom>,
     // add_arg: Option<Atom>,
 }
 

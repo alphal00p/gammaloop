@@ -24,17 +24,17 @@ use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
+    cff::generation::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
-    momentum::sample::ExternalIndex,
-    momentum::{Dep, ExternalMomenta, PolDef},
+    momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::{GlobalPrefactor, ParsingNet, symbolica_ext::AtomCoreExt},
-    settings::runtime::kinematic::Externals,
-    settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
+    settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, GS, Length, ose_atom_from_index},
 };
 
+pub mod cuts;
 pub mod global;
 
 #[derive(Clone, Copy, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Default)]
@@ -54,6 +54,7 @@ pub struct Graph {
     pub loop_momentum_basis: LoopMomentumBasis,
     pub param_builder: ParamBuilder,
     pub global_prefactor: GlobalPrefactor,
+    pub surface_cache: SurfaceCache,
     /// The cross section initial state cut
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
@@ -72,15 +73,20 @@ impl Graph {
         DotGraph::from(self).debug_dot()
     }
 
+    pub(crate) fn global_atom(&self) -> Atom {
+        &self.global_prefactor.num
+            * &self.global_prefactor.projector
+            * evaluate_overall_factor(self.overall_factor.as_view())
+    }
+
     /// With wrapped color, so that it doesn't enter the network as a tensor. Can unwrap using `unwrap_function`
     /// Contains the parametric sign on the OSE
     pub(crate) fn global_network(&self) -> ParsingNet {
-        let net = (&self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * evaluate_overall_factor(self.overall_factor.as_view()))
-        .wrap_color(GS.color_wrap)
-        .parse_into_net()
-        .unwrap();
+        let net = self
+            .global_atom()
+            .wrap_color(GS.color_wrap)
+            .parse_into_net()
+            .unwrap();
 
         let mut reps = Vec::new();
         for (p, eid, _) in self.iter_edges() {

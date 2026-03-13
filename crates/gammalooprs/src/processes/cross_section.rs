@@ -6,7 +6,7 @@ use std::{
     path::Path,
 };
 
-use ahash::HashSet;
+use ahash::{HashMap, HashSet};
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -28,15 +28,17 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         cut_expression::SuperGraphOrientationID,
+        esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup},
         expression::{AmplitudeOrientationID, CFFExpression, SubgraphOrientationID},
         generation::{
             ConstraintData, EsurfaceRewritingInstructions, PostProcessingSetup,
             generate_supergraph_cff, get_orientations_from_subgraph,
         },
     },
-    define_index,
+    define_index, disable,
     graph::{
-        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
+        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, cuts::CutSet,
+        parse::complete_group_parsing,
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup,
@@ -47,8 +49,14 @@ use crate::{
     numerator::symbolica_ext::AtomCoreExt,
     processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives},
-    uv::{UltravioletGraph, uv_graph::UVE},
+    utils::{
+        FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives,
+        symbolica_ext::LogPrint,
+    },
+    uv::{
+        UltravioletGraph, approx::CutStructure, forest::ParametricIntegrands, uv_graph::UVE,
+        wood::CutWoods,
+    },
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
@@ -149,6 +157,7 @@ impl CsAmplitudeCTDiagram {
         settings: &GenerationSettings,
         conjugate: bool,
     ) -> ParsingNet {
+        disable! {
         if let Some(network) = &self.network {
             network.clone()
         } else {
@@ -249,6 +258,8 @@ impl CsAmplitudeCTDiagram {
             self.network = Some(left_expr * right_expr);
             self.network.clone().unwrap()
         }
+        }
+        todo!()
     }
 }
 
@@ -677,13 +688,9 @@ impl CrossSectionGraph {
         self.generate_esurface_cuts();
         debug!("generating cff");
         self.generate_cff(settings)?;
-        debug!("extending cut esurface cache");
-        self.update_surface_cache();
         debug!("building lmbs");
         self.build_lmbs();
         debug!("building multi channeling channels");
-
-        self.determine_raisings()?;
 
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
@@ -700,184 +707,6 @@ impl CrossSectionGraph {
             self.build_threshold_counterterm(settings, vk)?;
             self.build_subspace_data()?;
         }
-
-        Ok(())
-    }
-
-    pub(crate) fn determine_raisings(&mut self) -> Result<()> {
-        let raised_edges = self.graph.get_raised_edge_groups();
-
-        println!("raised edges: {:?}", raised_edges);
-
-        let normalized_cut_esurfaces = self
-            .cut_esurface
-            .iter()
-            .map(|esurface| {
-                let mut new_esurface = esurface.clone();
-                for energy in new_esurface.energies.iter_mut() {
-                    let group_index_of_energy =
-                        raised_edges.iter().position(|group| group.contains(energy));
-
-                    if let Some(found_group_index) = group_index_of_energy {
-                        *energy = *raised_edges[found_group_index].first().unwrap();
-                    }
-                }
-                new_esurface.energies.sort();
-                new_esurface
-            })
-            .collect::<TiVec<CutId, _>>();
-
-        let mut raised_groups = TiVec::<RaisedCutId, Vec<CutId>>::new();
-
-        for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
-            let raised_cut_id =
-                raised_groups
-                    .iter_enumerated()
-                    .find_map(|(raised_cut_id, cuts)| {
-                        if cuts.iter().all(|cut_in_raised_group_id| {
-                            normalized_cut_esurfaces[*cut_in_raised_group_id].energies
-                                == normalized_cut_esurface.energies
-                        }) {
-                            Some(raised_cut_id)
-                        } else {
-                            None
-                        }
-                    });
-
-            if let Some(found_raised_cut_id) = raised_cut_id {
-                raised_groups[found_raised_cut_id].push(cut_id);
-            } else {
-                raised_groups.push(vec![cut_id]);
-            }
-        }
-
-        println!("raised groups: {:?}", raised_groups);
-
-        let mut crossed_pairs = Vec::<(CutId, CutId)>::new();
-        for cut_pair in self.cuts.iter_enumerated().combinations(2) {
-            if cut_pair[0].1.left.includes(&cut_pair[1].1.left)
-                || cut_pair[1].1.left.includes(&cut_pair[0].1.left)
-                || cut_pair[0].1.right.includes(&cut_pair[1].1.right)
-                || cut_pair[1].1.right.includes(&cut_pair[0].1.right)
-            {
-                continue;
-            } else if cut_pair[0].0.0 < cut_pair[1].0.0 {
-                crossed_pairs.push((cut_pair[0].0, cut_pair[1].0));
-            } else {
-                crossed_pairs.push((cut_pair[1].0, cut_pair[0].0));
-            }
-        }
-
-        let cross_free_powersets = raised_groups
-            .iter()
-            .map(|group| {
-                group
-                    .iter()
-                    .powerset()
-                    .filter_map(|subset| {
-                        if subset.is_empty() {
-                            None
-                        } else {
-                            let has_crossing = subset.iter().combinations(2).any(|combination| {
-                                let combination_tuple = if combination[0].0 < combination[1].0 {
-                                    (**combination[0], **combination[1])
-                                } else {
-                                    (**combination[1], **combination[0])
-                                };
-                                crossed_pairs.contains(&combination_tuple)
-                            });
-
-                            if has_crossing {
-                                None
-                            } else {
-                                // sort by number of vertices on left side, for non crossing cuts, this will sort them from left to right.
-                                let sorted_subset = subset
-                                    .iter()
-                                    .sorted_by(|cut_id_a, cut_id_b| {
-                                        let left_of_cut_a = &self.cuts[***cut_id_a].left;
-                                        let left_of_cut_b = &self.cuts[***cut_id_b].left;
-                                        let n_vertices_a = self
-                                            .graph
-                                            .underlying
-                                            .iter_nodes_of(left_of_cut_a)
-                                            .count();
-                                        let n_vertices_b = self
-                                            .graph
-                                            .underlying
-                                            .iter_nodes_of(left_of_cut_b)
-                                            .count();
-                                        n_vertices_a.cmp(&n_vertices_b)
-                                    })
-                                    .copied()
-                                    .copied()
-                                    .collect_vec();
-
-                                if sorted_subset == vec![CutId(3), CutId(0)] {
-                                    return None;
-                                }
-
-                                let all_sandwiches_connected =
-                                    sorted_subset.windows(2).all(|sequential_cuts| {
-                                        let right_of_first_cut =
-                                            &self.cuts[sequential_cuts[0]].right;
-                                        let left_of_second_cut =
-                                            &self.cuts[sequential_cuts[1]].left;
-
-                                        let sandwich =
-                                            right_of_first_cut.intersection(left_of_second_cut);
-
-                                        self.graph.is_connected(&sandwich)
-                                    });
-
-                                if all_sandwiches_connected {
-                                    Some(sorted_subset)
-                                } else {
-                                    None
-                                }
-                            }
-                        }
-                    })
-                    .collect_vec()
-            })
-            .collect::<TiVec<RaisedCutId, _>>();
-
-        // now check all sandwiches and check for connectedness
-        println!("cross free powersets: {:?}", cross_free_powersets);
-
-        let dual_shapes = cross_free_powersets
-            .iter()
-            .map(|powerset| {
-                powerset
-                    .iter()
-                    .map(|subset| {
-                        if subset.len() > 1 {
-                            Some(shape_for_t_derivatives(subset.len() - 1))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect()
-            })
-            .collect();
-
-        let max_order = cross_free_powersets
-            .iter()
-            .map(|powerset| powerset.iter().map(|subset| subset.len()).max().unwrap())
-            .max()
-            .unwrap();
-
-        let pass_two_evaluators = (1..=max_order)
-            .map(|order| build_derivative_structure(order as u8))
-            .collect();
-
-        let result = RaisedData {
-            raised_cut_groups: raised_groups,
-            cross_free_powersets,
-            dual_shapes,
-            pass_two_evaluators,
-        };
-
-        self.derived_data.raised_data = result;
 
         Ok(())
     }
@@ -899,45 +728,65 @@ impl CrossSectionGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    pub(crate) fn update_surface_cache(&mut self) {
-        let esurface_cache = &mut self
-            .derived_data
-            .global_cff_expression
-            .as_mut()
-            .unwrap()
-            .surfaces
-            .esurface_cache;
-
-        // if a cut was not generated during cff, we still add it to the surface cache such that it has an esurface_id
-        for esurface in self.cut_esurface.iter() {
-            if let Some(esurface_id) = esurface_cache.iter().position(|e| e == esurface) {
-                self.cut_esurface_id_map.push(esurface_id.into());
-            } else {
-                self.cut_esurface_id_map.push(esurface_cache.len().into());
-                esurface_cache.push(esurface.clone());
-            }
-        }
-    }
-
     fn generate_cff(&mut self, _settings: &GenerationSettings) -> Result<()> {
-        // hardcorde 1 to n for now
-        debug!("generating cff");
-
-        let shift_rewrite = self
+        let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_cut_expression = generate_cff_with_cuts(
-            &self.graph.underlying,
-            &self.graph.get_edges_in_initial_state_cut(),
-            &shift_rewrite,
-            &self.cuts,
-        )?;
+        let contract_edges = self
+            .graph
+            .iter_edges_of(
+                &self
+                    .graph
+                    .tree_edges
+                    .subtract(&self.graph.initial_state_cut),
+            )
+            .map(|x| x.1)
+            .collect_vec();
 
-        let global_cff = generate_supergraph_cff(&self.graph)?;
+        // print!("contract edges: {:?}", contract_edges);
+        let global_cff = self
+            .graph
+            .generate_cff(&contract_edges, &canonize_esurface)?;
 
-        self.derived_data.cff_expression = Some(cff_cut_expression);
+        let cut_esurface_map = self
+            .cut_esurface
+            .iter()
+            .map(|esurface| {
+                self.graph
+                    .surface_cache
+                    .esurface_cache
+                    .iter()
+                    .position(|e_sf| e_sf == esurface)
+                    .unwrap_or_else(|| {
+                        println!("esurfaces corruped");
+
+                        println!("cut esurfaces: {:?}", self.cut_esurface);
+                        println!(
+                            "graph esurfaces: {:?}",
+                            self.graph.surface_cache.esurface_cache
+                        );
+                        println!(
+                            "graph hsurfaces: {:?}",
+                            self.graph.surface_cache.hsurface_cache
+                        );
+                        panic!()
+                    })
+                    .into()
+            })
+            .collect();
+
+        self.cut_esurface_id_map = cut_esurface_map;
+
+        let esurface_raised_data = self
+            .graph
+            .determine_raised_esurfaces_from_expression(&global_cff);
+
+        let raised_cut_data =
+            RaisedCutData::new_from_esurface(&esurface_raised_data, &self.cut_esurface_id_map);
+
         self.derived_data.global_cff_expression = Some(global_cff);
+        self.derived_data.raised_data = raised_cut_data;
 
         Ok(())
     }
@@ -948,7 +797,7 @@ impl CrossSectionGraph {
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
     ) -> Result<()> {
-        info!("generatig cuts for graph: {}", self.graph.name);
+        info!("generating cuts for graph: {}", self.graph.name);
 
         let all_st_cuts = self.graph.all_st_cuts_for_cs(
             self.source_nodes.clone(),
@@ -1029,8 +878,7 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<()> {
-        self.derived_data.cut_paramatric_integrand =
-            self.build_parametric_integrand_raised_cuts(settings, vakint)?;
+        self.derived_data.cut_paramatric_integrand = self.build_integrand(settings, vakint)?;
         Ok(())
     }
 
@@ -1098,400 +946,61 @@ impl CrossSectionGraph {
         (initial_state_tree_expr, replacements)
     }
 
-    fn build_parametric_integrand_raised_cuts(
+    fn build_integrand(
         &mut self,
         settings: &GenerationSettings,
         vakint: (&Vakint, &vakint::VakintSettings),
-    ) -> Result<TiVec<RaisedCutId, Vec<Atom>>> {
-        let global_num = self.graph.global_network();
-
-        let (tree_structure, replacements) = self.get_initial_state_tree_data();
-
-        let canonize_esurface = self
-            .graph
-            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+    ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
+        let scalar_global_num: Atom = self.graph.global_atom();
 
         let max_order = self
             .derived_data
             .raised_data
-            .cross_free_powersets
+            .raised_cut_groups
             .iter()
-            .map(|sets| sets.iter().map(|set| set.len()).max().unwrap())
+            .map(|cut_group| cut_group.related_esurface_group.max_occurence)
             .max()
             .unwrap();
-
-        println!("max order: {}", max_order);
 
         self.graph
             .param_builder
             .initialize_t_derivatives(max_order - 1);
 
-        let mut result = TiVec::new();
-        for (raised_cut_id, cuts_in_group) in self
+        let cuts = self
             .derived_data
             .raised_data
             .raised_cut_groups
-            .iter_enumerated()
-        {
-            let mut result_for_this_raised_cut = Vec::new();
-            for cross_free_subset in
-                self.derived_data.raised_data.cross_free_powersets[raised_cut_id].iter()
-            {
-                let complement = cuts_in_group
+            .iter()
+            .map(|cuts| CutSet {
+                esurfaces: cuts.related_esurface_group.clone(),
+                union: cuts
+                    .cuts
                     .iter()
-                    .filter(|cut| !cross_free_subset.contains(cut))
-                    .collect_vec();
+                    .map(|cut_id| self.cuts[*cut_id].cut.as_subgraph())
+                    .reduce(|cut_1, cut_2| cut_1.union(&cut_2))
+                    .unwrap_or_else(|| self.graph.empty_subgraph()),
+            })
+            .collect();
 
-                let illegal_esurfaces = complement
-                    .iter()
-                    .map(|cut_id| &self.cut_esurface[**cut_id])
-                    .collect::<Vec<_>>();
+        let cut_structure = CutStructure { cuts };
 
-                let active_constraints = cuts_in_group
-                    .iter()
-                    .map(|cut_id| &self.cut_esurface[*cut_id])
-                    .collect::<Vec<_>>();
+        let cut_woods = CutWoods::new(cut_structure, &self.graph);
 
-                let mut reversed_dangling = HashSet::default();
-                let mut cut_edges = HashSet::default();
+        let lu_prefactor = self.lu_prefactor_helper_new();
 
-                for cut_id in cross_free_subset.iter() {
-                    let cut = &self.cuts[*cut_id].cut;
-                    for (orientation, edge_data) in cut.iter_edges(&self.graph) {
-                        let edge_id = self.graph.edge_name_to_index(&edge_data.data.name).unwrap();
-                        cut_edges.insert(edge_id);
-                        if orientation == Orientation::Reversed {
-                            reversed_dangling.insert(edge_id);
-                        }
-                    }
-                }
-
-                let reversed_dangling = reversed_dangling.into_iter().sorted().collect_vec();
-                let cut_edges = cut_edges.into_iter().sorted().collect_vec();
-
-                // build the graphs that are sandwiched between the cuts, this is done by taking the right side of the first cut, and intersect it with the left side of the second cut, etc.
-                // The cuts are non-crossing and sorted from left to right, so this is well defined.
-                let graphs = [self.cuts[*cross_free_subset.first().unwrap()].left.clone()]
-                    .into_iter()
-                    .chain(cross_free_subset.windows(2).map(|sequential_cuts| {
-                        let right_of_first_cut = &self.cuts[sequential_cuts[0]].right;
-                        let left_of_second_cut = &self.cuts[sequential_cuts[1]].left;
-
-                        right_of_first_cut.intersection(left_of_second_cut)
-                    }))
-                    .chain([self.cuts[*cross_free_subset.last().unwrap()].right.clone()]);
-
-                // These are used to add the feynman rules of the cuts, so it is important that each edge is only added once.
-                // We therefore delete the edges that have already been added in previous cuts.
-                let mut disjoint_cut_subgraphs = Vec::<Option<SuBitGraph>>::new();
-
-                let mut cut_locations = vec![];
-                cut_locations.push((None, Some(*cross_free_subset.first().unwrap())));
-
-                cross_free_subset.windows(2).for_each(|pair| {
-                    cut_locations.push((Some(pair[0]), Some(pair[1])));
-                });
-
-                cut_locations.push((Some(*cross_free_subset.last().unwrap()), None));
-
-                let mut num_edges_cut = 0;
-
-                for cut_id in cross_free_subset.iter() {
-                    let oriented_cut = &self.cuts[*cut_id].cut;
-                    let mut disjoint_cut_subgraph = oriented_cut.left.union(&oriented_cut.right);
-                    for subgraph in disjoint_cut_subgraphs.iter() {
-                        if let Some(existing_subgraph) = subgraph {
-                            disjoint_cut_subgraph.subtract_with(existing_subgraph);
-                        }
-                    }
-
-                    num_edges_cut += disjoint_cut_subgraph.nedges(&self.graph);
-                    disjoint_cut_subgraphs.push(Some(disjoint_cut_subgraph));
-                }
-
-                disjoint_cut_subgraphs.push(None);
-
-                let mut product = graphs
-                    .zip(disjoint_cut_subgraphs)
-                    .zip(cut_locations)
-                    .map(|((sandwich_subgraph, disjoint_cut_edges), cut_location)| {
-                        // println!(
-                        //     "subgraph: {}",
-                        //     self.graph
-                        //         .to_dot_graph_with_settings(&DotExportSettings {
-                        //             split_xs_by_initial_states: true,
-                        //             ..Default::default()
-                        //         })
-                        //         .dot(&sandwich_subgraph)
-                        // );
-
-                        let orientations = get_orientations_from_subgraph(
-                            &self.graph,
-                            &sandwich_subgraph,
-                            &reversed_dangling,
-                        )
-                        .into_iter()
-                        .filter_map(|cff_graph| {
-                            if settings
-                                .orientation_pattern
-                                .alt_filter(&cff_graph.global_orientation)
-                            {
-                                Some(cff_graph.global_orientation)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect::<TiVec<SubgraphOrientationID, _>>();
-
-                        let wood = self.graph.wood(&sandwich_subgraph);
-                        let mut vk_settings = vakint.1.clone();
-                        //  it needs to be the max number of loops across all divergent spinneys of that graph
-                        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
-                        let vakint = (vakint.0, &vk_settings);
-                        let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-                        let constraint_data = ConstraintData {
-                            illegal_esurfaces: &illegal_esurfaces,
-                            constraints: &active_constraints,
-                        };
-
-                        let rewrite_esurfaces = if cross_free_subset.len() > 1 {
-                            Some(EsurfaceRewritingInstructions {
-                                allowed_targets: &self
-                                    .derived_data
-                                    .global_cff_expression
-                                    .as_ref()
-                                    .unwrap()
-                                    .surfaces,
-                                subgraph_location: cut_location,
-                                graph: &self.graph,
-                                cuts: &self.cuts,
-                            })
-                        } else {
-                            None
-                        };
-
-                        let post_processing = PostProcessingSetup {
-                            constraint_data: Some(constraint_data),
-                            rewrite_esurfaces,
-                        };
-
-                        forest.compute(
-                            &self.graph,
-                            &self.graph.tree_edges,
-                            &sandwich_subgraph,
-                            vakint,
-                            &orientations,
-                            &canonize_esurface,
-                            &cut_edges,
-                            &self.graph.get_edges_in_initial_state_cut(),
-                            post_processing,
-                            &settings.uv,
-                            false,
-                        );
-
-                        forest.orientation_parametric_expr(
-                            disjoint_cut_edges.as_ref(),
-                            &self.graph,
-                            settings.uv.add_sigma,
-                        )
-                    })
-                    .reduce(|product, network| product * network)
-                    .unwrap()
-                    * tree_structure.clone()
-                    * global_num.clone();
-
-                product
-                    .execute::<Sequential, SmallestDegree, _, _, _>(
-                        TENSORLIB.read().unwrap().deref(),
-                        FUN_LIB.deref(),
-                    )
-                    .unwrap();
-
-                let scalar: Atom = product
-                    .result_scalar()
-                    .with_context(|| "in building LU integrand")?
-                    .into();
-
-                let mut integrand = scalar
-                    .unwrap_function(GS.color_wrap)
-                    .simplify_color()
-                    .replace(function!(GS.energy, W_.x_))
-                    .with(function!(GS.ose, W_.x_))
-                    .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                    .with(function!(GS.theta, W_.x_));
-
-                for (_, edge_index, _) in self
-                    .graph
-                    .underlying
-                    .iter_edges_of(&self.graph.initial_state_cut)
-                {
-                    integrand = integrand
-                        .replace(GS.ose(edge_index))
-                        .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
-                }
-
-                integrand = integrand.replace_multiple(&replacements);
-                let prefactor = self.lu_prefactor_helper_new();
-                let integrand_with_prefactor = prefactor * integrand;
-                println!(
-                    "integrand for raised cut group {}, cuts {:?}: {}",
-                    raised_cut_id.0, cross_free_subset, integrand_with_prefactor
-                );
-
-                result_for_this_raised_cut.push(integrand_with_prefactor);
-            }
-            result.push(result_for_this_raised_cut);
-        }
-
-        Ok(result)
-    }
-
-    fn build_original_parametric_integrand(
-        &mut self,
-        settings: &GenerationSettings,
-        vakint: (&Vakint, &vakint::VakintSettings),
-    ) -> Result<TiVec<CutId, Atom>> {
-        let global_num = self.graph.global_network();
-
-        let (tree_structure, replacements) = self.get_initial_state_tree_data();
-
-        let canonize_esurface = self
-            .graph
-            .get_esurface_canonization(&self.graph.loop_momentum_basis);
-
-        let mut integrands = TiVec::new();
-
-        for ((cut_id, cut), esurface) in self.cuts.iter_enumerated().zip(self.cut_esurface.iter()) {
-            let expression_for_cut = &self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .cut_expressions[cut_id];
-
-            let left_orientations = expression_for_cut
-                .left_amplitude
-                .orientations
-                .iter()
-                .map(|expr| expr.data.orientation.clone())
-                .filter(|o| settings.orientation_pattern.alt_filter(o))
-                .collect::<TiVec<AmplitudeOrientationID, _>>();
-
-            let right_orientations = expression_for_cut
-                .right_amplitude
-                .orientations
-                .iter()
-                .map(|expr| expr.data.orientation.clone())
-                .filter(|o| settings.orientation_pattern.alt_filter(o))
-                .collect::<TiVec<AmplitudeOrientationID, _>>();
-
-            let left_wood = self.graph.wood(&cut.left);
-            let right_wood = self.graph.wood(&cut.right);
-
-            let mut vk_settings_left = vakint.1.clone();
-            //  it needs to be the max number of loops across all divergent spinneys of that graph
-            vk_settings_left.number_of_terms_in_epsilon_expansion = left_wood.max_loops as i64;
-            let vakint_left = (vakint.0, &vk_settings_left);
-
-            let mut vk_settings_right = vakint.1.clone();
-            //  it needs to be the max number of loops across all divergent spinneys of that graph
-            vk_settings_right.number_of_terms_in_epsilon_expansion = right_wood.max_loops as i64;
-            let vakint_right = (vakint.0, &vk_settings_right);
-
-            let mut left_forest = left_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-            let mut right_forest = right_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-            let post = PostProcessingSetup {
-                constraint_data: None,
-                rewrite_esurfaces: None,
-            };
-
-            left_forest.compute(
-                &self.graph,
-                &self.graph.tree_edges,
-                &cut.left,
-                vakint_left,
-                &left_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-                &self.graph.get_edges_in_initial_state_cut(),
-                post.clone(),
-                &settings.uv,
-                false,
-            );
-
-            right_forest.compute(
-                &self.graph,
-                &self.graph.tree_edges,
-                &cut.right,
-                vakint_right,
-                &right_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-                &self.graph.get_edges_in_initial_state_cut(),
-                post.clone(),
-                &settings.uv,
-                true,
-            );
-            let left_expr = left_forest.orientation_parametric_expr(
-                Some(&esurface.bitvec(&self.graph.underlying)),
-                &self.graph,
-                settings.uv.add_sigma,
-            );
-
-            let right_expr =
-                right_forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
-
-            if settings.threshold_subtraction.enable_thresholds {
-                // we can recycle these tensor networks for the single threshold counterterms
-                self.derived_data
-                    .tensor_network_cache
-                    .push((left_expr.clone(), right_expr.clone()));
-            }
-
-            let mut product = left_expr * right_expr * global_num.clone() * tree_structure.clone();
-
-            debug!("Product:{}", product.dot_pretty());
-            product
-                .execute::<Sequential, SmallestDegree, _, _, _>(
-                    TENSORLIB.read().unwrap().deref(),
-                    FUN_LIB.deref(),
-                )
-                .unwrap();
-
-            let scalar: Atom = product
-                .result_scalar()
-                .with_context(|| "in building LU integrand")?
-                .into();
-
-            let mut integrand = scalar
-                .unwrap_function(GS.color_wrap)
-                .simplify_color()
-                .replace(function!(GS.energy, W_.x_))
-                .with(function!(GS.ose, W_.x_))
-                .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
-                .with(function!(GS.theta, W_.x_))
-                .expand_dots();
-
-            for (_, edge_index, _) in self
-                .graph
-                .underlying
-                .iter_edges_of(&self.graph.initial_state_cut)
-            {
-                integrand = integrand
-                    .replace(GS.ose(edge_index))
-                    .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
-            }
-
-            integrand = integrand.replace_multiple(&replacements);
-            let prefactor = self.lu_prefactor_helper();
-            let integrand_with_prefactor = prefactor * integrand;
-            // panic!("integrand for cut {}: {}", cut_id, integrand_with_prefactor);
-            integrands.push(integrand_with_prefactor);
-        }
-
-        Ok(integrands)
+        let mut cut_forests = cut_woods.unfold(&self.graph);
+        cut_forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        Ok(cut_forests
+            .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
+            .into_iter()
+            .map(|integrand| {
+                integrand.map(|a| {
+                    let res = (a * &lu_prefactor * &scalar_global_num);
+                    println!("result integrand: {}", res.log_print());
+                    res
+                })
+            })
+            .collect())
     }
 
     fn lu_prefactor_helper(&self) -> Atom {
@@ -2055,7 +1564,7 @@ impl CrossSectionGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
-    pub cut_paramatric_integrand: TiVec<RaisedCutId, Vec<Atom>>,
+    pub cut_paramatric_integrand: TiVec<RaisedCutId, ParametricIntegrands>,
     pub global_cff_expression: Option<CFFExpression<SuperGraphOrientationID>>,
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
@@ -2063,31 +1572,96 @@ pub struct CrossSectionDerivedData {
     pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
     pub threshold_counterterms: TiVec<CutId, LUCounterTermData>,
     pub subspace_data: TiVec<CutId, (SubspaceData, SubspaceData)>,
-    pub raised_data: RaisedData,
+    pub raised_data: RaisedCutData,
 }
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct RaisedData {
-    pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
-    pub cross_free_powersets: TiVec<RaisedCutId, Vec<Vec<CutId>>>,
-    pub dual_shapes: TiVec<RaisedCutId, Vec<Option<Vec<Vec<usize>>>>>,
+pub struct RaisedCutData {
+    pub raised_cut_groups: TiVec<RaisedCutId, RaisedCutGroup>,
+    pub dual_shapes: Vec<Vec<Vec<usize>>>,
     pub pass_two_evaluators: Vec<GenericEvaluator>,
 }
 
-impl Default for RaisedData {
+#[derive(Clone, Encode, Decode, Debug)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct RaisedCutGroup {
+    pub cuts: Vec<CutId>,
+    pub related_esurface_group: RaisedEsurfaceGroup,
+}
+
+impl Default for RaisedCutData {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RaisedData {
+impl RaisedCutData {
     pub fn new() -> Self {
-        RaisedData {
+        RaisedCutData {
             raised_cut_groups: TiVec::new(),
-            cross_free_powersets: TiVec::new(),
-            dual_shapes: TiVec::new(),
+            dual_shapes: vec![],
             pass_two_evaluators: vec![],
+        }
+    }
+
+    pub fn new_from_esurface(
+        raised_esurface_data: &RaisedEsurfaceData,
+        cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+    ) -> Self {
+        let reversed_map = cut_esurface_map
+            .iter_enumerated()
+            .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
+            .collect::<HashMap<EsurfaceID, CutId>>();
+
+        println!("cut_esurface_map: {:?}", cut_esurface_map);
+        println!("reversed_map: {:?}", reversed_map);
+        println!("raised_esurface_data: {:?}", raised_esurface_data);
+
+        let mut groups = TiVec::new();
+
+        for (raised_esurface_id, raised_esurface_group) in
+            raised_esurface_data.raised_groups.iter_enumerated()
+        {
+            if cut_esurface_map.contains(&raised_esurface_group.esurface_ids[0]) {
+                let cuts = raised_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .map(|esurface_id| reversed_map[esurface_id])
+                    .collect::<Vec<_>>();
+
+                let raised_cut_group = RaisedCutGroup {
+                    cuts,
+                    related_esurface_group: raised_esurface_group.clone(),
+                };
+
+                groups.push(raised_cut_group);
+            } else {
+                continue;
+            }
+        }
+
+        let global_max_occurence = groups
+            .iter()
+            .map(|group| group.related_esurface_group.max_occurence)
+            .max()
+            .unwrap_or_else(|| {
+                println!("corrupted groups");
+                panic!();
+            });
+
+        let dual_shapes = (1..global_max_occurence)
+            .map(|i| shape_for_t_derivatives(i))
+            .collect();
+
+        let pass_two_evaluators = (1..=global_max_occurence)
+            .map(|i| build_derivative_structure(i as u8))
+            .collect();
+
+        Self {
+            raised_cut_groups: groups,
+            dual_shapes,
+            pass_two_evaluators,
         }
     }
 }
@@ -2104,7 +1678,7 @@ impl CrossSectionDerivedData {
             tensor_network_cache: TiVec::new(),
             threshold_counterterms: TiVec::new(),
             subspace_data: TiVec::new(),
-            raised_data: RaisedData::new(),
+            raised_data: RaisedCutData::new(),
         }
     }
 }

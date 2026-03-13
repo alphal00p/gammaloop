@@ -613,7 +613,7 @@ mod test {
 
         graph.generate_cff().unwrap();
         graph
-            .build_parametric_integrand(&GenerationSettings::default(), vk)
+            .build_integrands(&GenerationSettings::default(), vk)
             .unwrap();
 
         println!("{}", graph.derived_data.all_mighty_integrand);

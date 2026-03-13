@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Display};
 
 use ahash::{AHashMap, AHashSet};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -12,14 +13,19 @@ use linnet::half_edge::{
 use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, FunctionBuilder},
-    symbol,
+    function, symbol,
 };
+use vakint::Vakint;
 
 use crate::{
-    graph::{LMBext, LoopMomentumBasis},
+    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     numerator::ParsingNet,
-    uv::UltravioletGraph,
+    uv::{
+        UVgenerationSettings, UltravioletGraph,
+        approx::{ApproximationKernel, ForestNodeLike, UVCtx, integrated::Integrated},
+    },
 };
+use color_eyre::Result;
 
 #[allow(clippy::derived_hash_with_manual_eq)]
 #[derive(Clone, Debug, Hash, Eq)]
@@ -28,6 +34,7 @@ pub struct Spinney {
     components: Vec<SuBitGraph>,
     pub dod: i32,
     pub lmb: LoopMomentumBasis,
+    // pub topo_order: Option<usize>,
 }
 
 impl Spinney {
@@ -35,8 +42,16 @@ impl Spinney {
         Spinney {
             components: vec![],
             dod: 0,
+
             subgraph: g.as_ref().empty_subgraph(),
             lmb: g.empty_lmb(),
+        }
+    }
+
+    pub fn forest_node<'a>(&'a self, topo_order: usize) -> ForestNode<'a> {
+        ForestNode {
+            spinney: self,
+            topo_order,
         }
     }
     pub fn new<E, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
@@ -126,28 +141,15 @@ impl SpinneyWood {
                 let source_subgraph = &n.get_node_data(nsource).subgraph;
                 let sink_subgraph = &n.get_node_data(nsink).subgraph;
                 let reduced_subgraph = sink_subgraph.subtract(source_subgraph);
-
-                // println!("Reduced: {}", graph.as_ref().dot(&reduced_subgraph));
-                // println!(
-                //     "Bridges: {}",
-                //     graph
-                //         .as_ref()
-                //         .dot(&graph.as_ref().bridges_of(&reduced_subgraph))
-                // );
-                //
-                //
                 let hairy_source = graph.as_ref().full_crown(source_subgraph);
 
                 if graph.as_ref().bridges_of(&reduced_subgraph).is_empty()
                     && !hairy_source.intersects(&reduced_subgraph)
                 {
                     // if the reduced graph is bridgless,and has no node overlap with the source, then the source subgraph is cycle independent of reduced subgraph
-
                     // if the source is not empty then this is a disjoint union
                     if !source_subgraph.is_empty() {
                         unions.insert(nsink);
-
-                        // println!("//{nsink}:{}", reduced_subgraph.string_label());
                     }
                     e.map(|_| reduced_subgraph)
                 } else {
@@ -175,10 +177,6 @@ impl SpinneyWood {
                 let Some(nid) = poset.involved_node_id(c) else {
                     continue;
                 };
-
-                // if poset[nid].subgraph.is_empty() {
-                //     continue;
-                // }
                 if comps.contains(&poset[nid].subgraph) {
                     comps.remove(&poset[nid].subgraph);
                 } else {
@@ -187,8 +185,6 @@ impl SpinneyWood {
                 }
             }
         }
-
-        // println!("Removing: {}", poset.dot(&to_remove));
 
         poset.delete_hedges(&to_remove);
         let root = poset
@@ -236,7 +232,7 @@ impl Display for SpinneyWood {
 // }
 
 pub struct SpinneyForest {
-    pub graph: HedgeGraph<NoData, OperationNode>,
+    pub graph: HedgeGraph<EdgeIndex, OperationNode>,
     pub root: NodeIndex,
     pub compute_store: AHashMap<OperationNode, ComputeNode>,
 }
@@ -244,6 +240,55 @@ pub struct SpinneyForest {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct OperationNode {
     pub key: TraceKey<SuBitGraph, EdgeIndex>,
+}
+
+pub struct ForestNode<'a> {
+    pub spinney: &'a Spinney,
+    pub topo_order: usize,
+}
+
+impl OperationNode {
+    pub fn current<'a>(
+        &'a self,
+        wood: &'a SpinneyWood,
+        topo_order: usize,
+    ) -> Option<Vec<ForestNode<'a>>> {
+        Some(
+            self.key
+                .levels
+                .last()?
+                .iter()
+                .map(|op| {
+                    let HedgePair::Paired { sink, .. } = wood.graph[&op.data].1 else {
+                        panic!("edge in trace key is not paired");
+                    };
+                    let spinney = &wood.graph[wood.graph.node_id(sink)];
+                    ForestNode {
+                        spinney,
+                        topo_order,
+                    }
+                })
+                .collect(),
+        )
+    }
+}
+
+impl ForestNodeLike for ForestNode<'_> {
+    fn dod(&self) -> i32 {
+        self.spinney.dod
+    }
+    fn lmb(&self) -> &LoopMomentumBasis {
+        &self.spinney.lmb
+    }
+    fn reduced_subgraph(&self, given: &Self) -> SuBitGraph {
+        self.spinney.subgraph.subtract(&given.spinney.subgraph)
+    }
+    fn subgraph(&self) -> &SuBitGraph {
+        &self.spinney.subgraph
+    }
+    fn topo_order(&self) -> usize {
+        self.topo_order
+    }
 }
 
 impl Display for OperationNode {
@@ -309,7 +354,10 @@ impl OperationNode {
             let mut mul = Atom::one();
 
             for op in l {
-                let new = Atom::var(symbol!(format!("S_{}", op.order.string_label())));
+                let new = function!(
+                    symbol!(format!("S_{}", op.order.string_label())),
+                    usize::from(op.data)
+                );
                 mul *= approx.clone().add_arg((new - &last_sym) * &acc).finish();
                 last.union_with(&op.order);
             }
@@ -323,15 +371,100 @@ impl OperationNode {
     // fn simple_op()
 }
 
+pub enum Integrand {
+    NotComputed,
+    Single(Atom),
+}
+pub enum Integrands {
+    NotComputed,
+    Multiple(Vec<Atom>),
+}
+
 pub struct ComputeNode {
-    pub local_3d: Atom, //3d denoms
-    pub final_integrand: Option<ParsingNet>,
-    pub integrated_4d: Atom, //4d
-    pub integrated_pole_part: Atom,
+    pub local_3d: Integrands, //3d denoms
+    pub final_integrand: Integrands,
+    pub integrated_4d: Integrand, //4d
+    pub simple: Integrand,
+}
+
+impl Default for ComputeNode {
+    fn default() -> Self {
+        ComputeNode {
+            local_3d: Integrands::NotComputed,
+            final_integrand: Integrands::NotComputed,
+            integrated_4d: Integrand::NotComputed,
+            simple: Integrand::NotComputed,
+        }
+    }
 }
 
 impl SpinneyForest {
-    pub fn walk(&self) {
+    pub fn integrate(
+        &mut self,
+        graph: &mut Graph,
+        wood: &SpinneyWood,
+        vakint: (&Vakint, &vakint::VakintSettings),
+        settings: &UVgenerationSettings,
+    ) -> Result<()> {
+        let integrated_orchestrator = Integrated::new(vakint.0, vakint.1);
+        let uvctx = UVCtx {
+            graph: &*graph,
+            settings,
+        };
+        for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
+            let mut integrand = Atom::num(1);
+            let mut current = None;
+            let mut is_union = false;
+            for h in self.graph.iter_crown(*nidx) {
+                if self.graph.flow(h).is_source() {
+                    continue;
+                }
+
+                let wood_eid = self.graph[self.graph[&self.graph[&h]].0];
+
+                let HedgePair::Paired { source, sink } = wood.graph[&wood_eid].1 else {
+                    panic!("edge in wood is not paired");
+                };
+
+                let given = wood.graph[wood.graph.node_id(source)].forest_node(order);
+                let current_for_h = wood.graph.node_id(sink);
+                if let Some(current) = &current {
+                    if current != &current_for_h {
+                        return Err(eyre!("Mismatched current nodes"));
+                    } else {
+                        is_union = true;
+                    }
+                } else {
+                    current = Some(current_for_h);
+                }
+                let current = wood.graph[current_for_h].forest_node(order);
+
+                let parent_node = self.graph.node_id(h);
+                let parent_key = &self.graph[parent_node];
+                let computed = self
+                    .compute_store
+                    .get(parent_key)
+                    .ok_or(eyre!("{} not yet added to store", parent_key))?;
+                let Integrand::Single(a) = &computed.integrated_4d else {
+                    return Err(eyre!("{} integrated_4d not computed yet", parent_key));
+                };
+                if is_union {
+                    integrand *= a;
+                } else {
+                    integrand = integrated_orchestrator.kernel(&uvctx, &current, &given, a)?;
+                }
+            }
+
+            self.compute_store
+                .entry(self.graph[*nidx].clone())
+                .or_insert(ComputeNode::default())
+                .integrated_4d = Integrand::Single(integrand);
+        }
+
+        Ok(())
+    }
+
+    pub fn debug_walk(&self) {
         let mut cover_groups: BTreeMap<SuBitGraph, Vec<NodeIndex>> = BTreeMap::new();
 
         self.graph
@@ -345,7 +478,7 @@ impl SpinneyForest {
                     .and_modify(|e| e.push(*nidx))
                     .or_insert_with(|| vec![*nidx]);
 
-                println!("Node {}: {}", nidx, trace_key);
+                println!("Node {}: {}:{:#}", nidx, trace_key, trace_key);
             });
 
         println!("edge [constraint=true style=invis];");
@@ -361,20 +494,7 @@ impl SpinneyForest {
             }
             println!("}}");
         }
-
-        // cover_groups.values().pairs
     }
-
-    // pub fn walk_(&self) {
-    //     self.graph
-    //         .topo_sort_kahn()
-    //         .unwrap()
-    //         .iter()
-    //         .for_each(|nidx| {
-    //             let trace_key = &self.graph[*nidx];
-    //             println!("Node {}: {}", nidx, trace_key);
-    //         });
-    // }
 }
 
 impl Display for SpinneyForest {
@@ -499,7 +619,7 @@ mod tests {
                 println!("{}", ff.dot(&g));
 
                 let f = f.unfold();
-                f.walk();
+                f.debug_walk();
                 println!("{}", f);
                 assert_eq!(
                     152,

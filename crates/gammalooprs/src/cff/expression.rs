@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
-use std::{borrow::Borrow, fmt::Display};
+use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
 use crate::{
-    cff::esurface::EsurfaceID,
+    cff::esurface::{self, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
+    processes::{CutId, RaisedCutData, RaisedCutId},
     settings::global::OrientationPattern,
     utils::{W_, ose_atom_from_index},
 };
@@ -275,7 +276,7 @@ impl GraphOrientation for OrientationExpression {
     }
 }
 
-impl<O: OrientationID> CFFExpression<O>
+impl<O: OrientationID + Clone> CFFExpression<O>
 where
     usize: From<O>,
 {
@@ -363,6 +364,85 @@ where
                 }
             })
             .collect()
+    }
+
+    pub(crate) fn select_esurface_residue(
+        mut self,
+        raised_esurface_group: &RaisedEsurfaceGroup,
+    ) -> Vec<CFFExpression<O>> {
+        self.normalize_single_raising(raised_esurface_group);
+
+        let reprentative_esurface_id = raised_esurface_group.esurface_ids[0];
+
+        let mut result = vec![];
+        for occurence in 1..=raised_esurface_group.max_occurence {
+            let mut new_expression = self.clone();
+
+            for orientation in new_expression.orientations.iter_mut() {
+                orientation.expression.keep_branches_with_value_count_mut(
+                    &HybridSurfaceID::Esurface(reprentative_esurface_id),
+                    occurence,
+                );
+
+                orientation
+                    .expression
+                    .map_mut(|hybrid_surface_id| match hybrid_surface_id {
+                        HybridSurfaceID::Esurface(esurface_id)
+                            if *esurface_id == reprentative_esurface_id =>
+                        {
+                            *hybrid_surface_id = HybridSurfaceID::Unit;
+                        }
+                        _ => (),
+                    });
+            }
+
+            result.push(new_expression);
+        }
+
+        result
+    }
+
+    pub(crate) fn normalize_single_raising(&mut self, raised_esurface_group: &RaisedEsurfaceGroup) {
+        println!("corrupt group?: {:?}", raised_esurface_group);
+        let reprentative_esurface_id = raised_esurface_group.esurface_ids[0];
+
+        for orientation in self.orientations.iter_mut() {
+            orientation
+                .expression
+                .map_mut(|hybrid_surface_id| match hybrid_surface_id {
+                    HybridSurfaceID::Esurface(esurface_id)
+                        if raised_esurface_group.esurface_ids.contains(esurface_id) =>
+                    {
+                        *hybrid_surface_id = HybridSurfaceID::Esurface(reprentative_esurface_id);
+                    }
+                    _ => (),
+                });
+        }
+    }
+
+    pub(crate) fn normalize_wrt_all_raisings(&mut self, raised_data: &RaisedEsurfaceData) {
+        let mut esurface_mappings = HashMap::new();
+
+        for cut_group in raised_data.raised_groups.iter() {
+            let esurface_id_of_first = cut_group.esurface_ids[0];
+
+            for esurface_id in cut_group.esurface_ids.iter() {
+                esurface_mappings.insert(*esurface_id, esurface_id_of_first);
+            }
+        }
+
+        for orientation in self.orientations.iter_mut() {
+            orientation
+                .expression
+                .map_mut(|hybrid_surface_id| match hybrid_surface_id {
+                    HybridSurfaceID::Esurface(esurface_id) => {
+                        if let Some(normalized_esurface_id) = esurface_mappings.get(esurface_id) {
+                            *esurface_id = *normalized_esurface_id;
+                        }
+                    }
+                    _ => (),
+                });
+        }
     }
 }
 

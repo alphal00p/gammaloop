@@ -54,10 +54,10 @@ impl CrossSectionGraphTerm {
         let mut limits: HashSet<IrLimit> = HashSet::new();
         let loop_count = self.graph.loop_momentum_basis.loop_edges.len();
 
-        for cuts_in_group in self.raised_data.raised_cut_groups.iter() {
+        for cut_group in self.raised_data.raised_cut_groups.iter() {
             let mut limits_of_cut: HashSet<IrLimit> = HashSet::new();
 
-            let representative_cut_esurface = &self.cut_esurface[*cuts_in_group.first().unwrap()];
+            let representative_cut_esurface = &self.cut_esurface[*cut_group.cuts.first().unwrap()];
             let massless_edges_in_cut = representative_cut_esurface
                 .energies
                 .iter()

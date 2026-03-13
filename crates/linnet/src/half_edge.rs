@@ -2952,7 +2952,7 @@ pub mod symbolica_interop;
 
 use subgraph::{
     BaseSubgraph, Cycle, FullOrEmpty, HedgeNode, Inclusion, InternalSubGraph, ModifySubSet,
-    OrientedCut, SubSetLike, SubSetOps,
+    OrientedCut, PairwiseSubSetOps, SubSetLike, SubSetOps,
 };
 
 use thiserror::Error;

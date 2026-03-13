@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, ops::Deref, path::Path};
 
 use crate::{
+    cff::generation::SurfaceCache,
     feyngen::{
         GenerationType,
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
@@ -779,6 +780,7 @@ impl Graph {
             loop_momentum_basis,
             initial_state_cut,
             underlying,
+            surface_cache: SurfaceCache::new(),
             group_id: initial_data.group_id,
             is_group_master: initial_data.is_group_master,
             param_builder,
@@ -934,8 +936,8 @@ impl Graph {
         if add_polarizations {
             let external_edges = initial_state_cut
                 .left
-                .union(&initial_state_cut.right)
-                .union(&graph.external_filter());
+                .union(initial_state_cut)
+                .union(&graph.external_filter::<SuBitGraph>());
             let polarizations = graph.generate_polarizations_of(&external_edges);
             global_prefactor.projector *= polarizations;
         }

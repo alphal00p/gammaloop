@@ -507,12 +507,6 @@ impl<ID: IndexLike> SubSetOps<ID> for SubSet<ID> {
         self.set.bitand_assign(&other.set)
     }
 
-    fn union_with_iter(&mut self, other: impl Iterator<Item = ID>) {
-        for h in other {
-            self.add(h)
-        }
-    }
-
     fn union_with(&mut self, other: &Self) {
         self.set.bitor_assign(&other.set)
     }

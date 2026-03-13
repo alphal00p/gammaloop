@@ -13,17 +13,43 @@ use super::{
 const BASE62_ALPHABET: &[u8; 62] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-/// Defines operations that can be performed between subgraphs or collections of subgraphs.
-///
-/// This trait provides utilities for common set-like operations such as unions,
-/// intersections (implicitly via other methods like `subtract`), and symmetric differences,
-/// often applied pairwise to collections of subgraphs or iteratively.
+/// Defines binary set operations between a subgraph and another subset-like value.
 ///
 /// # Type Parameters
 /// - `Other`: The type of the other subgraph to perform operations with. Defaults to `Self`.
 pub trait SubSetOps<ID = Hedge, Other: SubSetLike<ID> = Self>: SubSetLike<ID> {
-    // type Other = Self; // Potentially for future use if more varied inter-type operations are needed.
+    fn intersect_with(&mut self, other: &Other);
+    fn union_with(&mut self, other: &Other);
+    fn sym_diff_with(&mut self, other: &Other);
+    fn empty_intersection(&self, other: &Other) -> bool;
+    fn empty_union(&self, other: &Other) -> bool;
+    fn intersection(&self, other: &Other) -> Self {
+        let mut new = self.clone();
+        new.intersect_with(other);
+        new
+    }
+    fn union(&self, other: &Other) -> Self {
+        let mut new = self.clone();
+        new.union_with(other);
 
+        new
+    }
+    fn sym_diff(&self, other: &Other) -> Self {
+        let mut new = self.clone();
+        new.sym_diff_with(other);
+        new
+    }
+
+    fn subtract_with(&mut self, other: &Other);
+    fn subtract(&self, other: &Other) -> Self {
+        let mut new = self.clone();
+        new.subtract_with(other);
+        new
+    }
+}
+
+/// Self-only combinators built on top of [`SubSetOps`].
+pub trait PairwiseSubSetOps<ID = Hedge>: SubSetOps<ID, Self> + Sized {
     /// Applies a pairwise operation `op` between all elements of `left` (a mutable set)
     /// and all elements of `right` (a slice), adding results to `left`.
     /// Returns `true` if `left` was modified.
@@ -134,37 +160,9 @@ pub trait SubSetOps<ID = Hedge, Other: SubSetLike<ID> = Self>: SubSetLike<ID> {
             s
         }
     }
-
-    fn intersect_with(&mut self, other: &Self);
-    fn union_with(&mut self, other: &Self);
-    fn union_with_iter(&mut self, other: impl Iterator<Item = ID>);
-    fn sym_diff_with(&mut self, other: &Self);
-    fn empty_intersection(&self, other: &Self) -> bool;
-    fn empty_union(&self, other: &Self) -> bool;
-    fn intersection(&self, other: &Self) -> Self {
-        let mut new = self.clone();
-        new.intersect_with(other);
-        new
-    }
-    fn union(&self, other: &Self) -> Self {
-        let mut new = self.clone();
-        new.union_with(other);
-
-        new
-    }
-    fn sym_diff(&self, other: &Self) -> Self {
-        let mut new = self.clone();
-        new.sym_diff_with(other);
-        new
-    }
-
-    fn subtract_with(&mut self, other: &Self);
-    fn subtract(&self, other: &Self) -> Self {
-        let mut new = self.clone();
-        new.subtract_with(other);
-        new
-    }
 }
+
+impl<ID, T> PairwiseSubSetOps<ID> for T where T: SubSetOps<ID, T> + Sized {}
 
 pub trait SubGraphOps {
     fn complement<E, V, H, N: NodeStorageOps<NodeData = V>>(
@@ -244,11 +242,23 @@ pub trait ModifySubSet<Index> {
 
     /// Removes an element `index` from the subgraph.
     fn sub(&mut self, index: Index);
+
+    fn union_with_iter(&mut self, other: impl Iterator<Item = Index>) {
+        for index in other {
+            self.add(index);
+        }
+    }
 }
 
 pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
     /// maximal graph that contains all nodes of the subgraph
-    fn covers<E, V, H, N: NodeStorageOps<NodeData = V>, S: SubSetOps<Hedge> + SubSetLike<Hedge>>(
+    fn covers<
+        E,
+        V,
+        H,
+        N: NodeStorageOps<NodeData = V>,
+        S: ModifySubSet<Hedge> + SubSetOps<Hedge> + SubSetLike<Hedge>,
+    >(
         &self,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> S {

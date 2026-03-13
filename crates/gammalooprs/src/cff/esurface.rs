@@ -22,9 +22,12 @@ use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 
-use crate::define_index;
+use crate::cff::cut_expression::{CFFCutsExpression, SuperGraphOrientationID};
+use crate::cff::expression::CFFExpression;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
+use crate::{GammaLoopContext, define_index};
 
+use crate::integrands::process::GenericEvaluator;
 use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
@@ -917,6 +920,109 @@ fn remove_zeros_impl(external_shift: &mut ExternalShift) -> bool {
 impl From<EsurfaceID> for Atom {
     fn from(id: EsurfaceID) -> Self {
         parse!(&format!("η({})", Into::<usize>::into(id.0)))
+    }
+}
+
+define_index!(
+    pub struct RaisedEsurfaceId;
+);
+
+#[derive(Debug, Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct RaisedEsurfaceData {
+    pub raised_groups: TiVec<RaisedEsurfaceId, RaisedEsurfaceGroup>,
+    pub pass_two_evaluator: Option<Vec<GenericEvaluator>>,
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct RaisedEsurfaceGroup {
+    pub esurface_ids: Vec<EsurfaceID>,
+    pub max_occurence: usize,
+}
+
+impl Graph {
+    pub(crate) fn determine_raised_esurfaces_from_expression(
+        &self,
+        expr: &CFFExpression<SuperGraphOrientationID>,
+    ) -> RaisedEsurfaceData {
+        let raised_edges = self.get_raised_edge_groups();
+
+        let normalized_cut_esurfaces = self
+            .surface_cache
+            .esurface_cache
+            .iter()
+            .map(|esurface| {
+                let mut new_esurface = esurface.clone();
+                for energy in new_esurface.energies.iter_mut() {
+                    let group_index_of_energy =
+                        raised_edges.iter().position(|group| group.contains(energy));
+
+                    if let Some(found_group_index) = group_index_of_energy {
+                        *energy = *raised_edges[found_group_index].first().unwrap();
+                    }
+                }
+                new_esurface.energies.sort();
+                new_esurface
+            })
+            .collect::<TiVec<EsurfaceID, _>>();
+
+        let mut raised_groups = TiVec::<RaisedEsurfaceId, RaisedEsurfaceGroup>::new();
+
+        for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
+            let raised_cut_id =
+                raised_groups
+                    .iter_enumerated()
+                    .find_map(|(raised_cut_id, cuts)| {
+                        if cuts.esurface_ids.iter().all(|cut_in_raised_group_id| {
+                            normalized_cut_esurfaces[*cut_in_raised_group_id].energies
+                                == normalized_cut_esurface.energies
+                                && normalized_cut_esurfaces[*cut_in_raised_group_id].external_shift
+                                    == normalized_cut_esurface.external_shift
+                        }) {
+                            Some(raised_cut_id)
+                        } else {
+                            None
+                        }
+                    });
+
+            if let Some(found_raised_cut_id) = raised_cut_id {
+                raised_groups[found_raised_cut_id].esurface_ids.push(cut_id);
+            } else {
+                raised_groups.push(RaisedEsurfaceGroup {
+                    esurface_ids: vec![cut_id],
+                    max_occurence: 0,
+                });
+            }
+        }
+
+        let mut result = RaisedEsurfaceData {
+            raised_groups,
+            pass_two_evaluator: None,
+        };
+
+        let mut expression_copy = expr.clone();
+        expression_copy.normalize_wrt_all_raisings(&result);
+
+        for cut_group in result.raised_groups.iter_mut() {
+            let representative_esurface_id = cut_group.esurface_ids[0];
+
+            let max_occurence_for_this_id = expression_copy
+                .orientations
+                .iter()
+                .map(|orientation_expression| {
+                    let res = orientation_expression.expression.max_value_count_on_branch(
+                        &crate::cff::surface::HybridSurfaceID::Esurface(representative_esurface_id),
+                    );
+
+                    res
+                })
+                .max()
+                .unwrap_or(0);
+
+            cut_group.max_occurence = max_occurence_for_this_id;
+        }
+
+        result
     }
 }
 

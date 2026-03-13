@@ -23,19 +23,21 @@ use crate::{
         GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
         evaluators::SingleOrAllOrientations, param_builder::LUParams,
     },
-    momentum::Rotation,
-    momentum::sample::{LoopMomenta, MomentumSample, SubspaceData},
+    momentum::{
+        Rotation,
+        sample::{LoopMomenta, MomentumSample, SubspaceData},
+    },
     processes::{
         CutId, IteratedCtCollection, LUCounterTermData, LeftThresholdId, RightThresholdId,
     },
     settings::{GlobalSettings, RuntimeSettings},
-    subtraction::overlap_subspace,
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
-        overlap_subspace::{OverlapGroup, OverlapInput, OverlapStructure},
+        overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
     utils::{
         F, FloatLike,
+        hyperdual_utils::DualOrNot,
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };
@@ -450,7 +452,10 @@ impl LUCounterTerm {
 
                     let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
                         iterative_evaluator,
-                    )(params.as_slice());
+                    )(params.as_slice())
+                    .into_iter()
+                    .map(DualOrNot::unwrap_real)
+                    .collect_vec();
 
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
                     for (i, _e) in orientations.iter() {
@@ -481,7 +486,10 @@ impl LUCounterTerm {
 
                         let result = <T as GenericEvaluatorFloat>::get_evaluator(
                             parametric_evaluator,
-                        )(params.as_slice());
+                        )(params.as_slice())
+                        .into_iter()
+                        .map(DualOrNot::unwrap_real)
+                        .collect_vec();
 
                         result_of_this_ct += &result[0];
                     }
@@ -521,7 +529,10 @@ impl LUCounterTerm {
 
                     let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
                         iterative_evaluator,
-                    )(params.as_slice());
+                    )(params.as_slice())
+                    .into_iter()
+                    .map(DualOrNot::unwrap_real)
+                    .collect_vec();
 
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
                     for (i, _e) in orientations.iter() {
@@ -558,7 +569,10 @@ impl LUCounterTerm {
 
                         let result = <T as GenericEvaluatorFloat>::get_evaluator(
                             parametric_evaluator,
-                        )(params.as_slice());
+                        )(params.as_slice())
+                        .into_iter()
+                        .map(DualOrNot::unwrap_real)
+                        .collect_vec();
 
                         result_of_this_ct += &result[0];
                     }
@@ -615,7 +629,10 @@ impl LUCounterTerm {
 
                 let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
                     iterative_evaluator,
-                )(params.as_slice());
+                )(params.as_slice())
+                .into_iter()
+                .map(DualOrNot::unwrap_real)
+                .collect_vec();
 
                 let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
 
@@ -653,7 +670,10 @@ impl LUCounterTerm {
 
                     let result = <T as GenericEvaluatorFloat>::get_evaluator(parametric_evaluator)(
                         params.as_slice(),
-                    );
+                    )
+                    .into_iter()
+                    .map(DualOrNot::unwrap_real)
+                    .collect_vec();
 
                     result_of_this_ct += &result[0];
                 }

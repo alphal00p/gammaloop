@@ -9,18 +9,22 @@ use crate::{
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
     },
-    integrands::HasIntegrand,
-    integrands::evaluation::{EvaluationMetaData, EvaluationResult},
-    integrands::process::{
-        ChannelIndex, ParamBuilder,
-        evaluators::{evaluate_evaluator, evaluate_evaluator_single},
-        param_builder::LUParams,
+    integrands::{
+        HasIntegrand,
+        evaluation::{EvaluationMetaData, EvaluationResult},
+        process::{
+            ChannelIndex, ParamBuilder,
+            evaluators::{EvaluatorStack, evaluate_evaluator, evaluate_evaluator_single},
+            param_builder::LUParams,
+        },
     },
     model::Model,
-    momentum::sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
-    momentum::{Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum},
+    momentum::{
+        Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
+        sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
+    },
     processes::{
-        CrossSectionCut, CrossSectionGraph, CutId, RaisedCutId, RaisedData,
+        CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId,
         StandaloneExportSettings,
     },
     settings::{GlobalSettings, RuntimeSettings},
@@ -260,8 +264,7 @@ pub struct OrientationEvaluator {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
-    pub iterative_integrand: Option<TiVec<RaisedCutId, Vec<GenericEvaluator>>>,
-    pub parametric_integrand: TiVec<RaisedCutId, Vec<GenericEvaluator>>,
+    pub integrand: TiVec<RaisedCutId, Vec<EvaluatorStack>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
@@ -274,7 +277,7 @@ pub struct CrossSectionGraphTerm {
     pub orientation_filter: SubSet<SuperGraphOrientationID>,
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
-    pub raised_data: RaisedData,
+    pub raised_data: RaisedCutData,
 }
 
 impl CrossSectionGraphTerm {
@@ -284,79 +287,45 @@ impl CrossSectionGraphTerm {
     ) -> Result<Self> {
         let orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>> = graph
             .derived_data
-            .cff_expression
+            .global_cff_expression
             .as_ref()
             .unwrap()
-            .orientation_data
+            .orientations
             .iter()
-            .map(|data| data.orientation.clone())
+            .map(|data| data.orientation().clone())
             .collect();
 
-        println!(
-            "parameteric integrands len: {}",
-            graph.derived_data.cut_paramatric_integrand.len()
-        );
-        println!(
-            "dual shapes len: {}",
-            graph.derived_data.raised_data.dual_shapes.len()
-        );
-        let parametric_integrand = graph
+        let integrand = graph
             .derived_data
             .cut_paramatric_integrand
             .iter()
-            .zip(&graph.derived_data.raised_data.dual_shapes)
-            .map(|(integrand_for_cut, dual_shapes)| {
+            .map(|integrand_for_cut| {
                 integrand_for_cut
+                    .integrands
                     .iter()
-                    .zip(dual_shapes)
-                    .map(|(integrand_for_subset, dual_shape)| {
-                        GenericEvaluator::new_from_builder(
-                            [integrand_for_subset.clone()],
+                    .enumerate()
+                    .map(|(num_derivatives, integrand_for_subset)| {
+                        let dual_shape = if num_derivatives > 0 {
+                            Some(
+                                graph.derived_data.raised_data.dual_shapes[num_derivatives - 1]
+                                    .clone(),
+                            )
+                        } else {
+                            None
+                        };
+
+                        EvaluatorStack::new(
+                            &[integrand_for_subset.clone()],
                             &graph.graph.param_builder,
-                            dual_shape.clone(),
-                            OptimizationSettings::default(),
-                            settings.generation.evaluator.store_atom,
+                            &orientations.raw,
+                            dual_shape,
+                            &settings.generation.evaluator,
                         )
                         .unwrap()
                     })
                     .collect()
             })
-            .collect::<TiVec<RaisedCutId, Vec<GenericEvaluator>>>();
-
-        let iterative_integrand = if settings
-            .generation
-            .evaluator
-            .iterative_orientation_optimization
-        {
-            Some(
-                graph
-                    .derived_data
-                    .cut_paramatric_integrand
-                    .iter()
-                    .zip(&graph.derived_data.raised_data.dual_shapes)
-                    .map(|(integrand_for_cut, dual_shapes)| {
-                        integrand_for_cut
-                            .iter()
-                            .zip(dual_shapes)
-                            .map(|(integrand_for_subset, dual_shape)| {
-                                GenericEvaluator::new_from_builder(
-                                    orientations
-                                        .iter()
-                                        .map(|or| or.select(integrand_for_subset)),
-                                    &graph.graph.param_builder,
-                                    dual_shape.clone(),
-                                    OptimizationSettings::default(),
-                                    settings.generation.evaluator.store_atom,
-                                )
-                                .unwrap()
-                            })
-                            .collect()
-                    })
-                    .collect::<TiVec<RaisedCutId, Vec<GenericEvaluator>>>(),
-            )
-        } else {
-            None
-        };
+            .collect::<TiVec<RaisedCutId, Vec<EvaluatorStack>>>();
 
         let ct_evaluators = graph
             .derived_data
@@ -413,8 +382,7 @@ impl CrossSectionGraphTerm {
             .collect();
 
         Ok(Self {
-            iterative_integrand,
-            parametric_integrand,
+            integrand,
             graph: graph.graph.clone(),
             cut_esurface: graph.cut_esurface.clone(),
             cuts: graph.cuts.clone(),
@@ -450,42 +418,16 @@ impl CrossSectionGraphTerm {
             )
         })?;
 
-        for (cut_id, integrand) in self.parametric_integrand.iter_mut_enumerated() {
-            if integrand.len() == 1 {
-                integrand[0].compile(
-                    graph_path
-                        .join(format!("orientation_parametric_integrand_cut_{}", cut_id.0))
-                        .with_extension("cpp"),
+        for (raised_cut_id, integrands) in self.integrand.iter_mut().enumerate() {
+            for (n_derivatives, integrand) in integrands.iter_mut().enumerate() {
+                integrand.compile(
                     format!(
-                        "{}_orientation_paramatric_integrand_cut_{}",
-                        self.graph.name, cut_id.0
+                        "integrand_zen_cut_{}_deriv_{}",
+                        raised_cut_id, n_derivatives
                     ),
-                    graph_path
-                        .join(format!("orientation_parametric_integrand_cut_{}", cut_id.0))
-                        .with_extension("so"),
-                    settings.generation.compile.export_settings(),
+                    graph_path.clone(),
+                    settings,
                 );
-            } else {
-                return Err(eyre!("can not use compiled with duals yet"));
-            }
-        }
-
-        if let Some(iterative) = self.iterative_integrand.as_mut() {
-            for (cut_id, integrand) in iterative.iter_mut_enumerated() {
-                if integrand.len() == 1 {
-                    integrand[0].compile(
-                        graph_path
-                            .join(format!("iterative_cut_{}", cut_id.0))
-                            .with_extension("cpp"),
-                        format!("{}_iterative_cut_{}", self.graph.name, cut_id.0),
-                        graph_path
-                            .join(format!("iterative_cut_{}", cut_id.0))
-                            .with_extension("so"),
-                        settings.generation.compile.export_settings(),
-                    );
-                } else {
-                    return Err(eyre!("can not use compiled with duals yet"));
-                }
             }
         }
 
@@ -693,12 +635,10 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         debug!("loop moms: {}", momentum_sample.loop_moms());
 
-        for (raised_cut, cross_free_subsets) in
-            self.raised_data.cross_free_powersets.iter_enumerated()
-        {
+        for (raised_cut, raised_cut_group) in self.raised_data.raised_cut_groups.iter_enumerated() {
+            let max_occurance = raised_cut_group.related_esurface_group.max_occurence;
             debug!("\n =====START EVALUTAION FOR CUT {}=====", raised_cut.0);
-            let representative_esurface =
-                &self.cut_esurface[self.raised_data.raised_cut_groups[raised_cut][0]];
+            let representative_esurface = &self.cut_esurface[raised_cut_group.cuts[0]];
 
             debug!("representative esurface: {:#?}", representative_esurface);
 
@@ -734,26 +674,17 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             debug!("solution: {:?}", solution);
 
-            for (subset_id, subset) in cross_free_subsets.iter().enumerate() {
-                debug!("\n--- Evaluating subset {} ---", subset_id);
-                debug!("subset: {:?}", subset);
-                debug!("cuts {:?}", subset);
-                for cut in subset {
-                    let edges_in_cut = self.cuts[*cut]
-                        .cut
-                        .iter_edges(&self.graph)
-                        .map(|(_, e)| e.data.name.clone())
-                        .collect_vec();
-
-                    debug!("edges in cut {}: {:?}", cut.0, edges_in_cut);
-                }
-
-                let dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
-                    .clone()
-                    .map(HyperDual::<F<T>>::new);
+            for num_esurfaces in 1..=max_occurance {
+                let dual_shape = if num_esurfaces > 1 {
+                    Some(HyperDual::<F<T>>::new(
+                        self.raised_data.dual_shapes[num_esurfaces - 2].clone(),
+                    ))
+                } else {
+                    None
+                };
 
                 let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
-                    if let Some(dual_shape) = &dual_shape {
+                    if let Some(dual_shape) = dual_shape {
                         let dual_t_for_integrand =
                             dual_shape.variable(0, solution.solution.clone());
                         let dual_h_function =
@@ -763,7 +694,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                             .rescale_with_hyper_dual(&dual_t_for_integrand, None);
 
                         let dual_shape_for_esurface =
-                            HyperDual::<F<T>>::new(shape_for_t_derivatives(subset.len()));
+                            HyperDual::<F<T>>::new(shape_for_t_derivatives(num_esurfaces));
 
                         let dual_t_for_esurface =
                             dual_shape_for_esurface.variable(0, solution.solution.clone());
@@ -850,86 +781,17 @@ impl GraphTerm for CrossSectionGraphTerm {
                     Some(&lu_params),
                 );
 
-                let iterative = self.iterative_integrand.as_mut().map(|ev| {
-                    evaluate_evaluator(
-                        &mut ev[raised_cut][subset_id],
-                        params.as_slice(),
+                let result = self.integrand[raised_cut][num_esurfaces - 1]
+                    .evaluate(
+                        params,
+                        orientations,
+                        settings,
                         evaluation_metadata,
                         record_primary_timing,
                     )
-                });
-
-                let complex_dual_shape = self.raised_data.dual_shapes[raised_cut][subset_id]
-                    .clone()
-                    .map(HyperDual::<Complex<F<T>>>::new);
-
-                let mut result = complex_dual_shape
-                    .clone()
-                    .map(DualOrNot::Dual)
-                    .unwrap_or(DualOrNot::NonDual(Complex::new_re(momentum_sample.zero())));
-
-                let multiplicative_offset = subset.len();
-
-                for (i, e) in orientations.iter() {
-                    if let Some(iterative) = &iterative {
-                        //if subset_id == 2 {
-                        //    println!("iterative len: {}", iterative.len());
-                        //}
-
-                        result += DualOrNot::new_from_slice(
-                            &complex_dual_shape,
-                            iterative
-                                .get(i.0 * multiplicative_offset..(i.0 + 1) * multiplicative_offset)
-                                .unwrap_or_else(|| {
-                                    println!(
-                                        "raised_cut id: {}, subset id: {}",
-                                        raised_cut.0, subset_id
-                                    );
-
-                                    println!("orientation id: {}", i.0);
-
-                                    println!("multiplicative_offset: {}", multiplicative_offset);
-
-                                    println!(
-                                        "expected range: {}..{}",
-                                        i.0 * multiplicative_offset,
-                                        (i.0 + 1) * multiplicative_offset
-                                    );
-
-                                    println!("iterative evaluator len: {}", iterative.len());
-
-                                    println!("num orientations: {}", orientations.len());
-
-                                    println!("loop momenta \n: {}", momentum_sample.loop_moms());
-
-                                    panic!("result corrupted")
-                                }),
-                        );
-                    } else {
-                        self.param_builder
-                            .orientation_value(e, multiplicative_offset);
-                        let a = T::get_parameters(
-                            &mut self.param_builder,
-                            (settings.general.enable_cache, settings.general.debug_cache),
-                            &self.graph,
-                            &rescaled_momenta,
-                            hel,
-                            &settings.additional_params(),
-                            None,
-                            None,
-                            Some(&lu_params),
-                        );
-                        result += DualOrNot::new_from_slice(
-                            &complex_dual_shape,
-                            &evaluate_evaluator(
-                                &mut self.parametric_integrand[raised_cut][subset_id],
-                                a.as_slice(),
-                                evaluation_metadata,
-                                record_primary_timing,
-                            ),
-                        );
-                    }
-                }
+                    .expect("evaluation failed")
+                    .pop()
+                    .unwrap();
 
                 let ct_result = if settings.subtraction.disable_threshold_subtraction {
                     Complex::new_re(momentum_sample.zero())
@@ -964,7 +826,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
 
                 let pass_two_evaluator =
-                    &mut self.raised_data.pass_two_evaluators[subset.len() - 1];
+                    &mut self.raised_data.pass_two_evaluators[num_esurfaces - 1];
 
                 let pass_two_result = evaluate_evaluator_single(
                     pass_two_evaluator,

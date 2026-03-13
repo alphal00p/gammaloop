@@ -109,6 +109,7 @@ pub trait ParamBuilderGraph {
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
+    // fn explicit_meduium_numerato(&self,edge)
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
