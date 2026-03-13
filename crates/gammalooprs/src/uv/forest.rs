@@ -13,7 +13,10 @@ use symbolica::{
     function,
 };
 
-use linnet::half_edge::subgraph::{ModifySubSet, SubSetLike, SubSetOps};
+use linnet::half_edge::{
+    involution::HedgePair,
+    subgraph::{ModifySubSet, SubSetLike, SubSetOps},
+};
 use std::fmt::Write;
 use tracing::{debug, instrument};
 
@@ -323,12 +326,16 @@ impl Forest {
             }
         }
 
-        for (_, edge_index, _) in graph.iter_edges_of(
+        for (pair, edge_index, _) in graph.iter_edges_of(
             &graph
                 .full_filter()
                 .subtract(&graph.initial_state_cut.left)
                 .subtract(&graph.initial_state_cut.right),
         ) {
+            if matches!(pair, HedgePair::Unpaired { .. }) {
+                continue;
+            }
+
             for s in &mut sum {
                 *s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
