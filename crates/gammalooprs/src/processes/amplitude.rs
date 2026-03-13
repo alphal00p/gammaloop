@@ -332,6 +332,7 @@ impl Amplitude {
                 graph_group_structure: self.graph_group_structure.clone(),
                 group_derived_data: self.group_derived_data.clone(),
             },
+            event_processing_runtime: Default::default(),
         };
         self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
         Ok(())

@@ -8,11 +8,57 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Constructible;
 use tracing::info;
 
-use crate::observables::Event;
+use crate::observables::{Event, GenericEvent};
 use crate::{
     settings::runtime::Precision,
-    utils::{F, format_evaluation_time},
+    utils::{F, FloatLike, format_evaluation_time},
 };
+
+#[derive(Clone, Debug)]
+pub struct GraphEvaluationResult<T: FloatLike> {
+    pub integrand_result: Complex<F<T>>,
+    pub generated_events: Vec<GenericEvent<T>>,
+    pub event_processing_time: Duration,
+    pub generated_event_count: usize,
+    pub accepted_event_count: usize,
+}
+
+impl<T: FloatLike> GraphEvaluationResult<T> {
+    pub fn zero(zero: F<T>) -> Self {
+        Self {
+            integrand_result: Complex::new_re(zero),
+            generated_events: Vec::new(),
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
+        }
+    }
+
+    pub fn merge_in_place(&mut self, mut other: Self) {
+        self.integrand_result += other.integrand_result;
+        self.generated_events.append(&mut other.generated_events);
+        self.event_processing_time += other.event_processing_time;
+        self.generated_event_count += other.generated_event_count;
+        self.accepted_event_count += other.accepted_event_count;
+    }
+
+    pub fn into_f64(self) -> GraphEvaluationResult<f64> {
+        GraphEvaluationResult {
+            integrand_result: Complex::new(
+                self.integrand_result.re.into_ff64(),
+                self.integrand_result.im.into_ff64(),
+            ),
+            generated_events: self
+                .generated_events
+                .into_iter()
+                .map(|event| event.to_f64())
+                .collect(),
+            event_processing_time: self.event_processing_time,
+            generated_event_count: self.generated_event_count,
+            accepted_event_count: self.accepted_event_count,
+        }
+    }
+}
 
 /// The result of an evaluation of the integrand
 #[derive(Clone, Serialize, Debug)]
@@ -20,6 +66,9 @@ pub struct EvaluationResult {
     pub integrand_result: Complex<F<f64>>,
     pub integrator_weight: F<f64>,
     pub event_buffer: Vec<Event>,
+    pub event_processing_time: Duration,
+    pub generated_event_count: usize,
+    pub accepted_event_count: usize,
     pub evaluation_metadata: EvaluationMetaData,
 }
 
@@ -29,6 +78,9 @@ impl EvaluationResult {
             integrand_result: Complex::new_zero(),
             integrator_weight: F(0.0),
             event_buffer: Vec::new(),
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             evaluation_metadata: EvaluationMetaData::new_empty(),
         }
     }
@@ -73,6 +125,7 @@ pub struct EvaluationMetaData {
     pub integrand_evaluation_time: Duration,
     pub evaluator_evaluation_time: Duration,
     pub parameterization_time: Duration,
+    pub event_time: Duration,
     pub relative_instability_error: Complex<F<f64>>,
     pub highest_precision: Precision,
     pub is_nan: bool,
@@ -104,11 +157,12 @@ impl Display for EvaluationMetaData {
         };
         write!(
             f,
-            "EvaluationMetaData {{ total_timing: {:?},\t integrand_evaluation_time: {:?},\t evaluator_evaluation_time: {:?},\t parameterization_time: {:?},\t relative_instability_error: {:?},\t highest_precision: {:?},\t is_nan: {},\t final_is_stable: {},\t loop_momenta_escalation: {:?},\t stability_evaluations: {} }}",
+            "EvaluationMetaData {{ total_timing: {:?}, integrand_evaluation_time: {:?}, evaluator_evaluation_time: {:?}, parameterization_time: {:?}, event_time: {:?}, relative_instability_error: {:?}, highest_precision: {:?}, is_nan: {}, final_is_stable: {}, loop_momenta_escalation: {:?}, stability_evaluations: {} }}",
             self.total_timing,
             self.integrand_evaluation_time,
             self.evaluator_evaluation_time,
             self.parameterization_time,
+            self.event_time,
             self.relative_instability_error,
             self.highest_precision,
             self.is_nan,
@@ -126,6 +180,7 @@ impl EvaluationMetaData {
             integrand_evaluation_time: Duration::ZERO,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
+            event_time: Duration::ZERO,
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan: false,
@@ -143,12 +198,15 @@ pub struct StatisticsCounter {
     sum_integrand_evaluation_time: Duration,
     sum_evaluator_evaluation_time: Duration,
     sum_parameterization_time: Duration,
+    sum_event_time: Duration,
     sum_total_evaluation_time: Duration,
     sum_relative_instability_error: (F<f64>, F<f64>),
     num_double_precision_evals: usize,
     num_quadruple_precision_evals: usize,
     num_arb_precision_evals: usize,
     num_nan_evals: usize,
+    sum_generated_event_count: usize,
+    sum_accepted_event_count: usize,
 }
 
 impl StatisticsCounter {
@@ -163,12 +221,15 @@ impl StatisticsCounter {
                     data_entry.evaluation_metadata.evaluator_evaluation_time;
                 accumulator.sum_parameterization_time +=
                     data_entry.evaluation_metadata.parameterization_time;
+                accumulator.sum_event_time += data_entry.evaluation_metadata.event_time;
                 accumulator.sum_relative_instability_error.0 +=
                     data_entry.evaluation_metadata.relative_instability_error.re;
                 accumulator.sum_relative_instability_error.1 +=
                     data_entry.evaluation_metadata.relative_instability_error.im;
                 accumulator.sum_total_evaluation_time +=
                     data_entry.evaluation_metadata.total_timing;
+                accumulator.sum_generated_event_count += data_entry.generated_event_count;
+                accumulator.sum_accepted_event_count += data_entry.accepted_event_count;
 
                 accumulator.num_evals += 1;
                 match data_entry.evaluation_metadata.highest_precision {
@@ -209,6 +270,11 @@ impl StatisticsCounter {
             sum_total_evaluation_time: self.sum_total_evaluation_time
                 + other.sum_total_evaluation_time,
             num_nan_evals: self.num_nan_evals + other.num_nan_evals,
+            sum_event_time: self.sum_event_time + other.sum_event_time,
+            sum_generated_event_count: self.sum_generated_event_count
+                + other.sum_generated_event_count,
+            sum_accepted_event_count: self.sum_accepted_event_count
+                + other.sum_accepted_event_count,
         }
     }
 
@@ -217,6 +283,7 @@ impl StatisticsCounter {
             sum_integrand_evaluation_time: Duration::ZERO,
             sum_evaluator_evaluation_time: Duration::ZERO,
             sum_parameterization_time: Duration::ZERO,
+            sum_event_time: Duration::ZERO,
             sum_relative_instability_error: (F(0.0), F(0.0)),
             sum_total_evaluation_time: Duration::ZERO,
             num_evals: 0,
@@ -224,6 +291,8 @@ impl StatisticsCounter {
             num_quadruple_precision_evals: 0,
             num_arb_precision_evals: 0,
             num_nan_evals: 0,
+            sum_generated_event_count: 0,
+            sum_accepted_event_count: 0,
         }
     }
 

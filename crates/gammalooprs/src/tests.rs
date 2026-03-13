@@ -7,7 +7,6 @@ use crate::{
     integrands::builtin::h_function::HFunctionTestSettings, settings::RuntimeSettings,
     settings::runtime::IntegratedPhase,
 };
-use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
 use color_eyre::Result;
 use colored::Colorize;
 // use hyperdual::Zero;

@@ -4,13 +4,14 @@ use std::path::Path;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::Integrand;
 use crate::integrands::evaluation::{
-    EvaluationMetaData, EvaluationResult, LoopMomentaEscalationMetrics, RotatedEvaluation,
-    StabilityEvaluation, StabilityFailureReason,
+    EvaluationMetaData, EvaluationResult, GraphEvaluationResult, LoopMomentaEscalationMetrics,
+    RotatedEvaluation, StabilityEvaluation, StabilityFailureReason,
 };
 use crate::integrate::UserData;
 use crate::model::Model;
-use crate::momentum::Rotation;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
+use crate::momentum::{Rotation, ThreeMomentum};
+use crate::observables::EventProcessingRuntime;
 use crate::processes::StandaloneExportSettings;
 use crate::settings::GlobalSettings;
 use crate::utils::{
@@ -21,7 +22,7 @@ use color_eyre::owo_colors::OwoColorize;
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
-use eyre::Context;
+use eyre::{Context, eyre};
 use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
@@ -30,9 +31,10 @@ use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
+use std::sync::Once;
 use std::time::Duration;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
-use tracing::debug;
+use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 pub mod amplitude;
 pub mod cache_debugging;
@@ -53,6 +55,53 @@ pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
+
+#[derive(Debug, Clone)]
+pub struct MomentumSpaceEvaluationInput {
+    pub loop_momenta: Vec<ThreeMomentum<F<f64>>>,
+    pub graph_id: Option<usize>,
+    pub orientation: Option<usize>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RuntimeCache<T>(Option<T>);
+
+impl<T> Default for RuntimeCache<T> {
+    fn default() -> Self {
+        Self(None)
+    }
+}
+
+impl<T> RuntimeCache<T> {
+    pub(crate) fn invalidate(&mut self) {
+        self.0 = None;
+    }
+
+    pub(crate) fn set(&mut self, value: T) {
+        self.0 = Some(value);
+    }
+
+    pub(crate) fn take(&mut self) -> Option<T> {
+        self.0.take()
+    }
+}
+
+impl<T> bincode::Encode for RuntimeCache<T> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        _encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        Ok(())
+    }
+}
+
+impl<C, T> bincode::Decode<C> for RuntimeCache<T> {
+    fn decode<D: bincode::de::Decoder<Context = C>>(
+        _decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        Ok(Self::default())
+    }
+}
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -143,8 +192,77 @@ impl ProcessIntegrand {
 
     pub fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
-            ProcessIntegrand::Amplitude(integrand) => &mut integrand.settings,
-            ProcessIntegrand::CrossSection(integrand) => &mut integrand.settings,
+            ProcessIntegrand::Amplitude(integrand) => {
+                integrand.invalidate_event_processing_runtime();
+                &mut integrand.settings
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                integrand.invalidate_event_processing_runtime();
+                &mut integrand.settings
+            }
+        }
+    }
+
+    pub fn graph_count(&self) -> usize {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand.data.graph_terms.len(),
+            ProcessIntegrand::CrossSection(integrand) => integrand.data.graph_terms.len(),
+        }
+    }
+
+    pub fn find_graph_id_by_name(&self, graph_name: &str) -> Option<usize> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand
+                .data
+                .graph_terms
+                .iter()
+                .position(|term| term.graph.name == graph_name),
+            ProcessIntegrand::CrossSection(integrand) => integrand
+                .data
+                .graph_terms
+                .iter()
+                .position(|term| term.graph.name == graph_name),
+        }
+    }
+
+    pub fn graph_orientation_count(&self, graph_id: usize) -> Option<usize> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand
+                .data
+                .graph_terms
+                .get(graph_id)
+                .map(|term| term.get_num_orientations()),
+            ProcessIntegrand::CrossSection(integrand) => integrand
+                .data
+                .graph_terms
+                .get(graph_id)
+                .map(|term| term.get_num_orientations()),
+        }
+    }
+
+    pub fn evaluate_momentum_configuration(
+        &mut self,
+        model: &Model,
+        input: &MomentumSpaceEvaluationInput,
+        use_arb_prec: bool,
+    ) -> Result<EvaluationResult> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => evaluate_momentum_configuration(
+                integrand,
+                model,
+                input,
+                F(0.0),
+                use_arb_prec,
+                Complex::new_zero(),
+            ),
+            ProcessIntegrand::CrossSection(integrand) => evaluate_momentum_configuration(
+                integrand,
+                model,
+                input,
+                F(0.0),
+                use_arb_prec,
+                Complex::new_zero(),
+            ),
         }
     }
 }
@@ -198,6 +316,7 @@ fn stability_check<T: FloatLike>(
     max_eval: Complex<F<T>>,
     wgt: F<T>,
     is_final_level: bool,
+    escalate_if_exact_zero: bool,
 ) -> (Complex<F<T>>, bool, Option<StabilityFailureReason>) {
     if results.len() == 1 {
         return (results[0].clone(), true, None);
@@ -227,7 +346,7 @@ fn stability_check<T: FloatLike>(
     let mut unstable_sample = None;
     for (index, error) in errors.enumerate() {
         if !is_final_level
-            && settings.stability.escalate_if_exact_zero
+            && escalate_if_exact_zero
             && error.re == F::<T>::from_f64(0.0)
             && error.im == F::<T>::from_f64(0.0)
         {
@@ -302,6 +421,7 @@ fn stability_check_on_norm<T: FloatLike>(
     max_eval: Complex<F<T>>,
     wgt: F<T>,
     is_final_level: bool,
+    escalate_if_exact_zero: bool,
 ) -> (Complex<F<T>>, bool, Option<StabilityFailureReason>) {
     if results.len() == 1 {
         return (results[0].clone(), true, None);
@@ -326,7 +446,7 @@ fn stability_check_on_norm<T: FloatLike>(
         if !is_final_level
             && error == F::<T>::from_f64(0.0)
             && result_is_exact_zero
-            && settings.stability.escalate_if_exact_zero
+            && escalate_if_exact_zero
         {
             unstable_reason = Some(StabilityFailureReason::ZeroError);
             unstable_sample = Some(index);
@@ -380,6 +500,7 @@ fn stability_check_on_norm<T: FloatLike>(
 #[derive(Debug, Clone)]
 pub struct StabilityLevelResult {
     pub result: Complex<F<f64>>,
+    pub graph_result: GraphEvaluationResult<f64>,
     pub stability_level_used: Precision,
     pub parameterization_time: Duration,
     pub integrand_evaluation_time: Duration,
@@ -705,12 +826,17 @@ pub trait ProcessIntegrandImpl {
     fn get_group_masters(&self) -> impl Iterator<Item = &Self::G>;
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G>;
+    fn graph_count(&self) -> usize;
     fn get_settings(&self) -> &RuntimeSettings;
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G;
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
     fn get_group(&self, group_id: GroupId) -> &GraphGroup;
     fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup>;
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor<'_>;
+    fn take_event_processing_runtime(&mut self) -> Option<EventProcessingRuntime> {
+        None
+    }
+    fn restore_event_processing_runtime(&mut self, _runtime: Option<EventProcessingRuntime>) {}
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
 }
@@ -740,11 +866,12 @@ pub trait GraphTerm {
         sample: &MomentumSample<T>,
         model: &Model,
         settings: &RuntimeSettings,
+        event_processing_runtime: Option<&mut EventProcessingRuntime>,
         rotation: &Rotation,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Result<Complex<F<T>>>;
+    ) -> Result<GraphEvaluationResult<T>>;
 
     fn name(&self) -> String;
 
@@ -757,6 +884,32 @@ pub trait GraphTerm {
     fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
 }
 
+fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    graph_id: usize,
+    sample: &MomentumSample<T>,
+    model: &Model,
+    settings: &RuntimeSettings,
+    rotation: &Rotation,
+    evaluation_metadata: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+    channel_id: Option<(ChannelIndex, F<T>)>,
+) -> Result<GraphEvaluationResult<T>> {
+    let mut event_processing_runtime = integrand.take_event_processing_runtime();
+    let result = integrand.get_graph_mut(graph_id).evaluate(
+        sample,
+        model,
+        settings,
+        event_processing_runtime.as_mut(),
+        rotation,
+        evaluation_metadata,
+        record_primary_timing,
+        channel_id,
+    );
+    integrand.restore_event_processing_runtime(event_processing_runtime);
+    result
+}
+
 fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
@@ -764,7 +917,7 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     evaluation_metadata: &mut EvaluationMetaData,
     is_primary_stability_level: bool,
     record_rotated_results: bool,
-) -> Result<(Vec<Complex<F<T>>>, Vec<RotatedEvaluation>)> {
+) -> Result<(Vec<GraphEvaluationResult<T>>, usize, Vec<RotatedEvaluation>)> {
     let rotations = integrand.get_rotations().cloned().collect_vec();
 
     let cache = integrand.get_settings().general.enable_cache;
@@ -792,7 +945,8 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
         .position(Rotation::is_identity)
         .unwrap_or(0);
     let mut original_call_timed = false;
-    let mut evaluation_results: Vec<Complex<F<T>>> = Vec::with_capacity(gammaloop_samples.len());
+    let mut evaluation_results: Vec<GraphEvaluationResult<T>> =
+        Vec::with_capacity(gammaloop_samples.len());
     for (rotation_index, (gammaloop_sample, rotation)) in
         gammaloop_samples.iter().zip(rotations.iter()).enumerate()
     {
@@ -816,6 +970,10 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
         evaluation_results.push(result);
     }
 
+    for result in &evaluation_results {
+        evaluation_metadata.event_time += result.event_processing_time;
+    }
+
     if cache {
         integrand.increment_loop_cache_id(rotations.len());
         integrand.increment_external_cache_id(rotations.len());
@@ -830,20 +988,20 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
             .zip(evaluation_results.iter())
             .map(|(rotation, result)| RotatedEvaluation {
                 rotation: rotation.method.to_string(),
-                result: complex_to_f64(result),
+                result: complex_to_f64(&result.integrand_result),
             })
             .collect()
     } else {
         Vec::new()
     };
 
-    Ok((evaluation_results, rotated_results))
+    Ok((evaluation_results, primary_rotation_index, rotated_results))
 }
 
 fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
-    sample: &Sample<F<f64>>,
+    source: &EvaluationSource<'_>,
     stability_level: &StabilityLevelSetting,
     max_eval: &Complex<F<f64>>,
     wgt: F<f64>,
@@ -853,20 +1011,18 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     evaluation_metadata: &mut EvaluationMetaData,
     record_rotated_results: bool,
     precision_label: &str,
+    escalate_if_exact_zero: bool,
 ) -> Result<StabilityLevelResult> {
-    let before_parameterization = std::time::Instant::now();
-
-    let gammaloop_sample = parameterize::<T, I>(sample, integrand)?;
+    let (gammaloop_sample, parameterization_time) = source.build_gamma_sample::<T, I>(integrand)?;
     debug!("{precision_label} parameterization succeeded");
     debug!(
         "jacobian: {:+16e}",
         gammaloop_sample.get_default_sample().jacobian()
     );
 
-    let parameterization_time = before_parameterization.elapsed();
     let integrand_time_before = evaluation_metadata.integrand_evaluation_time;
     let evaluator_time_before = evaluation_metadata.evaluator_evaluation_time;
-    let (results, rotated_results) = evaluate_all_rotations(
+    let (graph_results, primary_rotation_index, rotated_results) = evaluate_all_rotations(
         integrand,
         model,
         &gammaloop_sample,
@@ -874,6 +1030,10 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
         is_primary_stability_level,
         record_rotated_results,
     )?;
+    let results = graph_results
+        .iter()
+        .map(|result| result.integrand_result.clone())
+        .collect_vec();
 
     let max_eval = complex_from_f64::<T>(max_eval);
     let wgt = F::<T>::from_ff64(wgt);
@@ -886,6 +1046,7 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
             max_eval,
             wgt,
             is_final_level,
+            escalate_if_exact_zero,
         )
     } else {
         stability_check(
@@ -895,11 +1056,16 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
             max_eval,
             wgt,
             is_final_level,
+            escalate_if_exact_zero,
         )
     };
 
+    let mut graph_result = graph_results[primary_rotation_index].clone();
+    graph_result.integrand_result = average_result.clone();
+
     Ok(StabilityLevelResult {
         result: complex_to_f64(&average_result),
+        graph_result: graph_result.into_f64(),
         stability_level_used: stability_level.precision,
         parameterization_time,
         integrand_evaluation_time: evaluation_metadata
@@ -1027,9 +1193,9 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     rotation: &Rotation,
     evaluation_metadata: &mut EvaluationMetaData,
     record_primary_timing: bool,
-) -> Result<Complex<F<T>>> {
+) -> Result<GraphEvaluationResult<T>> {
     let settings = integrand.get_settings().clone();
-    let zero = Complex::new_re(gammaloop_sample.get_default_sample().zero());
+    let zero = gammaloop_sample.get_default_sample().zero();
     let loop_cache_shift = 0;
     let cache = integrand.get_settings().general.enable_cache;
 
@@ -1038,12 +1204,14 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     } else {
         None
     };
-    let result = (|| -> Result<Complex<F<T>>> {
+    let result = (|| -> Result<GraphEvaluationResult<T>> {
         let result = match &gammaloop_sample {
-            GammaLoopSample::Default(sample) => integrand
-                .get_terms_mut()
-                .map(|term: &mut I::G| {
-                    term.evaluate(
+            GammaLoopSample::Default(sample) => (0..integrand.graph_count()).try_fold(
+                GraphEvaluationResult::zero(zero.clone()),
+                |mut sum, graph_id| {
+                    let graph_result = evaluate_graph_term(
+                        integrand,
+                        graph_id,
                         sample,
                         model,
                         &settings,
@@ -1051,9 +1219,22 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                         evaluation_metadata,
                         record_primary_timing,
                         None,
-                    )
-                })
-                .try_fold(zero.clone(), |sum, term| term.map(|value| sum + value))?,
+                    )?;
+                    sum.merge_in_place(graph_result);
+                    Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
+                },
+            )?,
+            GammaLoopSample::Graph { graph_id, sample } => evaluate_graph_term(
+                integrand,
+                *graph_id,
+                sample,
+                model,
+                &settings,
+                rotation,
+                evaluation_metadata,
+                record_primary_timing,
+                None,
+            )?,
             GammaLoopSample::MultiChanneling { .. } => {
                 unimplemented!(
                     "deprecated due to annyoing borrow issues, just set each graph to the same group"
@@ -1062,26 +1243,28 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             GammaLoopSample::DiscreteGraph { group_id, sample } => {
                 let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
 
-                let mut res = zero.clone();
+                let mut res = GraphEvaluationResult::zero(zero.clone());
 
                 for graph_id in group.into_iter() {
                     let graph_term_res = match sample {
-                        DiscreteGraphSample::Default(sample) => {
-                            integrand.get_graph_mut(graph_id).evaluate(
-                                sample,
-                                model,
-                                &settings,
-                                rotation,
-                                evaluation_metadata,
-                                record_primary_timing,
-                                None,
-                            )
-                        }
+                        DiscreteGraphSample::Default(sample) => evaluate_graph_term(
+                            integrand,
+                            graph_id,
+                            sample,
+                            model,
+                            &settings,
+                            rotation,
+                            evaluation_metadata,
+                            record_primary_timing,
+                            None,
+                        ),
                         DiscreteGraphSample::DiscreteMultiChanneling {
                             alpha,
                             channel_id,
                             sample,
-                        } => integrand.get_graph_mut(graph_id).evaluate(
+                        } => evaluate_graph_term(
+                            integrand,
+                            graph_id,
                             sample,
                             model,
                             &settings,
@@ -1096,7 +1279,9 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                             (0..num_channels)
                                 .map(ChannelIndex::from)
                                 .map(|channel_index| {
-                                    integrand.get_graph_mut(graph_id).evaluate(
+                                    evaluate_graph_term(
+                                        integrand,
+                                        graph_id,
                                         sample,
                                         model,
                                         &settings,
@@ -1106,7 +1291,13 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                         Some((channel_index, alpha.clone())),
                                     )
                                 })
-                                .try_fold(zero.clone(), |sum, term| Ok(sum + term?))
+                                .try_fold(
+                                    GraphEvaluationResult::zero(zero.clone()),
+                                    |mut sum, term| {
+                                        sum.merge_in_place(term?);
+                                        Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
+                                    },
+                                )
                         }
                         DiscreteGraphSample::Tropical(sample) => {
                             let master_graph = integrand.get_master_graph(*group_id).get_graph();
@@ -1133,20 +1324,23 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                     product * energy.powf(&F::from_f64(2. * edge_weight))
                                 });
 
-                            Ok(Complex::new_re(prefactor)
-                                * integrand.get_graph_mut(graph_id).evaluate(
-                                    sample,
-                                    model,
-                                    &settings,
-                                    rotation,
-                                    evaluation_metadata,
-                                    record_primary_timing,
-                                    None,
-                                )?)
+                            let mut graph_result = evaluate_graph_term(
+                                integrand,
+                                graph_id,
+                                sample,
+                                model,
+                                &settings,
+                                rotation,
+                                evaluation_metadata,
+                                record_primary_timing,
+                                None,
+                            )?;
+                            graph_result.integrand_result *= Complex::new_re(prefactor);
+                            Ok(graph_result)
                         }
                     };
 
-                    res += graph_term_res?;
+                    res.merge_in_place(graph_term_res?);
                 }
 
                 res
@@ -1157,7 +1351,9 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             integrand.increment_loop_cache_id(loop_cache_shift);
         }
 
-        Ok(result * gammaloop_sample.get_default_sample().jacobian())
+        let mut result = result;
+        result.integrand_result *= gammaloop_sample.get_default_sample().jacobian();
+        Ok(result)
     })();
     if record_primary_timing {
         evaluation_metadata.integrand_evaluation_time = evaluation_metadata
@@ -1300,16 +1496,161 @@ fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
     }
 }
 
-fn evaluate_sample<I: ProcessIntegrandImpl>(
+enum EvaluationSource<'a> {
+    XSpace(&'a Sample<F<f64>>),
+    Momentum(&'a MomentumSpaceEvaluationInput),
+}
+
+impl<'a> EvaluationSource<'a> {
+    fn build_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
+        &self,
+        integrand: &mut I,
+    ) -> Result<(GammaLoopSample<T>, Duration)> {
+        match self {
+            EvaluationSource::XSpace(sample) => {
+                let before_parameterization = std::time::Instant::now();
+                let sample = parameterize::<T, I>(sample, integrand)?;
+                Ok((sample, before_parameterization.elapsed()))
+            }
+            EvaluationSource::Momentum(input) => Ok((
+                build_direct_gamma_sample::<T, I>(integrand, input)?,
+                Duration::ZERO,
+            )),
+        }
+    }
+
+    fn loop_norm_sum<I: ProcessIntegrandImpl>(&self, integrand: &mut I) -> Result<F<f64>> {
+        match self {
+            EvaluationSource::XSpace(sample) => {
+                let sample = parameterize::<f64, I>(sample, integrand)?;
+                Ok(sum_loop_norms(
+                    sample.get_default_sample().loop_moms().0.iter(),
+                ))
+            }
+            EvaluationSource::Momentum(input) => Ok(sum_loop_norms(input.loop_momenta.iter())),
+        }
+    }
+
+    fn debug_sample<I: ProcessIntegrandImpl>(
+        &self,
+        integrand: &mut I,
+    ) -> Result<GammaLoopSample<f64>> {
+        self.build_gamma_sample::<f64, I>(integrand)
+            .map(|(sample, _)| sample)
+    }
+}
+
+fn sum_loop_norms<'a>(loop_momenta: impl Iterator<Item = &'a ThreeMomentum<F<f64>>>) -> F<f64> {
+    loop_momenta.fold(F(0.0), |acc, momentum| acc + momentum.norm())
+}
+
+fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    input: &MomentumSpaceEvaluationInput,
+) -> Result<GammaLoopSample<T>> {
+    if input.orientation.is_some() && input.graph_id.is_none() {
+        return Err(eyre!(
+            "A specific orientation requires selecting a specific graph in momentum-space evaluation."
+        ));
+    }
+
+    let expected_loop_count = integrand
+        .get_group_masters()
+        .next()
+        .map(|graph| graph.get_graph().get_loop_number())
+        .ok_or_else(|| eyre!("Cannot evaluate an integrand with no graph terms."))?;
+
+    if input.loop_momenta.len() != expected_loop_count {
+        return Err(eyre!(
+            "Expected {} loop momenta in momentum-space evaluation, got {}.",
+            expected_loop_count,
+            input.loop_momenta.len()
+        ));
+    }
+
+    let loop_momenta = input
+        .loop_momenta
+        .iter()
+        .map(|momentum| {
+            ThreeMomentum::new(
+                F::<T>::from_ff64(momentum.px),
+                F::<T>::from_ff64(momentum.py),
+                F::<T>::from_ff64(momentum.pz),
+            )
+        })
+        .collect::<LoopMomenta<F<T>>>();
+    let sample = MomentumSample::new(
+        loop_momenta,
+        integrand.loop_cache_id(),
+        &integrand.get_settings().kinematics.externals,
+        integrand.get_current_external_cache_id(),
+        F::<T>::from_f64(1.0),
+        integrand.get_dependent_momenta_constructor(),
+        input.orientation,
+    )?;
+
+    Ok(match input.graph_id {
+        Some(graph_id) => GammaLoopSample::Graph { graph_id, sample },
+        None => GammaLoopSample::Default(sample),
+    })
+}
+
+fn log_rotated_samples<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    gammaloop_sample: &GammaLoopSample<f64>,
+    level_result: &StabilityLevelResult,
+) {
+    let mut loop_mom_cache_id = integrand.loop_cache_id();
+    let mut external_mom_cache_id = integrand.external_cache_id();
+    let mut shift = 0;
+
+    let rotated_samples: Vec<_> = integrand
+        .get_rotations()
+        .map(|rotation| {
+            if rotation.is_identity() {
+                return gammaloop_sample.clone();
+            }
+            loop_mom_cache_id += 1;
+            shift += 1;
+            external_mom_cache_id += 1;
+            gammaloop_sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id)
+        })
+        .collect();
+    integrand.increment_external_cache_id(shift);
+    integrand.increment_loop_cache_id(shift);
+
+    for (sample, result) in rotated_samples
+        .iter()
+        .zip(level_result.rotated_results.iter())
+    {
+        let default_sample = sample.get_default_sample();
+        debug!(
+            "loop_moms: {}, external_moms: {}",
+            format!("{}", default_sample.loop_moms()).blue(),
+            format!("{:?}", default_sample.external_moms()).blue()
+        );
+
+        debug!(
+            "result of current level: {}",
+            format!("{:16e}", result.result).blue()
+        );
+    }
+}
+
+fn evaluate_from_source<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
-    sample: &Sample<F<f64>>,
+    source: EvaluationSource<'_>,
     wgt: F<f64>,
-    _iter: usize,
     use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
 ) -> Result<EvaluationResult> {
     let start_eval = std::time::Instant::now();
+    let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
+    if escalate_if_exact_zero && !integrand.get_settings().selectors.is_empty() {
+        warn_selectors_disable_zero_once();
+        escalate_if_exact_zero = false;
+    }
     let mut evaluation_metadata = EvaluationMetaData::new_empty();
     let mut stability_iterator =
         create_stability_iterator(&integrand.get_settings().stability, use_arb_prec);
@@ -1325,14 +1666,7 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
         .unwrap_or(false);
     let mut loop_momenta_escalation = None;
     if escalation_factor > 0.0 && stability_iterator.len() > 1 {
-        if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-            let default_sample = gammaloop_sample.get_default_sample();
-            let mut sum_norm = F::<f64>::from_f64(0.0);
-            for mom in default_sample.loop_moms().0.iter() {
-                let norm = mom.norm();
-                sum_norm = &sum_norm + &norm;
-            }
-
+        if let Ok(sum_norm) = source.loop_norm_sum(integrand) {
             let threshold =
                 F::<f64>::from_f64(escalation_factor * integrand.get_settings().kinematics.e_cm);
             if record_loop_momenta_escalation {
@@ -1365,7 +1699,7 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
             Precision::Double => evaluate_stability_level::<f64, I>(
                 integrand,
                 model,
-                sample,
+                &source,
                 &stability_level,
                 &max_eval,
                 wgt,
@@ -1375,11 +1709,12 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                 &mut evaluation_metadata,
                 record_rotated_results,
                 "f64",
+                escalate_if_exact_zero,
             ),
             Precision::Quad => evaluate_stability_level::<f128, I>(
                 integrand,
                 model,
-                sample,
+                &source,
                 &stability_level,
                 &max_eval,
                 wgt,
@@ -1389,11 +1724,12 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                 &mut evaluation_metadata,
                 record_rotated_results,
                 "f128",
+                escalate_if_exact_zero,
             ),
             Precision::Arb => evaluate_stability_level::<ArbPrec, I>(
                 integrand,
                 model,
-                sample,
+                &source,
                 &stability_level,
                 &max_eval,
                 wgt,
@@ -1403,6 +1739,7 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
                 &mut evaluation_metadata,
                 record_rotated_results,
                 "ArbPrec",
+                escalate_if_exact_zero,
             ),
         }?;
 
@@ -1413,47 +1750,13 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
             break;
         } else {
             debug!("unstable at level: {}", stability_level.precision);
-            if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                let mut loop_mom_cache_id = integrand.loop_cache_id();
-                let mut external_mom_cache_id = integrand.external_cache_id();
-                let mut shift = 0;
-
-                let rotated_samples: Vec<_> = integrand
-                    .get_rotations()
-                    .map(|rotation| {
-                        if rotation.is_identity() {
-                            return gammaloop_sample.clone();
-                        }
-                        loop_mom_cache_id += 1;
-                        shift += 1;
-                        external_mom_cache_id += 1;
-                        gammaloop_sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id)
-                    })
-                    .collect();
-                integrand.increment_external_cache_id(shift);
-                integrand.increment_loop_cache_id(shift);
-
+            if let Ok(gammaloop_sample) = source.debug_sample(integrand) {
                 let level_result = results_of_stability_levels
                     .last()
                     .expect("stability level result missing");
-                for (sample, result) in rotated_samples
-                    .iter()
-                    .zip(level_result.rotated_results.iter())
-                {
-                    let default_sample = sample.get_default_sample();
-                    debug!(
-                        "loop_moms: {}, external_moms: {}",
-                        format!("{}", default_sample.loop_moms()).blue(),
-                        format!("{:?}", default_sample.external_moms()).blue()
-                    );
-
-                    debug!(
-                        "result of current level: {}",
-                        format!("{:16e}", result.result).blue()
-                    );
-                }
+                log_rotated_samples(integrand, &gammaloop_sample, level_result);
             } else {
-                debug!("parameterization failed");
+                debug!("failed to reconstruct sample for instability logging");
             }
         }
     }
@@ -1467,7 +1770,7 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
         );
     }
 
-    if let Some(stability_level_result) = results_of_stability_levels.last() {
+    if let Some(stability_level_result) = results_of_stability_levels.last().cloned() {
         let re_is_nan = stability_level_result.result.re.is_nan()
             || stability_level_result.result.re.is_infinite();
         let im_is_nan = stability_level_result.result.im.is_nan()
@@ -1530,21 +1833,27 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
         Ok(EvaluationResult {
             integrand_result: nanless_result,
             integrator_weight: wgt,
-            event_buffer: vec![],
+            event_buffer: stability_level_result.graph_result.generated_events,
+            event_processing_time: evaluation_metadata.event_time,
+            generated_event_count: stability_level_result.graph_result.generated_event_count,
+            accepted_event_count: stability_level_result.graph_result.accepted_event_count,
             evaluation_metadata,
         })
     } else {
-        // this happens if parameterization fails at all levels
-        println!("Parameterization failed at all levels");
+        println!("Evaluation failed at all stability levels");
         Ok(EvaluationResult {
             integrand_result: Complex::new(F(0.0), F(0.0)),
             integrator_weight: wgt,
             event_buffer: vec![],
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             evaluation_metadata: EvaluationMetaData {
                 total_timing: Duration::ZERO,
                 integrand_evaluation_time: Duration::ZERO,
                 evaluator_evaluation_time: Duration::ZERO,
                 parameterization_time: Duration::ZERO,
+                event_time: Duration::ZERO,
                 relative_instability_error: Complex::new(F(0.0), F(0.0)),
                 is_nan: true,
                 final_is_stable: false,
@@ -1554,4 +1863,71 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
             },
         })
     }
+}
+
+fn warn_selectors_disable_zero_once() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        warn!(
+            "disabling `stability.escalate_if_exact_zero` during evaluation because selectors can legitimately zero the event weight"
+        );
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RuntimeCache;
+
+    #[test]
+    fn runtime_cache_serializes_as_empty() {
+        let encoded = bincode::encode_to_vec(
+            RuntimeCache::<usize>::default(),
+            bincode::config::standard(),
+        )
+        .expect("runtime cache should encode");
+        assert!(encoded.is_empty());
+
+        let (decoded, consumed): (RuntimeCache<usize>, usize) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard())
+                .expect("runtime cache should decode");
+        assert_eq!(consumed, 0);
+        assert!(decoded.0.is_none());
+    }
+}
+
+fn evaluate_sample<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    sample: &Sample<F<f64>>,
+    wgt: F<f64>,
+    _iter: usize,
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+) -> Result<EvaluationResult> {
+    evaluate_from_source(
+        integrand,
+        model,
+        EvaluationSource::XSpace(sample),
+        wgt,
+        use_arb_prec,
+        max_eval,
+    )
+}
+
+fn evaluate_momentum_configuration<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    input: &MomentumSpaceEvaluationInput,
+    wgt: F<f64>,
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+) -> Result<EvaluationResult> {
+    evaluate_from_source(
+        integrand,
+        model,
+        EvaluationSource::Momentum(input),
+        wgt,
+        use_arb_prec,
+        max_eval,
+    )
 }

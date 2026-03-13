@@ -14,11 +14,7 @@ use numpy::{Complex64, IntoPyArray, PyArray1, PyReadonlyArray2};
 use typed_index_collections::TiVec;
 
 use crate::{
-    commands::{
-        import::model::ImportModel,
-        inspect::{BatchedInspect, Inspect},
-        Evaluate,
-    },
+    commands::{evaluate_samples::EvaluateSamples, import::model::ImportModel, Evaluate},
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
@@ -37,7 +33,6 @@ use gammalooprs::feyngen::{
 
 use git_version::git_version;
 use itertools::{self, Itertools};
-use pyo3::types::PyFloat;
 use std::path::PathBuf;
 
 use symbolica::{atom::AtomCore, parse};
@@ -428,66 +423,92 @@ impl GammaLoopAPI {
         })
     }
 
-    pub fn inspect<'py>(
+    #[pyo3(
+        name = "evaluate_sample",
+        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, force_radius=false, momentum_space=false, discrete_dim=None, graph_name=None, orientation=None)
+    )]
+    pub fn evaluate_sample<'py>(
         &mut self,
         py: Python<'py>,
+        point: Vec<f64>,
         process_id: Option<usize>,
         integrand_name: Option<String>,
-        point: Vec<f64>,
         use_arb_prec: bool,
         force_radius: bool,
         momentum_space: bool,
-        discrete_dim: Vec<usize>,
-    ) -> Result<(Bound<'py, PyComplex>, Option<Bound<'py, PyFloat>>)> {
-        let res = Inspect {
-            process: process_id.map(ProcessRef::Id),
+        discrete_dim: Option<Vec<usize>>,
+        graph_name: Option<String>,
+        orientation: Option<usize>,
+    ) -> Result<Bound<'py, PyComplex>> {
+        let points =
+            ndarray::Array2::from_shape_vec((1, point.len()), point).map_err(|e| eyre!(e))?;
+        let discrete_dims = discrete_dim.unwrap_or_default();
+        let discrete_dims = if momentum_space {
+            None
+        } else {
+            Some(
+                ndarray::Array2::from_shape_vec((1, discrete_dims.len()), discrete_dims)
+                    .map_err(|e| eyre!(e))?,
+            )
+        };
+        let res = EvaluateSamples {
+            process_id,
             integrand_name,
-            point,
             use_arb_prec,
             force_radius,
             momentum_space,
-            discrete_dim,
+            points: points.view(),
+            discrete_dims: discrete_dims.as_ref().map(|dims| dims.view()),
+            graph_names: Some(vec![graph_name]),
+            orientations: Some(vec![orientation]),
         }
         .run(&mut self.gammaloop_state)?;
-        Ok((
-            PyComplex::from_doubles(py, res.1.re, res.1.im),
-            res.0.map(|j| j.into_pyobject(py).unwrap()),
-        ))
+        let value = res.into_iter().next().ok_or_else(|| {
+            eyre!("evaluate_sample did not return any result for the single input sample")
+        })?;
+        Ok(PyComplex::from_doubles(py, value.re, value.im))
     }
 
-    pub fn batched_inspect<'py>(
+    #[pyo3(
+        name = "evaluate_samples",
+        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, momentum_space=false, discrete_dims=None, force_radius=false, graph_names=None, orientations=None)
+    )]
+    pub fn evaluate_samples<'py>(
         &mut self,
         py: Python<'py>,
         points: PyReadonlyArray2<'py, f64>,
-        discrete_dims: PyReadonlyArray2<'py, usize>,
         process_id: Option<usize>,
         integrand_name: Option<String>,
         use_arb_prec: bool,
         momentum_space: bool,
-    ) -> Result<(
-        Bound<'py, PyArray1<Complex64>>,
-        Option<Bound<'py, PyArray1<f64>>>,
-    )> {
+        discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
+        force_radius: bool,
+        graph_names: Option<Vec<Option<String>>>,
+        orientations: Option<Vec<Option<usize>>>,
+    ) -> Result<Bound<'py, PyArray1<Complex64>>> {
         let points_rust = points.as_array();
-        let discrete_dims_rust = discrete_dims.as_array();
 
-        let batched_inspect = BatchedInspect {
+        let evaluate_samples = EvaluateSamples {
             process_id,
             integrand_name,
             use_arb_prec,
+            force_radius,
             momentum_space,
             points: points_rust,
-            discrete_dims: discrete_dims_rust,
+            discrete_dims: discrete_dims.as_ref().map(PyReadonlyArray2::as_array),
+            graph_names,
+            orientations,
         };
 
-        let (res, res_jac) = batched_inspect.run(&mut self.gammaloop_state).unwrap();
-        let res_map = res
-            .mapv_into_any(|c| Complex64::new(c.re, c.im))
-            .into_pyarray(py);
+        let res = evaluate_samples.run(&mut self.gammaloop_state)?;
+        let res_map = ndarray::Array1::from_vec(
+            res.into_iter()
+                .map(|c| Complex64::new(c.re, c.im))
+                .collect(),
+        )
+        .into_pyarray(py);
 
-        let res_jac_map = res_jac.map(|r| r.into_pyarray(py));
-
-        Ok((res_map, res_jac_map))
+        Ok(res_map)
     }
 
     #[pyo3(name="import_graphs", signature = (graphs, process_name=None, process_id=None, integrand_name=None, format="dot".into(), overwrite=false, append=false))]

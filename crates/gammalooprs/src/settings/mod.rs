@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     GammaLoopContext,
     integrands::IntegrandSettings,
-    observables::{ObservableSettings, PhaseSpaceSelectorSettings},
+    observables::{ObservablesSettings, QuantitiesSettings, SelectorsSettings},
     settings::runtime::HFunctionSettings,
     utils::{
         F, FloatLike,
@@ -48,10 +48,12 @@ pub struct RuntimeSettings {
     pub kinematics: KinematicsSettings,
     #[serde(rename = "integrator", skip_serializing_if = "IsDefault::is_default")]
     pub integrator: IntegratorSettings,
+    #[serde(rename = "quantities", skip_serializing_if = "IsDefault::is_default")]
+    pub quantities: QuantitiesSettings,
     #[serde(rename = "observables", skip_serializing_if = "IsDefault::is_default")]
-    pub observables: Vec<ObservableSettings>,
+    pub observables: ObservablesSettings,
     #[serde(rename = "selectors", skip_serializing_if = "IsDefault::is_default")]
-    pub selectors: Vec<PhaseSpaceSelectorSettings>,
+    pub selectors: SelectorsSettings,
     #[serde(rename = "stability")]
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub stability: StabilitySettings,
@@ -70,6 +72,9 @@ impl RuntimeSettings {
             .iter()
             .map(|a| F(T::from_f64(*a)))
             .collect()
+    }
+    pub(crate) fn requires_event_generation(&self) -> bool {
+        !self.observables.is_empty() || !self.selectors.is_empty()
     }
 }
 
@@ -103,8 +108,8 @@ impl Default for GlobalSettings {
 
 pub mod global;
 pub use runtime::{
-    GeneralSettings, IntegratorSettings, SamplingSettings, StabilitySettings, SubtractionSettings,
-    kinematic::KinematicsSettings,
+    GeneralSettings, IntegratorSettings, ObservablesOutputSettings, SamplingSettings,
+    StabilitySettings, SubtractionSettings, kinematic::KinematicsSettings,
 };
 pub mod runtime;
 
@@ -206,6 +211,12 @@ mod tests {
     fn test_integrator_settings_serialize_deserialize() {
         use crate::settings::runtime::IntegratorSettings;
         generic_test_settings::<IntegratorSettings>();
+    }
+
+    #[test]
+    fn test_observables_output_settings_serialize_deserialize() {
+        use crate::settings::runtime::ObservablesOutputSettings;
+        generic_test_settings::<ObservablesOutputSettings>();
     }
 
     #[test]

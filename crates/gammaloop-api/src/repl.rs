@@ -9,6 +9,12 @@ use std::{
 use clap::Parser;
 use console::style;
 use gammalooprs::model::ParameterType;
+use gammalooprs::observables::{
+    CountRangeSelectorSettings, EntrySelection, FilterQuantity, HistogramSettings,
+    JetClusteringSettings, JetPtQuantitySettings, ObservablePhase, ObservableSettings,
+    ObservableValueTransform, ParticleScalarQuantitySettings, QuantitySettings,
+    SelectorDefinitionSettings, SelectorReduction, SelectorSettings, ValueRangeSelectorSettings,
+};
 use gammalooprs::settings::RuntimeSettings;
 use serde_json::Value as JsonValue;
 
@@ -240,6 +246,9 @@ struct FlagValueContext<'a> {
 enum SettingsCatalogKind {
     Global,
     Runtime,
+    ProcessUpdateQuantity,
+    ProcessUpdateObservable,
+    ProcessUpdateSelector,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -354,6 +363,147 @@ fn runtime_settings_schema() -> &'static JsonValue {
         serialize_schema::<RuntimeSettings>("runtime settings completion")
             .expect("runtime settings schema must serialize for completion")
     })
+}
+
+fn observable_settings_root() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        serialize_settings_with_defaults(
+            &observable_settings_template(),
+            "observable settings completion",
+        )
+        .expect("observable settings template must serialize for completion")
+    })
+}
+
+fn observable_settings_schema() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        serialize_schema::<ObservableSettings>("observable settings completion")
+            .expect("observable settings schema must serialize for completion")
+    })
+}
+
+fn selector_settings_root() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        merge_settings_roots(&[
+            serialize_settings_with_defaults(
+                &selector_settings_template_value_range(),
+                "selector settings value-range completion",
+            )
+            .expect("selector value-range template must serialize for completion"),
+            serialize_settings_with_defaults(
+                &selector_settings_template_count_range(),
+                "selector settings count-range completion",
+            )
+            .expect("selector count-range template must serialize for completion"),
+        ])
+    })
+}
+
+fn selector_settings_schema() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        serialize_schema::<SelectorSettings>("selector settings completion")
+            .expect("selector settings schema must serialize for completion")
+    })
+}
+
+fn quantity_settings_root() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        merge_settings_roots(&[
+            serialize_settings_with_defaults(
+                &quantity_settings_template_particle_scalar(),
+                "particle scalar quantity completion",
+            )
+            .expect("particle scalar quantity template must serialize for completion"),
+            serialize_settings_with_defaults(
+                &quantity_settings_template_jet_pt(),
+                "jet pt quantity completion",
+            )
+            .expect("jet pt quantity template must serialize for completion"),
+            serialize_settings_with_defaults(&QuantitySettings::AFB {}, "afb quantity completion")
+                .expect("afb quantity template must serialize for completion"),
+            serialize_settings_with_defaults(
+                &QuantitySettings::CrossSection {},
+                "cross section quantity completion",
+            )
+            .expect("cross section quantity template must serialize for completion"),
+        ])
+    })
+}
+
+fn quantity_settings_schema() -> &'static JsonValue {
+    static ROOT: OnceLock<JsonValue> = OnceLock::new();
+    ROOT.get_or_init(|| {
+        serialize_schema::<QuantitySettings>("quantity settings completion")
+            .expect("quantity settings schema must serialize for completion")
+    })
+}
+
+fn merge_settings_roots(roots: &[JsonValue]) -> JsonValue {
+    let mut merged = serde_json::Map::new();
+    for root in roots {
+        let JsonValue::Object(map) = root else {
+            continue;
+        };
+        for (key, value) in map {
+            merged.entry(key.clone()).or_insert_with(|| value.clone());
+        }
+    }
+    JsonValue::Object(merged)
+}
+
+fn quantity_settings_template_particle_scalar() -> QuantitySettings {
+    QuantitySettings::ParticleScalar(ParticleScalarQuantitySettings {
+        pdgs: Vec::new(),
+        quantity: FilterQuantity::PT,
+    })
+}
+
+fn quantity_settings_template_jet_pt() -> QuantitySettings {
+    QuantitySettings::JetPt(JetPtQuantitySettings {
+        clustering: JetClusteringSettings::default(),
+    })
+}
+
+fn selector_settings_template_value_range() -> SelectorSettings {
+    SelectorSettings {
+        quantity: String::new(),
+        entry_selection: EntrySelection::All,
+        entry_index: 0,
+        selector: SelectorDefinitionSettings::ValueRange(ValueRangeSelectorSettings {
+            min: 0.0,
+            max: None,
+            reduction: SelectorReduction::AnyInRange,
+        }),
+    }
+}
+
+fn selector_settings_template_count_range() -> SelectorSettings {
+    SelectorSettings {
+        quantity: String::new(),
+        entry_selection: EntrySelection::All,
+        entry_index: 0,
+        selector: SelectorDefinitionSettings::CountRange(CountRangeSelectorSettings {
+            min_count: 0,
+            max_count: None,
+        }),
+    }
+}
+
+fn observable_settings_template() -> ObservableSettings {
+    ObservableSettings {
+        quantity: String::new(),
+        entry_selection: EntrySelection::All,
+        entry_index: 0,
+        value_transform: ObservableValueTransform::Identity,
+        phase: ObservablePhase::Real,
+        misbinning_max_normalized_distance: None,
+        histogram: HistogramSettings::default(),
+    }
 }
 
 fn matches_command_path(context: &CommandContext<'_>, path: &[&str]) -> bool {
@@ -1605,6 +1755,18 @@ fn settings_catalog_kind(context: &CommandContext<'_>) -> Option<SettingsCatalog
         || matches_command_path(context, &["set", "process", "kv"])
     {
         Some(SettingsCatalogKind::Runtime)
+    } else if matches_command_path(context, &["set", "process", "update", "quantity"])
+        && !context.completed_tokens.is_empty()
+    {
+        Some(SettingsCatalogKind::ProcessUpdateQuantity)
+    } else if matches_command_path(context, &["set", "process", "update", "observable"])
+        && !context.completed_tokens.is_empty()
+    {
+        Some(SettingsCatalogKind::ProcessUpdateObservable)
+    } else if matches_command_path(context, &["set", "process", "update", "selector"])
+        && !context.completed_tokens.is_empty()
+    {
+        Some(SettingsCatalogKind::ProcessUpdateSelector)
     } else {
         None
     }
@@ -1621,10 +1783,16 @@ fn add_settings_kv_suggestions(
     let root = match catalog_kind {
         SettingsCatalogKind::Global => global_settings_root(),
         SettingsCatalogKind::Runtime => runtime_settings_root(),
+        SettingsCatalogKind::ProcessUpdateQuantity => quantity_settings_root(),
+        SettingsCatalogKind::ProcessUpdateObservable => observable_settings_root(),
+        SettingsCatalogKind::ProcessUpdateSelector => selector_settings_root(),
     };
     let schema = match catalog_kind {
         SettingsCatalogKind::Global => global_settings_schema(),
         SettingsCatalogKind::Runtime => runtime_settings_schema(),
+        SettingsCatalogKind::ProcessUpdateQuantity => quantity_settings_schema(),
+        SettingsCatalogKind::ProcessUpdateObservable => observable_settings_schema(),
+        SettingsCatalogKind::ProcessUpdateSelector => selector_settings_schema(),
     };
 
     if let Some(value_request) = value_request {
@@ -3012,6 +3180,52 @@ mod tests {
         );
 
         assert!(values.contains(&"integrator.".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_observable_update_paths_after_name() {
+        let values = completion_values(
+            "set process -p triangle -i LO update observable top_pt_hist x_",
+            &CompletionState::default(),
+        );
+
+        assert!(values.contains(&"x_max=".to_string()), "{values:?}");
+        assert!(values.contains(&"x_min=".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_observable_update_enum_values() {
+        let values = completion_values(
+            "set process -p triangle -i LO update observable top_pt_hist phase=",
+            &CompletionState::default(),
+        );
+
+        assert!(values.contains(&"real".to_string()), "{values:?}");
+        assert!(values.contains(&"imag".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_selector_update_paths_after_name() {
+        let values = completion_values(
+            "set process -p triangle -i LO update selector top_cut entry_",
+            &CompletionState::default(),
+        );
+
+        assert!(values.contains(&"entry_index=".to_string()), "{values:?}");
+        assert!(
+            values.contains(&"entry_selection=".to_string()),
+            "{values:?}"
+        );
+    }
+
+    #[test]
+    fn completion_offers_quantity_update_paths_after_name() {
+        let values = completion_values(
+            "set process -p triangle -i LO update quantity top_pt p",
+            &CompletionState::default(),
+        );
+
+        assert!(values.contains(&"pdgs=".to_string()), "{values:?}");
     }
 
     #[test]

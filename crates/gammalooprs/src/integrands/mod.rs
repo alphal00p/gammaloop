@@ -13,7 +13,6 @@ use crate::integrands::process::{amplitude, cross_section_integrand};
 use crate::model::Model;
 use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
-use crate::observables::EventManager;
 use crate::utils::{F, FloatLike, f128};
 use crate::{
     settings::{
@@ -177,12 +176,6 @@ pub trait HasIntegrand {
 
     // In case your integrand supports observable, then overload this function to write the observables to file
     fn update_results(&mut self, _iter: usize) {}
-
-    // In case your integrand has an EventManager, overload this function to return it
-
-    fn get_event_manager_mut(&mut self) -> &mut EventManager {
-        panic!("This integrand does not have an EventManager");
-    }
 }
 
 #[derive(Clone)]
@@ -421,6 +414,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             integrand_evaluation_time: evaluation_time,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time,
+            event_time: Duration::ZERO,
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
@@ -442,6 +436,9 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
             integrator_weight: wgt,
             event_buffer: vec![],
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             evaluation_metadata,
         })
     }
@@ -584,6 +581,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
             integrand_evaluation_time: evaluation_time,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time,
+            event_time: Duration::ZERO,
             relative_instability_error: Complex::new_zero(),
             highest_precision: Precision::Double,
             is_nan,
@@ -605,6 +603,9 @@ impl HasIntegrand for UnitVolumeIntegrand {
             integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
             integrator_weight: wgt,
             event_buffer: vec![],
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             evaluation_metadata,
         })
     }
