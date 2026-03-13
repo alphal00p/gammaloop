@@ -8,7 +8,7 @@ commands = [
 folder = "./examples/cli/gg_hhh/2L/state"
 name = "gg_hhh_2l"
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "generate"
 commands = [
 
@@ -34,7 +34,7 @@ commands = [
 
 ]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "setup_euclidean_configuration"
 commands = [
     "set model MT=1000.0",
@@ -42,7 +42,7 @@ commands = [
     "set model ymt=1000.0",
 ]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "setup_physical_configuration"
 commands = [
     "set model MT=173.0",
@@ -50,7 +50,7 @@ commands = [
     "set model ymt=173.0",
 ]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "integrate"
 commands = [
     "set process -p gg_hhh -i 2L defaults",
@@ -70,7 +70,6 @@ commands = [
 
     """integrate --process gg_hhh -i 2L --n-cores 10
         --workspace-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace
-        --result-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace/result.txt
         --restart
     """,
 

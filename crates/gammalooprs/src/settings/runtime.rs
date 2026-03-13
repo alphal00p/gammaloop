@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
@@ -17,6 +17,7 @@ use crate::{
     momentum::RotationMethod,
     momentum::sample::ExternalIndex,
     momentum::signature::SignatureLike,
+    observables::ObservableFileFormat,
     settings::runtime::kinematic::Externals,
     settings::runtime::kinematic::improvement::generate_default_momenta,
     utils::{
@@ -30,6 +31,17 @@ use crate::{
 use symbolica::domains::float::Real;
 
 use super::{RuntimeSettings, global::OrientationPattern};
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
+#[serde(default)]
+pub struct RuntimeModelSettings {
+    #[serde(flatten, skip_serializing_if = "IsDefault::is_default")]
+    pub external_parameters: BTreeMap<String, (F<f64>, F<f64>)>,
+}
 
 #[cfg_attr(
     feature = "python_api",
@@ -150,6 +162,10 @@ pub struct GeneralSettings {
     pub use_picobarns: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_flux_factor: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub generate_events: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub store_additional_weights_in_event: bool,
 }
 
 impl Default for GeneralSettings {
@@ -166,6 +182,8 @@ impl Default for GeneralSettings {
             additional_param_values: vec![],
             use_picobarns: false,
             disable_flux_factor: false,
+            generate_events: false,
+            store_additional_weights_in_event: false,
         }
     }
 }
@@ -187,6 +205,25 @@ pub enum IntegratedPhase {
 }
 
 pub mod kinematic;
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct ObservablesOutputSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub format: ObservableFileFormat,
+}
+
+impl Default for ObservablesOutputSettings {
+    fn default() -> Self {
+        Self {
+            format: ObservableFileFormat::default(),
+        }
+    }
+}
 
 #[cfg_attr(
     feature = "python_api",
@@ -217,10 +254,12 @@ pub struct IntegratorSettings {
     pub train_on_avg: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub show_max_wgt_info: bool,
-    #[serde(skip_serializing_if = "is_float::<1000>")]
+    #[serde(skip_serializing_if = "is_float::<30>")]
     pub max_prob_ratio: f64,
     #[serde(skip_serializing_if = "is_u64::<69>")]
     pub seed: u64,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub observables_output: ObservablesOutputSettings,
 }
 
 impl Default for IntegratorSettings {
@@ -237,8 +276,9 @@ impl Default for IntegratorSettings {
             continuous_dim_learning_rate: 1.0,
             train_on_avg: false,
             show_max_wgt_info: true,
-            max_prob_ratio: 1000.0,
+            max_prob_ratio: 30.0,
             seed: 69,
+            observables_output: ObservablesOutputSettings::default(),
         }
     }
 }
@@ -268,9 +308,9 @@ impl Default for ParameterizationSettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[serde(default, deny_unknown_fields)]
-pub struct IntegrationResult {
+pub struct IntegralEstimate {
     pub neval: usize,
     pub real_zero: usize,
     pub im_zero: usize,
@@ -280,7 +320,7 @@ pub struct IntegrationResult {
     pub im_chisq: F<f64>,
 }
 
-impl Display for IntegrationResult {
+impl Display for IntegralEstimate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Format real and imaginary parts with proper uncertainty formatting
         let real_formatted = if self.error.re.0.abs() > 0.0 && f.alternate() {
@@ -328,7 +368,7 @@ impl Display for IntegrationResult {
     }
 }
 
-impl IntegrationResult {
+impl IntegralEstimate {
     pub fn is_compatible_with_target(&self, target: Complex<F<f64>>, sigma: i8) -> bool {
         let res_norm = self.result.norm().re;
         let tolerance = if res_norm.is_zero() {
@@ -343,6 +383,158 @@ impl IntegrationResult {
         // println!("Tol: {}", tolerance.0);
         self.result.approx_eq(&target, &tolerance)
     }
+
+    pub fn is_compatible_with_result(&self, other: &Self, sigma: i8) -> bool {
+        let combined_error = Complex::new(
+            (self.error.re * self.error.re + other.error.re * other.error.re).sqrt(),
+            (self.error.im * self.error.im + other.error.im * other.error.im).sqrt(),
+        );
+        let delta = self.result - other.result;
+        let delta_norm = delta.norm().re;
+        let tolerance = if delta_norm.is_zero() {
+            combined_error.norm().re
+        } else {
+            combined_error.norm().re * F(sigma as f64) / delta_norm
+        };
+
+        if tolerance.0 > 0.1 {
+            warn!("Tolerance larger than 10%! {}", tolerance)
+        }
+
+        self.result.approx_eq(&other.result, &tolerance)
+    }
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct IntegrationTableComponentResult {
+    pub component: String,
+    pub value: F<f64>,
+    pub error: F<f64>,
+    pub relative_error_percent: Option<f64>,
+    pub chi_sq_per_dof: f64,
+    pub target_delta_sigma: Option<f64>,
+    pub target_delta_percent: Option<f64>,
+    pub max_weight_impact: f64,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct IntegrationStatisticsSnapshot {
+    pub num_evals: usize,
+    pub average_total_time_seconds: f64,
+    pub average_parameterization_time_seconds: f64,
+    pub average_integrand_time_seconds: f64,
+    pub average_evaluator_time_seconds: f64,
+    pub average_observable_time_seconds: f64,
+    pub average_integrator_time_seconds: f64,
+    pub f64_percentage: f64,
+    pub f128_percentage: f64,
+    pub arb_percentage: f64,
+    pub nan_percentage: f64,
+    pub nan_or_unstable_percentage: f64,
+    pub generated_event_count: usize,
+    pub accepted_event_count: usize,
+    pub selection_efficiency_percentage: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct MaxWeightInfoEntry {
+    pub component: String,
+    pub sign: String,
+    pub max_eval: F<f64>,
+    pub coordinates: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct DiscreteCoordinate {
+    pub axis_label: String,
+    pub bin_index: usize,
+    pub bin_label: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct DiscreteBreakdownEntry {
+    pub bin_index: usize,
+    pub bin_label: Option<String>,
+    pub pdf: F<f64>,
+    pub value: F<f64>,
+    pub error: F<f64>,
+    pub chi_sq: F<f64>,
+    pub processed_samples: usize,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct DiscreteBreakdown {
+    pub axis_label: String,
+    pub fixed_coordinates: Vec<DiscreteCoordinate>,
+    pub entries: Vec<DiscreteBreakdownEntry>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct ComponentDiscreteBreakdown {
+    pub re: Option<DiscreteBreakdown>,
+    pub im: Option<DiscreteBreakdown>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct SlotIntegrationResult {
+    pub key: String,
+    pub process: String,
+    pub integrand: String,
+    pub target: Option<Complex<F<f64>>>,
+    pub integral: IntegralEstimate,
+    pub table_results: Vec<IntegrationTableComponentResult>,
+    pub integration_statistics: IntegrationStatisticsSnapshot,
+    pub max_weight_info: Vec<MaxWeightInfoEntry>,
+    pub grid_breakdown: ComponentDiscreteBreakdown,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
+pub struct IntegrationResult {
+    pub slots: Vec<SlotIntegrationResult>,
+}
+
+impl IntegrationResult {
+    pub fn slot(&self, key: &str) -> Option<&SlotIntegrationResult> {
+        self.slots.iter().find(|slot| slot.key == key)
+    }
+
+    pub fn single_slot(&self) -> Option<&SlotIntegrationResult> {
+        (self.slots.len() == 1).then(|| &self.slots[0])
+    }
+
+    pub fn single_slot_integral(&self) -> Option<&IntegralEstimate> {
+        self.single_slot().map(|slot| &slot.integral)
+    }
+
+    pub fn is_compatible_with_target(&self, target: Complex<F<f64>>, n_sigma: i8) -> bool {
+        self.single_slot_integral()
+            .is_some_and(|integral| integral.is_compatible_with_target(target, n_sigma))
+    }
+}
+
+impl Display for IntegrationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(slot) = self.single_slot() {
+            return slot.integral.fmt(f);
+        }
+
+        for (index, slot) in self.slots.iter().enumerate() {
+            if index > 0 {
+                writeln!(f)?;
+            }
+            write!(f, "{}: {}", slot.key, slot.integral)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -352,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_integration_result_display() {
-        let result = IntegrationResult {
+        let result = IntegralEstimate {
             neval: 1000000,
             real_zero: 0,
             im_zero: 0,
@@ -366,7 +558,7 @@ mod tests {
         println!("Integration result display: {}", display_str);
 
         // Test with only real part
-        let real_only_result = IntegrationResult {
+        let real_only_result = IntegralEstimate {
             neval: 500000,
             real_zero: 0,
             im_zero: 0,

@@ -7,7 +7,6 @@ use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_
 use symbolica::{atom::AtomCore, printer::CanonicalOrderingSettings};
 use vakint::{NumericalEvaluationResult, vakint_symbol};
 
-use gammalooprs::utils::VAKINT;
 use insta::assert_snapshot;
 use which::which;
 

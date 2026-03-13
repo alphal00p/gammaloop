@@ -3,10 +3,13 @@
   "title": "RuntimeSettings",
   "type": "object",
   "properties": {
-    "General": {
+    "general": {
       "$ref": "#/$defs/GeneralSettings"
     },
-    "Integrand": {
+    "h_function": {
+      "$ref": "#/$defs/HFunctionSettings"
+    },
+    "integrand": {
       "anyOf": [
         {
           "$ref": "#/$defs/IntegrandSettings"
@@ -16,29 +19,38 @@
         }
       ]
     },
-    "Integrator": {
+    "integrator": {
       "$ref": "#/$defs/IntegratorSettings"
     },
-    "Kinematics": {
+    "kinematics": {
       "$ref": "#/$defs/KinematicsSettings"
     },
-    "Observables": {
-      "type": "array",
-      "items": {
+    "model": {
+      "$ref": "#/$defs/RuntimeModelSettings"
+    },
+    "observables": {
+      "type": "object",
+      "additionalProperties": {
         "$ref": "#/$defs/ObservableSettings"
       }
     },
-    "Selectors": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/PhaseSpaceSelectorSettings"
+    "quantities": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/QuantitySettings"
       }
-    },
-    "stability": {
-      "$ref": "#/$defs/stabilitySettings"
     },
     "sampling": {
       "$ref": "#/$defs/SamplingSettings"
+    },
+    "selectors": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/SelectorSettings"
+      }
+    },
+    "stability": {
+      "$ref": "#/$defs/StabilitySettings"
     },
     "subtraction": {
       "$ref": "#/$defs/SubtractionSettings"
@@ -46,34 +58,11 @@
   },
   "additionalProperties": false,
   "$defs": {
-    "AFBSettings": {
-      "type": "object",
-      "properties": {
-        "filename": {
-          "type": "string"
-        },
-        "n_bins": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "write_to_file": {
-          "type": "boolean"
-        },
-        "x_max": {
-          "type": "number",
-          "format": "double"
-        },
-        "x_min": {
-          "type": "number",
-          "format": "double"
-        }
-      },
-      "required": ["x_min", "x_max", "n_bins", "write_to_file", "filename"]
-    },
     "Dep": {
       "type": "string",
-      "enum": ["dependent"]
+      "enum": [
+        "dependent"
+      ]
     },
     "DiscreteGraphSamplingType": {
       "oneOf": [
@@ -84,60 +73,11 @@
               "type": "number",
               "format": "double"
             },
-            "input_rescaling": {
-              "description": "todo make proper type for this object",
-              "type": "array",
-              "items": {
-                "type": "array",
-                "items": {
-                  "type": "array",
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "prefixItems": [
-                    {
-                      "type": "number",
-                      "format": "double"
-                    },
-                    {
-                      "type": "number",
-                      "format": "double"
-                    }
-                  ]
-                }
-              }
-            },
             "mapping": {
               "$ref": "#/$defs/ParameterizationMapping"
             },
             "mode": {
               "$ref": "#/$defs/ParameterizationMode"
-            },
-            "shifts": {
-              "description": "todo make proper type for this object",
-              "type": "array",
-              "items": {
-                "type": "array",
-                "maxItems": 4,
-                "minItems": 4,
-                "prefixItems": [
-                  {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  {
-                    "type": "number",
-                    "format": "double"
-                  }
-                ]
-              }
             },
             "subtype": {
               "type": "string",
@@ -145,7 +85,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["subtype"]
+          "required": [
+            "subtype"
+          ]
         },
         {
           "type": "object",
@@ -163,7 +105,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["subtype"]
+          "required": [
+            "subtype"
+          ]
         },
         {
           "type": "object",
@@ -181,13 +125,18 @@
             }
           },
           "additionalProperties": false,
-          "required": ["subtype"]
+          "required": [
+            "subtype"
+          ]
         },
         {
           "type": "object",
           "properties": {
             "matrix_stability_test": {
-              "type": ["number", "null"],
+              "type": [
+                "number",
+                "null"
+              ],
               "format": "double"
             },
             "subtype": {
@@ -199,8 +148,27 @@
             }
           },
           "additionalProperties": false,
-          "required": ["subtype"]
+          "required": [
+            "subtype"
+          ]
         }
+      ]
+    },
+    "EntrySelection": {
+      "type": "string",
+      "enum": [
+        "all",
+        "leading_only",
+        "nth_only"
+      ]
+    },
+    "EvaluatorMethod": {
+      "type": "string",
+      "enum": [
+        "SingleParametric",
+        "Iterative",
+        "SummedFunctionMap",
+        "Summed"
       ]
     },
     "ExternalMomenta": {
@@ -232,6 +200,9 @@
                     "$ref": "#/$defs/SignOrZero"
                   }
                 },
+                "improvement_settings": {
+                  "$ref": "#/$defs/PhaseSpaceImprovementSettings"
+                },
                 "momenta": {
                   "type": "array",
                   "items": {
@@ -240,7 +211,10 @@
                 }
               },
               "additionalProperties": false,
-              "required": ["momenta", "helicities"]
+              "required": [
+                "momenta",
+                "helicities"
+              ]
             },
             "type": {
               "type": "string",
@@ -248,7 +222,10 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type", "data"]
+          "required": [
+            "type",
+            "data"
+          ]
         }
       ]
     },
@@ -258,12 +235,37 @@
     },
     "FilterQuantity": {
       "type": "string",
-      "enum": ["E", "CosTheta", "PT"]
+      "enum": [
+        "E",
+        "CosTheta",
+        "PT",
+        "y",
+        "eta"
+      ]
     },
     "GeneralSettings": {
       "type": "object",
       "properties": {
+        "additional_param_values": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "debug_cache": {
+          "type": "boolean"
+        },
+        "disable_flux_factor": {
+          "type": "boolean"
+        },
         "enable_cache": {
+          "type": "boolean"
+        },
+        "evaluator_method": {
+          "$ref": "#/$defs/EvaluatorMethod"
+        },
+        "generate_events": {
           "type": "boolean"
         },
         "load_compiled_cff": {
@@ -280,7 +282,13 @@
         "orientation_pat": {
           "$ref": "#/$defs/OrientationPattern"
         },
+        "store_additional_weights_in_event": {
+          "type": "boolean"
+        },
         "use_ltd": {
+          "type": "boolean"
+        },
+        "use_picobarns": {
           "type": "boolean"
         }
       },
@@ -305,7 +313,10 @@
           "$ref": "#/$defs/HFunction"
         },
         "power": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "format": "uint",
           "minimum": 0
         },
@@ -323,7 +334,17 @@
           "$ref": "#/$defs/HFunctionSettings"
         }
       },
-      "required": ["h_function"]
+      "required": [
+        "h_function"
+      ]
+    },
+    "ImprovementMode": {
+      "type": "string",
+      "enum": [
+        "vh",
+        "mf",
+        "none"
+      ]
     },
     "IntegrandSettings": {
       "oneOf": [
@@ -336,7 +357,9 @@
             }
           },
           "$ref": "#/$defs/UnitSurfaceSettings",
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -347,7 +370,9 @@
             }
           },
           "$ref": "#/$defs/UnitVolumeSettings",
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -358,7 +383,9 @@
             }
           },
           "$ref": "#/$defs/HFunctionTestSettings",
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         }
       ]
     },
@@ -376,7 +403,10 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type", "h_function_settings"]
+          "required": [
+            "type",
+            "h_function_settings"
+          ]
         },
         {
           "type": "object",
@@ -387,7 +417,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         }
       ]
     },
@@ -402,13 +434,20 @@
     },
     "IntegratedPhase": {
       "type": "string",
-      "enum": ["real", "imag", "both"]
+      "enum": [
+        "real",
+        "imag",
+        "both"
+      ]
     },
     "IntegratorSettings": {
       "type": "object",
       "properties": {
         "bin_number_evolution": {
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "integer",
             "format": "uint",
@@ -455,6 +494,9 @@
           "format": "uint",
           "minimum": 0
         },
+        "observables_output": {
+          "$ref": "#/$defs/ObservablesOutputSettings"
+        },
         "seed": {
           "type": "integer",
           "format": "uint64",
@@ -469,92 +511,12 @@
       },
       "additionalProperties": false
     },
-    "Jet1PTSettings": {
-      "type": "object",
-      "properties": {
-        "dR": {
-          "type": "number",
-          "format": "double"
-        },
-        "filename": {
-          "type": "string"
-        },
-        "min_jpt": {
-          "type": "number",
-          "format": "double"
-        },
-        "n_bins": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "use_fastjet": {
-          "type": "boolean"
-        },
-        "write_to_file": {
-          "type": "boolean"
-        },
-        "x_max": {
-          "type": "number",
-          "format": "double"
-        },
-        "x_min": {
-          "type": "number",
-          "format": "double"
-        }
-      },
-      "required": [
-        "x_min",
-        "x_max",
-        "dR",
-        "min_jpt",
-        "n_bins",
-        "write_to_file",
-        "filename",
-        "use_fastjet"
-      ]
-    },
-    "JetSliceSettings": {
-      "type": "object",
-      "properties": {
-        "dR": {
-          "type": "number",
-          "format": "double"
-        },
-        "max_j1pt": {
-          "type": "number",
-          "format": "double"
-        },
-        "max_jets": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "min_j1pt": {
-          "type": "number",
-          "format": "double"
-        },
-        "min_jets": {
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
-        "min_jpt": {
-          "type": "number",
-          "format": "double"
-        },
-        "use_fastjet": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "min_jets",
-        "max_jets",
-        "min_j1pt",
-        "max_j1pt",
-        "dR",
-        "min_jpt",
-        "use_fastjet"
+    "JetAlgorithm": {
+      "type": "string",
+      "enum": [
+        "kt",
+        "cambridge_aachen",
+        "anti_kt"
       ]
     },
     "KinematicsSettings": {
@@ -579,52 +541,88 @@
       },
       "additionalProperties": false
     },
-    "ObservableSettings": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "jet1pt"
-            }
-          },
-          "$ref": "#/$defs/Jet1PTSettings",
-          "required": ["type"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "one_particle_obs"
-            }
-          },
-          "$ref": "#/$defs/SingleParticleObservableSettings",
-          "required": ["type"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "AFB"
-            }
-          },
-          "$ref": "#/$defs/AFBSettings",
-          "required": ["type"]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "type": {
-              "type": "string",
-              "const": "cross_section"
-            }
-          },
-          "required": ["type"]
-        }
+    "ObservableFileFormat": {
+      "type": "string",
+      "enum": [
+        "none",
+        "hwu",
+        "json"
       ]
+    },
+    "ObservablePhase": {
+      "type": "string",
+      "enum": [
+        "real",
+        "imag"
+      ]
+    },
+    "ObservableSettings": {
+      "type": "object",
+      "properties": {
+        "entry_index": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
+        },
+        "log_x_axis": {
+          "type": "boolean"
+        },
+        "log_y_axis": {
+          "type": "boolean"
+        },
+        "misbinning_max_normalized_distance": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "n_bins": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "phase": {
+          "$ref": "#/$defs/ObservablePhase"
+        },
+        "quantity": {
+          "type": "string"
+        },
+        "value_transform": {
+          "$ref": "#/$defs/ObservableValueTransform"
+        },
+        "x_max": {
+          "type": "number",
+          "format": "double"
+        },
+        "x_min": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "quantity"
+      ]
+    },
+    "ObservableValueTransform": {
+      "type": "string",
+      "enum": [
+        "identity",
+        "log10"
+      ]
+    },
+    "ObservablesOutputSettings": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "$ref": "#/$defs/ObservableFileFormat"
+        }
+      },
+      "additionalProperties": false
     },
     "OrientationPattern": {
       "type": "object",
@@ -649,7 +647,10 @@
           "type": "boolean"
         },
         "force_global_center": {
-          "type": ["array", "null"],
+          "type": [
+            "array",
+            "null"
+          ],
           "items": {
             "type": "array",
             "items": {
@@ -671,7 +672,10 @@
     },
     "ParameterizationMapping": {
       "type": "string",
-      "enum": ["log", "linear"]
+      "enum": [
+        "log",
+        "linear"
+      ]
     },
     "ParameterizationMode": {
       "type": "string",
@@ -679,7 +683,8 @@
         "cartesian",
         "spherical",
         "hyperspherical",
-        "hyperspherical_flat"
+        "hyperspherical_flat",
+        "momentum_space"
       ]
     },
     "ParameterizationSettings": {
@@ -689,121 +694,151 @@
           "type": "number",
           "format": "double"
         },
-        "input_rescaling": {
-          "description": "todo make proper type for this object",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": {
-              "type": "array",
-              "maxItems": 2,
-              "minItems": 2,
-              "prefixItems": [
-                {
-                  "type": "number",
-                  "format": "double"
-                },
-                {
-                  "type": "number",
-                  "format": "double"
-                }
-              ]
-            }
-          }
-        },
         "mapping": {
           "$ref": "#/$defs/ParameterizationMapping"
         },
         "mode": {
           "$ref": "#/$defs/ParameterizationMode"
-        },
-        "shifts": {
-          "description": "todo make proper type for this object",
-          "type": "array",
-          "items": {
-            "type": "array",
-            "maxItems": 4,
-            "minItems": 4,
-            "prefixItems": [
-              {
-                "type": "number",
-                "format": "double"
-              },
-              {
-                "type": "number",
-                "format": "double"
-              },
-              {
-                "type": "number",
-                "format": "double"
-              },
-              {
-                "type": "number",
-                "format": "double"
-              }
-            ]
-          }
         }
       },
       "additionalProperties": false
     },
     "ParseableAtom": {
       "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
-      "type": ["string"]
+      "type": [
+        "string"
+      ]
     },
-    "PhaseSpaceSelectorSettings": {
+    "PhaseSpaceImprovementSettings": {
+      "type": "object",
+      "properties": {
+        "large_deformation_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/F"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "$ref": "#/$defs/ImprovementMode"
+        },
+        "only_warn_on_large_deformation": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Precision": {
+      "type": "string",
+      "enum": [
+        "Double",
+        "Quad",
+        "Arb"
+      ]
+    },
+    "QuantitySettings": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
+            "pdgs": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "int"
+              }
+            },
+            "quantity": {
+              "$ref": "#/$defs/FilterQuantity"
+            },
             "type": {
               "type": "string",
-              "const": "jet"
+              "const": "particle_scalar"
             }
           },
-          "$ref": "#/$defs/JetSliceSettings",
-          "required": ["type"]
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "pdgs",
+            "quantity"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "algorithm": {
+              "$ref": "#/$defs/JetAlgorithm"
+            },
+            "dR": {
+              "type": "number",
+              "format": "double"
+            },
+            "min_jpt": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "jet_pt"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "algorithm": {
+              "$ref": "#/$defs/JetAlgorithm"
+            },
+            "dR": {
+              "type": "number",
+              "format": "double"
+            },
+            "min_jpt": {
+              "type": "number",
+              "format": "double"
+            },
+            "type": {
+              "type": "string",
+              "const": "jet_count"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
           "properties": {
             "type": {
               "type": "string",
-              "const": "ranged"
+              "const": "a_f_b"
             }
           },
-          "$ref": "#/$defs/RangeFilterSettings",
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "cross_section"
+            }
+          },
+          "required": [
+            "type"
+          ]
         }
       ]
-    },
-    "Precision": {
-      "type": "string",
-      "enum": ["Double", "Quad", "Arb"]
-    },
-    "RangeFilterSettings": {
-      "type": "object",
-      "properties": {
-        "filter": {
-          "$ref": "#/$defs/FilterQuantity"
-        },
-        "max_value": {
-          "type": "number",
-          "format": "double"
-        },
-        "min_value": {
-          "type": "number",
-          "format": "double"
-        },
-        "pdgs": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int"
-          }
-        }
-      },
-      "required": ["pdgs", "filter", "min_value", "max_value"]
     },
     "RotationSetting": {
       "oneOf": [
@@ -816,7 +851,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -827,7 +864,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -838,7 +877,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -849,7 +890,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -872,9 +915,18 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type", "alpha", "beta", "gamma"]
+          "required": [
+            "type",
+            "alpha",
+            "beta",
+            "gamma"
+          ]
         }
       ]
+    },
+    "RuntimeModelSettings": {
+      "type": "object",
+      "additionalProperties": false
     },
     "SamplingSettings": {
       "oneOf": [
@@ -885,60 +937,11 @@
               "type": "number",
               "format": "double"
             },
-            "input_rescaling": {
-              "description": "todo make proper type for this object",
-              "type": "array",
-              "items": {
-                "type": "array",
-                "items": {
-                  "type": "array",
-                  "maxItems": 2,
-                  "minItems": 2,
-                  "prefixItems": [
-                    {
-                      "type": "number",
-                      "format": "double"
-                    },
-                    {
-                      "type": "number",
-                      "format": "double"
-                    }
-                  ]
-                }
-              }
-            },
             "mapping": {
               "$ref": "#/$defs/ParameterizationMapping"
             },
             "mode": {
               "$ref": "#/$defs/ParameterizationMode"
-            },
-            "shifts": {
-              "description": "todo make proper type for this object",
-              "type": "array",
-              "items": {
-                "type": "array",
-                "maxItems": 4,
-                "minItems": 4,
-                "prefixItems": [
-                  {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  {
-                    "type": "number",
-                    "format": "double"
-                  }
-                ]
-              }
             },
             "type": {
               "type": "string",
@@ -946,7 +949,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -964,7 +969,9 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         },
         {
           "type": "object",
@@ -981,61 +988,110 @@
             }
           },
           "additionalProperties": false,
-          "required": ["type"]
+          "required": [
+            "type"
+          ]
         }
       ]
     },
-    "SignOrZero": {
-      "type": "string",
-      "enum": ["Zero", "Plus", "Minus"]
+    "SelectorDefinitionSettings": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "max": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "min": {
+              "type": "number",
+              "format": "double"
+            },
+            "reduction": {
+              "$ref": "#/$defs/SelectorReduction"
+            },
+            "selector": {
+              "type": "string",
+              "const": "value_range"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "selector",
+            "min"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "max_count": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint",
+              "minimum": 0
+            },
+            "min_count": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "selector": {
+              "type": "string",
+              "const": "count_range"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "selector",
+            "min_count"
+          ]
+        }
+      ]
     },
-    "SingleParticleObservableSettings": {
+    "SelectorReduction": {
+      "type": "string",
+      "enum": [
+        "any_in_range",
+        "all_in_range"
+      ]
+    },
+    "SelectorSettings": {
       "type": "object",
       "properties": {
-        "filename": {
-          "type": "string"
-        },
-        "log_obs": {
-          "type": "boolean",
-          "default": false
-        },
-        "log_x_axis": {
-          "type": "boolean",
-          "default": false
-        },
-        "log_y_axis": {
-          "type": "boolean",
-          "default": true
-        },
-        "n_bins": {
+        "entry_index": {
           "type": "integer",
           "format": "uint",
           "minimum": 0
         },
-        "pdgs": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "int"
-          }
+        "entry_selection": {
+          "$ref": "#/$defs/EntrySelection"
         },
         "quantity": {
-          "$ref": "#/$defs/FilterQuantity"
+          "type": "string"
         },
-        "write_to_file": {
-          "type": "boolean",
-          "default": true
-        },
-        "x_max": {
-          "type": "number",
-          "format": "double"
-        },
-        "x_min": {
-          "type": "number",
-          "format": "double"
+        "selector": {
+          "$ref": "#/$defs/SelectorDefinitionSettings"
         }
       },
-      "required": ["x_min", "x_max", "n_bins", "filename", "pdgs", "quantity"]
+      "required": [
+        "quantity",
+        "entry_selection",
+        "entry_index",
+        "selector"
+      ]
+    },
+    "SignOrZero": {
+      "type": "string",
+      "enum": [
+        "Zero",
+        "Plus",
+        "Minus"
+      ]
     },
     "StabilityLevelSetting": {
       "type": "object",
@@ -1067,13 +1123,13 @@
     "StabilityRecordingSettings": {
       "type": "object",
       "properties": {
-        "record_rotated_results": {
-          "type": "boolean"
-        },
         "record_all_stability_levels": {
           "type": "boolean"
         },
         "record_loop_momenta_escalation": {
+          "type": "boolean"
+        },
+        "record_rotated_results": {
           "type": "boolean"
         }
       },
@@ -1086,11 +1142,8 @@
           "type": "boolean"
         },
         "escalate_if_exact_zero": {
-          "type": "boolean"
-        },
-        "loop_momenta_norm_escalation_factor": {
-          "type": "number",
-          "format": "double"
+          "type": "boolean",
+          "default": false
         },
         "levels": {
           "type": "array",
@@ -1098,8 +1151,19 @@
             "$ref": "#/$defs/StabilityLevelSetting"
           }
         },
+        "loop_momenta_norm_escalation_factor": {
+          "type": "number",
+          "format": "double"
+        },
         "recording": {
-          "$ref": "#/$defs/StabilityRecordingSettings"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StabilityRecordingSettings"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "rotation_axis": {
           "type": "array",
@@ -1154,7 +1218,9 @@
           "minimum": 0
         }
       },
-      "required": ["n_3d_momenta"]
+      "required": [
+        "n_3d_momenta"
+      ]
     },
     "UnitVolumeSettings": {
       "type": "object",
@@ -1165,7 +1231,9 @@
           "minimum": 0
         }
       },
-      "required": ["n_3d_momenta"]
+      "required": [
+        "n_3d_momenta"
+      ]
     }
   }
 }

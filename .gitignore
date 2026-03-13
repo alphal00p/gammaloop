@@ -33,6 +33,10 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
+IGNORE/
+crates/gammaloop-api/python/gammaloop/libgammaloop_api*
+# Temporary cache files
+*.swo
 
 gammaloop_state_integration_workspace/
 result/

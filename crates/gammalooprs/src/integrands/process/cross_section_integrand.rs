@@ -10,7 +10,7 @@ use crate::{
     },
     integrands::{
         HasIntegrand,
-        evaluation::{EvaluationMetaData, EvaluationResult},
+        evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
         process::{
             ChannelIndex, ParamBuilder,
             evaluators::{EvaluatorStack, evaluate_evaluator_single},
@@ -22,6 +22,7 @@ use crate::{
         Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
         sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
+    observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
         CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId,
         StandaloneExportSettings,
@@ -34,7 +35,7 @@ use crate::{
             DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
             shape_for_t_derivatives,
         },
-        newton_solver::newton_iteration_and_derivative,
+        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
         serde_utils::SmartSerde,
     },
 };
@@ -43,10 +44,11 @@ use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
+use std::time::{Duration, Instant};
 
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Orientation},
+    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
     subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
 };
 use rayon::{
@@ -60,26 +62,32 @@ use std::{
     vec,
 };
 use symbolica::{
-    domains::{dual::HyperDual, float::Real},
+    domains::{
+        dual::HyperDual,
+        float::{Real, SingleFloat},
+    },
+    evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
 use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{
-    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid, evaluate_sample,
+    GenericEvaluator, GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache,
+    create_grid, evaluate_sample,
 };
 
 const TOLERANCE: F<f64> = F(2.0);
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
 const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
-const PICOBARN_CONVERSION: F<f64> = F(389_379_338.0); // thanks chatgpt
+const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrand {
     pub settings: RuntimeSettings,
     pub data: CrossSectionIntegrandData,
+    pub(crate) event_processing_runtime: RuntimeCache<EventProcessingRuntime>,
 }
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -127,7 +135,11 @@ impl CrossSectionIntegrand {
             "runtime settings for amplitude integrand",
         )?;
 
-        Ok(CrossSectionIntegrand { settings, data })
+        Ok(CrossSectionIntegrand {
+            settings,
+            data,
+            event_processing_runtime: RuntimeCache::default(),
+        })
     }
 
     pub(crate) fn compile(
@@ -145,6 +157,10 @@ impl CrossSectionIntegrand {
         })?;
 
         Ok(())
+    }
+
+    pub(crate) fn invalidate_event_processing_runtime(&mut self) {
+        self.event_processing_runtime.invalidate();
     }
 }
 
@@ -210,11 +226,17 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
         for a in self.data.graph_terms.iter_mut() {
             a.warm_up(&self.settings, model)?;
         }
+        self.event_processing_runtime
+            .set(EventProcessingRuntime::from_settings(&self.settings)?);
         Ok(())
     }
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G> {
         self.data.graph_terms.iter_mut()
+    }
+
+    fn graph_count(&self) -> usize {
+        self.data.graph_terms.len()
     }
 
     fn get_group_masters(&self) -> impl Iterator<Item = &Self::G> {
@@ -244,6 +266,24 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor<'_> {
         DependentMomentaConstructor::CrossSection
+    }
+
+    fn take_event_processing_runtime(&mut self) -> Option<EventProcessingRuntime> {
+        self.event_processing_runtime.take()
+    }
+
+    fn restore_event_processing_runtime(&mut self, runtime: Option<EventProcessingRuntime>) {
+        if let Some(runtime) = runtime {
+            self.event_processing_runtime.set(runtime);
+        }
+    }
+
+    fn event_processing_runtime(&self) -> Option<&EventProcessingRuntime> {
+        self.event_processing_runtime.as_ref()
+    }
+
+    fn event_processing_runtime_mut(&mut self) -> Option<&mut EventProcessingRuntime> {
+        self.event_processing_runtime.as_mut()
     }
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
@@ -430,82 +470,113 @@ impl CrossSectionGraphTerm {
         Ok(())
     }
 
-    // fn generate_event_for_cut<T: FloatLike>(
-    //     &self,
-    //     model: &Model,
-    //     t_scaling_solution: &NewtonIterationResult<T>,
-    //     momentum_sample: &MomentumSample<T>,
-    //     cut: &CrossSectionCut,
-    // ) -> Event<T> {
-    //     let rescaled_momenta =
-    //         momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
+    fn generate_event_for_cut<T: FloatLike>(
+        &self,
+        model: &Model,
+        t_scaling_solution: &NewtonIterationResult<T>,
+        momentum_sample: &MomentumSample<T>,
+        cut_id: CutId,
+        cut: &CrossSectionCut,
+    ) -> Result<GenericEvent<T>> {
+        let rescaled_momenta =
+            momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
 
-    //     let mut new_event = Event::<T>::default();
-    //     // Set initial momenta and PDGs for the event
-    //     new_event
-    //         .kinematic_configuration
-    //         .0
-    //         .extend(rescaled_momenta.external_moms().clone());
+        let mut new_event = GenericEvent::<T>::default();
+        new_event.cut_info.cut_id = cut_id.0;
+        // Set initial momenta and PDGs for the event
+        new_event
+            .kinematic_configuration
+            .0
+            .extend(rescaled_momenta.external_moms().clone());
 
-    //     new_event.particle_pdgs.0.extend(
-    //         self.graph
-    //             .get_external_partcles()
-    //             .iter()
-    //             .map(|p| p.pdg_code),
-    //     );
+        let mut incoming_pdgs = self
+            .graph
+            .underlying
+            .iter_edges_of(&self.graph.initial_state_cut)
+            .map(|(_, edge_index, edge_data)| {
+                edge_data
+                    .data
+                    .particle()
+                    .map(|particle| (edge_index, particle.pdg_code))
+                    .ok_or_else(|| {
+                        eyre!(
+                            "Initial-state cut edge {edge_index:?} in graph {} has no particle specifier",
+                            self.graph.name
+                        )
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        incoming_pdgs.sort_by_key(|(edge_index, _)| edge_index.0);
+        new_event
+            .cut_info
+            .particle_pdgs
+            .0
+            .extend(incoming_pdgs.into_iter().map(|(_, pdg)| pdg));
 
-    //     //let tt = self.graph.loop_momentum_basis.ext_edges.sort_by(|(ext_id_a, _),(ext_id_b, _)| );
-    //     // for (_, ext_edge_id) in self.graph.loop_momentum_basis.ext_edges.sort_by(|(ext_id_a, _),(ext_id_b, _)| -> ext_id_a.cmp(ext_id_b)) {
-    //     // }
-    //     // new_event.particle_pdgs.0
-    //     for (p, eid, d) in self.graph.iter_edges_of(&cut.left) {
-    //         let HedgePair::Split {
-    //             source: _,
-    //             sink: _,
-    //             split,
-    //         } = p
-    //         else {
-    //             panic!("Non-split edge in cut");
-    //         };
+        let initial_state_cut_edges = self.graph.get_edges_in_initial_state_cut();
 
-    //         let mut edge_spatial_momentum = self.graph.loop_momentum_basis.edge_signatures[eid]
-    //             .compute_three_momentum_from_four(
-    //                 rescaled_momenta.loop_moms(),
-    //                 momentum_sample.external_moms(),
-    //             );
+        for (p, eid, d) in self.graph.iter_edges_of(&cut.cut) {
+            if initial_state_cut_edges.contains(&eid) {
+                continue;
+            }
 
-    //         let cut_pdg = match split {
-    //             Flow::Source => {
-    //                 //o--> - - o
-    //                 d.pdg()
-    //             }
-    //             Flow::Sink => {
-    //                 //o - - >--o
-    //                 edge_spatial_momentum = -edge_spatial_momentum;
-    //                 model
-    //                     .get_particle_from_pdg(d.pdg())
-    //                     .get_anti_particle(&model)
-    //                     .pdg_code
-    //             }
-    //         };
+            let cut_flow = match p {
+                HedgePair::Split {
+                    source: _,
+                    sink: _,
+                    split,
+                } => split,
+                HedgePair::Unpaired { hedge: _, flow } => flow,
+                HedgePair::Paired { .. } => {
+                    return Err(eyre!(
+                        "Found paired edge {eid:?} while building an event for cut {:?} in graph {}",
+                        cut.cut,
+                        self.graph.name
+                    ));
+                }
+            };
 
-    //         let mass_value = if let Some(mass) = d.data.mass.value(model, &self.param_builder) {
-    //             if !mass.im.is_fully_zero() {
-    //                 panic!("Cut particles should have real-values masses ({})", d.pdg());
-    //             }
-    //             Some(mass.re)
-    //         } else {
-    //             None
-    //         };
+            let mut edge_spatial_momentum = self.graph.loop_momentum_basis.edge_signatures[eid]
+                .compute_three_momentum_from_four(
+                    rescaled_momenta.loop_moms(),
+                    momentum_sample.external_moms(),
+                );
 
-    //         let cut_four_momentum = edge_spatial_momentum.into_on_shell_four_momentum(mass_value);
+            let edge_pdg = d.data.particle().map(|p| p.pdg_code).ok_or_else(|| {
+                eyre!("Cut legs in Local Unitarity must have a particle specifier.")
+            })?;
 
-    //         new_event.kinematic_configuration.1.push(cut_four_momentum);
-    //         new_event.particle_pdgs.1.push(cut_pdg)
-    //     }
+            let cut_pdg = match cut_flow {
+                Flow::Source => edge_pdg,
+                Flow::Sink => {
+                    edge_spatial_momentum = -edge_spatial_momentum;
+                    model
+                        .get_particle_from_pdg(edge_pdg)
+                        .get_anti_particle(model)
+                        .pdg_code
+                }
+            };
 
-    //     Event::<T>::default()
-    // }
+            let mass_value = if let Some(mass) = d.data.mass.value(model, &self.param_builder) {
+                if !mass.im.is_zero() {
+                    return Err(eyre!(
+                        "Cut particles should have real-valued masses ({})",
+                        edge_pdg
+                    ));
+                }
+                Some(mass.re)
+            } else {
+                None
+            };
+
+            let cut_four_momentum = edge_spatial_momentum.into_on_shell_four_momentum(mass_value);
+
+            new_event.kinematic_configuration.1.push(cut_four_momentum);
+            new_event.cut_info.particle_pdgs.1.push(cut_pdg);
+        }
+
+        Ok(new_event)
+    }
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
@@ -595,11 +666,12 @@ impl GraphTerm for CrossSectionGraphTerm {
         momentum_sample: &MomentumSample<T>,
         model: &Model,
         settings: &RuntimeSettings,
+        mut event_processing_runtime: Option<&mut EventProcessingRuntime>,
         _rotation: &Rotation,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Result<Complex<F<T>>> {
+    ) -> Result<GraphEvaluationResult<T>> {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter, &self.orientations);
 
@@ -616,6 +688,8 @@ impl GraphTerm for CrossSectionGraphTerm {
         let hel = settings.kinematics.externals.get_helicities();
         let mut cut_results = TiVec::<CutId, Complex<F<T>>>::new();
         let mut cut_threshold_counterterms = TiVec::<CutId, Complex<F<T>>>::new();
+        let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
+        let mut accepted_event_group = GenericEventGroup::default();
 
         let momentum_sample = if let Some((channel_id, _alpha)) = &channel_id {
             MomentumSample {
@@ -670,6 +744,50 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             debug!("solution: {:?}", solution);
 
+            let mut event_timing = Duration::ZERO;
+            let event = if settings.should_generate_events() {
+                let start = Instant::now();
+                let generated = self.generate_event_for_cut::<T>(
+                    &model,
+                    &solution,
+                    &momentum_sample,
+                    self.raised_data.raised_cut_groups[raised_cut].cuts[0],
+                    &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
+                )?;
+                event_timing += start.elapsed();
+                Some(generated)
+            } else {
+                None
+            };
+
+            let mut accepted_event = event;
+            let mut selectors_pass = true;
+            if let Some(evt) = accepted_event.as_mut() {
+                differential_result.generated_event_count += 1;
+                let start = Instant::now();
+                if let Some(runtime) = event_processing_runtime.as_deref_mut() {
+                    if runtime.has_selectors() || runtime.has_observables() {
+                        selectors_pass = runtime.process_event(evt);
+                    }
+                }
+                event_timing += start.elapsed();
+                if !selectors_pass {
+                    accepted_event = None;
+                }
+            }
+            differential_result.event_processing_time += event_timing;
+
+            if !selectors_pass {
+                let zero = Complex::new_re(momentum_sample.zero());
+                for _ in 1..=max_occurance {
+                    cut_threshold_counterterms.push(zero.clone());
+                    cut_results.push(zero.clone());
+                }
+                continue;
+            }
+
+            let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
+            let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
             for num_esurfaces in 1..=max_occurance {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
@@ -833,12 +951,42 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 debug!("pass_two_result: {:+16e}", pass_two_result);
 
-                cut_threshold_counterterms.push(ct_result);
+                cut_threshold_counterterms.push(ct_result.clone());
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                cut_results.push(
-                    pass_two_result * prefactor, //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
-                );
+                let bare_contribution = pass_two_result * prefactor; //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
+                bare_cut_total += bare_contribution.clone();
+                threshold_counterterm_weights.push(ct_result);
+                cut_results.push(bare_contribution);
+            }
+
+            if let Some(mut event) = accepted_event {
+                let threshold_counterterm_total = threshold_counterterm_weights
+                    .iter()
+                    .fold(Complex::new_re(momentum_sample.zero()), |acc, value| {
+                        acc + value.clone()
+                    });
+                event.weight = bare_cut_total.clone() + threshold_counterterm_total;
+
+                if settings.general.store_additional_weights_in_event {
+                    event
+                        .additional_weights
+                        .weights
+                        .insert(AdditionalWeightKey::Original, bare_cut_total);
+                    for (subset_index, threshold_counterterm) in
+                        threshold_counterterm_weights.into_iter().enumerate()
+                    {
+                        event.additional_weights.weights.insert(
+                            AdditionalWeightKey::ThresholdCounterterm { subset_index },
+                            threshold_counterterm,
+                        );
+                    }
+                }
+
+                differential_result.accepted_event_count += 1;
+                if settings.should_buffer_generated_events() {
+                    accepted_event_group.push(event);
+                }
             }
         }
 
@@ -896,7 +1044,24 @@ impl GraphTerm for CrossSectionGraphTerm {
             }
         };
 
-        let final_result = all_cut_result * flux_factor;
+        let final_result = all_cut_result * flux_factor.clone();
+
+        if settings.should_buffer_generated_events() {
+            let flux_factor = Complex::new_re(flux_factor);
+            for event in accepted_event_group.iter_mut() {
+                event.weight *= flux_factor.clone();
+                if !event.additional_weights.weights.is_empty() {
+                    event.additional_weights.weights.insert(
+                        AdditionalWeightKey::FullMultiplicativeFactor,
+                        flux_factor.clone(),
+                    );
+                }
+            }
+
+            if !accepted_event_group.is_empty() {
+                differential_result.event_groups.push(accepted_event_group);
+            }
+        }
 
         debug!(
             "{}",
@@ -907,7 +1072,8 @@ impl GraphTerm for CrossSectionGraphTerm {
             .red()
         );
 
-        Ok(final_result)
+        differential_result.integrand_result = final_result;
+        Ok(differential_result)
     }
     fn name(&self) -> String {
         self.graph.name.clone()

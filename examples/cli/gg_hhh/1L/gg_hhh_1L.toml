@@ -41,7 +41,7 @@ generate = 10
 compile = 10
 integrate = 10
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "generate"
 commands = [
   "import model sm-default.json",
@@ -65,7 +65,7 @@ commands = [
   "save state -o",
 ]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "integrate_euclidean"
 commands = [
   "set model MT=1000.0",
@@ -94,11 +94,12 @@ commands = [
   # Target for "euclidean" point confirmed with MadLoop
   """integrate --process gg_hhh -i 1L --n-cores 10
         --target 6.56089133881216768e-4 -4.17078968913725420e-6
+        --no-show-max-weights
         --restart
     """,
 ]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "integrate_physical"
 commands = [
   "set process -p gg_hhh -i 1L defaults",
@@ -117,7 +118,6 @@ commands = [
   """integrate --process gg_hhh -i 1L --n-cores 10
         --target 1.89203604685291554e-6 -5.46603099163412881e-6
         --workspace-path ./GL_OUTPUT/gg_hhh/1L/state/integration_workspace
-        --result-path ./GL_OUTPUT/gg_hhh/1L/state/integration_workspace/result.txt
         --restart
     """,
 ]

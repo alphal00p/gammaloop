@@ -6,6 +6,7 @@ use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
 use gammalooprs::processes::ProcessCollection;
 
 use gammaloop_integration_tests::{get_test_cli, get_tests_workspace_path};
+use serial_test::serial;
 use symbolica::{
     atom::{Atom, AtomCore},
     printer::CanonicalOrderingSettings,
@@ -110,6 +111,26 @@ fn simple_epem_ddx_generation() -> Result<()> {
     cli.run_command("generate amp e+ e- > d d~")?;
 
     Ok(())
+}
+
+#[test]
+#[serial]
+fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalars_load.toml".into()),
+        get_tests_workspace_path().join("scalar_lu_generation_with_e2e_hack"),
+        Some("scalar_lu_generation_with_e2e_hack".to_string()),
+        true,
+    )?;
+
+    let result = (|| -> Result<()> {
+        cli.run_command("set model mass_scalar_2=0.1")?;
+        cli.run_command("generate xs scalar_1 > scalar_2 scalar_2 --only-diagrams")?;
+        cli.run_command("generate")?;
+        Ok(())
+    })();
+
+    result
 }
 
 #[test]

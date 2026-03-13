@@ -13,7 +13,6 @@ use spenso::structure::slot::{IsAbstractSlot, Slot};
 use spenso::structure::{OrderedStructure, TensorStructure};
 use symbolica::atom::FunctionBuilder;
 use symbolica::atom::{AtomCore, AtomView};
-use symbolica::domains::float::FloatLike;
 use symbolica::domains::rational::Rational;
 use symbolica::symbol;
 use symbolica::{
@@ -102,9 +101,9 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
                         count += 1;
                     } else if let Ok(i) = i64::try_from(i) {
                         if count == 0 {
-                            re = re.from_i64(i);
+                            re = i.into();
                         } else {
-                            im = im.from_i64(i);
+                            im = i.into();
                         }
                         count += 1;
                     }

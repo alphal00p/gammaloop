@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     GammaLoopContext,
     integrands::IntegrandSettings,
-    observables::{ObservableSettings, PhaseSpaceSelectorSettings},
+    observables::{ObservablesSettings, QuantitiesSettings, SelectorsSettings},
     settings::runtime::HFunctionSettings,
     utils::{
         F, FloatLike,
@@ -48,16 +48,20 @@ pub struct RuntimeSettings {
     // Runtime settings
     #[serde(rename = "general", skip_serializing_if = "IsDefault::is_default")]
     pub general: GeneralSettings,
+    #[serde(rename = "model", skip_serializing_if = "IsDefault::is_default")]
+    pub model: RuntimeModelSettings,
     #[serde(rename = "integrand", skip_serializing_if = "IsDefault::is_default")]
     pub hard_coded_integrand: Option<IntegrandSettings>,
     #[serde(rename = "kinematics", skip_serializing_if = "IsDefault::is_default")]
     pub kinematics: KinematicsSettings,
     #[serde(rename = "integrator", skip_serializing_if = "IsDefault::is_default")]
     pub integrator: IntegratorSettings,
+    #[serde(rename = "quantities", skip_serializing_if = "IsDefault::is_default")]
+    pub quantities: QuantitiesSettings,
     #[serde(rename = "observables", skip_serializing_if = "IsDefault::is_default")]
-    pub observables: Vec<ObservableSettings>,
+    pub observables: ObservablesSettings,
     #[serde(rename = "selectors", skip_serializing_if = "IsDefault::is_default")]
-    pub selectors: Vec<PhaseSpaceSelectorSettings>,
+    pub selectors: SelectorsSettings,
     #[serde(rename = "stability")]
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub stability: StabilitySettings,
@@ -76,6 +80,18 @@ impl RuntimeSettings {
             .iter()
             .map(|a| F(T::from_f64(*a)))
             .collect()
+    }
+
+    pub(crate) fn should_generate_events(&self) -> bool {
+        self.general.generate_events || !self.selectors.is_empty()
+    }
+
+    pub(crate) fn should_buffer_generated_events(&self) -> bool {
+        self.general.generate_events || (!self.selectors.is_empty() && !self.observables.is_empty())
+    }
+
+    pub(crate) fn should_return_generated_events(&self) -> bool {
+        self.general.generate_events
     }
 }
 
@@ -109,8 +125,8 @@ impl Default for GlobalSettings {
 
 pub mod global;
 pub use runtime::{
-    GeneralSettings, IntegratorSettings, SamplingSettings, StabilitySettings, SubtractionSettings,
-    kinematic::KinematicsSettings,
+    GeneralSettings, IntegratorSettings, ObservablesOutputSettings, RuntimeModelSettings,
+    SamplingSettings, StabilitySettings, SubtractionSettings, kinematic::KinematicsSettings,
 };
 pub mod runtime;
 
@@ -197,6 +213,28 @@ mod tests {
     }
 
     #[test]
+    fn runtime_model_settings_serialize_deserialize() {
+        use crate::settings::runtime::RuntimeModelSettings;
+        generic_test_settings::<RuntimeModelSettings>();
+    }
+
+    #[test]
+    fn runtime_settings_serializes_model_overrides_under_model_block() {
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(2.0), F(0.0)));
+
+        let serialized = toml::to_string_pretty(&settings).unwrap();
+        assert!(serialized.contains("[model]"));
+        assert!(serialized.contains("mass_scalar_2 = [2.0, 0.0]"));
+
+        let deserialized: RuntimeSettings = toml::from_str(&serialized).unwrap();
+        assert_eq!(settings, deserialized);
+    }
+
+    #[test]
     fn subtraction_settings_test_serialize_deserialize() {
         use crate::settings::runtime::SubtractionSettings;
         generic_test_settings::<SubtractionSettings>();
@@ -209,9 +247,68 @@ mod tests {
     }
 
     #[test]
+    fn runtime_event_generation_policy() {
+        let mut settings = RuntimeSettings::default();
+        assert!(!settings.should_generate_events());
+        assert!(!settings.should_buffer_generated_events());
+        assert!(!settings.should_return_generated_events());
+
+        settings.selectors.insert(
+            "selector".to_string(),
+            crate::observables::SelectorSettings {
+                quantity: "pt".to_string(),
+                entry_selection: crate::observables::EntrySelection::All,
+                entry_index: 0,
+                selector: crate::observables::SelectorDefinitionSettings::CountRange(
+                    crate::observables::CountRangeSelectorSettings {
+                        min_count: 1,
+                        max_count: None,
+                    },
+                ),
+            },
+        );
+        assert!(settings.should_generate_events());
+        assert!(!settings.should_buffer_generated_events());
+        assert!(!settings.should_return_generated_events());
+
+        settings.observables.insert(
+            "observable".to_string(),
+            crate::observables::ObservableSettings {
+                quantity: "pt".to_string(),
+                entry_selection: crate::observables::EntrySelection::All,
+                entry_index: 0,
+                value_transform: crate::observables::ObservableValueTransform::Identity,
+                phase: crate::observables::ObservablePhase::Real,
+                misbinning_max_normalized_distance: None,
+                histogram: crate::observables::HistogramSettings {
+                    x_min: 0.0,
+                    x_max: 1.0,
+                    n_bins: 1,
+                    log_x_axis: false,
+                    log_y_axis: true,
+                },
+            },
+        );
+        assert!(settings.should_generate_events());
+        assert!(settings.should_buffer_generated_events());
+        assert!(!settings.should_return_generated_events());
+
+        settings.general.generate_events = true;
+        assert!(settings.should_generate_events());
+        assert!(settings.should_buffer_generated_events());
+        assert!(settings.should_return_generated_events());
+    }
+
+    #[test]
     fn test_integrator_settings_serialize_deserialize() {
         use crate::settings::runtime::IntegratorSettings;
         generic_test_settings::<IntegratorSettings>();
+    }
+
+    #[test]
+    fn test_observables_output_settings_serialize_deserialize() {
+        use crate::settings::runtime::ObservablesOutputSettings;
+        generic_test_settings::<ObservablesOutputSettings>();
     }
 
     #[test]

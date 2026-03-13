@@ -5,7 +5,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    domains::float::{FloatLike as SymFloatLike, Real, RealLike},
+    domains::float::{Real, RealLike},
     evaluate::OptimizationSettings,
 };
 use tracing::debug;
@@ -63,8 +63,10 @@ impl LUCounterTermEvaluators {
             .left_atoms
             .iter()
             .map(|atom| {
+                let mut evaluator_atom = atom.clone();
+
                 GenericEvaluator::new_from_builder(
-                    [atom.clone()],
+                    [evaluator_atom],
                     param_builder,
                     None,
                     OptimizationSettings::default(),
@@ -78,8 +80,10 @@ impl LUCounterTermEvaluators {
             .right_atoms
             .iter()
             .map(|atom| {
+                let mut evaluator_atom = atom.clone();
+
                 GenericEvaluator::new_from_builder(
-                    [atom.clone()],
+                    [evaluator_atom],
                     param_builder,
                     None,
                     OptimizationSettings::default(),
@@ -90,8 +94,10 @@ impl LUCounterTermEvaluators {
             .collect();
 
         let parametric_iterated_evaluator = counterterm_data.iterated.map_ref(|atom| {
+            let mut evaluator_atom = atom.clone();
+
             GenericEvaluator::new_from_builder(
-                [atom.clone()],
+                [evaluator_atom],
                 param_builder,
                 None,
                 OptimizationSettings::default(),
@@ -110,8 +116,14 @@ impl LUCounterTermEvaluators {
                     .left_atoms
                     .iter()
                     .map(|atom| {
+                        let evaluator_atoms = orientations.iter().map(|or| {
+                            let mut evaluator_atom = or.select(atom);
+
+                            evaluator_atom
+                        });
+
                         GenericEvaluator::new_from_builder(
-                            orientations.iter().map(|or| or.select(atom)),
+                            evaluator_atoms,
                             param_builder,
                             None,
                             OptimizationSettings::default(),
@@ -135,8 +147,14 @@ impl LUCounterTermEvaluators {
                     .right_atoms
                     .iter()
                     .map(|atom| {
+                        let evaluator_atoms = orientations.iter().map(|or| {
+                            let mut evaluator_atom = or.select(atom);
+
+                            evaluator_atom
+                        });
+
                         GenericEvaluator::new_from_builder(
-                            orientations.iter().map(|or| or.select(atom)),
+                            evaluator_atoms,
                             param_builder,
                             None,
                             OptimizationSettings::default(),
@@ -156,8 +174,14 @@ impl LUCounterTermEvaluators {
             .iterative_orientation_optimization
         {
             Some(counterterm_data.iterated.map_ref(|atom| {
+                let evaluator_atoms = orientations.iter().map(|or| {
+                    let mut evaluator_atom = or.select(atom);
+
+                    evaluator_atom
+                });
+
                 GenericEvaluator::new_from_builder(
-                    orientations.iter().map(|or| or.select(atom)),
+                    evaluator_atoms,
                     param_builder,
                     None,
                     OptimizationSettings::default(),

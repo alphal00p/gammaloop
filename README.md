@@ -58,6 +58,8 @@ Requirements:
 - `just` (a lightweight make-like command runner; install with `cargo install just`)
 - a recent GNU toolchain
 - Python `3.11+` only if you also want the Python bindings
+- FORM `v4.2.1+` (only used for analytical integration of integrated UV counterterms)
+- Python module [ufo-model-loader](https://pypi.org/project/ufo-model-loader/) if you want gammaloop to be able to import UFO models
 
 Additional requirements for rendering diagrams:
 
@@ -71,8 +73,7 @@ If local dependency management is inconvenient, you can instead use the provided
 ```bash
 nix develop
 ```
-
-and then run the usual build commands from within that development shell.
+which will bring you to an environment with all dependencies available.
 
 Common build commands:
 
@@ -92,28 +93,15 @@ Notes:
 
 ## Shell completion
 
-The CLI can emit static shell-completion scripts from its Clap command definition:
-
-```bash
-./gammaloop --completions bash
-./gammaloop --completions fish
-./gammaloop --completions nushell
-```
-
-For an interactive session, the simplest way to load them is:
+The CLI can emit static shell-completion scripts from its Clap command definition that can be loaded into your shell as follows:
 
 ```bash
 # bash
 source <(./gammaloop --completions bash)
-
 # zsh
 source <(./gammaloop --completions zsh)
-
 # fish
 ./gammaloop --completions fish | source
-```
-
-```nu
 # nushell
 ./gammaloop --completions nushell | save --force /tmp/gammaloop-completions.nu
 source /tmp/gammaloop-completions.nu
@@ -156,7 +144,7 @@ The CLI remains the primary interface, but the same state-loading entry point is
 
 Once a state is loaded, there are dedicated API methods available for some tasks. The generic fallback is to run the same command strings that the CLI accepts.
 
-Python:
+### Python:
 
 ```python
 from gammaloop import GammaLoopAPI
@@ -178,12 +166,32 @@ just build-api
 
 The Python package source is under `crates/gammaloop-api/python/gammaloop`.
 
-Rust:
+There is also a standalone Python API example that builds a differential LU state
+and calls `evaluate_sample(...)` / `evaluate_samples(...)`:
+
+```bash
+source .venv/bin/activate
+NO_SYMBOLICA_OEM_LICENSE=1 SYMBOLICA_LICENSE=... just build-api
+cd examples/api/python/epem_a_ddxg_xs_LO
+SYMBOLICA_LICENSE=... python inspect_events.py
+```
+
+That example uses:
+- `examples/api/python/epem_a_ddxg_xs_LO/run.toml`
+- `examples/api/python/epem_a_ddxg_xs_LO/inspect_events.py`
+
+and creates its state under:
+
+```text
+examples/api/python/epem_a_ddxg_xs_LO/state
+```
+
+### Rust:
 
 ```rust
 use std::path::PathBuf;
 
-use gammaloop_api::{session::CliSession, state::CommandHistory, StateLoadOption};
+use gammaloop_api::{state::CommandHistory, StateLoadOption};
 
 fn main() -> color_eyre::Result<()> {
     let mut loaded = StateLoadOption {
@@ -194,20 +202,48 @@ fn main() -> color_eyre::Result<()> {
     .load()?;
 
     let command = CommandHistory::from_raw_string("display settings global")?;
-    let mut session = CliSession::new(
-        &mut loaded.state,
-        &mut loaded.run_history,
-        &mut loaded.cli_settings,
-        &mut loaded.default_runtime_settings,
-        &mut loaded.session_state,
-    );
-    let _ = session.execute_top_level(command)?;
+    let mut session = loaded.cli_session();
+    let _ = session.execute_command(command)?;
 
     Ok(())
 }
 ```
 
-In Rust, the API entry point is `StateLoadOption::load()`. After loading, you can either use dedicated command/data structures directly or keep using string commands through `CommandHistory::from_raw_string(...)` and `CliSession::execute_top_level(...)`.
+In Rust, the API entry point is `StateLoadOption::load()`. After loading, you can either start a CLI-style session with `loaded.cli_session()` or use dedicated command/data structures directly on the loaded state.
+
+There is also a standalone Rust API example, designed to run with
+[`rust-script`](https://crates.io/crates/rust-script), that builds the same
+differential LU state and prints the formatted rich result returned by
+`evaluate_sample(...)` / `evaluate_samples(...)`:
+
+```bash
+NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T SYMBOLICA_LICENSE=... \
+rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs
+```
+
+That example uses:
+- `examples/api/rust/epem_a_ddxg_xs_LO/run.toml`
+- `examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
+
+and creates its state under:
+
+```text
+examples/api/rust/epem_a_ddxg_xs_LO/state
+```
+
+Current note on shape and precision:
+
+- `evaluate_sample(...)` returns one sample result plus one observable bundle for
+  that single-sample batch.
+- `evaluate_samples(...)` returns per-sample evaluation results together with one
+  batch-global observable bundle merged over all samples in the batch.
+- the default Rust/Python `evaluate_sample(...)` / `evaluate_samples(...)` API
+  downcasts returned numeric values to `f64`, even when `use_arb_prec=true`.
+- for Rust-only workflows that need to keep the retained precision, use the
+  parallel `evaluate_sample_precise(...)` / `evaluate_samples_precise(...)`
+  helpers from `gammaloop_api::commands::evaluate_samples`; they return
+  precision-tagged results instead of widening the Python API away from its
+  `f64` contract.
 
 ## Examples and tests
 

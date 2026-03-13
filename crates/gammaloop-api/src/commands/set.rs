@@ -1,137 +1,38 @@
-use std::{fs, path::PathBuf, str::FromStr};
+use std::{collections::BTreeMap, fs, path::PathBuf, str::FromStr};
 
 use clap::Subcommand;
-use color_eyre::Result;
+use color_eyre::{Result, Section};
 use eyre::{eyre, Context, Report};
 use figment::{
     providers::{Format, Serialized},
     Figment,
 };
 use gammalooprs::{
-    model::{ParameterNature, ParameterType, UFOSymbol},
+    model::{ParameterNature, UFOSymbol},
     processes::ProcessCollection,
     settings::RuntimeSettings,
     utils::F,
 };
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use spenso::algebra::complex::Complex;
 use tracing::warn;
 
 use crate::{
     commands::generate::ProcessArgs,
+    commands::process_settings::{
+        observable_template, parse_quantity_kind, parse_selector_kind, quantity_template,
+        selector_template,
+    },
     commands::Commands,
+    model_parameters::{
+        external_model_parameter_type, parse_model_parameter_value, validate_model_parameter_type,
+    },
     state::{State, SyncSettings},
     tracing::{clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason},
     CLISettings,
 };
-
-pub(crate) const MODEL_COMPLEX_VALUE_FORMAT_HINT: &str =
-    "expects complex like 1.0, -1.0e13, 1.0+2.0i, or 1.0-2.0j";
-pub(crate) const MODEL_REAL_VALUE_FORMAT_HINT: &str = "expects real like 1.0, -1.0, or 1.0e13";
-
-pub(crate) fn model_value_format_hint(parameter_type: Option<ParameterType>) -> &'static str {
-    match parameter_type {
-        Some(ParameterType::Real) => MODEL_REAL_VALUE_FORMAT_HINT,
-        _ => MODEL_COMPLEX_VALUE_FORMAT_HINT,
-    }
-}
-
-fn parse_model_parameter_value(value: &str) -> Result<Complex<F<f64>>> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(eyre!("Model parameter value cannot be empty"));
-    }
-    if value.starts_with('{') || value.starts_with('[') {
-        return Err(eyre!(
-            "Legacy model-parameter syntax like '{{re:...,im:...}}' or '[re,im]' is deprecated; use {MODEL_COMPLEX_VALUE_FORMAT_HINT}"
-        ));
-    }
-
-    let (re, im) = parse_complex_literal(value)?;
-    Ok(Complex::new(F(re), F(im)))
-}
-
-fn parse_complex_literal(value: &str) -> Result<(f64, f64)> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(eyre!("Complex literal cannot be empty"));
-    }
-
-    if let Some(unit) = value.chars().last() {
-        if matches!(unit, 'i' | 'j' | 'I' | 'J') {
-            let body = &value[..value.len() - unit.len_utf8()];
-            let body = body.trim();
-            if body.is_empty() {
-                return Err(eyre!(
-                    "Missing coefficient before imaginary unit in '{value}'"
-                ));
-            }
-
-            if let Some(index) = find_imaginary_separator(body) {
-                let re = parse_float_literal(&body[..index], value)?;
-                let im = parse_imaginary_literal(&body[index..], value)?;
-                return Ok((re, im));
-            }
-
-            let im = parse_imaginary_literal(body, value)?;
-            return Ok((0.0, im));
-        }
-    }
-
-    Ok((parse_float_literal(value, value)?, 0.0))
-}
-
-fn find_imaginary_separator(value: &str) -> Option<usize> {
-    let bytes = value.as_bytes();
-    for index in (1..bytes.len()).rev() {
-        let current = bytes[index] as char;
-        if !matches!(current, '+' | '-') {
-            continue;
-        }
-        let previous = bytes[index - 1] as char;
-        if matches!(previous, 'e' | 'E') {
-            continue;
-        }
-        return Some(index);
-    }
-    None
-}
-
-fn parse_float_literal(value: &str, full_value: &str) -> Result<f64> {
-    value
-        .trim()
-        .parse::<f64>()
-        .with_context(|| format!("Failed to parse real part of complex literal '{full_value}'"))
-}
-
-fn parse_imaginary_literal(value: &str, full_value: &str) -> Result<f64> {
-    let value = value.trim();
-    if value == "+" {
-        return Ok(1.0);
-    }
-    if value == "-" {
-        return Ok(-1.0);
-    }
-    value.parse::<f64>().with_context(|| {
-        format!("Failed to parse imaginary part of complex literal '{full_value}'")
-    })
-}
-
-fn validate_model_parameter_type(
-    parameter_name: &str,
-    parameter_type: ParameterType,
-    value: &Complex<F<f64>>,
-) -> Result<()> {
-    if parameter_type == ParameterType::Real && value.im.0 != 0.0 {
-        return Err(eyre!(
-            "Model parameter '{parameter_name}' is Real and cannot be assigned an imaginary component; {}",
-            MODEL_REAL_VALUE_FORMAT_HINT
-        ));
-    }
-    Ok(())
-}
 
 impl FromStr for Set {
     type Err = Report;
@@ -165,18 +66,169 @@ pub enum Set {
 
     /// Set Model parameters
     Model {
-        /// Any number of PARAM=COMPLEX pairs
-        #[arg(value_name = "PARAM=COMPLEX", num_args = 1.., value_parser = KvPair::from_str)]
-        pairs: Vec<KvPair>,
+        #[command(flatten)]
+        target: ProcessArgs,
+        /// Any number of PARAM=COMPLEX pairs, or 'defaults' for process-targeted resets
+        #[arg(
+            value_name = "defaults|PARAM=COMPLEX",
+            num_args = 1..,
+            value_parser = ModelSetValue::from_str
+        )]
+        values: Vec<ModelSetValue>,
     },
 
     /// Set settings for a PROCESS
     Process {
         #[command(subcommand)]
-        input: SetArgs,
+        input: ProcessSetArgs,
         #[command(flatten)]
         process: ProcessArgs,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ModelSetValue {
+    Defaults,
+    Assignment(KvPair),
+}
+
+impl FromStr for ModelSetValue {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        if value.trim() == "defaults" {
+            return Ok(Self::Defaults);
+        }
+        KvPair::from_str(value).map(Self::Assignment)
+    }
+}
+
+fn resolve_generated_model_targets(
+    state: &State,
+    target: &ProcessArgs,
+) -> Result<Option<Vec<(usize, String)>>> {
+    match (&target.process, &target.integrand_name) {
+        (None, None) => Ok(None),
+        (None, Some(integrand_name)) => Ok(Some(vec![
+            state.find_generated_integrand_ref_by_name(integrand_name)?
+        ])),
+        (Some(process), None) => {
+            let process_id = state.resolve_process_ref(Some(process))?;
+            let process = &state.process_list.processes[process_id];
+            let generated = match &process.collection {
+                ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                    .iter()
+                    .filter(|(_, amplitude)| amplitude.integrand.is_some())
+                    .map(|(name, _)| (process_id, name.clone()))
+                    .collect::<Vec<_>>(),
+                ProcessCollection::CrossSections(cross_sections) => cross_sections
+                    .iter()
+                    .filter(|(_, cross_section)| cross_section.integrand.is_some())
+                    .map(|(name, _)| (process_id, name.clone()))
+                    .collect::<Vec<_>>(),
+            };
+            if generated.is_empty() {
+                return Err(eyre!(
+                    "Process '{}' has no generated integrands. Per-integrand model parameters are only supported for generated integrands.",
+                    process.definition.folder_name
+                ));
+            }
+            Ok(Some(generated))
+        }
+        (Some(process), Some(integrand_name)) => {
+            let process_id = state.resolve_process_ref(Some(process))?;
+            let canonical_name = state.process_list.processes[process_id]
+                .collection
+                .find_integrand(Some(integrand_name.clone()))?;
+            state
+                .process_list
+                .get_integrand(process_id, &canonical_name)
+                .and_then(|resolved| resolved.require_generated().map(|_| resolved))
+                .with_context(|| {
+                    format!(
+                        "Per-integrand model parameters are only supported for generated integrands"
+                    )
+                })?;
+            Ok(Some(vec![(process_id, canonical_name)]))
+        }
+    }
+}
+
+fn parse_model_assignments(
+    state: &State,
+    values: &[ModelSetValue],
+) -> Result<Option<Vec<(String, Complex<F<f64>>)>>> {
+    if values
+        .iter()
+        .any(|value| matches!(value, ModelSetValue::Defaults))
+    {
+        if values.len() != 1 {
+            return Err(eyre!(
+                "Model parameter updates cannot mix 'defaults' with explicit PARAM=VALUE assignments"
+            ));
+        }
+        return Ok(None);
+    }
+
+    let assignments = values
+        .iter()
+        .map(|value| match value {
+            ModelSetValue::Assignment(KvPair { key, value }) => {
+                let parameter = state
+                    .model
+                    .get_parameter_opt(key)
+                    .filter(|parameter| parameter.nature == ParameterNature::External);
+                if parameter.is_none() {
+                    let possibilities = state
+                        .model_parameters
+                        .keys()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>();
+                    return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
+                        format!(
+                            "Possible model parameters are: {}",
+                            possibilities.join(", ")
+                        )
+                    });
+                }
+                let parameter_type = parameter.unwrap().parameter_type.clone();
+                let value = parse_model_parameter_value(value).with_context(|| {
+                    format!("While parsing model parameter value {value} for key '{key}'")
+                })?;
+                validate_model_parameter_type(key, parameter_type, &value)?;
+                Ok((key.clone(), value))
+            }
+            ModelSetValue::Defaults => unreachable!("defaults handled above"),
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Some(assignments))
+}
+
+fn apply_model_assignments(
+    settings: &mut RuntimeSettings,
+    default_model_parameters: &gammalooprs::model::InputParamCard<F<f64>>,
+    assignments: &[(String, Complex<F<f64>>)],
+) -> Result<()> {
+    for (parameter_name, value) in assignments {
+        let symbol = UFOSymbol::from(parameter_name.as_str());
+        let default_value = default_model_parameters.get(&symbol).ok_or_else(|| {
+            eyre!(
+                "Model parameter '{parameter_name}' cannot be overridden because it is not present in the shared top-level model_parameters.json"
+            )
+        })?;
+
+        if default_value == value {
+            settings.model.external_parameters.remove(parameter_name);
+        } else {
+            settings
+                .model
+                .external_parameters
+                .insert(parameter_name.clone(), (value.re, value.im));
+        }
+    }
+
+    Ok(())
 }
 
 impl Set {
@@ -186,52 +238,65 @@ impl Set {
         global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<()> {
+        let runtime_model_validation = RuntimeModelValidationContext::from_state(state);
         match self {
-            Set::Model { pairs } => {
-                for KvPair { key, value } in pairs.iter() {
-                    let parameter = state
-                        .model
-                        .get_parameter_opt(key)
-                        .filter(|parameter| parameter.nature == ParameterNature::External);
-                    if parameter.is_none() {
-                        let possiblilities: Vec<String> = state
+            Set::Model { target, values } => {
+                let targets = resolve_generated_model_targets(state, target)?;
+                let assignments = parse_model_assignments(state, values)?;
+
+                if let Some(targets) = targets {
+                    let default_model_parameters = state.model_parameters.clone();
+                    if let Some(assignments) = assignments.as_ref() {
+                        for (process_id, integrand_name) in targets {
+                            let settings = state
+                                .process_list
+                                .get_integrand_mut(process_id, &integrand_name)?
+                                .get_mut_settings();
+                            apply_model_assignments(
+                                settings,
+                                &default_model_parameters,
+                                assignments,
+                            )?;
+                        }
+                    } else {
+                        for (process_id, integrand_name) in targets {
+                            let settings = state
+                                .process_list
+                                .get_integrand_mut(process_id, &integrand_name)?
+                                .get_mut_settings();
+                            settings.model = default_runtime_settings.model.clone();
+                        }
+                    }
+                } else {
+                    let Some(assignments) = assignments else {
+                        return Err(eyre!(
+                            "The 'defaults' shortcut for set model requires a process or integrand target"
+                        ));
+                    };
+
+                    for (parameter_name, value) in assignments {
+                        if let Some(parameter) = state
+                            .model_parameters
+                            .get_mut(&UFOSymbol::from(parameter_name.as_str()))
+                        {
+                            *parameter = value;
+                            continue;
+                        }
+                        let possibilities = state
                             .model_parameters
                             .keys()
                             .map(|s| s.to_string())
-                            .collect();
-                        return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
-                            format!(
-                                "Possible model parameters are: {}",
-                                possiblilities.join(", ")
-                            )
-                        });
+                            .collect::<Vec<_>>();
+                        return Err(eyre!("No model parameter named '{parameter_name}'"))
+                            .with_context(|| {
+                                format!(
+                                    "Possible model parameters are: {}",
+                                    possibilities.join(", ")
+                                )
+                            });
                     }
-                    let parameter_type = parameter.unwrap().parameter_type.clone();
-                    let value = parse_model_parameter_value(value).with_context(|| {
-                        format!("While parsing model parameter value {value} for key '{key}'")
-                    })?;
-                    validate_model_parameter_type(key, parameter_type, &value)?;
-
-                    if let Some(p) = state
-                        .model_parameters
-                        .get_mut(&UFOSymbol::from(key.as_str()))
-                    {
-                        *p = value;
-                        continue;
-                    }
-                    let possiblilities: Vec<String> = state
-                        .model_parameters
-                        .keys()
-                        .map(|s| s.to_string())
-                        .collect();
-                    return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
-                        format!(
-                            "Possible model parameters are: {}",
-                            possiblilities.join(", ")
-                        )
-                    });
+                    state.model_parameters.apply_to_model(&mut state.model)?;
                 }
-                state.model_parameters.apply_to_model(&mut state.model)?;
             }
             Set::BaseDir { path } => {
                 warn!(
@@ -263,22 +328,19 @@ impl Set {
                 global_settings.sync_settings()?;
             }
             Self::DefaultRuntime { input } => {
-                let fig = Figment::from(Serialized::defaults(&default_runtime_settings));
-
-                *default_runtime_settings = input.merge_figment(fig)?.extract()?;
+                let merged = merge_runtime_settings_input(default_runtime_settings, input)?;
+                runtime_model_validation.validate(&merged)?;
+                *default_runtime_settings = merged;
             }
             Self::Process { input, process } => {
                 let process_id = state.resolve_process_ref(process.process.as_ref())?;
-                let default_runtime_template =
-                    matches!(input, SetArgs::Defaults).then(|| default_runtime_settings.clone());
                 let apply_runtime_settings = |settings: &mut RuntimeSettings| -> Result<()> {
-                    if let Some(template) = default_runtime_template.as_ref() {
-                        *settings = template.clone();
-                    } else {
-                        let fig = Figment::from(Serialized::defaults(&settings));
-                        *settings = input.merge_figment(fig)?.extract()?;
-                    }
-                    Ok(())
+                    apply_process_set_args(
+                        input,
+                        settings,
+                        default_runtime_settings,
+                        Some(&runtime_model_validation),
+                    )
                 };
 
                 if let Some(name) = &process.integrand_name {
@@ -340,6 +402,101 @@ pub enum SetArgs {
 
     /// Use the stored settings file
     Stored,
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessSetArgs {
+    /// Load from a settings file
+    File {
+        #[arg(value_hint = clap::ValueHint::FilePath)]
+        file: PathBuf,
+    },
+
+    /// Load settings from TOML content passed as a CLI string
+    String {
+        #[arg(value_name = "TOML")]
+        string: String,
+    },
+
+    /// Set one or more dotted key-paths
+    Kv {
+        /// Any number of KEY=VALUE pairs
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+
+    /// Sync process runtime settings from the current default runtime settings
+    Defaults,
+
+    /// Use the stored settings file
+    Stored,
+
+    /// Add a named quantity/observable/selector
+    Add {
+        #[command(subcommand)]
+        target: ProcessAddTarget,
+    },
+
+    /// Update a named quantity/observable/selector
+    Update {
+        #[command(subcommand)]
+        target: ProcessUpdateTarget,
+    },
+
+    /// Remove a named quantity/observable/selector
+    Remove {
+        #[command(subcommand)]
+        target: ProcessRemoveTarget,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessAddTarget {
+    Quantity {
+        name: String,
+        #[arg(value_parser = parse_quantity_kind)]
+        kind: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Observable {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Selector {
+        name: String,
+        #[arg(value_parser = parse_selector_kind)]
+        kind: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessUpdateTarget {
+    Quantity {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Observable {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Selector {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessRemoveTarget {
+    Quantity { name: String },
+    Observable { name: String },
+    Selector { name: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -450,6 +607,169 @@ impl SetArgs {
     }
 }
 
+impl ProcessSetArgs {
+    fn as_set_args(&self) -> Option<SetArgs> {
+        match self {
+            ProcessSetArgs::File { file } => Some(SetArgs::File { file: file.clone() }),
+            ProcessSetArgs::String { string } => Some(SetArgs::String {
+                string: string.clone(),
+            }),
+            ProcessSetArgs::Kv { pairs } => Some(SetArgs::Kv {
+                pairs: pairs.clone(),
+            }),
+            ProcessSetArgs::Defaults => Some(SetArgs::Defaults),
+            ProcessSetArgs::Stored => Some(SetArgs::Stored),
+            ProcessSetArgs::Add { .. }
+            | ProcessSetArgs::Update { .. }
+            | ProcessSetArgs::Remove { .. } => None,
+        }
+    }
+}
+
+fn apply_process_set_args(
+    input: &ProcessSetArgs,
+    settings: &mut RuntimeSettings,
+    default_runtime_settings: &RuntimeSettings,
+    validation_context: Option<&RuntimeModelValidationContext>,
+) -> Result<()> {
+    match input {
+        ProcessSetArgs::Add { target } => apply_process_add_target(settings, target),
+        ProcessSetArgs::Update { target } => apply_process_update_target(settings, target),
+        ProcessSetArgs::Remove { target } => apply_process_remove_target(settings, target),
+        ProcessSetArgs::Defaults => {
+            *settings = default_runtime_settings.clone();
+            Ok(())
+        }
+        _ => {
+            let input = input
+                .as_set_args()
+                .expect("non-mutation process set args should convert to SetArgs");
+            *settings = merge_runtime_settings_input(settings, &input)?;
+            if let Some(validation_context) = validation_context {
+                validation_context.validate(settings)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn apply_process_add_target(
+    settings: &mut RuntimeSettings,
+    target: &ProcessAddTarget,
+) -> Result<()> {
+    match target {
+        ProcessAddTarget::Quantity { name, kind, pairs } => {
+            let entry = merge_named_settings(
+                &quantity_template(kind).ok_or_else(|| eyre!("Unknown quantity kind '{kind}'"))?,
+                pairs,
+                &format!("new quantity '{name}'"),
+            )?;
+            add_named_map_entry(&mut settings.quantities, name, entry, "quantity")
+        }
+        ProcessAddTarget::Observable { name, pairs } => {
+            let entry = merge_named_settings(
+                &observable_template(),
+                pairs,
+                &format!("new observable '{name}'"),
+            )?;
+            add_named_map_entry(&mut settings.observables, name, entry, "observable")
+        }
+        ProcessAddTarget::Selector { name, kind, pairs } => {
+            let entry = merge_named_settings(
+                &selector_template(kind).ok_or_else(|| eyre!("Unknown selector kind '{kind}'"))?,
+                pairs,
+                &format!("new selector '{name}'"),
+            )?;
+            add_named_map_entry(&mut settings.selectors, name, entry, "selector")
+        }
+    }
+}
+
+fn apply_process_update_target(
+    settings: &mut RuntimeSettings,
+    target: &ProcessUpdateTarget,
+) -> Result<()> {
+    match target {
+        ProcessUpdateTarget::Quantity { name, pairs } => {
+            update_named_map_entry(&mut settings.quantities, name, pairs, "quantity")
+        }
+        ProcessUpdateTarget::Observable { name, pairs } => {
+            update_named_map_entry(&mut settings.observables, name, pairs, "observable")
+        }
+        ProcessUpdateTarget::Selector { name, pairs } => {
+            update_named_map_entry(&mut settings.selectors, name, pairs, "selector")
+        }
+    }
+}
+
+fn apply_process_remove_target(
+    settings: &mut RuntimeSettings,
+    target: &ProcessRemoveTarget,
+) -> Result<()> {
+    match target {
+        ProcessRemoveTarget::Quantity { name } => {
+            remove_named_map_entry(&mut settings.quantities, name, "quantity")
+        }
+        ProcessRemoveTarget::Observable { name } => {
+            remove_named_map_entry(&mut settings.observables, name, "observable")
+        }
+        ProcessRemoveTarget::Selector { name } => {
+            remove_named_map_entry(&mut settings.selectors, name, "selector")
+        }
+    }
+}
+
+fn merge_named_settings<T>(base: &T, pairs: &[KvPair], label: &str) -> Result<T>
+where
+    T: Serialize + DeserializeOwned,
+{
+    let fig = Figment::from(Serialized::defaults(base));
+    SetArgs::Kv {
+        pairs: pairs.to_vec(),
+    }
+    .merge_figment(fig)?
+    .extract()
+    .with_context(|| format!("While building {label}"))
+}
+
+fn add_named_map_entry<T>(
+    map: &mut BTreeMap<String, T>,
+    name: &str,
+    entry: T,
+    label: &str,
+) -> Result<()> {
+    if map.contains_key(name) {
+        return Err(eyre!("A {label} named '{name}' already exists"));
+    }
+    map.insert(name.to_string(), entry);
+    Ok(())
+}
+
+fn update_named_map_entry<T>(
+    map: &mut BTreeMap<String, T>,
+    name: &str,
+    pairs: &[KvPair],
+    label: &str,
+) -> Result<()>
+where
+    T: Clone + Serialize + DeserializeOwned,
+{
+    let current = map
+        .get(name)
+        .cloned()
+        .ok_or_else(|| eyre!("No {label} named '{name}'"))?;
+    let updated = merge_named_settings(&current, pairs, &format!("{label} '{name}'"))?;
+    map.insert(name.to_string(), updated);
+    Ok(())
+}
+
+fn remove_named_map_entry<T>(map: &mut BTreeMap<String, T>, name: &str, label: &str) -> Result<()> {
+    if map.remove(name).is_none() {
+        return Err(eyre!("No {label} named '{name}'"));
+    }
+    Ok(())
+}
+
 use serde_json::Value as J;
 use serde_yaml::Value as Y;
 
@@ -486,6 +806,245 @@ fn infer_cli_value(raw: &str) -> Result<J> {
     Ok(J::String(raw.to_string()))
 }
 
+fn json_number_to_f64(value: &serde_json::Number) -> Result<f64> {
+    value
+        .as_f64()
+        .ok_or_else(|| eyre!("Could not represent JSON number '{value}' as f64"))
+}
+
+fn parse_runtime_model_setting_value(value: &J) -> Result<(F<f64>, F<f64>)> {
+    match value {
+        J::Number(number) => Ok((F(json_number_to_f64(number)?), F(0.0))),
+        J::String(string) => {
+            let parsed = parse_model_parameter_value(string)?;
+            Ok((parsed.re, parsed.im))
+        }
+        J::Array(entries) if entries.len() == 2 => {
+            let parse_component = |entry: &J| -> Result<F<f64>> {
+                match entry {
+                    J::Number(number) => Ok(F(json_number_to_f64(number)?)),
+                    other => Err(eyre!(
+                        "Runtime model setting components must be numeric, found {other:?}"
+                    )),
+                }
+            };
+            Ok((parse_component(&entries[0])?, parse_component(&entries[1])?))
+        }
+        other => Err(eyre!(
+            "Runtime model settings must be specified as a number, a complex string, or a two-element numeric array, found {other:?}"
+        )),
+    }
+}
+
+fn extract_runtime_model_updates_from_json(
+    value: &mut J,
+) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
+    let Some(object) = value.as_object_mut() else {
+        return Ok(BTreeMap::new());
+    };
+
+    let Some(model_value) = object.remove("model") else {
+        return Ok(BTreeMap::new());
+    };
+
+    let J::Object(model_object) = model_value else {
+        return Err(eyre!(
+            "The runtime settings 'model' block must be a table/object"
+        ));
+    };
+
+    model_object
+        .into_iter()
+        .map(|(parameter_name, value)| {
+            parse_runtime_model_setting_value(&value)
+                .map(|parsed| (parameter_name.clone(), parsed))
+                .with_context(|| format!("While parsing runtime model setting '{parameter_name}'"))
+        })
+        .collect()
+}
+
+fn extract_runtime_model_updates_from_toml(
+    value: &mut toml::Value,
+) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
+    let Some(table) = value.as_table_mut() else {
+        return Ok(BTreeMap::new());
+    };
+
+    let Some(model_value) = table.remove("model") else {
+        return Ok(BTreeMap::new());
+    };
+
+    let mut model_json = serde_json::json!({ "model": serde_json::to_value(model_value)? });
+    extract_runtime_model_updates_from_json(&mut model_json)
+}
+
+#[derive(Clone)]
+struct RuntimeModelValidationContext {
+    model: gammalooprs::model::Model,
+    model_parameters: gammalooprs::model::InputParamCard<F<f64>>,
+}
+
+impl RuntimeModelValidationContext {
+    fn from_state(state: &State) -> Self {
+        Self {
+            model: state.model.clone(),
+            model_parameters: state.model_parameters.clone(),
+        }
+    }
+
+    fn validate(&self, settings: &RuntimeSettings) -> Result<()> {
+        let mut possibilities = self
+            .model_parameters
+            .keys()
+            .map(|symbol| symbol.to_string())
+            .collect::<Vec<_>>();
+        possibilities.sort();
+
+        for (parameter_name, value) in &settings.model.external_parameters {
+            let parameter_type = external_model_parameter_type(&self.model, parameter_name)
+                .ok_or_else(|| eyre!("No model parameter named '{parameter_name}'"))
+                .with_note(|| {
+                    format!(
+                        "Possible model parameters are: {}",
+                        possibilities.join(", ")
+                    )
+                })?;
+
+            let symbol = UFOSymbol::from(parameter_name.as_str());
+            if !self.model_parameters.contains_key(&symbol) {
+                return Err(eyre!(
+                    "Model parameter '{parameter_name}' cannot be overridden because it is not present in the shared top-level model_parameters.json"
+                ))
+                .with_note(|| format!("Possible model parameters are: {}", possibilities.join(", ")));
+            }
+
+            validate_model_parameter_type(
+                parameter_name,
+                parameter_type,
+                &Complex::new(value.0, value.1),
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
+fn merge_runtime_settings_input(
+    settings: &RuntimeSettings,
+    input: &SetArgs,
+) -> Result<RuntimeSettings> {
+    let mut settings_without_model = settings.clone();
+    let preserved_model = settings_without_model.model.clone();
+    settings_without_model.model = Default::default();
+
+    let mut merged_settings: Option<RuntimeSettings> = None;
+    let mut model_updates = BTreeMap::new();
+
+    match input {
+        SetArgs::File { file } => {
+            let ext = file
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            match ext.as_str() {
+                "toml" => {
+                    let raw = fs::read_to_string(file).with_context(|| {
+                        format!("Trying to read runtime settings file {}", file.display())
+                    })?;
+                    let mut value = toml::from_str::<toml::Value>(&raw).with_context(|| {
+                        format!(
+                            "Trying to parse TOML runtime settings file {}",
+                            file.display()
+                        )
+                    })?;
+                    model_updates = extract_runtime_model_updates_from_toml(&mut value)?;
+                    if value.as_table().is_some_and(|table| !table.is_empty()) {
+                        let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                        merged_settings = Some(
+                            fig.merge(figment::providers::Toml::string(&toml::to_string(&value)?))
+                                .extract()?,
+                        );
+                    }
+                }
+                "json" => {
+                    let raw = fs::read_to_string(file).with_context(|| {
+                        format!("Trying to read runtime settings file {}", file.display())
+                    })?;
+                    let mut value = serde_json::from_str::<J>(&raw).with_context(|| {
+                        format!(
+                            "Trying to parse JSON runtime settings file {}",
+                            file.display()
+                        )
+                    })?;
+                    model_updates = extract_runtime_model_updates_from_json(&mut value)?;
+                    if value.as_object().is_some_and(|object| !object.is_empty()) {
+                        let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                        merged_settings = Some(
+                            fig.merge(figment::providers::Json::string(&serde_json::to_string(
+                                &value,
+                            )?))
+                            .extract()?,
+                        );
+                    }
+                }
+                _ => {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Unsupported settings file extension: {}",
+                        ext
+                    ));
+                }
+            }
+        }
+        SetArgs::String { string } => {
+            let mut value = toml::from_str::<toml::Value>(string)
+                .with_context(|| "Trying to parse runtime settings TOML string")?;
+            model_updates = extract_runtime_model_updates_from_toml(&mut value)?;
+            if value.as_table().is_some_and(|table| !table.is_empty()) {
+                let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                merged_settings = Some(
+                    fig.merge(figment::providers::Toml::string(&toml::to_string(&value)?))
+                        .extract()?,
+                );
+            }
+        }
+        SetArgs::Kv { pairs } => {
+            let mut fig = Figment::from(Serialized::defaults(&settings_without_model));
+            let mut saw_non_model_pair = false;
+            for KvPair { key, value } in pairs {
+                if let Some(parameter_name) = key.strip_prefix("model.") {
+                    model_updates.insert(
+                        parameter_name.to_string(),
+                        parse_runtime_model_setting_value(&infer_cli_value(value)?).with_context(
+                            || format!("While parsing runtime model setting '{parameter_name}'"),
+                        )?,
+                    );
+                } else {
+                    saw_non_model_pair = true;
+                    fig = fig.adjoin((key.clone(), infer_cli_value(value)?));
+                }
+            }
+
+            if saw_non_model_pair {
+                merged_settings = Some(fig.extract()?);
+            }
+        }
+        SetArgs::Stored => {}
+        SetArgs::Defaults => unreachable!("defaults should be handled by the caller"),
+    }
+
+    let mut merged_settings = merged_settings.unwrap_or_else(|| settings.clone());
+    merged_settings.model = preserved_model;
+    for (parameter_name, value) in model_updates {
+        merged_settings
+            .model
+            .external_parameters
+            .insert(parameter_name, value);
+    }
+
+    Ok(merged_settings)
+}
+
 fn yaml_to_json(v: Y) -> Result<J> {
     match v {
         Y::Null => Ok(J::Null),
@@ -500,8 +1059,32 @@ fn yaml_to_json(v: Y) -> Result<J> {
             }
         }
         Y::String(s) => Ok(J::String(s)),
+        Y::Sequence(values) => values
+            .into_iter()
+            .map(yaml_to_json)
+            .collect::<Result<Vec<_>>>()
+            .map(J::Array),
+        Y::Mapping(entries) => {
+            let mut object = serde_json::Map::with_capacity(entries.len());
+            for (key, value) in entries {
+                let key = match key {
+                    Y::String(s) => s,
+                    Y::Bool(b) => b.to_string(),
+                    Y::Number(n) => n.to_string(),
+                    Y::Null => "null".to_string(),
+                    other => {
+                        return Err(eyre!(
+                            "Unsupported YAML mapping key in CLI key-value: {:?}",
+                            other
+                        ));
+                    }
+                };
+                object.insert(key, yaml_to_json(value)?);
+            }
+            Ok(J::Object(object))
+        }
         other => Err(eyre!(
-            "Unsupported complex YAML value in CLI key-value: {:?}",
+            "Unsupported YAML value in CLI key-value: {:?}",
             other
         )),
     }
@@ -515,6 +1098,7 @@ mod test {
     use figment::{providers::Serialized, Figment};
     use gammalooprs::{
         model::{ParameterNature, ParameterType, UFOSymbol},
+        observables::{FilterQuantity, QuantitySettings, SelectorDefinitionSettings},
         settings::RuntimeSettings,
         utils::{test_utils::load_generic_model, F},
     };
@@ -522,17 +1106,19 @@ mod test {
     use spenso::algebra::complex::Complex;
 
     use crate::{
+        model_parameters::{
+            model_value_format_hint, parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT,
+            MODEL_REAL_VALUE_FORMAT_HINT,
+        },
         state::{ProcessRef, State},
         tracing::{get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override},
         CLISettings, Repl,
     };
 
     use super::{
-        super::Commands, model_value_format_hint, validate_model_parameter_type, KvPair, Set,
-        SetArgs,
-    };
-    use super::{
-        parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT, MODEL_REAL_VALUE_FORMAT_HINT,
+        super::Commands, apply_process_set_args, validate_model_parameter_type, KvPair,
+        ModelSetValue, ProcessAddTarget, ProcessArgs, ProcessRemoveTarget, ProcessSetArgs,
+        ProcessUpdateTarget, Set, SetArgs,
     };
 
     #[test]
@@ -609,12 +1195,133 @@ mod test {
     }
 
     #[test]
+    fn merge_runtime_settings_input_preserves_existing_model_overrides() {
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(2.0), F(0.0)));
+
+        let merged = super::merge_runtime_settings_input(
+            &settings,
+            &SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "integrator.n_start".to_string(),
+                    value: "123".to_string(),
+                }],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(merged.integrator.n_start, 123);
+        assert_eq!(
+            merged.model.external_parameters.get("mass_scalar_2"),
+            Some(&(F(2.0), F(0.0)))
+        );
+    }
+
+    #[test]
+    fn merge_runtime_settings_input_accepts_model_block_updates() {
+        let merged = super::merge_runtime_settings_input(
+            &RuntimeSettings::default(),
+            &SetArgs::String {
+                string: "[model]\nmass_scalar_2 = [1.0, 0.0]\n".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            merged.model.external_parameters.get("mass_scalar_2"),
+            Some(&(F(1.0), F(0.0)))
+        );
+    }
+
+    #[test]
+    fn process_settings_reject_non_overridable_model_parameters() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("sm");
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        let removable_parameter = state
+            .model
+            .parameters
+            .values()
+            .find(|parameter| {
+                parameter.nature == ParameterNature::External
+                    && state.model_parameters.contains_key(&parameter.name)
+            })
+            .expect("SM model must contain at least one overridable external parameter")
+            .name
+            .to_string();
+        state
+            .model_parameters
+            .remove(&UFOSymbol::from(removable_parameter.as_str()));
+        let validation_context = super::RuntimeModelValidationContext::from_state(&state);
+        let mut settings = RuntimeSettings::default();
+
+        let err = super::apply_process_set_args(
+            &ProcessSetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: format!("model.{removable_parameter}"),
+                    value: "1.0".to_string(),
+                }],
+            },
+            &mut settings,
+            &RuntimeSettings::default(),
+            Some(&validation_context),
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("cannot be overridden because it is not present"));
+    }
+
+    #[test]
+    fn process_settings_reject_invalid_model_value_types() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("sm");
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        let parameter = state
+            .model
+            .parameters
+            .values()
+            .find(|parameter| {
+                parameter.nature == ParameterNature::External
+                    && parameter.parameter_type == ParameterType::Real
+            })
+            .expect("expected at least one external real model parameter")
+            .name
+            .to_string();
+        let validation_context = super::RuntimeModelValidationContext::from_state(&state);
+        let mut settings = RuntimeSettings::default();
+
+        let err = super::apply_process_set_args(
+            &ProcessSetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: format!("model.{parameter}"),
+                    value: "1.0+2.0i".to_string(),
+                }],
+            },
+            &mut settings,
+            &RuntimeSettings::default(),
+            Some(&validation_context),
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("cannot be assigned an imaginary component"));
+    }
+
+    #[test]
     fn parse_set_process_defaults() {
         let cmd = Set::from_str("set process -p epem_a_tth -i LO defaults").unwrap();
 
         match cmd {
             Set::Process { input, process } => {
-                assert_eq!(input, SetArgs::Defaults);
+                assert_eq!(input, ProcessSetArgs::Defaults);
                 assert_eq!(
                     process.process,
                     Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
@@ -622,6 +1329,43 @@ mod test {
                 assert_eq!(process.integrand_name, Some("LO".to_string()));
             }
             other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_model_targeted_defaults() {
+        let cmd = Set::from_str("set model -p epem_a_tth -i LO defaults").unwrap();
+
+        match cmd {
+            Set::Model { target, values } => {
+                assert_eq!(
+                    target.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(target.integrand_name, Some("LO".to_string()));
+                assert_eq!(values, vec![ModelSetValue::Defaults]);
+            }
+            other => panic!("Expected set model command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_model_targeted_assignment() {
+        let cmd = Set::from_str("set model -i LO alpha=1.0+2.0i").unwrap();
+
+        match cmd {
+            Set::Model { target, values } => {
+                assert_eq!(target.process, None);
+                assert_eq!(target.integrand_name, Some("LO".to_string()));
+                assert_eq!(
+                    values,
+                    vec![ModelSetValue::Assignment(KvPair {
+                        key: "alpha".to_string(),
+                        value: "1.0+2.0i".to_string(),
+                    })]
+                );
+            }
+            other => panic!("Expected set model command, got {other:?}"),
         }
     }
 
@@ -657,7 +1401,7 @@ mod test {
             Set::Process { input, process } => {
                 assert_eq!(
                     input,
-                    SetArgs::String {
+                    ProcessSetArgs::String {
                         string: "alpha = 2".to_string()
                     }
                 );
@@ -696,13 +1440,267 @@ mod test {
             Set::Process { input, .. } => {
                 assert_eq!(
                     input,
-                    SetArgs::String {
+                    ProcessSetArgs::String {
                         string: multiline.to_string()
                     }
                 );
             }
             other => panic!("Expected set process command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_set_process_add_quantity() {
+        let cmd = Set::from_str(
+            "set process -p epem_a_tth -i LO add quantity top_pt particle_scalar quantity=PT",
+        )
+        .unwrap();
+
+        match cmd {
+            Set::Process { input, process } => {
+                assert_eq!(
+                    input,
+                    ProcessSetArgs::Add {
+                        target: ProcessAddTarget::Quantity {
+                            name: "top_pt".to_string(),
+                            kind: "particle_scalar".to_string(),
+                            pairs: vec![KvPair {
+                                key: "quantity".to_string(),
+                                value: "PT".to_string(),
+                            }],
+                        }
+                    }
+                );
+                assert_eq!(
+                    process.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(process.integrand_name, Some("LO".to_string()));
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_process_update_observable() {
+        let cmd = Set::from_str(
+            "set process -p epem_a_tth -i LO update observable top_pt_hist n_bins=100",
+        )
+        .unwrap();
+
+        match cmd {
+            Set::Process { input, .. } => {
+                assert_eq!(
+                    input,
+                    ProcessSetArgs::Update {
+                        target: ProcessUpdateTarget::Observable {
+                            name: "top_pt_hist".to_string(),
+                            pairs: vec![KvPair {
+                                key: "n_bins".to_string(),
+                                value: "100".to_string(),
+                            }],
+                        }
+                    }
+                );
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_process_remove_selector() {
+        let cmd = Set::from_str("set process -p epem_a_tth -i LO remove selector top_cut").unwrap();
+
+        match cmd {
+            Set::Process { input, .. } => {
+                assert_eq!(
+                    input,
+                    ProcessSetArgs::Remove {
+                        target: ProcessRemoveTarget::Selector {
+                            name: "top_cut".to_string(),
+                        }
+                    }
+                );
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn process_named_settings_mutations_update_runtime_maps() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "top_pt".to_string(),
+                    kind: "particle_scalar".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "pdgs".to_string(),
+                            value: "[6,-6]".to_string(),
+                        },
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "PT".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+
+        let quantity = settings
+            .quantities
+            .get("top_pt")
+            .expect("quantity should have been inserted");
+        match quantity {
+            QuantitySettings::ParticleScalar(particle) => {
+                assert_eq!(particle.pdgs, vec![6, -6]);
+                assert_eq!(particle.quantity, FilterQuantity::PT);
+            }
+            other => panic!("Expected particle-scalar quantity, got {other:?}"),
+        }
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Observable {
+                    name: "top_pt_hist".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "top_pt".to_string(),
+                        },
+                        KvPair {
+                            key: "x_max".to_string(),
+                            value: "500.0".to_string(),
+                        },
+                        KvPair {
+                            key: "n_bins".to_string(),
+                            value: "50".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            settings
+                .observables
+                .get("top_pt_hist")
+                .expect("observable should have been inserted")
+                .histogram
+                .n_bins,
+            50
+        );
+
+        apply_process_set_args(
+            &ProcessSetArgs::String {
+                string: r#"
+[selectors.top_pt_cut]
+quantity = "top_pt"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 10.0
+max = 500.0
+"#
+                .to_string(),
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+        let selector = settings
+            .selectors
+            .get("top_pt_cut")
+            .expect("selector should have been inserted");
+        assert_eq!(selector.quantity, "top_pt");
+        match &selector.selector {
+            SelectorDefinitionSettings::ValueRange(selector) => {
+                assert_eq!(selector.min, 10.0);
+                assert_eq!(selector.max, Some(500.0));
+            }
+            other => panic!("Expected value-range selector, got {other:?}"),
+        }
+
+        apply_process_set_args(
+            &ProcessSetArgs::Update {
+                target: ProcessUpdateTarget::Observable {
+                    name: "top_pt_hist".to_string(),
+                    pairs: vec![KvPair {
+                        key: "n_bins".to_string(),
+                        value: "80".to_string(),
+                    }],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            settings
+                .observables
+                .get("top_pt_hist")
+                .expect("observable should still exist")
+                .histogram
+                .n_bins,
+            80
+        );
+
+        apply_process_set_args(
+            &ProcessSetArgs::Update {
+                target: ProcessUpdateTarget::Selector {
+                    name: "top_pt_cut".to_string(),
+                    pairs: vec![KvPair {
+                        key: "max".to_string(),
+                        value: "250.0".to_string(),
+                    }],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+        match &settings
+            .selectors
+            .get("top_pt_cut")
+            .expect("selector should still exist")
+            .selector
+        {
+            SelectorDefinitionSettings::ValueRange(selector) => {
+                assert_eq!(selector.max, Some(250.0));
+            }
+            other => panic!("Expected value-range selector, got {other:?}"),
+        }
+
+        apply_process_set_args(
+            &ProcessSetArgs::Remove {
+                target: ProcessRemoveTarget::Quantity {
+                    name: "top_pt".to_string(),
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+        assert!(!settings.quantities.contains_key("top_pt"));
+    }
+
+    #[test]
+    fn infer_cli_value_accepts_yaml_sequences() {
+        let parsed = super::infer_cli_value("[alphaloop, matad]").unwrap();
+        assert_eq!(parsed, serde_json::json!(["alphaloop", "matad"]));
     }
 
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -874,10 +1872,14 @@ integrate = 10
             .contains_key(&UFOSymbol::from(internal_param.as_str())));
 
         let err = Set::Model {
-            pairs: vec![KvPair {
+            target: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+            values: vec![ModelSetValue::Assignment(KvPair {
                 key: internal_param.clone(),
                 value: "1.0".to_string(),
-            }],
+            })],
         }
         .run(
             &mut state,
@@ -904,10 +1906,14 @@ integrate = 10
             .to_string();
 
         Set::Model {
-            pairs: vec![KvPair {
+            target: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+            values: vec![ModelSetValue::Assignment(KvPair {
                 key: parameter.clone(),
                 value: "-1.0e13-33.0e12i".to_string(),
-            }],
+            })],
         }
         .run(
             &mut state,
@@ -941,10 +1947,14 @@ integrate = 10
             .to_string();
 
         let err = Set::Model {
-            pairs: vec![KvPair {
+            target: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+            values: vec![ModelSetValue::Assignment(KvPair {
                 key: parameter,
                 value: "1.0+2.0i".to_string(),
-            }],
+            })],
         }
         .run(
             &mut state,

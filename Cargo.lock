@@ -1397,6 +1397,7 @@ dependencies = [
  "color-eyre",
  "colored 3.1.1",
  "console 0.16.3",
+ "crossterm",
  "dirs 6.0.0",
  "eyre",
  "figment",
@@ -1437,6 +1438,7 @@ dependencies = [
  "tracing-indicatif",
  "tracing-subscriber",
  "typed-index-collections",
+ "unicode-width",
  "vergen-gitcl",
  "walkdir",
 ]
@@ -1446,6 +1448,7 @@ name = "gammaloop-integration-tests"
 version = "0.1.0"
 dependencies = [
  "bincode 2.0.1",
+ "cc",
  "color-eyre",
  "colored 3.1.1",
  "eyre",
@@ -1454,6 +1457,9 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "momtrop",
+ "ndarray",
+ "rand 0.9.2",
+ "serde_json",
  "serial_test",
  "spenso",
  "symbolica",

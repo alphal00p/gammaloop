@@ -15,10 +15,7 @@ use itertools::Itertools;
 use rand::Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    domains::float::{FloatLike as SymFloatLike, Real},
-    numerical_integration::MonteCarloRng,
-};
+use symbolica::{domains::float::Real, numerical_integration::MonteCarloRng};
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 

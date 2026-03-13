@@ -12,8 +12,7 @@ use color_eyre::Result;
 use gammaloop_api::{
     CLISettings, OneShot, StateLoadOption,
     commands::Commands,
-    session::CliSessionState,
-    state::{CommandHistory, CommandsBlock, RunHistory, State},
+    state::{CommandHistory, CommandsBlock, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
 use gammalooprs::{processes::ProcessCollection, settings::RuntimeSettings};
@@ -57,12 +56,7 @@ fn new_cli(name: &str) -> Result<SharedCli<'static>> {
     });
     let mut cli = SharedCli(template.lock().unwrap());
     let state_folder = cli_state_path(name);
-    clean_test(&state_folder);
-    cli.cli_settings = CLISettings::default();
-    cli.cli_settings.state.folder = state_folder;
-    cli.default_runtime_settings = RuntimeSettings::default();
-    cli.run_history = RunHistory::default();
-    cli.session_state = CliSessionState::default();
+    *cli = get_test_cli(None, &state_folder, None, true)?;
     Ok(cli)
 }
 
@@ -88,10 +82,6 @@ fn history_strings(run_history: &RunHistory) -> Vec<String> {
                 .unwrap_or_else(|| format!("{:?}", command.command))
         })
         .collect()
-}
-
-fn load_example_state(relative_path: &str) -> Result<State> {
-    State::load(PathBuf::from(relative_path), None, None)
 }
 
 fn duplicate_loaded_process(cli: &mut SharedCli<'_>, new_name: &str) {
@@ -137,6 +127,16 @@ fn add_duplicate_integrand(
     }
 }
 
+fn populate_generated_scalar_box_process(cli: &mut SharedCli<'_>) -> Result<()> {
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command(
+        "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0",
+    )?;
+    cli.run_command("generate")?;
+    cli.save_state()?;
+    Ok(())
+}
+
 fn run_without_arguments_is_a_noop() -> Result<()> {
     let mut cli = new_cli("run_without_arguments_is_a_noop")?;
 
@@ -148,7 +148,7 @@ fn run_without_arguments_is_a_noop() -> Result<()> {
 
 fn run_records_only_the_wrapper_command() -> Result<()> {
     let mut cli = new_cli("run_records_only_the_wrapper_command")?;
-    cli.run_history.commands_blocks = vec![
+    cli.run_history.command_blocks = vec![
         block(
             "set_display",
             &["set global kv global.display_directive=warn"],
@@ -192,7 +192,7 @@ fn run_prevalidation_is_all_or_nothing_for_inline_commands() -> Result<()> {
 fn run_prevalidation_is_all_or_nothing_for_nested_block_failures() -> Result<()> {
     let mut cli = new_cli("run_prevalidation_is_all_or_nothing_for_nested_block_failures")?;
     let original_display = cli.cli_settings.global.display_directive.clone();
-    cli.run_history.commands_blocks = vec![
+    cli.run_history.command_blocks = vec![
         block("first", &["set global kv global.display_directive=warn"]),
         block("broken", &["run missing_block"]),
     ];
@@ -209,7 +209,7 @@ fn run_prevalidation_is_all_or_nothing_for_nested_block_failures() -> Result<()>
 
 fn nested_run_records_only_the_top_level_run() -> Result<()> {
     let mut cli = new_cli("nested_run_records_only_the_top_level_run")?;
-    cli.run_history.commands_blocks = vec![
+    cli.run_history.command_blocks = vec![
         block("inner", &["set global kv global.display_directive=warn"]),
         block("outer", &["run inner"]),
     ];
@@ -233,7 +233,7 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
             ..CLISettings::default()
         },
         default_runtime_settings: frozen_runtime.clone(),
-        commands_blocks: vec![block(
+        command_blocks: vec![block(
             "boot_block",
             &["set global kv global.display_directive=warn"],
         )],
@@ -249,13 +249,13 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     assert!(matches!(flow, ControlFlow::Continue(())));
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
     assert_eq!(cli.default_runtime_settings.general.mu_r_sq, 24.0);
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert_eq!(history_strings(&cli.run_history).len(), 2);
 
     cli.save_state()?;
 
     let persisted = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
-    assert_eq!(persisted.commands_blocks.len(), 1);
+    assert_eq!(persisted.command_blocks.len(), 1);
     assert_eq!(persisted.commands.len(), 2);
     assert_eq!(persisted.cli_settings.global, frozen_global);
     assert_eq!(persisted.default_runtime_settings, frozen_runtime);
@@ -264,12 +264,12 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
 
 fn boot_run_history_rejects_conflicting_block_redefinitions() -> Result<()> {
     let mut cli = new_cli("boot_run_history_rejects_conflicting_block_redefinitions")?;
-    cli.run_history.commands_blocks = vec![block(
+    cli.run_history.command_blocks = vec![block(
         "shared",
         &["set global kv global.display_directive=warn"],
     )];
     let boot_run_history = RunHistory {
-        commands_blocks: vec![block(
+        command_blocks: vec![block(
             "shared",
             &["set global kv global.display_directive=error"],
         )],
@@ -280,19 +280,103 @@ fn boot_run_history_rejects_conflicting_block_redefinitions() -> Result<()> {
     let error_text = format!("{err:?}");
 
     assert!(error_text.contains("redefines an existing block with different commands"));
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn boot_run_history_allows_conflicting_redefinitions_after_confirmation() -> Result<()> {
+    let mut cli = new_cli("boot_run_history_allows_conflicting_redefinitions_after_confirmation")?;
+    cli.run_history.command_blocks = vec![block(
+        "shared",
+        &["set global kv global.display_directive=warn"],
+    )];
+    let boot_run_history = RunHistory {
+        command_blocks: vec![block(
+            "shared",
+            &["set global kv global.display_directive=error"],
+        )],
+        commands: vec![command("run shared")],
+        ..RunHistory::default()
+    };
+
+    let flow = cli.apply_boot_run_history_with_conflict_resolution(&boot_run_history, true)?;
+
+    assert!(matches!(flow, ControlFlow::Continue(())));
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
+    assert_eq!(
+        cli.run_history.command_blocks[0].commands[0]
+            .raw_string
+            .as_deref(),
+        Some("set global kv global.display_directive=error")
+    );
+    assert_eq!(cli.cli_settings.global.display_directive, "error");
+    Ok(())
+}
+
+fn boot_run_history_cancelled_conflicting_redefinitions_leave_state_untouched() -> Result<()> {
+    let mut cli =
+        new_cli("boot_run_history_cancelled_conflicting_redefinitions_leave_state_untouched")?;
+    cli.run_history.command_blocks = vec![block(
+        "shared",
+        &["set global kv global.display_directive=warn"],
+    )];
+    let boot_run_history = RunHistory {
+        command_blocks: vec![block(
+            "shared",
+            &["set global kv global.display_directive=error"],
+        )],
+        commands: vec![command("run shared")],
+        ..RunHistory::default()
+    };
+
+    let flow = cli.apply_boot_run_history_with_conflict_resolution(&boot_run_history, false)?;
+
+    assert!(matches!(flow, ControlFlow::Break(_)));
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
+    assert_eq!(
+        cli.run_history.command_blocks[0].commands[0]
+            .raw_string
+            .as_deref(),
+        Some("set global kv global.display_directive=warn")
+    );
+    assert!(cli.run_history.commands.is_empty());
+    Ok(())
+}
+
+fn boot_run_history_conflicting_redefinitions_error_in_read_only_mode() -> Result<()> {
+    let mut cli = new_cli("boot_run_history_conflicting_redefinitions_error_in_read_only_mode")?;
+    cli.cli_settings.session.read_only_state = true;
+    cli.run_history.command_blocks = vec![block(
+        "shared",
+        &["set global kv global.display_directive=warn"],
+    )];
+    let boot_run_history = RunHistory {
+        command_blocks: vec![block(
+            "shared",
+            &["set global kv global.display_directive=error"],
+        )],
+        ..RunHistory::default()
+    };
+
+    let err = cli
+        .apply_boot_run_history_with_conflict_resolution(&boot_run_history, true)
+        .unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("shared"));
+    assert!(error_text.contains("--read-only-state"));
     Ok(())
 }
 
 fn boot_run_history_allows_identical_semantic_redefinitions() -> Result<()> {
     let mut cli = new_cli("boot_run_history_allows_identical_semantic_redefinitions")?;
-    cli.run_history.commands_blocks = vec![block(
+    cli.run_history.command_blocks = vec![block(
         "shared",
         &["set global kv global.display_directive=warn"],
     )];
     let boot_run_history = RunHistory {
-        commands_blocks: vec![CommandsBlock {
+        command_blocks: vec![CommandsBlock {
             name: "shared".to_string(),
             commands: vec![CommandHistory::new_with_raw(
                 command("set global kv global.display_directive=warn").command,
@@ -305,7 +389,7 @@ fn boot_run_history_allows_identical_semantic_redefinitions() -> Result<()> {
     let flow = cli.apply_boot_run_history(&boot_run_history)?;
 
     assert!(matches!(flow, ControlFlow::Continue(())));
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert!(cli.run_history.commands.is_empty());
     Ok(())
 }
@@ -379,8 +463,8 @@ fn command_block_definition_mode_defers_execution_and_omits_history() -> Result<
 
     cli.run_command("finish_commands_block")?;
 
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
-    assert_eq!(cli.run_history.commands_blocks[0].name, "demo");
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks[0].name, "demo");
     assert!(cli.run_history.commands.is_empty());
 
     cli.run_command("run demo")?;
@@ -411,8 +495,8 @@ fn start_commands_block_cannot_nest() -> Result<()> {
 
     cli.run_command("finish_commands_block")?;
 
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
-    assert_eq!(cli.run_history.commands_blocks[0].name, "first");
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks[0].name, "first");
     Ok(())
 }
 
@@ -422,10 +506,10 @@ fn quit_during_block_definition_dismisses_the_pending_block() -> Result<()> {
     cli.run_command("start_commands_block demo")?;
     cli.run_command("set global kv global.display_directive=warn")?;
 
-    let flow = cli.run_command_flow("quit -o")?;
+    let flow = cli.run_command_flow("quit -o")?.flow;
 
     assert!(matches!(flow, ControlFlow::Continue(())));
-    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.command_blocks.is_empty());
     assert!(cli.run_history.commands.is_empty());
 
     let err = cli.run_command("finish_commands_block").unwrap_err();
@@ -440,7 +524,7 @@ fn ctrl_c_dismisses_pending_block_definition() -> Result<()> {
     cli.run_command("set global kv global.display_directive=warn")?;
 
     assert!(cli.dismiss_pending_commands_block("Ctrl-C"));
-    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.command_blocks.is_empty());
     assert!(cli.run_history.commands.is_empty());
     Ok(())
 }
@@ -452,14 +536,14 @@ fn ctrl_d_dismisses_pending_block_definition() -> Result<()> {
     cli.run_command("set global kv global.display_directive=warn")?;
 
     assert!(cli.dismiss_pending_commands_block("Ctrl-D"));
-    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.command_blocks.is_empty());
     assert!(cli.run_history.commands.is_empty());
     Ok(())
 }
 
 fn recursive_run_limit_is_enforced() -> Result<()> {
     let mut cli = new_cli("recursive_run_limit_is_enforced")?;
-    cli.run_history.commands_blocks = vec![block("loop", &["run loop"])];
+    cli.run_history.command_blocks = vec![block("loop", &["run loop"])];
 
     let err = cli.run_command("run loop").unwrap_err();
     let error_text = format!("{err:?}");
@@ -484,7 +568,7 @@ fn save_state_writes_global_settings_file() -> Result<()> {
 
 fn reset_processes_with_process_selector_removes_only_that_process() -> Result<()> {
     let mut cli = new_cli("reset_processes_with_process_selector_removes_only_that_process")?;
-    cli.state = load_example_state("./examples/cli/gg_hhh/1L/state")?;
+    populate_generated_scalar_box_process(&mut cli)?;
     duplicate_loaded_process(&mut cli, "second_process");
 
     cli.run_command("reset processes -p second_process")?;
@@ -492,30 +576,30 @@ fn reset_processes_with_process_selector_removes_only_that_process() -> Result<(
     assert_eq!(cli.state.process_list.processes.len(), 1);
     assert_eq!(
         cli.state.process_list.processes[0].definition.folder_name,
-        "gg_hhh"
+        "box"
     );
     Ok(())
 }
 
 fn reset_processes_with_integrand_selector_removes_only_that_integrand() -> Result<()> {
     let mut cli = new_cli("reset_processes_with_integrand_selector_removes_only_that_integrand")?;
-    cli.state = load_example_state("./examples/cli/gg_hhh/1L/state")?;
+    populate_generated_scalar_box_process(&mut cli)?;
     add_duplicate_integrand(&mut cli, 0, "virtual_copy");
 
-    cli.run_command("reset processes -p gg_hhh -i virtual_copy")?;
+    cli.run_command("reset processes -p box -i virtual_copy")?;
 
     let remaining = cli.state.process_list.processes[0]
         .collection
         .get_integrand_names();
-    assert_eq!(remaining, vec!["1L"]);
+    assert_eq!(remaining, vec!["scalar_box"]);
     Ok(())
 }
 
 fn reset_processes_removing_last_integrand_drops_empty_process() -> Result<()> {
     let mut cli = new_cli("reset_processes_removing_last_integrand_drops_empty_process")?;
-    cli.state = load_example_state("./examples/cli/gg_hhh/1L/state")?;
+    populate_generated_scalar_box_process(&mut cli)?;
 
-    cli.run_command("reset processes -p gg_hhh -i 1L")?;
+    cli.run_command("reset processes -p box -i scalar_box")?;
 
     assert!(cli.state.process_list.processes.is_empty());
     Ok(())
@@ -538,6 +622,9 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     nested_run_records_only_the_top_level_run()?;
     boot_run_history_merges_blocks_and_persists_commands_once()?;
     boot_run_history_rejects_conflicting_block_redefinitions()?;
+    boot_run_history_allows_conflicting_redefinitions_after_confirmation()?;
+    boot_run_history_cancelled_conflicting_redefinitions_leave_state_untouched()?;
+    boot_run_history_conflicting_redefinitions_error_in_read_only_mode()?;
     boot_run_history_allows_identical_semantic_redefinitions()?;
     booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_warns()?;
     command_block_definition_mode_defers_execution_and_omits_history()?;
@@ -581,7 +668,7 @@ fn run_history_load_reports_block_command_context() {
     fs::write(
         &run_card_path,
         r#"
-[[commands_blocks]]
+[[command_blocks]]
 name = "demo"
 commands = ["no_such_command"]
 "#,

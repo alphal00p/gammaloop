@@ -6,14 +6,18 @@ use color_eyre::Result;
 
 use gammaloop_api::{
     CLISettings,
+    commands::CommandExecution,
     commands::save::SaveState,
     session::{CliSession, CliSessionState},
     state::{RunHistory, State, SyncSettings},
 };
 
-use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
+use gammalooprs::{
+    initialisation::initialise, integrands::HasIntegrand, utils::test_utils::load_generic_model,
+};
 use std::{
     env,
+    ffi::OsString,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
     sync::Once,
@@ -85,9 +89,9 @@ impl CLIState {
         f(&mut session)
     }
 
-    pub fn run_command_flow(&mut self, command: &str) -> Result<ControlFlow<SaveState>> {
+    pub fn run_command_flow(&mut self, command: &str) -> Result<CommandExecution> {
         let command_history = gammaloop_api::state::CommandHistory::from_raw_string(command)?;
-        self.with_session(|session| session.execute_top_level(command_history))
+        self.with_session(|session| session.execute_command(command_history))
     }
 
     pub fn run_command(&mut self, command: &str) -> Result<()> {
@@ -99,6 +103,21 @@ impl CLIState {
         run_history: &RunHistory,
     ) -> Result<ControlFlow<SaveState>> {
         self.with_session(|session| session.apply_boot_run_history(run_history, run_history, false))
+    }
+
+    pub fn apply_boot_run_history_with_conflict_resolution(
+        &mut self,
+        run_history: &RunHistory,
+        accept_conflicts: bool,
+    ) -> Result<ControlFlow<SaveState>> {
+        self.with_session(|session| {
+            session.apply_boot_run_history_with_conflict_resolver(
+                run_history,
+                run_history,
+                false,
+                |_| Ok(accept_conflicts),
+            )
+        })
     }
 
     pub fn dismiss_pending_commands_block(&mut self, trigger: &str) -> bool {
@@ -216,4 +235,92 @@ pub fn get_tests_workspace_path() -> PathBuf {
     } else {
         workspace_root().join(TESTS_ARTIFACTS)
     }
+}
+
+pub struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    pub fn set(key: &'static str, value: &str) -> Self {
+        let previous = env::var_os(key);
+        unsafe {
+            env::set_var(key, value);
+        }
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => unsafe {
+                env::set_var(self.key, value);
+            },
+            None => unsafe {
+                env::remove_var(self.key);
+            },
+        }
+    }
+}
+
+pub fn new_test_artifact_dir(name: &str) -> Result<PathBuf> {
+    let path = get_tests_workspace_path().join(name);
+    if path.exists() {
+        clean_test(&path);
+    }
+    std::fs::create_dir_all(&path)?;
+    Ok(path)
+}
+
+pub fn run_commands(cli: &mut CLIState, commands: &[&str]) -> Result<()> {
+    for command in commands {
+        cli.run_command(command)?;
+    }
+    Ok(())
+}
+
+pub fn setup_sm_differential_lu_cli(test_name: &str) -> Result<CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[32.0,0.0,0.0,32.0],[32.0,0.0,0.0,-32.0]],"helicities":[1,1]}}'"#,
+            "set default-runtime kv subtraction.disable_threshold_subtraction=true",
+            "generate e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams",
+            "generate",
+        ],
+    )?;
+    Ok(cli)
+}
+
+pub fn default_xspace_point(cli: &CLIState) -> Result<Vec<f64>> {
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;
+    let integrand = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?;
+    let n_dim = integrand.get_n_dim();
+    let seed = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67];
+    Ok((0..n_dim).map(|index| seed[index % seed.len()]).collect())
+}
+
+pub fn default_momentum_space_point(cli: &CLIState) -> Result<Vec<f64>> {
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;
+    let integrand = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?;
+    let n_dim = integrand.get_n_dim();
+    let seed = [0.11, -0.07, 0.19, -0.13, 0.05, 0.29];
+    Ok((0..n_dim).map(|index| seed[index % seed.len()]).collect())
 }

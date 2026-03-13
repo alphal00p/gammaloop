@@ -12,10 +12,13 @@ use crate::{
     state::{CommandHistory, ProcessRef, RunHistory, State},
     CLISettings,
 };
+use symbolica::atom::Atom;
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;
 pub mod display;
 pub use display::Display;
+pub mod duplicate;
+pub use duplicate::Duplicate;
 pub mod generate;
 pub use generate::Generate;
 pub mod import;
@@ -23,7 +26,7 @@ pub use import::Import;
 pub mod inspect;
 pub use inspect::Inspect;
 pub mod integrate;
-pub use integrate::Integrate;
+pub use integrate::{Integrate, IntegrationOutput};
 pub mod reset;
 pub use reset::Reset;
 pub mod save;
@@ -35,16 +38,59 @@ pub use shell::Shell;
 pub mod run;
 pub use run::Run;
 pub mod evaluate;
+pub mod evaluate_samples;
 pub use evaluate::Evaluate;
 pub mod renormalize;
 pub use renormalize::Renormalize;
 pub mod profile;
 pub use profile::Profile;
+pub(crate) mod process_settings;
+
+#[derive(Debug, Clone)]
+pub enum CommandOutput {
+    None,
+    Evaluate(Atom),
+    Integrate(IntegrationOutput),
+}
+
+impl Default for CommandOutput {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommandExecution {
+    pub flow: ControlFlow<SaveState>,
+    pub output: CommandOutput,
+}
+
+impl CommandExecution {
+    pub fn continue_with(output: CommandOutput) -> Self {
+        Self {
+            flow: ControlFlow::Continue(()),
+            output,
+        }
+    }
+
+    pub fn continue_without_output() -> Self {
+        Self::continue_with(CommandOutput::None)
+    }
+
+    pub fn break_with(save_state: SaveState) -> Self {
+        Self {
+            flow: ControlFlow::Break(save_state),
+            output: CommandOutput::None,
+        }
+    }
+}
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Commands {
     #[clap(subcommand)]
     Display(Display),
+    #[clap(subcommand)]
+    Duplicate(Duplicate),
     #[clap(subcommand)]
     Set(Set),
     #[clap(subcommand)]
@@ -133,13 +179,13 @@ impl Commands {
         run_history: &mut RunHistory,
         global_cli_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
-    ) -> Result<ControlFlow<SaveState>, Report> {
+    ) -> Result<CommandExecution, Report> {
         match self {
             Commands::Profile(p) => {
                 p.run(state, global_cli_settings)?;
             }
             Commands::Quit(s) => {
-                return Ok(ControlFlow::Break(s));
+                return Ok(CommandExecution::break_with(s));
             }
             Commands::Inspect(inspect) => {
                 let _ = inspect.run(state)?;
@@ -169,16 +215,28 @@ impl Commands {
                 default_runtime_settings,
             )?,
             Commands::Integrate(g) => {
-                g.run(state, global_cli_settings)?;
+                return Ok(CommandExecution::continue_with(CommandOutput::Integrate(
+                    g.run(state, global_cli_settings)?,
+                )));
             }
             Commands::Evaluate(g) => {
-                _ = g.run(state, global_cli_settings, default_runtime_settings)?;
+                return Ok(CommandExecution::continue_with(CommandOutput::Evaluate(
+                    g.run(state, global_cli_settings, default_runtime_settings)?,
+                )));
             }
             Commands::Renormalize(r) => {
                 _ = r.run(state, global_cli_settings)?;
             }
             Commands::Display(l) => {
-                l.run(state, global_cli_settings, default_runtime_settings)?;
+                l.run(
+                    state,
+                    global_cli_settings,
+                    default_runtime_settings,
+                    run_history,
+                )?;
+            }
+            Commands::Duplicate(command) => {
+                command.run(state)?;
             }
             Commands::Run(r) => {
                 return r.run(
@@ -206,6 +264,6 @@ impl Commands {
                 s.run()?;
             }
         }
-        Ok(ControlFlow::Continue(()))
+        Ok(CommandExecution::continue_without_output())
     }
 }

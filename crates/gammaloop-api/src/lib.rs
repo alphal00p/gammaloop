@@ -60,16 +60,20 @@ use reedline::{Prompt, PromptEditMode, PromptHistorySearch};
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::command_parser::normalize_generate_argv;
 use state::{
     classify_state_folder, CommandHistory, RunHistory, State, StateFolderKind, SyncSettings,
 };
-use std::{borrow::Cow, ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
+use std::{
+    borrow::Cow, ffi::OsString, io::IsTerminal, path::Path, path::PathBuf, sync::atomic::Ordering,
+};
 use std::{fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use walkdir::WalkDir;
 
 // use tracing::LogLevel;
 mod command_parser;
 pub(crate) mod completion;
+pub(crate) mod model_parameters;
 #[cfg(feature = "python_api")]
 pub mod python;
 pub mod repl;
@@ -152,7 +156,7 @@ pub struct OneShot {
     logfile_level: Option<LogLevel>,
 
     /// Type of prefix for the logging format
-    #[arg(short = 'p', long = "logging_prefix")]
+    #[arg(short = 'p', long = "logging-prefix")]
     logging_prefix: Option<LogFormat>,
 
     /// Prevent writes into the state folder for the lifetime of this session
@@ -362,6 +366,18 @@ pub struct LoadedState {
     pub default_runtime_settings: RuntimeSettings,
     pub session_state: CliSessionState,
     pub state_load_summary: Option<StateLoadSummary>,
+}
+
+impl LoadedState {
+    pub fn cli_session(&mut self) -> CliSession<'_> {
+        CliSession::new(
+            &mut self.state,
+            &mut self.run_history,
+            &mut self.cli_settings,
+            &mut self.default_runtime_settings,
+            &mut self.session_state,
+        )
+    }
 }
 
 pub struct Parsed {
@@ -784,10 +800,11 @@ impl OneShot {
     /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
     pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
         let argv: Vec<OsString> = std::env::args_os().collect();
+        let normalized_argv = normalize_generate_argv(&argv);
 
         // Build a Command (same as derive(Parser)) and get matches
         let mut cmd = <OneShot as CommandFactory>::command();
-        let matches = cmd.clone().try_get_matches_from(&argv)?;
+        let matches = cmd.clone().try_get_matches_from(&normalized_argv)?;
 
         let cli = <OneShot as FromArgMatches>::from_arg_matches(&matches)
             .map_err(|e| e.format(&mut cmd))?;
@@ -1037,98 +1054,32 @@ impl OneShot {
         );
 
         if !boot_requested_exit {
+            let had_initial_command = self.command.is_some();
+            let mut enter_repl = !had_initial_command;
+
             if let Some(a) = self.command.take() {
                 let command = if raw.trim().is_empty() {
                     CommandHistory::new(a)
                 } else {
                     CommandHistory::new_with_raw(a, raw)
                 };
-                let flow = session.execute_top_level(command)?;
-
-                if let ControlFlow::Break(a) = flow {
-                    save_state = a;
-                }
-            } else {
-                print_banner();
-                if let Some(summary) = state_load_summary.as_ref() {
-                    print_state_load_summary(summary);
-                }
-                // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
-                let completion_state = repl::SharedCompletionState::new();
-                completion_state.update_from_session(&session);
-                let mut repl = ClapEditor::<Repl>::builder()
-                    .with_prompt(make_repl_prompt(&session.prompt_state_label(), None))
-                    .with_completion_state(completion_state.clone());
-
-                if let Some(home) = home_dir() {
-                    repl = repl.with_editor_hook(move |reed| {
-                        reed.with_history(Box::new(
-                            FileBackedHistory::with_file(10000, home.join(".gammaLoop_history"))
-                                .unwrap(),
-                        ))
-                    })
-                }
-                let mut r = repl.build();
-                let refresh_repl_state =
-                    |r: &mut repl::ClapEditor<Repl>, session: &session::CliSession<'_>| {
-                        completion_state.update_from_session(session);
-                        let prompt_state_label = session.prompt_state_label();
-                        let pending_block_name = session.pending_commands_block_name();
-                        r.set_prompt(make_repl_prompt(
-                            &prompt_state_label,
-                            pending_block_name.as_deref(),
-                        ));
-                    };
-
-                loop {
-                    match r.read_command() {
-                        ReadCommandOutput::Command(command, raw_input) => {
-                            match session.execute_top_level(CommandHistory::new_with_raw(
-                                command.command,
-                                raw_input,
-                            )) {
-                                Err(e) => {
-                                    eprintln!("{e:?}");
-                                }
-                                Ok(ControlFlow::Break(a)) => {
-                                    refresh_repl_state(&mut r, &session);
-                                    save_state = a;
-                                    break;
-                                }
-                                Ok(ControlFlow::Continue(())) => {
-                                    refresh_repl_state(&mut r, &session);
-                                }
-                            }
-                        }
-                        ReadCommandOutput::EmptyLine => (),
-                        ReadCommandOutput::ClapError(e) => {
-                            e.print().unwrap();
-                        }
-                        ReadCommandOutput::ShlexError => {
-                            println!(
-                                "{} input was not valid and could not be processed",
-                                style("Error:").red().bold()
-                            );
-                        }
-                        ReadCommandOutput::ReedlineError(e) => {
-                            panic!("{e}");
-                        }
-                        ReadCommandOutput::CtrlC => {
-                            if session.dismiss_pending_commands_block("Ctrl-C") {
-                                r.set_prompt(make_repl_prompt(&session.prompt_state_label(), None));
-                                continue;
-                            }
-                            continue;
-                        }
-                        ReadCommandOutput::CtrlD => {
-                            if session.dismiss_pending_commands_block("Ctrl-D") {
-                                r.set_prompt(make_repl_prompt(&session.prompt_state_label(), None));
-                                continue;
-                            }
-                            break;
-                        }
+                match session.execute_command(command)?.flow {
+                    ControlFlow::Break(a) => save_state = a,
+                    ControlFlow::Continue(()) => {
+                        enter_repl =
+                            std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
                     }
                 }
+            }
+
+            if enter_repl {
+                if !had_initial_command {
+                    print_banner();
+                    if let Some(summary) = state_load_summary.as_ref() {
+                        print_state_load_summary(summary);
+                    }
+                }
+                run_repl_session(&mut session, &mut save_state);
             }
         }
 
@@ -1149,6 +1100,84 @@ impl OneShot {
     }
 
     // pub fn initialize(&self) {}
+}
+
+fn run_repl_session(session: &mut CliSession<'_>, save_state: &mut SaveState) {
+    let completion_state = repl::SharedCompletionState::new();
+    completion_state.update_from_session(session);
+    let mut repl = ClapEditor::<Repl>::builder()
+        .with_prompt(make_repl_prompt(&session.prompt_state_label(), None))
+        .with_completion_state(completion_state.clone());
+
+    if let Some(home) = home_dir() {
+        repl = repl.with_editor_hook(move |reed| {
+            reed.with_history(Box::new(
+                FileBackedHistory::with_file(10000, home.join(".gammaLoop_history")).unwrap(),
+            ))
+        })
+    }
+    let mut editor = repl.build();
+    let refresh_repl_state = |editor: &mut repl::ClapEditor<Repl>,
+                              session: &session::CliSession<'_>| {
+        completion_state.update_from_session(session);
+        let prompt_state_label = session.prompt_state_label();
+        let pending_block_name = session.pending_commands_block_name();
+        editor.set_prompt(make_repl_prompt(
+            &prompt_state_label,
+            pending_block_name.as_deref(),
+        ));
+    };
+
+    loop {
+        match editor.read_command() {
+            ReadCommandOutput::Command(command, raw_input) => {
+                match session
+                    .execute_command(CommandHistory::new_with_raw(command.command, raw_input))
+                {
+                    Err(e) => {
+                        eprintln!("{e:?}");
+                    }
+                    Ok(execution) => match execution.flow {
+                        ControlFlow::Break(a) => {
+                            refresh_repl_state(&mut editor, session);
+                            *save_state = a;
+                            break;
+                        }
+                        ControlFlow::Continue(()) => {
+                            refresh_repl_state(&mut editor, session);
+                        }
+                    },
+                }
+            }
+            ReadCommandOutput::EmptyLine => (),
+            ReadCommandOutput::ClapError(e) => {
+                e.print().unwrap();
+            }
+            ReadCommandOutput::ShlexError => {
+                println!(
+                    "{} input was not valid and could not be processed",
+                    style("Error:").red().bold()
+                );
+            }
+            ReadCommandOutput::ReedlineError(e) => {
+                panic!("{e}");
+            }
+            ReadCommandOutput::CtrlC => {
+                if session.dismiss_pending_commands_block("Ctrl-C") {
+                    editor.set_prompt(make_repl_prompt(&session.prompt_state_label(), None));
+                    continue;
+                }
+                continue;
+            }
+            ReadCommandOutput::CtrlD => {
+                if session.dismiss_pending_commands_block("Ctrl-D") {
+                    editor.set_prompt(make_repl_prompt(&session.prompt_state_label(), None));
+                    continue;
+                }
+                break;
+            }
+        }
+    }
 }
 
 fn generate_completion_script(shell: CompletionShell) -> String {
@@ -1311,7 +1340,7 @@ mod tests {
         utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
     };
 
-    use crate::commands::Reset;
+    use crate::commands::{Duplicate, Reset};
     use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
     use crate::tracing::{
@@ -1523,9 +1552,14 @@ mod tests {
     }
 
     #[test]
-    fn oneshot_accepts_logging_prefix_override() {
-        let parsed = OneShot::try_parse_from(["gammaloop", "-p", "long"]).unwrap();
+    fn oneshot_accepts_logging_prefix_long_flag_override() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "--logging-prefix", "long"]).unwrap();
         assert_eq!(parsed.logging_prefix, Some(LogFormat::Long));
+    }
+
+    #[test]
+    fn oneshot_rejects_removed_logging_prefix_underscore_flag() {
+        assert!(OneShot::try_parse_from(["gammaloop", "--logging_prefix", "long"]).is_err());
     }
 
     #[test]
@@ -1678,9 +1712,38 @@ mod tests {
         };
         assert_eq!(
             integrate.process,
-            Some(ProcessRef::Unqualified("triangle".to_string()))
+            vec![ProcessRef::Unqualified("triangle".to_string())]
         );
-        assert_eq!(integrate.integrand_name, Some("LO".to_string()));
+        assert_eq!(integrate.integrand_name, vec!["LO".to_string()]);
+    }
+
+    #[test]
+    fn repl_parses_duplicate_integrand_output_selectors() {
+        let parsed = Repl::try_parse_from([
+            "gammaloop",
+            "duplicate",
+            "integrand",
+            "-p",
+            "box",
+            "-i",
+            "scalar_box",
+            "--output_process_name",
+            "box_copy",
+            "--output_integrand_name",
+            "scalar_box_copy",
+        ])
+        .unwrap();
+
+        let Commands::Duplicate(Duplicate::Integrand(command)) = parsed.command else {
+            panic!("expected duplicate integrand command");
+        };
+        assert_eq!(
+            command.process,
+            Some(ProcessRef::Unqualified("box".to_string()))
+        );
+        assert_eq!(command.integrand_name, Some("scalar_box".to_string()));
+        assert_eq!(command.output_process_name, "box_copy");
+        assert_eq!(command.output_integrand_name, "scalar_box_copy");
     }
 
     #[test]
@@ -1881,6 +1944,7 @@ mod tests {
 
         assert!(saved.contains("display_directive = \"info\""), "{saved}");
         assert!(saved.contains("logfile_directive = \"off\""), "{saved}");
+        assert!(saved.contains("log_format = \"Long\""), "{saved}");
         assert!(saved.contains("compiler = \"g++\""), "{saved}");
     }
 
@@ -1926,6 +1990,7 @@ mod tests {
         fs::remove_file(temp.path().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
         let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
         assert_eq!(loaded, CLISettings::default());
+        assert_eq!(loaded.global.log_style.log_format, LogFormat::Long);
     }
 
     #[test]

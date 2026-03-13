@@ -50,6 +50,10 @@ fn unwrap_sample_impl<T: FloatLike>(
 #[derive(Debug, Clone)]
 pub enum GammaLoopSample<T: FloatLike> {
     Default(MomentumSample<T>),
+    Graph {
+        graph_id: usize,
+        sample: MomentumSample<T>,
+    },
     MultiChanneling {
         alpha: F<T>,
         sample: MomentumSample<T>,
@@ -77,6 +81,10 @@ impl<T: FloatLike> GammaLoopSample<T> {
                 loop_mom_cache_id,
                 external_mom_cache_id,
             )),
+            GammaLoopSample::Graph { graph_id, sample } => GammaLoopSample::Graph {
+                graph_id: *graph_id,
+                sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
+            },
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
                     alpha: alpha.clone(),
@@ -95,6 +103,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     pub(crate) fn zero(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.zero(),
+            GammaLoopSample::Graph { sample, .. } => sample.zero(),
             GammaLoopSample::MultiChanneling { sample, .. } => sample.zero(),
             GammaLoopSample::DiscreteGraph { sample, .. } => sample.zero(),
         }
@@ -104,6 +113,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     pub(crate) fn one(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.one(),
+            GammaLoopSample::Graph { sample, .. } => sample.one(),
             GammaLoopSample::MultiChanneling { sample, .. } => sample.one(),
             GammaLoopSample::DiscreteGraph { sample, .. } => sample.one(),
         }
@@ -118,6 +128,10 @@ impl<T: FloatLike> GammaLoopSample<T> {
     {
         match self {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.cast_sample()),
+            GammaLoopSample::Graph { graph_id, sample } => GammaLoopSample::Graph {
+                graph_id: *graph_id,
+                sample: sample.cast_sample(),
+            },
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
                     alpha: alpha.clone().into(),
@@ -139,6 +153,10 @@ impl<T: FloatLike> GammaLoopSample<T> {
     {
         match self {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.higher_precision()),
+            GammaLoopSample::Graph { graph_id, sample } => GammaLoopSample::Graph {
+                graph_id: *graph_id,
+                sample: sample.higher_precision(),
+            },
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
                     alpha: alpha.higher(),
@@ -160,6 +178,10 @@ impl<T: FloatLike> GammaLoopSample<T> {
     {
         match self {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.lower_precision()),
+            GammaLoopSample::Graph { graph_id, sample } => GammaLoopSample::Graph {
+                graph_id: *graph_id,
+                sample: sample.lower_precision(),
+            },
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
                     alpha: alpha.lower(),
@@ -178,6 +200,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     pub(crate) fn get_default_sample(&self) -> &MomentumSample<T> {
         match self {
             GammaLoopSample::Default(sample) => sample,
+            GammaLoopSample::Graph { sample, .. } => sample,
             GammaLoopSample::MultiChanneling { sample, .. } => sample,
             GammaLoopSample::DiscreteGraph { sample, .. } => sample.get_default_sample(),
         }

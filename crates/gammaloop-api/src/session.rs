@@ -1,4 +1,7 @@
-use std::ops::ControlFlow;
+use std::{
+    io::{self, IsTerminal, Write},
+    ops::ControlFlow,
+};
 
 use color_eyre::{eyre::eyre, Result};
 use colored::Colorize;
@@ -9,14 +12,54 @@ use tracing::{info, warn};
 
 use crate::{
     commands::{
+        process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
         run::{prepare_command_histories_with_context, PreparedCommand, PreparedRun},
         save::SaveState,
-        Commands, StartCommandsBlock,
+        CommandExecution, Commands, StartCommandsBlock,
     },
     repl::{IrProfileCompletionEntry, ProcessCompletionEntry, ProcessKind},
     state::{CommandHistory, CommandsBlock, RunHistory, State},
     CLISettings,
 };
+
+fn format_command_block_conflict_message(conflicting_blocks: &[String]) -> String {
+    match conflicting_blocks {
+        [] => String::new(),
+        [single] => format!(
+            "Run card command block '{}' redefines an existing block with different commands",
+            single
+        ),
+        many => format!(
+            "Run card command blocks {} redefine existing blocks with different commands",
+            many.iter()
+                .map(|name| format!("'{}'", name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+fn prompt_command_block_conflict_override(conflicting_blocks: &[String]) -> Result<bool> {
+    let prompt = format!(
+        "{}. Proceed anyway? (it may break reproducibility of the state from run.toml) [y/n] > ",
+        format_command_block_conflict_message(conflicting_blocks)
+    );
+    let mut stderr = io::stderr();
+    let mut input = String::new();
+    loop {
+        eprint!("{prompt}");
+        stderr.flush()?;
+        input.clear();
+        io::stdin().read_line(&mut input)?;
+        match input.trim().to_ascii_lowercase().as_str() {
+            "y" | "yes" => return Ok(true),
+            "n" | "no" => return Ok(false),
+            _ => {
+                eprintln!("Please answer 'y' or 'n'.");
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct CliSessionState {
@@ -60,7 +103,7 @@ impl<'a> CliSession<'a> {
         }
     }
 
-    pub fn execute_top_level(&mut self, command: CommandHistory) -> Result<ControlFlow<SaveState>> {
+    pub fn execute_command(&mut self, command: CommandHistory) -> Result<CommandExecution> {
         let prepared = PreparedCommand::prepare(command, self.run_history, 1)?;
         self.execute_prepared(prepared, HistoryMode::Record)
     }
@@ -83,6 +126,34 @@ impl<'a> CliSession<'a> {
         effective_boot_run_history: &RunHistory,
         booted_existing_state: bool,
     ) -> Result<ControlFlow<SaveState>> {
+        let interactive_prompt_available = io::stdin().is_terminal() && io::stdout().is_terminal();
+        self.apply_boot_run_history_with_conflict_resolver(
+            boot_run_history,
+            effective_boot_run_history,
+            booted_existing_state,
+            |conflicting_blocks| {
+                if interactive_prompt_available {
+                    return prompt_command_block_conflict_override(conflicting_blocks);
+                }
+
+                Err(eyre!(
+                    "{}. Cannot continue non-interactively; rerun in an interactive terminal or align the command block definitions.",
+                    format_command_block_conflict_message(conflicting_blocks)
+                ))
+            },
+        )
+    }
+
+    pub fn apply_boot_run_history_with_conflict_resolver<F>(
+        &mut self,
+        boot_run_history: &RunHistory,
+        effective_boot_run_history: &RunHistory,
+        booted_existing_state: bool,
+        mut resolve_conflicts: F,
+    ) -> Result<ControlFlow<SaveState>>
+    where
+        F: FnMut(&[String]) -> Result<bool>,
+    {
         boot_run_history.validate()?;
 
         if booted_existing_state
@@ -106,9 +177,30 @@ impl<'a> CliSession<'a> {
         }
 
         let mut merged_history = self.run_history.clone();
-        merged_history.merge_commands_blocks(&effective_boot_run_history.commands_blocks)?;
+        let conflicting_blocks = merged_history
+            .conflicting_command_block_names(&effective_boot_run_history.command_blocks);
+        let overwrite_conflicting_blocks = if conflicting_blocks.is_empty() {
+            false
+        } else if self.cli_settings.session.read_only_state {
+            return Err(eyre!(
+                "{}. Cannot proceed while --read-only-state is enabled.",
+                format_command_block_conflict_message(&conflicting_blocks)
+            ));
+        } else if resolve_conflicts(&conflicting_blocks)? {
+            true
+        } else {
+            info!(
+                "{}",
+                "Boot run card application cancelled by user.".yellow()
+            );
+            return Ok(ControlFlow::Break(SaveState::default()));
+        };
+        merged_history.merge_command_blocks_with_overwrite(
+            &effective_boot_run_history.command_blocks,
+            overwrite_conflicting_blocks,
+        )?;
 
-        for block in &effective_boot_run_history.commands_blocks {
+        for block in &effective_boot_run_history.command_blocks {
             let block_context = format!("command block '{}'", block.name);
             let _ = prepare_command_histories_with_context(
                 &block.commands,
@@ -125,8 +217,10 @@ impl<'a> CliSession<'a> {
             "boot",
         )?;
 
-        self.run_history
-            .merge_commands_blocks(&effective_boot_run_history.commands_blocks)?;
+        self.run_history.merge_command_blocks_with_overwrite(
+            &effective_boot_run_history.command_blocks,
+            overwrite_conflicting_blocks,
+        )?;
         effective_boot_run_history
             .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;
         self.execute_prepared_commands(prepared, HistoryMode::Record)
@@ -149,7 +243,7 @@ impl<'a> CliSession<'a> {
 
     pub fn current_commands_block_names(&self) -> Vec<String> {
         self.run_history
-            .commands_blocks
+            .command_blocks
             .iter()
             .map(|block| block.name.clone())
             .collect()
@@ -228,6 +322,41 @@ impl<'a> CliSession<'a> {
             })
             .flatten()
             .collect()
+    }
+
+    pub(crate) fn current_process_settings_entries(&self) -> Vec<ProcessSettingsCompletionEntry> {
+        let mut entries = Vec::new();
+
+        for (process_id, process) in self.state.process_list.processes.iter().enumerate() {
+            for integrand_name in process.collection.get_integrand_names() {
+                let Ok(resolved) = process.get_integrand(integrand_name) else {
+                    continue;
+                };
+                let Some(integrand) = resolved.integrand else {
+                    continue;
+                };
+                let Ok(serialized) = serialize_runtime_named_settings(integrand.get_settings())
+                else {
+                    continue;
+                };
+
+                entries.push(ProcessSettingsCompletionEntry {
+                    process_id,
+                    process_name: process.definition.folder_name.clone(),
+                    integrand_name: integrand_name.to_string(),
+                    quantities: serialized.quantities,
+                    observables: serialized.observables,
+                    selectors: serialized.selectors,
+                });
+            }
+        }
+
+        entries.sort_by(|left, right| {
+            left.process_id
+                .cmp(&right.process_id)
+                .then_with(|| left.integrand_name.cmp(&right.integrand_name))
+        });
+        entries
     }
 
     pub fn current_model_parameter_entries(
@@ -311,7 +440,8 @@ impl<'a> CliSession<'a> {
         history_mode: HistoryMode,
     ) -> Result<ControlFlow<SaveState>> {
         for command in commands {
-            if let ControlFlow::Break(save_state) = self.execute_prepared(command, history_mode)? {
+            let execution = self.execute_prepared(command, history_mode)?;
+            if let ControlFlow::Break(save_state) = execution.flow {
                 return Ok(ControlFlow::Break(save_state));
             }
         }
@@ -322,7 +452,7 @@ impl<'a> CliSession<'a> {
         &mut self,
         command: PreparedCommand,
         history_mode: HistoryMode,
-    ) -> Result<ControlFlow<SaveState>> {
+    ) -> Result<CommandExecution> {
         match command {
             PreparedCommand::Plain(command) => self.execute_plain(command, history_mode),
             PreparedCommand::Run { command, plan } => self.execute_run(command, plan, history_mode),
@@ -333,7 +463,7 @@ impl<'a> CliSession<'a> {
         &mut self,
         command: CommandHistory,
         history_mode: HistoryMode,
-    ) -> Result<ControlFlow<SaveState>> {
+    ) -> Result<CommandExecution> {
         if self.session_state.pending_commands_block.is_some() {
             return self.handle_recording_mode(command);
         }
@@ -351,18 +481,23 @@ impl<'a> CliSession<'a> {
                 false
             }
             _ => {
-                if let ControlFlow::Break(save_state) = command.command.clone().run(
+                let execution = command.command.clone().run(
                     self.state,
                     self.run_history,
                     self.cli_settings,
                     self.default_runtime_settings,
-                )? {
+                )?;
+                if let ControlFlow::Break(save_state) = execution.flow {
                     if history_mode == HistoryMode::Record {
                         self.record_command(&command);
                     }
-                    return Ok(ControlFlow::Break(save_state));
+                    return Ok(CommandExecution::break_with(save_state));
                 }
-                history_mode == HistoryMode::Record
+                let output = execution.output;
+                if history_mode == HistoryMode::Record {
+                    self.record_command(&command);
+                }
+                return Ok(CommandExecution::continue_with(output));
             }
         };
 
@@ -370,7 +505,7 @@ impl<'a> CliSession<'a> {
             self.record_command(&command);
         }
 
-        Ok(ControlFlow::Continue(()))
+        Ok(CommandExecution::continue_without_output())
     }
 
     fn execute_run(
@@ -378,13 +513,13 @@ impl<'a> CliSession<'a> {
         command: CommandHistory,
         plan: PreparedRun,
         history_mode: HistoryMode,
-    ) -> Result<ControlFlow<SaveState>> {
+    ) -> Result<CommandExecution> {
         if self.session_state.pending_commands_block.is_some() {
             return self.handle_recording_mode(command);
         }
 
         if plan.is_empty() {
-            return Ok(ControlFlow::Continue(()));
+            return Ok(CommandExecution::continue_without_output());
         }
 
         let display_text = display_command(&command);
@@ -395,7 +530,7 @@ impl<'a> CliSession<'a> {
             if let ControlFlow::Break(save_state) =
                 self.execute_prepared_commands(block.commands, HistoryMode::Suppress)?
             {
-                return Ok(ControlFlow::Break(save_state));
+                return Ok(CommandExecution::break_with(save_state));
             }
         }
 
@@ -410,28 +545,28 @@ impl<'a> CliSession<'a> {
         if let ControlFlow::Break(save_state) =
             self.execute_prepared_commands(plan.commands, HistoryMode::Suppress)?
         {
-            return Ok(ControlFlow::Break(save_state));
+            return Ok(CommandExecution::break_with(save_state));
         }
 
         if history_mode == HistoryMode::Record {
             self.record_command(&command);
         }
 
-        Ok(ControlFlow::Continue(()))
+        Ok(CommandExecution::continue_without_output())
     }
 
-    fn handle_recording_mode(&mut self, command: CommandHistory) -> Result<ControlFlow<SaveState>> {
+    fn handle_recording_mode(&mut self, command: CommandHistory) -> Result<CommandExecution> {
         match command.command.clone() {
             Commands::StartCommandsBlock(_) => Err(eyre!(
                 "Cannot start a new command block definition before finishing the current one"
             )),
             Commands::FinishCommandsBlock => {
                 self.finish_commands_block()?;
-                Ok(ControlFlow::Continue(()))
+                Ok(CommandExecution::continue_without_output())
             }
             Commands::Quit(_) => {
                 self.dismiss_pending_commands_block("quit");
-                Ok(ControlFlow::Continue(()))
+                Ok(CommandExecution::continue_without_output())
             }
             _ => {
                 let stored = normalize_command_history(&command);
@@ -441,7 +576,7 @@ impl<'a> CliSession<'a> {
                     .as_mut()
                     .expect("recording mode requires a pending block");
                 pending.commands.push(stored);
-                Ok(ControlFlow::Continue(()))
+                Ok(CommandExecution::continue_without_output())
             }
         }
     }
@@ -488,13 +623,13 @@ impl<'a> CliSession<'a> {
 
         if let Some(existing_index) = self
             .run_history
-            .commands_blocks
+            .command_blocks
             .iter()
             .position(|existing| existing.name == pending.name)
         {
-            self.run_history.commands_blocks[existing_index] = block;
+            self.run_history.command_blocks[existing_index] = block;
         } else {
-            self.run_history.commands_blocks.push(block);
+            self.run_history.command_blocks.push(block);
         }
 
         self.run_history.validate()?;
@@ -531,7 +666,7 @@ fn raw_round_trips(raw: &str, command: &Commands) -> bool {
         .unwrap_or(false)
 }
 
-fn display_command(command: &CommandHistory) -> String {
+pub(crate) fn display_command(command: &CommandHistory) -> String {
     if let Some(raw_string) = normalize_command_history(command).raw_string {
         raw_string
     } else {

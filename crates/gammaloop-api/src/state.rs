@@ -31,7 +31,7 @@ use gammalooprs::{
     graph::Graph,
     initialisation::initialise,
     integrands::HasIntegrand,
-    model::{InputParamCard, Model},
+    model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     utils::{
@@ -45,6 +45,7 @@ use gammalooprs::{
 use crate::{
     command_parser::split_command_line,
     commands::{save::SaveState, Commands},
+    model_parameters::{external_model_parameter_type, validate_model_parameter_type},
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
 };
@@ -109,6 +110,24 @@ impl<'de> Deserialize<'de> for ProcessRef {
         }
 
         deserializer.deserialize_any(ProcessRefVisitor)
+    }
+}
+
+#[cfg(feature = "python_api")]
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ProcessRef {
+    type Error = pyo3::PyErr;
+
+    fn extract(obj: pyo3::Borrowed<'a, 'py, pyo3::types::PyAny>) -> pyo3::PyResult<Self> {
+        if let Ok(process_id) = <usize as pyo3::FromPyObject<'a, 'py>>::extract(obj) {
+            return Ok(ProcessRef::Id(process_id));
+        }
+
+        let selector = <String as pyo3::FromPyObject<'a, 'py>>::extract(obj).map_err(|_| {
+            pyo3::exceptions::PyTypeError::new_err(
+                "process selectors must be either an integer process id or a string selector",
+            )
+        })?;
+        ProcessRef::from_str(&selector).map_err(pyo3::exceptions::PyValueError::new_err)
     }
 }
 
@@ -302,8 +321,8 @@ impl SyncSettings for CLISettings {
 // Static flag to control serialization behavior
 static SERIALIZE_COMMANDS_AS_STRINGS: AtomicBool = AtomicBool::new(false);
 
-fn is_commands_blocks_empty(commands_blocks: &Vec<CommandsBlock>) -> bool {
-    commands_blocks.is_empty()
+fn is_command_blocks_empty(command_blocks: &Vec<CommandsBlock>) -> bool {
+    command_blocks.is_empty()
 }
 
 fn should_persist_command(command: &Commands) -> bool {
@@ -473,8 +492,8 @@ pub struct RunHistory {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub cli_settings: CLISettings,
 
-    #[serde(skip_serializing_if = "is_commands_blocks_empty")]
-    pub commands_blocks: Vec<CommandsBlock>,
+    #[serde(skip_serializing_if = "is_command_blocks_empty")]
+    pub command_blocks: Vec<CommandsBlock>,
     // #[serde(with = "serde_yaml::with::singleton_map_recursive")]
     // #[schemars(with = "Vec<CommandHistory>")]
     pub commands: Vec<CommandHistory>,
@@ -492,7 +511,7 @@ pub struct CommandsBlock {
 struct RawRunHistoryToml {
     default_runtime_settings: RuntimeSettings,
     cli_settings: CLISettings,
-    commands_blocks: Vec<RawCommandsBlockToml>,
+    command_blocks: Vec<RawCommandsBlockToml>,
     commands: Vec<TomlValue>,
 }
 
@@ -555,16 +574,16 @@ impl RunHistory {
     }
 
     pub fn validate(&self) -> Result<()> {
-        let mut seen_names = HashSet::with_capacity(self.commands_blocks.len());
-        for block in &self.commands_blocks {
+        let mut seen_names = HashSet::with_capacity(self.command_blocks.len());
+        for block in &self.command_blocks {
             if block.name.trim().is_empty() {
                 return Err(eyre!(
-                    "Run card `commands_blocks` contains a block with an empty name"
+                    "Run card `command_blocks` contains a block with an empty name"
                 ));
             }
             if !seen_names.insert(block.name.clone()) {
                 return Err(eyre!(
-                    "Run card `commands_blocks` contains duplicate block name '{}'",
+                    "Run card `command_blocks` contains duplicate block name '{}'",
                     block.name
                 ));
             }
@@ -573,10 +592,10 @@ impl RunHistory {
     }
 
     pub fn command_block(&self, name: &str) -> Option<&CommandsBlock> {
-        self.commands_blocks.iter().find(|block| block.name == name)
+        self.command_blocks.iter().find(|block| block.name == name)
     }
 
-    pub fn select_commands_blocks(
+    pub fn select_command_blocks(
         &self,
         selected_block_names: &[String],
     ) -> Result<Vec<CommandsBlock>> {
@@ -586,7 +605,7 @@ impl RunHistory {
                 eyre!(
                     "Unknown command block '{}'. Available command blocks: {}",
                     name,
-                    self.commands_blocks
+                    self.command_blocks
                         .iter()
                         .map(|block| block.name.as_str())
                         .collect::<Vec<_>>()
@@ -598,20 +617,47 @@ impl RunHistory {
         Ok(selected)
     }
 
-    pub fn merge_commands_blocks(&mut self, commands_blocks: &[CommandsBlock]) -> Result<()> {
-        for new_block in commands_blocks {
-            match self.command_block(&new_block.name) {
-                Some(existing_block) if existing_block.semantically_eq(new_block) => {}
+    pub fn conflicting_command_block_names(&self, command_blocks: &[CommandsBlock]) -> Vec<String> {
+        command_blocks
+            .iter()
+            .filter_map(|new_block| match self.command_block(&new_block.name) {
+                Some(existing_block) if !existing_block.semantically_eq(new_block) => {
+                    Some(new_block.name.clone())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn merge_command_blocks_with_overwrite(
+        &mut self,
+        command_blocks: &[CommandsBlock],
+        overwrite_conflicts: bool,
+    ) -> Result<()> {
+        for new_block in command_blocks {
+            match self
+                .command_blocks
+                .iter()
+                .position(|existing| existing.name == new_block.name)
+            {
+                Some(index) if self.command_blocks[index].semantically_eq(new_block) => {}
+                Some(index) if overwrite_conflicts => {
+                    self.command_blocks[index] = new_block.clone();
+                }
                 Some(_) => {
                     return Err(eyre!(
                         "Run card command block '{}' redefines an existing block with different commands",
                         new_block.name
                     ));
                 }
-                None => self.commands_blocks.push(new_block.clone()),
+                None => self.command_blocks.push(new_block.clone()),
             }
         }
         self.validate()
+    }
+
+    pub fn merge_command_blocks(&mut self, command_blocks: &[CommandsBlock]) -> Result<()> {
+        self.merge_command_blocks_with_overwrite(command_blocks, false)
     }
 
     pub fn apply_session_settings(
@@ -706,8 +752,8 @@ impl RunHistory {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let commands_blocks = raw_run_history
-            .commands_blocks
+        let command_blocks = raw_run_history
+            .command_blocks
             .into_iter()
             .map(|block| {
                 let RawCommandsBlockToml { name, commands } = block;
@@ -728,7 +774,7 @@ impl RunHistory {
         Ok(Self {
             default_runtime_settings: raw_run_history.default_runtime_settings,
             cli_settings: raw_run_history.cli_settings,
-            commands_blocks,
+            command_blocks,
             commands,
         })
     }
@@ -893,6 +939,85 @@ fn save_state_manifest(save_path: &Path) -> Result<()> {
 }
 
 impl State {
+    fn overridable_model_parameter_names(&self) -> Vec<String> {
+        let mut names = self
+            .model_parameters
+            .keys()
+            .map(|symbol| symbol.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    }
+
+    fn resolve_overridable_model_parameter_type(
+        &self,
+        parameter_name: &str,
+    ) -> Result<gammalooprs::model::ParameterType> {
+        let possibilities = self.overridable_model_parameter_names();
+        let parameter_type = external_model_parameter_type(&self.model, parameter_name)
+            .ok_or_else(|| eyre!("No model parameter named '{parameter_name}'"))
+            .with_note(|| {
+                format!(
+                    "Possible model parameters are: {}",
+                    possibilities.join(", ")
+                )
+            })?;
+
+        let symbol = UFOSymbol::from(parameter_name);
+        if !self.model_parameters.contains_key(&symbol) {
+            return Err(eyre!(
+                "Model parameter '{parameter_name}' cannot be overridden because it is not present in the shared top-level model_parameters.json"
+            ))
+            .with_note(|| format!("Possible model parameters are: {}", possibilities.join(", ")));
+        }
+
+        Ok(parameter_type)
+    }
+
+    pub fn find_generated_integrand_ref_by_name(
+        &self,
+        integrand_name: &str,
+    ) -> Result<(usize, String)> {
+        let matches = self
+            .process_list
+            .processes
+            .iter()
+            .enumerate()
+            .filter_map(|(process_id, process)| {
+                let found = match &process.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                        .get(integrand_name)
+                        .filter(|amplitude| amplitude.integrand.is_some())
+                        .map(|_| (process_id, process.definition.folder_name.clone())),
+                    ProcessCollection::CrossSections(cross_sections) => cross_sections
+                        .get(integrand_name)
+                        .filter(|cross_section| cross_section.integrand.is_some())
+                        .map(|_| (process_id, process.definition.folder_name.clone())),
+                };
+                found.map(|(process_id, process_name)| {
+                    (process_id, process_name, integrand_name.to_string())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        match matches.as_slice() {
+            [(process_id, _, canonical_name)] => Ok((*process_id, canonical_name.clone())),
+            [] => Err(eyre!(
+                "No generated integrand named '{integrand_name}' was found. Per-integrand model parameters are only supported for generated integrands."
+            )),
+            _ => {
+                let names = matches
+                    .iter()
+                    .map(|(process_id, process_name, _)| format!("#{process_id} ({process_name})"))
+                    .collect::<Vec<_>>();
+                Err(eyre!(
+                    "Integrand name '{integrand_name}' is ambiguous across generated integrands"
+                ))
+                .with_note(|| format!("Matching processes: {}", names.join(", ")))
+            }
+        }
+    }
+
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.model = Model::from_file(path)?;
         Ok(())
@@ -953,6 +1078,74 @@ impl State {
             .find_integrand(integrand_name.cloned())
             .with_note(|| format!("in process id {process_id}"))?;
         Ok((process_id, integrand_name))
+    }
+
+    pub fn resolve_effective_model_parameter_card_for_settings(
+        &self,
+        settings: &RuntimeSettings,
+    ) -> Result<InputParamCard<F<f64>>> {
+        let mut card = self.model_parameters.clone();
+
+        for (parameter_name, value) in &settings.model.external_parameters {
+            let parameter_type = self.resolve_overridable_model_parameter_type(parameter_name)?;
+            let value = Complex::new(value.0, value.1);
+            validate_model_parameter_type(parameter_name, parameter_type, &value)?;
+
+            let parameter = card
+                .get_mut(&UFOSymbol::from(parameter_name.as_str()))
+                .ok_or_else(|| {
+                    eyre!(
+                        "Model parameter '{parameter_name}' is missing from the shared top-level model_parameters.json"
+                    )
+                })?;
+            *parameter = value;
+        }
+
+        Ok(card)
+    }
+
+    pub fn resolve_serializable_model_parameter_card_for_settings(
+        &self,
+        settings: &RuntimeSettings,
+    ) -> Result<SerializableInputParamCard<F<f64>>> {
+        Ok(self
+            .resolve_effective_model_parameter_card_for_settings(settings)?
+            .to_serializable())
+    }
+
+    pub fn resolve_effective_model_parameter_card_for_integrand(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+    ) -> Result<SerializableInputParamCard<F<f64>>> {
+        let resolved = self
+            .process_list
+            .get_integrand(process_id, integrand_name)?;
+        match resolved.get_settings() {
+            Some(settings) => self.resolve_serializable_model_parameter_card_for_settings(settings),
+            None => Ok(self.model_parameters.to_serializable()),
+        }
+    }
+
+    pub fn resolve_model_for_settings(&self, settings: &RuntimeSettings) -> Result<Model> {
+        let mut model = self.model.clone();
+        self.resolve_effective_model_parameter_card_for_settings(settings)?
+            .apply_to_model(&mut model)?;
+        Ok(model)
+    }
+
+    pub fn resolve_model_for_integrand(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+    ) -> Result<Model> {
+        let resolved = self
+            .process_list
+            .get_integrand(process_id, integrand_name)?;
+        match resolved.get_settings() {
+            Some(settings) => self.resolve_model_for_settings(settings),
+            None => Ok(self.model.clone()),
+        }
     }
 
     pub fn generate_integrands(
@@ -1440,14 +1633,14 @@ mod tests {
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
         settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
-        utils::serde_utils::SHOWDEFAULTS,
+        utils::{serde_utils::SHOWDEFAULTS, test_utils::load_generic_model},
     };
     use tempfile::tempdir;
 
     use crate::commands::{
         display::Display,
         save::SaveState,
-        set::{Set, SetArgs},
+        set::{ProcessSetArgs, Set, SetArgs},
     };
 
     use super::*;
@@ -1652,9 +1845,9 @@ subtype = "tropical"
     }
 
     #[test]
-    fn run_history_filtered_for_save_preserves_commands_blocks() {
+    fn run_history_filtered_for_save_preserves_command_blocks() {
         let mut run_history = RunHistory::default();
-        run_history.commands_blocks = vec![
+        run_history.command_blocks = vec![
             CommandsBlock {
                 name: "generate".to_string(),
                 commands: vec![CommandHistory::new_with_raw(
@@ -1682,9 +1875,9 @@ subtype = "tropical"
         let toml = toml::to_string_pretty(&filtered).unwrap();
         set_serialize_commands_as_strings(false);
 
-        assert_eq!(filtered.commands_blocks.len(), 2);
+        assert_eq!(filtered.command_blocks.len(), 2);
         assert!(toml.contains("commands = ["));
-        assert!(toml.contains("[[commands_blocks]]"));
+        assert!(toml.contains("[[command_blocks]]"));
         assert!(toml.contains("quit -o"));
     }
 
@@ -1696,7 +1889,7 @@ subtype = "tropical"
 
         match cmd.command {
             Commands::Set(Set::Process { input, .. }) => match input {
-                SetArgs::String { string } => {
+                ProcessSetArgs::String { string } => {
                     assert_eq!(string, "[integrator]\nn_start = 1000\n");
                 }
                 other => panic!("Expected string set input, got {other:?}"),
@@ -1713,6 +1906,20 @@ subtype = "tropical"
                 assert_eq!(process, Some(ProcessRef::Id(12)));
             }
             other => panic!("Expected display integrands command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn command_history_defaults_generate_to_cross_section_mode() {
+        let cmd = CommandHistory::from_raw_string("generate e+ e- > d d~").unwrap();
+        match cmd.command {
+            Commands::Generate(generate) => match generate.mode {
+                Some(crate::commands::generate::GenerateCmd::Xs(args)) => {
+                    assert_eq!(args.tokens, vec!["e+", "e-", ">", "d", "d~"]);
+                }
+                other => panic!("Expected default cross-section generate mode, got {other:?}"),
+            },
+            other => panic!("Expected generate command, got {other:?}"),
         }
     }
 
@@ -1752,17 +1959,17 @@ use_picobarns = true
     }
 
     #[test]
-    fn run_history_load_preserves_commands_blocks() {
+    fn run_history_load_preserves_command_blocks() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
             &run_path,
             r#"
-[[commands_blocks]]
+[[command_blocks]]
 name = "zeta"
 commands = ["quit -n"]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "alpha"
 commands = ["quit -o"]
 "#,
@@ -1771,21 +1978,21 @@ commands = ["quit -o"]
 
         let run_history = RunHistory::load(&run_path).unwrap();
         assert!(run_history.commands.is_empty());
-        assert_eq!(run_history.commands_blocks.len(), 2);
+        assert_eq!(run_history.command_blocks.len(), 2);
     }
 
     #[test]
-    fn run_history_selects_named_commands_blocks_in_order() {
+    fn run_history_selects_named_command_blocks_in_order() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
             &run_path,
             r#"
-[[commands_blocks]]
+[[command_blocks]]
 name = "first"
 commands = ["quit -n"]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "second"
 commands = ["quit -o"]
 "#,
@@ -1795,7 +2002,7 @@ commands = ["quit -o"]
         let requested = vec!["second".to_string(), "first".to_string()];
         let run_history = RunHistory::load(&run_path).unwrap();
         let selected = run_history
-            .select_commands_blocks(requested.as_slice())
+            .select_command_blocks(requested.as_slice())
             .unwrap();
         assert_eq!(selected.len(), 2);
         assert_eq!(
@@ -1815,7 +2022,7 @@ commands = ["quit -o"]
         fs::write(
             &run_path,
             r#"
-[[commands_blocks]]
+[[command_blocks]]
 name = "first"
 commands = ["quit -n"]
 "#,
@@ -1825,7 +2032,7 @@ commands = ["quit -n"]
         let requested = vec!["missing".to_string()];
         let run_history = RunHistory::load(&run_path).unwrap();
         let err = run_history
-            .select_commands_blocks(requested.as_slice())
+            .select_command_blocks(requested.as_slice())
             .unwrap_err();
         let message = format!("{err}");
         assert!(message.contains("Unknown command block 'missing'"));
@@ -1847,13 +2054,13 @@ commands = ["quit -o"]
         let requested = vec!["first".to_string()];
         let run_history = RunHistory::load(&run_path).unwrap();
         let err = run_history
-            .select_commands_blocks(requested.as_slice())
+            .select_command_blocks(requested.as_slice())
             .unwrap_err();
         assert!(format!("{err}").contains("Unknown command block"));
     }
 
     #[test]
-    fn run_history_load_accepts_commands_and_commands_blocks_together() {
+    fn run_history_load_accepts_commands_and_command_blocks_together() {
         let temp = tempdir().unwrap();
         let run_path = temp.path().join("run.toml");
         fs::write(
@@ -1861,7 +2068,7 @@ commands = ["quit -o"]
             r#"
 commands = ["quit -o"]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "first"
 commands = ["quit -n"]
 "#,
@@ -1870,7 +2077,7 @@ commands = ["quit -n"]
 
         let run_history = RunHistory::load(&run_path).unwrap();
         assert_eq!(run_history.commands.len(), 1);
-        assert_eq!(run_history.commands_blocks.len(), 1);
+        assert_eq!(run_history.command_blocks.len(), 1);
         assert_eq!(
             run_history.commands[0].raw_string.as_deref(),
             Some("quit -o")
@@ -1884,11 +2091,11 @@ commands = ["quit -n"]
         fs::write(
             &run_path,
             r#"
-[[commands_blocks]]
+[[command_blocks]]
 name = "first"
 commands = ["quit -o"]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "first"
 commands = ["quit -n"]
 "#,
@@ -1948,6 +2155,56 @@ commands = ["quit -n"]
             classify_state_folder(temp.path()).unwrap(),
             StateFolderKind::Scratch
         );
+    }
+
+    #[test]
+    fn resolve_effective_model_parameter_card_overlays_runtime_model_settings() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(7.5), F(0.0)));
+
+        let resolved = state
+            .resolve_effective_model_parameter_card_for_settings(&settings)
+            .unwrap();
+
+        assert_eq!(
+            resolved[&UFOSymbol::from("mass_scalar_2")],
+            Complex::new(F(7.5), F(0.0))
+        );
+        assert_eq!(
+            resolved[&UFOSymbol::from("mass_scalar_1")],
+            state.model_parameters[&UFOSymbol::from("mass_scalar_1")]
+        );
+    }
+
+    #[test]
+    fn resolve_effective_model_parameter_card_rejects_non_overridable_parameters() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state
+            .model_parameters
+            .remove(&UFOSymbol::from("mass_scalar_2"));
+
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(7.5), F(0.0)));
+
+        let err = state
+            .resolve_effective_model_parameter_card_for_settings(&settings)
+            .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("cannot be overridden because it is not present"));
     }
 }
 

@@ -401,6 +401,7 @@ impl CrossSection {
                 graph_terms: terms,
                 graph_group_structure: self.graph_group_structure.clone(),
             },
+            event_processing_runtime: Default::default(),
         };
 
         self.integrand = Some(ProcessIntegrand::CrossSection(cross_section_integrand));

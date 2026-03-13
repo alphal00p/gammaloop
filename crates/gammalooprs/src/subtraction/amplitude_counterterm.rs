@@ -4,10 +4,7 @@ use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::{
-    atom::Atom,
-    domains::float::{FloatLike as SymFloatLike, Real},
-};
+use symbolica::{atom::Atom, domains::float::Real};
 
 use color_eyre::Result;
 use tracing::{debug, instrument};
@@ -52,6 +49,7 @@ const TOLERANCE: f64 = 1.0;
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+    pub generated_mask: TiVec<EsurfaceID, bool>,
     pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
     pub own_group_position: GraphGroupPosition,
 }
@@ -64,6 +62,10 @@ pub struct AmplitudeCountertermAtom {
 }
 
 impl AmplitudeCountertermAtom {
+    pub(crate) fn is_generated(&self) -> bool {
+        self.parametric_local != Atom::new() || self.parametric_integrated != Atom::new()
+    }
+
     #[instrument(
            skip_all,
            fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Threshold CT Evaluator"),
@@ -107,6 +109,7 @@ impl AmplitudeCountertermData {
         Self {
             overlap: OverlapStructure::new_empty(),
             evaluators: TiVec::new(),
+            generated_mask: TiVec::new(),
             esurface_map: TiVec::new(),
             own_group_position,
         }
@@ -195,6 +198,32 @@ impl AmplitudeCountertermData {
             }
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AmplitudeCountertermAtom;
+    use symbolica::{atom::Atom, symbol};
+
+    #[test]
+    fn empty_amplitude_counterterm_atom_is_not_generated() {
+        let atom = AmplitudeCountertermAtom {
+            parametric_local: Atom::new(),
+            parametric_integrated: Atom::new(),
+        };
+
+        assert!(!atom.is_generated());
+    }
+
+    #[test]
+    fn non_empty_amplitude_counterterm_atom_is_generated() {
+        let atom = AmplitudeCountertermAtom {
+            parametric_local: Atom::var(symbol!("x")),
+            parametric_integrated: Atom::new(),
+        };
+
+        assert!(atom.is_generated());
     }
 }
 

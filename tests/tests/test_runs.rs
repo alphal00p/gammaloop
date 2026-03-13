@@ -16,11 +16,14 @@ use gammalooprs::{
     GammaLoopContextContainer,
     model::UFOSymbol,
     numerator::aind::Aind,
+    settings::runtime::{IntegralEstimate, IntegrationResult as RuntimeIntegrationResult},
     utils::{self, ApproxEq, F, FUN_LIB, GS, TENSORLIB, W_},
 };
 use insta::assert_snapshot;
 use itertools::Itertools;
 use momtrop::assert_approx_eq;
+use serde_json::Value as JsonValue;
+use serial_test::serial;
 use spenso::{
     algebra::complex::Complex,
     network::{Network, Sequential, SmallestDegree, store::NetworkStore},
@@ -39,8 +42,214 @@ use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
 use gammaloop_integration_tests::{
-    clean_test, get_test_cli, get_tests_workspace_path, new_cli_for_test,
+    clean_test, get_test_cli, get_tests_workspace_path, new_cli_for_test, run_commands,
+    setup_sm_differential_lu_cli,
 };
+
+fn single_slot_integral(result: &RuntimeIntegrationResult) -> &IntegralEstimate {
+    &result
+        .single_slot()
+        .expect("expected a single integration-result slot")
+        .integral
+}
+
+fn default_integrate_for(name: &str) -> Integrate {
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        n_cores: Some(1),
+        workspace_path: Some(
+            get_tests_workspace_path().join(format!("{name}/integration_workspace")),
+        ),
+        target: vec![],
+        restart: true,
+        ..Default::default()
+    }
+}
+
+fn selected_slot_workspace(
+    cli: &gammaloop_integration_tests::CLIState,
+    workspace: &Path,
+    process: Option<ProcessRef>,
+    integrand_name: Option<&str>,
+) -> Result<PathBuf> {
+    let integrand_name = integrand_name.map(str::to_string);
+    let (process_id, integrand_name) = cli
+        .state
+        .find_integrand_ref(process.as_ref(), integrand_name.as_ref())?;
+    let process_name = cli.state.process_list.processes[process_id]
+        .definition
+        .folder_name
+        .clone();
+    Ok(workspace
+        .join("integrands")
+        .join(format!("{process_name}@{integrand_name}")))
+}
+
+const SCALAR_TRIANGLE_EXTERNALS: &str = r#"set process -p triangle -i scalar_tri string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [1.0, 0.0, 0.0, 0.0],
+    [0.5, 0.0, 0.0, -0.5],
+    "dependent"
+]
+helicities = [0, 0, 0]
+'"#;
+
+const SCALAR_BOX_ABOVE_EXTERNALS: &str = r#"set process -p box -i scalar_box string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [3.0, 0.0, 0.0, 3.0],
+    [3.0, 0.0, 0.0, -3.0],
+    [3.0, 0.0, 3.0, 0.0],
+    "dependent"
+]
+helicities = [0, 0, 0, 0]
+'"#;
+
+const SCALAR_BOX_BELOW_EXTERNALS: &str = r#"set process -p box -i scalar_box string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [0.3, 0.0, 0.0, 0.3],
+    [0.3, 0.0, 0.0, -0.3],
+    [0.3, 0.3, 0.0, 0.0],
+    "dependent"
+]
+helicities = [0, 0, 0, 0]
+'"#;
+
+const SCALAR_BOX_COPY_ABOVE_EXTERNALS: &str = r#"set process -p box_copy -i scalar_box_copy string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [3.0, 0.0, 0.0, 3.0],
+    [3.0, 0.0, 0.0, -3.0],
+    [3.0, 0.0, 3.0, 0.0],
+    "dependent"
+]
+helicities = [0, 0, 0, 0]
+'"#;
+
+const SCALAR_BOX_COPY_BELOW_EXTERNALS: &str = r#"set process -p box_copy -i scalar_box_copy string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [0.3, 0.0, 0.0, 0.3],
+    [0.3, 0.0, 0.0, -0.3],
+    [0.3, 0.3, 0.0, 0.0],
+    "dependent"
+]
+helicities = [0, 0, 0, 0]
+'"#;
+
+fn setup_scalar_topologies_cli(test_name: &str) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "import model scalars-default.json",
+            "reset processes",
+            "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri",
+            "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0",
+            "generate",
+            "set model mass_scalar_2=2.0",
+            "set model mass_scalar_1=1.0",
+            SCALAR_TRIANGLE_EXTERNALS,
+            SCALAR_BOX_ABOVE_EXTERNALS,
+        ],
+    )?;
+
+    Ok(cli)
+}
+
+fn scalar_topology_integrate_command(
+    test_name: &str,
+    workspace_name: &str,
+    selections: &[(&str, &str)],
+    targets: &[(&str, Complex<F<f64>>)],
+) -> Integrate {
+    let workspace = get_tests_workspace_path()
+        .join(test_name)
+        .join(workspace_name);
+    Integrate {
+        process: selections
+            .iter()
+            .map(|(process, _)| ProcessRef::Unqualified((*process).to_string()))
+            .collect(),
+        integrand_name: selections
+            .iter()
+            .map(|(_, integrand)| (*integrand).to_string())
+            .collect(),
+        workspace_path: Some(workspace),
+        n_cores: Some(1),
+        target: targets
+            .iter()
+            .map(|(key, target)| format!("{key}={},{}", target.re.0, target.im.0))
+            .collect(),
+        restart: true,
+        ..Default::default()
+    }
+}
+
+fn load_integration_result(path: &Path) -> Result<RuntimeIntegrationResult> {
+    Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
+}
+
+fn normalized_integration_result_json(result: &RuntimeIntegrationResult) -> JsonValue {
+    let mut value = serde_json::to_value(result).expect("integration result must serialize");
+    let Some(slots) = value.get_mut("slots").and_then(JsonValue::as_array_mut) else {
+        return value;
+    };
+    for slot in slots {
+        if let Some(statistics) = slot
+            .get_mut("integration_statistics")
+            .and_then(JsonValue::as_object_mut)
+        {
+            statistics.remove("average_total_time_seconds");
+            statistics.remove("average_parameterization_time_seconds");
+            statistics.remove("average_integrand_time_seconds");
+            statistics.remove("average_evaluator_time_seconds");
+            statistics.remove("average_observable_time_seconds");
+            statistics.remove("average_integrator_time_seconds");
+        }
+    }
+    value
+}
+
+fn assert_integration_results_match_ignoring_timings(
+    lhs: &RuntimeIntegrationResult,
+    rhs: &RuntimeIntegrationResult,
+) {
+    assert_eq!(
+        normalized_integration_result_json(lhs),
+        normalized_integration_result_json(rhs),
+    );
+}
+
+fn complex_distance(lhs: Complex<f64>, rhs: Complex<f64>) -> f64 {
+    let delta_re = lhs.re - rhs.re;
+    let delta_im = lhs.im - rhs.im;
+    (delta_re * delta_re + delta_im * delta_im).sqrt()
+}
 
 #[test]
 fn oak() -> Result<()> {
@@ -74,22 +283,23 @@ fn test_z_decay() -> Result<()> {
     )?;
 
     let result = Integrate {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("z_decay_test/integration_workspace/integration_results.yaml"),
-        ),
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
         workspace_path: Some(
             get_tests_workspace_path().join("z_decay_test/integration_workspace/"),
         ),
-        target: None,
+        target: vec![],
         n_cores: Some(1),
         restart: true,
+        ..Default::default()
     }
     .run(&mut state.state, &state.cli_settings)?;
 
-    assert_approx_eq(&result.result.re, &F(-0.372), &F(1e-2));
+    assert_approx_eq(
+        &single_slot_integral(&result).result.re,
+        &F(-0.372),
+        &F(1e-2),
+    );
     Ok(())
 }
 
@@ -103,10 +313,6 @@ fn epem_ttxh_lo() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("epem_ttxh_lo/integration_workspace/integration_results.toml"),
-        ),
         workspace_path: Some(get_tests_workspace_path().join("epem_ttxh_lo/integration_workspace")),
         n_cores: Some(1),
         restart: true,
@@ -152,10 +358,6 @@ fn test_epem_dd_dt() -> Result<()> {
     assert_snapshot!(format!("{a:.8e}"),@"(1.3677606162044735e-3+4.451464910288581e-4i)");
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("test_epem_dd_dt/integration_workspace/integration_results.toml"),
-        ),
         workspace_path: Some(
             get_tests_workspace_path().join("test_epem_dd_dt/integration_workspace"),
         ),
@@ -260,22 +462,20 @@ fn photons_1l_integrate() -> Result<()> {
     let target = Complex::new(F(-1.22898408452706e-13), F(-3.94362534040412e-13));
 
     let integrate = Integrate {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("photons_eu_integrate/integration_workspace/integration_results.yaml"),
-        ),
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
         n_cores: Some(1),
         workspace_path: Some(
             get_tests_workspace_path().join("photons_eu_integrate/integration_workspace/"),
         ),
-        target: Some(vec![target.re.0, target.im.0]),
+        target: vec![target.re.0.to_string(), target.im.0.to_string()],
         restart: true,
+        ..Default::default()
     };
 
     let integration_result = integrate.run(&mut cli.state, &cli.cli_settings)?;
 
+    let integration_result = single_slot_integral(&integration_result);
     assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
     assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
 
@@ -528,15 +728,19 @@ fn photonic_amplitudes() -> Result<()> {
 
         let before_integration = std::time::Instant::now();
         let integrated_result = Integrate {
-            process: None,
-            integrand_name: Some("default".to_string()),
-            result_path: None,
+            process: vec![],
+            integrand_name: vec!["default".to_string()],
             workspace_path: None,
             n_cores: Some(1),
-            target: bench_data.integrated_target.map(|t| vec![t.re.0, t.im.0]),
+            target: bench_data
+                .integrated_target
+                .map(|t| vec![t.re.0.to_string(), t.im.0.to_string()])
+                .unwrap_or_default(),
             restart: true,
+            ..Default::default()
         }
         .run(&mut cli.state, &cli.cli_settings)?;
+        let integrated_result = single_slot_integral(&integrated_result);
         let integration_time = before_integration.elapsed();
         let sample_time = integration_time / (integrated_result.neval as u32);
 
@@ -705,40 +909,38 @@ fn test_grouped_subtraction() -> Result<()> {
     )?;
 
     let int1 = Integrate {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        result_path: Some(get_tests_workspace_path().join(
-            "test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
-        )),
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
         workspace_path: Some(
             get_tests_workspace_path()
                 .join("test_grouped_subtraction/integration_workspace_no_group/"),
         ),
-        target: None,
+        target: vec![],
         n_cores: Some(1),
         restart: true,
+        ..Default::default()
     };
-    let int2 =
-        Integrate {
-            process: Some(ProcessRef::Id(1)),
-            integrand_name: Some("default".to_string()),
-            result_path: Some(get_tests_workspace_path().join(
-                "test_grouped_subtraction/integration_workspace_group/integration_results.yaml",
-            )),
-            workspace_path: Some(
-                get_tests_workspace_path()
-                    .join("test_grouped_subtraction/integration_workspace_group/"),
-            ),
-            target: None,
-            n_cores: Some(1),
-            restart: true,
-        };
+    let int2 = Integrate {
+        process: vec![ProcessRef::Id(1)],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("test_grouped_subtraction/integration_workspace_group/"),
+        ),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    };
 
     let integration_results_no_group = int1.run(&mut cli.state, &cli.cli_settings)?;
     let integration_results_group = int2.run(&mut cli.state, &cli.cli_settings)?;
 
     info!("No group result: {:#?}", integration_results_no_group);
     info!("Group result: {:#?}", integration_results_group);
+
+    let integration_results_no_group = single_slot_integral(&integration_results_no_group);
+    let integration_results_group = single_slot_integral(&integration_results_group);
 
     assert_approx_eq(
         &integration_results_group.result.re,
@@ -777,18 +979,7 @@ fn scalar_bubble() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_bubble/integration_workspace/integration_results.toml"),
-        ),
-        workspace_path: Some(
-            get_tests_workspace_path().join("scalar_bubble/integration_workspace"),
-        ),
-        n_cores: Some(1),
-        target: None,
-        restart: true,
+        ..default_integrate_for("scalar_bubble")
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
@@ -833,16 +1024,7 @@ fn scalar_sunrise() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_sunrise/integration_workspace/integration_results.toml"),
-        ),
-        workspace_path: Some(
-            get_tests_workspace_path().join("scalar_sunrise/integration_workspace"),
-        ),
-        n_cores: Some(1),
-        restart: true,
-        ..Default::default()
+        ..default_integrate_for("scalar_sunrise")
     };
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
         use_f128: false,
@@ -897,16 +1079,7 @@ fn scalar_mercedes() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_mercedes/integration_workspace/integration_results.toml"),
-        ),
-        workspace_path: Some(
-            get_tests_workspace_path().join("scalar_mercedes/integration_workspace"),
-        ),
-        n_cores: Some(1),
-        restart: true,
-        ..Default::default()
+        ..default_integrate_for("scalar_mercedes")
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
@@ -958,16 +1131,7 @@ fn scalar_basketball() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_basketball/integration_workspace/integration_results.toml"),
-        ),
-        workspace_path: Some(
-            get_tests_workspace_path().join("scalar_basketball/integration_workspace"),
-        ),
-        n_cores: Some(1),
-        restart: true,
-        ..Default::default()
+        ..default_integrate_for("scalar_basketball")
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
@@ -1024,18 +1188,7 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        result_path: Some(get_tests_workspace_path().join(
-            "scalar_mercedes_with_extra_loop/integration_workspace/integration_results.toml",
-        )),
-        workspace_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_mercedes_with_extra_loop/integration_workspace"),
-        ),
-        n_cores: Some(1),
-        target: None,
-        restart: true,
+        ..default_integrate_for("scalar_mercedes_with_extra_loop")
     };
 
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
@@ -1241,31 +1394,13 @@ fn scalar_box() -> Result<()> {
 
     cli.run_command("set process -p 0 -i default kv general.enable_cache=false")?;
     let integral_no_cache = Integrate {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_box/integration_workspace/integration_results.toml"),
-        ),
-        workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
-        n_cores: Some(1),
-        target: None,
-        restart: true,
+        ..default_integrate_for("scalar_box")
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
     cli.run_command("set process -p 0 -i default kv general.enable_cache=true")?;
     let integral_with_cache = Integrate {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_box/integration_workspace/integration_results.toml"),
-        ),
-        workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
-        target: None,
-        n_cores: Some(1),
-        restart: true,
+        ..default_integrate_for("scalar_box")
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
@@ -1274,6 +1409,9 @@ fn scalar_box() -> Result<()> {
         "Integral result with caching.  : {:#?}",
         integral_with_cache
     );
+
+    let integral_no_cache = single_slot_integral(&integral_no_cache);
+    let integral_with_cache = single_slot_integral(&integral_with_cache);
 
     assert_approx_eq(
         &integral_no_cache.result.re,
@@ -1288,6 +1426,519 @@ fn scalar_box() -> Result<()> {
 
     clean_test(&cli.cli_settings.state.folder);
 
+    Ok(())
+}
+
+#[test]
+fn test_multi_integrand() -> Result<()> {
+    let test_name = "test_multi_integrand";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p triangle -i scalar_tri {shared_integrator_settings}"
+    ))?;
+    let triangle_baseline = scalar_topology_integrate_command(
+        test_name,
+        "triangle_baseline",
+        &[("triangle", "scalar_tri")],
+        &[],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let box_above_baseline = scalar_topology_integrate_command(
+        test_name,
+        "box_above_baseline",
+        &[("box", "scalar_box")],
+        &[],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command(SCALAR_BOX_BELOW_EXTERNALS)?;
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let box_below_baseline = scalar_topology_integrate_command(
+        test_name,
+        "box_below_baseline",
+        &[("box", "scalar_box")],
+        &[],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command(SCALAR_BOX_ABOVE_EXTERNALS)?;
+
+    let triangle_target = single_slot_integral(&triangle_baseline).result;
+    let box_above_target = single_slot_integral(&box_above_baseline).result;
+    let box_below_target = single_slot_integral(&box_below_baseline).result;
+
+    cli.run_command(&format!(
+        "set process -p triangle -i scalar_tri {shared_integrator_settings}"
+    ))?;
+    let triangle_box_workspace = get_tests_workspace_path()
+        .join(test_name)
+        .join("triangle_and_box_correlated");
+    scalar_topology_integrate_command(
+        test_name,
+        "triangle_and_box_correlated",
+        &[("triangle", "scalar_tri"), ("box", "scalar_box")],
+        &[
+            ("triangle@scalar_tri", triangle_target),
+            ("box@scalar_box", box_above_target),
+        ],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let triangle_box_result =
+        load_integration_result(&triangle_box_workspace.join("integration_result.json"))?;
+
+    assert_eq!(triangle_box_result.slots.len(), 2);
+    let triangle_slot = triangle_box_result
+        .slot("triangle@scalar_tri")
+        .expect("triangle slot must be present");
+    let box_slot = triangle_box_result
+        .slot("box@scalar_box")
+        .expect("box slot must be present");
+    assert_eq!(triangle_slot.target, Some(triangle_target));
+    assert_eq!(box_slot.target, Some(box_above_target));
+    assert_eq!(triangle_slot.table_results.len(), 2);
+    assert_eq!(box_slot.table_results.len(), 2);
+    assert!(triangle_slot.integration_statistics.num_evals > 0);
+    assert!(box_slot.integration_statistics.num_evals > 0);
+    assert!(!triangle_slot.max_weight_info.is_empty());
+    assert!(!box_slot.max_weight_info.is_empty());
+    assert!(
+        triangle_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&triangle_baseline), 4),
+        "triangle correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        triangle_slot.integral,
+        single_slot_integral(&triangle_baseline),
+    );
+    assert!(
+        box_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&box_above_baseline), 4),
+        "box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        box_slot.integral,
+        single_slot_integral(&box_above_baseline),
+    );
+    assert!(
+        triangle_box_workspace
+            .join("integrands/triangle@scalar_tri/settings.toml")
+            .exists()
+    );
+    assert!(
+        triangle_box_workspace
+            .join("integrands/box@scalar_box/settings.toml")
+            .exists()
+    );
+
+    cli.run_command(
+        "duplicate integrand -p box -i scalar_box --output_process_name box_copy --output_integrand_name scalar_box_copy",
+    )?;
+    cli.run_command(SCALAR_BOX_COPY_BELOW_EXTERNALS)?;
+    let output_process = ProcessRef::Unqualified("box_copy".to_string());
+    let output_integrand = "scalar_box_copy".to_string();
+    cli.state
+        .find_integrand_ref(Some(&output_process), Some(&output_integrand))?;
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let box_pair_workspace = get_tests_workspace_path()
+        .join(test_name)
+        .join("box_above_and_below_correlated");
+    scalar_topology_integrate_command(
+        test_name,
+        "box_above_and_below_correlated",
+        &[("box", "scalar_box"), ("box_copy", "scalar_box_copy")],
+        &[
+            ("box@scalar_box", box_above_target),
+            ("box_copy@scalar_box_copy", box_below_target),
+        ],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let box_pair_result =
+        load_integration_result(&box_pair_workspace.join("integration_result.json"))?;
+
+    assert_eq!(box_pair_result.slots.len(), 2);
+    let box_above_slot = box_pair_result
+        .slot("box@scalar_box")
+        .expect("box slot must be present");
+    let box_below_slot = box_pair_result
+        .slot("box_copy@scalar_box_copy")
+        .expect("box_copy slot must be present");
+    assert_eq!(box_above_slot.target, Some(box_above_target));
+    assert_eq!(box_below_slot.target, Some(box_below_target));
+    assert_eq!(box_above_slot.table_results.len(), 2);
+    assert_eq!(box_below_slot.table_results.len(), 2);
+    assert!(box_above_slot.integration_statistics.num_evals > 0);
+    assert!(box_below_slot.integration_statistics.num_evals > 0);
+    assert!(!box_above_slot.max_weight_info.is_empty());
+    assert!(!box_below_slot.max_weight_info.is_empty());
+    assert!(
+        box_above_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&box_above_baseline), 4),
+        "leading box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        box_above_slot.integral,
+        single_slot_integral(&box_above_baseline),
+    );
+    assert!(
+        box_below_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&box_below_baseline), 4),
+        "secondary box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        box_below_slot.integral,
+        single_slot_integral(&box_below_baseline),
+    );
+    assert!(
+        box_pair_workspace
+            .join("integrands/box@scalar_box/settings.toml")
+            .exists()
+    );
+    assert!(
+        box_pair_workspace
+            .join("integrands/box_copy@scalar_box_copy/settings.toml")
+            .exists()
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_multi_integrand_batching_preserves_results() -> Result<()> {
+    let test_name = "test_multi_integrand_batching_preserves_results";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    cli.run_command(SCALAR_BOX_BELOW_EXTERNALS)?;
+
+    let mut single_batch = scalar_topology_integrate_command(
+        test_name,
+        "box_single_batch",
+        &[("box", "scalar_box")],
+        &[],
+    );
+    single_batch.batch_size = Some(10_000);
+    single_batch.no_stream_iterations = true;
+    single_batch.no_stream_updates = true;
+    single_batch.run(&mut cli.state, &cli.cli_settings)?;
+
+    let mut many_batches = scalar_topology_integrate_command(
+        test_name,
+        "box_many_batches",
+        &[("box", "scalar_box")],
+        &[],
+    );
+    many_batches.batch_size = Some(1);
+    many_batches.no_stream_iterations = true;
+    many_batches.no_stream_updates = true;
+    many_batches.run(&mut cli.state, &cli.cli_settings)?;
+
+    let single_batch_result = load_integration_result(
+        &get_tests_workspace_path()
+            .join(test_name)
+            .join("box_single_batch")
+            .join("integration_result.json"),
+    )?;
+    let many_batches_result = load_integration_result(
+        &get_tests_workspace_path()
+            .join(test_name)
+            .join("box_many_batches")
+            .join("integration_result.json"),
+    )?;
+
+    assert_integration_results_match_ignoring_timings(&single_batch_result, &many_batches_result);
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_multi_integrand_with_local_model_parameters() -> Result<()> {
+    let test_name = "test_multi_integrand_with_local_model_parameters";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let box_default_baseline = scalar_topology_integrate_command(
+        test_name,
+        "box_default_model",
+        &[("box", "scalar_box")],
+        &[],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command(
+        "duplicate integrand -p box -i scalar_box --output_process_name box_copy --output_integrand_name scalar_box_copy",
+    )?;
+    cli.run_command("set model -p box_copy mass_scalar_2=1.0")?;
+    cli.run_command(&format!(
+        "set process -p box_copy -i scalar_box_copy {shared_integrator_settings}"
+    ))?;
+
+    let box_process = ProcessRef::Unqualified("box".to_string());
+    let box_integrand = "scalar_box".to_string();
+    let (box_process_id, box_integrand_name) = cli
+        .state
+        .find_integrand_ref(Some(&box_process), Some(&box_integrand))?;
+    let box_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_process_id,
+            &box_integrand_name,
+        )?;
+    assert_eq!(box_card.data.get("mass_scalar_2"), Some(&(F(2.0), F(0.0))));
+
+    let box_copy_process = ProcessRef::Unqualified("box_copy".to_string());
+    let box_copy_integrand = "scalar_box_copy".to_string();
+    let (box_copy_process_id, box_copy_integrand_name) = cli
+        .state
+        .find_integrand_ref(Some(&box_copy_process), Some(&box_copy_integrand))?;
+    let box_copy_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_copy_process_id,
+            &box_copy_integrand_name,
+        )?;
+    assert_eq!(
+        box_copy_card.data.get("mass_scalar_2"),
+        Some(&(F(1.0), F(0.0)))
+    );
+
+    let box_local_baseline = scalar_topology_integrate_command(
+        test_name,
+        "box_local_model",
+        &[("box_copy", "scalar_box_copy")],
+        &[],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let box_default_target = single_slot_integral(&box_default_baseline).result;
+    let box_local_target = single_slot_integral(&box_local_baseline).result;
+
+    let shared_workspace = get_tests_workspace_path()
+        .join(test_name)
+        .join("box_default_and_local_model");
+    scalar_topology_integrate_command(
+        test_name,
+        "box_default_and_local_model",
+        &[("box", "scalar_box"), ("box_copy", "scalar_box_copy")],
+        &[
+            ("box@scalar_box", box_default_target),
+            ("box_copy@scalar_box_copy", box_local_target),
+        ],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let multi_result = load_integration_result(&shared_workspace.join("integration_result.json"))?;
+
+    let box_default_slot = multi_result
+        .slot("box@scalar_box")
+        .expect("box slot must be present");
+    let box_local_slot = multi_result
+        .slot("box_copy@scalar_box_copy")
+        .expect("box_copy slot must be present");
+    assert!(
+        box_default_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&box_default_baseline), 4),
+        "default-model box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        box_default_slot.integral,
+        single_slot_integral(&box_default_baseline),
+    );
+    assert!(
+        box_local_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&box_local_baseline), 4),
+        "local-model box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        box_local_slot.integral,
+        single_slot_integral(&box_local_baseline),
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_inspect_uses_per_integrand_model_parameters() -> Result<()> {
+    let test_name = "test_inspect_uses_per_integrand_model_parameters";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+
+    cli.run_command(
+        "duplicate integrand -p box -i scalar_box --output_process_name box_copy --output_integrand_name scalar_box_copy",
+    )?;
+
+    let inspect_point = vec![0.31, 0.52, 0.73];
+    let (_, default_inspect) = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: inspect_point.clone(),
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+    let (_, copied_inspect_before_override) = Inspect {
+        process: Some(ProcessRef::Unqualified("box_copy".to_string())),
+        integrand_name: Some("scalar_box_copy".to_string()),
+        point: inspect_point.clone(),
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert!(
+        complex_distance(default_inspect, copied_inspect_before_override) < 1e-12,
+        "duplicated integrand should initially inspect identically: {} vs {}",
+        default_inspect,
+        copied_inspect_before_override,
+    );
+
+    cli.run_command("set model -p box_copy mass_scalar_2=1.0")?;
+
+    let (_, copied_inspect_after_override) = Inspect {
+        process: Some(ProcessRef::Unqualified("box_copy".to_string())),
+        integrand_name: Some("scalar_box_copy".to_string()),
+        point: inspect_point.clone(),
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert!(
+        complex_distance(default_inspect, copied_inspect_after_override) > 1e-12,
+        "per-integrand model override should change the inspect result: {} vs {}",
+        default_inspect,
+        copied_inspect_after_override,
+    );
+
+    let box_copy_process = ProcessRef::Unqualified("box_copy".to_string());
+    let box_copy_integrand = "scalar_box_copy".to_string();
+    let (box_copy_process_id, box_copy_integrand_name) = cli
+        .state
+        .find_integrand_ref(Some(&box_copy_process), Some(&box_copy_integrand))?;
+    let box_copy_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_copy_process_id,
+            &box_copy_integrand_name,
+        )?;
+    assert_eq!(
+        box_copy_card.data.get("mass_scalar_2"),
+        Some(&(F(1.0), F(0.0)))
+    );
+
+    cli.run_command("set process -p box_copy -i scalar_box_copy defaults")?;
+
+    let box_copy_reset_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_copy_process_id,
+            &box_copy_integrand_name,
+        )?;
+    assert_eq!(
+        box_copy_reset_card.data.get("mass_scalar_2"),
+        Some(&(F(2.0), F(0.0)))
+    );
+
+    cli.run_command(SCALAR_BOX_COPY_ABOVE_EXTERNALS)?;
+
+    let (_, copied_inspect_after_defaults) = Inspect {
+        process: Some(ProcessRef::Unqualified("box_copy".to_string())),
+        integrand_name: Some("scalar_box_copy".to_string()),
+        point: inspect_point,
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert!(
+        complex_distance(default_inspect, copied_inspect_after_defaults) < 1e-12,
+        "resetting process defaults should clear the local model override: {} vs {}",
+        default_inspect,
+        copied_inspect_after_defaults,
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_integration_workspace_model_mismatch_requires_restart() -> Result<()> {
+    let test_name = "test_integration_workspace_model_mismatch_requires_restart";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let workspace_name = "box_workspace_model_mismatch";
+    scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[])
+        .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command("set model mass_scalar_2=1.0")?;
+    let mut resume_command =
+        scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[]);
+    resume_command.restart = false;
+    let err = resume_command
+        .run(&mut cli.state, &cli.cli_settings)
+        .expect_err("workspace resume should fail on model-parameter mismatch");
+    let err_text = format!("{err:?}");
+    assert!(err_text.contains("Workspace effective model parameters do not match"));
+    assert!(err_text.contains("box@scalar_box"));
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_integration_workspace_resume_preserves_current_effective_model_override() -> Result<()> {
+    let test_name = "test_integration_workspace_resume_preserves_current_effective_model_override";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let workspace_name = "box_workspace_effective_model_match";
+    scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[])
+        .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command("set model mass_scalar_2=1.0")?;
+    cli.run_command("set process -p box -i scalar_box kv model.mass_scalar_2=2.0")?;
+
+    let mut resume_command =
+        scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[]);
+    resume_command.restart = false;
+    resume_command.run(&mut cli.state, &cli.cli_settings)?;
+
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified("box".to_string())),
+        Some(&"scalar_box".to_string()),
+    )?;
+    let effective_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(process_id, &integrand_name)?;
+    assert_eq!(
+        effective_card.data.get("mass_scalar_2"),
+        Some(&(F(2.0), F(0.0)))
+    );
+
+    let mut second_resume =
+        scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[]);
+    second_resume.restart = false;
+    second_resume.run(&mut cli.state, &cli.cli_settings)?;
+
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -1562,7 +2213,6 @@ fn test_qqx_aaa_ir_subtracted_inspect() -> Result<()> {
     assert_eq!(inspect, target);
     Ok(())
 }
-
 #[test]
 fn test_integrate_dotted_bubble() -> Result<()> {
     let target = Complex::new(F(0.0), F(0.002871504663657095));
@@ -1574,18 +2224,13 @@ fn test_integrate_dotted_bubble() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        process: None,
-        integrand_name: None,
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("dotted_bubble/integration_workspace/integration_results.toml"),
-        ),
         workspace_path: Some(
             get_tests_workspace_path().join("dotted_bubble/integration_workspace"),
         ),
         n_cores: Some(1),
-        target: None,
+
         restart: true,
+        ..Default::default()
     };
 
     let integration_result = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -1609,18 +2254,11 @@ fn test_integrate_bubble_dot_1t1b() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        process: None,
-        integrand_name: None,
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("bubble_dot_1t1b/integration_workspace/integration_results.toml"),
-        ),
         workspace_path: Some(
             get_tests_workspace_path().join("bubble_dot_1t1b/integration_workspace"),
         ),
         n_cores: Some(1),
-        target: None,
-        restart: true,
+        ..Default::default()
     };
 
     let integration_result = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -1644,18 +2282,13 @@ fn test_integrate_bubble_dot_2t0b() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        process: None,
-        integrand_name: None,
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("bubble_dot_2t0b/integration_workspace/integration_results.toml"),
-        ),
         workspace_path: Some(
             get_tests_workspace_path().join("bubble_dot_2t0b/integration_workspace"),
         ),
         n_cores: Some(1),
-        target: None,
+
         restart: true,
+        ..Default::default()
     };
 
     let integration_result = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
@@ -1704,5 +2337,339 @@ fn test_mass_approach_scalar_self_energy() -> Result<()> {
         "Inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
     );
 
+    Ok(())
+}
+
+fn configure_differential_leading_jet_observable(
+    cli: &mut gammaloop_integration_tests::CLIState,
+) -> Result<()> {
+    run_commands(
+        cli,
+        &[
+            r#"set process string '
+[quantities.leading_jet_pt]
+type = "jet_pt"
+dR = 0.4
+'"#,
+            r#"set process string '
+[observables.leading_jet_pt_hist]
+quantity = "leading_jet_pt"
+entry_selection = "leading_only"
+x_min = 0.0
+x_max = 1000.0
+n_bins = 8
+'"#,
+        ],
+    )
+}
+
+fn configure_differential_leading_jet_selector(
+    cli: &mut gammaloop_integration_tests::CLIState,
+) -> Result<()> {
+    cli.run_command(
+        r#"set process string '
+[selectors.leading_jet_pt_cut]
+quantity = "leading_jet_pt"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 0.0
+'"#,
+    )
+}
+
+#[test]
+#[serial]
+fn lu_differential_integration_writes_json_observables() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+    )?;
+
+    let workspace = get_tests_workspace_path().join("lu_differential_integration_json/workspace");
+    let integration_result = Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    assert!(single_slot_integral(&integration_result).neval > 0);
+    assert!(workspace.join("integration_result.json").exists());
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let final_file = slot_workspace.join("observables_final.json");
+    assert!(final_file.exists());
+    assert!(
+        !slot_workspace
+            .join("observables_final_iter_0001.json")
+            .exists()
+    );
+
+    let final_bundle =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+    assert!(final_bundle.histograms.contains_key("leading_jet_pt_hist"));
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+    )?;
+
+    let workspace =
+        get_tests_workspace_path().join("lu_differential_integration_json/cli_flag_workspace");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        write_results_for_each_iteration: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    assert!(workspace.join("integration_result.json").exists());
+    assert!(
+        workspace
+            .join("results/integration_result_iter_0001.json")
+            .exists()
+    );
+    assert!(
+        slot_workspace
+            .join("observables_final_iter_0001.json")
+            .exists()
+    );
+    assert!(slot_workspace.join("observables_final.json").exists());
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
+    cli.run_command(
+        "set process kv integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu",
+    )?;
+
+    let workspace_without_observables =
+        get_tests_workspace_path().join("lu_differential_integration_hwu/without_observables");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace_without_observables.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        workspace_without_observables
+            .join("integration_result.json")
+            .exists()
+    );
+    assert!(
+        !selected_slot_workspace(&cli, &workspace_without_observables, None, Some("default"))?
+            .join("observables_final.hwu")
+            .exists()
+    );
+
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    let workspace_with_observables =
+        get_tests_workspace_path().join("lu_differential_integration_hwu/with_observables");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace_with_observables.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        workspace_with_observables
+            .join("integration_result.json")
+            .exists()
+    );
+
+    let slot_workspace =
+        selected_slot_workspace(&cli, &workspace_with_observables, None, Some("default"))?;
+    let hwu_file = slot_workspace.join("observables_final.hwu");
+    assert!(hwu_file.exists());
+    let hwu_contents = std::fs::read_to_string(hwu_file)?;
+    assert!(hwu_contents.contains("<histogram>"));
+    assert!(hwu_contents.contains("leading_jet_pt_hist"));
+    assert!(
+        !slot_workspace
+            .join("observables_final_iter_0001.hwu")
+            .exists()
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+    )?;
+
+    let workspace =
+        get_tests_workspace_path().join("lu_differential_integration_json/resume_workspace");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let (process_id, resolved_integrand_name) = cli
+        .state
+        .find_integrand_ref(None, Some(&"default".to_string()))?;
+    let slot_meta = gammalooprs::integrate::SlotMeta {
+        process_name: cli.state.process_list.processes[process_id]
+            .definition
+            .folder_name
+            .clone(),
+        integrand_name: resolved_integrand_name,
+    };
+    let final_file = slot_workspace.join("observables_final.json");
+    let checkpoint_file =
+        gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
+    assert!(checkpoint_file.exists());
+    let result_snapshot_path = workspace.join("integration_result.json");
+    let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
+    let state_before_resume =
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
+    let before_resume =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: false,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let after_resume =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+    assert_eq!(before_resume, after_resume);
+    assert_eq!(
+        result_before_resume,
+        std::fs::read_to_string(result_snapshot_path)?
+    );
+    assert_eq!(
+        state_before_resume,
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu",
+    )?;
+
+    let workspace =
+        get_tests_workspace_path().join("lu_differential_integration_hwu/resume_workspace");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let final_file = slot_workspace.join("observables_final.hwu");
+    let before_resume = std::fs::read_to_string(&final_file)?;
+    let (process_id, resolved_integrand_name) = cli
+        .state
+        .find_integrand_ref(None, Some(&"default".to_string()))?;
+    let slot_meta = gammalooprs::integrate::SlotMeta {
+        process_name: cli.state.process_list.processes[process_id]
+            .definition
+            .folder_name
+            .clone(),
+        integrand_name: resolved_integrand_name,
+    };
+    let checkpoint_file =
+        gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
+    assert!(checkpoint_file.exists());
+    let result_snapshot_path = workspace.join("integration_result.json");
+    let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
+    let state_before_resume =
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
+
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: false,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let after_resume = std::fs::read_to_string(final_file)?;
+    assert_eq!(before_resume, after_resume);
+    assert_eq!(
+        result_before_resume,
+        std::fs::read_to_string(result_snapshot_path)?
+    );
+    assert_eq!(
+        state_before_resume,
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_save_dot_silently_overwrites_existing_files() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_save_dot_overwrite")?;
+    cli.run_command("save dot")?;
+    cli.run_command("save dot")?;
     Ok(())
 }

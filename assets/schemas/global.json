@@ -3,32 +3,129 @@
   "title": "GlobalSettings",
   "type": "object",
   "properties": {
+    "display_directive": {
+      "type": "string"
+    },
     "generation": {
       "$ref": "#/$defs/GenerationSettings"
     },
-    "log_file_directive": {
+    "log_style": {
+      "$ref": "#/$defs/LogStyle"
+    },
+    "logfile_directive": {
       "type": "string"
     },
-    "stderr_directive": {
-      "type": "string"
+    "n_cores": {
+      "$ref": "#/$defs/Parallelisation"
     }
   },
   "additionalProperties": false,
   "$defs": {
+    "AlphaLoopSettings": {
+      "type": "object",
+      "properties": {
+        "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "CompilationOptimizationLevel": {
       "type": "string",
-      "enum": ["O0", "O1", "O2", "O3"]
+      "enum": [
+        "O0",
+        "O1",
+        "O2",
+        "O3"
+      ]
     },
     "EvaluatorSettings": {
       "type": "object",
       "properties": {
+        "abort_level": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
         "compile": {
           "type": "boolean"
         },
+        "cpe_iterations": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "horner_iterations": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
         "iterative_orientation_optimization": {
+          "type": "boolean"
+        },
+        "max_common_pair_cache_entries": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "max_common_pair_distance": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "max_horner_scheme_variables": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "n_cores": {
+          "type": "integer",
+          "format": "uint",
+          "default": 0,
+          "minimum": 0
+        },
+        "store_atom": {
+          "type": "boolean"
+        },
+        "summed": {
+          "type": "boolean"
+        },
+        "summed_function_map": {
+          "type": "boolean"
+        },
+        "verbose": {
           "type": "boolean"
         }
       }
+    },
+    "FMFTSettings": {
+      "type": "object",
+      "properties": {
+        "expand_masters": {
+          "type": "boolean"
+        },
+        "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "FeyGenSettings": {
+      "type": "object",
+      "properties": {
+        "gamma_simplification_closure_check": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     },
     "GammaloopCompileOptions": {
       "type": "object",
@@ -60,23 +157,80 @@
     "GenerationSettings": {
       "type": "object",
       "properties": {
-        "enable_thresholds": {
-          "type": "boolean"
+        "compile": {
+          "$ref": "#/$defs/GammaloopCompileOptions"
         },
         "evaluator": {
           "$ref": "#/$defs/EvaluatorSettings"
         },
-        "compile": {
-          "$ref": "#/$defs/GammaloopCompileOptions"
+        "feyngen": {
+          "$ref": "#/$defs/FeyGenSettings"
+        },
+        "force_cuts": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
         },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
+        },
+        "threshold_subtraction": {
+          "$ref": "#/$defs/ThresholdSubtractionSettings"
         },
         "tropical_subgraph_table": {
           "$ref": "#/$defs/TropicalSubgraphTableSettings"
         },
         "uv": {
           "$ref": "#/$defs/UVgenerationSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "LogFormat": {
+      "type": "string",
+      "enum": [
+        "Long",
+        "Short",
+        "Min",
+        "None"
+      ]
+    },
+    "LogStyle": {
+      "type": "object",
+      "properties": {
+        "full_line_source": {
+          "type": "boolean"
+        },
+        "include_fields": {
+          "type": "boolean"
+        },
+        "log_format": {
+          "$ref": "#/$defs/LogFormat"
+        },
+        "short_timestamp": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MATADSettings": {
+      "type": "object",
+      "properties": {
+        "direct_numerical_substition": {
+          "type": "boolean"
+        },
+        "expand_masters": {
+          "type": "boolean"
+        },
+        "substitute_hpls": {
+          "type": "boolean"
+        },
+        "susbstitute_masters": {
+          "type": "boolean"
         }
       },
       "additionalProperties": false
@@ -97,9 +251,84 @@
       },
       "additionalProperties": false
     },
+    "Parallelisation": {
+      "type": "object",
+      "properties": {
+        "compile": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "feyngen": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "generate": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "integrate": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
     "ParseableAtom": {
       "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
-      "type": ["string"]
+      "type": [
+        "string"
+      ]
+    },
+    "PySecDecSettings": {
+      "type": "object",
+      "properties": {
+        "max_n_evals": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_n_evals": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "quiet": {
+          "type": "boolean"
+        },
+        "relative_precision": {
+          "type": "number",
+          "format": "double"
+        },
+        "reuse_existing_output": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ThresholdSubtractionSettings": {
+      "type": "object",
+      "properties": {
+        "check_esurface_at_generation": {
+          "type": "boolean"
+        },
+        "disable_integrated_ct": {
+          "type": "boolean"
+        },
+        "enable_thresholds": {
+          "type": "boolean"
+        },
+        "skip_thresholds_that_are_cuts": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
     },
     "TropicalSubgraphTableSettings": {
       "type": "object",
@@ -120,8 +349,74 @@
     "UVgenerationSettings": {
       "type": "object",
       "properties": {
+        "add_sigma": {
+          "type": "boolean"
+        },
         "generate_integrated": {
           "type": "boolean"
+        },
+        "inner_products": {
+          "type": "boolean"
+        },
+        "only_integrated": {
+          "type": "boolean"
+        },
+        "softct": {
+          "type": "boolean"
+        },
+        "vakint": {
+          "$ref": "#/$defs/VakintSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "VakintSettings": {
+      "type": "object",
+      "properties": {
+        "additional_normalization": {
+          "type": "string"
+        },
+        "alphaloop": {
+          "$ref": "#/$defs/AlphaLoopSettings"
+        },
+        "clean_tmp_dir": {
+          "type": "boolean"
+        },
+        "evaluation_methods": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fmft": {
+          "$ref": "#/$defs/FMFTSettings"
+        },
+        "form_exe_path": {
+          "type": "string"
+        },
+        "matad": {
+          "$ref": "#/$defs/MATADSettings"
+        },
+        "normalization": {
+          "type": "string"
+        },
+        "pysecdec": {
+          "$ref": "#/$defs/PySecDecSettings"
+        },
+        "python_exe_path": {
+          "type": "string"
+        },
+        "run_time_decimal_precision": {
+          "type": "integer",
+          "format": "uint",
+          "default": 100,
+          "minimum": 0
+        },
+        "temporary_directory": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

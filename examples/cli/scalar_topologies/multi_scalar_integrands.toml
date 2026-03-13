@@ -1,0 +1,219 @@
+commands = [
+  "run generate",
+  #"run integrate_triangle",
+  #"run integrate_box_above_threshold",
+  #"run integrate_box_below_threshold",
+  #"run integrate_triangle_and_box",
+  "run integrate_box_above_and_below_threshold",
+  "quit -o"
+]
+
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/scalar_topologies/state"
+name = "multi_scalar_integrand"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+
+    "import model scalars-default.json",
+
+    "reset processes",
+    "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri",
+    "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0",
+	"generate",
+    "save dot",
+
+    "set model mass_scalar_2=2.0",
+    "set model mass_scalar_1=1.0",
+
+    """set process -p triangle -i scalar_tri string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[1.0, 0.0, 0.0,  0.0],
+   	[0.5, 0.0, 0.0, -0.5],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+	0,
+]
+    '""",
+
+	"""set process -p box -i scalar_box string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[3.0, 0.0, 0.0,  3.0],
+   	[3.0, 0.0, 0.0, -3.0],
+   	[3.0, 0.0, 3.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+	0,
+	0,
+]
+    '""",
+
+    "save state -o",
+
+]
+
+[[command_blocks]]
+name = "integrate_triangle"
+commands = [
+
+    "set process -p triangle -i scalar_tri kv integrator.n_increase=0 integrator.n_start=10000000 integrator.n_max=20000000000 integrator.seed=1337",
+
+	# (target is approximative)
+	"""integrate --process triangle -i scalar_tri --n-cores 1
+	             --target 0.0 8.09e-4
+                 --restart
+    """,
+
+]
+
+[[command_blocks]]
+name = "integrate_box_above_threshold"
+commands = [
+
+    "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
+
+	# (target is approximative)
+	"""integrate --process box -i scalar_box --n-cores 1
+	             --target 7.6e-6 7.43e-5
+                 --restart
+    """,
+
+]
+
+[[command_blocks]]
+name = "integrate_box_below_threshold"
+commands = [
+
+	"""set process -p box -i scalar_box string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[0.3, 0.0, 0.0,  0.3],
+   	[0.3, 0.0, 0.0, -0.3],
+   	[0.3, 0.3, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+	0,
+	0,
+]
+    '""",
+
+    "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
+
+	# (target is approximative)
+	"""integrate --process box -i scalar_box --n-cores 1
+	             --target 6.63e-5 0.0
+                 --restart
+    """,
+
+]
+
+[[command_blocks]]
+name = "integrate_triangle_and_box"
+commands = [
+
+    "set process -p triangle -i scalar_tri kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
+
+	"""integrate -p triangle -i scalar_tri -p box -i scalar_box --n-cores 1
+                 --target box@scalar_box=7.6e-6,7.43e-5 triangle@scalar_tri=0.0,8.09e-4
+                 --restart
+    """,
+
+]
+
+[[command_blocks]]
+name = "integrate_box_above_and_below_threshold"
+commands = [
+
+    "duplicate integrand -p box -i scalar_box --output_process_name box_copy --output_integrand_name scalar_box_copy",
+
+	"""set process -p box_copy -i scalar_box_copy string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[0.3, 0.0, 0.0,  0.3],
+   	[0.3, 0.0, 0.0, -0.3],
+   	[0.3, 0.3, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+	0,
+	0,
+]
+    '""",
+	"""set process -p box -i scalar_box string '
+    [sampling]
+    type = "discrete_graph_sampling"
+	sample_orientations = true
+    [sampling.sampling_type]
+    subtype = "multi_channeling"
+    '""",
+
+	"""set process -p box_copy -i scalar_box_copy string '
+    [sampling]
+    type = "discrete_graph_sampling"
+	sample_orientations = true
+    [sampling.sampling_type]
+    subtype = "multi_channeling"
+    '""",
+
+    "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=2000000000 integrator.seed=1337",
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	"""integrate -p box -i scalar_box -p box_copy -i scalar_box_copy --n-cores 10
+                 --target box@scalar_box=7.6e-6,7.43e-5 box_copy@scalar_box_copy=6.63e-5,0.0
+				 --show-phase both
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --sort-contributions integral
+				 --show-max-weight-info
+				 --show-max-weight-info-for-discrete-bins
+                 --restart
+    """,
+]
+
+[default_runtime_settings.sampling]
+type = "default"
+mode = "spherical"
+mapping = "linear"
+b = 1.0
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false

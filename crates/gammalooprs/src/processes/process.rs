@@ -30,7 +30,7 @@ use crate::{
     feyngen::NumeratorAwareGraphGroupingOption,
     integrands::process::ProcessIntegrand,
     numerator::GlobalPrefactor,
-    settings::{GlobalSettings, runtime::LockedRuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
 };
 use eyre::{Context, eyre};
 
@@ -45,6 +45,53 @@ use super::{Amplitude, CrossSection};
 
 const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
 const SETTINGS_HISTORY_YAML: &str = "settings_history.yaml";
+
+pub struct ResolvedIntegrandRef<'a> {
+    pub canonical_name: String,
+    pub integrand: Option<&'a ProcessIntegrand>,
+}
+
+impl<'a> ResolvedIntegrandRef<'a> {
+    pub fn get_settings(&self) -> Option<&'a RuntimeSettings> {
+        self.integrand.map(ProcessIntegrand::get_settings)
+    }
+
+    pub fn require_generated(&self) -> Result<&'a ProcessIntegrand> {
+        self.integrand.ok_or_else(|| {
+            eyre!(
+                "Integrand {} has not yet been generated, but exists",
+                self.canonical_name
+            )
+        })
+    }
+}
+
+fn create_overwriting_file(path: &Path, file_kind: &str) -> Result<File> {
+    if path.exists() {
+        if path.is_dir() {
+            fs::remove_dir_all(path).with_context(|| {
+                format!(
+                    "Trying to remove existing directory before exporting {file_kind} {}",
+                    path.display()
+                )
+            })?;
+        } else {
+            fs::remove_file(path).with_context(|| {
+                format!(
+                    "Trying to remove existing file before exporting {file_kind} {}",
+                    path.display()
+                )
+            })?;
+        }
+    }
+
+    File::create(path).with_context(|| {
+        format!(
+            "Trying to create file to export {file_kind} {}",
+            path.display()
+        )
+    })
+}
 
 fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
     let settings_history_toml = path.join(SETTINGS_HISTORY_TOML);
@@ -588,7 +635,10 @@ impl Process {
         Ok(())
     }
 
-    pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&ProcessIntegrand> {
+    pub fn get_integrand(
+        &self,
+        integrand_name: impl AsRef<str>,
+    ) -> Result<ResolvedIntegrandRef<'_>> {
         self.collection.get_integrand(integrand_name)
     }
 
@@ -673,33 +723,16 @@ impl Process {
 
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
-                        let mut dot = File::create_new(
-                            amp_path.join(format!("{}_graphs.dot", amp_name.clone())),
-                        )
-                        .with_context(|| {
-                            format!(
-                                "Trying to create file to export amplitude graph {}",
-                                amp_path
-                                    .join(format!("{}_graphs.dot", amp_name.clone()))
-                                    .display()
-                            )
-                        })?;
+                        let output_path = amp_path.join(format!("{}_graphs.dot", amp_name.clone()));
+                        let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
                         for graph in amp.graphs.iter() {
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     } else {
                         // Save each graph in its own file
                         for graph in amp.graphs.iter() {
-                            let mut dot =
-                                File::create(amp_path.join(format!("{}.dot", graph.graph.name)))
-                                    .with_context(|| {
-                                        format!(
-                                            "Trying to create file to export amplitude graph {}",
-                                            amp_path
-                                                .join(format!("{}.dot", graph.graph.name))
-                                                .display()
-                                        )
-                                    })?;
+                            let output_path = amp_path.join(format!("{}.dot", graph.graph.name));
+                            let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     }
@@ -721,32 +754,17 @@ impl Process {
 
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
-                        let mut dot = File::create_new(
-                            cs_path.join(format!("{}_graphs.dot", xs_name.clone())),
-                        )
-                        .with_context(|| {
-                            format!(
-                                "Trying to create file to export amplitude graph {}",
-                                cs_path
-                                    .join(format!("{}_graphs.dot", xs_name.clone()))
-                                    .display()
-                            )
-                        })?;
+                        let output_path = cs_path.join(format!("{}_graphs.dot", xs_name.clone()));
+                        let mut dot = create_overwriting_file(&output_path, "cross section graph")?;
                         for graph in cs.supergraphs.iter() {
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     } else {
                         // Save each supergraph in its own file
                         for graph in cs.supergraphs.iter() {
-                            let mut dot = File::create_new(
-                                cs_path.join(format!("{}.dot", graph.graph.name)),
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Trying to create file to export cross section graph {}",
-                                    cs_path.join(format!("{}.dot", graph.graph.name)).display()
-                                )
-                            })?;
+                            let output_path = cs_path.join(format!("{}.dot", graph.graph.name));
+                            let mut dot =
+                                create_overwriting_file(&output_path, "cross section graph")?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     }
@@ -839,46 +857,25 @@ impl ProcessCollection {
         }
     }
 
-    fn get_integrand(&self, name: impl AsRef<str>) -> Result<&ProcessIntegrand> {
-        let res = match self {
-            Self::Amplitudes(amplitudes) => {
-                if amplitudes.contains_key(name.as_ref()) {
-                    Ok(amplitudes.get(name.as_ref()).unwrap().integrand.as_ref())
-                } else {
-                    let names = amplitudes.keys().map(|a| a.as_str()).collect::<Vec<_>>();
+    fn get_integrand(&self, name: impl AsRef<str>) -> Result<ResolvedIntegrandRef<'_>> {
+        let canonical_name = self.find_integrand(Some(name.as_ref().to_string()))?;
+        let integrand = match self {
+            Self::Amplitudes(amplitudes) => amplitudes
+                .get(&canonical_name)
+                .expect("resolved amplitude name must exist")
+                .integrand
+                .as_ref(),
+            Self::CrossSections(cross_sections) => cross_sections
+                .get(&canonical_name)
+                .expect("resolved cross section name must exist")
+                .integrand
+                .as_ref(),
+        };
 
-                    Err(eyre!("Integrand {} does not exist", name.as_ref()))
-                        .suggestion(format!("Available amplitude names: {}", names.join(", ")))
-                }
-            }
-            Self::CrossSections(cross_sections) => {
-                if cross_sections.contains_key(name.as_ref()) {
-                    Ok(cross_sections
-                        .get(name.as_ref())
-                        .unwrap()
-                        .integrand
-                        .as_ref())
-                } else {
-                    let names = cross_sections
-                        .keys()
-                        .map(|a| a.as_str())
-                        .collect::<Vec<_>>();
-
-                    Err(eyre!("Integrand {} does not exist", name.as_ref())).suggestion(format!(
-                        "Available cross section names: {}",
-                        names.join(", ")
-                    ))
-                }
-            }
-        }?;
-
-        match res {
-            Some(integrand) => Ok(integrand),
-            None => Err(eyre!(
-                "Integrand {} has not yet been generated, but exists",
-                name.as_ref()
-            )),
-        }
+        Ok(ResolvedIntegrandRef {
+            canonical_name,
+            integrand,
+        })
     }
 
     pub fn find_integrand(&self, name: Option<String>) -> Result<String> {

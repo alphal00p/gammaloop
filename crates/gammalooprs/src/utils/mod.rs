@@ -1180,7 +1180,14 @@ impl<T: FloatLike> std::fmt::Display for F<T> {
 
 impl<T: FloatLike> std::fmt::LowerExp for F<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:e}", self.0)
+        let mut rendered = match f.precision() {
+            Some(precision) => format!("{:.*e}", precision, self.0),
+            None => format!("{:e}", self.0),
+        };
+        if f.sign_plus() && !rendered.starts_with('-') {
+            rendered.insert(0, '+');
+        }
+        f.pad(&rendered)
     }
 }
 
@@ -1343,6 +1350,22 @@ impl<T: FloatLike> F<T> {
         F(T::from_f64(x.0))
     }
 
+    pub(crate) fn zero(&self) -> Self {
+        F(self.0.zero())
+    }
+
+    pub(crate) fn one(&self) -> Self {
+        F(self.0.one())
+    }
+
+    pub(crate) fn from_usize(&self, x: usize) -> Self {
+        F(self.0.from_usize(x))
+    }
+
+    pub(crate) fn from_i64(&self, x: i64) -> Self {
+        F(self.0.from_i64(x))
+    }
+
     pub(crate) fn higher(&self) -> F<T::Higher>
     where
         T::Higher: FloatLike,
@@ -1445,6 +1468,9 @@ impl<T: FloatLike> F<T> {
     }
     pub(crate) fn ln(&self) -> Self {
         F(self.0.ln())
+    }
+    pub(crate) fn inv(&self) -> Self {
+        F(self.0.inv())
     }
     pub(crate) fn is_nan(&self) -> bool {
         self.0.is_nan()
@@ -3463,20 +3489,42 @@ pub(crate) fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String
 
 #[allow(unused)]
 pub(crate) fn format_evaluation_time(time: Duration) -> String {
-    let time_secs = time.as_secs_f64();
-    if time_secs < 1e-6 {
-        format!("{} ns", time.as_nanos())
-    } else if time_secs < 1e-3 {
-        format!("{:.2} µs", (time.as_nanos() as f64) / 1000.)
-    } else if time_secs < 1.0 {
-        format!("{:.2} ms", (time.as_micros() as f64) / 1000.)
+    let seconds = time.as_secs_f64();
+    let (value, unit) = if seconds >= 1.0 {
+        (seconds, "s")
+    } else if seconds >= 1.0e-3 {
+        (seconds * 1.0e3, "ms")
     } else {
-        format!("{:.2} s", (time.as_millis() as f64) / 1000.)
+        (seconds * 1.0e6, "µs")
+    };
+
+    let precision = if value >= 100.0 {
+        0
+    } else if value >= 10.0 {
+        1
+    } else {
+        2
+    };
+
+    format!("{value:.precision$} {unit}")
+}
+
+pub(crate) fn duration_from_secs_f64_saturating(time: f64) -> Duration {
+    if !time.is_finite() || time <= 0.0 {
+        return Duration::ZERO;
     }
+
+    let max_seconds = Duration::MAX.as_secs_f64();
+    let clamped = if time >= max_seconds {
+        max_seconds
+    } else {
+        time
+    };
+    Duration::from_secs_f64(clamped)
 }
 
 pub(crate) fn format_evaluation_time_from_f64(time: f64) -> String {
-    format_evaluation_time(Duration::from_secs_f64(time))
+    format_evaluation_time(duration_from_secs_f64_saturating(time))
 }
 
 pub(crate) fn format_sample(sample: &Sample<F<f64>>) -> String {
@@ -3506,6 +3554,147 @@ pub(crate) fn format_sample(sample: &Sample<F<f64>>) -> String {
         },
         _ => String::from("N/A"),
     }
+}
+
+pub(crate) fn normalize_tabled_separator_rows(rendered: &str) -> String {
+    let original_lines = rendered.lines().collect_vec();
+    let visible_lines = original_lines
+        .iter()
+        .map(|line| strip_ansi_escape_codes(line).chars().collect_vec())
+        .collect_vec();
+
+    original_lines
+        .iter()
+        .enumerate()
+        .map(|(row_index, line)| {
+            let visible_line = &visible_lines[row_index];
+            if is_top_border_row(visible_line) {
+                return rebuild_top_border_row(&visible_lines, row_index);
+            }
+
+            if is_internal_separator_row(visible_line) {
+                return rebuild_internal_separator_row(&visible_lines, row_index);
+            }
+
+            if is_bottom_border_row(visible_line) {
+                return rebuild_bottom_border_row(&visible_lines, row_index);
+            }
+
+            (*line).to_string()
+        })
+        .join("\n")
+}
+
+fn rebuild_top_border_row(visible_lines: &[Vec<char>], row_index: usize) -> String {
+    rebuild_border_row(visible_lines, row_index, '╭', '╮', |_, _, has_below| {
+        if has_below { '┬' } else { '─' }
+    })
+}
+
+fn rebuild_internal_separator_row(visible_lines: &[Vec<char>], row_index: usize) -> String {
+    rebuild_border_row(
+        visible_lines,
+        row_index,
+        '├',
+        '┤',
+        |row_index, column, has_below| match (
+            row_index > 0 && has_vertical_border(&visible_lines[row_index - 1], column),
+            has_below,
+        ) {
+            (false, false) => '─',
+            (false, true) => '┬',
+            (true, false) => '┴',
+            (true, true) => '┼',
+        },
+    )
+}
+
+fn rebuild_bottom_border_row(visible_lines: &[Vec<char>], row_index: usize) -> String {
+    rebuild_border_row(
+        visible_lines,
+        row_index,
+        '╰',
+        '╯',
+        |row_index, column, _| {
+            if row_index > 0 && has_vertical_border(&visible_lines[row_index - 1], column) {
+                '┴'
+            } else {
+                '─'
+            }
+        },
+    )
+}
+
+fn rebuild_border_row<F>(
+    visible_lines: &[Vec<char>],
+    row_index: usize,
+    left: char,
+    right: char,
+    mut intersection_for_column: F,
+) -> String
+where
+    F: FnMut(usize, usize, bool) -> char,
+{
+    let border = &visible_lines[row_index];
+    if border.len() < 2 {
+        return border.iter().collect();
+    }
+
+    let last = border.len() - 1;
+    let mut rebuilt = String::with_capacity(border.len());
+    rebuilt.push(left);
+
+    for column in 1..last {
+        let has_vertical_below = row_index + 1 < visible_lines.len()
+            && has_vertical_border(&visible_lines[row_index + 1], column);
+        rebuilt.push(intersection_for_column(
+            row_index,
+            column,
+            has_vertical_below,
+        ));
+    }
+
+    rebuilt.push(right);
+    rebuilt
+}
+
+fn has_vertical_border(line: &[char], column: usize) -> bool {
+    line.get(column)
+        .copied()
+        .is_some_and(|ch| matches!(ch, '│' | '├' | '┤' | '┬' | '┴' | '┼'))
+}
+
+fn is_internal_separator_row(line: &[char]) -> bool {
+    matches!(line.first(), Some('├')) && matches!(line.last(), Some('┤'))
+}
+
+fn is_top_border_row(line: &[char]) -> bool {
+    matches!(line.first(), Some('╭')) && matches!(line.last(), Some('╮'))
+}
+
+fn is_bottom_border_row(line: &[char]) -> bool {
+    matches!(line.first(), Some('╰')) && matches!(line.last(), Some('╯'))
+}
+
+fn strip_ansi_escape_codes(line: &str) -> String {
+    let mut stripped = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            while let Some(code) = chars.next() {
+                if ('@'..='~').contains(&code) {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        stripped.push(ch);
+    }
+
+    stripped
 }
 
 pub(crate) fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(

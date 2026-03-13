@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     marker::PhantomData,
     path::Path,
     sync::OnceLock,
@@ -17,6 +17,12 @@ use reedline::{Prompt, Reedline, Signal, Span, Suggestion, ValidationResult};
 use crate::{
     command_parser::split_command_line,
     commands::import::model::{builtin_json_model_names, builtin_json_model_restriction_names},
+    commands::process_settings::{
+        observable_completion_root, observable_schema, quantity_completion_root_for_kind,
+        quantity_kind_names, quantity_schema, selector_completion_root_for_kind,
+        selector_kind_names, selector_schema, NamedProcessSettingKind,
+        ProcessSettingsCompletionEntry,
+    },
     completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
     session::CliSession,
     settings_tree::{
@@ -30,6 +36,7 @@ use crate::{
 pub struct CompletionState {
     commands_block_names: Vec<String>,
     process_entries: Vec<ProcessCompletionEntry>,
+    process_settings_entries: Vec<ProcessSettingsCompletionEntry>,
     ir_profile_entries: Vec<IrProfileCompletionEntry>,
     model_parameter_entries: Vec<ModelParameterCompletionEntry>,
     model_particle_names: Vec<String>,
@@ -96,6 +103,7 @@ impl SharedCompletionState {
         self.write(|state| {
             state.commands_block_names = session.current_commands_block_names();
             state.process_entries = session.current_process_entries();
+            state.process_settings_entries = session.current_process_settings_entries();
             state.ir_profile_entries = session.current_ir_profile_entries();
             state.model_parameter_entries = session.current_model_parameter_entries();
             state.model_particle_names = session.current_model_particle_names();
@@ -243,6 +251,20 @@ enum SettingsCatalogKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProcessSettingsMutationKind {
+    Add,
+    Update,
+    Remove,
+    Display,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ProcessSettingsCommandKind {
+    mutation: ProcessSettingsMutationKind,
+    setting: NamedProcessSettingKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SettingsValueKind {
     Boolean,
     Integer,
@@ -282,8 +304,10 @@ struct ValueCompletionRequest {
 
 #[derive(Debug, Clone)]
 struct CommandContext<'a> {
+    root_cmd: &'a clap::Command,
     cmd: &'a clap::Command,
     matched_path: Vec<&'a str>,
+    all_completed_tokens: &'a [CompletionToken],
     completed_tokens: &'a [CompletionToken],
     current_token: &'a CompletionToken,
 }
@@ -445,10 +469,21 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                 ArgValueCompletion::IntegrandSelector(kind) => {
                     add_integrand_suggestions(
                         completion_state,
-                        context.completed_tokens,
-                        context.cmd,
+                        context.all_completed_tokens,
+                        context.root_cmd,
                         &value_request,
                         kind,
+                        pos,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectedIntegrandTarget => {
+                    add_selected_integrand_target_suggestions(
+                        completion_state,
+                        context.all_completed_tokens,
+                        context.root_cmd,
+                        &value_request,
                         pos,
                         &mut suggestions,
                         &mut seen,
@@ -459,8 +494,8 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
         } else if is_ir_profile_select_argument(&context, arg) {
             add_ir_profile_select_suggestions(
                 completion_state,
-                context.completed_tokens,
-                context.cmd,
+                context.all_completed_tokens,
+                context.root_cmd,
                 value_request,
                 pos,
                 &mut suggestions,
@@ -498,7 +533,8 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
         return suggestions;
     }
 
-    if context.current_token.cooked.is_empty() {
+    if context.current_token.cooked.is_empty() && process_settings_command_kind(&context).is_none()
+    {
         add_flag_suggestions(
             context.cmd,
             context.current_token,
@@ -562,8 +598,10 @@ fn resolve_command_context<'a>(
     }
 
     Some(CommandContext {
+        root_cmd,
         cmd,
         matched_path,
+        all_completed_tokens: completed_tokens,
         completed_tokens: &completed_tokens[remaining_start..],
         current_token,
     })
@@ -722,10 +760,20 @@ fn collect_used_arg_ids(
     let mut used_arg_ids = HashSet::new();
     for token in completed_tokens {
         if let Some(arg) = find_flag(cmd, token.cooked.as_str()) {
+            if arg_allows_multiple_occurrences(arg) {
+                continue;
+            }
             used_arg_ids.insert(arg_id(arg));
         }
     }
     used_arg_ids
+}
+
+fn arg_allows_multiple_occurrences(arg: &clap::Arg) -> bool {
+    matches!(
+        arg.get_action(),
+        clap::ArgAction::Append | clap::ArgAction::Count
+    )
 }
 
 fn positional_path_completion_request(
@@ -970,7 +1018,9 @@ fn add_value_suggestions(
     suggestions: &mut Vec<Suggestion>,
     seen: &mut HashSet<String>,
 ) {
-    if context.cmd.get_name() == "run" {
+    if context.cmd.get_name() == "run"
+        || matches_command_path(context, &["display", "command_block"])
+    {
         add_run_block_suggestions(context, pos, completion_state, suggestions, seen);
     }
 
@@ -984,6 +1034,10 @@ fn add_value_suggestions(
 
     if matches_generate_command_path(context) {
         add_generate_spec_suggestions(context, pos, completion_state, suggestions, seen);
+    }
+
+    if add_process_settings_suggestions(context, pos, completion_state, suggestions, seen) {
+        return;
     }
 
     if let Some(catalog_kind) = settings_catalog_kind(context) {
@@ -1110,9 +1164,22 @@ fn add_model_parameter_suggestions(
     suggestions: &mut Vec<Suggestion>,
     seen: &mut HashSet<String>,
 ) {
+    if context.completed_tokens.last().is_some_and(|token| {
+        matches!(
+            token.cooked.as_str(),
+            "-p" | "--process" | "-i" | "--integrand-name"
+        )
+    }) {
+        return;
+    }
+
     let current = context.current_token.cooked.as_str();
     if current.contains('=') {
         add_model_parameter_value_hint(context, completion_state, pos, suggestions, seen);
+        return;
+    }
+
+    if current == "defaults" {
         return;
     }
 
@@ -1128,6 +1195,20 @@ fn add_model_parameter_suggestions(
         .collect::<HashSet<_>>();
     if let Some((key, _)) = current.split_once('=') {
         assigned.insert(key.trim().to_string());
+    }
+
+    if !current.contains('=') && ("defaults".starts_with(current) || current.is_empty()) {
+        let rendered = render_value_completion("defaults", context.current_token.quote_style);
+        if seen.insert(rendered.clone()) {
+            suggestions.push(Suggestion {
+                value: rendered,
+                description: Some("Reset targeted model settings to defaults".to_string()),
+                style: None,
+                extra: None,
+                span: Span::new(context.current_token.start, pos),
+                append_whitespace: true,
+            });
+        }
     }
 
     for entry in &completion_state.model_parameter_entries {
@@ -1169,7 +1250,7 @@ fn add_model_parameter_value_hint(
                 .find(|entry| entry.name == name.trim())
                 .map(|entry| entry.parameter_type.clone())
         });
-    let hint = crate::commands::set::model_value_format_hint(parameter_type);
+    let hint = crate::model_parameters::model_value_format_hint(parameter_type);
     let rendered = render_value_completion(
         context.current_token.cooked.as_str(),
         context.current_token.quote_style,
@@ -1610,6 +1691,80 @@ fn settings_catalog_kind(context: &CommandContext<'_>) -> Option<SettingsCatalog
     }
 }
 
+fn process_settings_command_kind(
+    context: &CommandContext<'_>,
+) -> Option<ProcessSettingsCommandKind> {
+    let cases = [
+        (
+            &["set", "process", "add", "quantity"][..],
+            ProcessSettingsMutationKind::Add,
+            NamedProcessSettingKind::Quantity,
+        ),
+        (
+            &["set", "process", "add", "observable"][..],
+            ProcessSettingsMutationKind::Add,
+            NamedProcessSettingKind::Observable,
+        ),
+        (
+            &["set", "process", "add", "selector"][..],
+            ProcessSettingsMutationKind::Add,
+            NamedProcessSettingKind::Selector,
+        ),
+        (
+            &["set", "process", "update", "quantity"][..],
+            ProcessSettingsMutationKind::Update,
+            NamedProcessSettingKind::Quantity,
+        ),
+        (
+            &["set", "process", "update", "observable"][..],
+            ProcessSettingsMutationKind::Update,
+            NamedProcessSettingKind::Observable,
+        ),
+        (
+            &["set", "process", "update", "selector"][..],
+            ProcessSettingsMutationKind::Update,
+            NamedProcessSettingKind::Selector,
+        ),
+        (
+            &["set", "process", "remove", "quantity"][..],
+            ProcessSettingsMutationKind::Remove,
+            NamedProcessSettingKind::Quantity,
+        ),
+        (
+            &["set", "process", "remove", "observable"][..],
+            ProcessSettingsMutationKind::Remove,
+            NamedProcessSettingKind::Observable,
+        ),
+        (
+            &["set", "process", "remove", "selector"][..],
+            ProcessSettingsMutationKind::Remove,
+            NamedProcessSettingKind::Selector,
+        ),
+        (
+            &["display", "quantities"][..],
+            ProcessSettingsMutationKind::Display,
+            NamedProcessSettingKind::Quantity,
+        ),
+        (
+            &["display", "observables"][..],
+            ProcessSettingsMutationKind::Display,
+            NamedProcessSettingKind::Observable,
+        ),
+        (
+            &["display", "selectors"][..],
+            ProcessSettingsMutationKind::Display,
+            NamedProcessSettingKind::Selector,
+        ),
+    ];
+
+    cases.iter().find_map(|(path, mutation, setting)| {
+        matches_command_path(context, path).then_some(ProcessSettingsCommandKind {
+            mutation: *mutation,
+            setting: *setting,
+        })
+    })
+}
+
 fn add_settings_kv_suggestions(
     context: &CommandContext<'_>,
     pos: usize,
@@ -1641,6 +1796,429 @@ fn add_settings_kv_suggestions(
     }
 
     add_settings_path_suggestions(root, &key_request, pos, suggestions, seen);
+}
+
+fn add_process_settings_suggestions(
+    context: &CommandContext<'_>,
+    pos: usize,
+    completion_state: &CompletionState,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) -> bool {
+    let Some(command_kind) = process_settings_command_kind(context) else {
+        return false;
+    };
+
+    match command_kind.mutation {
+        ProcessSettingsMutationKind::Add => add_process_settings_add_suggestions(
+            context,
+            pos,
+            completion_state,
+            command_kind.setting,
+            suggestions,
+            seen,
+        ),
+        ProcessSettingsMutationKind::Update => add_process_settings_update_suggestions(
+            context,
+            pos,
+            completion_state,
+            command_kind.setting,
+            suggestions,
+            seen,
+        ),
+        ProcessSettingsMutationKind::Remove | ProcessSettingsMutationKind::Display => {
+            add_process_settings_name_suggestions_for_existing_entries(
+                context,
+                pos,
+                completion_state,
+                command_kind.setting,
+                suggestions,
+                seen,
+            )
+        }
+    }
+
+    true
+}
+
+fn add_process_settings_add_suggestions(
+    context: &CommandContext<'_>,
+    pos: usize,
+    completion_state: &CompletionState,
+    setting_kind: NamedProcessSettingKind,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    if context.completed_tokens.is_empty() {
+        let request = ValueCompletionRequest {
+            partial_value: context.current_token.cooked.clone(),
+            span_start: context.current_token.start,
+            quote_style: context.current_token.quote_style,
+        };
+        add_type_hint_suggestion(SettingsValueKind::String, &request, pos, suggestions, seen);
+        return;
+    }
+
+    match setting_kind {
+        NamedProcessSettingKind::Quantity | NamedProcessSettingKind::Selector
+            if context.completed_tokens.len() == 1 =>
+        {
+            let kinds = match setting_kind {
+                NamedProcessSettingKind::Quantity => quantity_kind_names(),
+                NamedProcessSettingKind::Selector => selector_kind_names(),
+                NamedProcessSettingKind::Observable => Vec::new(),
+            };
+            add_literal_value_suggestions(
+                kinds.iter().map(String::as_str),
+                &format!("Available {} kind", setting_kind.singular()),
+                context.current_token,
+                pos,
+                suggestions,
+                seen,
+            );
+            return;
+        }
+        _ => {}
+    }
+
+    let scopes = selected_process_settings_entries(
+        completion_state,
+        context.root_cmd,
+        context.all_completed_tokens,
+    );
+    let quantity_candidates = common_quantity_names(&scopes);
+    let (root, schema, accepts_quantity_reference) = match setting_kind {
+        NamedProcessSettingKind::Quantity if context.completed_tokens.len() >= 2 => (
+            quantity_completion_root_for_kind(context.completed_tokens[1].cooked.as_str()),
+            Some(quantity_schema()),
+            false,
+        ),
+        NamedProcessSettingKind::Observable if !context.completed_tokens.is_empty() => (
+            Some(observable_completion_root()),
+            Some(observable_schema()),
+            true,
+        ),
+        NamedProcessSettingKind::Selector if context.completed_tokens.len() >= 2 => (
+            selector_completion_root_for_kind(context.completed_tokens[1].cooked.as_str()),
+            Some(selector_schema()),
+            true,
+        ),
+        _ => (None, None, false),
+    };
+
+    if let (Some(root), Some(schema)) = (root, schema) {
+        add_process_settings_kv_suggestions(
+            root,
+            schema,
+            accepts_quantity_reference.then_some(quantity_candidates.as_slice()),
+            context.current_token,
+            pos,
+            suggestions,
+            seen,
+        );
+    }
+}
+
+fn add_process_settings_update_suggestions(
+    context: &CommandContext<'_>,
+    pos: usize,
+    completion_state: &CompletionState,
+    setting_kind: NamedProcessSettingKind,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    if context.completed_tokens.is_empty() {
+        add_process_settings_name_suggestions_for_existing_entries(
+            context,
+            pos,
+            completion_state,
+            setting_kind,
+            suggestions,
+            seen,
+        );
+        return;
+    }
+
+    let scopes = selected_process_settings_entries(
+        completion_state,
+        context.root_cmd,
+        context.all_completed_tokens,
+    );
+    let selected_name = context.completed_tokens[0].cooked.as_str();
+    let roots = common_named_setting_roots(&scopes, setting_kind, selected_name);
+    let Some(root) = intersect_settings_roots(&roots) else {
+        return;
+    };
+
+    let schema = match setting_kind {
+        NamedProcessSettingKind::Quantity => quantity_schema(),
+        NamedProcessSettingKind::Observable => observable_schema(),
+        NamedProcessSettingKind::Selector => selector_schema(),
+    };
+    let quantity_candidates = common_quantity_names(&scopes);
+    let accepts_quantity_reference = matches!(
+        setting_kind,
+        NamedProcessSettingKind::Observable | NamedProcessSettingKind::Selector
+    );
+
+    add_process_settings_kv_suggestions(
+        &root,
+        schema,
+        accepts_quantity_reference.then_some(quantity_candidates.as_slice()),
+        context.current_token,
+        pos,
+        suggestions,
+        seen,
+    );
+}
+
+fn add_process_settings_name_suggestions_for_existing_entries(
+    context: &CommandContext<'_>,
+    pos: usize,
+    completion_state: &CompletionState,
+    setting_kind: NamedProcessSettingKind,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let scopes = selected_process_settings_entries(
+        completion_state,
+        context.root_cmd,
+        context.all_completed_tokens,
+    );
+    let names = common_named_setting_names(&scopes, setting_kind);
+    add_literal_value_suggestions(
+        names.iter().map(String::as_str),
+        &format!(
+            "{} present in {} selected integrand(s)",
+            setting_kind.singular(),
+            scopes.len()
+        ),
+        context.current_token,
+        pos,
+        suggestions,
+        seen,
+    );
+}
+
+fn add_process_settings_kv_suggestions(
+    root: &JsonValue,
+    schema: &JsonValue,
+    quantity_name_candidates: Option<&[String]>,
+    current_token: &CompletionToken,
+    pos: usize,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let (key_request, value_request) = split_kv_completion_request(current_token);
+    if let Some(value_request) = value_request {
+        if key_request == "quantity" {
+            if let Some(candidates) = quantity_name_candidates {
+                let before = suggestions.len();
+                add_path_request_literal_suggestions(
+                    candidates.iter().map(String::as_str),
+                    "Existing quantity name",
+                    &value_request,
+                    pos,
+                    suggestions,
+                    seen,
+                );
+                if suggestions.len() > before {
+                    return;
+                }
+            }
+        }
+        add_settings_value_suggestions(
+            root,
+            schema,
+            &key_request,
+            &value_request,
+            pos,
+            suggestions,
+            seen,
+        );
+        return;
+    }
+
+    add_settings_path_suggestions(root, &key_request, pos, suggestions, seen);
+}
+
+fn add_literal_value_suggestions<'a>(
+    candidates: impl IntoIterator<Item = &'a str>,
+    description: &str,
+    current_token: &CompletionToken,
+    pos: usize,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let prefix = current_token.cooked.as_str();
+    for candidate in candidates {
+        if !prefix.is_empty() && !candidate.starts_with(prefix) {
+            continue;
+        }
+        let rendered = render_value_completion(candidate, current_token.quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(Suggestion {
+            value: rendered.clone(),
+            description: Some(description.to_string()),
+            style: None,
+            extra: None,
+            span: Span::new(current_token.start, pos),
+            append_whitespace: value_completion_appends_whitespace(&rendered),
+        });
+    }
+}
+
+fn add_path_request_literal_suggestions<'a>(
+    candidates: impl IntoIterator<Item = &'a str>,
+    description: &str,
+    request: &ValueCompletionRequest,
+    pos: usize,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    for candidate in candidates {
+        if !request.partial_value.is_empty() && !candidate.starts_with(&request.partial_value) {
+            continue;
+        }
+        let rendered = render_value_completion(candidate, request.quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(Suggestion {
+            value: rendered,
+            description: Some(description.to_string()),
+            style: None,
+            extra: None,
+            span: Span::new(request.span_start, pos),
+            append_whitespace: true,
+        });
+    }
+}
+
+fn selected_process_settings_entries<'a>(
+    completion_state: &'a CompletionState,
+    root_cmd: &clap::Command,
+    completed_tokens: &[CompletionToken],
+) -> Vec<&'a ProcessSettingsCompletionEntry> {
+    let selected_process =
+        find_selected_process_entry(completion_state, root_cmd, completed_tokens).or_else(|| {
+            (completion_state.process_entries.len() == 1)
+                .then(|| &completion_state.process_entries[0])
+        });
+    let Some(selected_process) = selected_process else {
+        return Vec::new();
+    };
+
+    let integrand_filter = find_last_flag_value(root_cmd, completed_tokens, "integrand-name");
+    completion_state
+        .process_settings_entries
+        .iter()
+        .filter(|entry| entry.process_id == selected_process.id)
+        .filter(|entry| {
+            integrand_filter
+                .as_deref()
+                .is_none_or(|integrand_name| entry.integrand_name == integrand_name)
+        })
+        .collect()
+}
+
+fn named_settings_map<'a>(
+    entry: &'a ProcessSettingsCompletionEntry,
+    setting_kind: NamedProcessSettingKind,
+) -> &'a BTreeMap<String, JsonValue> {
+    match setting_kind {
+        NamedProcessSettingKind::Quantity => &entry.quantities,
+        NamedProcessSettingKind::Observable => &entry.observables,
+        NamedProcessSettingKind::Selector => &entry.selectors,
+    }
+}
+
+fn common_named_setting_names(
+    scopes: &[&ProcessSettingsCompletionEntry],
+    setting_kind: NamedProcessSettingKind,
+) -> Vec<String> {
+    let Some(first) = scopes.first() else {
+        return Vec::new();
+    };
+
+    named_settings_map(first, setting_kind)
+        .keys()
+        .filter(|name| {
+            scopes
+                .iter()
+                .all(|scope| named_settings_map(scope, setting_kind).contains_key(*name))
+        })
+        .cloned()
+        .collect()
+}
+
+fn common_quantity_names(scopes: &[&ProcessSettingsCompletionEntry]) -> Vec<String> {
+    common_named_setting_names(scopes, NamedProcessSettingKind::Quantity)
+}
+
+fn common_named_setting_roots<'a>(
+    scopes: &[&'a ProcessSettingsCompletionEntry],
+    setting_kind: NamedProcessSettingKind,
+    name: &str,
+) -> Vec<&'a JsonValue> {
+    let roots = scopes
+        .iter()
+        .filter_map(|scope| named_settings_map(scope, setting_kind).get(name))
+        .collect::<Vec<_>>();
+    (roots.len() == scopes.len())
+        .then_some(roots)
+        .unwrap_or_default()
+}
+
+fn intersect_settings_roots(roots: &[&JsonValue]) -> Option<JsonValue> {
+    let mut iter = roots.iter();
+    let mut intersection = (*iter.next()?).clone();
+
+    for root in iter {
+        intersection = intersect_json_values(&intersection, root)?;
+    }
+
+    Some(intersection)
+}
+
+fn intersect_json_values(left: &JsonValue, right: &JsonValue) -> Option<JsonValue> {
+    match (left, right) {
+        (JsonValue::Object(left_map), JsonValue::Object(right_map)) => {
+            let mut merged = serde_json::Map::new();
+            for (key, left_value) in left_map {
+                let Some(right_value) = right_map.get(key) else {
+                    continue;
+                };
+                if let Some(value) = intersect_json_values(left_value, right_value) {
+                    merged.insert(key.clone(), value);
+                }
+            }
+            Some(JsonValue::Object(merged))
+        }
+        (JsonValue::Array(left_items), JsonValue::Array(right_items))
+            if left_items.len() == right_items.len() =>
+        {
+            Some(JsonValue::Array(left_items.clone()))
+        }
+        (left_value, right_value) if json_values_have_matching_kind(left_value, right_value) => {
+            Some(left_value.clone())
+        }
+        _ => None,
+    }
+}
+
+fn json_values_have_matching_kind(left: &JsonValue, right: &JsonValue) -> bool {
+    matches!(
+        (left, right),
+        (JsonValue::Null, JsonValue::Null)
+            | (JsonValue::Bool(_), JsonValue::Bool(_))
+            | (JsonValue::Number(_), JsonValue::Number(_))
+            | (JsonValue::String(_), JsonValue::String(_))
+            | (JsonValue::Array(_), JsonValue::Array(_))
+            | (JsonValue::Object(_), JsonValue::Object(_))
+    )
 }
 
 fn add_process_suggestions(
@@ -1728,7 +2306,7 @@ fn add_process_suggestions(
 fn add_integrand_suggestions(
     completion_state: &CompletionState,
     completed_tokens: &[CompletionToken],
-    cmd: &clap::Command,
+    root_cmd: &clap::Command,
     request: &PathCompletionRequest,
     selector_kind: SelectorKind,
     pos: usize,
@@ -1736,7 +2314,7 @@ fn add_integrand_suggestions(
     seen: &mut HashSet<String>,
 ) {
     let prefix = request.partial_path.as_str();
-    let process_filter = find_selected_process_entry(completion_state, cmd, completed_tokens);
+    let process_filter = find_selected_process_entry(completion_state, root_cmd, completed_tokens);
     let mut matching_processes = Vec::new();
 
     for entry in &completion_state.process_entries {
@@ -1799,6 +2377,47 @@ fn add_integrand_suggestions(
     }
 }
 
+fn add_selected_integrand_target_suggestions(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+    request: &PathCompletionRequest,
+    pos: usize,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let prefix = request.partial_path.as_str();
+    if prefix.contains('=') {
+        return;
+    }
+
+    let selected_keys =
+        selected_integrand_keys_for_target_completion(completion_state, completed_tokens, root_cmd);
+    let specified_target_keys = specified_target_keys(completed_tokens, root_cmd);
+
+    for slot_key in selected_keys {
+        if specified_target_keys.contains(&slot_key) {
+            continue;
+        }
+        let suggestion = format!("{slot_key}=");
+        if !suggestion.starts_with(prefix) {
+            continue;
+        }
+        let rendered = render_value_completion(&suggestion, request.quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(reedline::Suggestion {
+            value: rendered,
+            description: Some("Target for selected integrand".to_string()),
+            style: None,
+            extra: None,
+            span: Span::new(request.span_start, pos),
+            append_whitespace: false,
+        });
+    }
+}
+
 fn is_ir_profile_select_argument(context: &CommandContext<'_>, arg: &clap::Arg) -> bool {
     matches_command_path(context, &["profile", "infra-red"]) && arg.get_long() == Some("select")
 }
@@ -1806,14 +2425,14 @@ fn is_ir_profile_select_argument(context: &CommandContext<'_>, arg: &clap::Arg) 
 fn add_ir_profile_select_suggestions(
     completion_state: &CompletionState,
     completed_tokens: &[CompletionToken],
-    cmd: &clap::Command,
+    root_cmd: &clap::Command,
     request: &PathCompletionRequest,
     pos: usize,
     suggestions: &mut Vec<reedline::Suggestion>,
     seen: &mut HashSet<String>,
 ) {
-    let process_filter = find_last_flag_value(cmd, completed_tokens, "process");
-    let integrand_filter = find_last_flag_value(cmd, completed_tokens, "integrand-name");
+    let process_filter = find_last_flag_value(root_cmd, completed_tokens, "process");
+    let integrand_filter = find_last_flag_value(root_cmd, completed_tokens, "integrand-name");
     let prefix = request.partial_path.as_str();
 
     for entry in &completion_state.ir_profile_entries {
@@ -2105,23 +2724,30 @@ fn matches_selector_kind(kind: ProcessKind, selector_kind: SelectorKind) -> bool
 
 fn find_selected_process_entry<'a>(
     completion_state: &'a CompletionState,
-    cmd: &clap::Command,
+    root_cmd: &clap::Command,
     completed_tokens: &[CompletionToken],
 ) -> Option<&'a ProcessCompletionEntry> {
-    let process_value = find_last_flag_value(cmd, completed_tokens, "process")?;
+    let process_value = find_last_flag_value(root_cmd, completed_tokens, "process")?;
     resolve_process_reference(&completion_state.process_entries, &process_value)
 }
 
 fn find_last_flag_value(
-    cmd: &clap::Command,
+    root_cmd: &clap::Command,
     completed_tokens: &[CompletionToken],
     long_name: &str,
 ) -> Option<String> {
     let mut result = None;
+    let mut cmd = root_cmd;
     let mut index = 0usize;
 
     while index < completed_tokens.len() {
         let token = completed_tokens[index].cooked.as_str();
+        if let Some(subcmd) = find_subcommand(cmd, token) {
+            cmd = subcmd;
+            index += 1;
+            continue;
+        }
+
         if let Some(arg) = find_flag(cmd, token) {
             let is_target = arg.get_long() == Some(long_name);
             let inline_start = inline_flag_value_start(token);
@@ -2145,6 +2771,138 @@ fn find_last_flag_value(
     }
 
     result
+}
+
+fn selected_integrand_keys_for_target_completion(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+) -> Vec<String> {
+    let mut keys = Vec::new();
+    let mut pending_process: Option<String> = None;
+    let mut cmd = root_cmd;
+    let mut index = 0usize;
+
+    while index < completed_tokens.len() {
+        let token = completed_tokens[index].cooked.as_str();
+        if let Some(subcmd) = find_subcommand(cmd, token) {
+            cmd = subcmd;
+            index += 1;
+            continue;
+        }
+
+        let Some(arg) = find_flag(cmd, token) else {
+            index += 1;
+            continue;
+        };
+
+        let inline_start = inline_flag_value_start(token);
+        let value = if let Some(start) = inline_start {
+            Some(token[start..].to_string())
+        } else if arg_takes_value(arg) {
+            completed_tokens
+                .get(index + 1)
+                .map(|next| next.cooked.clone())
+        } else {
+            None
+        };
+
+        match arg.get_long() {
+            Some("process") => pending_process = value,
+            Some("integrand-name") => {
+                let Some(integrand_name) = value else {
+                    index += 1;
+                    if arg_takes_value(arg) && inline_start.is_none() {
+                        index = index.saturating_add(1);
+                    }
+                    continue;
+                };
+
+                let Some(process_value) = pending_process.as_deref() else {
+                    index += 1;
+                    if arg_takes_value(arg) && inline_start.is_none() {
+                        index = index.saturating_add(1);
+                    }
+                    continue;
+                };
+
+                let Some(process_entry) =
+                    resolve_process_reference(&completion_state.process_entries, process_value)
+                else {
+                    index += 1;
+                    if arg_takes_value(arg) && inline_start.is_none() {
+                        index = index.saturating_add(1);
+                    }
+                    continue;
+                };
+
+                if process_entry
+                    .integrand_names
+                    .iter()
+                    .any(|candidate| candidate == &integrand_name)
+                {
+                    keys.push(format!("{}@{}", process_entry.name, integrand_name));
+                }
+            }
+            _ => {}
+        }
+
+        index += 1;
+        if arg_takes_value(arg) && inline_start.is_none() {
+            index = index.saturating_add(1);
+        }
+    }
+
+    keys
+}
+
+fn specified_target_keys(
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+) -> HashSet<String> {
+    let mut specified = HashSet::new();
+    let mut cmd = root_cmd;
+    let mut index = 0usize;
+
+    while index < completed_tokens.len() {
+        let token = completed_tokens[index].cooked.as_str();
+        if let Some(subcmd) = find_subcommand(cmd, token) {
+            cmd = subcmd;
+            index += 1;
+            continue;
+        }
+
+        let Some(arg) = find_flag(cmd, token) else {
+            index += 1;
+            continue;
+        };
+
+        let inline_start = inline_flag_value_start(token);
+        let value = if let Some(start) = inline_start {
+            Some(token[start..].to_string())
+        } else if arg_takes_value(arg) {
+            completed_tokens
+                .get(index + 1)
+                .map(|next| next.cooked.clone())
+        } else {
+            None
+        };
+
+        if arg.get_long() == Some("target") {
+            if let Some(value) = value {
+                if let Some((key, _)) = value.split_once('=') {
+                    specified.insert(key.to_string());
+                }
+            }
+        }
+
+        index += 1;
+        if arg_takes_value(arg) && inline_start.is_none() {
+            index = index.saturating_add(1);
+        }
+    }
+
+    specified
 }
 
 fn resolve_process_reference<'a>(
@@ -2605,13 +3363,15 @@ fn shell_escape_unquoted(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{collections::BTreeMap, fs};
 
     use clap::CommandFactory;
     use gammalooprs::model::ParameterType;
+    use serde_json::json;
     use tempfile::tempdir;
 
     use crate::{
+        commands::process_settings::ProcessSettingsCompletionEntry,
         completion::{arg_value_completion, ArgValueCompletion},
         Repl,
     };
@@ -2657,8 +3417,111 @@ mod tests {
         }]
     }
 
+    fn sample_process_settings_entries() -> Vec<ProcessSettingsCompletionEntry> {
+        vec![
+            ProcessSettingsCompletionEntry {
+                process_id: 0,
+                process_name: "triangle".to_string(),
+                integrand_name: "LO".to_string(),
+                quantities: BTreeMap::from([(
+                    "top_pt".to_string(),
+                    json!({
+                        "type": "particle_scalar",
+                        "pdgs": [6, -6],
+                        "quantity": "PT"
+                    }),
+                )]),
+                observables: BTreeMap::from([(
+                    "top_pt_hist".to_string(),
+                    json!({
+                        "quantity": "top_pt",
+                        "entry_selection": "all",
+                        "entry_index": 0,
+                        "value_transform": "identity",
+                        "phase": "real",
+                        "misbinning_max_normalized_distance": null,
+                        "x_min": 0.0,
+                        "x_max": 500.0,
+                        "n_bins": 50,
+                        "log_x_axis": false,
+                        "log_y_axis": true
+                    }),
+                )]),
+                selectors: BTreeMap::from([(
+                    "top_cut".to_string(),
+                    json!({
+                        "quantity": "top_pt",
+                        "entry_selection": "all",
+                        "entry_index": 0,
+                        "selector": "value_range",
+                        "min": 10.0,
+                        "max": 500.0,
+                        "reduction": "any_in_range"
+                    }),
+                )]),
+            },
+            ProcessSettingsCompletionEntry {
+                process_id: 0,
+                process_name: "triangle".to_string(),
+                integrand_name: "NLO".to_string(),
+                quantities: BTreeMap::from([(
+                    "top_pt".to_string(),
+                    json!({
+                        "type": "particle_scalar",
+                        "pdgs": [6, -6],
+                        "quantity": "PT"
+                    }),
+                )]),
+                observables: BTreeMap::from([(
+                    "top_pt_hist".to_string(),
+                    json!({
+                        "quantity": "top_pt",
+                        "entry_selection": "all",
+                        "entry_index": 0,
+                        "value_transform": "identity",
+                        "phase": "real",
+                        "misbinning_max_normalized_distance": null,
+                        "x_min": 0.0,
+                        "x_max": 500.0,
+                        "n_bins": 50,
+                        "log_x_axis": false,
+                        "log_y_axis": true
+                    }),
+                )]),
+                selectors: BTreeMap::from([(
+                    "top_cut".to_string(),
+                    json!({
+                        "quantity": "top_pt",
+                        "entry_selection": "all",
+                        "entry_index": 0,
+                        "selector": "value_range",
+                        "min": 10.0,
+                        "max": 500.0,
+                        "reduction": "any_in_range"
+                    }),
+                )]),
+            },
+            ProcessSettingsCompletionEntry {
+                process_id: 2,
+                process_name: "epem_xs".to_string(),
+                integrand_name: "subtracted".to_string(),
+                quantities: BTreeMap::from([(
+                    "mll".to_string(),
+                    json!({
+                        "type": "particle_scalar",
+                        "pdgs": [11, -11],
+                        "quantity": "E"
+                    }),
+                )]),
+                observables: BTreeMap::new(),
+                selectors: BTreeMap::new(),
+            },
+        ]
+    }
+
     fn generate_completion_state() -> CompletionState {
         CompletionState {
+            process_entries: sample_process_entries(),
             model_particle_names: vec![
                 "g".to_string(),
                 "h".to_string(),
@@ -2667,6 +3530,7 @@ mod tests {
             ],
             model_coupling_names: vec!["QCD".to_string(), "QED".to_string()],
             model_vertex_names: vec!["V_6".to_string(), "V_9".to_string(), "V_36".to_string()],
+            process_settings_entries: sample_process_settings_entries(),
             ..CompletionState::default()
         }
     }
@@ -2754,7 +3618,7 @@ mod tests {
         fs::write(&file_path, "test").unwrap();
 
         let line = format!(
-            "integrate --result-path={}",
+            "integrate --workspace-path={}",
             temp.path().join("pro").display()
         );
         let values = completion_values(&line, &CompletionState::default());
@@ -2790,6 +3654,28 @@ mod tests {
         let values = completion_values("set model a", &completion_state);
 
         assert_eq!(values, vec!["alpha=".to_string()]);
+    }
+
+    #[test]
+    fn completion_skips_model_parameter_suggestions_for_target_flags() {
+        let completion_state = CompletionState {
+            model_parameter_entries: vec![ModelParameterCompletionEntry {
+                name: "alpha".to_string(),
+                parameter_type: ParameterType::Real,
+            }],
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("set model -p pro", &completion_state);
+
+        assert!(!values.contains(&"alpha=".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_defaults_for_set_model() {
+        let values = completion_values("set model d", &CompletionState::default());
+
+        assert_eq!(values, vec!["defaults".to_string()]);
     }
 
     #[test]
@@ -2833,7 +3719,7 @@ mod tests {
 
         assert!(suggestions.iter().any(|suggestion| {
             suggestion.description.as_deref()
-                == Some(crate::commands::set::MODEL_REAL_VALUE_FORMAT_HINT)
+                == Some(crate::model_parameters::MODEL_REAL_VALUE_FORMAT_HINT)
                 && suggestion.value == "alpha="
         }));
     }
@@ -2853,7 +3739,7 @@ mod tests {
 
         assert!(suggestions.iter().any(|suggestion| {
             suggestion.description.as_deref()
-                == Some(crate::commands::set::MODEL_COMPLEX_VALUE_FORMAT_HINT)
+                == Some(crate::model_parameters::MODEL_COMPLEX_VALUE_FORMAT_HINT)
                 && suggestion.value == "beta="
         }));
     }
@@ -2887,6 +3773,47 @@ mod tests {
     }
 
     #[test]
+    fn completion_offers_processes_for_set_process() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("set process -p e", &completion_state);
+
+        assert!(values.contains(&"epem_a_tth".to_string()));
+        assert!(values.contains(&"epem_xs".to_string()));
+        assert!(!values.contains(&"triangle".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_integrands_for_set_process() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("set process -p #0 -i ", &completion_state);
+
+        assert!(values.contains(&"LO".to_string()));
+        assert!(values.contains(&"NLO".to_string()));
+        assert!(!values.contains(&"virtual".to_string()));
+    }
+
+    #[test]
+    fn completion_keeps_repeatable_integrate_selectors_available() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("integrate -p triangle -i LO -", &completion_state);
+
+        assert!(values.contains(&"-p".to_string()));
+        assert!(values.contains(&"-i".to_string()));
+    }
+
+    #[test]
     fn completion_offers_integrands_for_reset_processes() {
         let completion_state = CompletionState {
             process_entries: sample_process_entries(),
@@ -2901,6 +3828,20 @@ mod tests {
         assert!(values.contains(&"LO".to_string()));
         assert!(values.contains(&"virtual".to_string()));
         assert!(!values.contains(&"subtracted".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_processes_for_reset_processes() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("reset processes -p e", &completion_state);
+
+        assert!(values.contains(&"epem_a_tth".to_string()));
+        assert!(values.contains(&"epem_xs".to_string()));
+        assert!(!values.contains(&"triangle".to_string()));
     }
 
     #[test]
@@ -2939,6 +3880,22 @@ mod tests {
     }
 
     #[test]
+    fn completion_filters_profile_processes_by_selector_kind() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let uv_values = completion_values("profile ultra-violet -p e", &completion_state);
+        assert!(uv_values.contains(&"epem_a_tth".to_string()));
+        assert!(!uv_values.contains(&"epem_xs".to_string()));
+
+        let ir_values = completion_values("profile infra-red -p e", &completion_state);
+        assert!(ir_values.contains(&"epem_xs".to_string()));
+        assert!(!ir_values.contains(&"epem_a_tth".to_string()));
+    }
+
+    #[test]
     fn completion_filters_processes_by_selector_kind() {
         let completion_state = CompletionState {
             process_entries: sample_process_entries(),
@@ -2965,6 +3922,38 @@ mod tests {
         );
 
         assert_eq!(values, vec!["subtracted".to_string()]);
+    }
+
+    #[test]
+    fn completion_offers_selected_integrand_target_keys() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values(
+            "integrate -p triangle -i LO -p epem_xs -i subtracted --target ",
+            &completion_state,
+        );
+
+        assert!(values.contains(&"triangle@LO=".to_string()));
+        assert!(values.contains(&"epem_xs@subtracted=".to_string()));
+    }
+
+    #[test]
+    fn completion_hides_already_targeted_slot_keys() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values(
+            "integrate -p triangle -i LO -p epem_xs -i subtracted --target triangle@LO=0,1 --target ",
+            &completion_state,
+        );
+
+        assert!(!values.contains(&"triangle@LO=".to_string()));
+        assert!(values.contains(&"epem_xs@subtracted=".to_string()));
     }
 
     #[test]
@@ -3012,6 +4001,159 @@ mod tests {
         );
 
         assert!(values.contains(&"integrator.".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_observable_update_paths_after_name() {
+        let values = completion_values(
+            "set process -p triangle -i LO update observable top_pt_hist x_",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"x_max=".to_string()), "{values:?}");
+        assert!(values.contains(&"x_min=".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_observable_update_enum_values() {
+        let values = completion_values(
+            "set process -p triangle -i LO update observable top_pt_hist phase=",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"real".to_string()), "{values:?}");
+        assert!(values.contains(&"imag".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_selector_update_paths_after_name() {
+        let values = completion_values(
+            "set process -p triangle -i LO update selector top_cut entry_",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"entry_index=".to_string()), "{values:?}");
+        assert!(
+            values.contains(&"entry_selection=".to_string()),
+            "{values:?}"
+        );
+    }
+
+    #[test]
+    fn completion_offers_quantity_update_paths_after_name() {
+        let values = completion_values(
+            "set process -p triangle -i LO update quantity top_pt p",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"pdgs=".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_existing_quantity_names_for_process_update() {
+        let values = completion_values(
+            "set process -p triangle update quantity ",
+            &generate_completion_state(),
+        );
+
+        assert_eq!(values, vec!["top_pt".to_string()]);
+    }
+
+    #[test]
+    fn completion_offers_quantity_kinds_for_process_add() {
+        let values = completion_values(
+            "set process -p triangle add quantity my_quantity ",
+            &generate_completion_state(),
+        );
+
+        assert!(
+            values.contains(&"particle_scalar".to_string()),
+            "{values:?}"
+        );
+        assert!(values.contains(&"jet_pt".to_string()), "{values:?}");
+        assert!(values.contains(&"cross_section".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_shows_type_hint_for_process_add_name() {
+        let suggestions = completion_suggestions(
+            "set process -p triangle add quantity ",
+            &generate_completion_state(),
+        );
+
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.description.as_deref() == Some("expects a string")),
+            "{suggestions:?}"
+        );
+    }
+
+    #[test]
+    fn completion_offers_selector_kinds_for_process_add() {
+        let values = completion_values(
+            "set process -p triangle add selector my_cut ",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"value_range".to_string()), "{values:?}");
+        assert!(values.contains(&"count_range".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_quantity_names_for_observable_quantity_references() {
+        let values = completion_values(
+            "set process -p triangle -i LO add observable my_hist quantity=",
+            &generate_completion_state(),
+        );
+
+        assert_eq!(values, vec!["top_pt".to_string()]);
+    }
+
+    #[test]
+    fn completion_offers_existing_selector_names_for_process_remove() {
+        let values = completion_values(
+            "set process -p triangle remove selector ",
+            &generate_completion_state(),
+        );
+
+        assert_eq!(values, vec!["top_cut".to_string()]);
+    }
+
+    #[test]
+    fn completion_offers_display_quantity_names() {
+        let values = completion_values(
+            "display quantities -p triangle ",
+            &generate_completion_state(),
+        );
+
+        assert_eq!(values, vec!["top_pt".to_string()]);
+    }
+
+    #[test]
+    fn completion_offers_process_and_integrand_selectors_for_display_quantities() {
+        let completion_state = generate_completion_state();
+
+        let process_values = completion_values("display quantities -p t", &completion_state);
+        assert_eq!(process_values, vec!["triangle".to_string()]);
+
+        let integrand_values =
+            completion_values("display quantities -p triangle -i ", &completion_state);
+        assert!(integrand_values.contains(&"LO".to_string()));
+        assert!(integrand_values.contains(&"NLO".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_command_block_names_for_display_command_block() {
+        let completion_state = CompletionState {
+            commands_block_names: vec!["alpha".to_string(), "beta".to_string()],
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("display command_block ", &completion_state);
+
+        assert!(values.contains(&"alpha".to_string()));
+        assert!(values.contains(&"beta".to_string()));
     }
 
     #[test]

@@ -60,12 +60,13 @@ impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
         let (process_id, integrand_name) =
             state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
+        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
 
         let integrand = state
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
 
-        integrand.warm_up(&state.model)?;
+        integrand.warm_up(&model)?;
         let pt = self.point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
 
         let settings = integrand.get_settings().clone();
@@ -73,7 +74,7 @@ impl Inspect {
         let (inspect_res_jac, inspect_res_eval) = gammalooprs::integrands::inspect::inspect(
             &settings,
             integrand,
-            &state.model,
+            &model,
             pt,
             &self.discrete_dim,
             self.force_radius,
@@ -121,11 +122,12 @@ impl<'a> BatchedInspect<'a> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
+        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
 
         let integrand = state
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
-        integrand.warm_up(&state.model)?;
+        integrand.warm_up(&model)?;
 
         let settings = integrand.get_settings().clone();
 
@@ -143,7 +145,7 @@ impl<'a> BatchedInspect<'a> {
             let (inspect_res_jac, inspect_res_eval) = gammalooprs::integrands::inspect::inspect(
                 &settings,
                 integrand,
-                &state.model,
+                &model,
                 pt,
                 &discrete_dim,
                 false,
