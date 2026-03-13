@@ -697,9 +697,11 @@ impl FeynmanGraph for Graph {
             scale *= Complex::new_re(e_cm.powi(vertex.dod)) * coupling_value;
         }
 
-        for (_, _, edge_data) in
-            self.iter_edges_of(&self.full_filter().subtract(&self.external_filter()))
-        {
+        for (_, _, edge_data) in self.iter_edges_of(
+            &self
+                .full_filter()
+                .subtract(&self.external_filter::<SuBitGraph>()),
+        ) {
             scale *= Complex::new_re(e_cm.powi(edge_data.data.dod))
         }
 

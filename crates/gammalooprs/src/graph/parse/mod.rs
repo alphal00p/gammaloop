@@ -936,8 +936,8 @@ impl Graph {
         if add_polarizations {
             let external_edges = initial_state_cut
                 .left
-                .union(&initial_state_cut.right)
-                .union(&graph.external_filter());
+                .union(initial_state_cut)
+                .union(&graph.external_filter::<SuBitGraph>());
             let polarizations = graph.generate_polarizations_of(&external_edges);
             global_prefactor.projector *= polarizations;
         }

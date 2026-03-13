@@ -269,12 +269,6 @@ impl SubSetOps<Hedge> for InternalSubGraph {
         self.loopcount = None;
     }
 
-    fn union_with_iter(&mut self, other: impl Iterator<Item = Hedge>) {
-        for h in other {
-            self.filter.add(h);
-        }
-    }
-
     fn union_with(&mut self, other: &InternalSubGraph) {
         self.filter.union_with(&other.filter);
         self.loopcount = None;

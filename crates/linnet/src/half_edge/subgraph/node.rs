@@ -196,10 +196,6 @@ impl Inclusion<RangeInclusive<Hedge>> for HedgeNode {
     }
 }
 impl SubSetOps<Hedge> for HedgeNode {
-    fn union_with_iter(&mut self, other: impl Iterator<Item = Hedge>) {
-        self.hairs.union_with_iter(other);
-    }
-
     fn union_with(&mut self, other: &Self) {
         // union is the intersection of the internal graphs, and the union of the external graph.
         self.internal_graph.intersect_with(&other.internal_graph);

@@ -4,8 +4,8 @@ use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{Hedge, HedgePair},
     subgraph::{
-        Cycle, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike,
-        SubSetOps, subset::SubSet,
+        Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
+        SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
     },
 };
 use spenso::network::library::TensorLibraryData;
