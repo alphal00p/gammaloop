@@ -1000,8 +1000,6 @@ impl CrossSectionGraph {
             })
             .collect();
 
-        println!("cut sets: {:?}", cuts);
-
         let cut_structure = CutStructure { cuts };
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph);
