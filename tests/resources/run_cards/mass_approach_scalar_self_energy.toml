@@ -1,6 +1,6 @@
 commands = [
 "import model ./assets/models/json/scalars/scalars_2p_3p.json",
-"import graphs scalar_self_energy.dot ",
+"import graphs ./tests/resources/graphs/mass_approach_scalar_self_energy.dot ",
 "generate",
 ]
 

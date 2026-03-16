@@ -1,6 +1,6 @@
 commands = [
 "import model ./assets/models/json/scalars/scalars_2p_3p.json",
-"import graphs bubble_dot_1t1b.dot ",
+"import graphs ./tests/resources/graphs/bubble_dot_1t1b.dot ",
 "generate",
 ]
 
