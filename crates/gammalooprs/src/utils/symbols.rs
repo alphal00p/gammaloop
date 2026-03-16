@@ -1,7 +1,10 @@
 use std::sync::LazyLock;
 
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::{
+    half_edge::involution::{EdgeIndex, Orientation},
+    num_traits::Sign,
+};
 
 use spenso::{
     network::{library::TensorLibraryData, parsing::SPENSO_TAG},
@@ -193,6 +196,7 @@ pub struct GammaloopSymbols {
     pub radius_star_right: Symbol,
     pub uv_damp_plus_right: Symbol,
     pub uv_damp_minus_right: Symbol,
+    pub thermal_distribution: Symbol,
 }
 
 impl GammaloopSymbols {
@@ -846,6 +850,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     radius_star_right: symbol!("r⃰_right"),
     uv_damp_plus_right: symbol!("damp_plus_right"),
     uv_damp_minus_right: symbol!("damp_minus_right"),
+    thermal_distribution: symbol!("N"),
 });
 
 impl GammaloopSymbols {
@@ -864,6 +869,11 @@ impl GammaloopSymbols {
             .add_arg(i)
             .add_args(&args)
             .finish()
+    }
+
+    pub fn thermal_distribution<'a>(&self, eid: impl Into<AtomOrView<'a>>, sign: Sign) -> Atom {
+        self.thermal_distribution
+            .f(&[eid.into().as_view(), (sign * Atom::num(1)).as_view()])
     }
 
     pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
