@@ -28,3 +28,9 @@ tracing = { version = "0.1.41", features = ["release_max_level_info"] }
 vakint = {workspace=true}
 which = "8.0.0"
 serial_test = "3.2.0"
+rand = { workspace = true, features = ["small_rng"] }
+ndarray = "0.17"
+serde_json = { workspace = true }
+
+[build-dependencies]
+cc = "1.1"
