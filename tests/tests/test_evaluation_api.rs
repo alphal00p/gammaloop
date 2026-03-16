@@ -58,7 +58,7 @@ fn update_leading_jet_selector(cli: &mut CLIState, min: f64) -> Result<()> {
 fn evaluate_x_samples(
     cli: &mut CLIState,
     points: &[Vec<f64>],
-) -> Result<Vec<gammalooprs::integrands::evaluation::SampleEvaluationResult>> {
+) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
     let ncols = points.first().map(Vec::len).unwrap_or(0);
     let flat = points
         .iter()
@@ -83,9 +83,9 @@ fn evaluate_x_samples(
 fn evaluate_momentum_sample(
     cli: &mut CLIState,
     point: &[f64],
-) -> Result<gammalooprs::integrands::evaluation::SampleEvaluationResult> {
+) -> Result<gammalooprs::integrands::evaluation::SingleSampleEvaluationResult> {
     let array = Array2::from_shape_vec((1, point.len()), point.to_vec())?;
-    let mut results = EvaluateSamples {
+    let results = EvaluateSamples {
         process_id: None,
         integrand_name: None,
         use_arb_prec: false,
@@ -98,13 +98,19 @@ fn evaluate_momentum_sample(
         orientations: None,
     }
     .run(&mut cli.state)?;
-    Ok(results.remove(0))
+    let mut samples = results.samples;
+    Ok(
+        gammalooprs::integrands::evaluation::SingleSampleEvaluationResult {
+            sample: samples.remove(0),
+            observables: results.observables,
+        },
+    )
 }
 
 fn evaluate_x_samples_minimal(
     cli: &mut CLIState,
     points: &[Vec<f64>],
-) -> Result<Vec<gammalooprs::integrands::evaluation::SampleEvaluationResult>> {
+) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
     let ncols = points.first().map(Vec::len).unwrap_or(0);
     let flat = points
         .iter()
@@ -129,7 +135,7 @@ fn evaluate_x_samples_minimal(
 fn evaluate_x_samples_precise(
     cli: &mut CLIState,
     points: &[Vec<f64>],
-) -> Result<Vec<gammalooprs::integrands::evaluation::PreciseSampleEvaluationResult>> {
+) -> Result<gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult> {
     let ncols = points.first().map(Vec::len).unwrap_or(0);
     let flat = points
         .iter()
@@ -183,7 +189,7 @@ fn lu_rust_generated_events_follow_graph_grouping_and_cut_ids() -> Result<()> {
 
     let point = default_xspace_point(&cli)?;
     let mut results = evaluate_x_samples(&mut cli, std::slice::from_ref(&point))?;
-    let result = results.remove(0);
+    let result = results.samples.remove(0);
     let event_groups = &result.evaluation.event_groups;
 
     assert_eq!(metadata(&result).generated_event_count, 3);
@@ -247,9 +253,9 @@ fn lu_rust_precise_evaluate_samples_returns_precision_tagged_results() -> Result
 
     let point = default_xspace_point(&cli)?;
     let results = evaluate_x_samples_precise(&mut cli, &[point])?;
-    assert_eq!(results.len(), 1);
-    assert_eq!(results[0].observables.histograms.len(), 2);
-    match &results[0].evaluation {
+    assert_eq!(results.samples.len(), 1);
+    assert_eq!(results.observables.histograms.len(), 2);
+    match &results.samples[0].evaluation {
         gammalooprs::integrands::evaluation::PreciseEvaluationResultOutput::Double(result) => {
             assert!(result.evaluation_metadata.is_some());
         }
@@ -272,9 +278,9 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
     let point = default_xspace_point(&cli)?;
 
     let mut results = evaluate_x_samples(&mut cli, std::slice::from_ref(&point))?;
-    let result = results.remove(0);
+    let result = results.samples.remove(0);
     assert!(result.evaluation.event_groups.is_empty());
-    assert!(result.observables.histograms.is_empty());
+    assert!(results.observables.histograms.is_empty());
     assert_eq!(metadata(&result).generated_event_count, 0);
     assert_eq!(metadata(&result).accepted_event_count, 0);
     assert!(result.evaluation.parameterization_jacobian.is_some());
@@ -283,7 +289,7 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
     )?;
     let mut results = evaluate_x_samples(&mut cli, std::slice::from_ref(&point))?;
-    let result = results.remove(0);
+    let result = results.samples.remove(0);
     assert!(!result.evaluation.event_groups.is_empty());
     assert!(
         metadata(&result).generated_event_count > 0,
@@ -301,9 +307,9 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
     configure_jet_quantities(&mut cli)?;
     add_leading_jet_selector(&mut cli, 1_000_000.0)?;
     let mut results = evaluate_x_samples(&mut cli, std::slice::from_ref(&point))?;
-    let result = results.remove(0);
+    let result = results.samples.remove(0);
     assert!(result.evaluation.event_groups.is_empty());
-    assert!(result.observables.histograms.is_empty());
+    assert!(results.observables.histograms.is_empty());
     assert!(
         metadata(&result).generated_event_count > 0,
         "selector-only mode should still generate temporary events"
@@ -314,16 +320,9 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
     update_leading_jet_selector(&mut cli, 0.0)?;
     let batch = vec![point.clone(), point];
     let results = evaluate_x_samples(&mut cli, &batch)?;
-    assert_eq!(results.len(), 2);
-    for result in &results {
+    assert_eq!(results.samples.len(), 2);
+    for result in &results.samples {
         assert!(result.evaluation.event_groups.is_empty());
-        assert!(
-            result
-                .observables
-                .histograms
-                .contains_key("leading_jet_pt_hist")
-        );
-        assert!(result.observables.histograms.contains_key("jet_count_hist"));
         assert!(
             metadata(result).generated_event_count > 0,
             "selector+observable mode should generate temporary events"
@@ -334,20 +333,22 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
         );
         assert!(metadata(result).accepted_event_count <= metadata(result).generated_event_count);
         assert!(metadata(result).event_processing_time.as_nanos() > 0);
-        let histogram = result
-            .observables
-            .histograms
-            .get("leading_jet_pt_hist")
-            .expect("missing leading-jet histogram");
-        assert_eq!(histogram.bins.len(), 8);
-        let jet_count_histogram = result
-            .observables
-            .histograms
-            .get("jet_count_hist")
-            .expect("missing jet-count histogram");
-        assert_eq!(jet_count_histogram.bins.len(), 6);
-        assert!(!jet_count_histogram.supports_misbinning_mitigation);
     }
+    let histogram = results
+        .observables
+        .histograms
+        .get("leading_jet_pt_hist")
+        .expect("missing leading-jet histogram");
+    assert_eq!(histogram.bins.len(), 8);
+    assert_eq!(histogram.sample_count, 2);
+    let jet_count_histogram = results
+        .observables
+        .histograms
+        .get("jet_count_hist")
+        .expect("missing jet-count histogram");
+    assert_eq!(jet_count_histogram.bins.len(), 6);
+    assert_eq!(jet_count_histogram.sample_count, 2);
+    assert!(!jet_count_histogram.supports_misbinning_mitigation);
 
     Ok(())
 }
@@ -361,9 +362,12 @@ fn lu_rust_momentum_space_evaluate_sample_reports_no_parameterization_jacobian()
     let point = default_momentum_space_point(&cli)?;
     let result = evaluate_momentum_sample(&mut cli, &point)?;
 
-    assert!(result.evaluation.parameterization_jacobian.is_none());
-    assert!(metadata(&result).event_processing_time >= Duration::ZERO);
-    assert!(result.evaluation.event_groups.len() <= metadata(&result).generated_event_count);
+    assert!(result.sample.evaluation.parameterization_jacobian.is_none());
+    assert!(metadata(&result.sample).event_processing_time >= Duration::ZERO);
+    assert!(
+        result.sample.evaluation.event_groups.len()
+            <= metadata(&result.sample).generated_event_count
+    );
     let formatted = result.to_string();
     assert!(formatted.contains("parameterization jacobian"));
     assert!(formatted.contains("None"));
@@ -384,19 +388,28 @@ fn lu_rust_minimal_output_keeps_events_and_observables() -> Result<()> {
 
     let point = default_xspace_point(&cli)?;
     let mut results = evaluate_x_samples_minimal(&mut cli, std::slice::from_ref(&point))?;
-    let result = results.remove(0);
+    let result = results.samples.remove(0);
 
     assert!(result.evaluation.evaluation_metadata.is_none());
     assert!(!result.evaluation.event_groups.is_empty());
     assert!(
-        result
+        results
             .observables
             .histograms
             .contains_key("leading_jet_pt_hist")
     );
-    assert!(result.observables.histograms.contains_key("jet_count_hist"));
+    assert!(
+        results
+            .observables
+            .histograms
+            .contains_key("jet_count_hist")
+    );
 
-    let formatted = result.to_string();
+    let formatted = gammalooprs::integrands::evaluation::SingleSampleEvaluationResult {
+        sample: result,
+        observables: results.observables,
+    }
+    .to_string();
     assert!(!formatted.contains("Evaluation metadata"));
     assert!(!formatted.contains("Stability results"));
     assert!(formatted.contains("Observable snapshots"));

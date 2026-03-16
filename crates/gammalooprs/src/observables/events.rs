@@ -525,17 +525,17 @@ impl<T: FloatLike> fmt::Display for GenericEvent<T> {
                     f,
                     "{}",
                     Table::new(momentum_rows).with(Style::rounded().horizontals([
-                                header_separator,
-                                in_out_separator,
-                                check_separator,
-                            ]))
+                        header_separator,
+                        in_out_separator,
+                        check_separator,
+                    ]))
                 )?;
             } else {
                 writeln!(
                     f,
                     "{}",
                     Table::new(momentum_rows)
-                            .with(Style::rounded().horizontals([header_separator, check_separator]))
+                        .with(Style::rounded().horizontals([header_separator, check_separator]))
                 )?;
             }
         }

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import gammaloop
+import numpy as np
 
 
 def main() -> None:
@@ -23,6 +24,15 @@ def main() -> None:
 
     point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
     result = api.evaluate_sample(point)
+    batch_result = api.evaluate_samples(
+        np.array(
+            [
+                [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
+                [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
+            ],
+            dtype=float,
+        )
+    )
     momentum_result = api.evaluate_sample(
         [0.11, -0.07, 0.19, -0.13, 0.05, 0.29],
         momentum_space=True,
@@ -30,6 +40,8 @@ def main() -> None:
 
     print("== x-space evaluate_sample ==\n")
     print(result)
+    print("\n== x-space evaluate_samples ==\n")
+    print(batch_result)
     print("\n== momentum-space evaluate_sample ==\n")
     print(momentum_result)
 

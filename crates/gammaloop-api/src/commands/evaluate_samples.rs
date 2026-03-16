@@ -2,7 +2,11 @@ use color_eyre::Result;
 use eyre::eyre;
 use gammalooprs::{
     integrands::{
-        evaluation::{PreciseSampleEvaluationResult, SampleEvaluationResult},
+        evaluation::{
+            BatchSampleEvaluationResult, PreciseBatchSampleEvaluationResult,
+            PreciseSampleEvaluationResult, PreciseSingleSampleEvaluationResult,
+            SampleEvaluationResult, SingleSampleEvaluationResult,
+        },
         process::MomentumSpaceEvaluationInput,
         HasIntegrand,
     },
@@ -31,7 +35,7 @@ pub struct EvaluateSamples<'a> {
 }
 
 impl<'a> EvaluateSamples<'a> {
-    pub fn run(&self, state: &mut State) -> Result<Vec<SampleEvaluationResult>> {
+    pub fn run(&self, state: &mut State) -> Result<BatchSampleEvaluationResult> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
@@ -65,7 +69,9 @@ impl<'a> EvaluateSamples<'a> {
             }
         }
 
-        let mut results = Vec::with_capacity(batch_len);
+        let mut samples = Vec::with_capacity(batch_len);
+        let mut observables = ObservableSnapshotBundle::default();
+        let mut have_observables = false;
         for sample_index in 0..batch_len {
             let point = self.points.row(sample_index);
             let graph_name = graph_names[sample_index].as_deref();
@@ -96,19 +102,29 @@ impl<'a> EvaluateSamples<'a> {
                 )?
             };
 
-            let observables = integrand
+            let sample_observables = integrand
                 .build_observable_snapshots_for_result(&evaluation)
                 .unwrap_or_else(ObservableSnapshotBundle::default);
+            if !sample_observables.histograms.is_empty() {
+                if have_observables {
+                    observables.merge_in_place(&sample_observables)?;
+                } else {
+                    observables = sample_observables;
+                    have_observables = true;
+                }
+            }
             if !integrand.get_settings().general.generate_events {
                 evaluation.event_groups.clear();
             }
-            results.push(SampleEvaluationResult {
+            samples.push(SampleEvaluationResult {
                 evaluation: evaluation.into_output(self.minimal_output),
-                observables,
             });
         }
 
-        Ok(results)
+        Ok(BatchSampleEvaluationResult {
+            samples,
+            observables,
+        })
     }
 }
 
@@ -127,7 +143,7 @@ pub struct EvaluateSamplesPrecise<'a> {
 }
 
 impl<'a> EvaluateSamplesPrecise<'a> {
-    pub fn run(&self, state: &mut State) -> Result<Vec<PreciseSampleEvaluationResult>> {
+    pub fn run(&self, state: &mut State) -> Result<PreciseBatchSampleEvaluationResult> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
@@ -161,7 +177,9 @@ impl<'a> EvaluateSamplesPrecise<'a> {
             }
         }
 
-        let mut results = Vec::with_capacity(batch_len);
+        let mut samples = Vec::with_capacity(batch_len);
+        let mut observables = ObservableSnapshotBundle::default();
+        let mut have_observables = false;
         for sample_index in 0..batch_len {
             let point = self.points.row(sample_index);
             let graph_name = graph_names[sample_index].as_deref();
@@ -192,41 +210,78 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                 )?
             };
 
-            let observables = integrand
+            let sample_observables = integrand
                 .build_observable_snapshots_for_precise_result(&evaluation)
                 .unwrap_or_else(ObservableSnapshotBundle::default);
+            if !sample_observables.histograms.is_empty() {
+                if have_observables {
+                    observables.merge_in_place(&sample_observables)?;
+                } else {
+                    observables = sample_observables;
+                    have_observables = true;
+                }
+            }
             if !integrand.get_settings().general.generate_events {
                 clear_precise_event_groups(&mut evaluation);
             }
-            results.push(PreciseSampleEvaluationResult {
+            samples.push(PreciseSampleEvaluationResult {
                 evaluation: evaluation.into_output(self.minimal_output),
-                observables,
             });
         }
 
-        Ok(results)
+        Ok(PreciseBatchSampleEvaluationResult {
+            samples,
+            observables,
+        })
     }
 }
 
 pub fn evaluate_samples_precise<'a>(
     state: &mut State,
     request: &EvaluateSamplesPrecise<'a>,
-) -> Result<Vec<PreciseSampleEvaluationResult>> {
+) -> Result<PreciseBatchSampleEvaluationResult> {
     request.run(state)
 }
 
 pub fn evaluate_sample_precise<'a>(
     state: &mut State,
     request: &EvaluateSamplesPrecise<'a>,
-) -> Result<PreciseSampleEvaluationResult> {
+) -> Result<PreciseSingleSampleEvaluationResult> {
     let mut results = request.run(state)?;
-    if results.len() != 1 {
+    if results.samples.len() != 1 {
         return Err(eyre!(
             "evaluate_sample_precise expects exactly one sample, got {}.",
-            results.len()
+            results.samples.len()
         ));
     }
-    Ok(results.remove(0))
+    Ok(PreciseSingleSampleEvaluationResult {
+        sample: results.samples.remove(0),
+        observables: results.observables,
+    })
+}
+
+pub fn evaluate_samples<'a>(
+    state: &mut State,
+    request: &EvaluateSamples<'a>,
+) -> Result<BatchSampleEvaluationResult> {
+    request.run(state)
+}
+
+pub fn evaluate_sample<'a>(
+    state: &mut State,
+    request: &EvaluateSamples<'a>,
+) -> Result<SingleSampleEvaluationResult> {
+    let mut results = request.run(state)?;
+    if results.samples.len() != 1 {
+        return Err(eyre!(
+            "evaluate_sample expects exactly one sample, got {}.",
+            results.samples.len()
+        ));
+    }
+    Ok(SingleSampleEvaluationResult {
+        sample: results.samples.remove(0),
+        observables: results.observables,
+    })
 }
 
 fn normalize_optional_per_sample<T: Clone>(

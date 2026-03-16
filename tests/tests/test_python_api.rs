@@ -117,6 +117,19 @@ def summarize_result(result):
         ],
     }}
 
+def summarize_batch_result(result):
+    return {{
+        "formatted": str(result),
+        "samples": [summarize_result(sample) for sample in result.samples],
+        "observable_keys": sorted(result.observables.keys()),
+        "histogram_bin_counts": {{
+            name: len(hist.bins) for name, hist in result.observables.items()
+        }},
+        "histogram_sample_counts": {{
+            name: hist.sample_count for name, hist in result.observables.items()
+        }},
+    }}
+
 api = build_api()
 run_commands(api, {commands_json})
 
@@ -415,7 +428,7 @@ except Exception as exc:
         "Install numpy in the active Python environment used for the API tests."
     )
 points = np.array([{}, {}], dtype=float)
-batch = [summarize_result(result) for result in api.evaluate_samples(points)]
+batch = summarize_batch_result(api.evaluate_samples(points))
 momentum = summarize_result(api.evaluate_sample({}, momentum_space=True))
 payload = {{
     "batch": batch,
@@ -428,30 +441,36 @@ payload = {{
         ),
     )?;
 
-    let batch = payload["batch"]
+    let batch = &payload["batch"];
+    let samples = batch["samples"]
         .as_array()
-        .expect("batch payload must be a list");
-    assert_eq!(batch.len(), 2);
-    for result in batch {
-        assert!(result["event_groups_len"].as_u64().unwrap() > 0);
-        assert_eq!(result["observable_keys"].as_array().map(Vec::len), Some(2));
-        assert_eq!(
-            result["observable_keys"][0].as_str(),
-            Some("jet_count_hist")
-        );
-        assert_eq!(
-            result["observable_keys"][1].as_str(),
-            Some("leading_jet_pt_hist")
-        );
-        assert_eq!(
-            result["histogram_bin_counts"]["leading_jet_pt_hist"].as_u64(),
-            Some(8)
-        );
-        assert_eq!(
-            result["histogram_bin_counts"]["jet_count_hist"].as_u64(),
-            Some(6)
-        );
+        .expect("batch samples payload must be a list");
+    assert_eq!(samples.len(), 2);
+    for sample in samples {
+        assert!(sample["event_groups_len"].as_u64().unwrap() > 0);
     }
+    assert_eq!(batch["observable_keys"].as_array().map(Vec::len), Some(2));
+    assert_eq!(batch["observable_keys"][0].as_str(), Some("jet_count_hist"));
+    assert_eq!(
+        batch["observable_keys"][1].as_str(),
+        Some("leading_jet_pt_hist")
+    );
+    assert_eq!(
+        batch["histogram_bin_counts"]["leading_jet_pt_hist"].as_u64(),
+        Some(8)
+    );
+    assert_eq!(
+        batch["histogram_bin_counts"]["jet_count_hist"].as_u64(),
+        Some(6)
+    );
+    assert_eq!(
+        batch["histogram_sample_counts"]["leading_jet_pt_hist"].as_u64(),
+        Some(2)
+    );
+    assert_eq!(
+        batch["histogram_sample_counts"]["jet_count_hist"].as_u64(),
+        Some(2)
+    );
 
     let momentum = &payload["momentum"];
     assert!(momentum["parameterization_jacobian"].is_null());

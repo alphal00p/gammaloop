@@ -17,7 +17,9 @@ use std::{env, path::PathBuf};
 
 use color_eyre::Result;
 use gammaloop_api::{
-    commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
+    commands::evaluate_samples::{
+        evaluate_sample, evaluate_sample_precise, EvaluateSamples, EvaluateSamplesPrecise,
+    },
     StateLoadOption,
 };
 use ndarray::{arr2, Array2};
@@ -51,54 +53,60 @@ fn main() -> Result<()> {
     .load()?;
 
     let single_point: Array2<f64> = arr2(&[[0.17, 0.31, 0.53, 0.23, 0.41, 0.67]]);
-    let single_result = EvaluateSamples {
-        process_id: None,
-        integrand_name: None,
-        use_arb_prec: false,
-        force_radius: false,
-        minimal_output: false,
-        momentum_space: false,
-        points: single_point.view(),
-        discrete_dims: None,
-        graph_names: None,
-        orientations: None,
-    }
-    .run(&mut loaded.state)?;
+    let single_result = evaluate_sample(
+        &mut loaded.state,
+        &EvaluateSamples {
+            process_id: None,
+            integrand_name: None,
+            use_arb_prec: false,
+            force_radius: false,
+            minimal_output: false,
+            momentum_space: false,
+            points: single_point.view(),
+            discrete_dims: None,
+            graph_names: None,
+            orientations: None,
+        },
+    )?;
     println!("\n== evaluate_sample ==\n");
-    println!("{}", single_result.first().unwrap());
+    println!("{single_result}");
 
     let momentum_point: Array2<f64> = arr2(&[[0.11, -0.07, 0.19, -0.13, 0.05, 0.29]]);
-    let momentum_result = EvaluateSamples {
-        process_id: None,
-        integrand_name: None,
-        use_arb_prec: false,
-        force_radius: false,
-        minimal_output: false,
-        momentum_space: true,
-        points: momentum_point.view(),
-        discrete_dims: None,
-        graph_names: None,
-        orientations: None,
-    }
-    .run(&mut loaded.state)?;
+    let momentum_result = evaluate_sample(
+        &mut loaded.state,
+        &EvaluateSamples {
+            process_id: None,
+            integrand_name: None,
+            use_arb_prec: false,
+            force_radius: false,
+            minimal_output: false,
+            momentum_space: true,
+            points: momentum_point.view(),
+            discrete_dims: None,
+            graph_names: None,
+            orientations: None,
+        },
+    )?;
     println!("\n== momentum-space evaluate_sample ==\n");
-    println!("{}", momentum_result.first().unwrap());
+    println!("{momentum_result}");
 
-    let precise_result = EvaluateSamplesPrecise {
-        process_id: None,
-        integrand_name: None,
-        use_arb_prec: true,
-        force_radius: false,
-        minimal_output: false,
-        momentum_space: false,
-        points: single_point.view(),
-        discrete_dims: None,
-        graph_names: None,
-        orientations: None,
-    }
-    .run(&mut loaded.state)?;
+    let precise_result = evaluate_sample_precise(
+        &mut loaded.state,
+        &EvaluateSamplesPrecise {
+            process_id: None,
+            integrand_name: None,
+            use_arb_prec: true,
+            force_radius: false,
+            minimal_output: false,
+            momentum_space: false,
+            points: single_point.view(),
+            discrete_dims: None,
+            graph_names: None,
+            orientations: None,
+        },
+    )?;
     println!("\n== evaluate_sample_precise ==\n");
-    println!("{}", precise_result.first().unwrap());
+    println!("{precise_result}");
 
     let batch_points: Array2<f64> = arr2(&[
         [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
@@ -119,10 +127,7 @@ fn main() -> Result<()> {
     .run(&mut loaded.state)?;
 
     println!("\n== evaluate_samples ==\n");
-    println!("batch_size: {}\n", batch_results.len());
-    for (index, result) in batch_results.iter().enumerate() {
-        println!("-- sample {index} --\n{result}");
-    }
+    println!("{batch_results}");
 
     let precise_batch_results = EvaluateSamplesPrecise {
         process_id: None,
@@ -138,10 +143,7 @@ fn main() -> Result<()> {
     }
     .run(&mut loaded.state)?;
     println!("\n== evaluate_samples_precise ==\n");
-    println!("batch_size: {}\n", precise_batch_results.len());
-    for (index, result) in precise_batch_results.iter().enumerate() {
-        println!("-- precise sample {index} --\n{result}");
-    }
+    println!("{precise_batch_results}");
 
     Ok(())
 }

@@ -250,13 +250,19 @@ and creates its state under:
 examples/api/rust/epem_a_ddxg_xs_LO/state
 ```
 
-Current note on precision: the Rust `evaluate_sample(...)` / `evaluate_samples(...)`
-API returns the rich `SampleEvaluationResult` downcast to `f64`, even when
-`use_arb_prec=true`. For Rust-only workflows that need to keep the retained
-precision, use the parallel `evaluate_sample_precise(...)` /
-`evaluate_samples_precise(...)` helpers from
-`gammaloop_api::commands::evaluate_samples`; they return a precision-tagged
-result enum instead of widening the Python API away from its `f64` contract.
+Current note on shape and precision:
+
+- `evaluate_sample(...)` returns one sample result plus one observable bundle for
+  that single-sample batch.
+- `evaluate_samples(...)` returns per-sample evaluation results together with one
+  batch-global observable bundle merged over all samples in the batch.
+- the default Rust/Python `evaluate_sample(...)` / `evaluate_samples(...)` API
+  downcasts returned numeric values to `f64`, even when `use_arb_prec=true`.
+- for Rust-only workflows that need to keep the retained precision, use the
+  parallel `evaluate_sample_precise(...)` / `evaluate_samples_precise(...)`
+  helpers from `gammaloop_api::commands::evaluate_samples`; they return
+  precision-tagged results instead of widening the Python API away from its
+  `f64` contract.
 
 ## Examples and tests
 

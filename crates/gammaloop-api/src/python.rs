@@ -2,7 +2,9 @@ use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
-    integrands::evaluation::SampleEvaluationResult,
+    integrands::evaluation::{
+        BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
+    },
     observables::{
         AdditionalWeightKey, Event, EventGroup, GenericAdditionalWeightInfo, HistogramSnapshot,
         HistogramStatisticsSnapshot,
@@ -75,6 +77,8 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<GammaLoopAPI>()?;
     m.add_class::<LogLevel>()?;
     m.add_class::<DotExportSettings>()?;
+    m.add_class::<PyEvaluationResult>()?;
+    m.add_class::<PyBatchEvaluationResult>()?;
     m.add_class::<PySampleEvaluationResult>()?;
     m.add_class::<PyEventGroup>()?;
     m.add_class::<PyEvent>()?;
@@ -222,7 +226,7 @@ pub struct PyStabilityResult {
     pub total_time_seconds: f64,
 }
 
-#[pyclass(from_py_object, name = "EvaluationResult")]
+#[pyclass(from_py_object, name = "SampleEvaluationResult")]
 #[derive(Clone)]
 pub struct PySampleEvaluationResult {
     inner: SampleEvaluationResult,
@@ -320,13 +324,114 @@ impl PySampleEvaluationResult {
             .collect()
     }
 
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+}
+
+#[pyclass(from_py_object, name = "EvaluationResult")]
+#[derive(Clone)]
+pub struct PyEvaluationResult {
+    inner: SingleSampleEvaluationResult,
+}
+
+#[pymethods]
+impl PyEvaluationResult {
+    #[getter]
+    fn sample(&self) -> PySampleEvaluationResult {
+        PySampleEvaluationResult {
+            inner: self.inner.sample.clone(),
+        }
+    }
+
+    #[getter]
+    fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
+        self.sample().integrand_result(py)
+    }
+
+    #[getter]
+    fn integrator_weight(&self) -> f64 {
+        self.inner.sample.evaluation.integrator_weight.0
+    }
+
+    #[getter]
+    fn generated_event_count(&self) -> Option<usize> {
+        self.sample().generated_event_count()
+    }
+
+    #[getter]
+    fn accepted_event_count(&self) -> Option<usize> {
+        self.sample().accepted_event_count()
+    }
+
+    #[getter]
+    fn event_processing_time_seconds(&self) -> Option<f64> {
+        self.sample().event_processing_time_seconds()
+    }
+
+    #[getter]
+    fn parameterization_jacobian(&self) -> Option<f64> {
+        self.inner
+            .sample
+            .evaluation
+            .parameterization_jacobian
+            .map(|jac| jac.0)
+    }
+
+    #[getter]
+    fn is_nan(&self) -> Option<bool> {
+        self.sample().is_nan()
+    }
+
+    #[getter]
+    fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
+        self.sample().stability_results()
+    }
+
+    #[getter]
+    fn event_groups(&self) -> Vec<PyEventGroup> {
+        self.sample().event_groups()
+    }
+
     #[getter]
     fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let dict = PyDict::new(py);
-        for (name, histogram) in &self.inner.observables.histograms {
-            dict.set_item(name, py_histogram_snapshot_from_snapshot(histogram.clone()))?;
-        }
-        Ok(dict)
+        py_observable_dict_from_bundle(py, &self.inner.observables)
+    }
+
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+}
+
+#[pyclass(from_py_object, name = "BatchEvaluationResult")]
+#[derive(Clone)]
+pub struct PyBatchEvaluationResult {
+    inner: BatchSampleEvaluationResult,
+}
+
+#[pymethods]
+impl PyBatchEvaluationResult {
+    #[getter]
+    fn samples(&self) -> Vec<PySampleEvaluationResult> {
+        self.inner
+            .samples
+            .iter()
+            .cloned()
+            .map(|inner| PySampleEvaluationResult { inner })
+            .collect()
+    }
+
+    #[getter]
+    fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        py_observable_dict_from_bundle(py, &self.inner.observables)
     }
 
     fn __str__(&self) -> String {
@@ -509,6 +614,17 @@ fn event_group_from_py_event_group(group: &PyEventGroup) -> EventGroup {
     gammalooprs::observables::GenericEventGroup(
         group.events.iter().map(event_from_py_event).collect(),
     )
+}
+
+fn py_observable_dict_from_bundle<'py>(
+    py: Python<'py>,
+    bundle: &gammalooprs::observables::ObservableSnapshotBundle,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
+    for (name, histogram) in &bundle.histograms {
+        dict.set_item(name, py_histogram_snapshot_from_snapshot(histogram.clone()))?;
+    }
+    Ok(dict)
 }
 
 fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogramSnapshot {
@@ -916,7 +1032,7 @@ impl GammaLoopAPI {
         discrete_dim: Option<Vec<usize>>,
         graph_name: Option<String>,
         orientation: Option<usize>,
-    ) -> Result<PySampleEvaluationResult> {
+    ) -> Result<PyEvaluationResult> {
         let points =
             ndarray::Array2::from_shape_vec((1, point.len()), point).map_err(|e| eyre!(e))?;
         let discrete_dims = discrete_dim.unwrap_or_default();
@@ -941,10 +1057,19 @@ impl GammaLoopAPI {
             orientations: Some(vec![orientation]),
         }
         .run(&mut self.gammaloop_state)?;
-        let value = res.into_iter().next().ok_or_else(|| {
+        let gammalooprs::integrands::evaluation::BatchSampleEvaluationResult {
+            mut samples,
+            observables,
+        } = res;
+        let value = samples.pop().ok_or_else(|| {
             eyre!("evaluate_sample did not return any result for the single input sample")
         })?;
-        Ok(PySampleEvaluationResult { inner: value })
+        Ok(PyEvaluationResult {
+            inner: SingleSampleEvaluationResult {
+                sample: value,
+                observables,
+            },
+        })
     }
 
     #[pyo3(
@@ -964,7 +1089,7 @@ impl GammaLoopAPI {
         force_radius: bool,
         graph_names: Option<Vec<Option<String>>>,
         orientations: Option<Vec<Option<usize>>>,
-    ) -> Result<Vec<PySampleEvaluationResult>> {
+    ) -> Result<PyBatchEvaluationResult> {
         let points_rust = points.as_array();
 
         let evaluate_samples = EvaluateSamples {
@@ -981,10 +1106,7 @@ impl GammaLoopAPI {
         };
 
         let res = evaluate_samples.run(&mut self.gammaloop_state)?;
-        Ok(res
-            .into_iter()
-            .map(|inner| PySampleEvaluationResult { inner })
-            .collect())
+        Ok(PyBatchEvaluationResult { inner: res })
     }
 
     #[pyo3(name="import_graphs", signature = (graphs, process_name=None, process_id=None, integrand_name=None, format="dot".into(), overwrite=false, append=false))]

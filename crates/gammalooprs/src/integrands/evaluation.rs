@@ -257,6 +257,41 @@ fn fmt_sample_result<D: Display>(
     Ok(())
 }
 
+fn fmt_batch_result<D: Display>(
+    f: &mut std::fmt::Formatter<'_>,
+    samples: &[D],
+    observables: &ObservableSnapshotBundle,
+) -> std::fmt::Result {
+    let summary_rows = [EvaluationSummaryRow {
+        field: "samples".to_string(),
+        value: format_count(samples.len()),
+    }];
+
+    writeln!(f, "{}", "Batch evaluation result".bold().bright_green())?;
+    writeln!(f, "{}", Table::new(summary_rows).with(Style::rounded()))?;
+
+    if let Some(observables_table) = summarize_observables(observables) {
+        writeln!(f)?;
+        writeln!(f, "{}", "Observable snapshots".bold().bright_magenta())?;
+        writeln!(f, "{observables_table}")?;
+    }
+
+    for (sample_index, sample) in samples.iter().enumerate() {
+        writeln!(f)?;
+        if sample_index > 0 {
+            writeln!(f)?;
+        }
+        writeln!(
+            f,
+            "{}",
+            format!("Sample {sample_index}").bold().bright_cyan()
+        )?;
+        write!(f, "{sample}")?;
+    }
+
+    Ok(())
+}
+
 impl Display for EvaluationResultOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fmt_evaluation_result_output(
@@ -321,25 +356,71 @@ impl Display for PreciseEvaluationResultOutput {
 
 impl Display for SampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_sample_result(f, &self.evaluation, &self.observables)
+        write!(f, "{}", self.evaluation)
     }
 }
 
 #[derive(Clone, Serialize, Debug)]
 pub struct SampleEvaluationResult {
     pub evaluation: EvaluationResultOutput,
-    pub observables: ObservableSnapshotBundle,
 }
 
 #[derive(Clone, Debug)]
 pub struct PreciseSampleEvaluationResult {
     pub evaluation: PreciseEvaluationResultOutput,
+}
+
+#[derive(Clone, Serialize, Debug)]
+pub struct SingleSampleEvaluationResult {
+    pub sample: SampleEvaluationResult,
+    pub observables: ObservableSnapshotBundle,
+}
+
+#[derive(Clone, Serialize, Debug)]
+pub struct BatchSampleEvaluationResult {
+    pub samples: Vec<SampleEvaluationResult>,
+    pub observables: ObservableSnapshotBundle,
+}
+
+#[derive(Clone, Debug)]
+pub struct PreciseSingleSampleEvaluationResult {
+    pub sample: PreciseSampleEvaluationResult,
+    pub observables: ObservableSnapshotBundle,
+}
+
+#[derive(Clone, Debug)]
+pub struct PreciseBatchSampleEvaluationResult {
+    pub samples: Vec<PreciseSampleEvaluationResult>,
     pub observables: ObservableSnapshotBundle,
 }
 
 impl Display for PreciseSampleEvaluationResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt_sample_result(f, &self.evaluation, &self.observables)
+        write!(f, "{}", self.evaluation)
+    }
+}
+
+impl Display for SingleSampleEvaluationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_sample_result(f, &self.sample.evaluation, &self.observables)
+    }
+}
+
+impl Display for BatchSampleEvaluationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_batch_result(f, &self.samples, &self.observables)
+    }
+}
+
+impl Display for PreciseSingleSampleEvaluationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_sample_result(f, &self.sample.evaluation, &self.observables)
+    }
+}
+
+impl Display for PreciseBatchSampleEvaluationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_batch_result(f, &self.samples, &self.observables)
     }
 }
 

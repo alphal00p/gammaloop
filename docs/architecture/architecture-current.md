@@ -336,7 +336,8 @@ Differential coverage is currently split into:
   - real generated-process end-to-end coverage for Rust `evaluate_sample(s)`
   - graph/cut grouping and incoming-PDG propagation checks
   - selectors / observables / event-group retention
-  - returned observable snapshots and evaluation metadata
+  - batch-global observable snapshots for `evaluate_samples`
+  - per-sample evaluation metadata
   - x-space vs momentum-space Jacobian behavior
   - minimal-output mode
 - `tests/tests/test_runs.rs`
