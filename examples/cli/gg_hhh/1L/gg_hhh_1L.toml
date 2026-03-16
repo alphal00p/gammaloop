@@ -9,7 +9,7 @@ commands = [
 folder = "./examples/cli/gg_hhh/1L/state"
 name = "gg_hhh_1l"
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "generate"
 commands = [
 
@@ -35,7 +35,7 @@ commands = [
 
 ]
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "integrate_euclidean"
 commands = [
 
@@ -71,7 +71,7 @@ commands = [
 ]
 
 
-[[commands_blocks]]
+[[command_blocks]]
 name = "integrate_physical"
 commands = [
 
