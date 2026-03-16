@@ -106,9 +106,9 @@ impl<'a> CliSession<'a> {
         }
 
         let mut merged_history = self.run_history.clone();
-        merged_history.merge_commands_blocks(&effective_boot_run_history.commands_blocks)?;
+        merged_history.merge_command_blocks(&effective_boot_run_history.command_blocks)?;
 
-        for block in &effective_boot_run_history.commands_blocks {
+        for block in &effective_boot_run_history.command_blocks {
             let block_context = format!("command block '{}'", block.name);
             let _ = prepare_command_histories_with_context(
                 &block.commands,
@@ -126,7 +126,7 @@ impl<'a> CliSession<'a> {
         )?;
 
         self.run_history
-            .merge_commands_blocks(&effective_boot_run_history.commands_blocks)?;
+            .merge_command_blocks(&effective_boot_run_history.command_blocks)?;
         effective_boot_run_history
             .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;
         self.execute_prepared_commands(prepared, HistoryMode::Record)
@@ -149,7 +149,7 @@ impl<'a> CliSession<'a> {
 
     pub fn current_commands_block_names(&self) -> Vec<String> {
         self.run_history
-            .commands_blocks
+            .command_blocks
             .iter()
             .map(|block| block.name.clone())
             .collect()
@@ -488,13 +488,13 @@ impl<'a> CliSession<'a> {
 
         if let Some(existing_index) = self
             .run_history
-            .commands_blocks
+            .command_blocks
             .iter()
             .position(|existing| existing.name == pending.name)
         {
-            self.run_history.commands_blocks[existing_index] = block;
+            self.run_history.command_blocks[existing_index] = block;
         } else {
-            self.run_history.commands_blocks.push(block);
+            self.run_history.command_blocks.push(block);
         }
 
         self.run_history.validate()?;

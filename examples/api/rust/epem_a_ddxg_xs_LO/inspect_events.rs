@@ -1,0 +1,147 @@
+#!/usr/bin/env rust-script
+//! ```cargo
+//! [dependencies]
+//! color-eyre = "0.6"
+//! ndarray = "0.17"
+//! gammaloop-api = { path = "../../../../crates/gammaloop-api", default-features = false, features = ["cli"] }
+//! gammalooprs = { path = "../../../../crates/gammalooprs" }
+//! ```
+//!
+//! Run from the repository root with `rust-script`, for example:
+//! `NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
+//!
+//! If you change the OEM-license environment at build time, add `--force` so
+//! `rust-script` does not reuse an incompatible cached build.
+
+use std::{env, path::PathBuf};
+
+use color_eyre::Result;
+use gammaloop_api::{
+    commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
+    StateLoadOption,
+};
+use ndarray::{arr2, Array2};
+
+fn example_dir() -> Result<PathBuf> {
+    Ok(PathBuf::from(file!())
+        .canonicalize()?
+        .parent()
+        .unwrap()
+        .to_path_buf())
+}
+
+fn main() -> Result<()> {
+    let example_dir = example_dir()?;
+    let run_card = example_dir.join("run.toml");
+    let state_dir = example_dir.join("state");
+
+    // Temporary until the proper LU numerator / theta / tree-denominator path
+    // is fixed.
+    env::set_var(
+        "GL_LU_E2E_HACK",
+        env::var("GL_LU_E2E_HACK").unwrap_or_else(|_| "1".into()),
+    );
+
+    let mut loaded = StateLoadOption {
+        fresh_state: true,
+        boot_commands_path: Some(run_card),
+        state_folder: Some(state_dir),
+        ..StateLoadOption::default()
+    }
+    .load()?;
+
+    let single_point: Array2<f64> = arr2(&[[0.17, 0.31, 0.53, 0.23, 0.41, 0.67]]);
+    let single_result = EvaluateSamples {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: false,
+        force_radius: false,
+        minimal_output: false,
+        momentum_space: false,
+        points: single_point.view(),
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut loaded.state)?;
+    println!("\n== evaluate_sample ==\n");
+    println!("{}", single_result.first().unwrap());
+
+    let momentum_point: Array2<f64> = arr2(&[[0.11, -0.07, 0.19, -0.13, 0.05, 0.29]]);
+    let momentum_result = EvaluateSamples {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: false,
+        force_radius: false,
+        minimal_output: false,
+        momentum_space: true,
+        points: momentum_point.view(),
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut loaded.state)?;
+    println!("\n== momentum-space evaluate_sample ==\n");
+    println!("{}", momentum_result.first().unwrap());
+
+    let precise_result = EvaluateSamplesPrecise {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: true,
+        force_radius: false,
+        minimal_output: false,
+        momentum_space: false,
+        points: single_point.view(),
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut loaded.state)?;
+    println!("\n== evaluate_sample_precise ==\n");
+    println!("{}", precise_result.first().unwrap());
+
+    let batch_points: Array2<f64> = arr2(&[
+        [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
+        [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
+    ]);
+    let batch_results = EvaluateSamples {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: false,
+        force_radius: false,
+        minimal_output: false,
+        momentum_space: false,
+        points: batch_points.view(),
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut loaded.state)?;
+
+    println!("\n== evaluate_samples ==\n");
+    println!("batch_size: {}\n", batch_results.len());
+    for (index, result) in batch_results.iter().enumerate() {
+        println!("-- sample {index} --\n{result}");
+    }
+
+    let precise_batch_results = EvaluateSamplesPrecise {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: true,
+        force_radius: false,
+        minimal_output: true,
+        momentum_space: false,
+        points: batch_points.view(),
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut loaded.state)?;
+    println!("\n== evaluate_samples_precise ==\n");
+    println!("batch_size: {}\n", precise_batch_results.len());
+    for (index, result) in precise_batch_results.iter().enumerate() {
+        println!("-- precise sample {index} --\n{result}");
+    }
+
+    Ok(())
+}

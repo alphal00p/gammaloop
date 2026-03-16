@@ -113,7 +113,7 @@ impl Run {
             ));
         }
 
-        let selected_blocks = run_history.select_commands_blocks(self.selected_block_names())?;
+        let selected_blocks = run_history.select_command_blocks(self.selected_block_names())?;
         let commands = prepare_command_histories_with_context(
             &self.parse_inline_commands()?,
             run_history,

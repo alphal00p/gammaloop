@@ -24,7 +24,7 @@ use crate::{
 
 #[cfg_attr(
     feature = "python_api",
-    pyo3::pyclass(unsendable, name = "IntegrationSettings")
+    pyo3::pyclass(from_py_object, unsendable, name = "IntegrationSettings")
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Integrate {

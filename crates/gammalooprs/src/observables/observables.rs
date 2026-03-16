@@ -1,5 +1,5 @@
 use super::clustering::{JetAlgorithm, JetClustering};
-use super::events::{GenericEvent, GenericEventGroup};
+use super::events::{GenericEvent, GenericEventGroup, GenericEventGroupList};
 use crate::settings::RuntimeSettings;
 use crate::utils::serde_utils::{
     IsDefault, is_false, is_float, is_true, is_usize, show_defaults_helper,
@@ -8,7 +8,7 @@ use crate::utils::{F, FloatLike};
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Result, eyre};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::{SmallVec, smallvec};
 use spenso::algebra::complex::Complex;
 use std::cmp::Ordering;
@@ -17,7 +17,6 @@ use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
 use std::path::Path;
-use symbolica::numerical_integration::StatisticsAccumulator;
 use tracing::info;
 
 pub type QuantitiesSettings = BTreeMap<String, QuantitySettings>;
@@ -68,7 +67,7 @@ pub enum ObservablePhase {
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 )]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum ObservableFileFormat {
     #[serde(rename = "none")]
     None,
@@ -101,7 +100,7 @@ impl fmt::Display for FilterQuantity {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct JetClusteringSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -114,7 +113,7 @@ pub struct JetClusteringSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct ParticleScalarQuantitySettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -124,7 +123,7 @@ pub struct ParticleScalarQuantitySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct JetPtQuantitySettings {
     #[serde(flatten)]
@@ -134,7 +133,7 @@ pub struct JetPtQuantitySettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum QuantitySettings {
     ParticleScalar(ParticleScalarQuantitySettings),
     JetPt(JetPtQuantitySettings),
@@ -144,7 +143,7 @@ pub enum QuantitySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct ValueRangeSelectorSettings {
     pub min: f64,
@@ -156,7 +155,7 @@ pub struct ValueRangeSelectorSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct CountRangeSelectorSettings {
     pub min_count: usize,
@@ -167,29 +166,142 @@ pub struct CountRangeSelectorSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "selector", rename_all = "snake_case")]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum SelectorDefinitionSettings {
     ValueRange(ValueRangeSelectorSettings),
     CountRange(CountRangeSelectorSettings),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub struct SelectorSettings {
     pub quantity: String,
-    #[serde(default, skip_serializing_if = "is_default_entry_selection")]
     pub entry_selection: EntrySelection,
-    #[serde(default, skip_serializing_if = "is_default_entry_index")]
     pub entry_index: usize,
-    #[serde(flatten)]
     pub selector: SelectorDefinitionSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum SelectorSerdeTag {
+    ValueRange,
+    CountRange,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ValueRangeSelectorSettingsSerde {
+    quantity: String,
+    #[serde(default, skip_serializing_if = "is_default_entry_selection")]
+    entry_selection: EntrySelection,
+    #[serde(default, skip_serializing_if = "is_default_entry_index")]
+    entry_index: usize,
+    selector: SelectorSerdeTag,
+    min: f64,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    max: Option<f64>,
+    #[serde(default, skip_serializing_if = "is_default_selector_reduction")]
+    reduction: SelectorReduction,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CountRangeSelectorSettingsSerde {
+    quantity: String,
+    #[serde(default, skip_serializing_if = "is_default_entry_selection")]
+    entry_selection: EntrySelection,
+    #[serde(default, skip_serializing_if = "is_default_entry_index")]
+    entry_index: usize,
+    selector: SelectorSerdeTag,
+    min_count: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    max_count: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+enum SelectorSettingsSerde {
+    ValueRange(ValueRangeSelectorSettingsSerde),
+    CountRange(CountRangeSelectorSettingsSerde),
+}
+
+impl Serialize for SelectorSettings {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match &self.selector {
+            SelectorDefinitionSettings::ValueRange(selector) => ValueRangeSelectorSettingsSerde {
+                quantity: self.quantity.clone(),
+                entry_selection: self.entry_selection,
+                entry_index: self.entry_index,
+                selector: SelectorSerdeTag::ValueRange,
+                min: selector.min,
+                max: selector.max,
+                reduction: selector.reduction,
+            }
+            .serialize(serializer),
+            SelectorDefinitionSettings::CountRange(selector) => CountRangeSelectorSettingsSerde {
+                quantity: self.quantity.clone(),
+                entry_selection: self.entry_selection,
+                entry_index: self.entry_index,
+                selector: SelectorSerdeTag::CountRange,
+                min_count: selector.min_count,
+                max_count: selector.max_count,
+            }
+            .serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SelectorSettings {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let settings = SelectorSettingsSerde::deserialize(deserializer)?;
+        Ok(match settings {
+            SelectorSettingsSerde::ValueRange(settings) => {
+                let SelectorSerdeTag::ValueRange = settings.selector else {
+                    return Err(serde::de::Error::custom(
+                        "selector = \"value_range\" is required for a value-range selector",
+                    ));
+                };
+                SelectorSettings {
+                    quantity: settings.quantity,
+                    entry_selection: settings.entry_selection,
+                    entry_index: settings.entry_index,
+                    selector: SelectorDefinitionSettings::ValueRange(ValueRangeSelectorSettings {
+                        min: settings.min,
+                        max: settings.max,
+                        reduction: settings.reduction,
+                    }),
+                }
+            }
+            SelectorSettingsSerde::CountRange(settings) => {
+                let SelectorSerdeTag::CountRange = settings.selector else {
+                    return Err(serde::de::Error::custom(
+                        "selector = \"count_range\" is required for a count-range selector",
+                    ));
+                };
+                SelectorSettings {
+                    quantity: settings.quantity,
+                    entry_selection: settings.entry_selection,
+                    entry_index: settings.entry_index,
+                    selector: SelectorDefinitionSettings::CountRange(CountRangeSelectorSettings {
+                        min_count: settings.min_count,
+                        max_count: settings.max_count,
+                    }),
+                }
+            }
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct HistogramSettings {
     #[serde(skip_serializing_if = "is_float::<0>")]
@@ -218,7 +330,7 @@ impl Default for HistogramSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct ObservableSettings {
     pub quantity: String,
@@ -335,7 +447,7 @@ struct CrossSectionDefinition;
 
 impl CrossSectionDefinition {
     fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
-        let reference = event.integrand_weight.re.clone();
+        let reference = event.weight.re.clone();
         let half = reference.one() / reference.from_usize(2);
         smallvec![ObservableEntry::unit(half)]
     }
@@ -477,51 +589,117 @@ impl ObservableDefinition {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ObservableBinAccumulator {
-    pub stats: StatisticsAccumulator<F<f64>>,
+    pub sum_weights: f64,
+    new_sum_weights: f64,
+    pub sum_weights_squared: f64,
+    new_sum_weights_squared: f64,
+    pub entry_count: usize,
+    new_entry_count: usize,
     pub mitigated_fill_count: usize,
     new_mitigated_fill_count: usize,
 }
 
 impl ObservableBinAccumulator {
-    fn add_sample(&mut self, sample: F<f64>, mitigated_fill_count: usize) {
-        self.stats.add_sample(sample, None);
+    fn add_sample(&mut self, sample: f64, entry_count: usize, mitigated_fill_count: usize) {
+        self.new_sum_weights += sample;
+        self.new_sum_weights_squared += sample * sample;
+        self.new_entry_count += entry_count;
         self.new_mitigated_fill_count += mitigated_fill_count;
     }
 
     fn merge_samples(&mut self, other: &mut ObservableBinAccumulator) {
-        self.stats.merge_samples(&mut other.stats);
+        self.new_sum_weights += other.new_sum_weights;
+        self.new_sum_weights_squared += other.new_sum_weights_squared;
+        self.new_entry_count += other.new_entry_count;
         self.new_mitigated_fill_count += other.new_mitigated_fill_count;
+
+        other.new_sum_weights = 0.0;
+        other.new_sum_weights_squared = 0.0;
+        other.new_entry_count = 0;
         other.new_mitigated_fill_count = 0;
     }
 
+    fn total_sum_weights(&self) -> f64 {
+        self.sum_weights + self.new_sum_weights
+    }
+
+    fn total_sum_weights_squared(&self) -> f64 {
+        self.sum_weights_squared + self.new_sum_weights_squared
+    }
+
+    fn total_entry_count(&self) -> usize {
+        self.entry_count + self.new_entry_count
+    }
+
+    fn total_mitigated_fill_count(&self) -> usize {
+        self.mitigated_fill_count + self.new_mitigated_fill_count
+    }
+
+    fn average(&self, sample_count: usize) -> f64 {
+        if sample_count == 0 {
+            0.0
+        } else {
+            self.total_sum_weights() / sample_count as f64
+        }
+    }
+
+    fn error(&self, sample_count: usize) -> f64 {
+        if sample_count <= 1 {
+            return 0.0;
+        }
+
+        let n = sample_count as f64;
+        let sum = self.total_sum_weights();
+        let sum_sq = self.total_sum_weights_squared();
+        let variance_numerator = sum_sq - (sum * sum) / n;
+        if !variance_numerator.is_finite() || variance_numerator <= 0.0 {
+            0.0
+        } else {
+            (variance_numerator / (n * (n - 1.0))).sqrt()
+        }
+    }
+
     fn update_iter(&mut self) {
-        self.stats.update_iter(false);
+        self.sum_weights += self.new_sum_weights;
+        self.sum_weights_squared += self.new_sum_weights_squared;
+        self.entry_count += self.new_entry_count;
         self.mitigated_fill_count += self.new_mitigated_fill_count;
+
+        self.new_sum_weights = 0.0;
+        self.new_sum_weights_squared = 0.0;
+        self.new_entry_count = 0;
         self.new_mitigated_fill_count = 0;
+    }
+
+    fn from_snapshot(snapshot: &HistogramBinSnapshot) -> Self {
+        Self {
+            sum_weights: snapshot.sum_weights,
+            new_sum_weights: 0.0,
+            sum_weights_squared: snapshot.sum_weights_squared,
+            new_sum_weights_squared: 0.0,
+            entry_count: snapshot.entry_count,
+            new_entry_count: 0,
+            mitigated_fill_count: snapshot.mitigated_fill_count,
+            new_mitigated_fill_count: 0,
+        }
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ObservableHistogramStatistics {
-    pub underflow_count: usize,
-    pub overflow_count: usize,
+    pub in_range_entry_count: usize,
     pub nan_value_count: usize,
     pub mitigated_pair_count: usize,
-    new_underflow_count: usize,
-    new_overflow_count: usize,
+    new_in_range_entry_count: usize,
     new_nan_value_count: usize,
     new_mitigated_pair_count: usize,
 }
 
 impl ObservableHistogramStatistics {
-    fn register_underflow(&mut self) {
-        self.new_underflow_count += 1;
-    }
-
-    fn register_overflow(&mut self) {
-        self.new_overflow_count += 1;
+    fn register_in_range_entry(&mut self) {
+        self.new_in_range_entry_count += 1;
     }
 
     fn register_nan(&mut self) {
@@ -533,25 +711,21 @@ impl ObservableHistogramStatistics {
     }
 
     fn merge_samples(&mut self, other: &mut ObservableHistogramStatistics) {
-        self.new_underflow_count += other.new_underflow_count;
-        self.new_overflow_count += other.new_overflow_count;
+        self.new_in_range_entry_count += other.new_in_range_entry_count;
         self.new_nan_value_count += other.new_nan_value_count;
         self.new_mitigated_pair_count += other.new_mitigated_pair_count;
 
-        other.new_underflow_count = 0;
-        other.new_overflow_count = 0;
+        other.new_in_range_entry_count = 0;
         other.new_nan_value_count = 0;
         other.new_mitigated_pair_count = 0;
     }
 
     fn update_iter(&mut self) {
-        self.underflow_count += self.new_underflow_count;
-        self.overflow_count += self.new_overflow_count;
+        self.in_range_entry_count += self.new_in_range_entry_count;
         self.nan_value_count += self.new_nan_value_count;
         self.mitigated_pair_count += self.new_mitigated_pair_count;
 
-        self.new_underflow_count = 0;
-        self.new_overflow_count = 0;
+        self.new_in_range_entry_count = 0;
         self.new_nan_value_count = 0;
         self.new_mitigated_pair_count = 0;
     }
@@ -559,17 +733,49 @@ impl ObservableHistogramStatistics {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct HistogramBinSnapshot {
-    pub x_min: f64,
-    pub x_max: f64,
-    pub average: f64,
-    pub error: f64,
+    pub x_min: Option<f64>,
+    pub x_max: Option<f64>,
+    pub entry_count: usize,
+    pub sum_weights: f64,
+    pub sum_weights_squared: f64,
     pub mitigated_fill_count: usize,
+}
+
+impl HistogramBinSnapshot {
+    pub fn average(&self, sample_count: usize) -> f64 {
+        if sample_count == 0 {
+            0.0
+        } else {
+            self.sum_weights / sample_count as f64
+        }
+    }
+
+    pub fn error(&self, sample_count: usize) -> f64 {
+        if sample_count <= 1 {
+            return 0.0;
+        }
+
+        let n = sample_count as f64;
+        let variance_numerator =
+            self.sum_weights_squared - (self.sum_weights * self.sum_weights) / n;
+        if !variance_numerator.is_finite() || variance_numerator <= 0.0 {
+            0.0
+        } else {
+            (variance_numerator / (n * (n - 1.0))).sqrt()
+        }
+    }
+
+    fn merge_in_place(&mut self, other: &HistogramBinSnapshot) {
+        self.entry_count += other.entry_count;
+        self.sum_weights += other.sum_weights;
+        self.sum_weights_squared += other.sum_weights_squared;
+        self.mitigated_fill_count += other.mitigated_fill_count;
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct HistogramStatisticsSnapshot {
-    pub underflow_count: usize,
-    pub overflow_count: usize,
+    pub in_range_entry_count: usize,
     pub nan_value_count: usize,
     pub mitigated_pair_count: usize,
 }
@@ -581,9 +787,12 @@ pub struct HistogramSnapshot {
     pub value_transform: ObservableValueTransform,
     pub x_min: f64,
     pub x_max: f64,
+    pub sample_count: usize,
     pub log_x_axis: bool,
     pub log_y_axis: bool,
     pub bins: Vec<HistogramBinSnapshot>,
+    pub underflow_bin: HistogramBinSnapshot,
+    pub overflow_bin: HistogramBinSnapshot,
     pub statistics: HistogramStatisticsSnapshot,
 }
 
@@ -597,6 +806,442 @@ impl HistogramSnapshot {
     pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let reader = BufReader::new(File::open(path.as_ref())?);
         Ok(serde_json::from_reader(reader)?)
+    }
+
+    fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let x_axis_mode = if self.log_x_axis { "LOG" } else { "LIN" };
+        let y_axis_mode = if self.log_y_axis { "LOG" } else { "LIN" };
+
+        writeln!(writer, "##& xmin & xmax & central value & dy &\n")?;
+        writeln!(
+            writer,
+            "<histogram> {} \"{} |X_AXIS@{} |Y_AXIS@{} |TYPE@AL\"",
+            self.bins.len(),
+            self.title,
+            x_axis_mode,
+            y_axis_mode,
+        )?;
+
+        for bin in &self.bins {
+            writeln!(
+                writer,
+                "  {:.8e}   {:.8e}   {:.8e}   {:.8e}",
+                bin.x_min.unwrap_or(self.x_min),
+                bin.x_max.unwrap_or(self.x_max),
+                bin.average(self.sample_count),
+                bin.error(self.sample_count),
+            )?;
+        }
+
+        writeln!(writer, "<\\histogram>")?;
+        Ok(())
+    }
+
+    pub fn merge(&self, other: &HistogramSnapshot) -> Result<Self> {
+        let mut merged = self.clone();
+        merged.merge_in_place(other)?;
+        Ok(merged)
+    }
+
+    pub fn merged(&self, other: &HistogramSnapshot) -> Result<Self> {
+        self.merge(other)
+    }
+
+    pub fn merge_in_place(&mut self, other: &HistogramSnapshot) -> Result<()> {
+        if self.title != other.title
+            || self.phase != other.phase
+            || self.value_transform != other.value_transform
+            || self.x_min != other.x_min
+            || self.x_max != other.x_max
+            || self.log_x_axis != other.log_x_axis
+            || self.log_y_axis != other.log_y_axis
+            || self.bins.len() != other.bins.len()
+        {
+            return Err(eyre!(
+                "Cannot merge incompatible histogram snapshots '{}'",
+                self.title
+            ));
+        }
+
+        self.sample_count += other.sample_count;
+        for (bin, other_bin) in self.bins.iter_mut().zip(other.bins.iter()) {
+            bin.merge_in_place(other_bin);
+        }
+        self.underflow_bin.merge_in_place(&other.underflow_bin);
+        self.overflow_bin.merge_in_place(&other.overflow_bin);
+        self.statistics.in_range_entry_count += other.statistics.in_range_entry_count;
+        self.statistics.nan_value_count += other.statistics.nan_value_count;
+        self.statistics.mitigated_pair_count += other.statistics.mitigated_pair_count;
+        Ok(())
+    }
+
+    pub fn rebin(&self, contiguous_bins: usize) -> Result<Self> {
+        if contiguous_bins == 0 {
+            return Err(eyre!("Rebinning factor must be strictly positive."));
+        }
+        if self.bins.is_empty() || self.bins.len() % contiguous_bins != 0 {
+            return Err(eyre!(
+                "Rebinning factor {} does not divide the {} histogram bins exactly.",
+                contiguous_bins,
+                self.bins.len()
+            ));
+        }
+
+        let bins = self
+            .bins
+            .chunks(contiguous_bins)
+            .map(|chunk| {
+                let mut rebinned = chunk[0].clone();
+                rebinned.x_min = chunk.first().and_then(|bin| bin.x_min);
+                rebinned.x_max = chunk.last().and_then(|bin| bin.x_max);
+                for bin in &chunk[1..] {
+                    rebinned.merge_in_place(bin);
+                }
+                rebinned
+            })
+            .collect();
+
+        Ok(Self {
+            title: self.title.clone(),
+            phase: self.phase,
+            value_transform: self.value_transform,
+            x_min: self.x_min,
+            x_max: self.x_max,
+            sample_count: self.sample_count,
+            log_x_axis: self.log_x_axis,
+            log_y_axis: self.log_y_axis,
+            bins,
+            underflow_bin: self.underflow_bin.clone(),
+            overflow_bin: self.overflow_bin.clone(),
+            statistics: self.statistics.clone(),
+        })
+    }
+
+    pub fn rebinned(&self, contiguous_bins: usize) -> Result<Self> {
+        self.rebin(contiguous_bins)
+    }
+
+    pub fn into_accumulator_state(self) -> HistogramAccumulatorState {
+        HistogramAccumulatorState::from_snapshot(&self)
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HistogramAccumulatorState {
+    pub title: String,
+    pub phase: ObservablePhase,
+    pub value_transform: ObservableValueTransform,
+    pub x_min: f64,
+    pub x_max: f64,
+    pub sample_count: usize,
+    new_sample_count: usize,
+    pub log_x_axis: bool,
+    pub log_y_axis: bool,
+    pub bins: Vec<ObservableBinAccumulator>,
+    pub underflow_bin: ObservableBinAccumulator,
+    pub overflow_bin: ObservableBinAccumulator,
+    pub statistics: ObservableHistogramStatistics,
+}
+
+impl HistogramAccumulatorState {
+    fn new(
+        title: String,
+        phase: ObservablePhase,
+        value_transform: ObservableValueTransform,
+        x_min: f64,
+        x_max: f64,
+        log_x_axis: bool,
+        log_y_axis: bool,
+        n_bins: usize,
+    ) -> Self {
+        Self {
+            title,
+            phase,
+            value_transform,
+            x_min,
+            x_max,
+            sample_count: 0,
+            new_sample_count: 0,
+            log_x_axis,
+            log_y_axis,
+            bins: vec![ObservableBinAccumulator::default(); n_bins],
+            underflow_bin: ObservableBinAccumulator::default(),
+            overflow_bin: ObservableBinAccumulator::default(),
+            statistics: ObservableHistogramStatistics::default(),
+        }
+    }
+
+    fn cleared_clone(&self) -> Self {
+        Self::new(
+            self.title.clone(),
+            self.phase,
+            self.value_transform,
+            self.x_min,
+            self.x_max,
+            self.log_x_axis,
+            self.log_y_axis,
+            self.bins.len(),
+        )
+    }
+
+    fn snapshot(&self) -> HistogramSnapshot {
+        let bins = self
+            .bins
+            .iter()
+            .enumerate()
+            .map(|(index, bin)| {
+                let x_min =
+                    (self.x_max - self.x_min) * index as f64 / self.bins.len() as f64 + self.x_min;
+                let x_max = (self.x_max - self.x_min) * (index + 1) as f64 / self.bins.len() as f64
+                    + self.x_min;
+                HistogramBinSnapshot {
+                    x_min: Some(x_min),
+                    x_max: Some(x_max),
+                    entry_count: bin.total_entry_count(),
+                    sum_weights: bin.total_sum_weights(),
+                    sum_weights_squared: bin.total_sum_weights_squared(),
+                    mitigated_fill_count: bin.total_mitigated_fill_count(),
+                }
+            })
+            .collect();
+
+        HistogramSnapshot {
+            title: self.title.clone(),
+            phase: self.phase,
+            value_transform: self.value_transform,
+            x_min: self.x_min,
+            x_max: self.x_max,
+            sample_count: self.sample_count + self.new_sample_count,
+            log_x_axis: self.log_x_axis,
+            log_y_axis: self.log_y_axis,
+            bins,
+            underflow_bin: HistogramBinSnapshot {
+                x_min: None,
+                x_max: Some(self.x_min),
+                entry_count: self.underflow_bin.total_entry_count(),
+                sum_weights: self.underflow_bin.total_sum_weights(),
+                sum_weights_squared: self.underflow_bin.total_sum_weights_squared(),
+                mitigated_fill_count: self.underflow_bin.total_mitigated_fill_count(),
+            },
+            overflow_bin: HistogramBinSnapshot {
+                x_min: Some(self.x_max),
+                x_max: None,
+                entry_count: self.overflow_bin.total_entry_count(),
+                sum_weights: self.overflow_bin.total_sum_weights(),
+                sum_weights_squared: self.overflow_bin.total_sum_weights_squared(),
+                mitigated_fill_count: self.overflow_bin.total_mitigated_fill_count(),
+            },
+            statistics: HistogramStatisticsSnapshot {
+                in_range_entry_count: self.statistics.in_range_entry_count
+                    + self.statistics.new_in_range_entry_count,
+                nan_value_count: self.statistics.nan_value_count
+                    + self.statistics.new_nan_value_count,
+                mitigated_pair_count: self.statistics.mitigated_pair_count
+                    + self.statistics.new_mitigated_pair_count,
+            },
+        }
+    }
+
+    fn merge_samples(&mut self, other: &mut HistogramAccumulatorState) -> Result<()> {
+        self.ensure_compatible(other)?;
+        self.new_sample_count += other.new_sample_count;
+        other.new_sample_count = 0;
+        for (bin, other_bin) in self.bins.iter_mut().zip(other.bins.iter_mut()) {
+            bin.merge_samples(other_bin);
+        }
+        self.underflow_bin.merge_samples(&mut other.underflow_bin);
+        self.overflow_bin.merge_samples(&mut other.overflow_bin);
+        self.statistics.merge_samples(&mut other.statistics);
+        Ok(())
+    }
+
+    fn update_result(&mut self) {
+        self.sample_count += self.new_sample_count;
+        self.new_sample_count = 0;
+        for bin in &mut self.bins {
+            bin.update_iter();
+        }
+        self.underflow_bin.update_iter();
+        self.overflow_bin.update_iter();
+        self.statistics.update_iter();
+
+        for (i, bin) in self.bins.iter().enumerate() {
+            let c1 = (self.x_max - self.x_min) * i as f64 / self.bins.len() as f64 + self.x_min;
+            let c2 = (self.x_max - self.x_min) * (i + 1) as f64 / self.bins.len() as f64;
+            info!(
+                "{}={}: {} +/- {}",
+                c1,
+                c2,
+                bin.average(self.sample_count),
+                bin.error(self.sample_count)
+            );
+        }
+
+        info!(
+            "{} stats: entries={}, underflow={}, overflow={}, nan_values={}, mitigated_pairs={}",
+            self.title,
+            self.statistics.in_range_entry_count,
+            self.underflow_bin.total_entry_count(),
+            self.overflow_bin.total_entry_count(),
+            self.statistics.nan_value_count,
+            self.statistics.mitigated_pair_count,
+        );
+    }
+
+    fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let x_axis_mode = if self.log_x_axis { "LOG" } else { "LIN" };
+        let y_axis_mode = if self.log_y_axis { "LOG" } else { "LIN" };
+
+        writeln!(writer, "##& xmin & xmax & central value & dy &\n")?;
+        writeln!(
+            writer,
+            "<histogram> {} \"{} |X_AXIS@{} |Y_AXIS@{} |TYPE@AL\"",
+            self.bins.len(),
+            self.title,
+            x_axis_mode,
+            y_axis_mode,
+        )?;
+
+        for (i, bin) in self.bins.iter().enumerate() {
+            let c1 = (self.x_max - self.x_min) * i as f64 / self.bins.len() as f64 + self.x_min;
+            let c2 =
+                (self.x_max - self.x_min) * (i + 1) as f64 / self.bins.len() as f64 + self.x_min;
+            writeln!(
+                writer,
+                "  {:.8e}   {:.8e}   {:.8e}   {:.8e}",
+                c1,
+                c2,
+                bin.average(self.sample_count + self.new_sample_count),
+                bin.error(self.sample_count + self.new_sample_count),
+            )?;
+        }
+
+        writeln!(writer, "<\\histogram>")?;
+        Ok(())
+    }
+
+    fn from_snapshot(snapshot: &HistogramSnapshot) -> Self {
+        Self {
+            title: snapshot.title.clone(),
+            phase: snapshot.phase,
+            value_transform: snapshot.value_transform,
+            x_min: snapshot.x_min,
+            x_max: snapshot.x_max,
+            sample_count: snapshot.sample_count,
+            new_sample_count: 0,
+            log_x_axis: snapshot.log_x_axis,
+            log_y_axis: snapshot.log_y_axis,
+            bins: snapshot
+                .bins
+                .iter()
+                .map(ObservableBinAccumulator::from_snapshot)
+                .collect(),
+            underflow_bin: ObservableBinAccumulator::from_snapshot(&snapshot.underflow_bin),
+            overflow_bin: ObservableBinAccumulator::from_snapshot(&snapshot.overflow_bin),
+            statistics: ObservableHistogramStatistics {
+                in_range_entry_count: snapshot.statistics.in_range_entry_count,
+                nan_value_count: snapshot.statistics.nan_value_count,
+                mitigated_pair_count: snapshot.statistics.mitigated_pair_count,
+                new_in_range_entry_count: 0,
+                new_nan_value_count: 0,
+                new_mitigated_pair_count: 0,
+            },
+        }
+    }
+
+    pub fn rebin(&self, contiguous_bins: usize) -> Result<Self> {
+        self.snapshot()
+            .rebin(contiguous_bins)
+            .map(|s| s.into_accumulator_state())
+    }
+
+    fn ensure_compatible(&self, other: &HistogramAccumulatorState) -> Result<()> {
+        if self.title != other.title
+            || self.phase != other.phase
+            || self.value_transform != other.value_transform
+            || self.x_min != other.x_min
+            || self.x_max != other.x_max
+            || self.log_x_axis != other.log_x_axis
+            || self.log_y_axis != other.log_y_axis
+            || self.bins.len() != other.bins.len()
+        {
+            return Err(eyre!(
+                "Cannot merge incompatible histogram accumulators '{}'",
+                self.title
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ObservableAccumulatorBundle {
+    pub histograms: BTreeMap<String, HistogramAccumulatorState>,
+}
+
+impl ObservableAccumulatorBundle {
+    pub fn merge_samples(&mut self, other: &mut ObservableAccumulatorBundle) -> Result<()> {
+        for (name, other_histogram) in other.histograms.iter_mut() {
+            let histogram = self
+                .histograms
+                .get_mut(name)
+                .ok_or_else(|| eyre!("Cannot merge unknown observable accumulator '{}'", name))?;
+            histogram.merge_samples(other_histogram)?;
+        }
+        Ok(())
+    }
+
+    pub fn update_results(&mut self) {
+        for histogram in self.histograms.values_mut() {
+            histogram.update_result();
+        }
+    }
+
+    pub fn snapshot_bundle(&self) -> ObservableSnapshotBundle {
+        ObservableSnapshotBundle {
+            histograms: self
+                .histograms
+                .iter()
+                .map(|(name, histogram)| (name.clone(), histogram.snapshot()))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, JsonSchema)]
+pub struct ObservableSnapshotBundle {
+    pub histograms: BTreeMap<String, HistogramSnapshot>,
+}
+
+impl ObservableSnapshotBundle {
+    pub fn to_json_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let writer = BufWriter::new(File::create(path.as_ref())?);
+        serde_json::to_writer_pretty(writer, self)?;
+        Ok(())
+    }
+
+    pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let reader = BufReader::new(File::open(path.as_ref())?);
+        Ok(serde_json::from_reader(reader)?)
+    }
+
+    pub fn write_hwu_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let mut writer = BufWriter::new(File::create(path.as_ref())?);
+        for histogram in self.histograms.values() {
+            histogram.write_hwu_block(&mut writer)?;
+        }
+        Ok(())
+    }
+
+    pub fn merge_in_place(&mut self, other: &ObservableSnapshotBundle) -> Result<()> {
+        for (name, other_histogram) in other.histograms.iter() {
+            let histogram = self
+                .histograms
+                .get_mut(name)
+                .ok_or_else(|| eyre!("Cannot merge unknown histogram snapshot '{}'", name))?;
+            histogram.merge_in_place(other_histogram)?;
+        }
+        Ok(())
     }
 }
 
@@ -690,24 +1335,41 @@ impl Selectors {
 #[derive(Clone, Default)]
 pub struct EventProcessingRuntime {
     selectors: Vec<Selectors>,
+    observables: BTreeMap<String, Observables>,
 }
 
 impl EventProcessingRuntime {
-    pub(crate) fn from_settings(settings: &RuntimeSettings) -> Result<Self> {
+    pub fn from_settings(settings: &RuntimeSettings) -> Result<Self> {
         let selectors = settings
             .selectors
             .values()
             .map(|selector| Selectors::from_settings(selector, &settings.quantities))
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(Self { selectors })
+        let observables = settings
+            .observables
+            .iter()
+            .map(|(name, observable)| {
+                Observables::from_settings(name, observable, &settings.quantities)
+                    .map(|observable| (name.clone(), observable))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+
+        Ok(Self {
+            selectors,
+            observables,
+        })
     }
 
-    pub(crate) fn has_selectors(&self) -> bool {
+    pub fn has_selectors(&self) -> bool {
         !self.selectors.is_empty()
     }
 
-    pub(crate) fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> bool {
+    pub fn has_observables(&self) -> bool {
+        !self.observables.is_empty()
+    }
+
+    pub fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> bool {
         for selector in self.selectors.iter_mut() {
             if !selector.process_event(event) {
                 return false;
@@ -715,16 +1377,80 @@ impl EventProcessingRuntime {
         }
         true
     }
+
+    pub fn process_event_groups<T: FloatLike>(&mut self, event_groups: &GenericEventGroupList<T>) {
+        for observable in self.observables.values_mut() {
+            observable.process_event_groups(event_groups);
+        }
+    }
+
+    pub fn merge_samples(&mut self, other: &mut EventProcessingRuntime) -> Result<()> {
+        for (name, other_observable) in other.observables.iter_mut() {
+            let observable = self
+                .observables
+                .get_mut(name)
+                .ok_or_else(|| eyre!("Cannot merge unknown observable '{}'", name))?;
+            observable.merge_samples(other_observable)?;
+        }
+        Ok(())
+    }
+
+    pub fn update_results(&mut self, iter: usize) {
+        for observable in self.observables.values_mut() {
+            observable.update_result(iter);
+        }
+    }
+
+    pub fn cleared_observable_clone(&self) -> Self {
+        Self {
+            selectors: self.selectors.clone(),
+            observables: self
+                .observables
+                .iter()
+                .map(|(name, observable)| (name.clone(), observable.cleared_clone()))
+                .collect(),
+        }
+    }
+
+    pub fn snapshot_bundle(&self) -> ObservableSnapshotBundle {
+        ObservableSnapshotBundle {
+            histograms: self
+                .observables
+                .iter()
+                .map(|(name, observable)| (name.clone(), observable.snapshot()))
+                .collect(),
+        }
+    }
+
+    pub fn accumulator_bundle(&self) -> ObservableAccumulatorBundle {
+        ObservableAccumulatorBundle {
+            histograms: self
+                .observables
+                .iter()
+                .map(|(name, observable)| (name.clone(), observable.accumulator_state()))
+                .collect(),
+        }
+    }
+
+    pub fn merge_accumulator_bundle(
+        &mut self,
+        other: &mut ObservableAccumulatorBundle,
+    ) -> Result<()> {
+        for (name, other_histogram) in other.histograms.iter_mut() {
+            let observable = self
+                .observables
+                .get_mut(name)
+                .ok_or_else(|| eyre!("Cannot merge unknown observable '{}'", name))?;
+            observable.merge_accumulator_state(other_histogram)?;
+        }
+        Ok(())
+    }
 }
 
 pub trait Observable {
-    fn process_event<T: FloatLike>(
-        &mut self,
-        event_group: &GenericEventGroup<T>,
-        integrator_weight: F<T>,
-    );
+    fn process_event_groups<T: FloatLike>(&mut self, event_groups: &GenericEventGroupList<T>);
 
-    fn merge_samples(&mut self, other: &mut Self)
+    fn merge_samples(&mut self, other: &mut Self) -> Result<()>
     where
         Self: Sized;
 
@@ -742,6 +1468,7 @@ struct PendingBinContribution {
 #[derive(Debug, Clone, Default)]
 struct GroupBinContribution {
     projected_weight: f64,
+    entry_count: usize,
     mitigated_fill_count: usize,
 }
 
@@ -750,20 +1477,14 @@ pub struct HistogramObservable {
     definition: ObservableDefinition,
     entry_selection: EntrySelection,
     entry_index: usize,
-    value_transform: ObservableValueTransform,
-    phase: ObservablePhase,
     misbinning_max_normalized_distance: Option<f64>,
-    x_min: f64,
-    x_max: f64,
-    title: String,
-    bins: Vec<ObservableBinAccumulator>,
-    histogram_stats: ObservableHistogramStatistics,
-    log_x_axis: bool,
-    log_y_axis: bool,
+    state: HistogramAccumulatorState,
     pending_contributions: Vec<PendingBinContribution>,
     candidate_pairs: Vec<(f64, usize, usize)>,
     used_contributions: Vec<bool>,
     grouped_contributions: Vec<GroupBinContribution>,
+    grouped_underflow: GroupBinContribution,
+    grouped_overflow: GroupBinContribution,
     touched_bins: Vec<usize>,
 }
 
@@ -789,29 +1510,28 @@ impl HistogramObservable {
             definition,
             entry_selection: settings.entry_selection,
             entry_index: settings.entry_index,
-            value_transform: settings.value_transform,
-            phase: settings.phase,
             misbinning_max_normalized_distance: settings.misbinning_max_normalized_distance,
-            x_min,
-            x_max,
-            title: observable_name.to_string(),
-            bins: vec![ObservableBinAccumulator::default(); n_bins],
-            histogram_stats: ObservableHistogramStatistics::default(),
-            log_x_axis: settings.histogram.log_x_axis,
-            log_y_axis: settings.histogram.log_y_axis,
+            state: HistogramAccumulatorState::new(
+                observable_name.to_string(),
+                settings.phase,
+                settings.value_transform,
+                x_min,
+                x_max,
+                settings.histogram.log_x_axis,
+                settings.histogram.log_y_axis,
+                n_bins,
+            ),
             pending_contributions: Vec::with_capacity(16),
             candidate_pairs: Vec::with_capacity(16),
             used_contributions: Vec::with_capacity(16),
             grouped_contributions: vec![GroupBinContribution::default(); n_bins],
+            grouped_underflow: GroupBinContribution::default(),
+            grouped_overflow: GroupBinContribution::default(),
             touched_bins: Vec::with_capacity(n_bins.min(16)),
         }
     }
 
-    fn build_group_contributions<T: FloatLike>(
-        &mut self,
-        event_group: &GenericEventGroup<T>,
-        integrator_weight: F<T>,
-    ) {
+    fn build_group_contributions<T: FloatLike>(&mut self, event_group: &GenericEventGroup<T>) {
         self.pending_contributions.clear();
         self.pending_contributions
             .reserve(event_group.len().saturating_mul(4));
@@ -819,30 +1539,41 @@ impl HistogramObservable {
         for event in event_group.iter() {
             let entries = self.definition.process_event(event);
             for entry in apply_entry_selection(&entries, self.entry_selection, self.entry_index) {
-                let transformed_value = transform_value(&entry.value, self.value_transform);
+                let transformed_value = transform_value(&entry.value, self.state.value_transform);
                 let value = transformed_value.into_ff64().0;
                 if !value.is_finite() {
-                    self.histogram_stats.register_nan();
+                    self.state.statistics.register_nan();
                     continue;
                 }
 
-                let Some(bin_position) =
-                    histogram_bin_position(value, self.x_min, self.x_max, self.bins.len())
-                else {
-                    self.histogram_stats.register_nan();
+                let Some(bin_position) = histogram_bin_position(
+                    value,
+                    self.state.x_min,
+                    self.state.x_max,
+                    self.state.bins.len(),
+                ) else {
+                    self.state.statistics.register_nan();
                     continue;
                 };
 
                 let projected_weight = self
+                    .state
                     .phase
-                    .project(&combined_entry_weight(event, &entry, &integrator_weight))
+                    .project(&combined_entry_weight(event, &entry))
                     .into_ff64()
                     .0;
 
                 match bin_position {
-                    HistogramBinPosition::Underflow => self.histogram_stats.register_underflow(),
-                    HistogramBinPosition::Overflow => self.histogram_stats.register_overflow(),
+                    HistogramBinPosition::Underflow => {
+                        self.grouped_underflow.projected_weight += projected_weight;
+                        self.grouped_underflow.entry_count += 1;
+                    }
+                    HistogramBinPosition::Overflow => {
+                        self.grouped_overflow.projected_weight += projected_weight;
+                        self.grouped_overflow.entry_count += 1;
+                    }
                     HistogramBinPosition::InRange(bin_index) => {
+                        self.state.statistics.register_in_range_entry();
                         self.pending_contributions.push(PendingBinContribution {
                             value,
                             bin_index,
@@ -860,11 +1591,12 @@ impl HistogramObservable {
             return;
         };
 
-        if self.pending_contributions.len() < 2 || self.bins.len() < 2 || max_distance <= 0.0 {
+        if self.pending_contributions.len() < 2 || self.state.bins.len() < 2 || max_distance <= 0.0
+        {
             return;
         }
 
-        let bin_width = (self.x_max - self.x_min) / self.bins.len() as f64;
+        let bin_width = (self.state.x_max - self.state.x_min) / self.state.bins.len() as f64;
         if !bin_width.is_finite() || bin_width <= 0.0 {
             return;
         }
@@ -923,46 +1655,12 @@ impl HistogramObservable {
             self.pending_contributions[j].mitigated = true;
             self.used_contributions[i] = true;
             self.used_contributions[j] = true;
-            self.histogram_stats.register_mitigated_pair();
+            self.state.statistics.register_mitigated_pair();
         }
     }
 
     pub fn snapshot(&self) -> HistogramSnapshot {
-        let bins = self
-            .bins
-            .iter()
-            .enumerate()
-            .map(|(index, bin)| {
-                let x_min =
-                    (self.x_max - self.x_min) * index as f64 / self.bins.len() as f64 + self.x_min;
-                let x_max = (self.x_max - self.x_min) * (index + 1) as f64 / self.bins.len() as f64
-                    + self.x_min;
-                HistogramBinSnapshot {
-                    x_min,
-                    x_max,
-                    average: bin.stats.avg.0,
-                    error: bin.stats.err.0,
-                    mitigated_fill_count: bin.mitigated_fill_count,
-                }
-            })
-            .collect();
-
-        HistogramSnapshot {
-            title: self.title.clone(),
-            phase: self.phase,
-            value_transform: self.value_transform,
-            x_min: self.x_min,
-            x_max: self.x_max,
-            log_x_axis: self.log_x_axis,
-            log_y_axis: self.log_y_axis,
-            bins,
-            statistics: HistogramStatisticsSnapshot {
-                underflow_count: self.histogram_stats.underflow_count,
-                overflow_count: self.histogram_stats.overflow_count,
-                nan_value_count: self.histogram_stats.nan_value_count,
-                mitigated_pair_count: self.histogram_stats.mitigated_pair_count,
-            },
-        }
+        self.state.snapshot()
     }
 
     pub fn write_to_file<P: AsRef<Path>>(
@@ -982,99 +1680,96 @@ impl HistogramObservable {
 
     fn write_hwu_file<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
         let mut writer = BufWriter::new(File::create(path.as_ref())?);
-        let x_axis_mode = if self.log_x_axis { "LOG" } else { "LIN" };
-        let y_axis_mode = if self.log_y_axis { "LOG" } else { "LIN" };
-
-        writeln!(writer, "##& xmin & xmax & central value & dy &\n")?;
-        writeln!(
-            writer,
-            "<histogram> {} \"{} |X_AXIS@{} |Y_AXIS@{} |TYPE@AL\"",
-            self.bins.len(),
-            self.title,
-            x_axis_mode,
-            y_axis_mode,
-        )?;
-
-        for (i, bin) in self.bins.iter().enumerate() {
-            let c1 = (self.x_max - self.x_min) * i as f64 / self.bins.len() as f64 + self.x_min;
-            let c2 =
-                (self.x_max - self.x_min) * (i + 1) as f64 / self.bins.len() as f64 + self.x_min;
-            writeln!(
-                writer,
-                "  {:.8e}   {:.8e}   {:.8e}   {:.8e}",
-                c1, c2, bin.stats.avg.0, bin.stats.err.0,
-            )?;
-        }
-
-        writeln!(writer, "<\\histogram>")?;
-        Ok(())
+        self.state.write_hwu_block(&mut writer)
     }
-}
 
-impl Observable for HistogramObservable {
-    fn process_event<T: FloatLike>(
-        &mut self,
-        event_group: &GenericEventGroup<T>,
-        integrator_weight: F<T>,
-    ) {
-        self.build_group_contributions(event_group, integrator_weight);
-        self.mitigate_group_misbinning();
-
-        self.touched_bins.clear();
-        for contribution in &self.pending_contributions {
-            let grouped = &mut self.grouped_contributions[contribution.bin_index];
-            if grouped.projected_weight == 0.0 && grouped.mitigated_fill_count == 0 {
-                self.touched_bins.push(contribution.bin_index);
-            }
-            grouped.projected_weight += contribution.projected_weight;
-            if contribution.mitigated {
-                grouped.mitigated_fill_count += 1;
-            }
+    fn flush_sample_contributions(&mut self) {
+        if self.touched_bins.is_empty()
+            && self.grouped_underflow.projected_weight == 0.0
+            && self.grouped_underflow.entry_count == 0
+            && self.grouped_underflow.mitigated_fill_count == 0
+            && self.grouped_overflow.projected_weight == 0.0
+            && self.grouped_overflow.entry_count == 0
+            && self.grouped_overflow.mitigated_fill_count == 0
+        {
+            return;
         }
 
-        for (bin_index, bin_accumulator) in self.bins.iter_mut().enumerate() {
+        for &bin_index in &self.touched_bins {
             let grouped = &self.grouped_contributions[bin_index];
-            if grouped.projected_weight != 0.0 || grouped.mitigated_fill_count != 0 {
-                bin_accumulator
-                    .add_sample(F(grouped.projected_weight), grouped.mitigated_fill_count);
-            } else {
-                bin_accumulator.add_sample(F(0.0), 0);
-            }
+            let bin_accumulator = &mut self.state.bins[bin_index];
+            bin_accumulator.add_sample(
+                grouped.projected_weight,
+                grouped.entry_count,
+                grouped.mitigated_fill_count,
+            );
         }
+        if self.grouped_underflow.projected_weight != 0.0
+            || self.grouped_underflow.entry_count != 0
+            || self.grouped_underflow.mitigated_fill_count != 0
+        {
+            self.state.underflow_bin.add_sample(
+                self.grouped_underflow.projected_weight,
+                self.grouped_underflow.entry_count,
+                self.grouped_underflow.mitigated_fill_count,
+            );
+        }
+        if self.grouped_overflow.projected_weight != 0.0
+            || self.grouped_overflow.entry_count != 0
+            || self.grouped_overflow.mitigated_fill_count != 0
+        {
+            self.state.overflow_bin.add_sample(
+                self.grouped_overflow.projected_weight,
+                self.grouped_overflow.entry_count,
+                self.grouped_overflow.mitigated_fill_count,
+            );
+        }
+    }
 
+    fn clear_sample_contributions(&mut self) {
+        self.grouped_underflow = GroupBinContribution::default();
+        self.grouped_overflow = GroupBinContribution::default();
         for bin_index in self.touched_bins.drain(..) {
             self.grouped_contributions[bin_index] = GroupBinContribution::default();
         }
     }
+}
 
-    fn merge_samples(&mut self, other: &mut HistogramObservable) {
-        for (bin, other_bin) in self.bins.iter_mut().zip(other.bins.iter_mut()) {
-            bin.merge_samples(other_bin);
+impl Observable for HistogramObservable {
+    fn process_event_groups<T: FloatLike>(&mut self, event_groups: &GenericEventGroupList<T>) {
+        self.state.new_sample_count += 1;
+        self.touched_bins.clear();
+
+        for event_group in event_groups.iter() {
+            self.build_group_contributions(event_group);
+            self.mitigate_group_misbinning();
+
+            for contribution in &self.pending_contributions {
+                let grouped = &mut self.grouped_contributions[contribution.bin_index];
+                if grouped.projected_weight == 0.0
+                    && grouped.entry_count == 0
+                    && grouped.mitigated_fill_count == 0
+                {
+                    self.touched_bins.push(contribution.bin_index);
+                }
+                grouped.projected_weight += contribution.projected_weight;
+                grouped.entry_count += 1;
+                if contribution.mitigated {
+                    grouped.mitigated_fill_count += 1;
+                }
+            }
         }
-        self.histogram_stats
-            .merge_samples(&mut other.histogram_stats);
+
+        self.flush_sample_contributions();
+        self.clear_sample_contributions();
+    }
+
+    fn merge_samples(&mut self, other: &mut HistogramObservable) -> Result<()> {
+        self.state.merge_samples(&mut other.state)
     }
 
     fn update_result(&mut self, _iter: usize) {
-        for bin in &mut self.bins {
-            bin.update_iter();
-        }
-        self.histogram_stats.update_iter();
-
-        for (i, bin) in self.bins.iter().enumerate() {
-            let c1 = (self.x_max - self.x_min) * i as f64 / self.bins.len() as f64 + self.x_min;
-            let c2 = (self.x_max - self.x_min) * (i + 1) as f64 / self.bins.len() as f64;
-            info!("{}={}: {} +/- {}", c1, c2, bin.stats.avg, bin.stats.err);
-        }
-
-        info!(
-            "{} stats: underflow={}, overflow={}, nan_values={}, mitigated_pairs={}",
-            self.title,
-            self.histogram_stats.underflow_count,
-            self.histogram_stats.overflow_count,
-            self.histogram_stats.nan_value_count,
-            self.histogram_stats.mitigated_pair_count,
-        );
+        self.state.update_result();
     }
 }
 
@@ -1105,19 +1800,16 @@ impl Observables {
         )))
     }
 
-    pub(crate) fn process_event<T: FloatLike>(
+    pub(crate) fn process_event_groups<T: FloatLike>(
         &mut self,
-        event_group: &GenericEventGroup<T>,
-        integrator_weight: F<T>,
+        event_groups: &GenericEventGroupList<T>,
     ) {
         match self {
-            Observables::Histogram(observable) => {
-                observable.process_event(event_group, integrator_weight)
-            }
+            Observables::Histogram(observable) => observable.process_event_groups(event_groups),
         }
     }
 
-    pub(crate) fn merge_samples(&mut self, other: &mut Observables) {
+    pub(crate) fn merge_samples(&mut self, other: &mut Observables) -> Result<()> {
         match (self, other) {
             (Observables::Histogram(lhs), Observables::Histogram(rhs)) => lhs.merge_samples(rhs),
         }
@@ -1126,6 +1818,51 @@ impl Observables {
     pub(crate) fn update_result(&mut self, iter: usize) {
         match self {
             Observables::Histogram(observable) => observable.update_result(iter),
+        }
+    }
+
+    pub(crate) fn cleared_clone(&self) -> Self {
+        match self {
+            Observables::Histogram(observable) => Observables::Histogram(HistogramObservable {
+                definition: observable.definition.clone(),
+                entry_selection: observable.entry_selection,
+                entry_index: observable.entry_index,
+                misbinning_max_normalized_distance: observable.misbinning_max_normalized_distance,
+                state: observable.state.cleared_clone(),
+                pending_contributions: Vec::with_capacity(
+                    observable.pending_contributions.capacity(),
+                ),
+                candidate_pairs: Vec::with_capacity(observable.candidate_pairs.capacity()),
+                used_contributions: Vec::with_capacity(observable.used_contributions.capacity()),
+                grouped_contributions: vec![
+                    GroupBinContribution::default();
+                    observable.grouped_contributions.len()
+                ],
+                grouped_underflow: GroupBinContribution::default(),
+                grouped_overflow: GroupBinContribution::default(),
+                touched_bins: Vec::with_capacity(observable.touched_bins.capacity()),
+            }),
+        }
+    }
+
+    pub(crate) fn snapshot(&self) -> HistogramSnapshot {
+        match self {
+            Observables::Histogram(observable) => observable.snapshot(),
+        }
+    }
+
+    pub(crate) fn accumulator_state(&self) -> HistogramAccumulatorState {
+        match self {
+            Observables::Histogram(observable) => observable.state.clone(),
+        }
+    }
+
+    pub(crate) fn merge_accumulator_state(
+        &mut self,
+        other: &mut HistogramAccumulatorState,
+    ) -> Result<()> {
+        match self {
+            Observables::Histogram(observable) => observable.state.merge_samples(other),
         }
     }
 }
@@ -1200,15 +1937,8 @@ fn value_in_range(value: f64, min: f64, max: Option<f64>) -> bool {
 fn combined_entry_weight<T: FloatLike>(
     event: &GenericEvent<T>,
     entry: &ObservableEntry<T>,
-    integrator_weight: &F<T>,
 ) -> Complex<F<T>> {
-    let combined = event.integrand_weight.clone()
-        * event.observable_weight.clone()
-        * entry.weight_modifier.clone();
-    Complex::new(
-        combined.re * integrator_weight.clone(),
-        combined.im * integrator_weight.clone(),
-    )
+    event.weight.clone() * entry.weight_modifier.clone()
 }
 
 impl ObservablePhase {

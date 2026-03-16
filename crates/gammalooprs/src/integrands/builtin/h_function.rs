@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::integrands::evaluation::EvaluationResult;
-use crate::integrands::evaluation::{EvaluationMetaData, StabilityEvaluation};
+use crate::integrands::evaluation::{EvaluationMetaData, StabilityResult};
 use crate::integrands::*;
 use crate::model::Model;
 use crate::settings::RuntimeSettings;
@@ -18,11 +18,10 @@ use color_eyre::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::FloatLike as SymFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 use tracing::info;
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionTestSettings {
@@ -53,7 +52,7 @@ impl HFunctionTestIntegrand {
     fn evaluate_sample_generic<T: FloatLike>(
         &self,
         xs: &[F<T>],
-    ) -> (Complex<F<T>>, Duration, Duration) {
+    ) -> (Complex<F<T>>, F<T>, Duration, Duration) {
         let e_cm: F<T> = F::<T>::from_f64(self.settings.kinematics.e_cm);
         let one = e_cm.one();
         let mut jac = e_cm.one();
@@ -92,7 +91,12 @@ impl HFunctionTestIntegrand {
         let h = utils::h(&t, None, None, &self.integrand_settings.h_function);
         let evaluation_time = evaluation_time.elapsed();
 
-        ((h * jac).into(), parameterization_time, evaluation_time)
+        (
+            (h * jac.clone()).into(),
+            jac,
+            parameterization_time,
+            evaluation_time,
+        )
     }
 }
 
@@ -145,40 +149,47 @@ impl HasIntegrand for HFunctionTestIntegrand {
         info!("Integrator weight : {:+.16e}", wgt);
 
         // TODO implement stability check
-        let (integration_result, parameterization_timing, evaluation_timing, precision) =
-            if use_f128 {
-                let sample_xs_f128 = sample_xs
+        let (
+            integration_result,
+            parameterization_jacobian,
+            parameterization_timing,
+            evaluation_timing,
+            precision,
+        ) = if use_f128 {
+            let sample_xs_f128 = sample_xs
+                .iter()
+                .map(|x| x.higher())
+                .collect::<Vec<F<f128>>>();
+            info!(
+                "f128 Upcasted x-space sample : ( {} )",
+                sample_xs_f128
                     .iter()
-                    .map(|x| x.higher())
-                    .collect::<Vec<F<f128>>>();
-                info!(
-                    "f128 Upcasted x-space sample : ( {} )",
-                    sample_xs_f128
-                        .iter()
-                        .map(|x| format!("{:+e}", x))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
+                    .map(|x| format!("{:+e}", x))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
 
-                let (res, parameterization_timing, evaluation_timing) =
-                    self.evaluate_sample_generic(sample_xs_f128.as_slice());
-                (
-                    Complex::new(res.re.lower(), res.im.lower()),
-                    parameterization_timing,
-                    evaluation_timing,
-                    Precision::Quad,
-                )
-            } else {
-                let (res, parameterization_timing, evaluation_timing) =
-                    self.evaluate_sample_generic(sample_xs.as_slice());
+            let (res, jac, parameterization_timing, evaluation_timing) =
+                self.evaluate_sample_generic(sample_xs_f128.as_slice());
+            (
+                Complex::new(res.re.lower(), res.im.lower()),
+                jac.lower(),
+                parameterization_timing,
+                evaluation_timing,
+                Precision::Quad,
+            )
+        } else {
+            let (res, jac, parameterization_timing, evaluation_timing) =
+                self.evaluate_sample_generic(sample_xs.as_slice());
 
-                (
-                    res,
-                    parameterization_timing,
-                    evaluation_timing,
-                    Precision::Double,
-                )
-            };
+            (
+                res,
+                jac,
+                parameterization_timing,
+                evaluation_timing,
+                Precision::Double,
+            )
+        };
 
         let is_nan = integration_result.re.is_nan() || integration_result.im.is_nan();
 
@@ -187,31 +198,25 @@ impl HasIntegrand for HFunctionTestIntegrand {
             integrand_evaluation_time: evaluation_timing,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: parameterization_timing,
-            event_time: Duration::ZERO,
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             relative_instability_error: Complex::new_zero(),
-            highest_precision: precision,
             is_nan,
-            final_is_stable: !is_nan,
             loop_momenta_escalation: None,
-            stability_evaluations: vec![StabilityEvaluation {
+            stability_results: vec![StabilityResult {
                 precision,
-                result: integration_result,
-                parameterization_time: parameterization_timing,
-                integrand_evaluation_time: evaluation_timing,
-                evaluator_evaluation_time: Duration::ZERO,
-                is_stable: !is_nan,
-                instability_reason: None,
-                rotated_results: Vec::new(),
+                estimated_relative_accuracy: None,
+                accepted_as_stable: !is_nan,
+                total_time: start_evaluate_sample.elapsed(),
             }],
         };
 
         Ok(EvaluationResult {
             integrand_result: integration_result,
+            parameterization_jacobian: Some(parameterization_jacobian),
             integrator_weight: wgt,
-            event_buffer: vec![],
-            event_processing_time: Duration::ZERO,
-            generated_event_count: 0,
-            accepted_event_count: 0,
+            event_groups: Default::default(),
             evaluation_metadata,
         })
     }

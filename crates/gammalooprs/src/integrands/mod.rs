@@ -3,7 +3,7 @@ pub mod evaluation;
 pub mod inspect;
 pub mod process;
 
-use crate::integrands::evaluation::{EvaluationMetaData, EvaluationResult, StabilityEvaluation};
+use crate::integrands::evaluation::{EvaluationMetaData, EvaluationResult, StabilityResult};
 use colored::Colorize;
 // use crate::integrands::process::ProcessIntegrandImpl;
 use crate::integrands::builtin::h_function::{HFunctionTestIntegrand, HFunctionTestSettings};
@@ -13,6 +13,9 @@ use crate::integrands::process::{amplitude, cross_section_integrand};
 use crate::model::Model;
 use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
+use crate::observables::{
+    ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
+};
 use crate::utils::{F, FloatLike, f128};
 use crate::{
     settings::{
@@ -30,12 +33,12 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
-use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
+use symbolica::domains::float::Real;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, instrument, trace, warn};
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
@@ -187,6 +190,68 @@ pub enum Integrand {
     ProcessIntegrand(ProcessIntegrand),
 }
 
+impl Integrand {
+    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
+        if let Integrand::ProcessIntegrand(integrand) = self {
+            integrand.process_evaluation_result(result);
+        }
+    }
+
+    pub fn merge_runtime_results(&mut self, other: &mut Integrand) -> Result<()> {
+        match (self, other) {
+            (Integrand::ProcessIntegrand(lhs), Integrand::ProcessIntegrand(rhs)) => {
+                lhs.merge_event_processing_runtime(rhs)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    pub fn update_runtime_results(&mut self, iter: usize) {
+        if let Integrand::ProcessIntegrand(integrand) = self {
+            integrand.update_event_processing_runtime(iter);
+        }
+    }
+
+    pub fn observable_accumulator_bundle(&self) -> Option<ObservableAccumulatorBundle> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => integrand.observable_accumulator_bundle(),
+            _ => None,
+        }
+    }
+
+    pub fn observable_snapshot_bundle(&self) -> Option<ObservableSnapshotBundle> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => integrand.observable_snapshot_bundle(),
+            _ => None,
+        }
+    }
+
+    pub fn build_observable_snapshots_for_result(
+        &self,
+        result: &EvaluationResult,
+    ) -> Option<ObservableSnapshotBundle> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => {
+                integrand.build_observable_snapshots_for_result(result)
+            }
+            _ => None,
+        }
+    }
+
+    pub fn write_observable_snapshots(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        format: ObservableFileFormat,
+    ) -> Result<()> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => {
+                integrand.write_observable_snapshots(path, format)
+            }
+            _ => Ok(()),
+        }
+    }
+}
+
 impl HasIntegrand for Integrand {
     fn name(&self) -> String {
         match self {
@@ -255,16 +320,6 @@ impl HasIntegrand for Integrand {
             Integrand::ProcessIntegrand(integrand) => integrand.get_integrator_settings(),
         }
     }
-
-    fn merge_results<I: HasIntegrand>(&mut self, other: &mut I, iter: usize) {
-        match self {
-            Integrand::UnitSurface(integrand) => integrand.merge_results(other, iter),
-            Integrand::UnitVolume(integrand) => integrand.merge_results(other, iter),
-            Integrand::HFunctionTest(integrand) => integrand.merge_results(other, iter),
-            // Integrand::ProcessIntegrandImpl(integrand) => integrand.merge_results(other, iter),
-            Integrand::ProcessIntegrand(integrand) => integrand.merge_results(other, iter),
-        }
-    }
 }
 
 pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
@@ -281,7 +336,7 @@ pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitSurfaceSettings {
@@ -414,37 +469,31 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             integrand_evaluation_time: evaluation_time,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time,
-            event_time: Duration::ZERO,
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             relative_instability_error: Complex::new_zero(),
-            highest_precision: Precision::Double,
             is_nan,
-            final_is_stable: !is_nan,
             loop_momenta_escalation: None,
-            stability_evaluations: vec![StabilityEvaluation {
+            stability_results: vec![StabilityResult {
                 precision: Precision::Double,
-                result: Complex::new(itg_wgt, F(0.)) * jac,
-                parameterization_time,
-                integrand_evaluation_time: evaluation_time,
-                evaluator_evaluation_time: Duration::ZERO,
-                is_stable: !is_nan,
-                instability_reason: None,
-                rotated_results: Vec::new(),
+                estimated_relative_accuracy: None,
+                accepted_as_stable: !is_nan,
+                total_time: start_evaluate_sample.elapsed(),
             }],
         };
 
         Ok(EvaluationResult {
-            integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
+            integrand_result: Complex::new(itg_wgt, F(0.)),
+            parameterization_jacobian: Some(jac),
             integrator_weight: wgt,
-            event_buffer: vec![],
-            event_processing_time: Duration::ZERO,
-            generated_event_count: 0,
-            accepted_event_count: 0,
+            event_groups: Default::default(),
             evaluation_metadata,
         })
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitVolumeSettings {
@@ -581,31 +630,25 @@ impl HasIntegrand for UnitVolumeIntegrand {
             integrand_evaluation_time: evaluation_time,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time,
-            event_time: Duration::ZERO,
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             relative_instability_error: Complex::new_zero(),
-            highest_precision: Precision::Double,
             is_nan,
-            final_is_stable: !is_nan,
             loop_momenta_escalation: None,
-            stability_evaluations: vec![StabilityEvaluation {
+            stability_results: vec![StabilityResult {
                 precision: Precision::Double,
-                result: Complex::new(itg_wgt, F(0.)) * jac,
-                parameterization_time,
-                integrand_evaluation_time: evaluation_time,
-                evaluator_evaluation_time: Duration::ZERO,
-                is_stable: !is_nan,
-                instability_reason: None,
-                rotated_results: Vec::new(),
+                estimated_relative_accuracy: None,
+                accepted_as_stable: !is_nan,
+                total_time: start_evaluate_sample.elapsed(),
             }],
         };
 
         Ok(EvaluationResult {
-            integrand_result: Complex::new(itg_wgt, F(0.)) * jac,
+            integrand_result: Complex::new(itg_wgt, F(0.)),
+            parameterization_jacobian: Some(jac),
             integrator_weight: wgt,
-            event_buffer: vec![],
-            event_processing_time: Duration::ZERO,
-            generated_event_count: 0,
-            accepted_event_count: 0,
+            event_groups: Default::default(),
             evaluation_metadata,
         })
     }

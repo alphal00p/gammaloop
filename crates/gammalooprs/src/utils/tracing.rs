@@ -7,7 +7,10 @@ use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::filter_fn;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*, registry::Registry, reload};
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[repr(usize)]
 #[derive(
     Clone,
@@ -34,7 +37,10 @@ pub enum LogFormat {
     None,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, JsonSchema, PartialEq, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogStyle {
@@ -65,7 +71,7 @@ pub struct LogStyle {
     Decode,
     JsonSchema,
 )]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Default)]
 pub enum LogLevel {
     /// A level lower than all log levels.

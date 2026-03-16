@@ -843,8 +843,32 @@ fn yaml_to_json(v: Y) -> Result<J> {
             }
         }
         Y::String(s) => Ok(J::String(s)),
+        Y::Sequence(values) => values
+            .into_iter()
+            .map(yaml_to_json)
+            .collect::<Result<Vec<_>>>()
+            .map(J::Array),
+        Y::Mapping(entries) => {
+            let mut object = serde_json::Map::with_capacity(entries.len());
+            for (key, value) in entries {
+                let key = match key {
+                    Y::String(s) => s,
+                    Y::Bool(b) => b.to_string(),
+                    Y::Number(n) => n.to_string(),
+                    Y::Null => "null".to_string(),
+                    other => {
+                        return Err(eyre!(
+                            "Unsupported YAML mapping key in CLI key-value: {:?}",
+                            other
+                        ));
+                    }
+                };
+                object.insert(key, yaml_to_json(value)?);
+            }
+            Ok(J::Object(object))
+        }
         other => Err(eyre!(
-            "Unsupported complex YAML value in CLI key-value: {:?}",
+            "Unsupported YAML value in CLI key-value: {:?}",
             other
         )),
     }
@@ -858,7 +882,7 @@ mod test {
     use figment::{providers::Serialized, Figment};
     use gammalooprs::{
         model::{ParameterNature, ParameterType, UFOSymbol},
-        observables::{FilterQuantity, QuantitySettings},
+        observables::{FilterQuantity, QuantitySettings, SelectorDefinitionSettings},
         settings::RuntimeSettings,
         utils::{test_utils::load_generic_model, F},
     };
@@ -1201,6 +1225,35 @@ mod test {
         );
 
         apply_process_set_args(
+            &ProcessSetArgs::String {
+                string: r#"
+[selectors.top_pt_cut]
+quantity = "top_pt"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 10.0
+max = 500.0
+"#
+                .to_string(),
+            },
+            &mut settings,
+            &defaults,
+        )
+        .unwrap();
+        let selector = settings
+            .selectors
+            .get("top_pt_cut")
+            .expect("selector should have been inserted");
+        assert_eq!(selector.quantity, "top_pt");
+        match &selector.selector {
+            SelectorDefinitionSettings::ValueRange(selector) => {
+                assert_eq!(selector.min, 10.0);
+                assert_eq!(selector.max, Some(500.0));
+            }
+            other => panic!("Expected value-range selector, got {other:?}"),
+        }
+
+        apply_process_set_args(
             &ProcessSetArgs::Update {
                 target: ProcessUpdateTarget::Observable {
                     name: "top_pt_hist".to_string(),
@@ -1225,6 +1278,32 @@ mod test {
         );
 
         apply_process_set_args(
+            &ProcessSetArgs::Update {
+                target: ProcessUpdateTarget::Selector {
+                    name: "top_pt_cut".to_string(),
+                    pairs: vec![KvPair {
+                        key: "max".to_string(),
+                        value: "250.0".to_string(),
+                    }],
+                },
+            },
+            &mut settings,
+            &defaults,
+        )
+        .unwrap();
+        match &settings
+            .selectors
+            .get("top_pt_cut")
+            .expect("selector should still exist")
+            .selector
+        {
+            SelectorDefinitionSettings::ValueRange(selector) => {
+                assert_eq!(selector.max, Some(250.0));
+            }
+            other => panic!("Expected value-range selector, got {other:?}"),
+        }
+
+        apply_process_set_args(
             &ProcessSetArgs::Remove {
                 target: ProcessRemoveTarget::Quantity {
                     name: "top_pt".to_string(),
@@ -1235,6 +1314,12 @@ mod test {
         )
         .unwrap();
         assert!(!settings.quantities.contains_key("top_pt"));
+    }
+
+    #[test]
+    fn infer_cli_value_accepts_yaml_sequences() {
+        let parsed = super::infer_cli_value("[alphaloop, matad]").unwrap();
+        assert_eq!(parsed, serde_json::json!(["alphaloop", "matad"]));
     }
 
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

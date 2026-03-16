@@ -14,7 +14,7 @@ pub use types::{ClusteringResult, Jet};
     Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum JetAlgorithm {
     Kt,
     CambridgeAachen,

@@ -88,6 +88,30 @@
 - Do not introduce writes into the state folder outside explicit `save state` / `quit -o`, except for logfile tracing when that logger is actually enabled.
 - Honor `--read-only-state` consistently. When it is enabled, do not write into the state folder and prefer cwd-based fallbacks for transient artifacts that would otherwise default into the state.
 
+## Differential LU / Event Processing Notes
+- `differential_lu.md` is the detailed implementation log for the current differential LU stack; `docs/architecture/architecture-current.md` has the corresponding implemented-architecture summary. Keep both in sync when changing selectors, observables, event grouping, or sample-evaluation output.
+- Event grouping semantics are by graph-group, not just by graph: if multiple LU graphs share the same `group_id`, all accepted cuts from all of those graphs belong in the same retained `EventGroup`.
+- Histogram error propagation is based on Monte Carlo samples, not on individual observable entries. Treat the full retained event-group list from one evaluation as one statistical sample for each histogram.
+- For histogram accumulation, do not explicitly zero-fill untouched bins. The current design is sparse:
+  - histogram-level `sample_count`
+  - per-bin raw stats `entry_count`, `sum_weights`, `sum_weights_squared`, `mitigated_fill_count`
+  - underflow and overflow are full bins with the same raw-stat structure
+- Histogram snapshots are intentionally raw-stat snapshots, not presentation-only views. They must remain mergeable and reconstructible back into live histogram state. Rust-side helpers already exist for `merge(...)`, `merge_in_place(...)`, `rebin(...)`, and reconstruction into accumulator state.
+- `general.generate_events` controls whether events are retained in returned results; observables and selectors may still force temporary event generation internally when this is `false`.
+- `general.store_additional_weights_in_event` controls whether `additional_weights` are stored on events. The map is a `BTreeMap` keyed by lightweight identifiers such as `Original`, `ThresholdCounterterm { subset_index }`, and `FullMultiplicativeFactor`.
+
+## API / Python Interop Notes
+- The Rust API has precise endpoints `evaluate_sample_precise` and `evaluate_samples_precise`; the Python API intentionally stays `f64`-only.
+- Python API end-to-end tests are subprocess-based and assume the user already built/installed the Python extension in the active environment (`maturin develop` or `just build-api`). Do not try to embed Python into the Rust test binary for these tests.
+- The top-level `.venv` in the repo is a reasonable default development environment for running the Python API examples/tests after building the extension there.
+
+## Environment and Build Quirks
+- `NO_SYMBOLICA_OEM_LICENSE` is read via `option_env!` in `gammalooprs` initialization, so it is a compile-time switch, not a pure runtime one. If you need to disable the OEM-license activation path, that variable must be present when building the relevant binary or Python extension.
+- Real LU end-to-end tests currently rely on the temporary `GL_LU_E2E_HACK` path. This hack sanitizes unresolved LU-specific symbolic leftovers before evaluator compilation. Search the codebase for `GL_LU_E2E_HACK` to find every hook and to remove the hack later once the proper LU numerator/theta/tree-denominator path is fixed.
+
+## CLI / State Notes
+- The run-card field is `command_blocks` (singular `command`), not `commands_blocks`. No compatibility alias is kept.
+
 ## Configuration & State Tips
 - CLI runs create a `gammaloop_state/` directory by default; keep it out of commits unless intentionally sharing a reproducible state.
 - Use `./bin/gammaloop -s <state_dir>` for isolated experiments.

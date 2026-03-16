@@ -4,14 +4,18 @@ use std::path::Path;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::Integrand;
 use crate::integrands::evaluation::{
-    EvaluationMetaData, EvaluationResult, GraphEvaluationResult, LoopMomentaEscalationMetrics,
-    RotatedEvaluation, StabilityEvaluation, StabilityFailureReason,
+    EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
+    LoopMomentaEscalationMetrics, PreciseEvaluationResult, RotatedEvaluation,
+    StabilityFailureReason, StabilityResult,
 };
 use crate::integrate::UserData;
 use crate::model::Model;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::momentum::{Rotation, ThreeMomentum};
-use crate::observables::EventProcessingRuntime;
+use crate::observables::{
+    AdditionalWeightKey, EventProcessingRuntime, ObservableAccumulatorBundle, ObservableFileFormat,
+    ObservableSnapshotBundle,
+};
 use crate::processes::StandaloneExportSettings;
 use crate::settings::GlobalSettings;
 use crate::utils::{
@@ -32,8 +36,12 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::sync::Once;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomOrView},
+    function,
+};
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 pub mod amplitude;
@@ -55,6 +63,31 @@ pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
+
+fn lu_e2e_hack_enabled() -> bool {
+    use std::sync::OnceLock;
+
+    static GL_LU_E2E_HACK_ENABLED: OnceLock<bool> = OnceLock::new();
+
+    *GL_LU_E2E_HACK_ENABLED.get_or_init(|| std::env::var_os("GL_LU_E2E_HACK").is_some())
+}
+
+pub(crate) fn maybe_apply_lu_e2e_hack<'a>(atom: impl Into<AtomOrView<'a>>) -> Atom {
+    let atom = atom.into().into_owned();
+
+    if !lu_e2e_hack_enabled() {
+        return atom;
+    }
+
+    use crate::utils::{GS, W_};
+
+    atom.replace(function!(GS.tree_denom_wrapper, W_.a_))
+        .with(Atom::num(1))
+        .replace(function!(GS.theta, W_.a_))
+        .with(Atom::num(1))
+        .replace(function!(GS.if_sigma, W_.a_))
+        .with(Atom::num(1))
+}
 
 #[derive(Debug, Clone)]
 pub struct MomentumSpaceEvaluationInput {
@@ -83,6 +116,14 @@ impl<T> RuntimeCache<T> {
 
     pub(crate) fn take(&mut self) -> Option<T> {
         self.0.take()
+    }
+
+    pub(crate) fn as_ref(&self) -> Option<&T> {
+        self.0.as_ref()
+    }
+
+    pub(crate) fn as_mut(&mut self) -> Option<&mut T> {
+        self.0.as_mut()
     }
 }
 
@@ -251,7 +292,7 @@ impl ProcessIntegrand {
                 integrand,
                 model,
                 input,
-                F(0.0),
+                F(1.0),
                 use_arb_prec,
                 Complex::new_zero(),
             ),
@@ -259,11 +300,295 @@ impl ProcessIntegrand {
                 integrand,
                 model,
                 input,
-                F(0.0),
+                F(1.0),
                 use_arb_prec,
                 Complex::new_zero(),
             ),
         }
+    }
+
+    pub fn evaluate_sample_precise(
+        &mut self,
+        sample: &Sample<F<f64>>,
+        model: &Model,
+        wgt: F<f64>,
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<PreciseEvaluationResult> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                evaluate_sample_precise(integrand, model, sample, wgt, use_arb_prec, max_eval)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                evaluate_sample_precise(integrand, model, sample, wgt, use_arb_prec, max_eval)
+            }
+        }
+    }
+
+    pub fn evaluate_momentum_configuration_precise(
+        &mut self,
+        model: &Model,
+        input: &MomentumSpaceEvaluationInput,
+        use_arb_prec: bool,
+    ) -> Result<PreciseEvaluationResult> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => evaluate_momentum_configuration_precise(
+                integrand,
+                model,
+                input,
+                F(1.0),
+                use_arb_prec,
+                Complex::new_zero(),
+            ),
+            ProcessIntegrand::CrossSection(integrand) => evaluate_momentum_configuration_precise(
+                integrand,
+                model,
+                input,
+                F(1.0),
+                use_arb_prec,
+                Complex::new_zero(),
+            ),
+        }
+    }
+
+    pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                process_evaluation_result_runtime(integrand, result)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                process_evaluation_result_runtime(integrand, result)
+            }
+        }
+    }
+
+    pub fn merge_event_processing_runtime(&mut self, other: &mut Self) -> Result<()> {
+        match (self, other) {
+            (ProcessIntegrand::Amplitude(lhs), ProcessIntegrand::Amplitude(rhs)) => {
+                merge_event_processing_runtime(lhs, rhs)
+            }
+            (ProcessIntegrand::CrossSection(lhs), ProcessIntegrand::CrossSection(rhs)) => {
+                merge_event_processing_runtime(lhs, rhs)
+            }
+            _ => Err(eyre!(
+                "Cannot merge event-processing runtime for incompatible process integrands."
+            )),
+        }
+    }
+
+    pub fn update_event_processing_runtime(&mut self, iter: usize) {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                update_event_processing_runtime(integrand, iter)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                update_event_processing_runtime(integrand, iter)
+            }
+        }
+    }
+
+    pub fn observable_accumulator_bundle(&self) -> Option<ObservableAccumulatorBundle> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => observable_accumulator_bundle(integrand),
+            ProcessIntegrand::CrossSection(integrand) => observable_accumulator_bundle(integrand),
+        }
+    }
+
+    pub fn observable_snapshot_bundle(&self) -> Option<ObservableSnapshotBundle> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => observable_snapshot_bundle(integrand),
+            ProcessIntegrand::CrossSection(integrand) => observable_snapshot_bundle(integrand),
+        }
+    }
+
+    pub fn build_observable_snapshots_for_result(
+        &self,
+        result: &EvaluationResult,
+    ) -> Option<ObservableSnapshotBundle> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                build_observable_snapshots_for_result(integrand, result)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                build_observable_snapshots_for_result(integrand, result)
+            }
+        }
+    }
+
+    pub fn build_observable_snapshots_for_precise_result(
+        &self,
+        result: &PreciseEvaluationResult,
+    ) -> Option<ObservableSnapshotBundle> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => match result {
+                PreciseEvaluationResult::Double(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Quad(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Arb(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+            },
+            ProcessIntegrand::CrossSection(integrand) => match result {
+                PreciseEvaluationResult::Double(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Quad(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+                PreciseEvaluationResult::Arb(result) => {
+                    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+                }
+            },
+        }
+    }
+
+    pub fn write_observable_snapshots(
+        &self,
+        path: impl AsRef<Path>,
+        format: ObservableFileFormat,
+    ) -> Result<()> {
+        let Some(bundle) = self.observable_snapshot_bundle() else {
+            return Ok(());
+        };
+
+        write_observable_snapshot_bundle(&bundle, path.as_ref(), format)
+    }
+}
+
+fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    result: &EvaluationResult,
+) {
+    if let Some(runtime) = integrand.event_processing_runtime_mut() {
+        if runtime.has_observables() {
+            runtime.process_event_groups(&result.event_groups);
+        }
+    }
+}
+
+fn merge_event_processing_runtime<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    other: &mut I,
+) -> Result<()> {
+    match (
+        integrand.event_processing_runtime_mut(),
+        other.event_processing_runtime_mut(),
+    ) {
+        (Some(lhs), Some(rhs)) => lhs.merge_samples(rhs),
+        _ => Ok(()),
+    }
+}
+
+fn update_event_processing_runtime<I: ProcessIntegrandImpl>(integrand: &mut I, iter: usize) {
+    if let Some(runtime) = integrand.event_processing_runtime_mut() {
+        runtime.update_results(iter);
+    }
+}
+
+fn observable_accumulator_bundle<I: ProcessIntegrandImpl>(
+    integrand: &I,
+) -> Option<ObservableAccumulatorBundle> {
+    integrand
+        .event_processing_runtime()
+        .filter(|runtime| runtime.has_observables())
+        .map(EventProcessingRuntime::accumulator_bundle)
+}
+
+fn observable_snapshot_bundle<I: ProcessIntegrandImpl>(
+    integrand: &I,
+) -> Option<ObservableSnapshotBundle> {
+    integrand
+        .event_processing_runtime()
+        .filter(|runtime| runtime.has_observables())
+        .map(EventProcessingRuntime::snapshot_bundle)
+}
+
+fn build_observable_snapshots_for_result<I: ProcessIntegrandImpl>(
+    integrand: &I,
+    result: &EvaluationResult,
+) -> Option<ObservableSnapshotBundle> {
+    build_observable_snapshots_for_event_groups(integrand, &result.event_groups)
+}
+
+fn build_observable_snapshots_for_event_groups<I: ProcessIntegrandImpl, T: FloatLike>(
+    integrand: &I,
+    event_groups: &crate::observables::GenericEventGroupList<T>,
+) -> Option<ObservableSnapshotBundle> {
+    let runtime = integrand.event_processing_runtime()?;
+    if !runtime.has_observables() {
+        return None;
+    }
+
+    let mut runtime = runtime.cleared_observable_clone();
+    runtime.process_event_groups(event_groups);
+    Some(runtime.snapshot_bundle())
+}
+
+fn full_event_multiplicative_factor(
+    parameterization_jacobian: Option<F<f64>>,
+    integrator_weight: F<f64>,
+) -> Complex<F<f64>> {
+    let jacobian = parameterization_jacobian.unwrap_or(F(1.0));
+    Complex::new_re(jacobian * integrator_weight)
+}
+
+fn apply_full_event_multiplicative_factor(
+    event_groups: &mut crate::observables::EventGroupList,
+    full_factor: &Complex<F<f64>>,
+) {
+    for event_group in event_groups.iter_mut() {
+        for event in event_group.iter_mut() {
+            event.weight *= full_factor.clone();
+            if !event.additional_weights.weights.is_empty() {
+                event
+                    .additional_weights
+                    .weights
+                    .entry(AdditionalWeightKey::FullMultiplicativeFactor)
+                    .and_modify(|value| *value *= full_factor.clone())
+                    .or_insert_with(|| full_factor.clone());
+            }
+        }
+    }
+}
+
+fn full_event_multiplicative_factor_precise<T: FloatLike>(
+    parameterization_jacobian: Option<F<T>>,
+    integrator_weight: F<T>,
+) -> Complex<F<T>> {
+    let jacobian = parameterization_jacobian.unwrap_or_else(|| integrator_weight.one());
+    Complex::new_re(jacobian * integrator_weight)
+}
+
+fn apply_full_event_multiplicative_factor_precise<T: FloatLike>(
+    event_groups: &mut crate::observables::GenericEventGroupList<T>,
+    full_factor: &Complex<F<T>>,
+) {
+    for event_group in event_groups.iter_mut() {
+        for event in event_group.iter_mut() {
+            event.weight *= full_factor.clone();
+
+            if !event.additional_weights.weights.is_empty() {
+                event.additional_weights.weights.insert(
+                    AdditionalWeightKey::FullMultiplicativeFactor,
+                    full_factor.clone(),
+                );
+            }
+        }
+    }
+}
+
+pub(crate) fn write_observable_snapshot_bundle(
+    bundle: &ObservableSnapshotBundle,
+    path: &Path,
+    format: ObservableFileFormat,
+) -> Result<()> {
+    match format {
+        ObservableFileFormat::None => Ok(()),
+        ObservableFileFormat::Hwu => bundle.write_hwu_file(path),
+        ObservableFileFormat::Json => bundle.to_json_file(path),
     }
 }
 
@@ -317,9 +642,14 @@ fn stability_check<T: FloatLike>(
     wgt: F<T>,
     is_final_level: bool,
     escalate_if_exact_zero: bool,
-) -> (Complex<F<T>>, bool, Option<StabilityFailureReason>) {
+) -> (
+    Complex<F<T>>,
+    Option<F<T>>,
+    bool,
+    Option<StabilityFailureReason>,
+) {
     if results.len() == 1 {
-        return (results[0].clone(), true, None);
+        return (results[0].clone(), None, true, None);
     }
 
     let average = results
@@ -341,10 +671,13 @@ fn stability_check<T: FloatLike>(
         };
         Complex::new(error_re, error_im)
     });
+    let mut estimated_relative_accuracy = average.re.zero();
 
     let mut unstable_reason = None;
     let mut unstable_sample = None;
     for (index, error) in errors.enumerate() {
+        estimated_relative_accuracy =
+            estimated_relative_accuracy.max(error.re.clone().max(error.im.clone()));
         if !is_final_level
             && escalate_if_exact_zero
             && error.re == F::<T>::from_f64(0.0)
@@ -408,6 +741,7 @@ fn stability_check<T: FloatLike>(
 
     (
         average,
+        Some(estimated_relative_accuracy),
         stable && below_wgt_threshold,
         unstable_reason.or(weight_reason),
     )
@@ -422,9 +756,14 @@ fn stability_check_on_norm<T: FloatLike>(
     wgt: F<T>,
     is_final_level: bool,
     escalate_if_exact_zero: bool,
-) -> (Complex<F<T>>, bool, Option<StabilityFailureReason>) {
+) -> (
+    Complex<F<T>>,
+    Option<F<T>>,
+    bool,
+    Option<StabilityFailureReason>,
+) {
     if results.len() == 1 {
-        return (results[0].clone(), true, None);
+        return (results[0].clone(), None, true, None);
     }
 
     let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
@@ -439,10 +778,12 @@ fn stability_check_on_norm<T: FloatLike>(
             (((res - average.clone()) / average.clone()).abs(), false)
         }
     });
+    let mut estimated_relative_accuracy = average.zero();
 
     let mut unstable_reason = None;
     let mut unstable_sample = None;
     for (index, (error, result_is_exact_zero)) in errors.enumerate() {
+        estimated_relative_accuracy = estimated_relative_accuracy.max(error.clone());
         if !is_final_level
             && error == F::<T>::from_f64(0.0)
             && result_is_exact_zero
@@ -492,6 +833,7 @@ fn stability_check_on_norm<T: FloatLike>(
 
     (
         results[0].clone(),
+        Some(estimated_relative_accuracy),
         stable && below_wgt_threshold,
         unstable_reason.or(weight_reason),
     )
@@ -502,12 +844,54 @@ pub struct StabilityLevelResult {
     pub result: Complex<F<f64>>,
     pub graph_result: GraphEvaluationResult<f64>,
     pub stability_level_used: Precision,
+    pub estimated_relative_accuracy: Option<F<f64>>,
+    pub total_time: Duration,
     pub parameterization_time: Duration,
+    pub parameterization_jacobian: Option<F<f64>>,
     pub integrand_evaluation_time: Duration,
     pub evaluator_evaluation_time: Duration,
     pub is_stable: bool,
     pub instability_reason: Option<StabilityFailureReason>,
     pub rotated_results: Vec<RotatedEvaluation>,
+}
+
+#[derive(Debug, Clone)]
+struct PreciseStabilityLevelResult<T: FloatLike> {
+    pub result: Complex<F<T>>,
+    pub graph_result: GraphEvaluationResult<T>,
+    pub stability_level_used: Precision,
+    pub estimated_relative_accuracy: Option<F<T>>,
+    pub total_time: Duration,
+    pub parameterization_time: Duration,
+    pub parameterization_jacobian: Option<F<T>>,
+    pub integrand_evaluation_time: Duration,
+    pub evaluator_evaluation_time: Duration,
+    pub is_stable: bool,
+    pub instability_reason: Option<StabilityFailureReason>,
+    pub rotated_results: Vec<RotatedEvaluation>,
+}
+
+impl<T: FloatLike> PreciseStabilityLevelResult<T> {
+    fn into_f64(self) -> StabilityLevelResult {
+        StabilityLevelResult {
+            result: complex_to_f64(&self.result),
+            graph_result: self.graph_result.into_f64(),
+            stability_level_used: self.stability_level_used,
+            estimated_relative_accuracy: self
+                .estimated_relative_accuracy
+                .map(|value| value.into_ff64()),
+            total_time: self.total_time,
+            parameterization_time: self.parameterization_time,
+            parameterization_jacobian: self
+                .parameterization_jacobian
+                .map(|value| value.into_ff64()),
+            integrand_evaluation_time: self.integrand_evaluation_time,
+            evaluator_evaluation_time: self.evaluator_evaluation_time,
+            is_stable: self.is_stable,
+            instability_reason: self.instability_reason,
+            rotated_results: self.rotated_results,
+        }
+    }
 }
 
 #[derive(
@@ -837,6 +1221,12 @@ pub trait ProcessIntegrandImpl {
         None
     }
     fn restore_event_processing_runtime(&mut self, _runtime: Option<EventProcessingRuntime>) {}
+    fn event_processing_runtime(&self) -> Option<&EventProcessingRuntime> {
+        None
+    }
+    fn event_processing_runtime_mut(&mut self) -> Option<&mut EventProcessingRuntime> {
+        None
+    }
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
 }
@@ -907,7 +1297,13 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
         channel_id,
     );
     integrand.restore_event_processing_runtime(event_processing_runtime);
-    result
+    let mut result = result?;
+    for event_group in result.event_groups.iter_mut() {
+        for event in event_group.iter_mut() {
+            event.cut_info.graph_id = graph_id;
+        }
+    }
+    Ok(result)
 }
 
 fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
@@ -971,7 +1367,7 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     }
 
     for result in &evaluation_results {
-        evaluation_metadata.event_time += result.event_processing_time;
+        evaluation_metadata.event_processing_time += result.event_processing_time;
     }
 
     if cache {
@@ -998,7 +1394,7 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     Ok((evaluation_results, primary_rotation_index, rotated_results))
 }
 
-fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
+fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
     source: &EvaluationSource<'_>,
@@ -1012,7 +1408,8 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     record_rotated_results: bool,
     precision_label: &str,
     escalate_if_exact_zero: bool,
-) -> Result<StabilityLevelResult> {
+) -> Result<PreciseStabilityLevelResult<T>> {
+    let level_start = Instant::now();
     let (gammaloop_sample, parameterization_time) = source.build_gamma_sample::<T, I>(integrand)?;
     debug!("{precision_label} parameterization succeeded");
     debug!(
@@ -1038,36 +1435,43 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     let max_eval = complex_from_f64::<T>(max_eval);
     let wgt = F::<T>::from_ff64(wgt);
 
-    let (average_result, is_stable, instability_reason) = if check_on_norm {
-        stability_check_on_norm(
-            integrand.get_settings(),
-            &results,
-            stability_level,
-            max_eval,
-            wgt,
-            is_final_level,
-            escalate_if_exact_zero,
-        )
-    } else {
-        stability_check(
-            integrand.get_settings(),
-            &results,
-            stability_level,
-            max_eval,
-            wgt,
-            is_final_level,
-            escalate_if_exact_zero,
-        )
-    };
+    let (average_result, estimated_relative_accuracy, is_stable, instability_reason) =
+        if check_on_norm {
+            stability_check_on_norm(
+                integrand.get_settings(),
+                &results,
+                stability_level,
+                max_eval,
+                wgt,
+                is_final_level,
+                escalate_if_exact_zero,
+            )
+        } else {
+            stability_check(
+                integrand.get_settings(),
+                &results,
+                stability_level,
+                max_eval,
+                wgt,
+                is_final_level,
+                escalate_if_exact_zero,
+            )
+        };
 
     let mut graph_result = graph_results[primary_rotation_index].clone();
     graph_result.integrand_result = average_result.clone();
 
-    Ok(StabilityLevelResult {
-        result: complex_to_f64(&average_result),
-        graph_result: graph_result.into_f64(),
+    Ok(PreciseStabilityLevelResult {
+        result: average_result,
+        graph_result,
         stability_level_used: stability_level.precision,
+        estimated_relative_accuracy,
+        total_time: level_start.elapsed(),
         parameterization_time,
+        parameterization_jacobian: match source {
+            EvaluationSource::XSpace(_) => Some(gammaloop_sample.get_default_sample().jacobian()),
+            EvaluationSource::Momentum(_) => None,
+        },
         integrand_evaluation_time: evaluation_metadata
             .integrand_evaluation_time
             .saturating_sub(integrand_time_before),
@@ -1078,6 +1482,39 @@ fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
         instability_reason,
         rotated_results,
     })
+}
+
+fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    source: &EvaluationSource<'_>,
+    stability_level: &StabilityLevelSetting,
+    max_eval: &Complex<F<f64>>,
+    wgt: F<f64>,
+    check_on_norm: bool,
+    is_final_level: bool,
+    is_primary_stability_level: bool,
+    evaluation_metadata: &mut EvaluationMetaData,
+    record_rotated_results: bool,
+    precision_label: &str,
+    escalate_if_exact_zero: bool,
+) -> Result<StabilityLevelResult> {
+    evaluate_stability_level_precise::<T, I>(
+        integrand,
+        model,
+        source,
+        stability_level,
+        max_eval,
+        wgt,
+        check_on_norm,
+        is_final_level,
+        is_primary_stability_level,
+        evaluation_metadata,
+        record_rotated_results,
+        precision_label,
+        escalate_if_exact_zero,
+    )
+    .map(PreciseStabilityLevelResult::into_f64)
 }
 
 /// Result of cache validation checks
@@ -1244,6 +1681,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                 let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
 
                 let mut res = GraphEvaluationResult::zero(zero.clone());
+                let mut grouped_events = crate::observables::GenericEventGroup::default();
 
                 for graph_id in group.into_iter() {
                     let graph_term_res = match sample {
@@ -1340,7 +1778,15 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                         }
                     };
 
-                    res.merge_in_place(graph_term_res?);
+                    let mut graph_term_res = graph_term_res?;
+                    for mut event_group in graph_term_res.event_groups.drain(..) {
+                        grouped_events.append(&mut event_group);
+                    }
+                    res.merge_in_place(graph_term_res);
+                }
+
+                if !grouped_events.is_empty() {
+                    res.event_groups.push(grouped_events);
                 }
 
                 res
@@ -1351,8 +1797,6 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
             integrand.increment_loop_cache_id(loop_cache_shift);
         }
 
-        let mut result = result;
-        result.integrand_result *= gammaloop_sample.get_default_sample().jacobian();
         Ok(result)
     })();
     if record_primary_timing {
@@ -1496,6 +1940,7 @@ fn create_grid<I: ProcessIntegrandImpl>(integrand: &I) -> Grid<F<f64>> {
     }
 }
 
+#[derive(Clone, Copy)]
 enum EvaluationSource<'a> {
     XSpace(&'a Sample<F<f64>>),
     Momentum(&'a MomentumSpaceEvaluationInput),
@@ -1652,36 +2097,8 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
         escalate_if_exact_zero = false;
     }
     let mut evaluation_metadata = EvaluationMetaData::new_empty();
-    let mut stability_iterator =
-        create_stability_iterator(&integrand.get_settings().stability, use_arb_prec);
-    let escalation_factor = integrand
-        .get_settings()
-        .stability
-        .loop_momenta_norm_escalation_factor;
-    let record_loop_momenta_escalation = integrand
-        .get_settings()
-        .stability
-        .recording
-        .map(|recording| recording.record_loop_momenta_escalation)
-        .unwrap_or(false);
-    let mut loop_momenta_escalation = None;
-    if escalation_factor > 0.0 && stability_iterator.len() > 1 {
-        if let Ok(sum_norm) = source.loop_norm_sum(integrand) {
-            let threshold =
-                F::<f64>::from_f64(escalation_factor * integrand.get_settings().kinematics.e_cm);
-            if record_loop_momenta_escalation {
-                loop_momenta_escalation = Some(LoopMomentaEscalationMetrics {
-                    sum_norm: sum_norm.0,
-                    threshold: threshold.0,
-                });
-            }
-            if sum_norm > threshold {
-                if let Some(last) = stability_iterator.last().copied() {
-                    stability_iterator = vec![last];
-                }
-            }
-        }
-    }
+    let (stability_iterator, loop_momenta_escalation) =
+        stability_iterator_for_source(integrand, &source, use_arb_prec);
 
     let mut results_of_stability_levels = Vec::with_capacity(stability_iterator.len());
 
@@ -1777,49 +2194,26 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
             || stability_level_result.result.im.is_infinite();
         let is_nan = re_is_nan || im_is_nan;
 
-        let recording = integrand.get_settings().stability.recording;
-        let stability_evaluations = if let Some(recording) = recording {
-            if recording.record_all_stability_levels {
-                results_of_stability_levels
-                    .iter()
-                    .map(|level| StabilityEvaluation {
-                        precision: level.stability_level_used,
-                        result: level.result,
-                        parameterization_time: level.parameterization_time,
-                        integrand_evaluation_time: level.integrand_evaluation_time,
-                        evaluator_evaluation_time: level.evaluator_evaluation_time,
-                        is_stable: level.is_stable,
-                        instability_reason: level.instability_reason,
-                        rotated_results: level.rotated_results.clone(),
-                    })
-                    .collect()
-            } else {
-                let level = results_of_stability_levels
-                    .last()
-                    .expect("stability level result missing");
-                vec![StabilityEvaluation {
-                    precision: level.stability_level_used,
-                    result: level.result,
-                    parameterization_time: level.parameterization_time,
-                    integrand_evaluation_time: level.integrand_evaluation_time,
-                    evaluator_evaluation_time: level.evaluator_evaluation_time,
-                    is_stable: level.is_stable,
-                    instability_reason: level.instability_reason,
-                    rotated_results: level.rotated_results.clone(),
-                }]
-            }
-        } else {
-            Vec::new()
-        };
+        let stability_results = results_of_stability_levels
+            .iter()
+            .map(|level| StabilityResult {
+                precision: level.stability_level_used,
+                estimated_relative_accuracy: level.estimated_relative_accuracy,
+                accepted_as_stable: level.is_stable,
+                total_time: level.total_time,
+            })
+            .collect();
 
         evaluation_metadata.total_timing = start_eval.elapsed();
-        evaluation_metadata.highest_precision = stability_level_result.stability_level_used;
         evaluation_metadata.parameterization_time = stability_level_result.parameterization_time;
+        evaluation_metadata.generated_event_count =
+            stability_level_result.graph_result.generated_event_count;
+        evaluation_metadata.accepted_event_count =
+            stability_level_result.graph_result.accepted_event_count;
         evaluation_metadata.relative_instability_error = Complex::new_zero();
         evaluation_metadata.is_nan = is_nan;
-        evaluation_metadata.final_is_stable = stability_level_result.is_stable;
         evaluation_metadata.loop_momenta_escalation = loop_momenta_escalation;
-        evaluation_metadata.stability_evaluations = stability_evaluations;
+        evaluation_metadata.stability_results = stability_results;
 
         let nanless_result = if re_is_nan && !im_is_nan {
             Complex::new(F(0.0), stability_level_result.result.im)
@@ -1830,38 +2224,222 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
         } else {
             stability_level_result.result
         };
+        let mut event_groups = stability_level_result.graph_result.event_groups;
+        let parameterization_jacobian = stability_level_result.parameterization_jacobian;
+        let full_factor = full_event_multiplicative_factor(parameterization_jacobian, wgt);
+        apply_full_event_multiplicative_factor(&mut event_groups, &full_factor);
         Ok(EvaluationResult {
             integrand_result: nanless_result,
+            parameterization_jacobian,
             integrator_weight: wgt,
-            event_buffer: stability_level_result.graph_result.generated_events,
-            event_processing_time: evaluation_metadata.event_time,
-            generated_event_count: stability_level_result.graph_result.generated_event_count,
-            accepted_event_count: stability_level_result.graph_result.accepted_event_count,
+            event_groups,
             evaluation_metadata,
         })
     } else {
         println!("Evaluation failed at all stability levels");
         Ok(EvaluationResult {
             integrand_result: Complex::new(F(0.0), F(0.0)),
+            parameterization_jacobian: None,
             integrator_weight: wgt,
-            event_buffer: vec![],
-            event_processing_time: Duration::ZERO,
-            generated_event_count: 0,
-            accepted_event_count: 0,
+            event_groups: Default::default(),
             evaluation_metadata: EvaluationMetaData {
                 total_timing: Duration::ZERO,
                 integrand_evaluation_time: Duration::ZERO,
                 evaluator_evaluation_time: Duration::ZERO,
                 parameterization_time: Duration::ZERO,
-                event_time: Duration::ZERO,
+                event_processing_time: Duration::ZERO,
+                generated_event_count: 0,
+                accepted_event_count: 0,
                 relative_instability_error: Complex::new(F(0.0), F(0.0)),
                 is_nan: true,
-                final_is_stable: false,
                 loop_momenta_escalation: None,
-                highest_precision: Precision::Double,
-                stability_evaluations: Vec::new(),
+                stability_results: Vec::new(),
             },
         })
+    }
+}
+
+fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    source: &EvaluationSource<'_>,
+    use_arb_prec: bool,
+) -> (
+    Vec<StabilityLevelSetting>,
+    Option<LoopMomentaEscalationMetrics>,
+) {
+    let mut stability_iterator =
+        create_stability_iterator(&integrand.get_settings().stability, use_arb_prec);
+    let escalation_factor = integrand
+        .get_settings()
+        .stability
+        .loop_momenta_norm_escalation_factor;
+    let record_loop_momenta_escalation = integrand
+        .get_settings()
+        .stability
+        .recording
+        .map(|recording| recording.record_loop_momenta_escalation)
+        .unwrap_or(false);
+    let mut loop_momenta_escalation = None;
+    if escalation_factor > 0.0 && stability_iterator.len() > 1 {
+        if let Ok(sum_norm) = source.loop_norm_sum(integrand) {
+            let threshold =
+                F::<f64>::from_f64(escalation_factor * integrand.get_settings().kinematics.e_cm);
+            if record_loop_momenta_escalation {
+                loop_momenta_escalation = Some(LoopMomentaEscalationMetrics {
+                    sum_norm: sum_norm.0,
+                    threshold: threshold.0,
+                });
+            }
+            if sum_norm > threshold {
+                if let Some(last) = stability_iterator.last().copied() {
+                    stability_iterator = vec![last];
+                }
+            }
+        }
+    }
+
+    (stability_iterator, loop_momenta_escalation)
+}
+
+fn finalize_precise_evaluation_result<T: FloatLike>(
+    result: PreciseStabilityLevelResult<T>,
+    integrator_weight: F<f64>,
+    evaluation_metadata: EvaluationMetaData,
+) -> GenericEvaluationResult<T> {
+    let re_is_nan = result.result.re.is_nan() || result.result.re.is_infinite();
+    let im_is_nan = result.result.im.is_nan() || result.result.im.is_infinite();
+    let nanless_result = if re_is_nan && !im_is_nan {
+        Complex::new(result.result.re.zero(), result.result.im)
+    } else if im_is_nan && !re_is_nan {
+        Complex::new(result.result.re, result.result.im.zero())
+    } else if re_is_nan && im_is_nan {
+        Complex::new(result.result.re.zero(), result.result.im.zero())
+    } else {
+        result.result
+    };
+
+    let mut event_groups = result.graph_result.event_groups;
+    let integrator_weight = F::<T>::from_ff64(integrator_weight);
+    let parameterization_jacobian = result.parameterization_jacobian;
+    let full_factor = full_event_multiplicative_factor_precise(
+        parameterization_jacobian.clone(),
+        integrator_weight.clone(),
+    );
+    apply_full_event_multiplicative_factor_precise(&mut event_groups, &full_factor);
+
+    GenericEvaluationResult {
+        integrand_result: nanless_result,
+        parameterization_jacobian,
+        integrator_weight,
+        event_groups,
+        evaluation_metadata,
+    }
+}
+
+fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    source: EvaluationSource<'_>,
+    wgt: F<f64>,
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+) -> Result<crate::integrands::evaluation::PreciseEvaluationResult> {
+    let base_result = evaluate_from_source(
+        integrand,
+        model,
+        source,
+        wgt,
+        use_arb_prec,
+        max_eval.clone(),
+    )?;
+    let final_precision = base_result
+        .evaluation_metadata
+        .final_precision()
+        .unwrap_or(Precision::Double);
+    let base_metadata = base_result.evaluation_metadata.clone();
+    let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
+    if escalate_if_exact_zero && !integrand.get_settings().selectors.is_empty() {
+        escalate_if_exact_zero = false;
+    }
+
+    match final_precision {
+        Precision::Double => Ok(
+            crate::integrands::evaluation::PreciseEvaluationResult::Double(
+                GenericEvaluationResult {
+                    integrand_result: base_result.integrand_result,
+                    parameterization_jacobian: base_result.parameterization_jacobian,
+                    integrator_weight: base_result.integrator_weight,
+                    event_groups: base_result.event_groups,
+                    evaluation_metadata: base_metadata,
+                },
+            ),
+        ),
+        Precision::Quad => {
+            let (stability_iterator, _) =
+                stability_iterator_for_source(integrand, &source, use_arb_prec);
+            let stability_level = stability_iterator
+                .into_iter()
+                .rev()
+                .find(|level| level.precision == Precision::Quad)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Quad precision was selected for the final result, but no quad stability level is configured."
+                    )
+                })?;
+            let mut evaluation_metadata = EvaluationMetaData::new_empty();
+            let result = evaluate_stability_level_precise::<f128, I>(
+                integrand,
+                model,
+                &source,
+                &stability_level,
+                &max_eval,
+                wgt,
+                integrand.get_settings().stability.check_on_norm,
+                true,
+                true,
+                &mut evaluation_metadata,
+                false,
+                "f128",
+                escalate_if_exact_zero,
+            )?;
+            Ok(
+                crate::integrands::evaluation::PreciseEvaluationResult::Quad(
+                    finalize_precise_evaluation_result(result, wgt, base_metadata),
+                ),
+            )
+        }
+        Precision::Arb => {
+            let (stability_iterator, _) =
+                stability_iterator_for_source(integrand, &source, use_arb_prec);
+            let stability_level = stability_iterator
+                .into_iter()
+                .rev()
+                .find(|level| level.precision == Precision::Arb)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Arbitrary precision was selected for the final result, but no Arb precision stability level is configured."
+                    )
+                })?;
+            let mut evaluation_metadata = EvaluationMetaData::new_empty();
+            let result = evaluate_stability_level_precise::<ArbPrec, I>(
+                integrand,
+                model,
+                &source,
+                &stability_level,
+                &max_eval,
+                wgt,
+                integrand.get_settings().stability.check_on_norm,
+                true,
+                true,
+                &mut evaluation_metadata,
+                false,
+                "ArbPrec",
+                escalate_if_exact_zero,
+            )?;
+            Ok(crate::integrands::evaluation::PreciseEvaluationResult::Arb(
+                finalize_precise_evaluation_result(result, wgt, base_metadata),
+            ))
+        }
     }
 }
 
@@ -1914,6 +2492,24 @@ fn evaluate_sample<I: ProcessIntegrandImpl>(
     )
 }
 
+fn evaluate_sample_precise<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    sample: &Sample<F<f64>>,
+    wgt: F<f64>,
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+) -> Result<crate::integrands::evaluation::PreciseEvaluationResult> {
+    evaluate_from_source_precise(
+        integrand,
+        model,
+        EvaluationSource::XSpace(sample),
+        wgt,
+        use_arb_prec,
+        max_eval,
+    )
+}
+
 fn evaluate_momentum_configuration<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
@@ -1923,6 +2519,24 @@ fn evaluate_momentum_configuration<I: ProcessIntegrandImpl>(
     max_eval: Complex<F<f64>>,
 ) -> Result<EvaluationResult> {
     evaluate_from_source(
+        integrand,
+        model,
+        EvaluationSource::Momentum(input),
+        wgt,
+        use_arb_prec,
+        max_eval,
+    )
+}
+
+fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    input: &MomentumSpaceEvaluationInput,
+    wgt: F<f64>,
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+) -> Result<crate::integrands::evaluation::PreciseEvaluationResult> {
+    evaluate_from_source_precise(
         integrand,
         model,
         EvaluationSource::Momentum(input),

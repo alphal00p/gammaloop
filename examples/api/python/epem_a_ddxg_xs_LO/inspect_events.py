@@ -1,0 +1,38 @@
+import os
+from pathlib import Path
+
+import gammaloop
+
+
+def main() -> None:
+    example_dir = Path(__file__).resolve().parent
+    run_card = example_dir / "run.toml"
+    state_dir = example_dir / "state"
+
+    # Temporary until the proper LU numerator / theta / tree-denominator path
+    # is fixed.
+    os.environ.setdefault("GL_LU_E2E_HACK", "1")
+
+    # `evaluate_sample` is the Python-side point-evaluation entry point and is
+    # the replacement for the older inspect-style workflow.
+    api = gammaloop.GammaLoopAPI(
+        state_folder=state_dir,
+        boot_commands_path=run_card,
+        fresh_state=True,
+    )
+
+    point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
+    result = api.evaluate_sample(point)
+    momentum_result = api.evaluate_sample(
+        [0.11, -0.07, 0.19, -0.13, 0.05, 0.29],
+        momentum_space=True,
+    )
+
+    print("== x-space evaluate_sample ==\n")
+    print(result)
+    print("\n== momentum-space evaluate_sample ==\n")
+    print(momentum_result)
+
+
+if __name__ == "__main__":
+    main()

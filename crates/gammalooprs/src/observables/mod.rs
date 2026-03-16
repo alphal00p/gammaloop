@@ -4,15 +4,16 @@ pub mod observables;
 
 pub use clustering::{ClusteringResult, Jet, JetAlgorithm, JetClustering};
 pub use events::{
-    CutInfo, Event, EventGroup, EventGroupList, GenericEvent, GenericEventGroup,
-    GenericEventGroupList, GenericReweightInfo,
+    AdditionalWeightKey, CutInfo, Event, EventGroup, EventGroupList, GenericAdditionalWeightInfo,
+    GenericEvent, GenericEventGroup, GenericEventGroupList,
 };
 pub use observables::{
     ConfiguredSelector, CountRangeSelectorSettings, EntrySelection, EventProcessingRuntime,
-    EventSelector, FilterQuantity, HistogramBinSnapshot, HistogramObservable, HistogramSettings,
-    HistogramSnapshot, HistogramStatisticsSnapshot, JetClusteringSettings, JetPtQuantitySettings,
-    Observable, ObservableBinAccumulator, ObservableFileFormat, ObservableHistogramStatistics,
-    ObservablePhase, ObservableSettings, ObservableValueTransform, Observables,
+    EventSelector, FilterQuantity, HistogramAccumulatorState, HistogramBinSnapshot,
+    HistogramObservable, HistogramSettings, HistogramSnapshot, HistogramStatisticsSnapshot,
+    JetClusteringSettings, JetPtQuantitySettings, Observable, ObservableAccumulatorBundle,
+    ObservableBinAccumulator, ObservableFileFormat, ObservableHistogramStatistics, ObservablePhase,
+    ObservableSettings, ObservableSnapshotBundle, ObservableValueTransform, Observables,
     ObservablesSettings, ParticleScalarQuantitySettings, QuantitiesSettings, QuantitySettings,
     SelectorDefinitionSettings, SelectorReduction, SelectorSettings, Selectors, SelectorsSettings,
     ValueRangeSelectorSettings,

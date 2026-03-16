@@ -4,7 +4,6 @@ use std::ops::AddAssign;
 use crate::utils::{F, FloatLike, PrecisionUpgradable};
 use spenso::algebra::{algebraic_traits::RefZero, complex::Complex};
 use symbolica::domains::dual::{DualNumberStructure, HyperDual};
-use symbolica::domains::float::FloatLike as SymbolicaFloatLike;
 
 pub(crate) fn new_constant<T: Clone + RefZero>(shape: &HyperDual<T>, value: &T) -> HyperDual<T> {
     let mut new = shape.clone();
@@ -98,11 +97,17 @@ impl<T: LowerExp> Display for DualOrNot<T> {
     }
 }
 
-impl<T: symbolica::domains::float::FloatLike> AddAssign for DualOrNot<T> {
+impl<T> AddAssign for DualOrNot<T>
+where
+    T: AddAssign<T>,
+{
     fn add_assign(&mut self, rhs: Self) {
         match (self, rhs) {
             (DualOrNot::Dual(x), DualOrNot::Dual(y)) => {
-                *x += y;
+                assert_eq!(x.values.len(), y.values.len());
+                for (lhs, rhs) in x.values.iter_mut().zip(y.values.into_iter()) {
+                    *lhs += rhs;
+                }
             }
             (DualOrNot::NonDual(x), DualOrNot::NonDual(y)) => {
                 *x += y;
