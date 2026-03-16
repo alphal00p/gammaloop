@@ -35,6 +35,7 @@ pub use shell::Shell;
 pub mod run;
 pub use run::Run;
 pub mod evaluate;
+pub mod evaluate_samples;
 pub use evaluate::Evaluate;
 pub mod renormalize;
 pub use renormalize::Renormalize;
