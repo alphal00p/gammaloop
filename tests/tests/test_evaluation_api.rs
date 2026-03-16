@@ -9,17 +9,21 @@ use gammaloop_integration_tests::{
 use ndarray::Array2;
 use serial_test::serial;
 
-fn configure_leading_jet_quantity(cli: &mut CLIState) -> Result<()> {
+fn configure_jet_quantities(cli: &mut CLIState) -> Result<()> {
     cli.run_command(
         r#"set process string '
 [quantities.leading_jet_pt]
 type = "jet_pt"
 dR = 0.4
+
+[quantities.jet_count]
+type = "jet_count"
+dR = 0.4
 '"#,
     )
 }
 
-fn add_leading_jet_observable(cli: &mut CLIState) -> Result<()> {
+fn add_jet_observables(cli: &mut CLIState) -> Result<()> {
     cli.run_command(
         r#"set process string '
 [observables.leading_jet_pt_hist]
@@ -28,6 +32,13 @@ entry_selection = "leading_only"
 x_min = 0.0
 x_max = 1000.0
 n_bins = 8
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+x_min = 0.0
+x_max = 6.0
+n_bins = 6
 '"#,
     )
 }
@@ -231,13 +242,13 @@ fn lu_rust_generated_events_follow_graph_grouping_and_cut_ids() -> Result<()> {
 fn lu_rust_precise_evaluate_samples_returns_precision_tagged_results() -> Result<()> {
     let _hack = enable_lu_e2e_hack();
     let mut cli = setup_sm_differential_lu_cli("lu_rust_precise_evaluate_samples")?;
-    configure_leading_jet_quantity(&mut cli)?;
-    add_leading_jet_observable(&mut cli)?;
+    configure_jet_quantities(&mut cli)?;
+    add_jet_observables(&mut cli)?;
 
     let point = default_xspace_point(&cli)?;
     let results = evaluate_x_samples_precise(&mut cli, &[point])?;
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].observables.histograms.len(), 1);
+    assert_eq!(results[0].observables.histograms.len(), 2);
     match &results[0].evaluation {
         gammalooprs::integrands::evaluation::PreciseEvaluationResultOutput::Double(result) => {
             assert!(result.evaluation_metadata.is_some());
@@ -287,7 +298,7 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
     cli.run_command(
         "set process kv general.generate_events=false general.store_additional_weights_in_event=false",
     )?;
-    configure_leading_jet_quantity(&mut cli)?;
+    configure_jet_quantities(&mut cli)?;
     add_leading_jet_selector(&mut cli, 1_000_000.0)?;
     let mut results = evaluate_x_samples(&mut cli, std::slice::from_ref(&point))?;
     let result = results.remove(0);
@@ -299,7 +310,7 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
     );
     assert_eq!(metadata(&result).accepted_event_count, 0);
 
-    add_leading_jet_observable(&mut cli)?;
+    add_jet_observables(&mut cli)?;
     update_leading_jet_selector(&mut cli, 0.0)?;
     let batch = vec![point.clone(), point];
     let results = evaluate_x_samples(&mut cli, &batch)?;
@@ -312,6 +323,7 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
                 .histograms
                 .contains_key("leading_jet_pt_hist")
         );
+        assert!(result.observables.histograms.contains_key("jet_count_hist"));
         assert!(
             metadata(result).generated_event_count > 0,
             "selector+observable mode should generate temporary events"
@@ -328,6 +340,13 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
             .get("leading_jet_pt_hist")
             .expect("missing leading-jet histogram");
         assert_eq!(histogram.bins.len(), 8);
+        let jet_count_histogram = result
+            .observables
+            .histograms
+            .get("jet_count_hist")
+            .expect("missing jet-count histogram");
+        assert_eq!(jet_count_histogram.bins.len(), 6);
+        assert!(!jet_count_histogram.supports_misbinning_mitigation);
     }
 
     Ok(())
@@ -360,8 +379,8 @@ fn lu_rust_minimal_output_keeps_events_and_observables() -> Result<()> {
     cli.run_command(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
     )?;
-    configure_leading_jet_quantity(&mut cli)?;
-    add_leading_jet_observable(&mut cli)?;
+    configure_jet_quantities(&mut cli)?;
+    add_jet_observables(&mut cli)?;
 
     let point = default_xspace_point(&cli)?;
     let mut results = evaluate_x_samples_minimal(&mut cli, std::slice::from_ref(&point))?;
@@ -375,6 +394,7 @@ fn lu_rust_minimal_output_keeps_events_and_observables() -> Result<()> {
             .histograms
             .contains_key("leading_jet_pt_hist")
     );
+    assert!(result.observables.histograms.contains_key("jet_count_hist"));
 
     let formatted = result.to_string();
     assert!(!formatted.contains("Evaluation metadata"));

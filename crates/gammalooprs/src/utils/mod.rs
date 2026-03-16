@@ -1182,7 +1182,14 @@ impl<T: FloatLike> std::fmt::Display for F<T> {
 
 impl<T: FloatLike> std::fmt::LowerExp for F<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:e}", self.0)
+        let mut rendered = match f.precision() {
+            Some(precision) => format!("{:.*e}", precision, self.0),
+            None => format!("{:e}", self.0),
+        };
+        if f.sign_plus() && !rendered.starts_with('-') {
+            rendered.insert(0, '+');
+        }
+        f.pad(&rendered)
     }
 }
 

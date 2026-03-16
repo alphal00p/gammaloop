@@ -261,6 +261,15 @@ mod test {
     }
 
     #[test]
+    fn split_defaults_generate_to_cross_section_mode_before_flags() {
+        let parts = split_command_line("generate --only-diagrams g g > h").unwrap();
+        assert_eq!(
+            parts,
+            vec!["generate", "xs", "--only-diagrams", "g", "g", ">", "h"]
+        );
+    }
+
+    #[test]
     fn normalize_generate_argv_inserts_default_mode() {
         let args = vec![
             OsString::from("gammaloop"),
@@ -278,6 +287,32 @@ mod test {
                 OsString::from("--read-only-state"),
                 OsString::from("generate"),
                 OsString::from("xs"),
+                OsString::from("g"),
+                OsString::from("g"),
+                OsString::from(">"),
+                OsString::from("h"),
+            ]
+        );
+    }
+
+    #[test]
+    fn normalize_generate_argv_inserts_default_mode_before_flags() {
+        let args = vec![
+            OsString::from("gammaloop"),
+            OsString::from("generate"),
+            OsString::from("--only-diagrams"),
+            OsString::from("g"),
+            OsString::from("g"),
+            OsString::from(">"),
+            OsString::from("h"),
+        ];
+        assert_eq!(
+            normalize_generate_argv(&args),
+            vec![
+                OsString::from("gammaloop"),
+                OsString::from("generate"),
+                OsString::from("xs"),
+                OsString::from("--only-diagrams"),
                 OsString::from("g"),
                 OsString::from("g"),
                 OsString::from(">"),

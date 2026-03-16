@@ -11,9 +11,9 @@ use gammalooprs::{
     model::{ParameterNature, ParameterType, UFOSymbol},
     observables::{
         CountRangeSelectorSettings, EntrySelection, FilterQuantity, HistogramSettings,
-        JetClusteringSettings, JetPtQuantitySettings, ObservablePhase, ObservableSettings,
-        ObservableValueTransform, ParticleScalarQuantitySettings, QuantitySettings,
-        SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
+        JetClusteringSettings, JetCountQuantitySettings, JetPtQuantitySettings, ObservablePhase,
+        ObservableSettings, ObservableValueTransform, ParticleScalarQuantitySettings,
+        QuantitySettings, SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
         ValueRangeSelectorSettings,
     },
     processes::ProcessCollection,
@@ -391,6 +391,7 @@ pub enum ProcessSetArgs {
 pub enum QuantityTemplateKind {
     ParticleScalar,
     JetPt,
+    JetCount,
     AFB,
     CrossSection,
 }
@@ -399,10 +400,11 @@ fn parse_quantity_template_kind(raw: &str) -> std::result::Result<QuantityTempla
     match raw {
         "particle_scalar" => Ok(QuantityTemplateKind::ParticleScalar),
         "jet_pt" => Ok(QuantityTemplateKind::JetPt),
+        "jet_count" => Ok(QuantityTemplateKind::JetCount),
         "afb" => Ok(QuantityTemplateKind::AFB),
         "cross_section" => Ok(QuantityTemplateKind::CrossSection),
         other => Err(format!(
-            "Unknown quantity kind '{other}', expected one of: particle_scalar, jet_pt, afb, cross_section"
+            "Unknown quantity kind '{other}', expected one of: particle_scalar, jet_pt, jet_count, afb, cross_section"
         )),
     }
 }
@@ -749,6 +751,9 @@ fn quantity_template(kind: QuantityTemplateKind) -> QuantitySettings {
             })
         }
         QuantityTemplateKind::JetPt => QuantitySettings::JetPt(JetPtQuantitySettings {
+            clustering: JetClusteringSettings::default(),
+        }),
+        QuantityTemplateKind::JetCount => QuantitySettings::JetCount(JetCountQuantitySettings {
             clustering: JetClusteringSettings::default(),
         }),
         QuantityTemplateKind::AFB => QuantitySettings::AFB {},

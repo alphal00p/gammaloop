@@ -132,11 +132,21 @@ pub struct JetPtQuantitySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(deny_unknown_fields)]
+pub struct JetCountQuantitySettings {
+    #[serde(flatten)]
+    pub clustering: JetClusteringSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[allow(non_snake_case)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum QuantitySettings {
     ParticleScalar(ParticleScalarQuantitySettings),
     JetPt(JetPtQuantitySettings),
+    JetCount(JetCountQuantitySettings),
     AFB {},
     CrossSection {},
 }
@@ -389,6 +399,46 @@ impl<T: FloatLike> ObservableEntry<T> {
 
 type ObservableEntries<T> = SmallVec<[ObservableEntry<T>; 8]>;
 
+type ClusteringHandle = usize;
+
+#[derive(Debug, Clone)]
+struct CompiledClustering {
+    settings: JetClusteringSettings,
+    clustering: JetClustering,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CompiledClusteringRegistry {
+    entries: Vec<CompiledClustering>,
+}
+
+impl CompiledClusteringRegistry {
+    fn register(&mut self, settings: &JetClusteringSettings) -> ClusteringHandle {
+        if let Some(index) = self
+            .entries
+            .iter()
+            .position(|entry| entry.settings == *settings)
+        {
+            index
+        } else {
+            let index = self.entries.len();
+            self.entries.push(CompiledClustering {
+                settings: settings.clone(),
+                clustering: JetClustering::new(settings.algorithm, settings.dR, settings.min_jpt),
+            });
+            index
+        }
+    }
+
+    fn get(&self, handle: ClusteringHandle) -> &JetClustering {
+        &self.entries[handle].clustering
+    }
+
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+}
+
 #[derive(Debug, Clone)]
 enum SelectorCriterion {
     ValueRange {
@@ -533,23 +583,53 @@ impl ForwardBackwardDefinition {
 
 #[derive(Debug, Clone)]
 struct JetPtDefinition {
-    clustering: JetClustering,
+    clustering_handle: ClusteringHandle,
 }
 
 impl JetPtDefinition {
-    fn new(settings: &JetClusteringSettings) -> Self {
+    fn new(
+        settings: &JetClusteringSettings,
+        clustering_registry: &mut CompiledClusteringRegistry,
+    ) -> Self {
         Self {
-            clustering: JetClustering::new(settings.algorithm, settings.dR, settings.min_jpt),
+            clustering_handle: clustering_registry.register(settings),
         }
     }
 
     fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
-        let jets = self.clustering.process_event(event);
+        let jets = event
+            .cached_clustering(self.clustering_handle)
+            .expect("jet-pt observable requires precomputed clustering");
         let mut entries = ObservableEntries::new();
-        for jet in jets.jets {
+        for jet in &jets.jets {
             entries.push(ObservableEntry::unit(jet.pt()));
         }
         entries
+    }
+}
+
+#[derive(Debug, Clone)]
+struct JetCountDefinition {
+    clustering_handle: ClusteringHandle,
+}
+
+impl JetCountDefinition {
+    fn new(
+        settings: &JetClusteringSettings,
+        clustering_registry: &mut CompiledClusteringRegistry,
+    ) -> Self {
+        Self {
+            clustering_handle: clustering_registry.register(settings),
+        }
+    }
+
+    fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
+        let jets = event
+            .cached_clustering(self.clustering_handle)
+            .expect("jet-count observable requires precomputed clustering");
+        let one = event_representative_one(event);
+        let jet_count = one.from_usize(jets.len()) + jet_count_offset(event);
+        smallvec![ObservableEntry::unit(jet_count)]
     }
 }
 
@@ -559,17 +639,25 @@ enum ObservableDefinition {
     ParticleScalar(ParticleScalarDefinition),
     ForwardBackward(ForwardBackwardDefinition),
     JetPt(JetPtDefinition),
+    JetCount(JetCountDefinition),
 }
 
 impl ObservableDefinition {
-    fn from_settings(settings: &QuantitySettings) -> Self {
+    fn from_settings(
+        settings: &QuantitySettings,
+        clustering_registry: &mut CompiledClusteringRegistry,
+    ) -> Self {
         match settings {
             QuantitySettings::ParticleScalar(settings) => ObservableDefinition::ParticleScalar(
                 ParticleScalarDefinition::new(settings.quantity, settings.pdgs.clone()),
             ),
-            QuantitySettings::JetPt(settings) => {
-                ObservableDefinition::JetPt(JetPtDefinition::new(&settings.clustering))
-            }
+            QuantitySettings::JetPt(settings) => ObservableDefinition::JetPt(JetPtDefinition::new(
+                &settings.clustering,
+                clustering_registry,
+            )),
+            QuantitySettings::JetCount(settings) => ObservableDefinition::JetCount(
+                JetCountDefinition::new(&settings.clustering, clustering_registry),
+            ),
             QuantitySettings::AFB {} => {
                 ObservableDefinition::ForwardBackward(ForwardBackwardDefinition)
             }
@@ -585,8 +673,57 @@ impl ObservableDefinition {
             ObservableDefinition::ParticleScalar(definition) => definition.process_event(event),
             ObservableDefinition::ForwardBackward(definition) => definition.process_event(event),
             ObservableDefinition::JetPt(definition) => definition.process_event(event),
+            ObservableDefinition::JetCount(definition) => definition.process_event(event),
         }
     }
+
+    fn required_clustering_handle(&self) -> Option<ClusteringHandle> {
+        match self {
+            ObservableDefinition::JetPt(definition) => Some(definition.clustering_handle),
+            ObservableDefinition::JetCount(definition) => Some(definition.clustering_handle),
+            _ => None,
+        }
+    }
+
+    fn supports_misbinning_mitigation(&self) -> bool {
+        !matches!(self, ObservableDefinition::JetCount(_))
+    }
+}
+
+fn event_representative_one<T: FloatLike>(event: &GenericEvent<T>) -> F<T> {
+    event
+        .kinematic_configuration
+        .0
+        .first()
+        .map(|momentum| momentum.temporal.value.one())
+        .or_else(|| {
+            event
+                .kinematic_configuration
+                .1
+                .first()
+                .map(|momentum| momentum.temporal.value.one())
+        })
+        .unwrap_or_else(|| event.weight.re.one())
+}
+
+fn jet_count_offset<T: FloatLike>(event: &GenericEvent<T>) -> F<T> {
+    let one = event_representative_one(event);
+    one.clone() / one.from_usize(2)
+}
+
+fn ensure_event_clustering<T: FloatLike>(
+    event: &mut GenericEvent<T>,
+    clustering_handle: ClusteringHandle,
+    clustering_registry: &CompiledClusteringRegistry,
+) {
+    event.ensure_clustering_slots(clustering_registry.len());
+    if event.cached_clustering(clustering_handle).is_some() {
+        return;
+    }
+
+    let clustering = clustering_registry.get(clustering_handle).clone();
+    let clustering_result = clustering.process_event(&*event);
+    event.derived_observable_data.clustered_jets[clustering_handle] = Some(clustering_result);
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -785,6 +922,7 @@ pub struct HistogramSnapshot {
     pub title: String,
     pub phase: ObservablePhase,
     pub value_transform: ObservableValueTransform,
+    pub supports_misbinning_mitigation: bool,
     pub x_min: f64,
     pub x_max: f64,
     pub sample_count: usize,
@@ -851,6 +989,7 @@ impl HistogramSnapshot {
         if self.title != other.title
             || self.phase != other.phase
             || self.value_transform != other.value_transform
+            || self.supports_misbinning_mitigation != other.supports_misbinning_mitigation
             || self.x_min != other.x_min
             || self.x_max != other.x_max
             || self.log_x_axis != other.log_x_axis
@@ -905,6 +1044,7 @@ impl HistogramSnapshot {
             title: self.title.clone(),
             phase: self.phase,
             value_transform: self.value_transform,
+            supports_misbinning_mitigation: self.supports_misbinning_mitigation,
             x_min: self.x_min,
             x_max: self.x_max,
             sample_count: self.sample_count,
@@ -931,6 +1071,7 @@ pub struct HistogramAccumulatorState {
     pub title: String,
     pub phase: ObservablePhase,
     pub value_transform: ObservableValueTransform,
+    pub supports_misbinning_mitigation: bool,
     pub x_min: f64,
     pub x_max: f64,
     pub sample_count: usize,
@@ -948,6 +1089,7 @@ impl HistogramAccumulatorState {
         title: String,
         phase: ObservablePhase,
         value_transform: ObservableValueTransform,
+        supports_misbinning_mitigation: bool,
         x_min: f64,
         x_max: f64,
         log_x_axis: bool,
@@ -958,6 +1100,7 @@ impl HistogramAccumulatorState {
             title,
             phase,
             value_transform,
+            supports_misbinning_mitigation,
             x_min,
             x_max,
             sample_count: 0,
@@ -976,6 +1119,7 @@ impl HistogramAccumulatorState {
             self.title.clone(),
             self.phase,
             self.value_transform,
+            self.supports_misbinning_mitigation,
             self.x_min,
             self.x_max,
             self.log_x_axis,
@@ -1009,6 +1153,7 @@ impl HistogramAccumulatorState {
             title: self.title.clone(),
             phase: self.phase,
             value_transform: self.value_transform,
+            supports_misbinning_mitigation: self.supports_misbinning_mitigation,
             x_min: self.x_min,
             x_max: self.x_max,
             sample_count: self.sample_count + self.new_sample_count,
@@ -1125,6 +1270,7 @@ impl HistogramAccumulatorState {
             title: snapshot.title.clone(),
             phase: snapshot.phase,
             value_transform: snapshot.value_transform,
+            supports_misbinning_mitigation: snapshot.supports_misbinning_mitigation,
             x_min: snapshot.x_min,
             x_max: snapshot.x_max,
             sample_count: snapshot.sample_count,
@@ -1159,6 +1305,7 @@ impl HistogramAccumulatorState {
         if self.title != other.title
             || self.phase != other.phase
             || self.value_transform != other.value_transform
+            || self.supports_misbinning_mitigation != other.supports_misbinning_mitigation
             || self.x_min != other.x_min
             || self.x_max != other.x_max
             || self.log_x_axis != other.log_x_axis
@@ -1245,21 +1392,29 @@ impl ObservableSnapshotBundle {
     }
 }
 
-pub trait EventSelector {
-    fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> bool;
+trait EventSelector {
+    fn process_event<T: FloatLike>(
+        &mut self,
+        event: &mut GenericEvent<T>,
+        clustering_registry: &CompiledClusteringRegistry,
+    ) -> bool;
 }
 
 #[derive(Clone, Default)]
-pub struct NoEventSelector;
+struct NoEventSelector;
 
 impl EventSelector for NoEventSelector {
-    fn process_event<T: FloatLike>(&mut self, _event: &GenericEvent<T>) -> bool {
+    fn process_event<T: FloatLike>(
+        &mut self,
+        _event: &mut GenericEvent<T>,
+        _clustering_registry: &CompiledClusteringRegistry,
+    ) -> bool {
         true
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ConfiguredSelector {
+struct ConfiguredSelector {
     definition: ObservableDefinition,
     criteria: Vec<SelectorCriterion>,
 }
@@ -1268,6 +1423,7 @@ impl ConfiguredSelector {
     pub(crate) fn new(
         settings: &SelectorSettings,
         quantities: &QuantitiesSettings,
+        clustering_registry: &mut CompiledClusteringRegistry,
     ) -> Result<Self> {
         let quantity = quantities.get(&settings.quantity).ok_or_else(|| {
             eyre!(
@@ -1293,14 +1449,21 @@ impl ConfiguredSelector {
         };
 
         Ok(Self {
-            definition: ObservableDefinition::from_settings(quantity),
+            definition: ObservableDefinition::from_settings(quantity, clustering_registry),
             criteria: vec![criterion],
         })
     }
 }
 
 impl EventSelector for ConfiguredSelector {
-    fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> bool {
+    fn process_event<T: FloatLike>(
+        &mut self,
+        event: &mut GenericEvent<T>,
+        clustering_registry: &CompiledClusteringRegistry,
+    ) -> bool {
+        if let Some(clustering_handle) = self.definition.required_clustering_handle() {
+            ensure_event_clustering(event, clustering_handle, clustering_registry);
+        }
         let entries = self.definition.process_event(event);
         self.criteria
             .iter()
@@ -1309,53 +1472,80 @@ impl EventSelector for ConfiguredSelector {
 }
 
 #[derive(Clone)]
-pub enum Selectors {
+enum Selectors {
     All(NoEventSelector),
     Configured(ConfiguredSelector),
 }
 
 impl Selectors {
-    pub(crate) fn from_settings(
+    fn from_settings(
         settings: &SelectorSettings,
         quantities: &QuantitiesSettings,
+        clustering_registry: &mut CompiledClusteringRegistry,
     ) -> Result<Self> {
         Ok(Selectors::Configured(ConfiguredSelector::new(
-            settings, quantities,
+            settings,
+            quantities,
+            clustering_registry,
         )?))
     }
 
-    pub(crate) fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> bool {
+    fn process_event<T: FloatLike>(
+        &mut self,
+        event: &mut GenericEvent<T>,
+        clustering_registry: &CompiledClusteringRegistry,
+    ) -> bool {
         match self {
-            Selectors::All(selector) => selector.process_event(event),
-            Selectors::Configured(selector) => selector.process_event(event),
+            Selectors::All(selector) => selector.process_event(event, clustering_registry),
+            Selectors::Configured(selector) => selector.process_event(event, clustering_registry),
         }
     }
 }
 
 #[derive(Clone, Default)]
 pub struct EventProcessingRuntime {
+    clustering_registry: CompiledClusteringRegistry,
+    observable_clustering_handles: Vec<ClusteringHandle>,
     selectors: Vec<Selectors>,
     observables: BTreeMap<String, Observables>,
 }
 
 impl EventProcessingRuntime {
     pub fn from_settings(settings: &RuntimeSettings) -> Result<Self> {
+        let mut clustering_registry = CompiledClusteringRegistry::default();
         let selectors = settings
             .selectors
             .values()
-            .map(|selector| Selectors::from_settings(selector, &settings.quantities))
+            .map(|selector| {
+                Selectors::from_settings(selector, &settings.quantities, &mut clustering_registry)
+            })
             .collect::<Result<Vec<_>>>()?;
 
+        let mut observable_clustering_handles = Vec::new();
         let observables = settings
             .observables
             .iter()
             .map(|(name, observable)| {
-                Observables::from_settings(name, observable, &settings.quantities)
-                    .map(|observable| (name.clone(), observable))
+                Observables::from_settings(
+                    name,
+                    observable,
+                    &settings.quantities,
+                    &mut clustering_registry,
+                )
+                .map(|observable| {
+                    if let Some(handle) = observable.required_clustering_handle() {
+                        if !observable_clustering_handles.contains(&handle) {
+                            observable_clustering_handles.push(handle);
+                        }
+                    }
+                    (name.clone(), observable)
+                })
             })
             .collect::<Result<BTreeMap<_, _>>>()?;
 
         Ok(Self {
+            clustering_registry,
+            observable_clustering_handles,
             selectors,
             observables,
         })
@@ -1369,10 +1559,16 @@ impl EventProcessingRuntime {
         !self.observables.is_empty()
     }
 
-    pub fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> bool {
+    pub fn process_event<T: FloatLike>(&mut self, event: &mut GenericEvent<T>) -> bool {
         for selector in self.selectors.iter_mut() {
-            if !selector.process_event(event) {
+            if !selector.process_event(event, &self.clustering_registry) {
                 return false;
+            }
+        }
+
+        if self.has_observables() {
+            for &handle in &self.observable_clustering_handles {
+                ensure_event_clustering(event, handle, &self.clustering_registry);
             }
         }
         true
@@ -1403,6 +1599,8 @@ impl EventProcessingRuntime {
 
     pub fn cleared_observable_clone(&self) -> Self {
         Self {
+            clustering_registry: self.clustering_registry.clone(),
+            observable_clustering_handles: self.observable_clustering_handles.clone(),
             selectors: self.selectors.clone(),
             observables: self
                 .observables
@@ -1494,10 +1692,11 @@ impl HistogramObservable {
         quantity_settings: &QuantitySettings,
         observable_name: &str,
         settings: &ObservableSettings,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut n_bins = settings.histogram.n_bins;
         let mut x_min = settings.histogram.x_min;
         let mut x_max = settings.histogram.x_max;
+        let supports_misbinning_mitigation = definition.supports_misbinning_mitigation();
         if matches!(quantity_settings, QuantitySettings::CrossSection {}) {
             n_bins = 1;
             if x_max <= x_min {
@@ -1505,8 +1704,15 @@ impl HistogramObservable {
                 x_max = 1.0;
             }
         }
+        if settings.misbinning_max_normalized_distance.is_some() && !supports_misbinning_mitigation
+        {
+            return Err(eyre!(
+                "Observable '{}' does not support misbinning mitigation.",
+                observable_name
+            ));
+        }
 
-        Self {
+        Ok(Self {
             definition,
             entry_selection: settings.entry_selection,
             entry_index: settings.entry_index,
@@ -1515,6 +1721,7 @@ impl HistogramObservable {
                 observable_name.to_string(),
                 settings.phase,
                 settings.value_transform,
+                supports_misbinning_mitigation,
                 x_min,
                 x_max,
                 settings.histogram.log_x_axis,
@@ -1528,7 +1735,7 @@ impl HistogramObservable {
             grouped_underflow: GroupBinContribution::default(),
             grouped_overflow: GroupBinContribution::default(),
             touched_bins: Vec::with_capacity(n_bins.min(16)),
-        }
+        })
     }
 
     fn build_group_contributions<T: FloatLike>(&mut self, event_group: &GenericEventGroup<T>) {
@@ -1779,10 +1986,11 @@ pub enum Observables {
 }
 
 impl Observables {
-    pub(crate) fn from_settings(
+    fn from_settings(
         name: &str,
         settings: &ObservableSettings,
         quantities: &QuantitiesSettings,
+        clustering_registry: &mut CompiledClusteringRegistry,
     ) -> Result<Self> {
         let quantity = quantities.get(&settings.quantity).ok_or_else(|| {
             eyre!(
@@ -1793,11 +2001,11 @@ impl Observables {
         })?;
 
         Ok(Observables::Histogram(HistogramObservable::new(
-            ObservableDefinition::from_settings(quantity),
+            ObservableDefinition::from_settings(quantity, clustering_registry),
             quantity,
             name,
             settings,
-        )))
+        )?))
     }
 
     pub(crate) fn process_event_groups<T: FloatLike>(
@@ -1812,6 +2020,14 @@ impl Observables {
     pub(crate) fn merge_samples(&mut self, other: &mut Observables) -> Result<()> {
         match (self, other) {
             (Observables::Histogram(lhs), Observables::Histogram(rhs)) => lhs.merge_samples(rhs),
+        }
+    }
+
+    pub(crate) fn required_clustering_handle(&self) -> Option<ClusteringHandle> {
+        match self {
+            Observables::Histogram(observable) => {
+                observable.definition.required_clustering_handle()
+            }
         }
     }
 

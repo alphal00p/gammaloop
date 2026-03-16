@@ -844,11 +844,11 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             let mut accepted_event = event;
             let mut selectors_pass = true;
-            if let Some(evt) = accepted_event.as_ref() {
+            if let Some(evt) = accepted_event.as_mut() {
                 differential_result.generated_event_count += 1;
                 let start = Instant::now();
                 if let Some(runtime) = event_processing_runtime.as_deref_mut() {
-                    if runtime.has_selectors() {
+                    if runtime.has_selectors() || runtime.has_observables() {
                         selectors_pass = runtime.process_event(evt);
                     }
                 }

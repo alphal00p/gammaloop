@@ -1,3 +1,4 @@
+use super::clustering::ClusteringResult;
 use crate::momentum::FourMomentum;
 use crate::utils::{F, FloatLike, into_complex_ff64};
 use colored::Colorize;
@@ -22,6 +23,33 @@ pub struct CutInfo {
 pub type Event = GenericEvent<f64>;
 pub type EventGroup = GenericEventGroup<f64>;
 pub type EventGroupList = GenericEventGroupList<f64>;
+
+#[derive(Default, Debug, Clone)]
+pub struct GenericDerivedEventData<T: FloatLike> {
+    pub clustered_jets: Vec<Option<ClusteringResult<T>>>,
+}
+
+impl<T: FloatLike> GenericDerivedEventData<T> {
+    pub fn to_f64(&self) -> GenericDerivedEventData<f64> {
+        GenericDerivedEventData {
+            clustered_jets: self
+                .clustered_jets
+                .iter()
+                .map(|result| result.as_ref().map(ClusteringResult::to_f64))
+                .collect(),
+        }
+    }
+
+    pub fn from_f64(data: &GenericDerivedEventData<f64>) -> Self {
+        GenericDerivedEventData {
+            clustered_jets: data
+                .clustered_jets
+                .iter()
+                .map(|result| result.as_ref().map(ClusteringResult::from_f64))
+                .collect(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum AdditionalWeightKey {
@@ -138,9 +166,26 @@ pub struct GenericEvent<T: FloatLike> {
     pub weight: Complex<F<T>>,
     // Contains additional partial weights for future use to do post-processing reweighting.
     pub additional_weights: GenericAdditionalWeightInfo<T>,
+    #[serde(skip)]
+    pub derived_observable_data: GenericDerivedEventData<T>,
 }
 
 impl<T: FloatLike> GenericEvent<T> {
+    pub fn ensure_clustering_slots(&mut self, n_clusterings: usize) {
+        if self.derived_observable_data.clustered_jets.len() < n_clusterings {
+            self.derived_observable_data
+                .clustered_jets
+                .resize_with(n_clusterings, || None);
+        }
+    }
+
+    pub fn cached_clustering(&self, handle: usize) -> Option<&ClusteringResult<T>> {
+        self.derived_observable_data
+            .clustered_jets
+            .get(handle)
+            .and_then(|result| result.as_ref())
+    }
+
     pub fn to_f64(&self) -> Event {
         GenericEvent {
             kinematic_configuration: (
@@ -158,6 +203,7 @@ impl<T: FloatLike> GenericEvent<T> {
             cut_info: self.cut_info.clone(),
             weight: into_complex_ff64(&self.weight),
             additional_weights: self.additional_weights.to_f64(),
+            derived_observable_data: self.derived_observable_data.to_f64(),
         }
     }
 
@@ -180,6 +226,9 @@ impl<T: FloatLike> GenericEvent<T> {
             cut_info: event.cut_info.clone(),
             weight: Complex::new(F::from_ff64(event.weight.re), F::from_ff64(event.weight.im)),
             additional_weights: GenericAdditionalWeightInfo::from_f64(&event.additional_weights),
+            derived_observable_data: GenericDerivedEventData::from_f64(
+                &event.derived_observable_data,
+            ),
         }
     }
 }
@@ -295,7 +344,9 @@ fn format_momentum_rows<T: FloatLike>(
             px: format_real_generic(&momentum.spatial.px),
             py: format_real_generic(&momentum.spatial.py),
             pz: format_real_generic(&momentum.spatial.pz),
-            p2: format_real_generic(&momentum_mass_squared(momentum)),
+            p2: format_real_generic(&momentum_mass_squared(momentum))
+                .bright_yellow()
+                .to_string(),
         })
         .collect()
 }
@@ -352,11 +403,19 @@ fn conservation_row<T: FloatLike>(event: &GenericEvent<T>) -> MomentumRow {
     MomentumRow {
         state: "CHECK".bold().bright_yellow().to_string(),
         pdg: "N/A".bright_yellow().to_string(),
-        e: format_real_generic(&delta.temporal.value),
-        px: format_real_generic(&delta.spatial.px),
-        py: format_real_generic(&delta.spatial.py),
-        pz: format_real_generic(&delta.spatial.pz),
-        p2: String::new(),
+        e: format_real_generic(&delta.temporal.value)
+            .bright_yellow()
+            .to_string(),
+        px: format_real_generic(&delta.spatial.px)
+            .bright_yellow()
+            .to_string(),
+        py: format_real_generic(&delta.spatial.py)
+            .bright_yellow()
+            .to_string(),
+        pz: format_real_generic(&delta.spatial.pz)
+            .bright_yellow()
+            .to_string(),
+        p2: String::new().bright_yellow().to_string(),
     }
 }
 
@@ -466,17 +525,17 @@ impl<T: FloatLike> fmt::Display for GenericEvent<T> {
                     f,
                     "{}",
                     Table::new(momentum_rows).with(Style::rounded().horizontals([
-                        header_separator,
-                        in_out_separator,
-                        check_separator,
-                    ]))
+                                header_separator,
+                                in_out_separator,
+                                check_separator,
+                            ]))
                 )?;
             } else {
                 writeln!(
                     f,
                     "{}",
                     Table::new(momentum_rows)
-                        .with(Style::rounded().horizontals([header_separator, check_separator]))
+                            .with(Style::rounded().horizontals([header_separator, check_separator]))
                 )?;
             }
         }

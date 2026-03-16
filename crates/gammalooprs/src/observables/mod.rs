@@ -8,13 +8,13 @@ pub use events::{
     GenericEvent, GenericEventGroup, GenericEventGroupList,
 };
 pub use observables::{
-    ConfiguredSelector, CountRangeSelectorSettings, EntrySelection, EventProcessingRuntime,
-    EventSelector, FilterQuantity, HistogramAccumulatorState, HistogramBinSnapshot,
-    HistogramObservable, HistogramSettings, HistogramSnapshot, HistogramStatisticsSnapshot,
-    JetClusteringSettings, JetPtQuantitySettings, Observable, ObservableAccumulatorBundle,
+    CountRangeSelectorSettings, EntrySelection, EventProcessingRuntime, FilterQuantity,
+    HistogramAccumulatorState, HistogramBinSnapshot, HistogramObservable, HistogramSettings,
+    HistogramSnapshot, HistogramStatisticsSnapshot, JetClusteringSettings,
+    JetCountQuantitySettings, JetPtQuantitySettings, Observable, ObservableAccumulatorBundle,
     ObservableBinAccumulator, ObservableFileFormat, ObservableHistogramStatistics, ObservablePhase,
     ObservableSettings, ObservableSnapshotBundle, ObservableValueTransform, Observables,
     ObservablesSettings, ParticleScalarQuantitySettings, QuantitiesSettings, QuantitySettings,
-    SelectorDefinitionSettings, SelectorReduction, SelectorSettings, Selectors, SelectorsSettings,
+    SelectorDefinitionSettings, SelectorReduction, SelectorSettings, SelectorsSettings,
     ValueRangeSelectorSettings,
 };

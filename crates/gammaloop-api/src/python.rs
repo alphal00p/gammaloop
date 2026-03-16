@@ -176,6 +176,7 @@ pub struct PyHistogramSnapshot {
     pub title: String,
     pub phase: String,
     pub value_transform: String,
+    pub supports_misbinning_mitigation: bool,
     pub x_min: f64,
     pub x_max: f64,
     pub sample_count: usize,
@@ -494,6 +495,7 @@ fn event_from_py_event(event: &PyEvent) -> Event {
         additional_weights: GenericAdditionalWeightInfo {
             weights: additional_weights,
         },
+        derived_observable_data: Default::default(),
     }
 }
 
@@ -514,6 +516,7 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
         title: snapshot.title,
         phase: format!("{:?}", snapshot.phase).to_lowercase(),
         value_transform: format!("{:?}", snapshot.value_transform).to_lowercase(),
+        supports_misbinning_mitigation: snapshot.supports_misbinning_mitigation,
         x_min: snapshot.x_min,
         x_max: snapshot.x_max,
         sample_count: snapshot.sample_count,
