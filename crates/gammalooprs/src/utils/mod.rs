@@ -3484,16 +3484,24 @@ pub(crate) fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String
 
 #[allow(unused)]
 pub(crate) fn format_evaluation_time(time: Duration) -> String {
-    let time_secs = time.as_secs_f64();
-    if time_secs < 1e-6 {
-        format!("{} ns", time.as_nanos())
-    } else if time_secs < 1e-3 {
-        format!("{:.2} µs", (time.as_nanos() as f64) / 1000.)
-    } else if time_secs < 1.0 {
-        format!("{:.2} ms", (time.as_micros() as f64) / 1000.)
+    let seconds = time.as_secs_f64();
+    let (value, unit) = if seconds >= 1.0 {
+        (seconds, "s")
+    } else if seconds >= 1.0e-3 {
+        (seconds * 1.0e3, "ms")
     } else {
-        format!("{:.2} s", (time.as_millis() as f64) / 1000.)
-    }
+        (seconds * 1.0e6, "µs")
+    };
+
+    let precision = if value >= 100.0 {
+        0
+    } else if value >= 10.0 {
+        1
+    } else {
+        2
+    };
+
+    format!("{value:.precision$} {unit}")
 }
 
 pub(crate) fn format_evaluation_time_from_f64(time: f64) -> String {

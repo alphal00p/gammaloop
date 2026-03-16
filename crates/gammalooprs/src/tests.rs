@@ -7,7 +7,6 @@ use crate::{
     integrands::builtin::h_function::HFunctionTestSettings, settings::RuntimeSettings,
     settings::runtime::IntegratedPhase,
 };
-use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
 use color_eyre::Result;
 use colored::Colorize;
 // use hyperdual::Zero;
@@ -69,6 +68,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
+                true,
             )?;
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.re - res.result.re)
@@ -93,6 +93,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
+                true,
             )?;
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.re - res.result.im)
@@ -119,6 +120,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
+                true,
             )?;
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.im - res.result.re)
@@ -145,6 +147,7 @@ fn compare_integration(
                 Some(target),
                 None,
                 None,
+                true,
             )?;
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.im - res.result.im)
