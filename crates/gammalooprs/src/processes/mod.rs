@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -98,7 +98,10 @@ pub struct ProcessList {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub struct DotExportSettings {
     // pub root_folder: PathBuf,
     pub combine_diagrams: bool,
@@ -110,7 +113,10 @@ pub struct DotExportSettings {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub struct StandaloneExportSettings {
     #[serde(default)]
     pub mode: StandaloneExportMode,
@@ -118,7 +124,7 @@ pub struct StandaloneExportSettings {
     pub format: StandaloneDataFormat,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
@@ -129,7 +135,7 @@ pub enum StandaloneExportMode {
     Python,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
 )]
