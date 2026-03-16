@@ -148,7 +148,7 @@ fn run_without_arguments_is_a_noop() -> Result<()> {
 
 fn run_records_only_the_wrapper_command() -> Result<()> {
     let mut cli = new_cli("run_records_only_the_wrapper_command")?;
-    cli.run_history.commands_blocks = vec![
+    cli.run_history.command_blocks = vec![
         block(
             "set_display",
             &["set global kv global.display_directive=warn"],
@@ -192,7 +192,7 @@ fn run_prevalidation_is_all_or_nothing_for_inline_commands() -> Result<()> {
 fn run_prevalidation_is_all_or_nothing_for_nested_block_failures() -> Result<()> {
     let mut cli = new_cli("run_prevalidation_is_all_or_nothing_for_nested_block_failures")?;
     let original_display = cli.cli_settings.global.display_directive.clone();
-    cli.run_history.commands_blocks = vec![
+    cli.run_history.command_blocks = vec![
         block("first", &["set global kv global.display_directive=warn"]),
         block("broken", &["run missing_block"]),
     ];
@@ -209,7 +209,7 @@ fn run_prevalidation_is_all_or_nothing_for_nested_block_failures() -> Result<()>
 
 fn nested_run_records_only_the_top_level_run() -> Result<()> {
     let mut cli = new_cli("nested_run_records_only_the_top_level_run")?;
-    cli.run_history.commands_blocks = vec![
+    cli.run_history.command_blocks = vec![
         block("inner", &["set global kv global.display_directive=warn"]),
         block("outer", &["run inner"]),
     ];
@@ -233,7 +233,7 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
             ..CLISettings::default()
         },
         default_runtime_settings: frozen_runtime.clone(),
-        commands_blocks: vec![block(
+        command_blocks: vec![block(
             "boot_block",
             &["set global kv global.display_directive=warn"],
         )],
@@ -249,13 +249,13 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     assert!(matches!(flow, ControlFlow::Continue(())));
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
     assert_eq!(cli.default_runtime_settings.general.mu_r_sq, 24.0);
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert_eq!(history_strings(&cli.run_history).len(), 2);
 
     cli.save_state()?;
 
     let persisted = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
-    assert_eq!(persisted.commands_blocks.len(), 1);
+    assert_eq!(persisted.command_blocks.len(), 1);
     assert_eq!(persisted.commands.len(), 2);
     assert_eq!(persisted.cli_settings.global, frozen_global);
     assert_eq!(persisted.default_runtime_settings, frozen_runtime);
@@ -264,12 +264,12 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
 
 fn boot_run_history_rejects_conflicting_block_redefinitions() -> Result<()> {
     let mut cli = new_cli("boot_run_history_rejects_conflicting_block_redefinitions")?;
-    cli.run_history.commands_blocks = vec![block(
+    cli.run_history.command_blocks = vec![block(
         "shared",
         &["set global kv global.display_directive=warn"],
     )];
     let boot_run_history = RunHistory {
-        commands_blocks: vec![block(
+        command_blocks: vec![block(
             "shared",
             &["set global kv global.display_directive=error"],
         )],
@@ -280,19 +280,19 @@ fn boot_run_history_rejects_conflicting_block_redefinitions() -> Result<()> {
     let error_text = format!("{err:?}");
 
     assert!(error_text.contains("redefines an existing block with different commands"));
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert!(cli.run_history.commands.is_empty());
     Ok(())
 }
 
 fn boot_run_history_allows_identical_semantic_redefinitions() -> Result<()> {
     let mut cli = new_cli("boot_run_history_allows_identical_semantic_redefinitions")?;
-    cli.run_history.commands_blocks = vec![block(
+    cli.run_history.command_blocks = vec![block(
         "shared",
         &["set global kv global.display_directive=warn"],
     )];
     let boot_run_history = RunHistory {
-        commands_blocks: vec![CommandsBlock {
+        command_blocks: vec![CommandsBlock {
             name: "shared".to_string(),
             commands: vec![CommandHistory::new_with_raw(
                 command("set global kv global.display_directive=warn").command,
@@ -305,7 +305,7 @@ fn boot_run_history_allows_identical_semantic_redefinitions() -> Result<()> {
     let flow = cli.apply_boot_run_history(&boot_run_history)?;
 
     assert!(matches!(flow, ControlFlow::Continue(())));
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert!(cli.run_history.commands.is_empty());
     Ok(())
 }
@@ -379,8 +379,8 @@ fn command_block_definition_mode_defers_execution_and_omits_history() -> Result<
 
     cli.run_command("finish_commands_block")?;
 
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
-    assert_eq!(cli.run_history.commands_blocks[0].name, "demo");
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks[0].name, "demo");
     assert!(cli.run_history.commands.is_empty());
 
     cli.run_command("run demo")?;
@@ -411,8 +411,8 @@ fn start_commands_block_cannot_nest() -> Result<()> {
 
     cli.run_command("finish_commands_block")?;
 
-    assert_eq!(cli.run_history.commands_blocks.len(), 1);
-    assert_eq!(cli.run_history.commands_blocks[0].name, "first");
+    assert_eq!(cli.run_history.command_blocks.len(), 1);
+    assert_eq!(cli.run_history.command_blocks[0].name, "first");
     Ok(())
 }
 
@@ -425,7 +425,7 @@ fn quit_during_block_definition_dismisses_the_pending_block() -> Result<()> {
     let flow = cli.run_command_flow("quit -o")?;
 
     assert!(matches!(flow, ControlFlow::Continue(())));
-    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.command_blocks.is_empty());
     assert!(cli.run_history.commands.is_empty());
 
     let err = cli.run_command("finish_commands_block").unwrap_err();
@@ -440,7 +440,7 @@ fn ctrl_c_dismisses_pending_block_definition() -> Result<()> {
     cli.run_command("set global kv global.display_directive=warn")?;
 
     assert!(cli.dismiss_pending_commands_block("Ctrl-C"));
-    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.command_blocks.is_empty());
     assert!(cli.run_history.commands.is_empty());
     Ok(())
 }
@@ -452,14 +452,14 @@ fn ctrl_d_dismisses_pending_block_definition() -> Result<()> {
     cli.run_command("set global kv global.display_directive=warn")?;
 
     assert!(cli.dismiss_pending_commands_block("Ctrl-D"));
-    assert!(cli.run_history.commands_blocks.is_empty());
+    assert!(cli.run_history.command_blocks.is_empty());
     assert!(cli.run_history.commands.is_empty());
     Ok(())
 }
 
 fn recursive_run_limit_is_enforced() -> Result<()> {
     let mut cli = new_cli("recursive_run_limit_is_enforced")?;
-    cli.run_history.commands_blocks = vec![block("loop", &["run loop"])];
+    cli.run_history.command_blocks = vec![block("loop", &["run loop"])];
 
     let err = cli.run_command("run loop").unwrap_err();
     let error_text = format!("{err:?}");
@@ -581,7 +581,7 @@ fn run_history_load_reports_block_command_context() {
     fs::write(
         &run_card_path,
         r#"
-[[commands_blocks]]
+[[command_blocks]]
 name = "demo"
 commands = ["no_such_command"]
 "#,

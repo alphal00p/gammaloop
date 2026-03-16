@@ -9,7 +9,7 @@
         "$ref": "#/$defs/CommandHistory"
       }
     },
-    "commands_blocks": {
+    "command_blocks": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/CommandsBlock"
