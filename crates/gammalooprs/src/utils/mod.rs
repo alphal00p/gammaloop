@@ -1345,6 +1345,22 @@ impl<T: FloatLike> F<T> {
         F(T::from_f64(x.0))
     }
 
+    pub(crate) fn zero(&self) -> Self {
+        F(self.0.zero())
+    }
+
+    pub(crate) fn one(&self) -> Self {
+        F(self.0.one())
+    }
+
+    pub(crate) fn from_usize(&self, x: usize) -> Self {
+        F(self.0.from_usize(x))
+    }
+
+    pub(crate) fn from_i64(&self, x: i64) -> Self {
+        F(self.0.from_i64(x))
+    }
+
     pub(crate) fn higher(&self) -> F<T::Higher>
     where
         T::Higher: FloatLike,
@@ -1447,6 +1463,9 @@ impl<T: FloatLike> F<T> {
     }
     pub(crate) fn ln(&self) -> Self {
         F(self.0.ln())
+    }
+    pub(crate) fn inv(&self) -> Self {
+        F(self.0.inv())
     }
     pub(crate) fn is_nan(&self) -> bool {
         self.0.is_nan()

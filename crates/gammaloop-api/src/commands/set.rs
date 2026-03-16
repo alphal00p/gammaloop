@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, str::FromStr};
+use std::{collections::BTreeMap, fs, path::PathBuf, str::FromStr};
 
 use clap::Subcommand;
 use color_eyre::Result;
@@ -9,12 +9,19 @@ use figment::{
 };
 use gammalooprs::{
     model::{ParameterNature, ParameterType, UFOSymbol},
+    observables::{
+        CountRangeSelectorSettings, EntrySelection, FilterQuantity, HistogramSettings,
+        JetClusteringSettings, JetPtQuantitySettings, ObservablePhase, ObservableSettings,
+        ObservableValueTransform, ParticleScalarQuantitySettings, QuantitySettings,
+        SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
+        ValueRangeSelectorSettings,
+    },
     processes::ProcessCollection,
     settings::RuntimeSettings,
     utils::F,
 };
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use spenso::algebra::complex::Complex;
 use tracing::warn;
@@ -173,7 +180,7 @@ pub enum Set {
     /// Set settings for a PROCESS
     Process {
         #[command(subcommand)]
-        input: SetArgs,
+        input: ProcessSetArgs,
         #[command(flatten)]
         process: ProcessArgs,
     },
@@ -269,16 +276,8 @@ impl Set {
             }
             Self::Process { input, process } => {
                 let process_id = state.resolve_process_ref(process.process.as_ref())?;
-                let default_runtime_template =
-                    matches!(input, SetArgs::Defaults).then(|| default_runtime_settings.clone());
                 let apply_runtime_settings = |settings: &mut RuntimeSettings| -> Result<()> {
-                    if let Some(template) = default_runtime_template.as_ref() {
-                        *settings = template.clone();
-                    } else {
-                        let fig = Figment::from(Serialized::defaults(&settings));
-                        *settings = input.merge_figment(fig)?.extract()?;
-                    }
-                    Ok(())
+                    apply_process_set_args(input, settings, default_runtime_settings)
                 };
 
                 if let Some(name) = &process.integrand_name {
@@ -340,6 +339,137 @@ pub enum SetArgs {
 
     /// Use the stored settings file
     Stored,
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessSetArgs {
+    /// Load from a settings file
+    File {
+        #[arg(value_hint = clap::ValueHint::FilePath)]
+        file: PathBuf,
+    },
+
+    /// Load settings from TOML content passed as a CLI string
+    String {
+        #[arg(value_name = "TOML")]
+        string: String,
+    },
+
+    /// Set one or more dotted key-paths
+    Kv {
+        /// Any number of KEY=VALUE pairs
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+
+    /// Sync process runtime settings from the current default runtime settings
+    Defaults,
+
+    /// Use the stored settings file
+    Stored,
+
+    /// Add a named quantity/observable/selector
+    Add {
+        #[command(subcommand)]
+        target: ProcessAddTarget,
+    },
+
+    /// Update a named quantity/observable/selector
+    Update {
+        #[command(subcommand)]
+        target: ProcessUpdateTarget,
+    },
+
+    /// Remove a named quantity/observable/selector
+    Remove {
+        #[command(subcommand)]
+        target: ProcessRemoveTarget,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub enum QuantityTemplateKind {
+    ParticleScalar,
+    JetPt,
+    AFB,
+    CrossSection,
+}
+
+fn parse_quantity_template_kind(raw: &str) -> std::result::Result<QuantityTemplateKind, String> {
+    match raw {
+        "particle_scalar" => Ok(QuantityTemplateKind::ParticleScalar),
+        "jet_pt" => Ok(QuantityTemplateKind::JetPt),
+        "afb" => Ok(QuantityTemplateKind::AFB),
+        "cross_section" => Ok(QuantityTemplateKind::CrossSection),
+        other => Err(format!(
+            "Unknown quantity kind '{other}', expected one of: particle_scalar, jet_pt, afb, cross_section"
+        )),
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub enum SelectorTemplateKind {
+    ValueRange,
+    CountRange,
+}
+
+fn parse_selector_template_kind(raw: &str) -> std::result::Result<SelectorTemplateKind, String> {
+    match raw {
+        "value_range" => Ok(SelectorTemplateKind::ValueRange),
+        "count_range" => Ok(SelectorTemplateKind::CountRange),
+        other => Err(format!(
+            "Unknown selector kind '{other}', expected one of: value_range, count_range"
+        )),
+    }
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessAddTarget {
+    Quantity {
+        name: String,
+        #[arg(value_parser = parse_quantity_template_kind)]
+        kind: QuantityTemplateKind,
+        #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Observable {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Selector {
+        name: String,
+        #[arg(value_parser = parse_selector_template_kind)]
+        kind: SelectorTemplateKind,
+        #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessUpdateTarget {
+    Quantity {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Observable {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+    Selector {
+        name: String,
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ProcessRemoveTarget {
+    Quantity { name: String },
+    Observable { name: String },
+    Selector { name: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -450,6 +580,219 @@ impl SetArgs {
     }
 }
 
+impl ProcessSetArgs {
+    fn as_set_args(&self) -> Option<SetArgs> {
+        match self {
+            ProcessSetArgs::File { file } => Some(SetArgs::File { file: file.clone() }),
+            ProcessSetArgs::String { string } => Some(SetArgs::String {
+                string: string.clone(),
+            }),
+            ProcessSetArgs::Kv { pairs } => Some(SetArgs::Kv {
+                pairs: pairs.clone(),
+            }),
+            ProcessSetArgs::Defaults => Some(SetArgs::Defaults),
+            ProcessSetArgs::Stored => Some(SetArgs::Stored),
+            ProcessSetArgs::Add { .. }
+            | ProcessSetArgs::Update { .. }
+            | ProcessSetArgs::Remove { .. } => None,
+        }
+    }
+}
+
+fn apply_process_set_args(
+    input: &ProcessSetArgs,
+    settings: &mut RuntimeSettings,
+    default_runtime_settings: &RuntimeSettings,
+) -> Result<()> {
+    match input {
+        ProcessSetArgs::Add { target } => apply_process_add_target(settings, target),
+        ProcessSetArgs::Update { target } => apply_process_update_target(settings, target),
+        ProcessSetArgs::Remove { target } => apply_process_remove_target(settings, target),
+        ProcessSetArgs::Defaults => {
+            *settings = default_runtime_settings.clone();
+            Ok(())
+        }
+        _ => {
+            let fig = Figment::from(Serialized::defaults(&settings));
+            let input = input
+                .as_set_args()
+                .expect("non-mutation process set args should convert to SetArgs");
+            *settings = input.merge_figment(fig)?.extract()?;
+            Ok(())
+        }
+    }
+}
+
+fn apply_process_add_target(
+    settings: &mut RuntimeSettings,
+    target: &ProcessAddTarget,
+) -> Result<()> {
+    match target {
+        ProcessAddTarget::Quantity { name, kind, pairs } => {
+            let entry = merge_named_settings(
+                &quantity_template(*kind),
+                pairs,
+                &format!("new quantity '{name}'"),
+            )?;
+            add_named_map_entry(&mut settings.quantities, name, entry, "quantity")
+        }
+        ProcessAddTarget::Observable { name, pairs } => {
+            let entry = merge_named_settings(
+                &observable_template(),
+                pairs,
+                &format!("new observable '{name}'"),
+            )?;
+            add_named_map_entry(&mut settings.observables, name, entry, "observable")
+        }
+        ProcessAddTarget::Selector { name, kind, pairs } => {
+            let entry = merge_named_settings(
+                &selector_template(*kind),
+                pairs,
+                &format!("new selector '{name}'"),
+            )?;
+            add_named_map_entry(&mut settings.selectors, name, entry, "selector")
+        }
+    }
+}
+
+fn apply_process_update_target(
+    settings: &mut RuntimeSettings,
+    target: &ProcessUpdateTarget,
+) -> Result<()> {
+    match target {
+        ProcessUpdateTarget::Quantity { name, pairs } => {
+            update_named_map_entry(&mut settings.quantities, name, pairs, "quantity")
+        }
+        ProcessUpdateTarget::Observable { name, pairs } => {
+            update_named_map_entry(&mut settings.observables, name, pairs, "observable")
+        }
+        ProcessUpdateTarget::Selector { name, pairs } => {
+            update_named_map_entry(&mut settings.selectors, name, pairs, "selector")
+        }
+    }
+}
+
+fn apply_process_remove_target(
+    settings: &mut RuntimeSettings,
+    target: &ProcessRemoveTarget,
+) -> Result<()> {
+    match target {
+        ProcessRemoveTarget::Quantity { name } => {
+            remove_named_map_entry(&mut settings.quantities, name, "quantity")
+        }
+        ProcessRemoveTarget::Observable { name } => {
+            remove_named_map_entry(&mut settings.observables, name, "observable")
+        }
+        ProcessRemoveTarget::Selector { name } => {
+            remove_named_map_entry(&mut settings.selectors, name, "selector")
+        }
+    }
+}
+
+fn merge_named_settings<T>(base: &T, pairs: &[KvPair], label: &str) -> Result<T>
+where
+    T: Serialize + DeserializeOwned,
+{
+    let fig = Figment::from(Serialized::defaults(base));
+    SetArgs::Kv {
+        pairs: pairs.to_vec(),
+    }
+    .merge_figment(fig)?
+    .extract()
+    .with_context(|| format!("While building {label}"))
+}
+
+fn add_named_map_entry<T>(
+    map: &mut BTreeMap<String, T>,
+    name: &str,
+    entry: T,
+    label: &str,
+) -> Result<()> {
+    if map.contains_key(name) {
+        return Err(eyre!("A {label} named '{name}' already exists"));
+    }
+    map.insert(name.to_string(), entry);
+    Ok(())
+}
+
+fn update_named_map_entry<T>(
+    map: &mut BTreeMap<String, T>,
+    name: &str,
+    pairs: &[KvPair],
+    label: &str,
+) -> Result<()>
+where
+    T: Clone + Serialize + DeserializeOwned,
+{
+    let current = map
+        .get(name)
+        .cloned()
+        .ok_or_else(|| eyre!("No {label} named '{name}'"))?;
+    let updated = merge_named_settings(&current, pairs, &format!("{label} '{name}'"))?;
+    map.insert(name.to_string(), updated);
+    Ok(())
+}
+
+fn remove_named_map_entry<T>(map: &mut BTreeMap<String, T>, name: &str, label: &str) -> Result<()> {
+    if map.remove(name).is_none() {
+        return Err(eyre!("No {label} named '{name}'"));
+    }
+    Ok(())
+}
+
+fn quantity_template(kind: QuantityTemplateKind) -> QuantitySettings {
+    match kind {
+        QuantityTemplateKind::ParticleScalar => {
+            QuantitySettings::ParticleScalar(ParticleScalarQuantitySettings {
+                pdgs: Vec::new(),
+                quantity: FilterQuantity::PT,
+            })
+        }
+        QuantityTemplateKind::JetPt => QuantitySettings::JetPt(JetPtQuantitySettings {
+            clustering: JetClusteringSettings::default(),
+        }),
+        QuantityTemplateKind::AFB => QuantitySettings::AFB {},
+        QuantityTemplateKind::CrossSection => QuantitySettings::CrossSection {},
+    }
+}
+
+fn selector_template(kind: SelectorTemplateKind) -> SelectorSettings {
+    let selector = match kind {
+        SelectorTemplateKind::ValueRange => {
+            SelectorDefinitionSettings::ValueRange(ValueRangeSelectorSettings {
+                min: 0.0,
+                max: None,
+                reduction: SelectorReduction::AnyInRange,
+            })
+        }
+        SelectorTemplateKind::CountRange => {
+            SelectorDefinitionSettings::CountRange(CountRangeSelectorSettings {
+                min_count: 0,
+                max_count: None,
+            })
+        }
+    };
+
+    SelectorSettings {
+        quantity: String::new(),
+        entry_selection: EntrySelection::All,
+        entry_index: 0,
+        selector,
+    }
+}
+
+fn observable_template() -> ObservableSettings {
+    ObservableSettings {
+        quantity: String::new(),
+        entry_selection: EntrySelection::All,
+        entry_index: 0,
+        value_transform: ObservableValueTransform::Identity,
+        phase: ObservablePhase::Real,
+        misbinning_max_normalized_distance: None,
+        histogram: HistogramSettings::default(),
+    }
+}
+
 use serde_json::Value as J;
 use serde_yaml::Value as Y;
 
@@ -515,6 +858,7 @@ mod test {
     use figment::{providers::Serialized, Figment};
     use gammalooprs::{
         model::{ParameterNature, ParameterType, UFOSymbol},
+        observables::{FilterQuantity, QuantitySettings},
         settings::RuntimeSettings,
         utils::{test_utils::load_generic_model, F},
     };
@@ -528,8 +872,9 @@ mod test {
     };
 
     use super::{
-        super::Commands, model_value_format_hint, validate_model_parameter_type, KvPair, Set,
-        SetArgs,
+        super::Commands, apply_process_set_args, model_value_format_hint,
+        validate_model_parameter_type, KvPair, ProcessAddTarget, ProcessRemoveTarget,
+        ProcessSetArgs, ProcessUpdateTarget, Set, SetArgs,
     };
     use super::{
         parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT, MODEL_REAL_VALUE_FORMAT_HINT,
@@ -614,7 +959,7 @@ mod test {
 
         match cmd {
             Set::Process { input, process } => {
-                assert_eq!(input, SetArgs::Defaults);
+                assert_eq!(input, ProcessSetArgs::Defaults);
                 assert_eq!(
                     process.process,
                     Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
@@ -657,7 +1002,7 @@ mod test {
             Set::Process { input, process } => {
                 assert_eq!(
                     input,
-                    SetArgs::String {
+                    ProcessSetArgs::String {
                         string: "alpha = 2".to_string()
                     }
                 );
@@ -696,13 +1041,200 @@ mod test {
             Set::Process { input, .. } => {
                 assert_eq!(
                     input,
-                    SetArgs::String {
+                    ProcessSetArgs::String {
                         string: multiline.to_string()
                     }
                 );
             }
             other => panic!("Expected set process command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_set_process_add_quantity() {
+        let cmd = Set::from_str(
+            "set process -p epem_a_tth -i LO add quantity top_pt particle_scalar quantity=PT",
+        )
+        .unwrap();
+
+        match cmd {
+            Set::Process { input, process } => {
+                assert_eq!(
+                    input,
+                    ProcessSetArgs::Add {
+                        target: ProcessAddTarget::Quantity {
+                            name: "top_pt".to_string(),
+                            kind: super::QuantityTemplateKind::ParticleScalar,
+                            pairs: vec![KvPair {
+                                key: "quantity".to_string(),
+                                value: "PT".to_string(),
+                            }],
+                        }
+                    }
+                );
+                assert_eq!(
+                    process.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(process.integrand_name, Some("LO".to_string()));
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_process_update_observable() {
+        let cmd = Set::from_str(
+            "set process -p epem_a_tth -i LO update observable top_pt_hist n_bins=100",
+        )
+        .unwrap();
+
+        match cmd {
+            Set::Process { input, .. } => {
+                assert_eq!(
+                    input,
+                    ProcessSetArgs::Update {
+                        target: ProcessUpdateTarget::Observable {
+                            name: "top_pt_hist".to_string(),
+                            pairs: vec![KvPair {
+                                key: "n_bins".to_string(),
+                                value: "100".to_string(),
+                            }],
+                        }
+                    }
+                );
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_process_remove_selector() {
+        let cmd = Set::from_str("set process -p epem_a_tth -i LO remove selector top_cut").unwrap();
+
+        match cmd {
+            Set::Process { input, .. } => {
+                assert_eq!(
+                    input,
+                    ProcessSetArgs::Remove {
+                        target: ProcessRemoveTarget::Selector {
+                            name: "top_cut".to_string(),
+                        }
+                    }
+                );
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn process_named_settings_mutations_update_runtime_maps() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "top_pt".to_string(),
+                    kind: super::QuantityTemplateKind::ParticleScalar,
+                    pairs: vec![
+                        KvPair {
+                            key: "pdgs".to_string(),
+                            value: "[6,-6]".to_string(),
+                        },
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "PT".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+        )
+        .unwrap();
+
+        let quantity = settings
+            .quantities
+            .get("top_pt")
+            .expect("quantity should have been inserted");
+        match quantity {
+            QuantitySettings::ParticleScalar(particle) => {
+                assert_eq!(particle.pdgs, vec![6, -6]);
+                assert_eq!(particle.quantity, FilterQuantity::PT);
+            }
+            other => panic!("Expected particle-scalar quantity, got {other:?}"),
+        }
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Observable {
+                    name: "top_pt_hist".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "top_pt".to_string(),
+                        },
+                        KvPair {
+                            key: "x_max".to_string(),
+                            value: "500.0".to_string(),
+                        },
+                        KvPair {
+                            key: "n_bins".to_string(),
+                            value: "50".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+        )
+        .unwrap();
+        assert_eq!(
+            settings
+                .observables
+                .get("top_pt_hist")
+                .expect("observable should have been inserted")
+                .histogram
+                .n_bins,
+            50
+        );
+
+        apply_process_set_args(
+            &ProcessSetArgs::Update {
+                target: ProcessUpdateTarget::Observable {
+                    name: "top_pt_hist".to_string(),
+                    pairs: vec![KvPair {
+                        key: "n_bins".to_string(),
+                        value: "80".to_string(),
+                    }],
+                },
+            },
+            &mut settings,
+            &defaults,
+        )
+        .unwrap();
+        assert_eq!(
+            settings
+                .observables
+                .get("top_pt_hist")
+                .expect("observable should still exist")
+                .histogram
+                .n_bins,
+            80
+        );
+
+        apply_process_set_args(
+            &ProcessSetArgs::Remove {
+                target: ProcessRemoveTarget::Quantity {
+                    name: "top_pt".to_string(),
+                },
+            },
+            &mut settings,
+            &defaults,
+        )
+        .unwrap();
+        assert!(!settings.quantities.contains_key("top_pt"));
     }
 
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

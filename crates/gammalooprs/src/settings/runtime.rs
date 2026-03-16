@@ -17,6 +17,7 @@ use crate::{
     momentum::RotationMethod,
     momentum::sample::ExternalIndex,
     momentum::signature::SignatureLike,
+    observables::ObservableFileFormat,
     settings::runtime::kinematic::Externals,
     settings::runtime::kinematic::improvement::generate_default_momenta,
     utils::{
@@ -185,6 +186,25 @@ pub mod kinematic;
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
+pub struct ObservablesOutputSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub format: ObservableFileFormat,
+    #[serde(skip_serializing_if = "is_false")]
+    pub per_iteration: bool,
+}
+
+impl Default for ObservablesOutputSettings {
+    fn default() -> Self {
+        Self {
+            format: ObservableFileFormat::default(),
+            per_iteration: false,
+        }
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
 pub struct IntegratorSettings {
     #[serde(skip_serializing_if = "is_usize::<64>")]
     pub n_bins: usize,
@@ -212,6 +232,8 @@ pub struct IntegratorSettings {
     pub max_prob_ratio: f64,
     #[serde(skip_serializing_if = "is_u64::<69>")]
     pub seed: u64,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub observables_output: ObservablesOutputSettings,
 }
 
 impl Default for IntegratorSettings {
@@ -230,6 +252,7 @@ impl Default for IntegratorSettings {
             show_max_wgt_info: true,
             max_prob_ratio: 1000.0,
             seed: 69,
+            observables_output: ObservablesOutputSettings::default(),
         }
     }
 }
