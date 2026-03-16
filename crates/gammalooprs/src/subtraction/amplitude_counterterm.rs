@@ -3,10 +3,7 @@ use std::{cell::RefCell, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::{
-    atom::Atom,
-    domains::float::{FloatLike as SymFloatLike, Real},
-};
+use symbolica::{atom::Atom, domains::float::Real};
 
 use color_eyre::Result;
 use tracing::{debug, instrument};

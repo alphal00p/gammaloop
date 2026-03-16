@@ -25,7 +25,7 @@ use crate::integrands::HasIntegrand;
 use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
 use crate::model::Model;
-use crate::observables::Event;
+use crate::observables::{EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat};
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
@@ -36,12 +36,20 @@ use crate::{is_interrupted, set_interrupted};
 use rayon::prelude::*;
 use spenso::algebra::complex::Complex;
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
 use tabled::Tabled;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
+
+#[derive(Clone, Copy)]
+enum ObservableFlushReason {
+    Iteration(usize),
+    Final,
+    Interrupted,
+}
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
 
@@ -329,6 +337,7 @@ where
     let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
 
     let mut n_samples_evaluated = 0;
+    let mut interrupted = false;
     'integrateLoop: while integration_state.num_points < settings.integrator.n_max {
         // ensure we do not overshoot
         let cur_points = {
@@ -387,7 +396,7 @@ where
                                 break;
                             }
 
-                            let result = integrand.evaluate_sample(
+                            let mut result = integrand.evaluate_sample(
                                 s,
                                 model,
                                 s.get_weight(),
@@ -396,15 +405,21 @@ where
                                 current_max_evals,
                             )?;
 
+                            integrand.process_evaluation_result(&result);
+                            maybe_discard_generated_events(&mut result, settings);
+                            let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
+                            let effective_integrand_result =
+                                result.integrand_result * Complex::new_re(jacobian);
+
                             core_accumulator.add_sample(
-                                result.integrand_result,
+                                effective_integrand_result,
                                 s.get_weight(),
                                 Some(s),
                             );
 
                             let training_eval = match settings.integrator.integrated_phase {
-                                IntegratedPhase::Real => result.integrand_result.re,
-                                IntegratedPhase::Imag => result.integrand_result.im,
+                                IntegratedPhase::Real => effective_integrand_result.re,
+                                IntegratedPhase::Imag => effective_integrand_result.im,
                                 IntegratedPhase::Both => unimplemented!(),
                             };
 
@@ -431,6 +446,7 @@ where
 
         if is_interrupted() {
             warn!("{}", "Integration iterrupted by user".yellow());
+            interrupted = true;
             break 'integrateLoop;
         }
 
@@ -462,12 +478,20 @@ where
         // now merge all statistics and observables into the first
         let (first, others) = user_data.integrand.split_at_mut(1);
         for other_itg in others {
-            first[0].merge_results(other_itg, integration_state.iter);
+            first[0].merge_runtime_results(other_itg)?;
         }
 
         // now write the observables to disk
         if let Some(itg) = user_data.integrand.first_mut() {
-            itg.update_results(integration_state.iter);
+            itg.update_runtime_results(integration_state.iter);
+            if settings.integrator.observables_output.per_iteration {
+                write_observables_output(
+                    itg,
+                    settings,
+                    workspace.as_deref(),
+                    ObservableFlushReason::Iteration(integration_state.iter),
+                );
+            }
         }
 
         show_integration_status(
@@ -507,6 +531,19 @@ where
     }
     // Reset the interrupted flag
     set_interrupted(false);
+
+    if let Some(itg) = user_data.integrand.first() {
+        write_observables_output(
+            itg,
+            settings,
+            workspace.as_deref(),
+            if interrupted {
+                ObservableFlushReason::Interrupted
+            } else {
+                ObservableFlushReason::Final
+            },
+        );
+    }
 
     if integration_state.num_points > 0 {
         info!("");
@@ -595,6 +632,7 @@ pub(crate) fn batch_integrate(
     );
 
     let event_output = generate_event_output(
+        integrand,
         evaluation_results,
         input.event_output_settings,
         input.settings,
@@ -615,11 +653,16 @@ fn generate_integrand_output(
     integrand_output_settings: IntegralOutputSettings,
     integrated_phase: IntegratedPhase,
 ) -> BatchIntegrateOutput {
+    fn effective_integrand_result(result: &EvaluationResult) -> Complex<F<f64>> {
+        let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
+        result.integrand_result * Complex::new_re(jacobian)
+    }
+
     match integrand_output_settings {
         IntegralOutputSettings::Default => {
             let integrand_values = evaluation_results
                 .iter()
-                .map(|result| result.integrand_result)
+                .map(effective_integrand_result)
                 .collect();
 
             BatchIntegrateOutput::Default(integrand_values, samples.to_vec())
@@ -630,22 +673,19 @@ fn generate_integrand_output(
             let mut grid = integrand.create_grid();
 
             for (result, sample) in evaluation_results.iter().zip(samples.iter()) {
-                real_accumulator.add_sample(
-                    result.integrand_result.re * sample.get_weight(),
-                    Some(sample),
-                );
-                imag_accumulator.add_sample(
-                    result.integrand_result.im * sample.get_weight(),
-                    Some(sample),
-                );
+                let effective_result = effective_integrand_result(result);
+                real_accumulator
+                    .add_sample(effective_result.re * sample.get_weight(), Some(sample));
+                imag_accumulator
+                    .add_sample(effective_result.im * sample.get_weight(), Some(sample));
 
                 match integrated_phase {
                     IntegratedPhase::Real => {
-                        grid.add_training_sample(sample, result.integrand_result.re)
+                        grid.add_training_sample(sample, effective_result.re)
                             .unwrap();
                     }
                     IntegratedPhase::Imag => {
-                        grid.add_training_sample(sample, result.integrand_result.im)
+                        grid.add_training_sample(sample, effective_result.im)
                             .unwrap();
                     }
                     IntegratedPhase::Both => {
@@ -664,6 +704,7 @@ fn generate_integrand_output(
 
 /// Process events into histograms or event lists, as specified by the user.
 fn generate_event_output(
+    integrand: &Integrand,
     evaluation_results: Vec<EvaluationResult>,
     event_output_settings: EventOutputSettings,
     _settings: &RuntimeSettings,
@@ -672,13 +713,74 @@ fn generate_event_output(
         EventOutputSettings::None => EventOutput::None,
 
         EventOutputSettings::EventList => {
-            let event_list = evaluation_results
-                .into_iter()
-                .flat_map(|result| result.event_buffer) // the clone is necessary for the case where we return an accumulator +
-                .collect();
-            EventOutput::EventList { events: event_list }
+            let mut event_groups = EventGroupList::default();
+            for mut result in evaluation_results {
+                event_groups.append(&mut result.event_groups);
+            }
+            EventOutput::EventList { event_groups }
         }
-        EventOutputSettings::Histogram => todo!(), // process events using the observables
+        EventOutputSettings::Histogram => integrand
+            .observable_accumulator_bundle()
+            .map(|histograms| EventOutput::Histogram { histograms })
+            .unwrap_or(EventOutput::None),
+    }
+}
+
+fn maybe_discard_generated_events(result: &mut EvaluationResult, settings: &RuntimeSettings) {
+    if !settings.should_return_generated_events() {
+        result.event_groups.clear();
+    }
+}
+
+fn maybe_discard_generated_events_for_integrand(
+    result: &mut EvaluationResult,
+    integrand: &Integrand,
+) {
+    if let Integrand::ProcessIntegrand(process_integrand) = integrand {
+        maybe_discard_generated_events(result, process_integrand.get_settings());
+    }
+}
+
+fn observable_output_path(
+    workspace: &Path,
+    format: ObservableFileFormat,
+    reason: ObservableFlushReason,
+) -> Option<PathBuf> {
+    let extension = match format {
+        ObservableFileFormat::None => return None,
+        ObservableFileFormat::Hwu => "hwu",
+        ObservableFileFormat::Json => "json",
+    };
+
+    let file_name = match reason {
+        ObservableFlushReason::Iteration(iter) => format!("observables_iter_{iter:04}.{extension}"),
+        ObservableFlushReason::Final => format!("observables_final.{extension}"),
+        ObservableFlushReason::Interrupted => format!("observables_interrupted.{extension}"),
+    };
+
+    Some(workspace.join(file_name))
+}
+
+fn write_observables_output(
+    integrand: &Integrand,
+    settings: &RuntimeSettings,
+    workspace: Option<&Path>,
+    reason: ObservableFlushReason,
+) {
+    let format = settings.integrator.observables_output.format;
+    let Some(workspace) = workspace else {
+        return;
+    };
+    let Some(path) = observable_output_path(workspace, format, reason) else {
+        return;
+    };
+
+    if let Err(err) = integrand.write_observable_snapshots(&path, format) {
+        warn!(
+            "failed to write observables output to {}: {}",
+            path.display(),
+            err
+        );
     }
 }
 
@@ -701,31 +803,48 @@ fn evaluate_sample_list(
         .collect_vec()
         .into_par_iter();
 
-    let evaluation_results_per_core: Vec<Result<Vec<EvaluationResult>>> = sample_chunks
-        .zip(integrands)
-        .map(|(chunk, mut integrand)| {
-            chunk
-                .iter()
-                .map(|sample| {
-                    integrand.evaluate_sample(
-                        sample,
-                        model,
-                        sample.get_weight(),
-                        iter,
-                        false,
-                        max_eval,
-                    )
-                })
-                .collect::<Result<Vec<_>>>()
-        })
-        .collect();
-    let evaluation_results_per_core: Vec<Vec<EvaluationResult>> = evaluation_results_per_core
-        .into_iter()
-        .collect::<Result<_>>()?;
+    let evaluation_results_per_core: Vec<Result<(Vec<EvaluationResult>, Integrand)>> =
+        sample_chunks
+            .zip(integrands)
+            .map(|(chunk, mut integrand)| {
+                let evaluation_results = chunk
+                    .iter()
+                    .map(|sample| {
+                        integrand
+                            .evaluate_sample(
+                                sample,
+                                model,
+                                sample.get_weight(),
+                                iter,
+                                false,
+                                max_eval,
+                            )
+                            .map(|mut result| {
+                                integrand.process_evaluation_result(&result);
+                                maybe_discard_generated_events_for_integrand(
+                                    &mut result,
+                                    &integrand,
+                                );
+                                result
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+
+                Ok((evaluation_results, integrand))
+            })
+            .collect();
+    let mut evaluation_results_per_core: Vec<(Vec<EvaluationResult>, Integrand)> =
+        evaluation_results_per_core
+            .into_iter()
+            .collect::<Result<_>>()?;
+
+    for (_, worker_integrand) in evaluation_results_per_core.iter_mut() {
+        integrand.merge_runtime_results(worker_integrand)?;
+    }
 
     let evaluation_results = evaluation_results_per_core
         .into_iter()
-        .flatten()
+        .flat_map(|(results, _)| results)
         .collect_vec();
 
     let meta_data_statistics = StatisticsCounter::from_evaluation_results(&evaluation_results);
@@ -762,8 +881,12 @@ pub enum BatchIntegrateOutput {
 #[derive(Serialize, Deserialize)]
 pub enum EventOutput {
     None,
-    EventList { events: Vec<Event> },
-    Histogram { histograms: Vec<()> }, // placeholder for the actual histograms
+    EventList {
+        event_groups: EventGroupList,
+    },
+    Histogram {
+        histograms: ObservableAccumulatorBundle,
+    },
 }
 
 /// The result of evaluating a batch of points
@@ -843,6 +966,8 @@ pub struct MasterNode {
     master_accumulator_re: StatisticsAccumulator<F<f64>>,
     master_accumulator_im: StatisticsAccumulator<F<f64>>,
     statistics: StatisticsCounter,
+    observable_accumulators: Option<ObservableAccumulatorBundle>,
+    event_groups: EventGroupList,
     current_iter: usize,
 }
 
@@ -854,6 +979,8 @@ impl MasterNode {
             master_accumulator_im: StatisticsAccumulator::new(),
             master_accumulator_re: StatisticsAccumulator::new(),
             statistics: StatisticsCounter::new_empty(),
+            observable_accumulators: None,
+            event_groups: EventGroupList::default(),
             current_iter: 0,
         }
     }
@@ -925,6 +1052,9 @@ impl MasterNode {
         );
         self.master_accumulator_re.update_iter(false);
         self.master_accumulator_im.update_iter(false);
+        if let Some(observable_accumulators) = self.observable_accumulators.as_mut() {
+            observable_accumulators.update_results();
+        }
 
         self.current_iter += 1;
     }
@@ -1008,8 +1138,17 @@ impl MasterNode {
 
         match output.event_data {
             EventOutput::None => {}
-            _ => {
-                todo!("event processing not yet implemented");
+            EventOutput::EventList { mut event_groups } => {
+                self.event_groups.append(&mut event_groups);
+            }
+            EventOutput::Histogram { mut histograms } => {
+                if let Some(existing) = self.observable_accumulators.as_mut() {
+                    existing
+                        .merge_samples(&mut histograms)
+                        .map_err(|err| err.to_string())?;
+                } else {
+                    self.observable_accumulators = Some(histograms);
+                }
             }
         }
 

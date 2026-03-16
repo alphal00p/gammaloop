@@ -2,7 +2,6 @@ use color_eyre::Result;
 use colored::Colorize;
 use momtrop::float::MomTropFloat;
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::FloatLike;
 use symbolica::numerical_integration::Sample;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, instrument, trace, warn};
@@ -12,8 +11,7 @@ use crate::model::Model;
 use crate::momentum::ThreeMomentum;
 use crate::settings::RuntimeSettings;
 use crate::utils;
-use crate::utils::F;
-use crate::utils::f128;
+use crate::utils::{F, f128};
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
@@ -47,10 +45,10 @@ pub fn inspect<I: HasIntegrand>(
 
         info!(
             "f128 sampling jacobian for this point = {:+.32e}",
-            FloatLike::inv(&inv_jac)
+            inv_jac.inv()
         );
 
-        (Some(FloatLike::inv(&inv_jac).to_f64()), xs)
+        (Some(inv_jac.inv().to_f64()), xs)
     } else {
         (
             None,

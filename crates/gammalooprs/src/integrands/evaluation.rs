@@ -5,19 +5,22 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::Constructible;
+use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
-use crate::observables::{Event, GenericEvent};
+use crate::observables::{
+    EventGroupList, GenericEventGroupList, ObservableSnapshotBundle,
+    events::{format_complex_generic, format_optional_real_generic, format_real_generic},
+};
 use crate::{
     settings::runtime::Precision,
-    utils::{F, FloatLike, format_evaluation_time},
+    utils::{ArbPrec, F, FloatLike, f128, format_evaluation_time},
 };
 
 #[derive(Clone, Debug)]
 pub struct GraphEvaluationResult<T: FloatLike> {
     pub integrand_result: Complex<F<T>>,
-    pub generated_events: Vec<GenericEvent<T>>,
+    pub event_groups: GenericEventGroupList<T>,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
     pub accepted_event_count: usize,
@@ -27,7 +30,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
     pub fn zero(zero: F<T>) -> Self {
         Self {
             integrand_result: Complex::new_re(zero),
-            generated_events: Vec::new(),
+            event_groups: GenericEventGroupList::default(),
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
             accepted_event_count: 0,
@@ -36,7 +39,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 
     pub fn merge_in_place(&mut self, mut other: Self) {
         self.integrand_result += other.integrand_result;
-        self.generated_events.append(&mut other.generated_events);
+        self.event_groups.append(&mut other.event_groups);
         self.event_processing_time += other.event_processing_time;
         self.generated_event_count += other.generated_event_count;
         self.accepted_event_count += other.accepted_event_count;
@@ -48,11 +51,7 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
                 self.integrand_result.re.into_ff64(),
                 self.integrand_result.im.into_ff64(),
             ),
-            generated_events: self
-                .generated_events
-                .into_iter()
-                .map(|event| event.to_f64())
-                .collect(),
+            event_groups: self.event_groups.to_f64(),
             event_processing_time: self.event_processing_time,
             generated_event_count: self.generated_event_count,
             accepted_event_count: self.accepted_event_count,
@@ -63,27 +62,388 @@ impl<T: FloatLike> GraphEvaluationResult<T> {
 /// The result of an evaluation of the integrand
 #[derive(Clone, Serialize, Debug)]
 pub struct EvaluationResult {
+    /// Integrand value before any parameterization Jacobian is applied.
     pub integrand_result: Complex<F<f64>>,
+    pub parameterization_jacobian: Option<F<f64>>,
+    /// Monte Carlo sample weight supplied by the integrator/grid, excluding the parameterization Jacobian.
     pub integrator_weight: F<f64>,
-    pub event_buffer: Vec<Event>,
-    pub event_processing_time: Duration,
-    pub generated_event_count: usize,
-    pub accepted_event_count: usize,
+    pub event_groups: EventGroupList,
     pub evaluation_metadata: EvaluationMetaData,
+}
+
+#[derive(Clone, Serialize, Debug)]
+pub struct EvaluationResultOutput {
+    pub integrand_result: Complex<F<f64>>,
+    pub parameterization_jacobian: Option<F<f64>>,
+    pub integrator_weight: F<f64>,
+    pub event_groups: EventGroupList,
+    pub evaluation_metadata: Option<EvaluationMetaData>,
+}
+
+#[derive(Clone, Debug)]
+pub struct GenericEvaluationResult<T: FloatLike> {
+    pub integrand_result: Complex<F<T>>,
+    pub parameterization_jacobian: Option<F<T>>,
+    pub integrator_weight: F<T>,
+    pub event_groups: GenericEventGroupList<T>,
+    pub evaluation_metadata: EvaluationMetaData,
+}
+
+#[derive(Clone, Debug)]
+pub struct GenericEvaluationResultOutput<T: FloatLike> {
+    pub integrand_result: Complex<F<T>>,
+    pub parameterization_jacobian: Option<F<T>>,
+    pub integrator_weight: F<T>,
+    pub event_groups: GenericEventGroupList<T>,
+    pub evaluation_metadata: Option<EvaluationMetaData>,
+}
+
+impl<T: FloatLike> GenericEvaluationResult<T> {
+    pub fn into_output(self, minimal_output: bool) -> GenericEvaluationResultOutput<T> {
+        GenericEvaluationResultOutput {
+            integrand_result: self.integrand_result,
+            parameterization_jacobian: self.parameterization_jacobian,
+            integrator_weight: self.integrator_weight,
+            event_groups: self.event_groups,
+            evaluation_metadata: (!minimal_output).then_some(self.evaluation_metadata),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum PreciseEvaluationResultOutput {
+    Double(GenericEvaluationResultOutput<f64>),
+    Quad(GenericEvaluationResultOutput<f128>),
+    Arb(GenericEvaluationResultOutput<ArbPrec>),
+}
+
+#[derive(Clone, Debug)]
+pub enum PreciseEvaluationResult {
+    Double(GenericEvaluationResult<f64>),
+    Quad(GenericEvaluationResult<f128>),
+    Arb(GenericEvaluationResult<ArbPrec>),
+}
+
+impl PreciseEvaluationResult {
+    pub fn into_output(self, minimal_output: bool) -> PreciseEvaluationResultOutput {
+        match self {
+            PreciseEvaluationResult::Double(result) => {
+                PreciseEvaluationResultOutput::Double(result.into_output(minimal_output))
+            }
+            PreciseEvaluationResult::Quad(result) => {
+                PreciseEvaluationResultOutput::Quad(result.into_output(minimal_output))
+            }
+            PreciseEvaluationResult::Arb(result) => {
+                PreciseEvaluationResultOutput::Arb(result.into_output(minimal_output))
+            }
+        }
+    }
+}
+
+impl PreciseEvaluationResultOutput {
+    pub fn precision(&self) -> Precision {
+        match self {
+            PreciseEvaluationResultOutput::Double(_) => Precision::Double,
+            PreciseEvaluationResultOutput::Quad(_) => Precision::Quad,
+            PreciseEvaluationResultOutput::Arb(_) => Precision::Arb,
+        }
+    }
+
+    pub fn evaluation_metadata(&self) -> Option<&EvaluationMetaData> {
+        match self {
+            PreciseEvaluationResultOutput::Double(result) => result.evaluation_metadata.as_ref(),
+            PreciseEvaluationResultOutput::Quad(result) => result.evaluation_metadata.as_ref(),
+            PreciseEvaluationResultOutput::Arb(result) => result.evaluation_metadata.as_ref(),
+        }
+    }
 }
 
 impl EvaluationResult {
     pub fn zero() -> Self {
         Self {
             integrand_result: Complex::new_zero(),
+            parameterization_jacobian: None,
             integrator_weight: F(0.0),
-            event_buffer: Vec::new(),
-            event_processing_time: Duration::ZERO,
-            generated_event_count: 0,
-            accepted_event_count: 0,
+            event_groups: EventGroupList::default(),
             evaluation_metadata: EvaluationMetaData::new_empty(),
         }
     }
+
+    pub fn into_output(self, minimal_output: bool) -> EvaluationResultOutput {
+        EvaluationResultOutput {
+            integrand_result: self.integrand_result,
+            parameterization_jacobian: self.parameterization_jacobian,
+            integrator_weight: self.integrator_weight,
+            event_groups: self.event_groups,
+            evaluation_metadata: (!minimal_output).then_some(self.evaluation_metadata),
+        }
+    }
+}
+
+fn fmt_evaluation_result_output<T: FloatLike>(
+    f: &mut std::fmt::Formatter<'_>,
+    precision: Option<Precision>,
+    integrand_result: &Complex<F<T>>,
+    parameterization_jacobian: Option<&F<T>>,
+    integrator_weight: &F<T>,
+    event_groups: &GenericEventGroupList<T>,
+    evaluation_metadata: Option<&EvaluationMetaData>,
+) -> std::fmt::Result {
+    let mut summary_rows = Vec::with_capacity(5);
+    if let Some(precision) = precision {
+        summary_rows.push(EvaluationSummaryRow {
+            field: "precision".to_string(),
+            value: precision.to_string(),
+        });
+    }
+    summary_rows.extend([
+        EvaluationSummaryRow {
+            field: "integrand result".to_string(),
+            value: format_complex_generic(integrand_result),
+        },
+        EvaluationSummaryRow {
+            field: "parameterization jacobian".to_string(),
+            value: format_optional_real_generic(parameterization_jacobian),
+        },
+        EvaluationSummaryRow {
+            field: "integrator weight".to_string(),
+            value: format_real_generic(integrator_weight),
+        },
+        EvaluationSummaryRow {
+            field: "event groups".to_string(),
+            value: format_count(event_groups.len()),
+        },
+    ]);
+
+    writeln!(f, "{}", "Evaluation result".bold().bright_green())?;
+    writeln!(f, "{}", Table::new(summary_rows).with(Style::rounded()))?;
+    if let Some(metadata) = evaluation_metadata {
+        writeln!(f)?;
+        write!(f, "{metadata}")?;
+    }
+
+    if !event_groups.is_empty() {
+        writeln!(f)?;
+        writeln!(
+            f,
+            "{}",
+            format!(
+                "Generated {} event group(s)",
+                format_count(event_groups.len())
+            )
+            .bold()
+            .bright_cyan()
+        )?;
+        write!(f, "{event_groups}")?;
+    }
+
+    Ok(())
+}
+
+fn fmt_sample_result<D: Display>(
+    f: &mut std::fmt::Formatter<'_>,
+    evaluation: &D,
+    observables: &ObservableSnapshotBundle,
+) -> std::fmt::Result {
+    write!(f, "{evaluation}")?;
+
+    if let Some(observables_table) = summarize_observables(observables) {
+        writeln!(f)?;
+        writeln!(f)?;
+        writeln!(f, "{}", "Observable snapshots".bold().bright_magenta())?;
+        write!(f, "{observables_table}")?;
+    }
+
+    Ok(())
+}
+
+impl Display for EvaluationResultOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_evaluation_result_output(
+            f,
+            None,
+            &self.integrand_result,
+            self.parameterization_jacobian.as_ref(),
+            &self.integrator_weight,
+            &self.event_groups,
+            self.evaluation_metadata.as_ref(),
+        )
+    }
+}
+
+impl<T: FloatLike> Display for GenericEvaluationResultOutput<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_evaluation_result_output(
+            f,
+            None,
+            &self.integrand_result,
+            self.parameterization_jacobian.as_ref(),
+            &self.integrator_weight,
+            &self.event_groups,
+            self.evaluation_metadata.as_ref(),
+        )
+    }
+}
+
+impl Display for PreciseEvaluationResultOutput {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PreciseEvaluationResultOutput::Double(result) => fmt_evaluation_result_output(
+                f,
+                Some(Precision::Double),
+                &result.integrand_result,
+                result.parameterization_jacobian.as_ref(),
+                &result.integrator_weight,
+                &result.event_groups,
+                result.evaluation_metadata.as_ref(),
+            ),
+            PreciseEvaluationResultOutput::Quad(result) => fmt_evaluation_result_output(
+                f,
+                Some(Precision::Quad),
+                &result.integrand_result,
+                result.parameterization_jacobian.as_ref(),
+                &result.integrator_weight,
+                &result.event_groups,
+                result.evaluation_metadata.as_ref(),
+            ),
+            PreciseEvaluationResultOutput::Arb(result) => fmt_evaluation_result_output(
+                f,
+                Some(Precision::Arb),
+                &result.integrand_result,
+                result.parameterization_jacobian.as_ref(),
+                &result.integrator_weight,
+                &result.event_groups,
+                result.evaluation_metadata.as_ref(),
+            ),
+        }
+    }
+}
+
+impl Display for SampleEvaluationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_sample_result(f, &self.evaluation, &self.observables)
+    }
+}
+
+#[derive(Clone, Serialize, Debug)]
+pub struct SampleEvaluationResult {
+    pub evaluation: EvaluationResultOutput,
+    pub observables: ObservableSnapshotBundle,
+}
+
+#[derive(Clone, Debug)]
+pub struct PreciseSampleEvaluationResult {
+    pub evaluation: PreciseEvaluationResultOutput,
+    pub observables: ObservableSnapshotBundle,
+}
+
+impl Display for PreciseSampleEvaluationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt_sample_result(f, &self.evaluation, &self.observables)
+    }
+}
+
+#[derive(Tabled)]
+struct EvaluationSummaryRow {
+    field: String,
+    value: String,
+}
+
+#[derive(Tabled)]
+struct HistogramSummaryRow {
+    name: String,
+    bins: usize,
+    #[tabled(rename = "in-range")]
+    in_range_entries: String,
+    phase: String,
+    range: String,
+    underflow: String,
+    overflow: String,
+}
+
+#[derive(Tabled)]
+struct StabilitySummaryRow {
+    level: String,
+    relative_accuracy: String,
+    time: String,
+    status: String,
+}
+
+fn format_duration(duration: Duration) -> String {
+    let seconds = duration.as_secs_f64();
+    let (value, unit) = if seconds >= 1.0 {
+        (seconds, "s")
+    } else if seconds >= 1.0e-3 {
+        (seconds * 1.0e3, "ms")
+    } else {
+        (seconds * 1.0e6, "μs")
+    };
+
+    let precision = if value >= 100.0 {
+        0
+    } else if value >= 10.0 {
+        1
+    } else {
+        2
+    };
+
+    format!("{value:.precision$} {unit}")
+}
+
+fn format_count(value: usize) -> String {
+    if value < 1_000 {
+        return value.to_string();
+    }
+
+    let value = value as f64;
+    for (scale, suffix) in [
+        (1_000_000_000_f64, "B"),
+        (1_000_000_f64, "M"),
+        (1_000_f64, "K"),
+    ] {
+        if value >= scale {
+            let scaled = value / scale;
+            let precision = if scaled >= 100.0 {
+                0
+            } else if scaled >= 10.0 {
+                1
+            } else {
+                2
+            };
+            return format!("{scaled:.precision$}{suffix}");
+        }
+    }
+
+    value.round().to_string()
+}
+
+fn format_ratio(value: f64) -> String {
+    if !value.is_finite() {
+        return "None".red().to_string();
+    }
+    format!("{:+.16e}", value)
+}
+
+fn summarize_observables(observables: &ObservableSnapshotBundle) -> Option<String> {
+    if observables.histograms.is_empty() {
+        return None;
+    }
+
+    let rows = observables
+        .histograms
+        .iter()
+        .map(|(name, histogram)| HistogramSummaryRow {
+            name: name.clone(),
+            bins: histogram.bins.len(),
+            in_range_entries: format_count(histogram.statistics.in_range_entry_count),
+            phase: format!("{:?}", histogram.phase).to_lowercase(),
+            range: format!("[{:+.16e}, {:+.16e}]", histogram.x_min, histogram.x_max),
+            underflow: format_count(histogram.underflow_bin.entry_count),
+            overflow: format_count(histogram.overflow_bin.entry_count),
+        })
+        .collect::<Vec<_>>();
+
+    Some(Table::new(rows).with(Style::rounded()).to_string())
 }
 
 /// Per-precision evaluation details produced during stability checks.
@@ -101,15 +461,11 @@ pub struct RotatedEvaluation {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct StabilityEvaluation {
+pub struct StabilityResult {
     pub precision: Precision,
-    pub result: Complex<F<f64>>,
-    pub parameterization_time: Duration,
-    pub integrand_evaluation_time: Duration,
-    pub evaluator_evaluation_time: Duration,
-    pub is_stable: bool,
-    pub instability_reason: Option<StabilityFailureReason>,
-    pub rotated_results: Vec<RotatedEvaluation>,
+    pub estimated_relative_accuracy: Option<F<f64>>,
+    pub accepted_as_stable: bool,
+    pub total_time: Duration,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -125,51 +481,86 @@ pub struct EvaluationMetaData {
     pub integrand_evaluation_time: Duration,
     pub evaluator_evaluation_time: Duration,
     pub parameterization_time: Duration,
-    pub event_time: Duration,
+    pub event_processing_time: Duration,
+    pub generated_event_count: usize,
+    pub accepted_event_count: usize,
     pub relative_instability_error: Complex<F<f64>>,
-    pub highest_precision: Precision,
     pub is_nan: bool,
-    pub final_is_stable: bool,
     pub loop_momenta_escalation: Option<LoopMomentaEscalationMetrics>,
-    pub stability_evaluations: Vec<StabilityEvaluation>,
+    pub stability_results: Vec<StabilityResult>,
 }
 
 impl Display for EvaluationMetaData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let stability_summary = if self.stability_evaluations.is_empty() {
-            "none".to_string()
+        let selection_retention = if self.generated_event_count == 0 {
+            "None".red().to_string()
         } else {
-            self.stability_evaluations
-                .iter()
-                .map(|evaluation| {
-                    format!(
-                        "{}:{}",
-                        evaluation.precision,
-                        if evaluation.is_stable {
-                            "stable"
-                        } else {
-                            "unstable"
-                        }
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
+            format_ratio(self.accepted_event_count as f64 / self.generated_event_count as f64)
         };
-        write!(
-            f,
-            "EvaluationMetaData {{ total_timing: {:?}, integrand_evaluation_time: {:?}, evaluator_evaluation_time: {:?}, parameterization_time: {:?}, event_time: {:?}, relative_instability_error: {:?}, highest_precision: {:?}, is_nan: {}, final_is_stable: {}, loop_momenta_escalation: {:?}, stability_evaluations: {} }}",
-            self.total_timing,
-            self.integrand_evaluation_time,
-            self.evaluator_evaluation_time,
-            self.parameterization_time,
-            self.event_time,
-            self.relative_instability_error,
-            self.highest_precision,
-            self.is_nan,
-            self.final_is_stable,
-            self.loop_momenta_escalation,
-            stability_summary
-        )
+        let rows = vec![
+            EvaluationSummaryRow {
+                field: "nan".to_string(),
+                value: self.is_nan.to_string(),
+            },
+            EvaluationSummaryRow {
+                field: "generated events".to_string(),
+                value: format_count(self.generated_event_count),
+            },
+            EvaluationSummaryRow {
+                field: "accepted events".to_string(),
+                value: format_count(self.accepted_event_count),
+            },
+            EvaluationSummaryRow {
+                field: "selection retention".to_string(),
+                value: selection_retention,
+            },
+            EvaluationSummaryRow {
+                field: "parameterization time".to_string(),
+                value: format_duration(self.parameterization_time),
+            },
+            EvaluationSummaryRow {
+                field: "integrand evaluation time".to_string(),
+                value: format_duration(self.integrand_evaluation_time),
+            },
+            EvaluationSummaryRow {
+                field: "evaluator evaluation time".to_string(),
+                value: format_duration(self.evaluator_evaluation_time),
+            },
+            EvaluationSummaryRow {
+                field: "event processing time".to_string(),
+                value: format_duration(self.event_processing_time),
+            },
+            EvaluationSummaryRow {
+                field: "total evaluation time".to_string(),
+                value: format_duration(self.total_timing),
+            },
+        ];
+        writeln!(f, "{}", "Evaluation metadata".bold().bright_yellow())?;
+        writeln!(f, "{}", Table::new(rows).with(Style::rounded()))?;
+
+        if !self.stability_results.is_empty() {
+            let stability_rows = self
+                .stability_results
+                .iter()
+                .map(|result| StabilitySummaryRow {
+                    level: result.precision.to_string(),
+                    relative_accuracy: format_optional_real_generic(
+                        result.estimated_relative_accuracy.as_ref(),
+                    ),
+                    time: format_duration(result.total_time),
+                    status: if result.accepted_as_stable {
+                        "stable".green().to_string()
+                    } else {
+                        "unstable".red().to_string()
+                    },
+                })
+                .collect::<Vec<_>>();
+            writeln!(f)?;
+            writeln!(f, "{}", "Stability results".bold().bright_magenta())?;
+            write!(f, "{}", Table::new(stability_rows).with(Style::rounded()))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -180,14 +571,18 @@ impl EvaluationMetaData {
             integrand_evaluation_time: Duration::ZERO,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: Duration::ZERO,
-            event_time: Duration::ZERO,
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             relative_instability_error: Complex::new_zero(),
-            highest_precision: Precision::Double,
             is_nan: false,
-            final_is_stable: true,
             loop_momenta_escalation: None,
-            stability_evaluations: Vec::new(),
+            stability_results: Vec::new(),
         }
+    }
+
+    pub(crate) fn final_precision(&self) -> Option<Precision> {
+        self.stability_results.last().map(|result| result.precision)
     }
 }
 
@@ -221,18 +616,24 @@ impl StatisticsCounter {
                     data_entry.evaluation_metadata.evaluator_evaluation_time;
                 accumulator.sum_parameterization_time +=
                     data_entry.evaluation_metadata.parameterization_time;
-                accumulator.sum_event_time += data_entry.evaluation_metadata.event_time;
+                accumulator.sum_event_time += data_entry.evaluation_metadata.event_processing_time;
                 accumulator.sum_relative_instability_error.0 +=
                     data_entry.evaluation_metadata.relative_instability_error.re;
                 accumulator.sum_relative_instability_error.1 +=
                     data_entry.evaluation_metadata.relative_instability_error.im;
                 accumulator.sum_total_evaluation_time +=
                     data_entry.evaluation_metadata.total_timing;
-                accumulator.sum_generated_event_count += data_entry.generated_event_count;
-                accumulator.sum_accepted_event_count += data_entry.accepted_event_count;
+                accumulator.sum_generated_event_count +=
+                    data_entry.evaluation_metadata.generated_event_count;
+                accumulator.sum_accepted_event_count +=
+                    data_entry.evaluation_metadata.accepted_event_count;
 
                 accumulator.num_evals += 1;
-                match data_entry.evaluation_metadata.highest_precision {
+                match data_entry
+                    .evaluation_metadata
+                    .final_precision()
+                    .unwrap_or(Precision::Double)
+                {
                     Precision::Double => accumulator.num_double_precision_evals += 1,
                     Precision::Quad => accumulator.num_quadruple_precision_evals += 1,
                     Precision::Arb => accumulator.num_arb_precision_evals += 1,
@@ -337,8 +738,16 @@ impl StatisticsCounter {
     #[allow(dead_code)]
     pub(crate) fn get_avg_instabillity_error(&self) -> (F<f64>, F<f64>) {
         (
-            self.sum_relative_instability_error.0 / F::<f64>::new_from_usize(self.num_evals),
-            self.sum_relative_instability_error.1 / F::<f64>::new_from_usize(self.num_evals),
+            self.sum_relative_instability_error.0
+                / self
+                    .sum_relative_instability_error
+                    .0
+                    .from_usize(self.num_evals),
+            self.sum_relative_instability_error.1
+                / self
+                    .sum_relative_instability_error
+                    .1
+                    .from_usize(self.num_evals),
         )
     }
 

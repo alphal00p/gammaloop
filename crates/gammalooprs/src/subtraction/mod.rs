@@ -1,4 +1,4 @@
-use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
+use symbolica::domains::float::Real;
 
 use crate::{
     settings::runtime::{

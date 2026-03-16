@@ -21,7 +21,10 @@ use crate::{
     uv::UVgenerationSettings,
 };
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -47,7 +50,10 @@ pub struct GenerationSettings {
     pub force_cuts: Vec<Vec<String>>,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -74,7 +80,7 @@ impl Default for ThresholdSubtractionSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy, JsonSchema)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 #[derive(Default)]
 pub enum CompilationOptimizationLevel {
@@ -113,7 +119,10 @@ pub fn is_gpp(compiler: &str) -> bool {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
     #[serde(skip_serializing_if = "is_true")]
@@ -173,7 +182,10 @@ impl GammaloopCompileOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 #[derive(Default)]
 pub struct FeyGenSettings {
@@ -182,7 +194,10 @@ pub struct FeyGenSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct TropicalSubgraphTableSettings {
     #[serde(skip_serializing_if = "is_false")]
@@ -205,7 +220,7 @@ impl Default for TropicalSubgraphTableSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct OrientationPattern {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -298,7 +313,10 @@ impl OrientationPattern {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct Parallelisation {
     #[serde(skip_serializing_if = "is_usize::<1>")]

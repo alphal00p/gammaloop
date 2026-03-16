@@ -9,7 +9,7 @@ use nalgebra::DVector;
 use rand::Rng;
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    domains::float::{FloatLike as SymFloatLike, Real, RealLike},
+    domains::float::{Real, RealLike},
     numerical_integration::{MonteCarloRng, Sample},
 };
 use tabled::{builder::Builder, settings::Style};
