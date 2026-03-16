@@ -21,6 +21,7 @@ use gammalooprs::{
 use insta::assert_snapshot;
 use itertools::Itertools;
 use momtrop::assert_approx_eq;
+use serial_test::serial;
 use spenso::{
     algebra::complex::Complex,
     network::{Network, Sequential, SmallestDegree, store::NetworkStore},
@@ -39,7 +40,8 @@ use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
 use gammaloop_integration_tests::{
-    clean_test, get_test_cli, get_tests_workspace_path, new_cli_for_test,
+    clean_test, enable_lu_e2e_hack, get_test_cli, get_tests_workspace_path, new_cli_for_test,
+    run_commands, setup_sm_differential_lu_cli,
 };
 
 #[test]
@@ -1489,5 +1491,148 @@ fn test_qqx_aaa_ir_subtracted_inspect() -> Result<()> {
 
     let target = Complex::new(2.3159767780905335e-1, -1.8547720156633686e-4);
     assert_eq!(inspect, target);
+    Ok(())
+}
+
+fn configure_differential_leading_jet_observable(
+    cli: &mut gammaloop_integration_tests::CLIState,
+) -> Result<()> {
+    run_commands(
+        cli,
+        &[
+            r#"set process string '
+[quantities.leading_jet_pt]
+type = "jet_pt"
+dR = 0.4
+'"#,
+            r#"set process string '
+[observables.leading_jet_pt_hist]
+quantity = "leading_jet_pt"
+entry_selection = "leading_only"
+x_min = 0.0
+x_max = 1000.0
+n_bins = 8
+'"#,
+        ],
+    )
+}
+
+fn configure_differential_leading_jet_selector(
+    cli: &mut gammaloop_integration_tests::CLIState,
+) -> Result<()> {
+    cli.run_command(
+        r#"set process string '
+[selectors.leading_jet_pt_cut]
+quantity = "leading_jet_pt"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 0.0
+'"#,
+    )
+}
+
+#[test]
+#[serial]
+fn lu_differential_integration_writes_json_observables() -> Result<()> {
+    let _hack = enable_lu_e2e_hack();
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json integrator.observables_output.per_iteration=true",
+    )?;
+
+    let workspace = get_tests_workspace_path().join("lu_differential_integration_json/workspace");
+    let result_path = workspace.join("integration_results.yaml");
+    let integration_result = Integrate {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        result_path: Some(result_path),
+        workspace_path: Some(workspace.clone()),
+        target: None,
+        n_cores: Some(1),
+        restart: true,
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    assert!(integration_result.neval > 0);
+    let iteration_file = workspace.join("observables_iter_0001.json");
+    let final_file = workspace.join("observables_final.json");
+    assert!(iteration_file.exists());
+    assert!(final_file.exists());
+
+    let iter_bundle =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&iteration_file)?;
+    let final_bundle =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+    assert!(iter_bundle.histograms.contains_key("leading_jet_pt_hist"));
+    assert!(final_bundle.histograms.contains_key("leading_jet_pt_hist"));
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Result<()> {
+    let _hack = enable_lu_e2e_hack();
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
+    cli.run_command(
+        "set process kv integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu integrator.observables_output.per_iteration=false",
+    )?;
+
+    let workspace_without_observables =
+        get_tests_workspace_path().join("lu_differential_integration_hwu/without_observables");
+    Integrate {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        result_path: Some(workspace_without_observables.join("integration_results.yaml")),
+        workspace_path: Some(workspace_without_observables.clone()),
+        target: None,
+        n_cores: Some(1),
+        restart: true,
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        !workspace_without_observables
+            .join("observables_final.hwu")
+            .exists()
+    );
+
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    let workspace_with_observables =
+        get_tests_workspace_path().join("lu_differential_integration_hwu/with_observables");
+    Integrate {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        result_path: Some(workspace_with_observables.join("integration_results.yaml")),
+        workspace_path: Some(workspace_with_observables.clone()),
+        target: None,
+        n_cores: Some(1),
+        restart: true,
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let hwu_file = workspace_with_observables.join("observables_final.hwu");
+    assert!(hwu_file.exists());
+    let hwu_contents = std::fs::read_to_string(hwu_file)?;
+    assert!(hwu_contents.contains("<histogram>"));
+    assert!(hwu_contents.contains("leading_jet_pt_hist"));
+    assert!(
+        !workspace_with_observables
+            .join("observables_iter_0001.hwu")
+            .exists()
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_save_dot_silently_overwrites_existing_files() -> Result<()> {
+    let _hack = enable_lu_e2e_hack();
+    let mut cli = setup_sm_differential_lu_cli("lu_save_dot_overwrite")?;
+    cli.run_command("save dot")?;
+    cli.run_command("save dot")?;
     Ok(())
 }
