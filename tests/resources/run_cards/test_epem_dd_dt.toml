@@ -2,6 +2,10 @@
 
 commands = [
   "import model sm",
+
+  # "import graphs ./tests/resources/graphs/epem_dd_dt.dot",
+  # "generate",
+  # "save dot",
   "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes ",
   # "integrate"
 ]
@@ -16,6 +20,7 @@ include_fields = true
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = true
 compile = true
+summed_function_map = true
 do_fn_map_replacements = false
 
 [cli_settings.global.generation.threshold_subtraction]
@@ -30,6 +35,9 @@ softct = false
 add_sigma = false
 inner_products = false
 
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+
 [default_runtime_settings.kinematics]
 e_cm = 1.0
 
@@ -38,7 +46,7 @@ type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
 momenta = [[1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, -1.0]]
-helicities = [1, 1]
+helicities = [1, -1]
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true

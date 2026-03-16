@@ -1,6 +1,21 @@
+// digraph addbar {
+//     v1 [style=invis, is_cut=0]
+//     v1 -> v2 [particle="a"]
+//     v2 -> a -> v3 [particle="d"]
+//     v3 -> b -> v2 [particle="d"]
+//     a -> b [particle="g"]
+//     v3 -> v1 [particle="a"]
+// }
+
+
 digraph addbar {
-    v1 [style=invis, is_cut=0]
-    v1 -> v2 [particle="a"]
+    exte0    [style=invis, is_cut=0];
+    exte1    [style=invis, is_cut=1];
+    v1      -> exte1 [id=0 particle="e-"];
+    v1   -> exte0 [id=1 particle="e+"];
+    exte0   -> v4    [id=2 particle="e+"];
+    exte1   -> v4    [id=3 particle="e-"];
+    v4 -> v2 [particle="a"]
     v2 -> a -> v3 [particle="d"]
     v3 -> b -> v2 [particle="d"]
     a -> b [particle="g"]

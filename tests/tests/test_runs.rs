@@ -102,6 +102,24 @@ fn test_epem_dd_dt() -> Result<()> {
         false,
     )?;
 
+    let (_, a) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        momentum_space: false,
+        point: vec![
+            0.3684805278343727,
+            0.20242350926484026,
+            0.48242524836619227,
+            0.3919994435419629,
+            0.14345675651437087,
+            0.47075342347077187,
+        ],
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert_snapshot!(format!("{a:.8e}"),@"(1.3677606162044735e-3+4.451464910288581e-4i)");
+
     let integrate_command = Integrate {
         result_path: Some(
             get_tests_workspace_path()
@@ -117,7 +135,10 @@ fn test_epem_dd_dt() -> Result<()> {
 
     let intergal = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
     assert!(
-        intergal.is_compatible_with_target(Complex::new_re(F(5.89551e-06)), 1),
+        intergal.is_compatible_with_target(
+            Complex::new(F(1.0185532594130467e-4), F(-2.7124366612352106e-7)),
+            1
+        ),
         "Not compatible: {intergal}",
     );
 
