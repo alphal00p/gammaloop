@@ -58,6 +58,7 @@ Requirements:
 - `just` (a lightweight make-like command runner; install with `cargo install just`)
 - a recent GNU toolchain
 - Python `3.11+` only if you also want the Python bindings
+- FORM `v4.2.1+` (only used for analytical integration of integrated UV counterterms)
 
 Additional requirements for rendering diagrams:
 
@@ -178,6 +179,26 @@ just build-api
 
 The Python package source is under `crates/gammaloop-api/python/gammaloop`.
 
+There is also a standalone Python API example that builds a differential LU state
+and calls `evaluate_sample(...)` / `evaluate_samples(...)`:
+
+```bash
+source .venv/bin/activate
+NO_SYMBOLICA_OEM_LICENSE=1 SYMBOLICA_LICENSE=... just build-api
+cd examples/api/python/epem_a_ddxg_xs_LO
+GL_LU_E2E_HACK=1 SYMBOLICA_LICENSE=... python inspect_events.py
+```
+
+That example uses:
+- `examples/api/python/epem_a_ddxg_xs_LO/run.toml`
+- `examples/api/python/epem_a_ddxg_xs_LO/inspect_events.py`
+
+and creates its state under:
+
+```text
+examples/api/python/epem_a_ddxg_xs_LO/state
+```
+
 Rust:
 
 ```rust
@@ -208,6 +229,34 @@ fn main() -> color_eyre::Result<()> {
 ```
 
 In Rust, the API entry point is `StateLoadOption::load()`. After loading, you can either use dedicated command/data structures directly or keep using string commands through `CommandHistory::from_raw_string(...)` and `CliSession::execute_top_level(...)`.
+
+There is also a standalone Rust API example, designed to run with
+[`rust-script`](https://crates.io/crates/rust-script), that builds the same
+differential LU state and prints the formatted rich result returned by
+`evaluate_sample(...)` / `evaluate_samples(...)`:
+
+```bash
+NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T SYMBOLICA_LICENSE=... \
+rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs
+```
+
+That example uses:
+- `examples/api/rust/epem_a_ddxg_xs_LO/run.toml`
+- `examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
+
+and creates its state under:
+
+```text
+examples/api/rust/epem_a_ddxg_xs_LO/state
+```
+
+Current note on precision: the Rust `evaluate_sample(...)` / `evaluate_samples(...)`
+API returns the rich `SampleEvaluationResult` downcast to `f64`, even when
+`use_arb_prec=true`. For Rust-only workflows that need to keep the retained
+precision, use the parallel `evaluate_sample_precise(...)` /
+`evaluate_samples_precise(...)` helpers from
+`gammaloop_api::commands::evaluate_samples`; they return a precision-tagged
+result enum instead of widening the Python API away from its `f64` contract.
 
 ## Examples and tests
 
