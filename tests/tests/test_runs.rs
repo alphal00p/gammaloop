@@ -1613,3 +1613,44 @@ fn test_integrate_bubble_dot_2t0b() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn test_mass_approach_scalar_self_energy() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("mass_approach_scalar_self_energy.toml".into()),
+        get_tests_workspace_path().join("mass_approach_scalar_self_energy"),
+        None,
+        true,
+    )?;
+
+    let mass_values = [1.1, 1.05, 1.01, 1.001, 1.0001];
+    let mut inspect_magnitudes = Vec::with_capacity(mass_values.len());
+
+    for mass in mass_values {
+        cli.run_command(&format!("set model mass_scalar_2={mass}"))?;
+
+        let (_, inspect) = Inspect {
+            process: None,
+            integrand_name: Some("default".to_string()),
+            point: vec![0.1, 0.2, 0.3, 0.3, 0.4, 0.5],
+            momentum_space: false,
+            use_arb_prec: true,
+            ..Default::default()
+        }
+        .run(&mut cli)?;
+
+        let magnitude = (inspect.re * inspect.re + inspect.im * inspect.im).sqrt();
+        inspect_magnitudes.push(magnitude);
+    }
+
+    assert!(
+        inspect_magnitudes.windows(2).all(|pair| pair[1] <= pair[0]),
+        "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 1: {inspect_magnitudes:?}"
+    );
+    assert!(
+        inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 1.0e-11,
+        "Inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
+    );
+
+    Ok(())
+}
