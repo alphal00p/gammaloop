@@ -3,7 +3,7 @@
 commands = [
   "import model sm",
   "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes ",
-  "integrate"
+  # "integrate"
 ]
 
 [cli_settings.global]

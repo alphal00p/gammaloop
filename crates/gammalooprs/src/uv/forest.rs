@@ -96,7 +96,6 @@ impl Forest {
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
-        println!("computing forest for {}", graph.dot(&cut_data.union));
 
         for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
@@ -133,40 +132,6 @@ impl Forest {
                 }
                 _ => {
                     unimplemented!("Union not implemented");
-                    // let (local_4d, simple, local_3d) = {
-                    //     let current = &self.dag.nodes[n];
-                    //     let mut dependents =
-                    //         current.parents.iter().map(|p| &self.dag.nodes[*p].data);
-
-                    //     let mut dep_vec: Vec<&Approximation> = Vec::new();
-                    //     dep_vec.push(dependents.next().unwrap());
-
-                    //     let Some((mut approx, _)) = dep_vec[0].local_3d.expr() else {
-                    //         panic!("local 3d not computed for parents")
-                    //     };
-
-                    //     let mut iterative_approx = dep_vec[0].clone();
-
-                    //     for p in dependents {
-                    //         dep_vec.push(p);
-
-                    //         approx = p.local_3d(&iterative_approx, graph, approx);
-
-                    //         iterative_approx = p.clone();
-                    //     }
-                    //     (
-                    //         ApproxOp::union(&dep_vec).unwrap(),
-                    //         SimpleApprox::union(
-                    //             self.dag.nodes[n].data.subgraph.clone(),
-                    //             dep_vec.iter().map(|s| s.simple_approx.as_ref().unwrap()),
-                    //         ),
-                    //         iterative_approx.local_3d,
-                    //     )
-                    // };
-
-                    // self.dag.nodes[n].data.local_4d = local_4d;
-                    // self.dag.nodes[n].data.simple_approx = Some(simple);
-                    // self.dag.nodes[n].data.local_3d = local_3d;
                 }
             }
         }
@@ -328,8 +293,6 @@ impl Forest {
             if matches!(pair, HedgePair::Unpaired { .. }) {
                 continue;
             }
-
-            // println!("{}", GS.split_mom_pattern_simple(edge_index));
 
             for s in &mut sum {
                 *s = s.replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);

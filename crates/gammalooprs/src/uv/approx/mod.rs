@@ -228,7 +228,7 @@ impl CFFapprox {
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
-        println!("Fourddenoms:{}", fourddenoms.log_print(None));
+        // println!("Fourddenoms:{}", fourddenoms.log_print(None));
 
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
@@ -466,18 +466,6 @@ impl Approximation {
                 .numerator(&reduced, &self.subgraph.included())
                 .get_single_atom()
                 .unwrap();
-
-            println!(
-                "Numerator of {},{}, subgraph: {}, with contracted graph: {}, is {}",
-                self.simple_approx
-                    .as_ref()
-                    .unwrap()
-                    .expr(&graph.full_filter()),
-                graph.pretty_dot(),
-                graph.dot(&reduced),
-                graph.dot(&self.subgraph),
-                resnum.log_print(None)
-            );
 
             let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
 

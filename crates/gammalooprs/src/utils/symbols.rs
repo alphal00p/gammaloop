@@ -1026,6 +1026,7 @@ impl GammaloopSymbols {
         )
     }
 
+    /// Add the sign by splitting Q(i,mu)-> Q3(i,mu)+OSE(i)*σ(i)*δ(cind(0),mu)
     pub(crate) fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
         let index = Minkowski {}.to_symbolic([W_.a__]);

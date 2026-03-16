@@ -95,12 +95,31 @@ fn test_z_decay() -> Result<()> {
 
 #[test]
 fn test_epem_dd_dt() -> Result<()> {
-    let state = get_test_cli(
+    let mut cli = get_test_cli(
         Some("test_epem_dd_dt.toml".into()),
         get_tests_workspace_path().join("test_epem_dd_dt"),
         None,
         false,
     )?;
+
+    let integrate_command = Integrate {
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("test_epem_dd_dt/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("test_epem_dd_dt/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    };
+
+    let intergal = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        intergal.is_compatible_with_target(Complex::new_re(F(5.89551e-06)), 1),
+        "Not compatible: {intergal}",
+    );
 
     // todo add integration
     Ok(())
