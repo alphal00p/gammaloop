@@ -53,6 +53,8 @@ pub struct GenerationSettings {
     pub force_cuts: Vec<Vec<String>>,
     #[serde(skip_serializing_if = "is_false")]
     pub override_lmb_heuristics: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub medium: MediumSettings,
 }
 
 #[cfg_attr(
@@ -673,4 +675,27 @@ impl Default for Parallelisation {
             integrate: 1,
         }
     }
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct MediumSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub mode: MediumMode,
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum MediumMode {
+    #[default]
+    Vacuum,
+    ThermodynamicEquilibrium,
 }

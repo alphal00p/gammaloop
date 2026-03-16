@@ -17,6 +17,7 @@ pub mod expression;
 pub mod generation;
 pub mod hsurface;
 pub mod surface;
+pub mod thermal_numerator;
 pub mod tree;
 
 pub struct CFFTerm {
