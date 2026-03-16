@@ -9,7 +9,10 @@ use idenso::color::CS;
 
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::{
+    involution::{EdgeIndex, Orientation},
+    subgraph::InternalSubGraph,
+};
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{
@@ -1138,14 +1141,20 @@ impl<T: FloatLike> ParamBuilder<T> {
         .unwrap();
 
         for e in graph.iter_edge_ids() {
-            new.add_tagged_function::<Symbol>(
-                GS.ose,
-                vec![Atom::num(e.0 as i64)],
-                format!("OSE{e}"),
-                vec![],
-                graph.explicit_ose_atom(e),
-            )
-            .unwrap();
+            if lmb.edge_signatures[e]
+                .internal
+                .iter()
+                .any(|sign| sign.is_sign())
+            {
+                new.add_tagged_function::<Symbol>(
+                    GS.ose,
+                    vec![Atom::num(e.0 as i64)],
+                    format!("OSE{e}"),
+                    vec![],
+                    graph.explicit_ose_atom(e),
+                )
+                .unwrap();
+            }
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
