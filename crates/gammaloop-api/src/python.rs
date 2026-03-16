@@ -2,6 +2,11 @@ use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
+    integrands::evaluation::SampleEvaluationResult,
+    observables::{
+        AdditionalWeightKey, Event, EventGroup, GenericAdditionalWeightInfo, HistogramSnapshot,
+        HistogramStatisticsSnapshot,
+    },
     processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::{LogFormat, LogLevel},
@@ -10,7 +15,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
 };
-use numpy::{Complex64, IntoPyArray, PyArray1, PyReadonlyArray2};
+use numpy::PyReadonlyArray2;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -45,7 +50,7 @@ use pyo3::{
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
-    types::{PyComplex, PyModule, PyTuple, PyType},
+    types::{PyComplex, PyDict, PyModule, PyTuple, PyType},
     wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
@@ -70,6 +75,16 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<GammaLoopAPI>()?;
     m.add_class::<LogLevel>()?;
     m.add_class::<DotExportSettings>()?;
+    m.add_class::<PySampleEvaluationResult>()?;
+    m.add_class::<PyEventGroup>()?;
+    m.add_class::<PyEvent>()?;
+    m.add_class::<PyFourMomentum>()?;
+    m.add_class::<PyCutInfo>()?;
+    m.add_class::<PyAdditionalWeight>()?;
+    m.add_class::<PyHistogramSnapshot>()?;
+    m.add_class::<PyHistogramBinSnapshot>()?;
+    m.add_class::<PyHistogramStatisticsSnapshot>()?;
+    m.add_class::<PyStabilityResult>()?;
     /*
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
@@ -88,11 +103,469 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+#[pyclass(from_py_object, name = "ComplexValue", get_all)]
+#[derive(Clone)]
+pub struct PyComplexValue {
+    pub re: f64,
+    pub im: f64,
+}
+
+#[pyclass(from_py_object, name = "FourMomentum", get_all)]
+#[derive(Clone)]
+pub struct PyFourMomentum {
+    pub e: f64,
+    pub px: f64,
+    pub py: f64,
+    pub pz: f64,
+}
+
+#[pyclass(from_py_object, name = "AdditionalWeight", get_all)]
+#[derive(Clone)]
+pub struct PyAdditionalWeight {
+    pub key: String,
+    pub value: PyComplexValue,
+}
+
+#[pyclass(from_py_object, name = "CutInfo", get_all)]
+#[derive(Clone)]
+pub struct PyCutInfo {
+    pub incoming_pdgs: Vec<isize>,
+    pub outgoing_pdgs: Vec<isize>,
+    pub cut_id: usize,
+    pub graph_id: usize,
+}
+
+#[pyclass(from_py_object, name = "Event", get_all)]
+#[derive(Clone)]
+pub struct PyEvent {
+    pub incoming_momenta: Vec<PyFourMomentum>,
+    pub outgoing_momenta: Vec<PyFourMomentum>,
+    pub cut_info: PyCutInfo,
+    pub weight: PyComplexValue,
+    pub additional_weights: Vec<PyAdditionalWeight>,
+}
+
+#[pyclass(from_py_object, name = "EventGroup", get_all)]
+#[derive(Clone)]
+pub struct PyEventGroup {
+    pub events: Vec<PyEvent>,
+}
+
+#[pyclass(from_py_object, name = "HistogramBin", get_all)]
+#[derive(Clone)]
+pub struct PyHistogramBinSnapshot {
+    pub x_min: Option<f64>,
+    pub x_max: Option<f64>,
+    pub entry_count: usize,
+    pub sum_weights: f64,
+    pub sum_weights_squared: f64,
+    pub mitigated_fill_count: usize,
+}
+
+#[pyclass(from_py_object, name = "HistogramStats", get_all)]
+#[derive(Clone)]
+pub struct PyHistogramStatisticsSnapshot {
+    pub in_range_entry_count: usize,
+    pub nan_value_count: usize,
+    pub mitigated_pair_count: usize,
+}
+
+#[pyclass(from_py_object, name = "HistogramSnapshot", get_all)]
+#[derive(Clone)]
+pub struct PyHistogramSnapshot {
+    pub title: String,
+    pub phase: String,
+    pub value_transform: String,
+    pub x_min: f64,
+    pub x_max: f64,
+    pub sample_count: usize,
+    pub log_x_axis: bool,
+    pub log_y_axis: bool,
+    pub bins: Vec<PyHistogramBinSnapshot>,
+    pub underflow_bin: PyHistogramBinSnapshot,
+    pub overflow_bin: PyHistogramBinSnapshot,
+    pub statistics: PyHistogramStatisticsSnapshot,
+}
+
+#[pymethods]
+impl PyHistogramBinSnapshot {
+    fn average(&self, sample_count: usize) -> f64 {
+        if sample_count == 0 {
+            0.0
+        } else {
+            self.sum_weights / sample_count as f64
+        }
+    }
+
+    fn error(&self, sample_count: usize) -> f64 {
+        if sample_count <= 1 {
+            return 0.0;
+        }
+        let n = sample_count as f64;
+        let variance_numerator =
+            self.sum_weights_squared - (self.sum_weights * self.sum_weights) / n;
+        if !variance_numerator.is_finite() || variance_numerator <= 0.0 {
+            0.0
+        } else {
+            (variance_numerator / (n * (n - 1.0))).sqrt()
+        }
+    }
+}
+
+#[pyclass(from_py_object, name = "StabilityResult", get_all)]
+#[derive(Clone)]
+pub struct PyStabilityResult {
+    pub precision: String,
+    pub estimated_relative_accuracy: Option<f64>,
+    pub accepted_as_stable: bool,
+    pub total_time_seconds: f64,
+}
+
+#[pyclass(from_py_object, name = "EvaluationResult")]
+#[derive(Clone)]
+pub struct PySampleEvaluationResult {
+    inner: SampleEvaluationResult,
+}
+
+#[pymethods]
+impl PySampleEvaluationResult {
+    #[getter]
+    fn integrand_result<'py>(&self, py: Python<'py>) -> Bound<'py, PyComplex> {
+        PyComplex::from_doubles(
+            py,
+            self.inner.evaluation.integrand_result.re.0,
+            self.inner.evaluation.integrand_result.im.0,
+        )
+    }
+
+    #[getter]
+    fn integrator_weight(&self) -> f64 {
+        self.inner.evaluation.integrator_weight.0
+    }
+
+    #[getter]
+    fn generated_event_count(&self) -> Option<usize> {
+        self.inner
+            .evaluation
+            .evaluation_metadata
+            .as_ref()
+            .map(|metadata| metadata.generated_event_count)
+    }
+
+    #[getter]
+    fn accepted_event_count(&self) -> Option<usize> {
+        self.inner
+            .evaluation
+            .evaluation_metadata
+            .as_ref()
+            .map(|metadata| metadata.accepted_event_count)
+    }
+
+    #[getter]
+    fn event_processing_time_seconds(&self) -> Option<f64> {
+        self.inner
+            .evaluation
+            .evaluation_metadata
+            .as_ref()
+            .map(|metadata| metadata.event_processing_time.as_secs_f64())
+    }
+
+    #[getter]
+    fn parameterization_jacobian(&self) -> Option<f64> {
+        self.inner
+            .evaluation
+            .parameterization_jacobian
+            .map(|jac| jac.0)
+    }
+
+    #[getter]
+    fn is_nan(&self) -> Option<bool> {
+        self.inner
+            .evaluation
+            .evaluation_metadata
+            .as_ref()
+            .map(|metadata| metadata.is_nan)
+    }
+
+    #[getter]
+    fn stability_results(&self) -> Option<Vec<PyStabilityResult>> {
+        self.inner
+            .evaluation
+            .evaluation_metadata
+            .as_ref()
+            .map(|metadata| {
+                metadata
+                    .stability_results
+                    .iter()
+                    .map(|result| PyStabilityResult {
+                        precision: result.precision.to_string(),
+                        estimated_relative_accuracy: result
+                            .estimated_relative_accuracy
+                            .map(|value| value.0),
+                        accepted_as_stable: result.accepted_as_stable,
+                        total_time_seconds: result.total_time.as_secs_f64(),
+                    })
+                    .collect()
+            })
+    }
+
+    #[getter]
+    fn event_groups(&self) -> Vec<PyEventGroup> {
+        self.inner
+            .evaluation
+            .event_groups
+            .iter()
+            .map(py_event_group_from_event_group)
+            .collect()
+    }
+
+    #[getter]
+    fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        for (name, histogram) in &self.inner.observables.histograms {
+            dict.set_item(name, py_histogram_snapshot_from_snapshot(histogram.clone()))?;
+        }
+        Ok(dict)
+    }
+
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+}
+
+#[pymethods]
+impl PyEvent {
+    fn __str__(&self) -> String {
+        event_from_py_event(self).to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+}
+
+#[pymethods]
+impl PyEventGroup {
+    fn __str__(&self) -> String {
+        event_group_from_py_event_group(self).to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        self.__str__()
+    }
+}
+
+fn py_complex_from_complex(
+    value: spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>,
+) -> PyComplexValue {
+    PyComplexValue {
+        re: value.re.0,
+        im: value.im.0,
+    }
+}
+
+fn py_four_momentum_from_momentum(
+    momentum: &gammalooprs::momentum::FourMomentum<gammalooprs::utils::F<f64>>,
+) -> PyFourMomentum {
+    PyFourMomentum {
+        e: momentum.temporal.value.0,
+        px: momentum.spatial.px.0,
+        py: momentum.spatial.py.0,
+        pz: momentum.spatial.pz.0,
+    }
+}
+
+fn additional_weight_key_to_string(key: AdditionalWeightKey) -> String {
+    match key {
+        AdditionalWeightKey::FullMultiplicativeFactor => "full_multiplicative_factor".to_string(),
+        AdditionalWeightKey::Original => "original".to_string(),
+        AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
+            format!("threshold_counterterm:{subset_index}")
+        }
+    }
+}
+
+fn py_event_from_event(event: &Event) -> PyEvent {
+    let additional_weights = event
+        .additional_weights
+        .weights
+        .iter()
+        .map(|(key, value)| PyAdditionalWeight {
+            key: additional_weight_key_to_string(*key),
+            value: py_complex_from_complex(*value),
+        })
+        .collect();
+
+    PyEvent {
+        incoming_momenta: event
+            .kinematic_configuration
+            .0
+            .iter()
+            .map(py_four_momentum_from_momentum)
+            .collect(),
+        outgoing_momenta: event
+            .kinematic_configuration
+            .1
+            .iter()
+            .map(py_four_momentum_from_momentum)
+            .collect(),
+        cut_info: PyCutInfo {
+            incoming_pdgs: event.cut_info.particle_pdgs.0.iter().copied().collect(),
+            outgoing_pdgs: event.cut_info.particle_pdgs.1.iter().copied().collect(),
+            cut_id: event.cut_info.cut_id,
+            graph_id: event.cut_info.graph_id,
+        },
+        weight: py_complex_from_complex(event.weight),
+        additional_weights,
+    }
+}
+
+fn event_from_py_event(event: &PyEvent) -> Event {
+    let incoming_momenta = event
+        .incoming_momenta
+        .iter()
+        .map(|momentum| gammalooprs::momentum::FourMomentum {
+            temporal: gammalooprs::momentum::Energy {
+                value: gammalooprs::utils::F(momentum.e),
+            },
+            spatial: gammalooprs::momentum::ThreeMomentum {
+                px: gammalooprs::utils::F(momentum.px),
+                py: gammalooprs::utils::F(momentum.py),
+                pz: gammalooprs::utils::F(momentum.pz),
+            },
+        })
+        .collect();
+    let outgoing_momenta = event
+        .outgoing_momenta
+        .iter()
+        .map(|momentum| gammalooprs::momentum::FourMomentum {
+            temporal: gammalooprs::momentum::Energy {
+                value: gammalooprs::utils::F(momentum.e),
+            },
+            spatial: gammalooprs::momentum::ThreeMomentum {
+                px: gammalooprs::utils::F(momentum.px),
+                py: gammalooprs::utils::F(momentum.py),
+                pz: gammalooprs::utils::F(momentum.pz),
+            },
+        })
+        .collect();
+    let additional_weights = event
+        .additional_weights
+        .iter()
+        .map(|weight| {
+            let key = match weight.key.as_str() {
+                "original" => AdditionalWeightKey::Original,
+                "full_multiplicative_factor" => AdditionalWeightKey::FullMultiplicativeFactor,
+                _ => match weight.key.strip_prefix("threshold_counterterm:") {
+                    Some(subset_index) => AdditionalWeightKey::ThresholdCounterterm {
+                        subset_index: subset_index.parse().unwrap_or_default(),
+                    },
+                    None => AdditionalWeightKey::Original,
+                },
+            };
+            (
+                key,
+                spenso::algebra::complex::Complex::new(
+                    gammalooprs::utils::F(weight.value.re),
+                    gammalooprs::utils::F(weight.value.im),
+                ),
+            )
+        })
+        .collect();
+
+    Event {
+        kinematic_configuration: (incoming_momenta, outgoing_momenta),
+        cut_info: gammalooprs::observables::CutInfo {
+            particle_pdgs: (
+                event.cut_info.incoming_pdgs.iter().copied().collect(),
+                event.cut_info.outgoing_pdgs.iter().copied().collect(),
+            ),
+            cut_id: event.cut_info.cut_id,
+            graph_id: event.cut_info.graph_id,
+        },
+        weight: spenso::algebra::complex::Complex::new(
+            gammalooprs::utils::F(event.weight.re),
+            gammalooprs::utils::F(event.weight.im),
+        ),
+        additional_weights: GenericAdditionalWeightInfo {
+            weights: additional_weights,
+        },
+    }
+}
+
+fn py_event_group_from_event_group(group: &EventGroup) -> PyEventGroup {
+    PyEventGroup {
+        events: group.iter().map(py_event_from_event).collect(),
+    }
+}
+
+fn event_group_from_py_event_group(group: &PyEventGroup) -> EventGroup {
+    gammalooprs::observables::GenericEventGroup(
+        group.events.iter().map(event_from_py_event).collect(),
+    )
+}
+
+fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogramSnapshot {
+    PyHistogramSnapshot {
+        title: snapshot.title,
+        phase: format!("{:?}", snapshot.phase).to_lowercase(),
+        value_transform: format!("{:?}", snapshot.value_transform).to_lowercase(),
+        x_min: snapshot.x_min,
+        x_max: snapshot.x_max,
+        sample_count: snapshot.sample_count,
+        log_x_axis: snapshot.log_x_axis,
+        log_y_axis: snapshot.log_y_axis,
+        bins: snapshot
+            .bins
+            .into_iter()
+            .map(|bin| PyHistogramBinSnapshot {
+                x_min: bin.x_min,
+                x_max: bin.x_max,
+                entry_count: bin.entry_count,
+                sum_weights: bin.sum_weights,
+                sum_weights_squared: bin.sum_weights_squared,
+                mitigated_fill_count: bin.mitigated_fill_count,
+            })
+            .collect(),
+        underflow_bin: PyHistogramBinSnapshot {
+            x_min: snapshot.underflow_bin.x_min,
+            x_max: snapshot.underflow_bin.x_max,
+            entry_count: snapshot.underflow_bin.entry_count,
+            sum_weights: snapshot.underflow_bin.sum_weights,
+            sum_weights_squared: snapshot.underflow_bin.sum_weights_squared,
+            mitigated_fill_count: snapshot.underflow_bin.mitigated_fill_count,
+        },
+        overflow_bin: PyHistogramBinSnapshot {
+            x_min: snapshot.overflow_bin.x_min,
+            x_max: snapshot.overflow_bin.x_max,
+            entry_count: snapshot.overflow_bin.entry_count,
+            sum_weights: snapshot.overflow_bin.sum_weights,
+            sum_weights_squared: snapshot.overflow_bin.sum_weights_squared,
+            mitigated_fill_count: snapshot.overflow_bin.mitigated_fill_count,
+        },
+        statistics: py_histogram_statistics_from_snapshot(snapshot.statistics),
+    }
+}
+
+fn py_histogram_statistics_from_snapshot(
+    stats: HistogramStatisticsSnapshot,
+) -> PyHistogramStatisticsSnapshot {
+    PyHistogramStatisticsSnapshot {
+        in_range_entry_count: stats.in_range_entry_count,
+        nan_value_count: stats.nan_value_count,
+        mitigated_pair_count: stats.mitigated_pair_count,
+    }
+}
+
 /*
 pub struct OutputOptions {}
 
 /// There should only be 1 worker per instance of gammaloop.
-#[pyclass(name = "Worker", unsendable)]
+#[pyclass(from_py_object, name = "Worker", unsendable)]
 pub struct PythonWorker {
     pub model: Model,
     pub process_list: ProcessList,
@@ -111,7 +584,7 @@ impl Clone for PythonWorker {
     }
 }
 
-#[pyclass(name = "SnailFilterOptions")]
+#[pyclass(from_py_object, name = "SnailFilterOptions")]
 pub struct PySnailFilterOptions {
     pub filter_options: SnailFilterOptions,
 }
@@ -140,7 +613,7 @@ impl PySnailFilterOptions {
     }
 }
 
-#[pyclass(name = "SelfEnergyFilterOptions")]
+#[pyclass(from_py_object, name = "SelfEnergyFilterOptions")]
 pub struct PySelfEnergyFilterOptions {
     pub filter_options: SelfEnergyFilterOptions,
 }
@@ -169,7 +642,7 @@ impl PySelfEnergyFilterOptions {
     }
 }
 
-#[pyclass(name = "SewedFilterOptions")]
+#[pyclass(from_py_object, name = "SewedFilterOptions")]
 pub struct PySewedFilterOptions {
     pub filter_options: SewedFilterOptions,
 }
@@ -186,7 +659,7 @@ impl PySewedFilterOptions {
     }
 }
 
-#[pyclass(name = "TadpolesFilterOptions")]
+#[pyclass(from_py_object, name = "TadpolesFilterOptions")]
 pub struct PyTadpolesFilterOptions {
     pub filter_options: TadpolesFilterOptions,
 }
@@ -215,7 +688,7 @@ impl PyTadpolesFilterOptions {
     }
 }
 
-#[pyclass(name = "FeynGenFilters")]
+#[pyclass(from_py_object, name = "FeynGenFilters")]
 pub struct PyFeynGenFilters {
     pub filters: Vec<FeynGenFilter>,
 }
@@ -305,7 +778,7 @@ fn feyngen_to_python_error(error: FeynGenError) -> PyErr {
     exceptions::PyValueError::new_err(format!("Feynman diagram generator error | {error}"))
 }
 
-#[pyclass(name = "NumeratorAwareGroupingOption")]
+#[pyclass(from_py_object, name = "NumeratorAwareGroupingOption")]
 pub struct PyNumeratorAwareGroupingOption {
     pub grouping_options: NumeratorAwareGraphGroupingOption,
 }
@@ -425,21 +898,22 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_sample",
-        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, force_radius=false, momentum_space=false, discrete_dim=None, graph_name=None, orientation=None)
+        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, force_radius=false, minimal_output=false, momentum_space=false, discrete_dim=None, graph_name=None, orientation=None)
     )]
     pub fn evaluate_sample<'py>(
         &mut self,
-        py: Python<'py>,
+        _py: Python<'py>,
         point: Vec<f64>,
         process_id: Option<usize>,
         integrand_name: Option<String>,
         use_arb_prec: bool,
         force_radius: bool,
+        minimal_output: bool,
         momentum_space: bool,
         discrete_dim: Option<Vec<usize>>,
         graph_name: Option<String>,
         orientation: Option<usize>,
-    ) -> Result<Bound<'py, PyComplex>> {
+    ) -> Result<PySampleEvaluationResult> {
         let points =
             ndarray::Array2::from_shape_vec((1, point.len()), point).map_err(|e| eyre!(e))?;
         let discrete_dims = discrete_dim.unwrap_or_default();
@@ -456,6 +930,7 @@ impl GammaLoopAPI {
             integrand_name,
             use_arb_prec,
             force_radius,
+            minimal_output,
             momentum_space,
             points: points.view(),
             discrete_dims: discrete_dims.as_ref().map(|dims| dims.view()),
@@ -466,26 +941,27 @@ impl GammaLoopAPI {
         let value = res.into_iter().next().ok_or_else(|| {
             eyre!("evaluate_sample did not return any result for the single input sample")
         })?;
-        Ok(PyComplex::from_doubles(py, value.re, value.im))
+        Ok(PySampleEvaluationResult { inner: value })
     }
 
     #[pyo3(
         name = "evaluate_samples",
-        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, momentum_space=false, discrete_dims=None, force_radius=false, graph_names=None, orientations=None)
+        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, discrete_dims=None, force_radius=false, graph_names=None, orientations=None)
     )]
     pub fn evaluate_samples<'py>(
         &mut self,
-        py: Python<'py>,
+        _py: Python<'py>,
         points: PyReadonlyArray2<'py, f64>,
         process_id: Option<usize>,
         integrand_name: Option<String>,
         use_arb_prec: bool,
+        minimal_output: bool,
         momentum_space: bool,
         discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
         force_radius: bool,
         graph_names: Option<Vec<Option<String>>>,
         orientations: Option<Vec<Option<usize>>>,
-    ) -> Result<Bound<'py, PyArray1<Complex64>>> {
+    ) -> Result<Vec<PySampleEvaluationResult>> {
         let points_rust = points.as_array();
 
         let evaluate_samples = EvaluateSamples {
@@ -493,6 +969,7 @@ impl GammaLoopAPI {
             integrand_name,
             use_arb_prec,
             force_radius,
+            minimal_output,
             momentum_space,
             points: points_rust,
             discrete_dims: discrete_dims.as_ref().map(PyReadonlyArray2::as_array),
@@ -501,14 +978,10 @@ impl GammaLoopAPI {
         };
 
         let res = evaluate_samples.run(&mut self.gammaloop_state)?;
-        let res_map = ndarray::Array1::from_vec(
-            res.into_iter()
-                .map(|c| Complex64::new(c.re, c.im))
-                .collect(),
-        )
-        .into_pyarray(py);
-
-        Ok(res_map)
+        Ok(res
+            .into_iter()
+            .map(|inner| PySampleEvaluationResult { inner })
+            .collect())
     }
 
     #[pyo3(name="import_graphs", signature = (graphs, process_name=None, process_id=None, integrand_name=None, format="dot".into(), overwrite=false, append=false))]
