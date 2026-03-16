@@ -8,9 +8,11 @@
 # - event generation
 # - additional partial weights in the generated events
 # - one shared jet-pt quantity
+# - one shared jet-count quantity
 # - one shared down-quark energy quantity
 # - one leading-jet selector
 # - one leading-jet histogram observable
+# - one jet-count histogram observable
 # - one down/anti-down energy histogram observable
 # - a local state under ./state
 #
@@ -44,6 +46,12 @@ algorithm = "anti_kt"
 dR = 0.4
 min_jpt = 0.0
 
+[quantities.jet_count]
+type = "jet_count"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 0.0
+
 [quantities.down_energy]
 type = "particle_scalar"
 pdgs = [1, -1]
@@ -70,6 +78,14 @@ phase = "real"
 x_min = 0.0
 x_max = 1000.0
 n_bins = 8
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+phase = "real"
+x_min = 0.0
+x_max = 6.0
+n_bins = 6
 '"""
 ]
 

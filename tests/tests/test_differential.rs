@@ -6,10 +6,10 @@ use gammalooprs::{
     observables::{
         AdditionalWeightKey, CutInfo, EntrySelection, Event, EventGroupList,
         EventProcessingRuntime, FilterQuantity, GenericEventGroupList, HistogramSettings,
-        ObservablePhase, ObservableSettings, ObservableSnapshotBundle, ObservableValueTransform,
-        ParticleScalarQuantitySettings, QuantitiesSettings, QuantitySettings,
-        SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
-        ValueRangeSelectorSettings,
+        JetClusteringSettings, JetCountQuantitySettings, ObservablePhase, ObservableSettings,
+        ObservableSnapshotBundle, ObservableValueTransform, ParticleScalarQuantitySettings,
+        QuantitiesSettings, QuantitySettings, SelectorDefinitionSettings, SelectorReduction,
+        SelectorSettings, ValueRangeSelectorSettings,
     },
     settings::RuntimeSettings,
     utils::{F, f128},
@@ -63,6 +63,7 @@ fn make_event(
         },
         weight: Complex::new(F(weight.0), F(weight.1)),
         additional_weights: gammalooprs::observables::GenericAdditionalWeightInfo { weights },
+        derived_observable_data: Default::default(),
     }
 }
 
@@ -138,6 +139,35 @@ fn runtime_settings() -> RuntimeSettings {
         },
     );
 
+    settings
+}
+
+fn jet_count_runtime_settings(with_misbinning: bool) -> RuntimeSettings {
+    let mut settings = RuntimeSettings::default();
+    settings.quantities.insert(
+        "jet_count".to_string(),
+        QuantitySettings::JetCount(JetCountQuantitySettings {
+            clustering: JetClusteringSettings::default(),
+        }),
+    );
+    settings.observables.insert(
+        "jet_count_hist".to_string(),
+        ObservableSettings {
+            quantity: "jet_count".to_string(),
+            entry_selection: EntrySelection::All,
+            entry_index: 0,
+            value_transform: ObservableValueTransform::Identity,
+            phase: ObservablePhase::Real,
+            misbinning_max_normalized_distance: with_misbinning.then_some(0.1),
+            histogram: HistogramSettings {
+                x_min: 0.0,
+                x_max: 6.0,
+                n_bins: 6,
+                log_x_axis: false,
+                log_y_axis: true,
+            },
+        },
+    );
     settings
 }
 
@@ -238,8 +268,10 @@ fn event_processing_runtime_filters_events_and_builds_snapshots() -> Result<()> 
         [(AdditionalWeightKey::Original, (2.0, 4.0))],
     );
 
-    assert!(selector_runtime.process_event(&accepted_event));
-    assert!(!selector_runtime.process_event(&rejected_event));
+    let mut accepted_event = accepted_event;
+    let mut rejected_event = rejected_event;
+    assert!(selector_runtime.process_event(&mut accepted_event));
+    assert!(!selector_runtime.process_event(&mut rejected_event));
 
     observable_runtime.process_event_groups(&singleton_groups(accepted_event.clone()));
     observable_runtime.process_event_groups(&singleton_groups(accepted_event));
@@ -369,5 +401,27 @@ fn event_processing_runtime_merges_worker_results_and_batch_histograms() -> Resu
     assert_eq!(merged_again.bins[0].entry_count, 2);
     assert_eq!(merged_again.bins[1].entry_count, 2);
 
+    Ok(())
+}
+
+#[test]
+fn jet_count_histograms_disable_misbinning_and_reject_misbinning_settings() -> Result<()> {
+    let runtime = EventProcessingRuntime::from_settings(&jet_count_runtime_settings(false))?;
+    let snapshot = runtime.snapshot_bundle();
+    let histogram = snapshot
+        .histograms
+        .get("jet_count_hist")
+        .expect("missing jet-count histogram");
+    assert!(!histogram.supports_misbinning_mitigation);
+
+    let error = match EventProcessingRuntime::from_settings(&jet_count_runtime_settings(true)) {
+        Ok(_) => panic!("jet-count observable must reject misbinning mitigation"),
+        Err(error) => error,
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("does not support misbinning mitigation")
+    );
     Ok(())
 }

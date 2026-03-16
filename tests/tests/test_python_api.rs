@@ -246,6 +246,10 @@ fn python_evaluate_sample_honors_generate_events_and_observable_snapshots() -> R
 type = "jet_pt"
 dR = 0.4
 
+[quantities.jet_count]
+type = "jet_count"
+dR = 0.4
+
 [selectors.leading_jet_pt_cut]
 quantity = "leading_jet_pt"
 selector = "value_range"
@@ -258,6 +262,13 @@ entry_selection = "leading_only"
 x_min = 0.0
 x_max = 1000.0
 n_bins = 8
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+x_min = 0.0
+x_max = 6.0
+n_bins = 6
 '"#
         .to_string(),
     );
@@ -287,10 +298,14 @@ payload = {{
     assert_eq!(without_events["event_groups_len"].as_u64(), Some(0));
     assert_eq!(
         without_events["observable_keys"].as_array().map(Vec::len),
-        Some(1)
+        Some(2)
     );
     assert_eq!(
         without_events["observable_keys"][0].as_str(),
+        Some("jet_count_hist")
+    );
+    assert_eq!(
+        without_events["observable_keys"][1].as_str(),
         Some("leading_jet_pt_hist")
     );
     assert!(without_events["generated_event_count"].as_u64().unwrap() > 0);
@@ -334,8 +349,13 @@ payload = {{
     assert!(minimal["accepted_event_count"].is_null());
     assert!(minimal["event_processing_time_seconds"].is_null());
     assert!(minimal["event_groups_len"].as_u64().unwrap() > 0);
+    assert_eq!(minimal["observable_keys"].as_array().map(Vec::len), Some(2));
     assert_eq!(
         minimal["observable_keys"][0].as_str(),
+        Some("jet_count_hist")
+    );
+    assert_eq!(
+        minimal["observable_keys"][1].as_str(),
         Some("leading_jet_pt_hist")
     );
     assert!(
@@ -360,12 +380,23 @@ fn python_evaluate_samples_batch_and_momentum_space_have_expected_shape() -> Res
 type = "jet_pt"
 dR = 0.4
 
+[quantities.jet_count]
+type = "jet_count"
+dR = 0.4
+
 [observables.leading_jet_pt_hist]
 quantity = "leading_jet_pt"
 entry_selection = "leading_only"
 x_min = 0.0
 x_max = 1000.0
 n_bins = 8
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+x_min = 0.0
+x_max = 6.0
+n_bins = 6
 '"#
         .to_string(),
     );
@@ -403,13 +434,22 @@ payload = {{
     assert_eq!(batch.len(), 2);
     for result in batch {
         assert!(result["event_groups_len"].as_u64().unwrap() > 0);
+        assert_eq!(result["observable_keys"].as_array().map(Vec::len), Some(2));
         assert_eq!(
             result["observable_keys"][0].as_str(),
+            Some("jet_count_hist")
+        );
+        assert_eq!(
+            result["observable_keys"][1].as_str(),
             Some("leading_jet_pt_hist")
         );
         assert_eq!(
             result["histogram_bin_counts"]["leading_jet_pt_hist"].as_u64(),
             Some(8)
+        );
+        assert_eq!(
+            result["histogram_bin_counts"]["jet_count_hist"].as_u64(),
+            Some(6)
         );
     }
 

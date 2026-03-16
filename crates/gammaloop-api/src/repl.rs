@@ -11,8 +11,8 @@ use console::style;
 use gammalooprs::model::ParameterType;
 use gammalooprs::observables::{
     CountRangeSelectorSettings, EntrySelection, FilterQuantity, HistogramSettings,
-    JetClusteringSettings, JetPtQuantitySettings, ObservablePhase, ObservableSettings,
-    ObservableValueTransform, ParticleScalarQuantitySettings, QuantitySettings,
+    JetClusteringSettings, JetCountQuantitySettings, JetPtQuantitySettings, ObservablePhase,
+    ObservableSettings, ObservableValueTransform, ParticleScalarQuantitySettings, QuantitySettings,
     SelectorDefinitionSettings, SelectorReduction, SelectorSettings, ValueRangeSelectorSettings,
 };
 use gammalooprs::settings::RuntimeSettings;
@@ -424,6 +424,11 @@ fn quantity_settings_root() -> &'static JsonValue {
                 "jet pt quantity completion",
             )
             .expect("jet pt quantity template must serialize for completion"),
+            serialize_settings_with_defaults(
+                &quantity_settings_template_jet_count(),
+                "jet count quantity completion",
+            )
+            .expect("jet count quantity template must serialize for completion"),
             serialize_settings_with_defaults(&QuantitySettings::AFB {}, "afb quantity completion")
                 .expect("afb quantity template must serialize for completion"),
             serialize_settings_with_defaults(
@@ -465,6 +470,12 @@ fn quantity_settings_template_particle_scalar() -> QuantitySettings {
 
 fn quantity_settings_template_jet_pt() -> QuantitySettings {
     QuantitySettings::JetPt(JetPtQuantitySettings {
+        clustering: JetClusteringSettings::default(),
+    })
+}
+
+fn quantity_settings_template_jet_count() -> QuantitySettings {
+    QuantitySettings::JetCount(JetCountQuantitySettings {
         clustering: JetClusteringSettings::default(),
     })
 }
