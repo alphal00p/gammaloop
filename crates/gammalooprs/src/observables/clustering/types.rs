@@ -48,6 +48,26 @@ impl<T: FloatLike> Jet<T> {
     pub fn constituent_indices(&self) -> &[usize] {
         &self.constituents
     }
+
+    pub fn to_f64(&self) -> Jet<f64> {
+        Jet::from_parts(
+            self.momentum.to_f64(),
+            self.constituents.clone(),
+            self.pt2.into_ff64(),
+            self.rapidity.into_ff64(),
+            self.phi.into_ff64(),
+        )
+    }
+
+    pub fn from_f64(jet: &Jet<f64>) -> Self {
+        Jet::from_parts(
+            FourMomentum::from_ff64(&jet.momentum),
+            jet.constituents.clone(),
+            F::from_ff64(jet.pt2),
+            F::from_ff64(jet.rapidity),
+            F::from_ff64(jet.phi),
+        )
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -70,6 +90,18 @@ impl<T: FloatLike> ClusteringResult<T> {
 
     pub fn ordered_pt(&self) -> SmallVec<[F<T>; 8]> {
         self.jets.iter().map(Jet::pt).collect()
+    }
+
+    pub fn to_f64(&self) -> ClusteringResult<f64> {
+        ClusteringResult {
+            jets: self.jets.iter().map(Jet::to_f64).collect(),
+        }
+    }
+
+    pub fn from_f64(result: &ClusteringResult<f64>) -> Self {
+        ClusteringResult {
+            jets: result.jets.iter().map(Jet::from_f64).collect(),
+        }
     }
 }
 
