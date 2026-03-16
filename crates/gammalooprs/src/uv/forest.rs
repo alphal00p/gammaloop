@@ -1,6 +1,7 @@
 use crate::{
     GammaLoopContext,
     graph::{Graph, LMBext, cuts::CutSet},
+    numerator::symbolica_ext::AtomCoreExt,
     utils::{GS, W_, ose_atom_from_index, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure},
 };
@@ -95,6 +96,7 @@ impl Forest {
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
+        println!("computing forest for {}", graph.dot(&cut_data.union));
 
         for (i, n) in order.into_iter().enumerate() {
             match self.dag.nodes[n].parents.len() {
@@ -214,7 +216,7 @@ impl Forest {
                     .as_ref()
                     .unwrap()
                     .expr(&graph.full_filter()),
-               expr = % atom.expand_num().log_print(),"Term before simplification"
+               expr = % atom.expand_num().log_print(None),"Term before simplification"
             );
 
             let atom = (atom
@@ -235,7 +237,7 @@ impl Forest {
                     .as_ref()
                     .unwrap()
                     .expr(&graph.full_filter()),
-               expr = % atom.log_print(),"Term"
+               expr = % atom.log_print(None),"Term"
             );
             sum += atom;
         }
@@ -269,8 +271,6 @@ impl Forest {
         let mut sum = None;
 
         for (_, n) in &self.dag.nodes {
-            n.data.final_integrand.clone().unwrap();
-
             let mut first = false;
 
             if sum.is_none() {
@@ -319,26 +319,26 @@ impl Forest {
 
         let mut sum = sum.ok_or(eyre!("No terms in forest"))?;
 
-        // add Feynman rules of cut edges
-        for (_p, _edge_index, d) in graph.iter_edges_of(&cut_edges.union) {
-            for s in &mut sum {
-                *s *= (&d.data.num).wrap_color(GS.color_wrap);
-            }
-        }
-
         for (pair, edge_index, _) in graph.iter_edges_of(
             &graph
                 .full_filter()
-                .subtract(&graph.initial_state_cut.left)
-                .subtract(&graph.initial_state_cut.right),
+                .subtract(&graph.initial_state_cut)
+                .subtract(&graph.tree_edges),
         ) {
             if matches!(pair, HedgePair::Unpaired { .. }) {
                 continue;
             }
 
+            // println!("{}", GS.split_mom_pattern_simple(edge_index));
+
             for s in &mut sum {
-                *s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
+                *s = s.replace_multiple(&[GS.split_mom_pattern_simple(edge_index)]);
             }
+        }
+
+        for s in &mut sum {
+            *s = s.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_);
+            // println!("Final integrand for forest: {}", s.log_print(Some(100)));
         }
         Ok(sum)
     }

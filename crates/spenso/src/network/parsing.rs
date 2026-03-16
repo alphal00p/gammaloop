@@ -53,6 +53,7 @@ pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::ne
         Some(("spenso",i))=>{
             let SpensoPrintSettings{
                 parens,
+                with_dim,
                 commas,..
             } = SpensoPrintSettings::from(i);
 
@@ -92,6 +93,9 @@ pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::ne
             }
             b.format(&mut s, opt,PrintState::new()).unwrap();
             s.push('.');
+            if with_dim {a.format(&mut s, opt, PrintState::new()).unwrap();
+                s.push('.');
+            }
             c.format(&mut s, opt,PrintState::new()).unwrap();
             if parens {
                 s.push(')');

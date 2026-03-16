@@ -1,12 +1,14 @@
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::Result;
-use eyre::eyre;
+use color_eyre::{Result, Section};
+use eyre::{Context, Error, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetIter, SubSetLike, subset::SubSet},
     typed_vec::IndexLike,
 };
+
+use color_eyre::Report;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::{
@@ -15,6 +17,7 @@ use spenso::{
         complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     },
     network::{ExecutionResult, Sequential, SmallestDegree},
+    shadowing::symbolica_utils::SpensoPrintSettings,
 };
 use std::ops::Deref;
 use std::{mem::transmute, ops::Neg, path::Path};
@@ -231,7 +234,7 @@ impl EvaluatorStack {
             &param_builder,
             dual_shape.clone(),
             opt_settings.clone(),
-            settings.store_atom,
+            settings,
         )
     }
     #[instrument(
@@ -256,7 +259,7 @@ impl EvaluatorStack {
                     .map(|atom| {
                         orientations.iter().map(|a| {
                             let selected = a.select(atom.as_atom_view());
-                            debug!(selected_expr = %selected.log_print(), "Iterative");
+                            debug!(selected_expr = %selected.log_print(None), "Iterative");
                             selected
                         })
                     })
@@ -264,7 +267,7 @@ impl EvaluatorStack {
                 &param_builder,
                 dual_shape.clone(),
                 settings.optimization_settings(),
-                settings.store_atom,
+                settings,
             )?,
             orientations.len(),
         ))
@@ -350,7 +353,7 @@ impl EvaluatorStack {
             entries,
             settings.optimization_settings(),
             dual_shape.clone(),
-            settings.store_atom,
+            settings,
         )
     }
 
@@ -375,7 +378,7 @@ impl EvaluatorStack {
                         a.orientation_thetas() * a.select(atom.as_atom_view()),
                         true,
                     );
-                    debug!(selected_expr = %selected.log_print(), "Iterative");
+                    debug!(selected_expr = %selected.log_print(None), "Iterative");
                     selected
                 })
                 .fold(Atom::Zero, |acc, n| acc + n)
@@ -396,7 +399,7 @@ impl EvaluatorStack {
             &param_builder,
             dual_shape.clone(),
             settings.optimization_settings(),
-            settings.store_atom,
+            settings,
         )
     }
     #[instrument(
@@ -415,58 +418,73 @@ impl EvaluatorStack {
             .iter()
             .map(|a| {
                 let mut net = a.as_atom_view().parse_into_net()?;
-
                 net.execute::<Sequential, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),
                 )?;
 
-                Ok(net.result_scalar().map(|a| match a {
-                    ExecutionResult::One => Atom::num(1),
-                    ExecutionResult::Zero => Atom::Zero,
-                    ExecutionResult::Val(v) => v.into_owned(),
-                })?)
+                Ok(net
+                    .result_scalar()
+                    .map(|a| match a {
+                        ExecutionResult::One => Atom::num(1),
+                        ExecutionResult::Zero => Atom::Zero,
+                        ExecutionResult::Val(v) => v.into_owned(),
+                    })
+                    .map_err(|a| {
+                        Report::from(a)
+                            .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
+                    })?)
             })
             .collect::<Result<Vec<_>>>()?;
 
         let iterative = if settings.iterative_orientation_optimization {
-            Some(Self::new_iterative(
-                &parsed_atoms,
-                param_builder,
-                orientations,
-                &dual_shape,
-                settings,
-            )?)
+            Some(
+                Self::new_iterative(
+                    &parsed_atoms,
+                    param_builder,
+                    orientations,
+                    &dual_shape,
+                    settings,
+                )
+                .with_context(|| "Failed to create iterative evaluator")?,
+            )
         } else {
             None
         };
 
         let summed_function_map = if settings.summed_function_map {
-            Some(Self::new_summed_function_map(
-                &parsed_atoms,
-                param_builder,
-                orientations,
-                &dual_shape,
-                settings,
-            )?)
+            Some(
+                Self::new_summed_function_map(
+                    &parsed_atoms,
+                    param_builder,
+                    orientations,
+                    &dual_shape,
+                    settings,
+                )
+                .with_context(|| "Failed to create summed function map")?,
+            )
         } else {
             None
         };
 
         let summed = if settings.summed {
-            Some(Self::new_summed(
-                &parsed_atoms,
-                param_builder,
-                orientations,
-                &dual_shape,
-                settings,
-            )?)
+            Some(
+                Self::new_summed(
+                    &parsed_atoms,
+                    param_builder,
+                    orientations,
+                    &dual_shape,
+                    settings,
+                )
+                .with_context(|| "Failed to create summed ")?,
+            )
         } else {
             None
         };
 
         let single_parametric =
-            Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)?;
+            Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)
+                .with_context(|| "Failed to create parametric")?;
 
         Ok(EvaluatorStack {
             single_parametric,
@@ -602,7 +620,7 @@ impl EvaluatorStack {
             input.override_if(true);
             // if let Some(exprs) = &summed_function_map.exprs {
             //     for e in exprs {
-            //         debug!(expr=%e.log_print(),"Summed evaluator");
+            //         debug!(expr=%e.log_print(None),"Summed evaluator");
             //     }
             // }
 
@@ -849,7 +867,7 @@ impl GenericEvaluator {
         builder: &ParamBuilder<f64>,
         dual_shape: Option<Vec<Vec<usize>>>,
         optimization_settings: OptimizationSettings,
-        store_atom: bool,
+        settings: &EvaluatorSettings,
     ) -> Result<Self> {
         let params: Vec<Atom> = (&builder.pairs)
             .into_iter()
@@ -863,7 +881,7 @@ impl GenericEvaluator {
             builder.reps.clone(),
             optimization_settings,
             dual_shape,
-            store_atom,
+            settings,
         )
     }
 
@@ -874,15 +892,50 @@ impl GenericEvaluator {
         fn_map_entries: Vec<FnMapEntry>,
         optimization_settings: OptimizationSettings,
         dual_shape: Option<Vec<Vec<usize>>>,
-        store_atom: bool,
+        settings: &EvaluatorSettings,
     ) -> Result<Self> {
-        let exprs: Vec<Atom> = atoms.into_iter().collect();
+        let reps = if settings.do_fn_map_replacements {
+            fn_map_entries
+                .iter()
+                .map(|r| r.replacement())
+                .collect::<Vec<_>>()
+        } else {
+            vec![]
+        };
+
+        for r in &reps {
+            println!("Reps!!{:#}", r)
+        }
+
+        let exprs: Vec<Atom> = atoms
+            .into_iter()
+            .map(|a| a.replace_multiple(&reps).replace_multiple(&reps))
+            .collect();
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for n in exprs.iter() {
             let eval = n
                 .evaluator(fn_map, params, optimization_settings.clone())
-                .map_err(|e| eyre!("Failed to create evaluator for atom: {:120}\n: {}", n, e))?;
+                .map_err(|e| {
+                    let mut settings =SpensoPrintSettings::compact().nice_symbolica();
+                    settings.max_line_length = Some(120);
+                    settings.hide_all_namespaces = false;
+                    eyre!(
+                        "Failed to create evaluator for atom: {:120}\n: {}, with params: \n {:120}, and fn_map_entries: \n {}",
+                        n.printer(settings),
+                        e,
+                        params
+                            .iter()
+                            .map(|a| a.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                        fn_map_entries
+                            .iter()
+                            .map(|a| format!("{}->{}\n",a.lhs,a.rhs))
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    )
+                })?;
 
             tree = Some(if let Some(mut tree) = tree {
                 tree.merge(eval, optimization_settings.cpe_iterations)
@@ -917,7 +970,11 @@ impl GenericEvaluator {
         let evaluator = GenericEvaluator {
             exprs_len: exprs.len(),
             fn_map_entries,
-            exprs: if store_atom { Some(exprs) } else { None },
+            exprs: if settings.store_atom {
+                Some(exprs)
+            } else {
+                None
+            },
             rational: Some(rational),
             f64_compiled: None,
             f64_eager,

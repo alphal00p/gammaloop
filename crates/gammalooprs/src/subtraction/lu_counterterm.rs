@@ -69,7 +69,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     None,
                     OptimizationSettings::default(),
-                    settings.generation.evaluator.store_atom,
+                    &settings.generation.evaluator,
                 )
                 .unwrap()
             })
@@ -84,7 +84,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     None,
                     OptimizationSettings::default(),
-                    settings.generation.evaluator.store_atom,
+                    &settings.generation.evaluator,
                 )
                 .unwrap()
             })
@@ -96,7 +96,7 @@ impl LUCounterTermEvaluators {
                 param_builder,
                 None,
                 OptimizationSettings::default(),
-                settings.generation.evaluator.store_atom,
+                &settings.generation.evaluator,
             )
             .unwrap()
         });
@@ -116,7 +116,7 @@ impl LUCounterTermEvaluators {
                             param_builder,
                             None,
                             OptimizationSettings::default(),
-                            settings.generation.evaluator.store_atom,
+                            &settings.generation.evaluator,
                         )
                         .unwrap()
                     })
@@ -141,7 +141,7 @@ impl LUCounterTermEvaluators {
                             param_builder,
                             None,
                             OptimizationSettings::default(),
-                            settings.generation.evaluator.store_atom,
+                            &settings.generation.evaluator,
                         )
                         .unwrap()
                     })
@@ -162,7 +162,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     None,
                     OptimizationSettings::default(),
-                    settings.generation.evaluator.store_atom,
+                    &settings.generation.evaluator,
                 )
                 .unwrap()
             }))

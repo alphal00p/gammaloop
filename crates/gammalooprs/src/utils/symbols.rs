@@ -756,7 +756,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     top: symbol!("Top"),
     num: symbol!("num"),
-    den: symbol!("den"),
+    den: symbol!("denom"),
     ubar: symbol!(
         "ubar",
         print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u̅") }
@@ -1028,11 +1028,11 @@ impl GammaloopSymbols {
 
     pub(crate) fn split_mom_pattern_simple(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
+        let index = Minkowski {}.to_symbolic([W_.a__]);
         Replacement::new(
-            self.emr_mom(e, Minkowski {}.to_symbolic([W_.a__]))
-                .to_pattern(),
-            function!(GS.ose, eidc, Minkowski {}.to_symbolic([W_.a__])) * sign_atom(e)
-                + function!(GS.emr_vec, eidc, Minkowski {}.to_symbolic([W_.a__])),
+            self.emr_mom(e, &index).to_pattern(),
+            function!(GS.ose, eidc) * sign_atom(e) * self.energy_delta(&index)
+                + function!(GS.emr_vec, eidc, &index),
         )
     }
 

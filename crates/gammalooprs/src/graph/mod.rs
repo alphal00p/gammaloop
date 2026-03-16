@@ -31,7 +31,7 @@ use crate::{
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::{GlobalPrefactor, ParsingNet, symbolica_ext::AtomCoreExt},
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    utils::{F, GS, Length, ose_atom_from_index},
+    utils::{F, GS, Length, ose_atom_from_index, symbolica_ext::LogPrint},
 };
 
 pub mod cuts;
@@ -71,6 +71,16 @@ pub mod ext;
 impl Graph {
     pub fn debug_dot(&self) -> String {
         DotGraph::from(self).debug_dot()
+    }
+
+    pub fn pretty_dot(&self) -> String {
+        self.dot_impl(
+            &self.full_filter(),
+            "",
+            &|a| None,
+            &|e| Some(format!("label=\"{}\"", e.num.log_print(None))),
+            &|v| Some(format!("label=\"{}\"", v.num.log_print(None))),
+        )
     }
 
     pub(crate) fn global_atom(&self) -> Atom {

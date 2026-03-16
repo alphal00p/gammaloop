@@ -24,6 +24,23 @@
     "Rust": {
       "language_servers": ["rust-analyzer", "rscls"],
     },
+    "Python": {
+      "language_servers": ["ty", "ruff", "!basedpyright"],
+      "inlay_hints": {
+        "enabled": true,
+        "show_type_hints": true,
+        "show_parameter_hints": true,
+        "show_other_hints": true,
+      },
+      "format_on_save": "on",
+      "formatter": [
+        {
+          "language_server": {
+            "name": "ruff",
+          },
+        },
+      ],
+    },
   },
   "lsp": {
     "yaml-language-server": {
@@ -65,9 +82,11 @@
       },
     },
     "rust-analyzer": {
+      "fetch": {
+        "pre_release": true,
+      },
       "binary": {
-        "ignore_system_version": false,
-        "path": "rust-analyzer",
+        "ignore_system_version": true,
       },
 
       "initialization_options": {

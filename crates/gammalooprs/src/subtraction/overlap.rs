@@ -12,6 +12,7 @@ use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::ExternalFourMomenta;
 use crate::momentum::sample::LoopMomenta;
 use crate::momentum::signature::LoopExtSignature;
+use crate::processes::EvaluatorSettings;
 use crate::settings::RuntimeSettings;
 use crate::utils::F;
 use crate::utils::GS;
@@ -141,7 +142,7 @@ impl OverlapStructure {
                 vec![],
                 optimization_settings.clone(),
                 None,
-                false,
+                &EvaluatorSettings::default(),
             )?;
 
             group.prefactor_evaluator = Some(RefCell::new(evalautor));

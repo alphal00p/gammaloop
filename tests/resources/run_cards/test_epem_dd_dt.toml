@@ -1,8 +1,34 @@
+#:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
+
 commands = [
-"import model sm",
-"generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes ",
-"integrate"
+  "import model sm",
+  "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes ",
+  "integrate"
 ]
+
+[cli_settings.global]
+logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "info,gammalooprs::fill_in_reduced=debug"
+
+[cli_settings.global.log_style]
+include_fields = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = true
+compile = true
+do_fn_map_replacements = false
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+check_esurface_at_generation = true
+# [cli_settings.global.generation.orientation_pattern]
+# pat = "orientation_delta(1,1,1,-1,1,-1,1)"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+softct = false
+add_sigma = false
+inner_products = false
 
 [default_runtime_settings.kinematics]
 e_cm = 1.0
@@ -11,18 +37,11 @@ e_cm = 1.0
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [[1.0, 0.0, 0.0, 1.0],[1.0,0.0,0.0,-1.0]]
-helicities = [1,1]
+momenta = [[1.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, -1.0]]
+helicities = [1, 1]
 
-
-[cli_settings.global.generation.evaluator]
-iterative_orientation_optimization = true
-compile = true
-[cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = false
-check_esurface_at_generation = true
-#[cli_settings.global.generation.orientation_pattern]
-#pat = "orientation_delta(1,1,1,-1,1,-1,1)"
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
 
 [default_runtime_settings.integrator]
 seed = 42

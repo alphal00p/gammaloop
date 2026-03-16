@@ -21,16 +21,18 @@ use crate::model::Model;
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub iterative_orientation_optimization: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub summed_function_map: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub compile: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub store_atom: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub do_fn_map_replacements: bool,
     #[serde(default, skip_serializing_if = "is_usize::<10>")]
     pub horner_iterations: usize,
     #[serde(default, skip_serializing_if = "is_usize::<10>")]
@@ -59,6 +61,7 @@ impl Default for EvaluatorSettings {
             summed: false,
             summed_function_map: false,
             compile: false,
+            do_fn_map_replacements: false,
             store_atom: false,
             horner_iterations: 10,
             n_cores: 1,

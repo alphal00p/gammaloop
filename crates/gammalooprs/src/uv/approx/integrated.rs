@@ -75,15 +75,15 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             .unwrap();
 
         if settings.pole_part {
-            debug!(t_arg = %t_arg.log_print(),"T arg for pole part 4d CT");
+            debug!(t_arg = %t_arg.log_print(None),"T arg for pole part 4d CT");
         } else {
-            debug!(t_arg = %t_arg.log_print(),"T arg for integrated 4d CT");
+            debug!(t_arg = %t_arg.log_print(None),"T arg for integrated 4d CT");
         }
         t_arg = t_arg.simplify_metrics().simplify_gamma() / graph.denominator(&reduced, |_| 1);
         if settings.pole_part {
-            debug!(t_arg = %t_arg.log_print(),"T arg  gamma simplified for pole part 4d CT");
+            debug!(t_arg = %t_arg.log_print(None),"T arg  gamma simplified for pole part 4d CT");
         } else {
-            debug!(t_arg = %t_arg.log_print(),"T arg gamma simplified for integrated 4d CT");
+            debug!(t_arg = %t_arg.log_print(None),"T arg gamma simplified for integrated 4d CT");
         }
 
         t_arg = t_arg
@@ -95,7 +95,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
 
         let mut atomarg = t_arg * expr;
 
-        debug!(atomarg = %atomarg.log_print(),"t_arg * inner_t for 4d CT");
+        debug!(atomarg = %atomarg.log_print(None),"t_arg * inner_t for 4d CT");
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &current.lmb(), &[W_.x___]);
@@ -152,7 +152,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 ));
         }
 
-        debug!(atomarg = %atomarg.log_print(),"t_arg * inner_t after rescaling masses for 4d CT");
+        debug!(atomarg = %atomarg.log_print(None),"t_arg * inner_t after rescaling masses for 4d CT");
         // den(..) tags a propagator, its first derivative is 1 and the rest is 0
         let mut a = atomarg
             .series(GS.rescale, Atom::Zero, current.dod().into(), true)
@@ -163,7 +163,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             .replace(parse!("der(x__, den(y__))"))
             .with(Atom::num(0));
 
-        debug!(a = %a.log_print(),"Series expanded for 4d CT");
+        debug!(a = %a.log_print(None),"Series expanded for 4d CT");
 
         if soft_ct {
             let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
@@ -200,7 +200,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
         );
 
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term as input");
+            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term as input");
         }
         debug!(settings = ?&self.vakint_settings,"Vakint args");
 
@@ -211,20 +211,20 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
 
         integrand_vakint.canonicalize(&self.vakint_settings, &self.vakint.topologies, false)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term after canonicalization");
+            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
         }
         integrand_vakint.tensor_reduce(&self.vakint, &self.vakint_settings)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term after tensor reduction");
+            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after tensor reduction");
         }
         integrand_vakint.evaluate_integral(&self.vakint, &self.vakint_settings)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(),numerator = %t.numerator.log_print(),"Vakint term after evaluation");
+            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after evaluation");
         }
 
         let mut res: Atom = integrand_vakint.into();
 
-        debug!(res = %res.expand().log_print(),"Raw post vakint ");
+        debug!(res = %res.expand().log_print(None),"Raw post vakint ");
 
         res = res
             .replace(parse_lit!(vakint::cl2))
@@ -302,7 +302,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        debug!(res = %res.expand().log_print(),"Replaced post vakint ");
+        debug!(res = %res.expand().log_print(None),"Replaced post vakint ");
         let series = res
             .series(
                 GS.dim_epsilon,
@@ -312,7 +312,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             )
             .unwrap();
 
-        debug!(series = %series.to_atom().log_print(),"Series ");
+        debug!(series = %series.to_atom().log_print(None),"Series ");
 
         let mut pole_stripped = Atom::Zero;
 
@@ -355,7 +355,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             }
         }
 
-        debug!(pole_part = %settings.pole_part,res = %res.log_print(),"Final integrated 4d CT");
+        debug!(pole_part = %settings.pole_part,res = %res.log_print(None),"Final integrated 4d CT");
 
         if res
             .replace(GS.dim)
@@ -393,7 +393,7 @@ pub(crate) fn to_vakint_integrand<
     let mut integrand_vakint = integrand.clone();
 
     debug!(
-        integrand = %integrand.log_print(),
+        integrand = %integrand.log_print(None),
         "Integrand vakint init"
     );
     //Atom::Zero

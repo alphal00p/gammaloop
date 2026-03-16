@@ -321,6 +321,12 @@ impl CrossSectionGraphTerm {
                             dual_shape,
                             &settings.generation.evaluator,
                         )
+                        .with_context(|| {
+                            format!(
+                                "Failed to create evaluator for graph{}",
+                                graph.graph.debug_dot()
+                            )
+                        })
                         .unwrap()
                     })
                     .collect()

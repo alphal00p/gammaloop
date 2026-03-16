@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::LazyLock};
+use std::{collections::HashSet, panic::catch_unwind, sync::LazyLock};
 
 use spenso::{
     network::{
@@ -29,6 +29,7 @@ use symbolica::{
 };
 
 use crate::parsing_ind::Parsind;
+use eyre::{Result, eyre};
 
 use super::rep_symbols::RS;
 
@@ -581,7 +582,7 @@ pub trait MetricSimplifier {
     /// An [`Atom`] representing the expression after metric simplification.
     fn simplify_metrics(&self) -> Atom;
 
-    fn expand_dots(&self) -> Atom;
+    fn expand_dots(&self) -> Result<Atom>;
 
     /// Converts contracted index patterns into dot product notation `dot(...)`.
     ///
@@ -599,7 +600,7 @@ impl MetricSimplifier for Atom {
         self.as_view().to_dots()
     }
 
-    fn expand_dots(&self) -> Atom {
+    fn expand_dots(&self) -> Result<Atom> {
         self.as_view().expand_dots()
     }
     fn simplify_metrics(&self) -> Atom {
@@ -612,18 +613,22 @@ impl MetricSimplifier for AtomView<'_> {
         to_dots_impl(*self)
     }
 
-    fn expand_dots(&self) -> Atom {
+    fn expand_dots(&self) -> Result<Atom> {
         let set = ParseSettings::default();
         let pat = function!(SPENSO_TAG.dot, RS.f_, RS.g_, RS.h_).to_pattern();
-        self.replace(pat.clone()).with_map(move |a| {
+
+        Ok(self.replace(pat.clone()).with_map(move |a| {
             let mut net = pat
                 .replace_wildcards_with_matches(a)
                 .parse_to_atom_net::<AbstractIndex>(&set)
-                .unwrap();
+                .expect(&format!(
+                    "failed to parse {}",
+                    pat.replace_wildcards_with_matches(a)
+                ));
 
             net.simple_execute();
             net.result_scalar().unwrap().into()
-        })
+        }))
     }
     fn simplify_metrics(&self) -> Atom {
         simplify_metrics_impl(*self)
@@ -771,6 +776,6 @@ mod test {
             ))
         );
 
-        insta::assert_snapshot!(a.expand_dots().to_bare_ordered_string(),@"-1*P(cind(1))*P(mink(4,-1*g(2)),cind(1))+-1*P(cind(2))*P(mink(4,-1*g(2)),cind(2))+-1*P(cind(3))*P(mink(4,-1*g(2)),cind(3))+P(cind(0))*P(mink(4,-1*g(2)),cind(0))")
+        insta::assert_snapshot!(a.expand_dots().unwrap().to_bare_ordered_string(),@"-1*P(cind(1))*P(mink(4,-1*g(2)),cind(1))+-1*P(cind(2))*P(mink(4,-1*g(2)),cind(2))+-1*P(cind(3))*P(mink(4,-1*g(2)),cind(3))+P(cind(0))*P(mink(4,-1*g(2)),cind(0))")
     }
 }

@@ -47,7 +47,7 @@ use crate::{
     model::ArcParticle,
     momentum::sample::SubspaceData,
     numerator::symbolica_ext::AtomCoreExt,
-    processes::DotExportSettings,
+    processes::{DotExportSettings, EvaluatorSettings},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{
         FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives,
@@ -950,8 +950,6 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         vakint: (&Vakint, &vakint::VakintSettings),
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
-        let scalar_global_num: Atom = self.graph.global_atom();
-
         let max_order = self
             .derived_data
             .raised_data
@@ -992,13 +990,7 @@ impl CrossSectionGraph {
         Ok(cut_forests
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
             .into_iter()
-            .map(|integrand| {
-                integrand.map(|a| {
-                    let res = (a * &lu_prefactor * &scalar_global_num);
-                    debug!("result integrand: {}", res.log_print());
-                    res
-                })
-            })
+            .map(|integrand| integrand.map(|a| a * &lu_prefactor))
             .collect())
     }
 
@@ -1336,7 +1328,8 @@ impl CrossSectionGraph {
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
                         .with(function!(GS.theta, W_.x_))
-                        .expand_dots();
+                        .expand_dots()
+                        .unwrap();
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1399,7 +1392,8 @@ impl CrossSectionGraph {
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
                         .with(function!(GS.theta, W_.x_))
-                        .expand_dots();
+                        .expand_dots()
+                        .unwrap();
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1455,7 +1449,8 @@ impl CrossSectionGraph {
                         .with(function!(GS.ose, W_.x_))
                         .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
                         .with(function!(GS.theta, W_.x_))
-                        .expand_dots();
+                        .expand_dots()
+                        .unwrap();
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1728,7 +1723,7 @@ fn build_derivative_structure(order: u8) -> GenericEvaluator {
         vec![],
         OptimizationSettings::default(),
         None,
-        true,
+        &EvaluatorSettings::default(),
     )
     .unwrap()
 }

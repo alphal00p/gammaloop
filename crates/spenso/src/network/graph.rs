@@ -675,6 +675,19 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             &|_| None,
             &|e| {
                 if let NetworkEdge::Slot(s) = e {
+                    // #[cfg(feature = "shadowing")]
+                    // {
+                    //     use symbolica::atom::AtomCore;
+
+                    //     use crate::shadowing::symbolica_utils::SpensoPrintSettings;
+
+                    //     Some(format!(
+                    //         "label=\"{s}={}\"",
+                    //         s.to_atom()
+                    //             .printer(SpensoPrintSettings::compact().nice_symbolica())
+                    //     ))
+                    // }
+                    // #[cfg(not(feature = "shadowing"))]
                     Some(format!("label=\"{s}\""))
                 } else {
                     None

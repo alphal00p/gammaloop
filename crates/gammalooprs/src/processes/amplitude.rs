@@ -802,7 +802,8 @@ impl AmplitudeGraph {
                     let scalar = a
                         .unwrap_function(GS.color_wrap)
                         .simplify_color()
-                        .expand_dots();
+                        .expand_dots()
+                        .unwrap();
                     self.add_additional_factors_to_cff_atom(&scalar)
                 })
             })
@@ -1196,7 +1197,7 @@ impl AmplitudeGraph {
                 })?
                 .into();
 
-            debug!("All parametric before color atom:{}", scalar.log_print());
+            debug!("All parametric before color atom:{}", scalar.log_print(None));
             scalar = scalar
                 .unwrap_function(GS.color_wrap)
                 .simplify_color()

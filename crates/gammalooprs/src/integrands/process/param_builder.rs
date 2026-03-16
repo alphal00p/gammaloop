@@ -650,6 +650,24 @@ pub struct FnMapEntry {
 }
 
 impl FnMapEntry {
+    pub fn replacement(&self) -> Replacement {
+        let mut rhs = self.rhs.clone();
+        let mut lhs = self.lhs.clone();
+
+        for (i, a) in self.args.iter().enumerate() {
+            let arg = Atom::from(a.clone()).to_pattern();
+            lhs = lhs
+                .replace(&arg)
+                .allow_new_wildcards_on_rhs(true)
+                .with(symbol!(&format!("arg{}_", i)));
+            rhs = rhs
+                .replace(&arg)
+                .allow_new_wildcards_on_rhs(true)
+                .with(symbol!(&format!("arg{}_", i)));
+        }
+        Replacement::new(lhs.to_pattern(), rhs)
+    }
+
     pub fn archive<T: ExportAtomTo>(&self) -> Result<(T, T, Vec<T>, Vec<T>)> {
         Ok((
             T::export_atom_to(&self.lhs)?,
@@ -1118,24 +1136,11 @@ impl<T: FloatLike> ParamBuilder<T> {
             ..Default::default()
         };
 
-        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
-
-        let arg = symbol!("arg");
+        let arg = symbol!("argument");
         new.add_function(
             GS.tree_denom_wrapper,
             "tree_denom".into(),
             vec![arg],
-            Atom::var(arg),
-        )
-        .unwrap();
-
-        let eid = symbol!("eid");
-        let mom = symbol!("mom");
-        let mass = symbol!("mass");
-        new.add_function(
-            GS.den,
-            "den".into(),
-            vec![eid, mom, mass, arg],
             Atom::var(arg),
         )
         .unwrap();
@@ -1158,36 +1163,35 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         for (edge_id, signature) in lmb.edge_signatures.iter() {
-            if !lmb.loop_edges.contains(&edge_id) {
-                let start = if signature.internal.iter().any(|sign| sign.is_sign()) {
-                    //has loop mom->is a non-tree edge -> energy is OSE-> no need for Q(0) rep
-                    1
-                } else {
-                    0
-                };
-                for i in start..4 {
-                    new.add_tagged_function::<Symbol>(
+            // if !lmb.loop_edges.contains(&edge_id) {
+            let start = if signature.internal.iter().any(|sign| sign.is_sign()) {
+                //has loop mom->is a non-tree edge -> energy is OSE-> no need for Q(0) rep
+                1
+            } else {
+                0
+            };
+            for i in start..4 {
+                new.add_tagged_function::<Symbol>(
+                    GS.emr_mom,
+                    vec![
+                        Atom::num(edge_id.0 as i64),
+                        Atom::from(ExpandedIndex::from_iter([i])),
+                    ],
+                    format!("Q({edge_id}, {i})"),
+                    vec![],
+                    lmb.loop_atom(
+                        edge_id,
                         GS.emr_mom,
-                        vec![
-                            Atom::num(edge_id.0 as i64),
-                            Atom::from(ExpandedIndex::from_iter([i])),
-                        ],
-                        format!("Q({edge_id}, {i})"),
-                        vec![],
-                        lmb.loop_atom(
-                            edge_id,
-                            GS.emr_mom,
-                            &[Atom::from(ExpandedIndex::from_iter([i]))],
-                            true,
-                        ) + lmb.ext_atom(
-                            edge_id,
-                            GS.emr_mom,
-                            &[Atom::from(ExpandedIndex::from_iter([i]))],
-                            true,
-                        ),
-                    )
-                    .unwrap();
-                }
+                        &[Atom::from(ExpandedIndex::from_iter([i]))],
+                        true,
+                    ) + lmb.ext_atom(
+                        edge_id,
+                        GS.emr_mom,
+                        &[Atom::from(ExpandedIndex::from_iter([i]))],
+                        true,
+                    ),
+                )
+                .unwrap();
             }
         }
 
@@ -1198,11 +1202,10 @@ impl<T: FloatLike> ParamBuilder<T> {
             parse_lit!(sqrt(x)),
         )
         .unwrap();
+        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
         // new.fn_map.add_conditional(GS.orientation_if);
-
         new.add_constant(GS.pi.into(), pi_rational.into());
-
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
         new.update_model_values(model);
         new.update_idenso_values();

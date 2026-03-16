@@ -15,11 +15,13 @@ use crate::{
 };
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::color::ColorSimplifier;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use std::hash::Hash;
 use tracing::debug;
 
-use spenso::network::library::TensorLibraryData;
+use spenso::{
+    network::library::TensorLibraryData, shadowing::symbolica_utils::SpensoPrintSettings,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, Symbol},
     function, parse_lit, symbol,
@@ -215,25 +217,18 @@ impl CFFapprox {
     ) -> Result<CFFapprox> {
         let cff = graph
             .cff(
-                &to_contract.union(
-                    &graph
-                        .tree_edges
-                        .subtract(&graph.initial_state_cut.left)
-                        .subtract(&graph.initial_state_cut.right),
-                ),
+                &to_contract
+                    .union(&graph.tree_edges)
+                    .subtract(&graph.initial_state_cut),
                 cuts,
             )?
             .expression_with_selectors();
 
         let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(
-                &graph
-                    .tree_edges
-                    .subtract(&graph.initial_state_cut.left)
-                    .subtract(&graph.initial_state_cut.right),
-                |_| -1,
-            ),
+            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
+
+        println!("Fourddenoms:{}", fourddenoms.log_print(None));
 
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
@@ -317,7 +312,7 @@ impl Approximation {
             simple = % self.simple_approx
                 .as_ref()
                 .unwrap()
-                .expr(&graph.full_filter()).log_print(),
+                .expr(&graph.full_filter()).log_print(None),
             "Computing Integrated",
         );
 
@@ -408,6 +403,7 @@ impl Approximation {
         cutset: &CutSet,
         settings: &UVgenerationSettings,
     ) -> Result<Vec<Atom>> {
+        let global_num = graph.global_atom();
         let (t, s) = self
             .local_3d
             .expr()
@@ -445,7 +441,10 @@ impl Approximation {
             unreachable!()
         };
 
-        let reduced = graph.full_filter().subtract(self.subgraph.included());
+        let reduced = graph
+            .full_filter()
+            .subtract(self.subgraph.included())
+            .subtract(&graph.initial_state_cut);
 
         let mut integrands = vec![];
 
@@ -468,6 +467,18 @@ impl Approximation {
                 .get_single_atom()
                 .unwrap();
 
+            println!(
+                "Numerator of {},{}, subgraph: {}, with contracted graph: {}, is {}",
+                self.simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+                graph.pretty_dot(),
+                graph.dot(&reduced),
+                graph.dot(&self.subgraph),
+                resnum.log_print(None)
+            );
+
             let bridgeless_reduced = reduced.subtract(&graph.tree_edges);
 
             let mut reps = Vec::new();
@@ -478,9 +489,22 @@ impl Approximation {
                 }
             }
 
-            resnum = resnum.replace_multiple(&reps).replace(GS.dim).with(4);
-            resnum *= cff;
-            resnum = resnum.wrap_color(GS.color_wrap);
+            resnum = resnum.replace_multiple(&reps);
+            resnum *= cff * &global_num;
+
+            resnum = resnum.replace(GS.dim).with(4).simplify_color().to_dots();
+            // println!(
+            //     "Resnum {}",
+            //     resnum.printer(
+            //         SpensoPrintSettings {
+            //             with_dim: true,
+            //             ..SpensoPrintSettings::compact()
+            //         }
+            //         .nice_symbolica()
+            //     )
+            // );
+
+            resnum = resnum.expand_dots()?;
 
             debug!(
                 "Integrand before parsing for {} for dod{}:{}",
@@ -502,11 +526,12 @@ impl Approximation {
                     .with(Atom::Zero)
                     .collect_factors()
                     .collect_num()
-                    .log_print() // printer(LOGPRINTOPTS)
+                    .log_print(None) // printer(LOGPRINTOPTS)
             );
 
             integrands.push(resnum.replace_multiple(&reps))
         }
+
         // debug!("final_cff {res:>}");
         Ok(integrands)
     }

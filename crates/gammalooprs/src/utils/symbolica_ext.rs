@@ -907,12 +907,13 @@ where
 }
 
 pub trait LogPrint {
-    fn log_print(&self) -> String;
+    fn log_print(&self, max_line_length: Option<usize>) -> String;
 }
 
 impl<A: AtomCore> LogPrint for A {
-    fn log_print(&self) -> String {
-        let settings = SpensoPrintSettings::compact().nice_symbolica();
+    fn log_print(&self, max: Option<usize>) -> String {
+        let mut settings = SpensoPrintSettings::compact().nice_symbolica();
+        settings.max_line_length = max;
         // settings.hide_all_namespaces = false;
         self.printer(settings).to_string()
     }
