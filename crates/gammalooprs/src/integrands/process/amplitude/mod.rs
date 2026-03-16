@@ -38,12 +38,13 @@ use crate::{
         LoopMomentumBasis,
     },
     integrands::HasIntegrand,
-    integrands::evaluation::{EvaluationMetaData, EvaluationResult},
+    integrands::evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
     integrands::process::{ChannelIndex, ParamBuilder, evaluators::EvaluatorStack},
     model::Model,
     momentum::sample::{ExternalIndex, MomentumSample},
     momentum::signature::SignatureLike,
     momentum::{Rotation, RotationMethod},
+    observables::EventProcessingRuntime,
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
@@ -54,7 +55,8 @@ use crate::{
 };
 
 use super::{
-    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid, evaluate_sample,
+    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
+    evaluate_sample,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -366,11 +368,12 @@ impl GraphTerm for AmplitudeGraphTerm {
         momentum_sample: &MomentumSample<T>,
         model: &Model,
         settings: &RuntimeSettings,
+        _event_processing_runtime: Option<&mut EventProcessingRuntime>,
         rotation: &Rotation,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Result<Complex<F<T>>> {
+    ) -> Result<GraphEvaluationResult<T>> {
         self.evaluate_impl(
             momentum_sample,
             model,
@@ -380,6 +383,13 @@ impl GraphTerm for AmplitudeGraphTerm {
             record_primary_timing,
             channel_id,
         )
+        .map(|integrand_result| GraphEvaluationResult {
+            integrand_result,
+            generated_events: Vec::new(),
+            event_processing_time: std::time::Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
+        })
     }
 
     fn get_num_orientations(&self) -> usize {
@@ -409,6 +419,7 @@ impl GraphTerm for AmplitudeGraphTerm {
 pub struct AmplitudeIntegrand {
     pub settings: RuntimeSettings,
     pub data: AmplitudeIntegrandData,
+    pub(crate) event_processing_runtime: RuntimeCache<EventProcessingRuntime>,
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -471,7 +482,15 @@ impl AmplitudeIntegrand {
             "runtime settings for amplitude integrand",
         )?;
 
-        Ok(AmplitudeIntegrand { settings, data })
+        Ok(AmplitudeIntegrand {
+            settings,
+            data,
+            event_processing_runtime: RuntimeCache::default(),
+        })
+    }
+
+    pub(crate) fn invalidate_event_processing_runtime(&mut self) {
+        self.event_processing_runtime.invalidate();
     }
 
     pub(crate) fn get_existing_esurfaces(
@@ -749,6 +768,9 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             }
         }
 
+        self.event_processing_runtime
+            .set(EventProcessingRuntime::from_settings(&self.settings)?);
+
         Ok(())
     }
 
@@ -758,6 +780,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G> {
         self.data.graph_terms.iter_mut()
+    }
+
+    fn graph_count(&self) -> usize {
+        self.data.graph_terms.len()
     }
 
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
@@ -790,6 +816,16 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
     fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup> {
         &self.data.graph_group_structure
+    }
+
+    fn take_event_processing_runtime(&mut self) -> Option<EventProcessingRuntime> {
+        self.event_processing_runtime.take()
+    }
+
+    fn restore_event_processing_runtime(&mut self, runtime: Option<EventProcessingRuntime>) {
+        if let Some(runtime) = runtime {
+            self.event_processing_runtime.set(runtime);
+        }
     }
     // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
     //     &self.data.builder_cache

@@ -187,6 +187,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
             integrand_evaluation_time: evaluation_timing,
             evaluator_evaluation_time: Duration::ZERO,
             parameterization_time: parameterization_timing,
+            event_time: Duration::ZERO,
             relative_instability_error: Complex::new_zero(),
             highest_precision: precision,
             is_nan,
@@ -208,6 +209,9 @@ impl HasIntegrand for HFunctionTestIntegrand {
             integrand_result: integration_result,
             integrator_weight: wgt,
             event_buffer: vec![],
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
             evaluation_metadata,
         })
     }
