@@ -744,7 +744,6 @@ impl CrossSectionGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        // print!("contract edges: {:?}", contract_edges);
         let global_cff = self
             .graph
             .generate_cff(&contract_edges, &canonize_esurface)?;
@@ -996,7 +995,7 @@ impl CrossSectionGraph {
             .map(|integrand| {
                 integrand.map(|a| {
                     let res = (a * &lu_prefactor * &scalar_global_num);
-                    println!("result integrand: {}", res.log_print());
+                    debug!("result integrand: {}", res.log_print());
                     res
                 })
             })
@@ -1614,13 +1613,9 @@ impl RaisedCutData {
             .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
             .collect::<HashMap<EsurfaceID, CutId>>();
 
-        println!("cut_esurface_map: {:?}", cut_esurface_map);
-        println!("reversed_map: {:?}", reversed_map);
-        println!("raised_esurface_data: {:?}", raised_esurface_data);
-
         let mut groups = TiVec::new();
 
-        for (raised_esurface_id, raised_esurface_group) in
+        for (_raised_esurface_id, raised_esurface_group) in
             raised_esurface_data.raised_groups.iter_enumerated()
         {
             if cut_esurface_map.contains(&raised_esurface_group.esurface_ids[0]) {

@@ -403,7 +403,6 @@ where
     }
 
     pub(crate) fn normalize_single_raising(&mut self, raised_esurface_group: &RaisedEsurfaceGroup) {
-        println!("corrupt group?: {:?}", raised_esurface_group);
         let reprentative_esurface_id = raised_esurface_group.esurface_ids[0];
 
         for orientation in self.orientations.iter_mut() {

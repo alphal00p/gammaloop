@@ -1067,11 +1067,11 @@ impl<T: FloatLike> ParamBuilder<T> {
             })
             .collect();
         self.values.append(&mut higher_order_values);
-        println!("Initialized {} derivative values", self.values.len() - 1);
+        debug!("Initialized {} derivative values", self.values.len() - 1);
 
         for values in self.values.iter() {
-            println!("values at order: ");
-            println!("len: {}", values.len());
+            debug!("values at order: ");
+            debug!("len: {}", values.len());
         }
     }
 
