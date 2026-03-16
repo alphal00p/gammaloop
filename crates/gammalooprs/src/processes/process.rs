@@ -46,6 +46,33 @@ use super::{Amplitude, CrossSection};
 const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
 const SETTINGS_HISTORY_YAML: &str = "settings_history.yaml";
 
+fn create_overwriting_file(path: &Path, file_kind: &str) -> Result<File> {
+    if path.exists() {
+        if path.is_dir() {
+            fs::remove_dir_all(path).with_context(|| {
+                format!(
+                    "Trying to remove existing directory before exporting {file_kind} {}",
+                    path.display()
+                )
+            })?;
+        } else {
+            fs::remove_file(path).with_context(|| {
+                format!(
+                    "Trying to remove existing file before exporting {file_kind} {}",
+                    path.display()
+                )
+            })?;
+        }
+    }
+
+    File::create(path).with_context(|| {
+        format!(
+            "Trying to create file to export {file_kind} {}",
+            path.display()
+        )
+    })
+}
+
 fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
     let settings_history_toml = path.join(SETTINGS_HISTORY_TOML);
     if settings_history_toml.exists() {
@@ -673,33 +700,16 @@ impl Process {
 
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
-                        let mut dot = File::create_new(
-                            amp_path.join(format!("{}_graphs.dot", amp_name.clone())),
-                        )
-                        .with_context(|| {
-                            format!(
-                                "Trying to create file to export amplitude graph {}",
-                                amp_path
-                                    .join(format!("{}_graphs.dot", amp_name.clone()))
-                                    .display()
-                            )
-                        })?;
+                        let output_path = amp_path.join(format!("{}_graphs.dot", amp_name.clone()));
+                        let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
                         for graph in amp.graphs.iter() {
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     } else {
                         // Save each graph in its own file
                         for graph in amp.graphs.iter() {
-                            let mut dot =
-                                File::create(amp_path.join(format!("{}.dot", graph.graph.name)))
-                                    .with_context(|| {
-                                        format!(
-                                            "Trying to create file to export amplitude graph {}",
-                                            amp_path
-                                                .join(format!("{}.dot", graph.graph.name))
-                                                .display()
-                                        )
-                                    })?;
+                            let output_path = amp_path.join(format!("{}.dot", graph.graph.name));
+                            let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     }
@@ -721,32 +731,17 @@ impl Process {
 
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
-                        let mut dot = File::create_new(
-                            cs_path.join(format!("{}_graphs.dot", xs_name.clone())),
-                        )
-                        .with_context(|| {
-                            format!(
-                                "Trying to create file to export amplitude graph {}",
-                                cs_path
-                                    .join(format!("{}_graphs.dot", xs_name.clone()))
-                                    .display()
-                            )
-                        })?;
+                        let output_path = cs_path.join(format!("{}_graphs.dot", xs_name.clone()));
+                        let mut dot = create_overwriting_file(&output_path, "cross section graph")?;
                         for graph in cs.supergraphs.iter() {
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     } else {
                         // Save each supergraph in its own file
                         for graph in cs.supergraphs.iter() {
-                            let mut dot = File::create_new(
-                                cs_path.join(format!("{}.dot", graph.graph.name)),
-                            )
-                            .with_context(|| {
-                                format!(
-                                    "Trying to create file to export cross section graph {}",
-                                    cs_path.join(format!("{}.dot", graph.graph.name)).display()
-                                )
-                            })?;
+                            let output_path = cs_path.join(format!("{}.dot", graph.graph.name));
+                            let mut dot =
+                                create_overwriting_file(&output_path, "cross section graph")?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     }
