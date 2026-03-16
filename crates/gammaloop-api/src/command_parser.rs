@@ -1,3 +1,5 @@
+use std::ffi::OsString;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandLineParseError {
     IncompleteShellSyntax,
@@ -5,7 +7,46 @@ pub enum CommandLineParseError {
 
 pub fn split_command_line(input: &str) -> Result<Vec<String>, CommandLineParseError> {
     let normalized = escape_process_ref_hash_ids(input);
-    shlex::split(&normalized).ok_or(CommandLineParseError::IncompleteShellSyntax)
+    shlex::split(&normalized)
+        .map(normalize_generate_tokens)
+        .ok_or(CommandLineParseError::IncompleteShellSyntax)
+}
+
+pub fn normalize_generate_argv(argv: &[OsString]) -> Vec<OsString> {
+    let mut normalized = argv.to_vec();
+    let Some(generate_index) = normalized.iter().position(|arg| arg == "generate") else {
+        return normalized;
+    };
+
+    let next = normalized
+        .get(generate_index + 1)
+        .and_then(|value| value.to_str())
+        .map(str::to_owned);
+    if should_insert_default_generate_mode(next.as_deref()) {
+        normalized.insert(generate_index + 1, OsString::from("xs"));
+    }
+
+    normalized
+}
+
+fn normalize_generate_tokens(mut tokens: Vec<String>) -> Vec<String> {
+    let Some(generate_index) = tokens.iter().position(|token| token == "generate") else {
+        return tokens;
+    };
+
+    let next = tokens.get(generate_index + 1).map(String::as_str);
+    if should_insert_default_generate_mode(next) {
+        tokens.insert(generate_index + 1, "xs".to_string());
+    }
+
+    tokens
+}
+
+fn should_insert_default_generate_mode(next: Option<&str>) -> bool {
+    matches!(next, Some(next) if !matches!(
+        next,
+        "xs" | "amp" | "amplitude" | "existing" | "-h" | "--help" | "help"
+    ))
 }
 
 pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseError> {
@@ -176,7 +217,9 @@ fn escape_process_ref_hash_ids(input: &str) -> String {
 
 #[cfg(test)]
 mod test {
-    use super::{split_command_line, split_command_list};
+    use std::ffi::OsString;
+
+    use super::{normalize_generate_argv, split_command_line, split_command_list};
 
     #[test]
     fn split_supports_multiline_quoted_values() {
@@ -209,6 +252,73 @@ mod test {
         let line = "display processes # trailing comment";
         let parts = split_command_line(line).unwrap();
         assert_eq!(parts, vec!["display", "processes"]);
+    }
+
+    #[test]
+    fn split_defaults_generate_to_cross_section_mode() {
+        let parts = split_command_line("generate g g > h").unwrap();
+        assert_eq!(parts, vec!["generate", "xs", "g", "g", ">", "h"]);
+    }
+
+    #[test]
+    fn split_defaults_generate_to_cross_section_mode_before_flags() {
+        let parts = split_command_line("generate --only-diagrams g g > h").unwrap();
+        assert_eq!(
+            parts,
+            vec!["generate", "xs", "--only-diagrams", "g", "g", ">", "h"]
+        );
+    }
+
+    #[test]
+    fn normalize_generate_argv_inserts_default_mode() {
+        let args = vec![
+            OsString::from("gammaloop"),
+            OsString::from("--read-only-state"),
+            OsString::from("generate"),
+            OsString::from("g"),
+            OsString::from("g"),
+            OsString::from(">"),
+            OsString::from("h"),
+        ];
+        assert_eq!(
+            normalize_generate_argv(&args),
+            vec![
+                OsString::from("gammaloop"),
+                OsString::from("--read-only-state"),
+                OsString::from("generate"),
+                OsString::from("xs"),
+                OsString::from("g"),
+                OsString::from("g"),
+                OsString::from(">"),
+                OsString::from("h"),
+            ]
+        );
+    }
+
+    #[test]
+    fn normalize_generate_argv_inserts_default_mode_before_flags() {
+        let args = vec![
+            OsString::from("gammaloop"),
+            OsString::from("generate"),
+            OsString::from("--only-diagrams"),
+            OsString::from("g"),
+            OsString::from("g"),
+            OsString::from(">"),
+            OsString::from("h"),
+        ];
+        assert_eq!(
+            normalize_generate_argv(&args),
+            vec![
+                OsString::from("gammaloop"),
+                OsString::from("generate"),
+                OsString::from("xs"),
+                OsString::from("--only-diagrams"),
+                OsString::from("g"),
+                OsString::from("g"),
+                OsString::from(">"),
+                OsString::from("h"),
+            ]
+        );
     }
 
     #[test]
