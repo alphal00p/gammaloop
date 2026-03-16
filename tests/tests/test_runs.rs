@@ -33,7 +33,7 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     function,
     id::Pattern,
-    symbol,
+    symbol, warn,
 };
 use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
@@ -1489,5 +1489,108 @@ fn test_qqx_aaa_ir_subtracted_inspect() -> Result<()> {
 
     let target = Complex::new(2.3159767780905335e-1, -1.8547720156633686e-4);
     assert_eq!(inspect, target);
+    Ok(())
+}
+
+#[test]
+fn test_integrate_dotted_bubble() -> Result<()> {
+    let target = Complex::new(F(0.0), F(0.002871504663657095));
+    let mut cli = get_test_cli(
+        Some("dotted_bubble_generate.toml".into()),
+        get_tests_workspace_path().join("dotted_bubble"),
+        None,
+        true,
+    )?;
+
+    let integrate_command = Integrate {
+        process: None,
+        integrand_name: None,
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("dotted_bubble/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("dotted_bubble/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    let integration_result = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integration_result.is_compatible_with_target(target, 2),
+        "Integration result {integration_result} not compatible with target {target}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_integrate_bubble_dot_1t1b() -> Result<()> {
+    let target = Complex::new(F(-0.00041875868403258484), F(0.0));
+
+    let mut cli = get_test_cli(
+        Some("bubble_dot_1t1b_generate.toml".into()),
+        get_tests_workspace_path().join("bubble_dot_1t1b"),
+        None,
+        true,
+    )?;
+
+    let integrate_command = Integrate {
+        process: None,
+        integrand_name: None,
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("bubble_dot_1t1b/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("bubble_dot_1t1b/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    let integration_result = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integration_result.is_compatible_with_target(target, 2),
+        "Integration result {integration_result} not compatible with target {target}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_integrate_bubble_dot_2t0b() -> Result<()> {
+    let target = Complex::new(F(-2.9911664985748502e-05), F(0.0));
+
+    let mut cli = get_test_cli(
+        Some("bubble_dot_2t0b_generate.toml".into()),
+        get_tests_workspace_path().join("bubble_dot_2t0b"),
+        None,
+        true,
+    )?;
+
+    let integrate_command = Integrate {
+        process: None,
+        integrand_name: None,
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("bubble_dot_2t0b/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("bubble_dot_2t0b/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    let integration_result = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        integration_result.is_compatible_with_target(target, 2),
+        "Integration result {integration_result} not compatible with target {target}"
+    );
     Ok(())
 }

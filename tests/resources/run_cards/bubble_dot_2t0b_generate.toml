@@ -1,0 +1,47 @@
+commands = [
+"import model ./assets/models/json/scalars/scalars_2p_3p.json",
+"import graphs bubble_dot_2t0b.dot ",
+"generate",
+]
+
+
+[default_runtime_settings.general]
+use_picobarns = false
+disable_flux_factor = true
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    [
+         4.0,
+         0.0,
+         0.0,
+         0.0,
+    ],
+]
+helicities = [
+    1,
+]
+
+[default_runtime_settings.integrator]
+n_max = 5_000_000
+n_start = 5_00_000
+n_increase = 0
+continuous_dim_learning_rate = 1.5
+
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+compile=true
+iterative_orientation_optimization=true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
