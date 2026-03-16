@@ -370,24 +370,7 @@ struct StabilitySummaryRow {
 }
 
 fn format_duration(duration: Duration) -> String {
-    let seconds = duration.as_secs_f64();
-    let (value, unit) = if seconds >= 1.0 {
-        (seconds, "s")
-    } else if seconds >= 1.0e-3 {
-        (seconds * 1.0e3, "ms")
-    } else {
-        (seconds * 1.0e6, "μs")
-    };
-
-    let precision = if value >= 100.0 {
-        0
-    } else if value >= 10.0 {
-        1
-    } else {
-        2
-    };
-
-    format!("{value:.precision$} {unit}")
+    format_evaluation_time(duration)
 }
 
 fn format_count(value: usize) -> String {
@@ -417,11 +400,24 @@ fn format_count(value: usize) -> String {
     value.round().to_string()
 }
 
-fn format_ratio(value: f64) -> String {
+fn format_percentage(value: f64, significant_digits: usize) -> String {
     if !value.is_finite() {
         return "None".red().to_string();
     }
-    format!("{:+.16e}", value)
+
+    if value == 0.0 {
+        let decimals = significant_digits.saturating_sub(1);
+        return format!("{:.*}%", decimals, 0.0);
+    }
+
+    let abs_value = value.abs();
+    let exponent = abs_value.log10().floor() as i32;
+    if exponent < -2 || exponent >= significant_digits as i32 {
+        return format!("{:.*e}%", significant_digits.saturating_sub(1), value);
+    }
+
+    let decimals = (significant_digits as i32 - exponent - 1).max(0) as usize;
+    format!("{value:.decimals$}%")
 }
 
 fn summarize_observables(observables: &ObservableSnapshotBundle) -> Option<String> {
@@ -492,11 +488,6 @@ pub struct EvaluationMetaData {
 
 impl Display for EvaluationMetaData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let selection_retention = if self.generated_event_count == 0 {
-            "None".red().to_string()
-        } else {
-            format_ratio(self.accepted_event_count as f64 / self.generated_event_count as f64)
-        };
         let rows = vec![
             EvaluationSummaryRow {
                 field: "nan".to_string(),
@@ -509,10 +500,6 @@ impl Display for EvaluationMetaData {
             EvaluationSummaryRow {
                 field: "accepted events".to_string(),
                 value: format_count(self.accepted_event_count),
-            },
-            EvaluationSummaryRow {
-                field: "selection retention".to_string(),
-                value: selection_retention,
             },
             EvaluationSummaryRow {
                 field: "parameterization time".to_string(),
@@ -600,6 +587,7 @@ pub struct StatisticsCounter {
     num_quadruple_precision_evals: usize,
     num_arb_precision_evals: usize,
     num_nan_evals: usize,
+    num_nan_or_unstable_evals: usize,
     sum_generated_event_count: usize,
     sum_accepted_event_count: usize,
 }
@@ -643,6 +631,16 @@ impl StatisticsCounter {
                 if data_entry.evaluation_metadata.is_nan {
                     accumulator.num_nan_evals += 1;
                 }
+                if data_entry.evaluation_metadata.is_nan
+                    || data_entry
+                        .evaluation_metadata
+                        .stability_results
+                        .last()
+                        .map(|result| !result.accepted_as_stable)
+                        .unwrap_or(false)
+                {
+                    accumulator.num_nan_or_unstable_evals += 1;
+                }
 
                 accumulator
             },
@@ -671,6 +669,8 @@ impl StatisticsCounter {
             sum_total_evaluation_time: self.sum_total_evaluation_time
                 + other.sum_total_evaluation_time,
             num_nan_evals: self.num_nan_evals + other.num_nan_evals,
+            num_nan_or_unstable_evals: self.num_nan_or_unstable_evals
+                + other.num_nan_or_unstable_evals,
             sum_event_time: self.sum_event_time + other.sum_event_time,
             sum_generated_event_count: self.sum_generated_event_count
                 + other.sum_generated_event_count,
@@ -692,6 +692,7 @@ impl StatisticsCounter {
             num_quadruple_precision_evals: 0,
             num_arb_precision_evals: 0,
             num_nan_evals: 0,
+            num_nan_or_unstable_evals: 0,
             sum_generated_event_count: 0,
             sum_accepted_event_count: 0,
         }
@@ -734,6 +735,11 @@ impl StatisticsCounter {
         Duration::from_secs_f64(avg_param_timing)
     }
 
+    pub(crate) fn get_avg_event_timing(&self) -> Duration {
+        let avg_event_timing = self.sum_event_time.as_secs_f64() / self.num_evals as f64;
+        Duration::from_secs_f64(avg_event_timing)
+    }
+
     /// Get the average relative error computed during instability checks
     #[allow(dead_code)]
     pub(crate) fn get_avg_instabillity_error(&self) -> (F<f64>, F<f64>) {
@@ -769,12 +775,38 @@ impl StatisticsCounter {
         self.num_nan_evals as f64 / self.num_evals as f64 * 100.0
     }
 
+    pub(crate) fn get_percentage_nan_or_unstable(&self) -> f64 {
+        self.num_nan_or_unstable_evals as f64 / self.num_evals as f64 * 100.0
+    }
+
+    pub(crate) fn selection_efficiency_percentage(&self) -> Option<f64> {
+        if self.sum_generated_event_count == 0 {
+            None
+        } else {
+            Some(
+                self.sum_accepted_event_count as f64 / self.sum_generated_event_count as f64
+                    * 100.0,
+            )
+        }
+    }
+
     #[allow(clippy::format_in_format_args)]
     pub(crate) fn display_status(&self) {
         let time_integrand_formatted = format_evaluation_time(self.get_avg_integrand_timing());
         let time_evaluators_formatted = format_evaluation_time(self.get_avg_evaluator_timing());
         let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());
+        let event_time_formatted = format_evaluation_time(self.get_avg_event_timing());
         let total_time = format_evaluation_time(self.get_avg_total_timing());
+        let selection_efficiency = self.selection_efficiency_percentage();
+        let selection_efficiency_display = selection_efficiency
+            .map(|value| format_percentage(value, 3).green().to_string())
+            .unwrap_or_else(|| "None".red().to_string());
+        let nan_or_unstable = self.get_percentage_nan_or_unstable();
+        let nan_or_unstable_display = if nan_or_unstable > 0.0 {
+            format_percentage(nan_or_unstable, 2).red().to_string()
+        } else {
+            format_percentage(nan_or_unstable, 2).green().to_string()
+        };
 
         info!(
             "|  {}  | {} {} | {} {} | {} {} | {} {}",
@@ -800,6 +832,19 @@ impl StatisticsCounter {
             format!("{:-9}", format!("{:.2}%", self.get_percentage_arb())).green(),
             format!("{:-7}", "nan:"),
             format!("{:-9}", format!("{:.2}%", self.get_percentage_nan())).green(),
+        );
+
+        info!(
+            "|  {}  | {} {} | {} {} | {} {} | {} {}",
+            format!("{:-7}", "events").blue().bold(),
+            format!("{:-7}", "Evts:"),
+            format!("{:-9}", format_count(self.sum_generated_event_count)).green(),
+            format!("{:-7}", "Sel. %:"),
+            format!("{:-9}", selection_efficiency_display),
+            format!("{:-7}", "t. obs:"),
+            format!("{:-9}", event_time_formatted).green(),
+            format!("{:-16}", "NaNs/Unstable %:"),
+            format!("{:-9}", nan_or_unstable_display),
         );
     }
 }

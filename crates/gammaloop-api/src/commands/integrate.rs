@@ -69,6 +69,10 @@ pub struct Integrate {
     /// Whether to restart the integration from scratch, or continue from a previous run if possible
     #[arg(short = 'r', long)]
     pub restart: bool,
+
+    /// Hide max-weight information during intermediate iteration updates
+    #[arg(long = "no-show-max-weights")]
+    pub no_show_max_weights: bool,
 }
 
 impl Integrate {
@@ -204,6 +208,7 @@ impl Integrate {
             target,
             integration_state,
             Some(workspace_path.clone()),
+            !self.no_show_max_weights,
         )?;
 
         fs::write(&result_path, serde_json::to_string(&result)?)?;

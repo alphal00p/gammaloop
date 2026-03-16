@@ -278,6 +278,7 @@ pub fn havana_integrate<T>(
     target: Option<Complex<F<f64>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
+    show_max_wgt_info_per_iteration: bool,
 ) -> Result<IntegrationResult>
 where
     T: Fn(&RuntimeSettings) -> UserData,
@@ -501,7 +502,7 @@ where
             cur_points,
             n_samples_evaluated,
             &target,
-            settings.integrator.show_max_wgt_info,
+            show_max_wgt_info_per_iteration && settings.integrator.show_max_wgt_info,
         );
         info!("");
 
