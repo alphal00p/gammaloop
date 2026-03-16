@@ -1447,7 +1447,7 @@ mod tests {
     use crate::commands::{
         display::Display,
         save::SaveState,
-        set::{Set, SetArgs},
+        set::{ProcessSetArgs, Set, SetArgs},
     };
 
     use super::*;
@@ -1696,7 +1696,7 @@ subtype = "tropical"
 
         match cmd.command {
             Commands::Set(Set::Process { input, .. }) => match input {
-                SetArgs::String { string } => {
+                ProcessSetArgs::String { string } => {
                     assert_eq!(string, "[integrator]\nn_start = 1000\n");
                 }
                 other => panic!("Expected string set input, got {other:?}"),
