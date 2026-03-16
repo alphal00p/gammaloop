@@ -385,7 +385,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         )
         .map(|integrand_result| GraphEvaluationResult {
             integrand_result,
-            generated_events: Vec::new(),
+            event_groups: Default::default(),
             event_processing_time: std::time::Duration::ZERO,
             generated_event_count: 0,
             accepted_event_count: 0,
@@ -826,6 +826,14 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         if let Some(runtime) = runtime {
             self.event_processing_runtime.set(runtime);
         }
+    }
+
+    fn event_processing_runtime(&self) -> Option<&EventProcessingRuntime> {
+        self.event_processing_runtime.as_ref()
+    }
+
+    fn event_processing_runtime_mut(&mut self) -> Option<&mut EventProcessingRuntime> {
+        self.event_processing_runtime.as_mut()
     }
     // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
     //     &self.data.builder_cache

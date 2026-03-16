@@ -22,7 +22,6 @@ use linnet::half_edge::subgraph::{
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::dual::HyperDual;
-use symbolica::domains::float::FloatLike as SymFloatLike;
 use tabled::settings::Style;
 
 use typed_index_collections::TiVec;

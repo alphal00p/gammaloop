@@ -5,7 +5,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    domains::float::{FloatLike as SymFloatLike, Real, RealLike},
+    domains::float::{Real, RealLike},
     evaluate::OptimizationSettings,
 };
 use tracing::debug;
@@ -21,7 +21,7 @@ use crate::{
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     integrands::process::{
         GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
-        evaluators::SingleOrAllOrientations, param_builder::LUParams,
+        evaluators::SingleOrAllOrientations, maybe_apply_lu_e2e_hack, param_builder::LUParams,
     },
     momentum::Rotation,
     momentum::sample::{LoopMomenta, MomentumSample, SubspaceData},
@@ -62,8 +62,17 @@ impl LUCounterTermEvaluators {
             .left_atoms
             .iter()
             .map(|atom| {
+                let mut evaluator_atom = atom.clone();
+
+                // Temporary end-to-end LU hack.
+                // Search for GL_LU_E2E_HACK to remove this once the proper
+                // LU numerator / theta / tree-denominator path is fixed.
+                if std::env::var_os("GL_LU_E2E_HACK").is_some() {
+                    evaluator_atom = maybe_apply_lu_e2e_hack(evaluator_atom);
+                }
+
                 GenericEvaluator::new_from_builder(
-                    [atom.clone()],
+                    [evaluator_atom],
                     param_builder,
                     None,
                     OptimizationSettings::default(),
@@ -77,8 +86,17 @@ impl LUCounterTermEvaluators {
             .right_atoms
             .iter()
             .map(|atom| {
+                let mut evaluator_atom = atom.clone();
+
+                // Temporary end-to-end LU hack.
+                // Search for GL_LU_E2E_HACK to remove this once the proper
+                // LU numerator / theta / tree-denominator path is fixed.
+                if std::env::var_os("GL_LU_E2E_HACK").is_some() {
+                    evaluator_atom = maybe_apply_lu_e2e_hack(evaluator_atom);
+                }
+
                 GenericEvaluator::new_from_builder(
-                    [atom.clone()],
+                    [evaluator_atom],
                     param_builder,
                     None,
                     OptimizationSettings::default(),
@@ -89,8 +107,17 @@ impl LUCounterTermEvaluators {
             .collect();
 
         let parametric_iterated_evaluator = counterterm_data.iterated.map_ref(|atom| {
+            let mut evaluator_atom = atom.clone();
+
+            // Temporary end-to-end LU hack.
+            // Search for GL_LU_E2E_HACK to remove this once the proper
+            // LU numerator / theta / tree-denominator path is fixed.
+            if std::env::var_os("GL_LU_E2E_HACK").is_some() {
+                evaluator_atom = maybe_apply_lu_e2e_hack(evaluator_atom);
+            }
+
             GenericEvaluator::new_from_builder(
-                [atom.clone()],
+                [evaluator_atom],
                 param_builder,
                 None,
                 OptimizationSettings::default(),
@@ -109,8 +136,21 @@ impl LUCounterTermEvaluators {
                     .left_atoms
                     .iter()
                     .map(|atom| {
+                        let evaluator_atoms = orientations.iter().map(|or| {
+                            let mut evaluator_atom = or.select(atom);
+
+                            // Temporary end-to-end LU hack.
+                            // Search for GL_LU_E2E_HACK to remove this once the proper
+                            // LU numerator / theta / tree-denominator path is fixed.
+                            if std::env::var_os("GL_LU_E2E_HACK").is_some() {
+                                evaluator_atom = maybe_apply_lu_e2e_hack(evaluator_atom);
+                            }
+
+                            evaluator_atom
+                        });
+
                         GenericEvaluator::new_from_builder(
-                            orientations.iter().map(|or| or.select(atom)),
+                            evaluator_atoms,
                             param_builder,
                             None,
                             OptimizationSettings::default(),
@@ -134,8 +174,21 @@ impl LUCounterTermEvaluators {
                     .right_atoms
                     .iter()
                     .map(|atom| {
+                        let evaluator_atoms = orientations.iter().map(|or| {
+                            let mut evaluator_atom = or.select(atom);
+
+                            // Temporary end-to-end LU hack.
+                            // Search for GL_LU_E2E_HACK to remove this once the proper
+                            // LU numerator / theta / tree-denominator path is fixed.
+                            if std::env::var_os("GL_LU_E2E_HACK").is_some() {
+                                evaluator_atom = maybe_apply_lu_e2e_hack(evaluator_atom);
+                            }
+
+                            evaluator_atom
+                        });
+
                         GenericEvaluator::new_from_builder(
-                            orientations.iter().map(|or| or.select(atom)),
+                            evaluator_atoms,
                             param_builder,
                             None,
                             OptimizationSettings::default(),
@@ -155,8 +208,21 @@ impl LUCounterTermEvaluators {
             .iterative_orientation_optimization
         {
             Some(counterterm_data.iterated.map_ref(|atom| {
+                let evaluator_atoms = orientations.iter().map(|or| {
+                    let mut evaluator_atom = or.select(atom);
+
+                    // Temporary end-to-end LU hack.
+                    // Search for GL_LU_E2E_HACK to remove this once the proper
+                    // LU numerator / theta / tree-denominator path is fixed.
+                    if std::env::var_os("GL_LU_E2E_HACK").is_some() {
+                        evaluator_atom = maybe_apply_lu_e2e_hack(evaluator_atom);
+                    }
+
+                    evaluator_atom
+                });
+
                 GenericEvaluator::new_from_builder(
-                    orientations.iter().map(|or| or.select(atom)),
+                    evaluator_atoms,
                     param_builder,
                     None,
                     OptimizationSettings::default(),
