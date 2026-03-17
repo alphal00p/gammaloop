@@ -48,7 +48,6 @@ pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
     number_thousands_separator: None,
     multiplication_operator: '*',
     double_star_for_exponentiation: false,
-    square_brackets_for_function: false,
     num_exp_as_superscript: false,
     mode: PrintMode::Symbolica,
     precision: None,

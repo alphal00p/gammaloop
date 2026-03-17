@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::integrands::process::GenericEvaluatorFloat;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopMomenta, SubspaceData,
@@ -42,7 +40,7 @@ use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::{MixedTensor, ParamTensor};
-use spenso_hep_lib::{hep_lib, hep_lib_atom};
+use spenso_hep_lib::hep_lib_atom;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::{Constructible, FloatLike as SymFloatLike, RealLike, SingleFloat};

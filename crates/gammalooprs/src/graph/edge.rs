@@ -25,7 +25,7 @@ use symbolica::{
 use crate::{
     feyngen::diagram_generator::EdgeColor,
     integrands::process::ParamBuilder,
-    model::{ArcParticle, Model, ParameterName, UFOSymbol},
+    model::{ArcParticle, Model, UFOSymbol},
     momentum::{Helicity, sample::LoopIndex},
     numerator::aind::{Aind, NewAind},
     utils::{F, FloatLike, GS},

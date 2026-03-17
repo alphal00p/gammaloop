@@ -206,7 +206,7 @@ impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
                         .iter()
                         .map(|a| {
                             a.iter()
-                                .map(|(a, o)| match o {
+                                .map(|(_, o)| match o {
                                     Orientation::Default => 1i8,
                                     Orientation::Reversed => -1i8,
                                     Orientation::Undirected => 0,
@@ -234,7 +234,7 @@ impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
                             .original_integrand
                             .iterative
                             .as_ref()
-                            .map(|(eval, len)| export_generic_evaluator(eval))
+                            .map(|(eval, _)| export_generic_evaluator(eval))
                             .transpose()?,
                         summed_function_map: term
                             .original_integrand
@@ -267,7 +267,7 @@ impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
                                 iterative: evaluator_stack
                                     .iterative
                                     .as_ref()
-                                    .map(|(eval, len)| export_generic_evaluator(eval))
+                                    .map(|(eval, _)| export_generic_evaluator(eval))
                                     .transpose()?,
                                 summed_function_map: evaluator_stack
                                     .summed_function_map
@@ -426,142 +426,5 @@ impl AmplitudeIntegrand {
         }
 
         Ok(())
-    }
-
-    fn export_standalone_python_directory(
-        &self,
-        path: &Path,
-        archive: &StandaloneEvaluatorArchive,
-    ) -> Result<()> {
-        Err(eyre!("Not yet implemented"))
-        // let root = path.join(STANDALONE_PYTHON_DIR);
-        // let data_root = root.join("data");
-        // fs::create_dir_all(&data_root)
-        //     .with_context(|| format!("Failed creating {}", data_root.display()))?;
-        // fs::write(
-        //     root.join(STANDALONE_PYTHON_SCRIPT_FILE),
-        //     standalone_python_script(),
-        // )
-        // .with_context(|| "Failed writing python standalone script")?;
-
-        // let graphs = archive
-        //     .graph_terms
-        //     .iter()
-        //     .enumerate()
-        //     .map(|(graph_index, graph)| {
-        //         let graph_dir = data_root.join(format!("graph_{graph_index}"));
-        //         fs::create_dir_all(&graph_dir).with_context(|| {
-        //             format!(
-        //                 "Failed creating graph standalone directory {}",
-        //                 graph_dir.display()
-        //             )
-        //         })?;
-
-        //         let params_dir = graph_dir.join("params");
-        //         fs::create_dir_all(&params_dir)?;
-        //         let mut params = Vec::new();
-        //         for (i, bytes) in graph.param_builder_params.iter().enumerate() {
-        //             let rel = format!("graph_{graph_index}/params/param_{i}.bin");
-        //             fs::write(data_root.join(&rel), bytes).with_context(|| {
-        //                 format!("Failed writing {}", data_root.join(&rel).display())
-        //             })?;
-        //             params.push(rel);
-        //         }
-
-        //         let reps_dir = graph_dir.join("replacements");
-        //         fs::create_dir_all(&reps_dir)?;
-        //         let mut replacements = Vec::new();
-        //         for (i, (lhs, rhs)) in graph.param_builder_replacements.iter().enumerate() {
-        //             let lhs_rel = format!("graph_{graph_index}/replacements/lhs_{i}.bin");
-        //             let rhs_rel = format!("graph_{graph_index}/replacements/rhs_{i}.bin");
-        //             fs::write(data_root.join(&lhs_rel), lhs).with_context(|| {
-        //                 format!("Failed writing {}", data_root.join(&lhs_rel).display())
-        //             })?;
-        //             fs::write(data_root.join(&rhs_rel), rhs).with_context(|| {
-        //                 format!("Failed writing {}", data_root.join(&rhs_rel).display())
-        //             })?;
-        //             replacements.push(PythonReplacementManifest {
-        //                 lhs: lhs_rel,
-        //                 rhs: rhs_rel,
-        //             });
-        //         }
-
-        //         let write_eval =
-        //             |name: &str,
-        //              eval: &StandaloneGenericEvaluatorArchive|
-        //              -> Result<(Vec<String>, PythonEvaluatorManifest)> {
-        //                 let eval_dir = graph_dir.join(name);
-        //                 fs::create_dir_all(&eval_dir)?;
-        //                 let mut expr_files = Vec::new();
-        //                 for (i, expr) in eval.exprs.iter().enumerate() {
-        //                     let rel = format!("graph_{graph_index}/{name}/expr_{i}.bin");
-        //                     fs::write(data_root.join(&rel), expr).with_context(|| {
-        //                         format!("Failed writing {}", data_root.join(&rel).display())
-        //                     })?;
-        //                     expr_files.push(rel);
-        //                 }
-        //                 Ok((expr_files.clone(), python_eval_manifest(eval, expr_files)))
-        //             };
-
-        //         let (_, single_parametric) = write_eval(
-        //             "single_parametric",
-        //             &graph.original_integrand.single_parametric,
-        //         )?;
-        //         let iterative = graph
-        //             .original_integrand
-        //             .iterative
-        //             .as_ref()
-        //             .map(|e| write_eval("iterative", e).map(|(_, m)| m))
-        //             .transpose()?;
-        //         let summed_function_map = graph
-        //             .original_integrand
-        //             .summed_function_map
-        //             .as_ref()
-        //             .map(|e| write_eval("summed_function_map", e).map(|(_, m)| m))
-        //             .transpose()?;
-        //         let summed = graph
-        //             .original_integrand
-        //             .summed
-        //             .as_ref()
-        //             .map(|e| write_eval("summed", e).map(|(_, m)| m))
-        //             .transpose()?;
-
-        //         let mut threshold_counterterms = Vec::new();
-        //         for (ct_id, ct) in graph.threshold_counterterms.iter().enumerate() {
-        //             let (_, parametric) =
-        //                 write_eval(&format!("ct_{ct_id}_parametric"), &ct.parametric)?;
-        //             let iterative = ct
-        //                 .iterative
-        //                 .as_ref()
-        //                 .map(|e| write_eval(&format!("ct_{ct_id}_iterative"), e).map(|(_, m)| m))
-        //                 .transpose()?;
-        //             threshold_counterterms.push(PythonCountertermManifest {
-        //                 parametric,
-        //                 iterative,
-        //             });
-        //         }
-
-        //         Ok(PythonStandaloneGraphManifest {
-        //             graph_name: graph.graph_name.clone(),
-        //             params,
-        //             replacements,
-        //             original_integrand: PythonEvaluatorStackManifest {
-        //                 single_parametric,
-        //                 iterative,
-        //                 summed_function_map,
-        //                 summed,
-        //             },
-        //             threshold_counterterms,
-        //         })
-        //     })
-        //     .collect::<Result<Vec<_>>>()?;
-
-        // let manifest = PythonStandaloneManifest { graphs };
-        // let manifest_path = data_root.join(STANDALONE_PYTHON_MANIFEST_FILE);
-        // let manifest_json = serde_json::to_vec_pretty(&manifest)?;
-        // fs::write(&manifest_path, manifest_json)
-        //     .with_context(|| format!("Failed writing {}", manifest_path.display()))?;
-
-        // Ok(())
     }
 }

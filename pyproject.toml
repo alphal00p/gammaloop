@@ -2,30 +2,30 @@
 name = "gammaloop"
 version = "0.3.3"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
-authors = [
-    { name = "Valentin Hirschi", email = "valentin.hirschi@gmail.com" },
-    { name = "Mathijs Fraaije", email = "mathijsfraaije@gmail.com" },
-    { name = "Lucien Huber", email = "mail@lcnbr.ch" },
-]
-requires-python = ">=3.11"
 readme = "README.md"
-license = { file = "LICENSE.md" }
-keywords = ["physics", "collider", "cross-section", "perturbative", "loop"]
+requires-python = ">=3.11"
+authors = [
+  { name = "Valentin Hirschi", email = "valentin.hirschi@gmail.com" },
+  { name = "Mathijs Fraaije", email = "mathijsfraaije@gmail.com" },
+  { name = "Lucien Huber", email = "mail@lcnbr.ch" },
+]
+
+keywords = ["collider", "cross-section", "loop", "perturbative", "physics"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Rust",
-    "Topic :: Scientific/Engineering :: Physics",
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Rust",
+  "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-    "pyyaml>=6.0.1",
-    "PyMuPDF>=1.23.4",
-    "pydot",
-    "symbolica>=0.14.0",
-    "pytest",
-    "ufo-model-loader>=0.1.1",
-    "polars>=1.33.1",
-    "jupyter>=1.1.1",
-    "numpy>=2.3.3",
+  "PyMuPDF>=1.23.4",
+  "jupyter>=1.1.1",
+  "numpy>=2.3.3",
+  "polars>=1.33.1",
+  "pydot",
+  "pytest",
+  "pyyaml>=6.0.1",
+  "symbolica>=0.14.0",
+  "ufo-model-loader>=0.1.1",
 ]
 
 [project.urls]
@@ -34,12 +34,12 @@ repository = "https://github.com/alphal00p/gammaloop"
 
 [dependency-groups]
 dev = [
-    "symbolica>=0.16.0",
-    "black>=23.12.1,<24",
-    "inline-snapshot>=0.21.2",
-    "PyYAML>=6.0.1,<7",
-    "pytest>=8.3.5,<9",
-    "ufo-model-loader>=0.1.1",
+  "PyYAML>=6.0.1,<7",
+  "black>=23.12.1,<24",
+  "inline-snapshot>=0.21.2",
+  "pytest>=8.3.5,<9",
+  "symbolica>=0.16.0",
+  "ufo-model-loader>=0.1.1",
 ]
 
 [tool.uv]
@@ -51,20 +51,18 @@ build-backend = "maturin"
 
 [tool.maturin]
 features = ["python_abi"]
-python-source = "crates/gammaloop-api/python"
 module-name = "gammaloop._gammaloop"
+python-source = "crates/gammaloop-api/python"
 sdist-include = ["LICENSE.md", "README.md"]
 
-
 [tool.pytest.ini_options]
-
 
 [tool.mypy]
 disable_error_code = "no-redef"
 check_untyped_defs = true
 exclude = [
-    'python/gammaloop/data/templates/drawing/combine_pages.py',
-    'python/gammaloop/data/models/*',
+  "python/gammaloop/data/templates/drawing/combine_pages.py",
+  "python/gammaloop/data/models/*",
 ]
 
 [[tool.mypy.overrides]]

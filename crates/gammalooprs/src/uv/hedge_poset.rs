@@ -118,7 +118,6 @@ impl TraceUnfold<SuBitGraph> for SpinneyWood {
 }
 
 impl SpinneyWood {
-    #[allow(dead_code)]
     pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: impl AsRef<HedgeGraph<E, V, H>> + LMBext,
@@ -398,6 +397,65 @@ impl Default for ComputeNode {
 }
 
 impl SpinneyForest {
+    pub fn iter_parents<'a>(
+        &'a self,
+        node: NodeIndex,
+        order: usize,
+        wood: &'a SpinneyWood,
+    ) -> impl Iterator<
+        Item = Result<(
+            &'a ComputeNode,
+            ForestNode<'a>,
+            ForestNode<'a>,
+            &'a OperationNode,
+            bool,
+        )>,
+    > + 'a {
+        let mut current = None;
+        let mut is_union = false;
+        self.graph
+            .iter_crown(node)
+            .filter(|h| self.graph.flow(*h).is_sink())
+            .map(move |h| {
+                // iterate over the sink-half-edges of the forest, i.e. the incoming half-edges to the current node
+                // most of the time this will be a single half-edge, but in the case of a union, there may be multiple
+
+                let wood_eid = self.graph[self.graph[&self.graph[&h]].0];
+
+                let HedgePair::Paired { source, sink } = wood.graph[&wood_eid].1 else {
+                    panic!("edge in wood is not paired");
+                };
+
+                // get this hedge's forest node from the wood. This is the node that has already been computed (as it is a parent to this edge)
+                let given = wood.graph[wood.graph.node_id(source)].forest_node(order);
+
+                // this is the current node, which should be the same for all union edges (since they all have the same sink)
+                let current_for_h = wood.graph.node_id(sink);
+                if let Some(current) = &current {
+                    if current != &current_for_h {
+                        return Err(eyre!("Mismatched current nodes"));
+                    } else {
+                        is_union = true;
+                    }
+                } else {
+                    current = Some(current_for_h);
+                }
+
+                // this is the current node, which we want to compute with
+                let current = wood.graph[current_for_h].forest_node(order);
+
+                // this is the parent node, in the forest, which has already been computed and we want to get the computed value
+                let parent_node = self.graph.node_id(h);
+                let parent_key = &self.graph[parent_node];
+                let computed = self
+                    .compute_store
+                    .get(parent_key)
+                    .ok_or(eyre!("{} not yet added to store", parent_key))?;
+
+                Ok((computed, current, given, parent_key, is_union))
+            })
+    }
+
     pub fn integrate(
         &mut self,
         graph: &mut Graph,
@@ -412,38 +470,10 @@ impl SpinneyForest {
         };
         for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
             let mut integrand = Atom::num(1);
-            let mut current = None;
-            let mut is_union = false;
-            for h in self.graph.iter_crown(*nidx) {
-                if self.graph.flow(h).is_source() {
-                    continue;
-                }
 
-                let wood_eid = self.graph[self.graph[&self.graph[&h]].0];
+            for h in self.iter_parents(*nidx, order, wood) {
+                let (computed, current, given, parent_key, is_union) = h?;
 
-                let HedgePair::Paired { source, sink } = wood.graph[&wood_eid].1 else {
-                    panic!("edge in wood is not paired");
-                };
-
-                let given = wood.graph[wood.graph.node_id(source)].forest_node(order);
-                let current_for_h = wood.graph.node_id(sink);
-                if let Some(current) = &current {
-                    if current != &current_for_h {
-                        return Err(eyre!("Mismatched current nodes"));
-                    } else {
-                        is_union = true;
-                    }
-                } else {
-                    current = Some(current_for_h);
-                }
-                let current = wood.graph[current_for_h].forest_node(order);
-
-                let parent_node = self.graph.node_id(h);
-                let parent_key = &self.graph[parent_node];
-                let computed = self
-                    .compute_store
-                    .get(parent_key)
-                    .ok_or(eyre!("{} not yet added to store", parent_key))?;
                 let Integrand::Single(a) = &computed.integrated_4d else {
                     return Err(eyre!("{} integrated_4d not computed yet", parent_key));
                 };
