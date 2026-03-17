@@ -87,6 +87,13 @@ impl AmplitudeCountertermAtom {
             ),
         }
     }
+
+    pub(crate) fn new() -> Self {
+        Self {
+            parametric_local: Atom::new(),
+            parametric_integrated: Atom::new(),
+        }
+    }
 }
 
 #[derive(Clone, Encode, Decode)]
