@@ -28,9 +28,7 @@ use crate::{
     cff::{
         esurface::GroupEsurfaceId,
         expression::{CFFExpression, OrientationData, OrientationID},
-        generation::{
-            PostProcessingSetup, generate_cff_expression, get_orientations_from_subgraph,
-        },
+        generation::{PostProcessingSetup, get_orientations_from_subgraph},
     },
     disable,
     graph::{

@@ -381,7 +381,8 @@ fn get_orientations_with_cut<E, V, H>(
     orientations_consistent_with_cut.collect_vec()
 }
 
-pub(crate) fn generate_cff_expression<E, V, H>(
+#[cfg(test)]
+fn generate_cff_expression<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
     edges_in_initial_state_cut: &[EdgeIndex],
