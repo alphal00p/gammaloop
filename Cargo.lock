@@ -1374,6 +1374,7 @@ dependencies = [
  "color-eyre",
  "colored 3.1.1",
  "console 0.16.2",
+ "crossterm",
  "dirs 6.0.0",
  "eyre",
  "figment",
@@ -1414,6 +1415,7 @@ dependencies = [
  "tracing-indicatif",
  "tracing-subscriber",
  "typed-index-collections",
+ "unicode-width",
  "vergen-gitcl",
  "walkdir",
 ]

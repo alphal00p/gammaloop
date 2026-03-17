@@ -3544,6 +3544,147 @@ pub(crate) fn format_sample(sample: &Sample<F<f64>>) -> String {
     }
 }
 
+pub(crate) fn normalize_tabled_separator_rows(rendered: &str) -> String {
+    let original_lines = rendered.lines().collect_vec();
+    let visible_lines = original_lines
+        .iter()
+        .map(|line| strip_ansi_escape_codes(line).chars().collect_vec())
+        .collect_vec();
+
+    original_lines
+        .iter()
+        .enumerate()
+        .map(|(row_index, line)| {
+            let visible_line = &visible_lines[row_index];
+            if is_top_border_row(visible_line) {
+                return rebuild_top_border_row(&visible_lines, row_index);
+            }
+
+            if is_internal_separator_row(visible_line) {
+                return rebuild_internal_separator_row(&visible_lines, row_index);
+            }
+
+            if is_bottom_border_row(visible_line) {
+                return rebuild_bottom_border_row(&visible_lines, row_index);
+            }
+
+            (*line).to_string()
+        })
+        .join("\n")
+}
+
+fn rebuild_top_border_row(visible_lines: &[Vec<char>], row_index: usize) -> String {
+    rebuild_border_row(visible_lines, row_index, '╭', '╮', |_, _, has_below| {
+        if has_below { '┬' } else { '─' }
+    })
+}
+
+fn rebuild_internal_separator_row(visible_lines: &[Vec<char>], row_index: usize) -> String {
+    rebuild_border_row(
+        visible_lines,
+        row_index,
+        '├',
+        '┤',
+        |row_index, column, has_below| match (
+            row_index > 0 && has_vertical_border(&visible_lines[row_index - 1], column),
+            has_below,
+        ) {
+            (false, false) => '─',
+            (false, true) => '┬',
+            (true, false) => '┴',
+            (true, true) => '┼',
+        },
+    )
+}
+
+fn rebuild_bottom_border_row(visible_lines: &[Vec<char>], row_index: usize) -> String {
+    rebuild_border_row(
+        visible_lines,
+        row_index,
+        '╰',
+        '╯',
+        |row_index, column, _| {
+            if row_index > 0 && has_vertical_border(&visible_lines[row_index - 1], column) {
+                '┴'
+            } else {
+                '─'
+            }
+        },
+    )
+}
+
+fn rebuild_border_row<F>(
+    visible_lines: &[Vec<char>],
+    row_index: usize,
+    left: char,
+    right: char,
+    mut intersection_for_column: F,
+) -> String
+where
+    F: FnMut(usize, usize, bool) -> char,
+{
+    let border = &visible_lines[row_index];
+    if border.len() < 2 {
+        return border.iter().collect();
+    }
+
+    let last = border.len() - 1;
+    let mut rebuilt = String::with_capacity(border.len());
+    rebuilt.push(left);
+
+    for column in 1..last {
+        let has_vertical_below = row_index + 1 < visible_lines.len()
+            && has_vertical_border(&visible_lines[row_index + 1], column);
+        rebuilt.push(intersection_for_column(
+            row_index,
+            column,
+            has_vertical_below,
+        ));
+    }
+
+    rebuilt.push(right);
+    rebuilt
+}
+
+fn has_vertical_border(line: &[char], column: usize) -> bool {
+    line.get(column)
+        .copied()
+        .is_some_and(|ch| matches!(ch, '│' | '├' | '┤' | '┬' | '┴' | '┼'))
+}
+
+fn is_internal_separator_row(line: &[char]) -> bool {
+    matches!(line.first(), Some('├')) && matches!(line.last(), Some('┤'))
+}
+
+fn is_top_border_row(line: &[char]) -> bool {
+    matches!(line.first(), Some('╭')) && matches!(line.last(), Some('╮'))
+}
+
+fn is_bottom_border_row(line: &[char]) -> bool {
+    matches!(line.first(), Some('╰')) && matches!(line.last(), Some('╯'))
+}
+
+fn strip_ansi_escape_codes(line: &str) -> String {
+    let mut stripped = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            while let Some(code) = chars.next() {
+                if ('@'..='~').contains(&code) {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        stripped.push(ch);
+    }
+
+    stripped
+}
+
 pub(crate) fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
     vec1: &TiSlice<K, T>,
     vec2: &TiSlice<K, T>,

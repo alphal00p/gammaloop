@@ -20,6 +20,7 @@ use gammaloop_api::{
     commands::evaluate_samples::{
         evaluate_sample, evaluate_sample_precise, EvaluateSamples, EvaluateSamplesPrecise,
     },
+    state::CommandHistory,
     StateLoadOption,
 };
 use ndarray::{arr2, Array2};
@@ -51,6 +52,16 @@ fn main() -> Result<()> {
         ..StateLoadOption::default()
     }
     .load()?;
+
+    // The example card ships a small block of `display quantities`,
+    // `display observables`, and `display selectors` commands. Run it through
+    // the CLI session before switching to the lower-level evaluation APIs.
+    {
+        let mut session = loaded.cli_session();
+        let _ = session.execute_top_level(CommandHistory::from_raw_string(
+            "run display_named_settings_examples",
+        )?)?;
+    }
 
     let single_point: Array2<f64> = arr2(&[[0.17, 0.31, 0.53, 0.23, 0.41, 0.67]]);
     let single_result = evaluate_sample(

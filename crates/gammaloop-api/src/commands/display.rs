@@ -1,22 +1,31 @@
-use clap::Subcommand;
+use clap::{Args, Subcommand};
 use colored::Colorize;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use tabled::{builder::Builder, settings::Style};
+use tabled::{
+    builder::Builder,
+    settings::{Style, style::HorizontalLine, themes::Theme},
+};
 use tracing::info;
 
 use color_eyre::Result;
-use eyre::Context;
+use eyre::{Context, eyre};
 use gammalooprs::processes::{Amplitude, CrossSection, Process, ProcessCollection};
 use gammalooprs::settings::RuntimeSettings;
 
 use crate::{
-    commands::generate::ProcessArgs,
-    completion::CompletionArgExt,
-    settings_tree::{serialize_settings_with_defaults, value_at_path},
-    state::{ProcessRef, State},
     CLISettings,
+    commands::generate::ProcessArgs,
+    commands::process_settings::{
+        NamedProcessSettingKind, observable_kind, quantity_kind, selector_kind,
+        serialize_runtime_named_settings, summarize_observable, summarize_quantity,
+        summarize_selector,
+    },
+    completion::CompletionArgExt,
+    session::display_command,
+    settings_tree::{serialize_settings_with_defaults, value_at_path},
+    state::{CommandsBlock, ProcessRef, RunHistory, State},
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -44,10 +53,35 @@ pub enum Display {
         )]
         process: Option<ProcessRef>,
     },
+    Quantities {
+        #[command(flatten)]
+        target: DisplayProcessNamedSettingsArgs,
+    },
+    Observables {
+        #[command(flatten)]
+        target: DisplayProcessNamedSettingsArgs,
+    },
+    Selectors {
+        #[command(flatten)]
+        target: DisplayProcessNamedSettingsArgs,
+    },
+    #[command(name = "command_block")]
+    CommandBlock {
+        #[arg(value_name = "NAME")]
+        name: Option<String>,
+    },
     Settings {
         #[command(subcommand)]
         target: DisplaySettingsTarget,
     },
+}
+
+#[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
+pub struct DisplayProcessNamedSettingsArgs {
+    #[command(flatten)]
+    process: ProcessArgs,
+    #[arg(value_name = "NAME")]
+    name: Option<String>,
 }
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -78,6 +112,7 @@ impl Display {
         state: &State,
         global_settings: &CLISettings,
         default_runtime_settings: &RuntimeSettings,
+        run_history: &RunHistory,
     ) -> Result<()> {
         match self {
             Display::Integrands { process } => {
@@ -89,6 +124,18 @@ impl Display {
             }
             Display::Processes => {
                 render_processes_table(state)?;
+            }
+            Display::Quantities { target } => {
+                render_named_process_settings(state, target, NamedProcessSettingKind::Quantity)?;
+            }
+            Display::Observables { target } => {
+                render_named_process_settings(state, target, NamedProcessSettingKind::Observable)?;
+            }
+            Display::Selectors { target } => {
+                render_named_process_settings(state, target, NamedProcessSettingKind::Selector)?;
+            }
+            Display::CommandBlock { name } => {
+                render_command_blocks(run_history, name.as_deref())?;
             }
             Display::Model {
                 show_couplings,
@@ -347,6 +394,271 @@ fn format_bytes(size: usize) -> String {
     }
 }
 
+fn command_block_contents(block: &CommandsBlock) -> String {
+    if block.commands.is_empty() {
+        return "(empty)".to_string();
+    }
+
+    block
+        .commands
+        .iter()
+        .map(display_command)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn render_command_blocks(run_history: &RunHistory, selected_name: Option<&str>) -> Result<()> {
+    if let Some(name) = selected_name {
+        let block = run_history.command_block(name).ok_or_else(|| {
+            eyre!(
+                "Unknown command block '{}'. Available command blocks: {}",
+                name,
+                run_history
+                    .command_blocks
+                    .iter()
+                    .map(|block| block.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+        info!("\n{}", command_block_contents(block));
+        return Ok(());
+    }
+
+    if run_history.command_blocks.is_empty() {
+        info!("{}", "No active command blocks.".yellow());
+        return Ok(());
+    }
+
+    info!("{}", "Command blocks".bold().blue());
+    info!("\n{}", render_command_blocks_table(run_history));
+    Ok(())
+}
+
+fn render_command_blocks_table(run_history: &RunHistory) -> String {
+    let mut builder = Builder::new();
+    builder.push_record([
+        "name".bold().blue().to_string(),
+        "commands".bold().blue().to_string(),
+    ]);
+
+    for block in &run_history.command_blocks {
+        builder.push_record([
+            block.name.green().bold().to_string(),
+            command_block_contents(block),
+        ]);
+    }
+
+    let mut table = builder.build();
+    let mut style = Theme::from_style(Style::rounded().remove_horizontals());
+    for row in 1..=run_history.command_blocks.len() {
+        style.insert_horizontal_line(
+            row,
+            HorizontalLine::new('─')
+                .intersection('┼')
+                .left('├')
+                .right('┤'),
+        );
+    }
+    table.with(style);
+    table.to_string()
+}
+
+fn render_named_process_settings(
+    state: &State,
+    target: &DisplayProcessNamedSettingsArgs,
+    setting_kind: NamedProcessSettingKind,
+) -> Result<()> {
+    let process_id = state.resolve_process_ref(target.process.process.as_ref())?;
+    let process = &state.process_list.processes[process_id];
+    let integrand_names = selected_integrand_names(process, target.process.integrand_name.as_ref());
+
+    if let Some(name) = target.name.as_deref() {
+        return render_named_process_setting_detail(
+            state,
+            process_id,
+            &process.definition.folder_name,
+            process.definition.process_id,
+            &integrand_names,
+            setting_kind,
+            name,
+        );
+    }
+
+    let mut builder = Builder::new();
+    let show_integrand = integrand_names.len() > 1;
+    let mut header = Vec::new();
+    if show_integrand {
+        header.push("integrand".bold().blue().to_string());
+    }
+    header.push("name".bold().blue().to_string());
+    header.push("kind".bold().blue().to_string());
+    header.push("details".bold().blue().to_string());
+    builder.push_record(header);
+
+    let mut num_rows = 0usize;
+    for integrand_name in &integrand_names {
+        let integrand = state
+            .process_list
+            .get_integrand(process_id, integrand_name)?;
+        match setting_kind {
+            NamedProcessSettingKind::Quantity => {
+                for (name, settings) in &integrand.get_settings().quantities {
+                    num_rows += 1;
+                    let mut record = Vec::new();
+                    if show_integrand {
+                        record.push(integrand_name.clone().cyan().to_string());
+                    }
+                    record.push(name.clone().green().to_string());
+                    record.push(quantity_kind(settings).yellow().to_string());
+                    record.push(summarize_quantity(settings));
+                    builder.push_record(record);
+                }
+            }
+            NamedProcessSettingKind::Observable => {
+                for (name, settings) in &integrand.get_settings().observables {
+                    num_rows += 1;
+                    let mut record = Vec::new();
+                    if show_integrand {
+                        record.push(integrand_name.clone().cyan().to_string());
+                    }
+                    record.push(name.clone().green().to_string());
+                    record.push(observable_kind(settings).yellow().to_string());
+                    record.push(summarize_observable(settings));
+                    builder.push_record(record);
+                }
+            }
+            NamedProcessSettingKind::Selector => {
+                for (name, settings) in &integrand.get_settings().selectors {
+                    num_rows += 1;
+                    let mut record = Vec::new();
+                    if show_integrand {
+                        record.push(integrand_name.clone().cyan().to_string());
+                    }
+                    record.push(name.clone().green().to_string());
+                    record.push(selector_kind(settings).yellow().to_string());
+                    record.push(summarize_selector(settings));
+                    builder.push_record(record);
+                }
+            }
+        }
+    }
+
+    if num_rows == 0 {
+        info!(
+            "{}",
+            format!(
+                "No {} configured for process #{} ({})",
+                setting_kind.plural(),
+                process.definition.process_id,
+                process.definition.folder_name
+            )
+            .yellow()
+        );
+        return Ok(());
+    }
+
+    let mut table = builder.build();
+    table.with(Style::rounded());
+    let title = if show_integrand {
+        format!(
+            "{} for process #{} ({})",
+            setting_kind.plural(),
+            process.definition.process_id,
+            process.definition.folder_name
+        )
+    } else {
+        format!(
+            "{} for process #{} ({}) integrand '{}'",
+            setting_kind.plural(),
+            process.definition.process_id,
+            process.definition.folder_name,
+            integrand_names[0]
+        )
+    };
+    info!("{}", title.bold().blue());
+    info!("\n{table}");
+    Ok(())
+}
+
+fn render_named_process_setting_detail(
+    state: &State,
+    process_id: usize,
+    process_name: &str,
+    process_display_id: usize,
+    integrand_names: &[String],
+    setting_kind: NamedProcessSettingKind,
+    name: &str,
+) -> Result<()> {
+    let mut selected_roots = Vec::new();
+    let mut missing_integrands = Vec::new();
+
+    for integrand_name in integrand_names {
+        let integrand = state
+            .process_list
+            .get_integrand(process_id, integrand_name)?;
+        let serialized = serialize_runtime_named_settings(integrand.get_settings())?;
+        let map = match setting_kind {
+            NamedProcessSettingKind::Quantity => &serialized.quantities,
+            NamedProcessSettingKind::Observable => &serialized.observables,
+            NamedProcessSettingKind::Selector => &serialized.selectors,
+        };
+        if let Some(root) = map.get(name) {
+            selected_roots.push((integrand_name.clone(), root.clone()));
+        } else {
+            missing_integrands.push(integrand_name.clone());
+        }
+    }
+
+    if selected_roots.is_empty() {
+        return Err(eyre!(
+            "No {} named '{}' found for process #{} ({})",
+            setting_kind.singular(),
+            name,
+            process_display_id,
+            process_name
+        ));
+    }
+
+    if !missing_integrands.is_empty() {
+        return Err(eyre!(
+            "{} '{}' is missing from integrand(s): {}",
+            setting_kind.singular(),
+            name,
+            missing_integrands.join(", ")
+        ));
+    }
+
+    for (integrand_name, root) in selected_roots {
+        render_settings_table(
+            &format!(
+                "{} '{}' for process #{} ({}) integrand '{}'",
+                setting_kind.singular(),
+                name,
+                process_display_id,
+                process_name,
+                integrand_name
+            ),
+            &root,
+            None,
+        )?;
+    }
+
+    Ok(())
+}
+
+fn selected_integrand_names(process: &Process, requested: Option<&String>) -> Vec<String> {
+    if let Some(integrand_name) = requested {
+        vec![integrand_name.clone()]
+    } else {
+        process
+            .get_integrand_names()
+            .into_iter()
+            .map(str::to_string)
+            .collect()
+    }
+}
+
 impl DisplaySettingsTarget {
     fn run(
         &self,
@@ -475,12 +787,16 @@ mod test {
     use clap::Parser;
     use serde_json::json;
 
-    use crate::{commands::Commands, state::ProcessRef, CLISettings, Repl};
+    use crate::{
+        CLISettings, Repl,
+        commands::Commands,
+        state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory},
+    };
     use gammalooprs::settings::RuntimeSettings;
 
     use super::{
-        format_bytes, serialize_settings_with_defaults, value_at_path, Display,
-        DisplaySettingsTarget,
+        Display, DisplaySettingsTarget, command_block_contents, format_bytes,
+        render_command_blocks_table, serialize_settings_with_defaults, value_at_path,
     };
 
     #[test]
@@ -537,6 +853,87 @@ mod test {
             },
             other => panic!("Expected display settings command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_display_quantities_without_name() {
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "display",
+            "quantities",
+            "-p",
+            "epem_a_tth",
+            "-i",
+            "LO",
+        ])
+        .unwrap();
+
+        match repl.command {
+            Commands::Display(Display::Quantities { target }) => {
+                assert_eq!(
+                    target.process.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(target.process.integrand_name, Some("LO".to_string()));
+                assert_eq!(target.name, None);
+            }
+            other => panic!("Expected display quantities command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_display_selector_with_name() {
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "display",
+            "selectors",
+            "-p",
+            "epem_a_tth",
+            "top_cut",
+        ])
+        .unwrap();
+
+        match repl.command {
+            Commands::Display(Display::Selectors { target }) => {
+                assert_eq!(
+                    target.process.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(target.process.integrand_name, None);
+                assert_eq!(target.name.as_deref(), Some("top_cut"));
+            }
+            other => panic!("Expected display selectors command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_display_command_block_without_name() {
+        let repl = Repl::try_parse_from(["gammaloop", "display", "command_block"]).unwrap();
+
+        match repl.command {
+            Commands::Display(Display::CommandBlock { name }) => {
+                assert_eq!(name, None);
+            }
+            other => panic!("Expected display command_block command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_display_command_block_with_name() {
+        let repl =
+            Repl::try_parse_from(["gammaloop", "display", "command_block", "alpha"]).unwrap();
+
+        match repl.command {
+            Commands::Display(Display::CommandBlock { name }) => {
+                assert_eq!(name.as_deref(), Some("alpha"));
+            }
+            other => panic!("Expected display command_block command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_display_command_block_rejects_hyphenated_name() {
+        assert!(Repl::try_parse_from(["gammaloop", "display", "command-block"]).is_err());
     }
 
     #[test]
@@ -616,5 +1013,67 @@ mod test {
         assert_eq!(format_bytes(999), "999 B");
         assert_eq!(format_bytes(1024), "1.00 KiB");
         assert_eq!(format_bytes(1024 * 1024), "1.00 MiB");
+    }
+
+    #[test]
+    fn command_block_contents_preserve_raw_commands() {
+        let block = CommandsBlock {
+            name: "alpha".to_string(),
+            commands: vec![
+                CommandHistory::from_raw_string("display processes").unwrap(),
+                CommandHistory::from_raw_string("set process -p triangle -i LO defaults").unwrap(),
+            ],
+        };
+
+        assert_eq!(
+            command_block_contents(&block),
+            "display processes\nset process -p triangle -i LO defaults"
+        );
+    }
+
+    #[test]
+    fn command_block_contents_marks_empty_blocks() {
+        let run_history = RunHistory {
+            command_blocks: vec![CommandsBlock {
+                name: "empty".to_string(),
+                commands: Vec::new(),
+            }],
+            ..RunHistory::default()
+        };
+
+        assert_eq!(
+            command_block_contents(&run_history.command_blocks[0]),
+            "(empty)"
+        );
+    }
+
+    #[test]
+    fn command_blocks_table_separates_each_block() {
+        let run_history = RunHistory {
+            command_blocks: vec![
+                CommandsBlock {
+                    name: "alpha".to_string(),
+                    commands: vec![CommandHistory::from_raw_string("display processes").unwrap()],
+                },
+                CommandsBlock {
+                    name: "beta".to_string(),
+                    commands: vec![CommandHistory::from_raw_string("display model").unwrap()],
+                },
+            ],
+            ..RunHistory::default()
+        };
+
+        let rendered = render_command_blocks_table(&run_history);
+
+        assert!(rendered.contains("alpha"), "{rendered}");
+        assert!(rendered.contains("beta"), "{rendered}");
+        assert_eq!(
+            rendered
+                .lines()
+                .filter(|line| line.starts_with('├') && line.ends_with('┤'))
+                .count(),
+            2,
+            "{rendered}"
+        );
     }
 }

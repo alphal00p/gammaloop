@@ -9,13 +9,6 @@ use figment::{
 };
 use gammalooprs::{
     model::{ParameterNature, ParameterType, UFOSymbol},
-    observables::{
-        CountRangeSelectorSettings, EntrySelection, FilterQuantity, HistogramSettings,
-        JetClusteringSettings, JetCountQuantitySettings, JetPtQuantitySettings, ObservablePhase,
-        ObservableSettings, ObservableValueTransform, ParticleScalarQuantitySettings,
-        QuantitySettings, SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
-        ValueRangeSelectorSettings,
-    },
     processes::ProcessCollection,
     settings::RuntimeSettings,
     utils::F,
@@ -28,6 +21,10 @@ use tracing::warn;
 
 use crate::{
     commands::generate::ProcessArgs,
+    commands::process_settings::{
+        observable_template, parse_quantity_kind, parse_selector_kind, quantity_template,
+        selector_template,
+    },
     commands::Commands,
     state::{State, SyncSettings},
     tracing::{clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason},
@@ -387,50 +384,12 @@ pub enum ProcessSetArgs {
     },
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
-pub enum QuantityTemplateKind {
-    ParticleScalar,
-    JetPt,
-    JetCount,
-    AFB,
-    CrossSection,
-}
-
-fn parse_quantity_template_kind(raw: &str) -> std::result::Result<QuantityTemplateKind, String> {
-    match raw {
-        "particle_scalar" => Ok(QuantityTemplateKind::ParticleScalar),
-        "jet_pt" => Ok(QuantityTemplateKind::JetPt),
-        "jet_count" => Ok(QuantityTemplateKind::JetCount),
-        "afb" => Ok(QuantityTemplateKind::AFB),
-        "cross_section" => Ok(QuantityTemplateKind::CrossSection),
-        other => Err(format!(
-            "Unknown quantity kind '{other}', expected one of: particle_scalar, jet_pt, jet_count, afb, cross_section"
-        )),
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
-pub enum SelectorTemplateKind {
-    ValueRange,
-    CountRange,
-}
-
-fn parse_selector_template_kind(raw: &str) -> std::result::Result<SelectorTemplateKind, String> {
-    match raw {
-        "value_range" => Ok(SelectorTemplateKind::ValueRange),
-        "count_range" => Ok(SelectorTemplateKind::CountRange),
-        other => Err(format!(
-            "Unknown selector kind '{other}', expected one of: value_range, count_range"
-        )),
-    }
-}
-
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum ProcessAddTarget {
     Quantity {
         name: String,
-        #[arg(value_parser = parse_quantity_template_kind)]
-        kind: QuantityTemplateKind,
+        #[arg(value_parser = parse_quantity_kind)]
+        kind: String,
         #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
@@ -441,8 +400,8 @@ pub enum ProcessAddTarget {
     },
     Selector {
         name: String,
-        #[arg(value_parser = parse_selector_template_kind)]
-        kind: SelectorTemplateKind,
+        #[arg(value_parser = parse_selector_kind)]
+        kind: String,
         #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
@@ -632,7 +591,7 @@ fn apply_process_add_target(
     match target {
         ProcessAddTarget::Quantity { name, kind, pairs } => {
             let entry = merge_named_settings(
-                &quantity_template(*kind),
+                &quantity_template(kind).ok_or_else(|| eyre!("Unknown quantity kind '{kind}'"))?,
                 pairs,
                 &format!("new quantity '{name}'"),
             )?;
@@ -648,7 +607,7 @@ fn apply_process_add_target(
         }
         ProcessAddTarget::Selector { name, kind, pairs } => {
             let entry = merge_named_settings(
-                &selector_template(*kind),
+                &selector_template(kind).ok_or_else(|| eyre!("Unknown selector kind '{kind}'"))?,
                 pairs,
                 &format!("new selector '{name}'"),
             )?;
@@ -740,62 +699,6 @@ fn remove_named_map_entry<T>(map: &mut BTreeMap<String, T>, name: &str, label: &
         return Err(eyre!("No {label} named '{name}'"));
     }
     Ok(())
-}
-
-fn quantity_template(kind: QuantityTemplateKind) -> QuantitySettings {
-    match kind {
-        QuantityTemplateKind::ParticleScalar => {
-            QuantitySettings::ParticleScalar(ParticleScalarQuantitySettings {
-                pdgs: Vec::new(),
-                quantity: FilterQuantity::PT,
-            })
-        }
-        QuantityTemplateKind::JetPt => QuantitySettings::JetPt(JetPtQuantitySettings {
-            clustering: JetClusteringSettings::default(),
-        }),
-        QuantityTemplateKind::JetCount => QuantitySettings::JetCount(JetCountQuantitySettings {
-            clustering: JetClusteringSettings::default(),
-        }),
-        QuantityTemplateKind::AFB => QuantitySettings::AFB {},
-        QuantityTemplateKind::CrossSection => QuantitySettings::CrossSection {},
-    }
-}
-
-fn selector_template(kind: SelectorTemplateKind) -> SelectorSettings {
-    let selector = match kind {
-        SelectorTemplateKind::ValueRange => {
-            SelectorDefinitionSettings::ValueRange(ValueRangeSelectorSettings {
-                min: 0.0,
-                max: None,
-                reduction: SelectorReduction::AnyInRange,
-            })
-        }
-        SelectorTemplateKind::CountRange => {
-            SelectorDefinitionSettings::CountRange(CountRangeSelectorSettings {
-                min_count: 0,
-                max_count: None,
-            })
-        }
-    };
-
-    SelectorSettings {
-        quantity: String::new(),
-        entry_selection: EntrySelection::All,
-        entry_index: 0,
-        selector,
-    }
-}
-
-fn observable_template() -> ObservableSettings {
-    ObservableSettings {
-        quantity: String::new(),
-        entry_selection: EntrySelection::All,
-        entry_index: 0,
-        value_transform: ObservableValueTransform::Identity,
-        phase: ObservablePhase::Real,
-        misbinning_max_normalized_distance: None,
-        histogram: HistogramSettings::default(),
-    }
 }
 
 use serde_json::Value as J;
@@ -1093,7 +996,7 @@ mod test {
                     ProcessSetArgs::Add {
                         target: ProcessAddTarget::Quantity {
                             name: "top_pt".to_string(),
-                            kind: super::QuantityTemplateKind::ParticleScalar,
+                            kind: "particle_scalar".to_string(),
                             pairs: vec![KvPair {
                                 key: "quantity".to_string(),
                                 value: "PT".to_string(),
@@ -1165,7 +1068,7 @@ mod test {
             &ProcessSetArgs::Add {
                 target: ProcessAddTarget::Quantity {
                     name: "top_pt".to_string(),
-                    kind: super::QuantityTemplateKind::ParticleScalar,
+                    kind: "particle_scalar".to_string(),
                     pairs: vec![
                         KvPair {
                             key: "pdgs".to_string(),

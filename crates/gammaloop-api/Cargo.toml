@@ -34,6 +34,7 @@ clap = { workspace = true, features = ["unstable-ext"] }
 color-eyre = "0.6.5"
 colored = { workspace = true }
 console = "0.16.0"
+crossterm = "0.28.1"
 dirs = "6.0.0"
 eyre = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
@@ -91,6 +92,7 @@ typed-index-collections = { workspace = true, features = [
   "serde",
   "serde-alloc",
 ] }
+unicode-width = "0.2.0"
 walkdir = "2.5"
 
 # PyO3: optional for embedding. Auto-init at runtime.

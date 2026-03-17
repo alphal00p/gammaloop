@@ -41,6 +41,7 @@ pub mod renormalize;
 pub use renormalize::Renormalize;
 pub mod profile;
 pub use profile::Profile;
+pub(crate) mod process_settings;
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Commands {
@@ -179,7 +180,12 @@ impl Commands {
                 _ = r.run(state, global_cli_settings)?;
             }
             Commands::Display(l) => {
-                l.run(state, global_cli_settings, default_runtime_settings)?;
+                l.run(
+                    state,
+                    global_cli_settings,
+                    default_runtime_settings,
+                    run_history,
+                )?;
             }
             Commands::Run(r) => {
                 return r.run(

@@ -9,6 +9,7 @@ use tracing::{info, warn};
 
 use crate::{
     commands::{
+        process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
         run::{prepare_command_histories_with_context, PreparedCommand, PreparedRun},
         save::SaveState,
         Commands, StartCommandsBlock,
@@ -228,6 +229,38 @@ impl<'a> CliSession<'a> {
             })
             .flatten()
             .collect()
+    }
+
+    pub(crate) fn current_process_settings_entries(&self) -> Vec<ProcessSettingsCompletionEntry> {
+        let mut entries = Vec::new();
+
+        for (process_id, process) in self.state.process_list.processes.iter().enumerate() {
+            for integrand_name in process.collection.get_integrand_names() {
+                let Ok(integrand) = process.get_integrand(integrand_name) else {
+                    continue;
+                };
+                let Ok(serialized) = serialize_runtime_named_settings(integrand.get_settings())
+                else {
+                    continue;
+                };
+
+                entries.push(ProcessSettingsCompletionEntry {
+                    process_id,
+                    process_name: process.definition.folder_name.clone(),
+                    integrand_name: integrand_name.to_string(),
+                    quantities: serialized.quantities,
+                    observables: serialized.observables,
+                    selectors: serialized.selectors,
+                });
+            }
+        }
+
+        entries.sort_by(|left, right| {
+            left.process_id
+                .cmp(&right.process_id)
+                .then_with(|| left.integrand_name.cmp(&right.integrand_name))
+        });
+        entries
     }
 
     pub fn current_model_parameter_entries(
@@ -531,7 +564,7 @@ fn raw_round_trips(raw: &str, command: &Commands) -> bool {
         .unwrap_or(false)
 }
 
-fn display_command(command: &CommandHistory) -> String {
+pub(crate) fn display_command(command: &CommandHistory) -> String {
     if let Some(raw_string) = normalize_command_history(command).raw_string {
         raw_string
     } else {

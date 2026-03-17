@@ -21,6 +21,9 @@ def main() -> None:
         boot_commands_path=run_card,
         fresh_state=True,
     )
+    # The example card includes a reusable block that shows the new named
+    # process-setting display commands through the Python `run(...)` bridge.
+    api.run("run display_named_settings_examples")
 
     point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
     result = api.evaluate_sample(point)

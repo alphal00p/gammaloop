@@ -86,6 +86,10 @@ pub enum FilterQuantity {
     CosThetaP,
     #[serde(rename = "PT")]
     PT,
+    #[serde(rename = "y")]
+    Rapidity,
+    #[serde(rename = "eta")]
+    PseudoRapidity,
 }
 
 impl fmt::Display for FilterQuantity {
@@ -94,6 +98,8 @@ impl fmt::Display for FilterQuantity {
             FilterQuantity::Energy => write!(f, "Energy"),
             FilterQuantity::CosThetaP => write!(f, "CosTheta"),
             FilterQuantity::PT => write!(f, "Pt"),
+            FilterQuantity::Rapidity => write!(f, "y"),
+            FilterQuantity::PseudoRapidity => write!(f, "eta"),
         }
     }
 }
@@ -533,6 +539,8 @@ impl ParticleScalarDefinition {
             let Some(value) = (match self.quantity {
                 FilterQuantity::Energy => Some(momentum.temporal.value),
                 FilterQuantity::PT => Some(momentum.pt()),
+                FilterQuantity::Rapidity => Some(momentum.rapidity()),
+                FilterQuantity::PseudoRapidity => Some(momentum.spatial.pseudo_rap()),
                 FilterQuantity::CosThetaP => incoming_beam.clone().map(|beam| {
                     let beam_spatial = beam.spatial.clone();
                     let momentum_spatial = momentum.spatial.clone();
@@ -810,6 +818,13 @@ impl ObservableBinAccumulator {
         self.new_mitigated_fill_count = 0;
     }
 
+    fn rescale(&mut self, factor: f64) {
+        self.sum_weights *= factor;
+        self.new_sum_weights *= factor;
+        self.sum_weights_squared *= factor * factor;
+        self.new_sum_weights_squared *= factor * factor;
+    }
+
     fn from_snapshot(snapshot: &HistogramBinSnapshot) -> Self {
         Self {
             sum_weights: snapshot.sum_weights,
@@ -907,6 +922,11 @@ impl HistogramBinSnapshot {
         self.sum_weights += other.sum_weights;
         self.sum_weights_squared += other.sum_weights_squared;
         self.mitigated_fill_count += other.mitigated_fill_count;
+    }
+
+    fn rescale_in_place(&mut self, factor: f64) {
+        self.sum_weights *= factor;
+        self.sum_weights_squared *= factor * factor;
     }
 }
 
@@ -1012,6 +1032,20 @@ impl HistogramSnapshot {
         self.statistics.nan_value_count += other.statistics.nan_value_count;
         self.statistics.mitigated_pair_count += other.statistics.mitigated_pair_count;
         Ok(())
+    }
+
+    pub fn rescale(&mut self, factor: f64) {
+        for bin in &mut self.bins {
+            bin.rescale_in_place(factor);
+        }
+        self.underflow_bin.rescale_in_place(factor);
+        self.overflow_bin.rescale_in_place(factor);
+    }
+
+    pub fn rescaled(&self, factor: f64) -> Self {
+        let mut scaled = self.clone();
+        scaled.rescale(factor);
+        scaled
     }
 
     pub fn rebin(&self, contiguous_bins: usize) -> Result<Self> {
@@ -1299,6 +1333,20 @@ impl HistogramAccumulatorState {
         self.snapshot()
             .rebin(contiguous_bins)
             .map(|s| s.into_accumulator_state())
+    }
+
+    pub fn rescale(&mut self, factor: f64) {
+        for bin in &mut self.bins {
+            bin.rescale(factor);
+        }
+        self.underflow_bin.rescale(factor);
+        self.overflow_bin.rescale(factor);
+    }
+
+    pub fn rescaled(&self, factor: f64) -> Self {
+        let mut scaled = self.clone();
+        scaled.rescale(factor);
+        scaled
     }
 
     fn ensure_compatible(&self, other: &HistogramAccumulatorState) -> Result<()> {
@@ -2174,30 +2222,52 @@ mod tests {
     };
     use std::fs;
 
-    #[test]
-    fn histogram_snapshot_json_round_trip() {
-        let snapshot = HistogramSnapshot {
+    fn sample_histogram_snapshot() -> HistogramSnapshot {
+        HistogramSnapshot {
             title: "top_pt".to_string(),
             phase: ObservablePhase::Real,
             value_transform: ObservableValueTransform::Identity,
+            supports_misbinning_mitigation: true,
             x_min: 0.0,
             x_max: 10.0,
+            sample_count: 3,
             log_x_axis: false,
             log_y_axis: true,
             bins: vec![HistogramBinSnapshot {
-                x_min: 0.0,
-                x_max: 10.0,
-                average: 1.25,
-                error: 0.5,
+                x_min: Some(0.0),
+                x_max: Some(10.0),
+                entry_count: 3,
+                sum_weights: 3.75,
+                sum_weights_squared: 5.625,
                 mitigated_fill_count: 2,
             }],
+            underflow_bin: HistogramBinSnapshot {
+                x_min: None,
+                x_max: Some(0.0),
+                entry_count: 1,
+                sum_weights: 1.5,
+                sum_weights_squared: 2.25,
+                mitigated_fill_count: 0,
+            },
+            overflow_bin: HistogramBinSnapshot {
+                x_min: Some(10.0),
+                x_max: None,
+                entry_count: 2,
+                sum_weights: 0.5,
+                sum_weights_squared: 0.25,
+                mitigated_fill_count: 1,
+            },
             statistics: HistogramStatisticsSnapshot {
-                underflow_count: 1,
-                overflow_count: 2,
+                in_range_entry_count: 3,
                 nan_value_count: 3,
                 mitigated_pair_count: 4,
             },
-        };
+        }
+    }
+
+    #[test]
+    fn histogram_snapshot_json_round_trip() {
+        let snapshot = sample_histogram_snapshot();
 
         let file_path = std::env::temp_dir().join(format!(
             "gammaloop_histogram_snapshot_{}_{}.json",
@@ -2213,5 +2283,33 @@ mod tests {
         let _ = fs::remove_file(&file_path);
 
         assert_eq!(loaded, snapshot);
+    }
+
+    #[test]
+    fn histogram_snapshot_rescale_scales_weight_sums_only() {
+        let snapshot = sample_histogram_snapshot();
+        let scaled = snapshot.rescaled(2.0);
+
+        assert_eq!(scaled.sample_count, snapshot.sample_count);
+        assert_eq!(scaled.statistics, snapshot.statistics);
+        assert_eq!(scaled.bins[0].entry_count, snapshot.bins[0].entry_count);
+        assert_eq!(
+            scaled.bins[0].mitigated_fill_count,
+            snapshot.bins[0].mitigated_fill_count
+        );
+        assert_eq!(scaled.bins[0].sum_weights, 7.5);
+        assert_eq!(scaled.bins[0].sum_weights_squared, 22.5);
+        assert_eq!(scaled.underflow_bin.sum_weights, 3.0);
+        assert_eq!(scaled.underflow_bin.sum_weights_squared, 9.0);
+        assert_eq!(scaled.overflow_bin.sum_weights, 1.0);
+        assert_eq!(scaled.overflow_bin.sum_weights_squared, 1.0);
+        assert_eq!(
+            scaled.bins[0].average(scaled.sample_count),
+            snapshot.bins[0].average(snapshot.sample_count) * 2.0
+        );
+        assert_eq!(
+            scaled.bins[0].error(scaled.sample_count),
+            snapshot.bins[0].error(snapshot.sample_count) * 2.0
+        );
     }
 }

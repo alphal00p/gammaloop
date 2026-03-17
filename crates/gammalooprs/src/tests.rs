@@ -69,6 +69,8 @@ fn compare_integration(
                 None,
                 None,
                 true,
+                true,
+                |_, _| Ok(()),
             )?;
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.re - res.result.re)
@@ -94,6 +96,8 @@ fn compare_integration(
                 None,
                 None,
                 true,
+                true,
+                |_, _| Ok(()),
             )?;
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.re - res.result.im)
@@ -121,6 +125,8 @@ fn compare_integration(
                 None,
                 None,
                 true,
+                true,
+                |_, _| Ok(()),
             )?;
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.im - res.result.re)
@@ -148,6 +154,8 @@ fn compare_integration(
                 None,
                 None,
                 true,
+                true,
+                |_, _| Ok(()),
             )?;
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.im - res.result.im)

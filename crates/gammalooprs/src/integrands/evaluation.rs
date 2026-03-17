@@ -5,8 +5,16 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use tabled::{Table, Tabled, settings::Style};
-use tracing::info;
+use tabled::{
+    Table, Tabled,
+    builder::Builder,
+    settings::{
+        Alignment, Modify, Panel, Style,
+        object::{Columns, Object, Rows},
+        style::{HorizontalLine, On, VerticalLine},
+        themes::BorderCorrection,
+    },
+};
 
 use crate::observables::{
     EventGroupList, GenericEventGroupList, ObservableSnapshotBundle,
@@ -14,7 +22,7 @@ use crate::observables::{
 };
 use crate::{
     settings::runtime::Precision,
-    utils::{ArbPrec, F, FloatLike, f128, format_evaluation_time},
+    utils::{ArbPrec, F, FloatLike, f128, format_evaluation_time, normalize_tabled_separator_rows},
 };
 
 #[derive(Clone, Debug)]
@@ -501,6 +509,22 @@ fn format_percentage(value: f64, significant_digits: usize) -> String {
     format!("{value:.decimals$}%")
 }
 
+fn format_status_header(label: &str) -> String {
+    format!("{label:<7}").blue().bold().to_string()
+}
+
+fn format_status_key(label: &str) -> String {
+    format!("{label} :  ")
+}
+
+fn pad_status_value(value: impl Display, width: usize) -> String {
+    format!("{value:<width$}")
+}
+
+fn status_group_separator() -> VerticalLine<On, On, ()> {
+    VerticalLine::new('│').top('┬').bottom('┴')
+}
+
 fn summarize_observables(observables: &ObservableSnapshotBundle) -> Option<String> {
     if observables.histograms.is_empty() {
         return None;
@@ -871,8 +895,7 @@ impl StatisticsCounter {
         }
     }
 
-    #[allow(clippy::format_in_format_args)]
-    pub(crate) fn display_status(&self) {
+    pub(crate) fn build_status_table(&self) -> Table {
         let time_integrand_formatted = format_evaluation_time(self.get_avg_integrand_timing());
         let time_evaluators_formatted = format_evaluation_time(self.get_avg_evaluator_timing());
         let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());
@@ -880,52 +903,165 @@ impl StatisticsCounter {
         let total_time = format_evaluation_time(self.get_avg_total_timing());
         let selection_efficiency = self.selection_efficiency_percentage();
         let selection_efficiency_display = selection_efficiency
-            .map(|value| format_percentage(value, 3).green().to_string())
-            .unwrap_or_else(|| "None".red().to_string());
+            .map(|value| {
+                pad_status_value(format_percentage(value, 3), 9)
+                    .green()
+                    .to_string()
+            })
+            .unwrap_or_else(|| pad_status_value("None", 9).red().to_string());
         let nan_or_unstable = self.get_percentage_nan_or_unstable();
         let nan_or_unstable_display = if nan_or_unstable > 0.0 {
-            format_percentage(nan_or_unstable, 2).red().to_string()
+            pad_status_value(format_percentage(nan_or_unstable, 2), 9)
+                .red()
+                .to_string()
         } else {
-            format_percentage(nan_or_unstable, 2).green().to_string()
+            pad_status_value(format_percentage(nan_or_unstable, 2), 9)
+                .green()
+                .to_string()
+        };
+        let nan_value = self.get_percentage_nan();
+        let nan_display = if nan_value > 0.0 {
+            pad_status_value(format_percentage(nan_value, 2), 9)
+                .red()
+                .to_string()
+        } else {
+            pad_status_value(format_percentage(nan_value, 2), 9)
+                .green()
+                .to_string()
         };
 
-        info!(
-            "|  {}  | {} {} | {} {} | {} {} | {} {}",
-            format!("{:-7}", "timing").blue().bold(),
-            format!("{:-7}", "total:"),
-            format!("{:-9}", total_time).green(),
-            format!("{:-7}", "param:"),
-            format!("{:-9}", param_time_formatted).green(),
-            format!("{:-7}", "itg:"),
-            format!("{:-9}", time_integrand_formatted).green(),
-            format!("{:-11}", "evaluators:"),
-            format!("{:-9}", time_evaluators_formatted).green(),
-        );
+        let mut table = Builder::new();
+        table.push_record([
+            format_status_header("timing"),
+            format_status_key("total"),
+            pad_status_value(total_time, 9).green().to_string(),
+            format_status_key("param"),
+            pad_status_value(param_time_formatted, 9)
+                .green()
+                .to_string(),
+            format_status_key("itg"),
+            pad_status_value(time_integrand_formatted, 9)
+                .green()
+                .to_string(),
+            format_status_key("evaluators"),
+            pad_status_value(time_evaluators_formatted, 9)
+                .green()
+                .to_string(),
+        ]);
+        table.push_record([
+            format_status_header("evals"),
+            format_status_key("f64"),
+            pad_status_value(format!("{:.2}%", self.get_percentage_f64()), 9)
+                .green()
+                .to_string(),
+            format_status_key("f128"),
+            pad_status_value(format!("{:.2}%", self.get_percentage_f128()), 9)
+                .green()
+                .to_string(),
+            format_status_key("arb"),
+            pad_status_value(format!("{:.2}%", self.get_percentage_arb()), 9)
+                .green()
+                .to_string(),
+            format_status_key("nan"),
+            nan_display,
+        ]);
+        table.push_record([
+            format_status_header("events"),
+            format_status_key("evts #"),
+            pad_status_value(format_count(self.sum_generated_event_count), 9)
+                .green()
+                .to_string(),
+            format_status_key("sel. %"),
+            selection_efficiency_display,
+            format_status_key("obs"),
+            pad_status_value(event_time_formatted, 9)
+                .green()
+                .to_string(),
+            format_status_key("nans+unstable %"),
+            nan_or_unstable_display,
+        ]);
 
-        info!(
-            "|  {}  | {} {} | {} {} | {} {} | {} {}",
-            format!("{:-7}", "evals").blue().bold(),
-            format!("{:-7}", "f64:"),
-            format!("{:-9}", format!("{:.2}%", self.get_percentage_f64())).green(),
-            format!("{:-7}", "f128:"),
-            format!("{:-9}", format!("{:.2}%", self.get_percentage_f128())).green(),
-            format!("{:-7}", "arb:"),
-            format!("{:-9}", format!("{:.2}%", self.get_percentage_arb())).green(),
-            format!("{:-7}", "nan:"),
-            format!("{:-9}", format!("{:.2}%", self.get_percentage_nan())).green(),
+        let mut table = table.build();
+        table.with(Panel::header(
+            "Integration statistics".bold().green().to_string(),
+        ));
+        table.with(
+            Style::rounded()
+                .remove_horizontals()
+                .verticals([
+                    (1, status_group_separator()),
+                    (3, status_group_separator()),
+                    (5, status_group_separator()),
+                    (7, status_group_separator()),
+                ])
+                .horizontals([(
+                    1,
+                    HorizontalLine::new('─')
+                        .intersection('┬')
+                        .left('├')
+                        .right('┤'),
+                )])
+                .remove_vertical(),
         );
+        table.with(BorderCorrection::span());
+        table.with(Modify::new(Rows::new(0..1)).with(Alignment::center()));
+        table.with(Modify::new(Rows::new(1..)).with(Alignment::left()));
+        for column in [1usize, 3, 5, 7] {
+            table.with(
+                Modify::new(Rows::new(1..).intersect(Columns::one(column)))
+                    .with(Alignment::right()),
+            );
+        }
+        table
+    }
 
-        info!(
-            "|  {}  | {} {} | {} {} | {} {} | {} {}",
-            format!("{:-7}", "events").blue().bold(),
-            format!("{:-7}", "Evts:"),
-            format!("{:-9}", format_count(self.sum_generated_event_count)).green(),
-            format!("{:-7}", "Sel. %:"),
-            format!("{:-9}", selection_efficiency_display),
-            format!("{:-7}", "t. obs:"),
-            format!("{:-9}", event_time_formatted).green(),
-            format!("{:-16}", "NaNs/Unstable %:"),
-            format!("{:-9}", nan_or_unstable_display),
+    pub(crate) fn render_status_table(&self) -> String {
+        normalize_tabled_separator_rows(&self.build_status_table().to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::StatisticsCounter;
+
+    #[test]
+    fn status_table_renders_three_rows_without_header() {
+        let stats = StatisticsCounter {
+            num_evals: 10,
+            sum_integrand_evaluation_time: Duration::from_micros(414),
+            sum_evaluator_evaluation_time: Duration::from_micros(279),
+            sum_parameterization_time: Duration::from_nanos(5_800),
+            sum_event_time: Duration::ZERO,
+            sum_total_evaluation_time: Duration::from_micros(462),
+            sum_relative_instability_error: (0.0.into(), 0.0.into()),
+            num_double_precision_evals: 10,
+            num_quadruple_precision_evals: 0,
+            num_arb_precision_evals: 0,
+            num_nan_evals: 0,
+            num_nan_or_unstable_evals: 0,
+            sum_generated_event_count: 0,
+            sum_accepted_event_count: 0,
+        };
+
+        let rendered = stats.render_status_table();
+        let lines = rendered.lines().collect::<Vec<_>>();
+
+        assert!(
+            rendered.starts_with('╭') && rendered.ends_with('╯'),
+            "{rendered}"
         );
+        assert_eq!(lines.len(), 7, "{rendered}");
+        assert!(rendered.contains("Integration statistics"), "{rendered}");
+        assert!(lines[2].contains('┬'), "{rendered}");
+        assert!(lines[6].contains('┴'), "{rendered}");
+        assert_eq!(lines[3].matches('│').count(), 6, "{rendered}");
+        assert_eq!(lines[4].matches('│').count(), 6, "{rendered}");
+        assert_eq!(lines[5].matches('│').count(), 6, "{rendered}");
+        assert!(rendered.contains("timing"), "{rendered}");
+        assert!(rendered.contains("evals"), "{rendered}");
+        assert!(rendered.contains("events"), "{rendered}");
+        assert!(rendered.contains("nans+unstable % :"), "{rendered}");
     }
 }

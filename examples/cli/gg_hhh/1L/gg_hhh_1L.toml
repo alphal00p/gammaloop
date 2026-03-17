@@ -65,6 +65,7 @@ commands = [
     # Target for "euclidean" point confirmed with MadLoop
     """integrate --process gg_hhh -i 1L --n-cores 10
         --target 6.56089133881216768e-4 -4.17078968913725420e-6
+        --no-show-max-weights
         --restart
     """,
 

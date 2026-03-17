@@ -152,7 +152,7 @@ pub struct OneShot {
     logfile_level: Option<LogLevel>,
 
     /// Type of prefix for the logging format
-    #[arg(short = 'p', long = "logging_prefix")]
+    #[arg(short = 'p', long = "logging-prefix")]
     logging_prefix: Option<LogFormat>,
 
     /// Prevent writes into the state folder for the lifetime of this session
@@ -362,6 +362,18 @@ pub struct LoadedState {
     pub default_runtime_settings: RuntimeSettings,
     pub session_state: CliSessionState,
     pub state_load_summary: Option<StateLoadSummary>,
+}
+
+impl LoadedState {
+    pub fn cli_session(&mut self) -> CliSession<'_> {
+        CliSession::new(
+            &mut self.state,
+            &mut self.run_history,
+            &mut self.cli_settings,
+            &mut self.default_runtime_settings,
+            &mut self.session_state,
+        )
+    }
 }
 
 pub struct Parsed {
@@ -1466,9 +1478,14 @@ mod tests {
     }
 
     #[test]
-    fn oneshot_accepts_logging_prefix_override() {
-        let parsed = OneShot::try_parse_from(["gammaloop", "-p", "long"]).unwrap();
+    fn oneshot_accepts_logging_prefix_long_flag_override() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "--logging-prefix", "long"]).unwrap();
         assert_eq!(parsed.logging_prefix, Some(LogFormat::Long));
+    }
+
+    #[test]
+    fn oneshot_rejects_removed_logging_prefix_underscore_flag() {
+        assert!(OneShot::try_parse_from(["gammaloop", "--logging_prefix", "long"]).is_err());
     }
 
     #[test]
@@ -1745,6 +1762,7 @@ mod tests {
 
         assert!(saved.contains("display_directive = \"info\""), "{saved}");
         assert!(saved.contains("logfile_directive = \"off\""), "{saved}");
+        assert!(saved.contains("log_format = \"Long\""), "{saved}");
         assert!(saved.contains("compiler = \"g++\""), "{saved}");
     }
 
@@ -1790,6 +1808,7 @@ mod tests {
         fs::remove_file(temp.path().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
         let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
         assert_eq!(loaded, CLISettings::default());
+        assert_eq!(loaded.global.log_style.log_format, LogFormat::Long);
     }
 
     #[test]

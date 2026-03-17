@@ -31,7 +31,7 @@ use crate::settings::RuntimeSettings;
 use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
 use crate::utils;
 use crate::utils::F;
-use crate::utils::format_sample;
+use crate::utils::normalize_tabled_separator_rows;
 use crate::{is_interrupted, set_interrupted};
 use rayon::prelude::*;
 use spenso::algebra::complex::Complex;
@@ -40,7 +40,17 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
-use tabled::Tabled;
+use tabled::{
+    Table, Tabled,
+    builder::Builder,
+    settings::{
+        Alignment, Modify, Panel, Span,
+        object::{Cell, Rows},
+        style::{HorizontalLine, On, Style, VerticalLine},
+        themes::BorderCorrection,
+        width::Width,
+    },
+};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
@@ -126,7 +136,7 @@ impl ComplexAccumulator {
         self.im.update_iter(use_weighted_average);
     }
 
-    pub(crate) fn format_max_weights(&self, i_itg: usize) -> Vec<String> {
+    pub(crate) fn max_weight_rows(&self, i_itg: usize) -> Vec<[String; 3]> {
         let max_evals = [
             &self.re.max_eval_positive,
             &self.re.max_eval_negative,
@@ -152,9 +162,7 @@ impl ComplexAccumulator {
         )
         .filter_map(|(max_eval, max_eval_sample, sign_str, phase_str)| {
             if max_eval.is_non_zero() {
-                #[allow(clippy::format_in_format_args)]
-                Some(format!(
-                    "|  {:<20} | {:<23} | {}",
+                Some([
                     format!(
                         "itg #{:-3} {} [{}] ",
                         format!("{:<3}", i_itg + 1),
@@ -162,21 +170,453 @@ impl ComplexAccumulator {
                         format!("{:<1}", sign_str).blue()
                     ),
                     format!("{:+.16e}", max_eval),
-                    format!(
-                        "( {} )",
-                        if let Some(sample) = max_eval_sample {
-                            format_sample(sample)
-                        } else {
-                            "N/A".to_string()
-                        }
-                    )
-                ))
+                    if let Some(sample) = max_eval_sample {
+                        format_max_eval_sample(sample)
+                    } else {
+                        "N/A".to_string()
+                    },
+                ])
             } else {
                 None
             }
         })
         .collect()
     }
+}
+
+struct IntegralResultCells {
+    integrand: String,
+    value: String,
+    relative_error: String,
+    chi_sq: String,
+    delta_sigma: Option<String>,
+    delta_percent: Option<String>,
+    mwi: String,
+}
+
+const MAX_SHARED_TABLE_WIDTH: usize = 150;
+
+fn result_group_separator() -> VerticalLine<On, On, ()> {
+    VerticalLine::new('│').top('┬').bottom('┴')
+}
+
+fn format_max_eval_coordinate(value: F<f64>) -> String {
+    let formatted = format!("{:.16e}", value.0);
+    let Some((mantissa, exponent)) = formatted.rsplit_once('e') else {
+        return formatted;
+    };
+    let exponent = exponent.parse::<i32>().unwrap_or_default();
+    format!("{mantissa}e{exponent:+03}")
+}
+
+fn format_max_eval_coordinates(xs: &[F<f64>]) -> String {
+    format!(
+        "[ {} ]",
+        xs.iter()
+            .map(|value| format_max_eval_coordinate(*value))
+            .join(" ")
+    )
+}
+
+fn format_max_eval_sample(sample: &Sample<F<f64>>) -> String {
+    match sample {
+        Sample::Continuous(_, xs) => {
+            format!("xs: {}", format_max_eval_coordinates(xs))
+        }
+        Sample::Discrete(_, graph_index, Some(nested_sample)) => match nested_sample.as_ref() {
+            Sample::Continuous(_, xs) => {
+                format!(
+                    "graph: {graph_index}, xs: {}",
+                    format_max_eval_coordinates(xs)
+                )
+            }
+            Sample::Discrete(_, channel_index, Some(nested_cont_sample)) => {
+                match nested_cont_sample.as_ref() {
+                    Sample::Continuous(_, xs) => format!(
+                        "graph: {graph_index}, channel: {channel_index}, xs: {}",
+                        format_max_eval_coordinates(xs)
+                    ),
+                    _ => String::from("N/A"),
+                }
+            }
+            _ => String::from("N/A"),
+        },
+        _ => String::from("N/A"),
+    }
+}
+
+fn format_iteration_points(points: usize) -> String {
+    format!("{:.0}K", points as f64 / 1000.0)
+}
+
+fn format_total_points(points: usize) -> String {
+    if points >= 10_000_000 {
+        format!("{:.0}M", points as f64 / 1_000_000.0)
+    } else {
+        format!("{:.0}K", points as f64 / 1000.0)
+    }
+}
+
+fn build_integral_result_cells(
+    itg: &StatisticsAccumulator<F<f64>>,
+    i_itg: usize,
+    i_iter: usize,
+    tag: &str,
+    trgt: Option<F<f64>>,
+) -> IntegralResultCells {
+    let relative_error = if itg.avg.is_non_zero() {
+        if (itg.err / itg.avg).abs().0 > 0.01 {
+            format!(
+                "{:-8}",
+                format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).red()
+            )
+        } else {
+            format!(
+                "{:-8}",
+                format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).green()
+            )
+        }
+    } else {
+        format!("{:-8}", "")
+    };
+
+    let chi_sq = if itg.chi_sq / F::<f64>::new_from_usize(i_iter) > F(5.) {
+        format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).red()
+    } else {
+        format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).normal()
+    };
+
+    let (delta_sigma, delta_percent) = if i_itg == 1 {
+        if let Some(t) = trgt {
+            let delta_in_sigmas = (t - itg.avg).abs().0 / itg.err.0;
+            let delta_in_percent = if t.abs() > F(0.) {
+                (t - itg.avg).abs().0 / t.abs().0 * 100.
+            } else {
+                0.
+            };
+            let is_outside_target = delta_in_sigmas > 5.
+                || (t.abs().is_non_zero() && ((t - itg.avg).abs() / t.abs()).0 > 0.01);
+            let sigma_display = if is_outside_target {
+                delta_in_sigmas
+            } else if t.is_non_zero() && itg.avg.is_non_zero() {
+                delta_in_sigmas
+            } else {
+                0.
+            };
+            let sigma_text = format!("Δ = {:.3}σ", sigma_display);
+            let percent_text = format!("Δ = {:.3}%", delta_in_percent);
+            if is_outside_target {
+                (
+                    Some(sigma_text.red().to_string()),
+                    Some(percent_text.red().to_string()),
+                )
+            } else {
+                (
+                    Some(sigma_text.green().to_string()),
+                    Some(percent_text.green().to_string()),
+                )
+            }
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
+    let mwi = if itg.avg.abs().0 != 0. {
+        let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
+            / (itg.avg.abs() * F::<f64>::new_from_usize(itg.processed_samples));
+        if mwi > F(1.) {
+            format!("  mwi: {:<10.4e}", mwi.0).red().to_string()
+        } else {
+            format!("  mwi: {:<10.4e}", mwi.0).normal().to_string()
+        }
+    } else {
+        format!("  mwi: {:<10.4e}", 0.).normal().to_string()
+    };
+
+    IntegralResultCells {
+        integrand: format!(
+            "itg #{:-3} {}:",
+            format!("{:<3}", i_itg),
+            format!("{:-2}", tag).blue().bold(),
+        ),
+        value: utils::format_uncertainty(itg.avg, itg.err)
+            .blue()
+            .bold()
+            .to_string(),
+        relative_error: relative_error.to_string(),
+        chi_sq: chi_sq.to_string(),
+        delta_sigma,
+        delta_percent,
+        mwi,
+    }
+}
+
+fn build_iteration_status_header_left(elapsed_time: Duration, iter: usize) -> String {
+    format!(
+        "[ {} ] {}",
+        format!(
+            "{:^7}",
+            utils::format_wdhms(elapsed_time.as_secs() as usize)
+        )
+        .bold(),
+        format!("Iteration #{:-4}", iter).bold().green(),
+    )
+}
+
+fn build_iteration_status_header_middle(cur_points: usize, total_points: usize) -> String {
+    format!(
+        "n_pts = {} {}",
+        format_iteration_points(cur_points),
+        format!("n_tot = {}", format_total_points(total_points))
+            .bold()
+            .green(),
+    )
+}
+
+fn build_iteration_status_header_tail(
+    cores: usize,
+    elapsed_time: Duration,
+    n_samples_evaluated: usize,
+) -> String {
+    let average_sample_time = if n_samples_evaluated == 0 {
+        "N/A".red().to_string()
+    } else {
+        utils::format_evaluation_time_from_f64(
+            elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
+        )
+        .bold()
+        .blue()
+        .to_string()
+    };
+
+    format!("{average_sample_time} /sample/core")
+}
+
+fn build_iteration_results_table(
+    integration_state: &IntegrationState,
+    cores: usize,
+    elapsed_time: Duration,
+    cur_points: usize,
+    n_samples_evaluated: usize,
+    target: &Option<Complex<F<f64>>>,
+) -> Table {
+    let has_target_columns = target.is_some();
+    let n_columns = if has_target_columns { 7 } else { 5 };
+    let mut builder = Builder::new();
+    let mut first_row = vec![
+        build_iteration_status_header_left(elapsed_time, integration_state.iter),
+        String::new(),
+        build_iteration_status_header_middle(cur_points, integration_state.num_points),
+    ];
+    first_row.resize(n_columns - 1, String::new());
+    first_row.push(build_iteration_status_header_tail(
+        cores,
+        elapsed_time,
+        n_samples_evaluated,
+    ));
+    builder.push_record(first_row);
+
+    let mut rows_without_target = Vec::new();
+    let mut row_index = 1usize;
+
+    for (i_integrand, integrand) in integration_state.all_integrals.iter().enumerate() {
+        for (tag, accumulator, target_component) in [
+            (
+                "re",
+                &integrand.re,
+                if i_integrand == 0 {
+                    target.map(|value| value.re)
+                } else {
+                    None
+                },
+            ),
+            (
+                "im",
+                &integrand.im,
+                if i_integrand == 0 {
+                    target.map(|value| value.im)
+                } else {
+                    None
+                },
+            ),
+        ] {
+            let cells = build_integral_result_cells(
+                accumulator,
+                i_integrand + 1,
+                integration_state.iter,
+                tag,
+                target_component,
+            );
+            if has_target_columns {
+                if let (Some(delta_sigma), Some(delta_percent)) =
+                    (cells.delta_sigma, cells.delta_percent)
+                {
+                    builder.push_record(vec![
+                        cells.integrand,
+                        cells.value,
+                        cells.relative_error,
+                        cells.chi_sq,
+                        delta_sigma,
+                        delta_percent,
+                        cells.mwi,
+                    ]);
+                } else {
+                    builder.push_record(vec![
+                        cells.integrand,
+                        cells.value,
+                        cells.relative_error,
+                        cells.chi_sq,
+                        cells.mwi,
+                        String::new(),
+                        String::new(),
+                    ]);
+                    rows_without_target.push(row_index);
+                }
+            } else {
+                builder.push_record(vec![
+                    cells.integrand,
+                    cells.value,
+                    cells.relative_error,
+                    cells.chi_sq,
+                    cells.mwi,
+                ]);
+            }
+            row_index += 1;
+        }
+    }
+
+    let mut table = builder.build();
+    table.modify((0, 0), Span::column(2));
+    table.modify((0, 2), Span::column((n_columns - 3) as isize));
+    for row in rows_without_target {
+        table.modify((row, 4), Span::column(3));
+    }
+
+    if has_target_columns {
+        table.with(
+            Style::rounded()
+                .remove_horizontals()
+                .verticals([
+                    (3, result_group_separator()),
+                    (4, result_group_separator()),
+                    (6, result_group_separator()),
+                ])
+                .horizontals([(
+                    1,
+                    HorizontalLine::new('─')
+                        .intersection('┬')
+                        .left('├')
+                        .right('┤'),
+                )])
+                .remove_vertical(),
+        );
+    } else {
+        table.with(
+            Style::rounded()
+                .remove_horizontals()
+                .verticals([(3, result_group_separator()), (4, result_group_separator())])
+                .horizontals([(
+                    1,
+                    HorizontalLine::new('─')
+                        .intersection('┬')
+                        .left('├')
+                        .right('┤'),
+                )])
+                .remove_vertical(),
+        );
+    }
+
+    table.with(BorderCorrection::span());
+    table.with(Modify::new(Rows::new(0..)).with(Alignment::left()));
+    table.with(Modify::new(Cell::new(0, 2)).with(Alignment::center()));
+    table.with(Modify::new(Cell::new(0, n_columns - 1)).with(Alignment::center()));
+    table
+}
+
+fn build_max_weight_details_table(all_integrals: &[ComplexAccumulator]) -> Table {
+    let mut builder = Builder::new();
+    builder.push_record([
+        "Integrand".bold().blue().to_string(),
+        "Max eval".bold().blue().to_string(),
+        "Max eval coordinates".bold().blue().to_string(),
+    ]);
+
+    for (i_itg, integral) in all_integrals.iter().enumerate() {
+        for row in integral.max_weight_rows(i_itg) {
+            builder.push_record(row);
+        }
+    }
+
+    let mut table = builder.build();
+    table.with(Panel::header(
+        "Maximum weight details".bold().green().to_string(),
+    ));
+    table.with(Style::rounded().remove_horizontals().horizontals([
+        (1, HorizontalLine::full('─', '┬', '├', '┤')),
+        (2, HorizontalLine::full('─', '┼', '├', '┤')),
+    ]));
+    table.with(BorderCorrection::span());
+    table.with(Modify::new(Rows::new(0..2)).with(Alignment::center()));
+    table.with(Modify::new(Rows::new(2..)).with(Alignment::left()));
+    table
+}
+
+fn render_max_weight_details_table(all_integrals: &[ComplexAccumulator]) -> String {
+    normalize_tabled_separator_rows(&build_max_weight_details_table(all_integrals).to_string())
+}
+
+fn suppress_iteration_header_tail_separator(rendered: &str) -> String {
+    rendered
+        .lines()
+        .enumerate()
+        .map(|(line_index, line)| {
+            if line_index != 1 {
+                return line.to_string();
+            }
+
+            let vertical_positions = line.match_indices('│').map(|(idx, _)| idx).collect_vec();
+            if vertical_positions.len() < 3 {
+                return line.to_string();
+            }
+
+            let suppressed_index = vertical_positions[vertical_positions.len() - 2];
+            let mut updated = line.to_string();
+            updated.replace_range(suppressed_index..suppressed_index + '│'.len_utf8(), " ");
+            updated
+        })
+        .join("\n")
+}
+
+fn render_tables_with_shared_width(mut tables: Vec<Table>) -> String {
+    let max_width = tables
+        .iter()
+        .map(Table::total_width)
+        .max()
+        .unwrap_or(0)
+        .min(MAX_SHARED_TABLE_WIDTH);
+
+    for table in &mut tables {
+        if table.total_width() < max_width {
+            table.with(Width::increase(max_width));
+        }
+    }
+
+    tables
+        .into_iter()
+        .enumerate()
+        .map(|(table_index, table)| {
+            let rendered = table.to_string();
+            let rendered = if table_index == 0 {
+                suppress_iteration_header_tail_separator(&rendered)
+            } else {
+                rendered
+            };
+            normalize_tabled_separator_rows(&rendered)
+        })
+        .collect_vec()
+        .join("\n")
 }
 
 /// struct to keep track of state, used in the havana_integrate function
@@ -270,8 +710,14 @@ pub struct CoreResult {
     pub grid: Grid<F<f64>>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntegrationStatusKind {
+    Iteration,
+    Final,
+}
+
 /// Integrate function used for local runs
-pub fn havana_integrate<T>(
+pub fn havana_integrate<T, S>(
     settings: &RuntimeSettings,
     model: &Model,
     user_data_generator: T,
@@ -279,9 +725,12 @@ pub fn havana_integrate<T>(
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
     show_max_wgt_info_per_iteration: bool,
+    show_integration_statistics_per_iteration: bool,
+    mut status_emitter: S,
 ) -> Result<IntegrationResult>
 where
     T: Fn(&RuntimeSettings) -> UserData,
+    S: FnMut(IntegrationStatusKind, String) -> Result<()>,
 {
     let mut user_data = user_data_generator(settings);
 
@@ -495,16 +944,19 @@ where
             }
         }
 
-        show_integration_status(
-            &integration_state,
-            cores,
-            t_start.elapsed(),
-            cur_points,
-            n_samples_evaluated,
-            &target,
-            show_max_wgt_info_per_iteration && settings.integrator.show_max_wgt_info,
-        );
-        info!("");
+        status_emitter(
+            IntegrationStatusKind::Iteration,
+            render_iteration_status_block(
+                &integration_state,
+                cores,
+                t_start.elapsed(),
+                cur_points,
+                n_samples_evaluated,
+                &target,
+                show_max_wgt_info_per_iteration && settings.integrator.show_max_wgt_info,
+                show_integration_statistics_per_iteration,
+            ),
+        )?;
 
         // now write the integration state to disk if a workspace has been provided.
         if let Some(ref workspace_path) = workspace {
@@ -547,19 +999,19 @@ where
     }
 
     if integration_state.num_points > 0 {
-        info!("");
-        info!("{}", "Final integration results:".bold().green());
-        info!("");
-        show_integration_status(
-            &integration_state,
-            cores,
-            t_start.elapsed(),
-            0,
-            n_samples_evaluated,
-            &target,
-            true,
-        );
-        info!("");
+        status_emitter(
+            IntegrationStatusKind::Final,
+            render_iteration_status_block(
+                &integration_state,
+                cores,
+                t_start.elapsed(),
+                0,
+                n_samples_evaluated,
+                &target,
+                true,
+                true,
+            ),
+        )?;
     } else {
         info!("");
         warn!(
@@ -1158,28 +1610,52 @@ impl MasterNode {
 
     /// Display the current status of the integration. Usually called after each iteration.
     pub(crate) fn display_status(&self) {
-        print_integral_result(
-            &self.master_accumulator_re,
-            1,
-            self.current_iter,
-            "re",
-            None,
-        );
+        let status_block = [
+            render_integral_result(
+                &self.master_accumulator_re,
+                1,
+                self.current_iter,
+                "re",
+                None,
+            ),
+            render_integral_result(
+                &self.master_accumulator_im,
+                1,
+                self.current_iter,
+                "im",
+                None,
+            ),
+            self.statistics.render_status_table(),
+        ]
+        .join("\n");
 
-        print_integral_result(
-            &self.master_accumulator_im,
-            1,
-            self.current_iter,
-            "im",
-            None,
-        );
-
-        self.statistics.display_status();
+        info!("\n{status_block}");
     }
 }
 
-#[allow(clippy::format_in_format_args)]
-pub(crate) fn show_integration_status(
+pub fn emit_integration_status_via_tracing(
+    kind: IntegrationStatusKind,
+    status_block: impl AsRef<str>,
+) -> Result<()> {
+    let status_block = status_block.as_ref();
+    match kind {
+        IntegrationStatusKind::Iteration => {
+            info!("\n{status_block}");
+            info!("");
+        }
+        IntegrationStatusKind::Final => {
+            info!("");
+            info!("{}", "Final integration results:".bold().green());
+            info!("");
+            info!("\n{status_block}");
+            info!("");
+        }
+    }
+
+    Ok(())
+}
+
+fn render_iteration_status_block(
     integration_state: &IntegrationState,
     cores: usize,
     elapsed_time: Duration,
@@ -1187,95 +1663,28 @@ pub(crate) fn show_integration_status(
     n_samples_evaluated: usize,
     target: &Option<Complex<F<f64>>>,
     show_max_wgt_info: bool,
-) {
-    info!(
-        "/  [ {} ] {}: n_pts={:-6.0}K {} {}",
-        format!(
-            "{:^7}",
-            utils::format_wdhms(elapsed_time.as_secs() as usize)
-        )
-        .bold(),
-        format!("Iteration #{:-4}", integration_state.iter)
-            .bold()
-            .green(),
-        cur_points as f64 / 1000.,
-        if integration_state.num_points >= 10_000_000 {
-            format!(
-                "n_tot={:-7.0}M",
-                integration_state.num_points as f64 / 1_000_000.
-            )
-            .bold()
-            .green()
-        } else {
-            format!(
-                "n_tot={:-7.0}K",
-                integration_state.num_points as f64 / 1000.
-            )
-            .bold()
-            .green()
-        },
-        format!(
-            "{:-22}",
-            format!(
-                "{:-9} /sample/core",
-                if n_samples_evaluated == 0 {
-                    "N/A".red()
-                } else {
-                    utils::format_evaluation_time_from_f64(
-                        elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
-                    )
-                    .bold()
-                    .blue()
-                }
-            )
-        )
-    );
+    show_statistics: bool,
+) -> String {
+    let mut tables = vec![build_iteration_results_table(
+        integration_state,
+        cores,
+        elapsed_time,
+        cur_points,
+        n_samples_evaluated,
+        target,
+    )];
 
-    for (i_integrand, integrand) in integration_state.all_integrals.iter().enumerate() {
-        print_integral_result(
-            &integrand.re,
-            i_integrand + 1,
-            integration_state.iter,
-            "re",
-            if i_integrand == 0 {
-                target.map(|o| o.re).or(None)
-            } else {
-                None
-            },
-        );
-        print_integral_result(
-            &integrand.im,
-            i_integrand + 1,
-            integration_state.iter,
-            "im",
-            if i_integrand == 0 {
-                target.map(|o| o.im).or(None)
-            } else {
-                None
-            },
-        );
-    }
     if show_max_wgt_info {
-        info!(
-            "|  -------------------------------------------------------------------------------------------"
-        );
-        info!(
-            "|  {:<16} | {:<23} | {}",
-            "Integrand", "Max Eval", "Max Eval xs",
-        );
-
-        for (i_itg, integral) in integration_state.all_integrals.iter().enumerate() {
-            for max_weight_str in integral.format_max_weights(i_itg) {
-                info!("{}", max_weight_str);
-            }
-        }
-
-        info!(
-            "|  -------------------------------------------------------------------------------------------"
-        );
+        tables.push(build_max_weight_details_table(
+            &integration_state.all_integrals,
+        ));
     }
 
-    integration_state.stats.display_status();
+    if show_statistics {
+        tables.push(integration_state.stats.build_status_table());
+    }
+
+    render_tables_with_shared_width(tables)
 }
 
 pub fn print_integral_result(
@@ -1285,82 +1694,162 @@ pub fn print_integral_result(
     tag: &str,
     trgt: Option<F<f64>>,
 ) {
-    info!(
-        "|  itg #{:-3} {}: {} {} {} {} {}",
-        format!("{:<3}", i_itg),
-        format!("{:-2}", tag).blue().bold(),
-        format!("{:-19}", utils::format_uncertainty(itg.avg, itg.err))
-            .blue()
-            .bold(),
-        if itg.avg.is_non_zero() {
-            if (itg.err / itg.avg).abs().0 > 0.01 {
-                format!(
-                    "{:-8}",
-                    format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).red()
-                )
-            } else {
-                format!(
-                    "{:-8}",
-                    format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).green()
-                )
-            }
-        } else {
-            format!("{:-8}", "")
-        },
-        if itg.chi_sq / (F::<f64>::new_from_usize(i_iter)) > F(5.) {
-            format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).red()
-        } else {
-            format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).normal()
-        },
-        if i_itg == 1 {
-            if let Some(t) = trgt {
-                if (t - itg.avg).abs().0 / itg.err.0 > 5.
-                    || (t.abs().is_non_zero() && ((t - itg.avg).abs() / t.abs()).0 > 0.01)
-                {
-                    format!(
-                        "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        (t - itg.avg).abs().0 / itg.err.0,
-                        if t.abs() > F(0.) {
-                            (t - itg.avg).abs().0 / t.abs().0 * 100.
-                        } else {
-                            0.
-                        }
-                    )
-                    .red()
-                } else {
-                    format!(
-                        "Δ={:-7.3}σ, Δ={:-7.3}%",
-                        if t.is_non_zero() && itg.avg.is_non_zero() {
-                            (t - itg.avg).abs().0 / itg.err.0
-                        } else {
-                            0.
-                        },
-                        if t.abs() > F(0.) {
-                            (t - itg.avg).abs().0 / t.abs().0 * 100.
-                        } else {
-                            0.
-                        }
-                    )
-                    .green()
-                }
-            } else {
-                "".to_string().normal()
-            }
-        } else {
-            "".to_string().normal()
-        },
-        if itg.avg.abs().0 != 0. {
-            let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
-                / (itg.avg.abs() * (F::<f64>::new_from_usize(itg.processed_samples)));
-            if mwi > F(1.) {
-                format!("  mwi: {:<10.4e}", mwi.0).red()
-            } else {
-                format!("  mwi: {:<10.4e}", mwi.0).normal()
-            }
-        } else {
-            format!("  mwi: {:<10.4e}", 0.).normal()
-        }
-    );
+    info!("{}", render_integral_result(itg, i_itg, i_iter, tag, trgt));
+}
+
+#[allow(clippy::format_in_format_args)]
+fn render_integral_result(
+    itg: &StatisticsAccumulator<F<f64>>,
+    i_itg: usize,
+    i_iter: usize,
+    tag: &str,
+    trgt: Option<F<f64>>,
+) -> String {
+    let cells = build_integral_result_cells(itg, i_itg, i_iter, tag, trgt);
+    let delta = match (cells.delta_sigma.as_ref(), cells.delta_percent.as_ref()) {
+        (Some(delta_sigma), Some(delta_percent)) => format!("{delta_sigma}, {delta_percent}"),
+        _ => String::new(),
+    };
+
+    format!(
+        "|  {} {} {} {} {} {}",
+        cells.integrand, cells.value, cells.relative_error, cells.chi_sq, delta, cells.mwi
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use symbolica::numerical_integration::ContinuousGrid;
+
+    fn make_accumulator(
+        re_avg: f64,
+        re_err: f64,
+        re_chi_sq: f64,
+        im_avg: f64,
+        im_err: f64,
+        im_chi_sq: f64,
+    ) -> ComplexAccumulator {
+        let mut accumulator = ComplexAccumulator::new();
+        accumulator.re.avg = F(re_avg);
+        accumulator.re.err = F(re_err);
+        accumulator.re.chi_sq = F(re_chi_sq);
+        accumulator.re.processed_samples = 100_000;
+        accumulator.re.max_eval_positive = F(1.0);
+        accumulator.im.avg = F(im_avg);
+        accumulator.im.err = F(im_err);
+        accumulator.im.chi_sq = F(im_chi_sq);
+        accumulator.im.processed_samples = 100_000;
+        accumulator.im.max_eval_positive = F(1.0);
+        accumulator
+    }
+
+    fn make_integration_state() -> IntegrationState {
+        let mut state = IntegrationState::new_from_settings(|| {
+            Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false))
+        });
+        state.iter = 1;
+        state.num_points = 100_000;
+        let mut evaluation = EvaluationResult::zero();
+        evaluation.evaluation_metadata.integrand_evaluation_time = Duration::from_micros(414);
+        evaluation.evaluation_metadata.evaluator_evaluation_time = Duration::from_micros(279);
+        evaluation.evaluation_metadata.parameterization_time = Duration::from_nanos(5_800);
+        evaluation.evaluation_metadata.total_timing = Duration::from_micros(462);
+        state.stats = StatisticsCounter::from_evaluation_results(&[evaluation]);
+        state.all_integrals = vec![
+            make_accumulator(7.5e-5, 9.8e-5, 0.394, 3.2e-5, 1.5e-5, 0.378),
+            make_accumulator(2.1e-5, 2.0e-6, 0.221, -1.7e-5, 3.0e-6, 0.187),
+        ];
+        state
+    }
+
+    #[test]
+    fn max_weight_details_table_renders_titled_table_without_wrapping_parentheses() {
+        let mut accumulator = ComplexAccumulator::new();
+        accumulator.re.max_eval_positive = F(2.3840672847728);
+        accumulator.re.max_eval_positive_xs = Some(Sample::Discrete(
+            F(1.0),
+            0,
+            Some(Box::new(Sample::Discrete(
+                F(1.0),
+                0,
+                Some(Box::new(Sample::Continuous(
+                    F(1.0),
+                    vec![
+                        F(0.9695746085826609),
+                        F(0.5327714835649985),
+                        F(0.003410284786539597),
+                    ],
+                ))),
+            ))),
+        ));
+
+        let rendered = render_max_weight_details_table(&[accumulator]);
+
+        assert!(rendered.contains("Maximum weight details"), "{rendered}");
+        assert!(rendered.contains("Integrand"), "{rendered}");
+        assert!(rendered.contains("Max eval"), "{rendered}");
+        assert!(rendered.contains("Max eval coordinates"), "{rendered}");
+        assert!(
+            rendered.contains("graph: 0, channel: 0, xs: [ "),
+            "{rendered}"
+        );
+        assert!(rendered.contains("e-01"), "{rendered}");
+        assert!(rendered.contains("e-03 ]"), "{rendered}");
+        assert!(!rendered.contains(", 0.532"), "{rendered}");
+        assert!(!rendered.contains("( graph:"), "{rendered}");
+    }
+
+    #[test]
+    fn iteration_status_block_uses_compact_header_and_optional_statistics() {
+        let state = make_integration_state();
+        let rendered = render_iteration_status_block(
+            &state,
+            4,
+            Duration::from_secs(1),
+            100_000,
+            100_000,
+            &Some(Complex::new(F(1.0e-4), F(2.0e-5))),
+            false,
+            false,
+        );
+
+        assert!(rendered.contains("Iteration #   1"), "{rendered}");
+        assert!(rendered.contains("n_pts = 100K n_tot = 100K"), "{rendered}");
+        assert!(rendered.contains("/sample/core"), "{rendered}");
+        assert!(rendered.contains("Δ ="), "{rendered}");
+        assert!(!rendered.contains("Integration statistics"), "{rendered}");
+        let lines = rendered.lines().collect::<Vec<_>>();
+        assert!(
+            lines.first().is_some_and(|line| !line.contains('┬')),
+            "{rendered}"
+        );
+        assert_eq!(lines[1].matches('│').count(), 2, "{rendered}");
+        assert!(lines[2].contains('┬'), "{rendered}");
+        assert!(
+            lines.last().is_some_and(|line| line.contains('┴')),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn iteration_status_block_omits_delta_columns_when_no_target_is_provided() {
+        let state = make_integration_state();
+        let rendered = render_iteration_status_block(
+            &state,
+            4,
+            Duration::from_secs(1),
+            100_000,
+            100_000,
+            &None,
+            false,
+            true,
+        );
+
+        assert!(!rendered.contains("Δ="), "{rendered}");
+        assert!(rendered.contains("Integration statistics"), "{rendered}");
+        assert!(rendered.contains("mwi:"), "{rendered}");
+    }
 }
 
 #[test]

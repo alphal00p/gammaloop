@@ -1,25 +1,37 @@
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    io::{self, IsTerminal, Write},
+    path::PathBuf,
+};
 
 use clap::Args;
+use crossterm::{
+    cursor::{MoveDown, MoveToColumn, MoveUp},
+    queue,
+    terminal::{self, Clear, ClearType},
+};
 use gammalooprs::utils::serde_utils::SmartSerde;
-
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
+use unicode_width::UnicodeWidthChar;
 
 use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::{
-    integrate::{havana_integrate, print_integral_result, IntegrationState},
-    settings::{runtime::IntegrationResult, RuntimeSettings},
+    integrate::{
+        IntegrationState, IntegrationStatusKind, emit_integration_status_via_tracing,
+        havana_integrate, print_integral_result,
+    },
+    settings::{RuntimeSettings, runtime::IntegrationResult},
     utils::F,
 };
 use tracing::{info, warn};
 
 use crate::{
+    CLISettings,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
-    CLISettings,
 };
 
 #[cfg_attr(
@@ -73,6 +85,139 @@ pub struct Integrate {
     /// Hide max-weight information during intermediate iteration updates
     #[arg(long = "no-show-max-weights")]
     pub no_show_max_weights: bool,
+
+    /// Hide integration statistics during intermediate iteration updates
+    #[arg(long = "no-show-integration-statistics")]
+    pub no_show_integration_statistics: bool,
+
+    /// Disable live streaming of intermediate integration updates in interactive terminals
+    #[arg(long = "no-stream")]
+    pub no_stream: bool,
+}
+
+struct StreamRenderer {
+    stderr: io::Stderr,
+    rendered_line_count: usize,
+}
+
+impl StreamRenderer {
+    fn new() -> Self {
+        Self {
+            stderr: io::stderr(),
+            rendered_line_count: 0,
+        }
+    }
+
+    fn render(&mut self, block: &str) -> Result<()> {
+        let prepared = prepare_stream_block(block, stream_terminal_width());
+        if self.rendered_line_count > 0 {
+            self.clear_rendered_block()?;
+        }
+
+        queue!(self.stderr, MoveToColumn(0))?;
+        write!(self.stderr, "{prepared}")?;
+        self.stderr.flush()?;
+        self.rendered_line_count = prepared.lines().count().max(1);
+        Ok(())
+    }
+
+    fn clear(&mut self) -> Result<()> {
+        if self.rendered_line_count == 0 {
+            return Ok(());
+        }
+
+        self.clear_rendered_block()?;
+        self.rendered_line_count = 0;
+        self.stderr.flush()?;
+        Ok(())
+    }
+
+    fn clear_rendered_block(&mut self) -> Result<()> {
+        queue!(self.stderr, MoveToColumn(0))?;
+        if self.rendered_line_count > 1 {
+            queue!(
+                self.stderr,
+                MoveUp((self.rendered_line_count.saturating_sub(1)) as u16)
+            )?;
+        }
+
+        for line_index in 0..self.rendered_line_count {
+            queue!(self.stderr, MoveToColumn(0), Clear(ClearType::CurrentLine))?;
+            if line_index + 1 < self.rendered_line_count {
+                queue!(self.stderr, MoveDown(1))?;
+            }
+        }
+        queue!(self.stderr, MoveToColumn(0))?;
+        if self.rendered_line_count > 1 {
+            queue!(
+                self.stderr,
+                MoveUp((self.rendered_line_count.saturating_sub(1)) as u16)
+            )?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for StreamRenderer {
+    fn drop(&mut self) {
+        let _ = self.clear();
+    }
+}
+
+fn stream_terminal_width() -> usize {
+    terminal::size()
+        .map(|(width, _)| width.saturating_sub(1).max(1) as usize)
+        .unwrap_or(120)
+}
+
+fn prepare_stream_block(block: &str, max_width: usize) -> String {
+    block
+        .lines()
+        .map(|line| truncate_ansi_line(line, max_width))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn truncate_ansi_line(line: &str, max_width: usize) -> String {
+    if max_width == 0 {
+        return String::new();
+    }
+
+    let mut truncated = String::new();
+    let mut chars = line.chars().peekable();
+    let mut visible_width = 0usize;
+    let mut saw_escape = false;
+    let mut was_truncated = false;
+
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && chars.peek() == Some(&'[') {
+            saw_escape = true;
+            truncated.push(ch);
+            truncated.push(chars.next().unwrap());
+            for code in chars.by_ref() {
+                truncated.push(code);
+                if ('@'..='~').contains(&code) {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        let char_width = UnicodeWidthChar::width(ch).unwrap_or(0);
+        if visible_width + char_width > max_width {
+            was_truncated = true;
+            break;
+        }
+
+        truncated.push(ch);
+        visible_width += char_width;
+    }
+
+    if was_truncated && saw_escape && !truncated.ends_with("\u{1b}[0m") {
+        truncated.push_str("\u{1b}[0m");
+    }
+
+    truncated
 }
 
 impl Integrate {
@@ -201,6 +346,18 @@ impl Integrate {
             .n_cores
             .unwrap_or(global_cli_settings.global.n_cores.integrate);
 
+        let enable_streaming = if self.no_stream {
+            false
+        } else if io::stderr().is_terminal() {
+            true
+        } else {
+            info!(
+                "Streaming integration updates disabled because stderr is not a TTY; falling back to append-only logging."
+            );
+            false
+        };
+        let mut stream_renderer = enable_streaming.then(StreamRenderer::new);
+
         let result = havana_integrate(
             &settings,
             &state.model,
@@ -209,6 +366,22 @@ impl Integrate {
             integration_state,
             Some(workspace_path.clone()),
             !self.no_show_max_weights,
+            !self.no_show_integration_statistics,
+            move |kind, status_block| {
+                if let Some(renderer) = stream_renderer.as_mut() {
+                    match kind {
+                        IntegrationStatusKind::Iteration => renderer.render(&status_block)?,
+                        IntegrationStatusKind::Final => {
+                            renderer.clear()?;
+                            emit_integration_status_via_tracing(kind, &status_block)?;
+                        }
+                    }
+                } else {
+                    emit_integration_status_via_tracing(kind, &status_block)?;
+                }
+
+                Ok(())
+            },
         )?;
 
         fs::write(&result_path, serde_json::to_string(&result)?)?;
@@ -246,5 +419,23 @@ mod tests {
             integrate.default_workspace_path(&settings),
             PathBuf::from("./integration_workspace")
         );
+    }
+
+    #[test]
+    fn truncate_ansi_line_limits_visible_width() {
+        let line = "\u{1b}[32mhello\u{1b}[0m world";
+        let truncated = super::truncate_ansi_line(&line, 7);
+
+        assert!(truncated.contains('\u{1b}'));
+        assert!(truncated.ends_with("\u{1b}[0m"));
+        assert!(!truncated.contains("world"));
+    }
+
+    #[test]
+    fn prepare_stream_block_truncates_each_line_independently() {
+        let block = "123456789\nabcdefghi";
+        let prepared = super::prepare_stream_block(block, 5);
+
+        assert_eq!(prepared, "12345\nabcde");
     }
 }

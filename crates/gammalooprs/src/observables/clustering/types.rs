@@ -172,8 +172,6 @@ impl<T: FloatLike> PseudoJet<T> {
     }
 }
 
-const MAX_RAPIDITY_SENTINEL: usize = 100_000;
-
 fn transverse_momentum_squared<T: FloatLike>(momentum: &FourMomentum<F<T>>) -> F<T> {
     momentum.spatial.px.square() + momentum.spatial.py.square()
 }
@@ -192,31 +190,5 @@ fn phi<T: FloatLike>(momentum: &FourMomentum<F<T>>) -> F<T> {
 }
 
 fn rapidity<T: FloatLike>(momentum: &FourMomentum<F<T>>, pt2: &F<T>) -> F<T> {
-    let zero = momentum.temporal.value.zero();
-    let pz = momentum.spatial.pz.clone();
-    let abs_pz = pz.norm();
-    let energy = momentum.temporal.value.clone();
-
-    if *pt2 == zero.clone() && energy == abs_pz {
-        let max_rapidity_here = abs_pz.from_usize(MAX_RAPIDITY_SENTINEL) + abs_pz;
-        if pz >= zero {
-            max_rapidity_here
-        } else {
-            -max_rapidity_here
-        }
-    } else {
-        let mass2 = energy.square()
-            - (momentum.spatial.px.square()
-                + momentum.spatial.py.square()
-                + momentum.spatial.pz.square());
-        let effective_mass2 = if mass2 < zero { zero.clone() } else { mass2 };
-        let e_plus_abs_pz = energy + abs_pz;
-        let half = e_plus_abs_pz.one() / e_plus_abs_pz.from_usize(2);
-        let mut rapidity =
-            ((pt2.clone() + effective_mass2) / (e_plus_abs_pz.clone() * e_plus_abs_pz)).ln() * half;
-        if pz > zero {
-            rapidity = -rapidity;
-        }
-        rapidity
-    }
+    momentum.rapidity_with_pt2(pt2)
 }
