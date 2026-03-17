@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use clinnet, cite it with this metadata."
+title: "clinnet"
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+    email: lucien@alphaloop.ch
+abstract: "A CLI for incrementally rendering Typst figures from DOT graphs and assembling them into PDF grids."
+version: "0.1.8"
+license: "MIT"
+repository-code: "https://github.com/lcnbr/linnet"
+url: "https://github.com/lcnbr/linnet/tree/main/clinnet"
+keywords:
+  - typst
+  - graph
+  - dot
+  - pdf
+  - cli

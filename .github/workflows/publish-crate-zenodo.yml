@@ -1,0 +1,38 @@
+name: Publish crate release to Zenodo
+
+on:
+  push:
+    tags:
+      - "spenso-v*"
+      - "idenso-v*"
+      - "vakint-v*"
+      - "gammalooprs-v*"
+      - "linnet-v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+      ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+      ZENODO_API_URL: ${{ vars.ZENODO_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Resolve tagged crate release
+        id: release
+        run: python3 tools/zenodo_release.py github-output --tag "${GITHUB_REF_NAME}" --output "${GITHUB_OUTPUT}"
+
+      - name: Show release metadata
+        run: python3 tools/zenodo_release.py metadata --tag "${GITHUB_REF_NAME}"
+
+      - name: Package crate archive
+        run: cargo package --locked --allow-dirty --no-verify -p "${{ steps.release.outputs.package }}"
+
+      - name: Publish archive to Zenodo
+        run: python3 tools/zenodo_release.py publish --tag "${GITHUB_REF_NAME}" --archive "${{ steps.release.outputs.archive_path }}"

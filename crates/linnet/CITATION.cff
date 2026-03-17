@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use linnet, cite it with this metadata."
+title: "linnet"
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+abstract: "A library for half-edge graph data structures, subgraphs, and graph drawing."
+version: "0.17.0"
+license: "MIT"
+doi: "10.5281/zenodo.15494394"
+repository-code: "https://github.com/alphal00p/linnet"
+url: "https://github.com/alphal00p/linnet"
+keywords:
+  - graphs
+  - half-edge
+  - tensor networks
+  - feynman diagrams

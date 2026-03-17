@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use spenso, cite it with this metadata."
+title: "spenso"
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+    email: cargo+mail@lucien.ch
+abstract: "A tensor network library with automatic abstract-index matching, iteration, and contraction support."
+version: "0.6.0"
+license: "MIT OR Apache-2.0"
+repository-code: "https://github.com/alphal00p/spenso"
+url: "https://docs.rs/spenso/latest/spenso/"
+keywords:
+  - contraction
+  - tensors

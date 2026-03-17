@@ -8,9 +8,9 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow, bail};
 use blake3::Hasher;
 use clap::{ArgAction, Parser};
+use eyre::{Context, Result, bail, eyre};
 use indicatif::{ProgressBar, ProgressStyle};
 use parking_lot::Mutex as ParkingMutex;
 use pathdiff::diff_paths;
@@ -66,7 +66,7 @@ fn check_typst_version() -> Result<()> {
     let output = Command::new("typst")
         .arg("--version")
         .output()
-        .context("failed to run 'typst --version'. Is typst installed and in PATH?")?;
+        .wrap_err("failed to run 'typst --version'. Is typst installed and in PATH?")?;
 
     if !output.status.success() {
         bail!("typst --version failed");

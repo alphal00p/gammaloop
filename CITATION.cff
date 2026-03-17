@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this repository, cite the relevant crate or the monorepo entry below."
+title: "gammaloop monorepo"
+type: software
+authors:
+  - family-names: Hirschi
+    given-names: Valentin
+    email: valentin.hirschi@gmail.com
+  - family-names: Huber
+    given-names: Lucien
+    email: mail@lcnbr.ch
+  - family-names: Fraaije
+    given-names: Mathijs
+    email: mathijsfraaije@gmail.com
+abstract: "Workspace for GammaLoop and the related tensor-network, graph, and HEP-support crates developed around the AlphaLoop project."
+repository-code: "https://github.com/alphal00p/gammaloop"
+license: "MIT OR Apache-2.0"
+keywords:
+  - gammaloop
+  - local unitarity
+  - tensor networks
+  - graphs
+  - high-energy physics

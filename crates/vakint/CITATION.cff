@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use vakint, cite it with this metadata."
+title: "vakint"
+type: software
+authors:
+  - family-names: Hirschi
+    given-names: Valentin
+    email: valentin.hirschi@gmail.com
+abstract: "Computation of single-scale vacuum integrals for high-energy physics."
+version: "0.1.2"
+license: "MIT"
+repository-code: "https://github.com/alphal00p/vakint"
+url: "https://alphal00p.github.io/"
+keywords:
+  - physics
+  - integral
+  - vaccuum
+  - qft

@@ -274,6 +274,7 @@
           libmpc
           form
           gnum4
+
           nickel
           nls
           typst

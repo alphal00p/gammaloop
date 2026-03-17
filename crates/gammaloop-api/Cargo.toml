@@ -2,16 +2,11 @@
 name = "gammaloop-api"
 version = "0.1.0"
 edition = "2021"
-authors = [
-  "Valentin Hirschi <valentin.hirschi@gmail.com>",
-  "Mathijs Fraaije <mathijsfraaije@gmail.com>",
-  "Lucien Huber <mail@lcnbr.ch>",
-]
-license = "MIT OR Apache-2.0"
-categories = ["science"]
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
-keywords = ["cross-section", "loop", "perturbative", "physics"]
 repository = "https://github.com/alphal00p/gammaloop"
+license.workspace = true
+keywords = ["cross-section", "loop", "perturbative", "physics"]
+categories = ["science"]
 build = "build.rs"
 
 [lib]
@@ -30,6 +25,8 @@ bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
 chrono = { version = "0.4", features = ["serde"] }
 clap = { workspace = true, features = ["unstable-ext"] }
+clap_complete = "4.5.57"
+clap_complete_nushell = "4.5.10"
 # clap-repl = "0.3.2"
 color-eyre = "0.6.5"
 colored = { workspace = true }
@@ -41,8 +38,8 @@ gammalooprs = { workspace = true }
 git-version = { workspace = true }
 idenso = { workspace = true }
 include_dir = { workspace = true }
-indicatif = "0.18.4"
 indexmap = "2.2.2"
+indicatif = "0.18.4"
 itertools = { workspace = true }
 json5 = "0.4.1"
 linnet = { workspace = true, features = [
@@ -53,13 +50,11 @@ linnet = { workspace = true, features = [
 ] }
 ndarray = { version = "0.17" }
 nu-ansi-term = { workspace = true }
-numpy = { workspace = true , optional = true }
+numpy = { workspace = true, optional = true }
 pyo3-stub-gen = { workspace = true, optional = true }
 rand = { workspace = true, features = ["small_rng"] }
 rayon = { workspace = true }
 reedline = "0.42.0"
-clap_complete = "4.5.57"
-clap_complete_nushell = "4.5.10"
 regex = "1.11.2"
 rust-embed = { version = "8.4", features = ["interpolate-folder-path"] }
 schemars = { workspace = true }

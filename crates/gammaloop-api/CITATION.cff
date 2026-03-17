@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use gammaloop-api, cite it with this metadata."
+title: "gammaloop-api"
+type: software
+authors:
+  - family-names: Hirschi
+    given-names: Valentin
+    email: valentin.hirschi@gmail.com
+  - family-names: Fraaije
+    given-names: Mathijs
+    email: mathijsfraaije@gmail.com
+  - family-names: Huber
+    given-names: Lucien
+    email: mail@lcnbr.ch
+abstract: "Rust and Python API bindings, plus the CLI frontend, for GammaLoop."
+version: "0.1.0"
+license: "MIT OR Apache-2.0"
+repository-code: "https://github.com/alphal00p/gammaloop"
+url: "https://github.com/alphal00p/gammaloop"
+keywords:
+  - gammaloop
+  - python
+  - cli
+  - high-energy physics
