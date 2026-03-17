@@ -61,7 +61,11 @@ impl Graph {
         }
 
         let cff = self.generate_cff(&contract_edges, &canonize_esurface)?;
-        let residue = cff.select_esurface_residue(&cutset.esurfaces);
+        let residue = if let Some(esurfaces) = &cutset.esurfaces {
+            cff.select_esurface_residue(esurfaces)
+        } else {
+            vec![cff]
+        };
 
         // println!("residue orders: {}", residue.len());
 

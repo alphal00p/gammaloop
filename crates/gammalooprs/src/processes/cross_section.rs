@@ -953,7 +953,7 @@ impl CrossSectionGraph {
             .raised_cut_groups
             .iter()
             .map(|cuts| CutSet {
-                esurfaces: cuts.related_esurface_group.clone(),
+                esurfaces: Some(cuts.related_esurface_group.clone()),
                 union: cuts
                     .cuts
                     .iter()
