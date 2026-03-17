@@ -1,8 +1,7 @@
 use crate::{
     GammaLoopContext,
     graph::{Graph, LMBext, cuts::CutSet},
-    numerator::symbolica_ext::AtomCoreExt,
-    utils::{GS, W_, ose_atom_from_index, symbolica_ext::LogPrint},
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::approx::{CFFapprox, CutStructure},
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -16,7 +15,7 @@ use symbolica::{
 
 use linnet::half_edge::{
     involution::HedgePair,
-    subgraph::{ModifySubSet, SubSetLike, SubSetOps},
+    subgraph::{SubSetLike, SubSetOps},
 };
 use std::fmt::Write;
 use tracing::{debug, instrument};
@@ -77,7 +76,7 @@ impl CutForests {
         let mut exprs = vec![];
 
         for (forest, cuts) in self.forests.iter().zip(self.cuts.cuts.into_iter()) {
-            let integrands = forest.orientation_parametric_expr(&cuts, graph, add_sigma)?;
+            let integrands = forest.orientation_parametric_expr(graph, add_sigma)?;
             exprs.push(ParametricIntegrands { integrands, cuts });
         }
         Ok(exprs)
@@ -235,7 +234,6 @@ impl Forest {
     #[instrument(skip_all)]
     pub(crate) fn orientation_parametric_expr(
         &self,
-        cut_edges: &CutSet,
         graph: &Graph,
         add_sigma: bool,
     ) -> Result<Vec<Atom>> {

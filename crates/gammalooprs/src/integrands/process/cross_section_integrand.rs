@@ -14,7 +14,7 @@ use crate::{
         evaluation::{EvaluationMetaData, EvaluationResult},
         process::{
             ChannelIndex, ParamBuilder,
-            evaluators::{EvaluatorStack, evaluate_evaluator, evaluate_evaluator_single},
+            evaluators::{EvaluatorStack, evaluate_evaluator_single},
             param_builder::LUParams,
         },
     },
@@ -62,7 +62,6 @@ use std::{
 };
 use symbolica::{
     domains::{dual::HyperDual, float::Real},
-    evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
 use tracing::debug;
@@ -433,7 +432,7 @@ impl CrossSectionGraphTerm {
                     ),
                     graph_path.clone(),
                     settings,
-                );
+                )?;
             }
         }
 

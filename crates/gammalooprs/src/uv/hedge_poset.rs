@@ -18,8 +18,7 @@ use symbolica::{
 use vakint::Vakint;
 
 use crate::{
-    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
-    numerator::ParsingNet,
+    graph::{Graph, LMBext, LoopMomentumBasis},
     uv::{
         UVgenerationSettings, UltravioletGraph,
         approx::{ApproximationKernel, ForestNodeLike, UVCtx, integrated::Integrated},

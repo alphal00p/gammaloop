@@ -2,25 +2,21 @@ use std::{
     fmt::{Display, Formatter},
     fs::{self, File},
     io::Write,
-    ops::{Deref, Index, IndexMut},
+    ops::{Index, IndexMut},
     path::Path,
 };
 
-use ahash::{HashMap, HashSet};
+use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use idenso::color::ColorSimplifier;
 use itertools::Itertools;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
-use spenso::{
-    algebra::algebraic_traits::IsZero,
-    network::{Sequential, SmallestDegree},
-    structure::concrete_index::ExpandedIndex,
-};
+use spenso::{algebra::algebraic_traits::IsZero, structure::concrete_index::ExpandedIndex};
 use tracing::info;
 use vakint::Vakint;
 
@@ -29,11 +25,7 @@ use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup},
-        expression::{AmplitudeOrientationID, CFFExpression, SubgraphOrientationID},
-        generation::{
-            ConstraintData, EsurfaceRewritingInstructions, PostProcessingSetup,
-            generate_supergraph_cff, get_orientations_from_subgraph,
-        },
+        expression::CFFExpression,
     },
     define_index, disable,
     graph::{
@@ -49,14 +41,8 @@ use crate::{
     numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, EvaluatorSettings},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{
-        FUN_LIB, GS, TENSORLIB, W_, hyperdual_utils::shape_for_t_derivatives,
-        symbolica_ext::LogPrint,
-    },
-    uv::{
-        UltravioletGraph, approx::CutStructure, forest::ParametricIntegrands, uv_graph::UVE,
-        wood::CutWoods,
-    },
+    utils::{GS, hyperdual_utils::shape_for_t_derivatives},
+    uv::{approx::CutStructure, forest::ParametricIntegrands, uv_graph::UVE, wood::CutWoods},
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
@@ -80,7 +66,6 @@ use crate::{
     cff::{
         cut_expression::{CFFCutsExpression, CutOrientationData},
         esurface::{Esurface, EsurfaceID},
-        generation::generate_cff_with_cuts,
     },
     graph::{ExternalConnection, FeynmanGraph, Graph},
     integrands::process::{

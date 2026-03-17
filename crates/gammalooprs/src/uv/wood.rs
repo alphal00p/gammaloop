@@ -68,10 +68,6 @@ pub struct Wood {
 }
 
 impl Wood {
-    pub(crate) fn n_spinneys(&self) -> usize {
-        self.poset.n_nodes()
-    }
-
     pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = InternalSubGraph>>(
         s: I,
         graph: impl AsRef<HedgeGraph<E, V, H>>,

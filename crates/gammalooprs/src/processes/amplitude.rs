@@ -50,7 +50,6 @@ use crate::{
     uv::{
         UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, integrated::to_vakint_integrand},
-        forest,
         settings::VakintSettings,
         wood::CutWoods,
     },
@@ -786,7 +785,6 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
-        //TODO actual cut structure
         let cutstructure = CutStructure {
             cuts: vec![CutSet::empty(self.graph.n_hedges())],
         };
@@ -796,22 +794,10 @@ impl AmplitudeGraph {
         let exprs: Vec<_> = forests
             .orientation_parametric_exprs(&self.graph, false)?
             .into_iter()
-            .map(|e| {
-                e.map(|a| {
-                    let scalar = a
-                        .unwrap_function(GS.color_wrap)
-                        .simplify_color()
-                        .expand_dots()
-                        .unwrap();
-                    self.add_additional_factors_to_cff_atom(&scalar)
-                })
-            })
+            .map(|e| e.map(|a| self.add_additional_factors_to_cff_atom(&a)))
             .collect();
 
-        //TODO use the expresssions
-
-        self.derived_data.all_mighty_integrand =
-            self.build_original_parametric_integrand(settings, vakint)?;
+        self.derived_data.all_mighty_integrand = exprs[0].integrands[0].clone();
         Ok(())
     }
 

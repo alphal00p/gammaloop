@@ -69,8 +69,7 @@ fn four_photon_one_loop_amp() {
         },
         ..Default::default()
     };
-    let vk_settings = set.uv.vakint.true_settings();
-    let vk = (crate::utils::vakint().unwrap(), &vk_settings);
+    let vk = crate::utils::vakint().unwrap();
 
     amp.generate_cff().unwrap();
     amp.build_integrands(&set, vk).unwrap();

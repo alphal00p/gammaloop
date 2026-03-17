@@ -9,10 +9,7 @@ use idenso::color::CS;
 
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::InternalSubGraph,
-};
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{

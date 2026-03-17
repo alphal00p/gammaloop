@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
@@ -19,9 +17,7 @@ use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use std::hash::Hash;
 use tracing::debug;
 
-use spenso::{
-    network::library::TensorLibraryData, shadowing::symbolica_utils::SpensoPrintSettings,
-};
+use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, Symbol},
     function, parse_lit, symbol,
@@ -29,7 +25,7 @@ use symbolica::{
 
 use linnet::half_edge::{
     HedgeGraph,
-    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+    subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
 };
 
 use tracing::instrument;
@@ -132,26 +128,6 @@ impl SimpleApprox {
             t_args: vec![self.t_op(&bigger_graph.filter)],
             sign: -self.sign,
             graph: bigger_graph,
-        }
-    }
-
-    pub(crate) fn union<'a>(
-        subgraph: InternalSubGraph,
-        union: impl IntoIterator<Item = &'a Self>,
-    ) -> Self {
-        let mut t_args = vec![];
-        let mut sign = Sign::Positive;
-        for u in union {
-            if u.t_args.len() != 1 {
-                panic!("Union can only be applied to dependent approximations");
-            }
-            t_args.push(u.t_args[0].clone());
-            sign = sign * u.sign;
-        }
-        SimpleApprox {
-            t_args,
-            sign,
-            graph: subgraph,
         }
     }
 }
@@ -536,15 +512,6 @@ impl Approximation {
 }
 
 impl ApproxOp {
-    pub(crate) fn sign(&self) -> Option<Sign> {
-        match self {
-            ApproxOp::NotComputed => None,
-            ApproxOp::Union { sign, .. } => Some(*sign),
-            ApproxOp::Dependent { sign, .. } => Some(*sign),
-            ApproxOp::Root => Some(Sign::Positive),
-        }
-    }
-
     pub(crate) fn expr(&self) -> Option<(Vec<Atom>, Sign)> {
         match self {
             ApproxOp::NotComputed => None,
@@ -557,36 +524,5 @@ impl ApproxOp {
             ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrands.clone(), *sign)),
             ApproxOp::Root => Some((vec![Atom::num(1)], Sign::Positive)),
         }
-    }
-
-    pub(crate) fn union(dependent: &[&Approximation]) -> Option<Self> {
-        let mut t_args = vec![];
-        let mut subgraphs = vec![];
-
-        let mut final_sign = Sign::Positive;
-        for d in dependent {
-            match &d.integrated_4d {
-                ApproxOp::Dependent {
-                    t_arg,
-                    sign,
-                    subgraph,
-                } => {
-                    t_args.push(t_arg.clone());
-                    final_sign = final_sign * *sign;
-                    subgraphs.push(subgraph.clone())
-                }
-                _ => return None,
-            }
-        }
-
-        Some(Self::Union {
-            t_args,
-            sign: final_sign,
-            subgraphs,
-        })
-    }
-
-    pub(crate) fn is_computed(&self) -> bool {
-        !matches!(self, ApproxOp::NotComputed)
     }
 }
