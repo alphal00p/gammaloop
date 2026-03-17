@@ -18,7 +18,7 @@ pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseEr
 
     let mut parts = Vec::new();
     let mut current = String::new();
-    let mut chars = input.chars().peekable();
+    let chars = input.chars().peekable();
     let mut mode = Mode::Unquoted;
     let mut unquoted_escape = false;
     let mut double_quoted_escape = false;

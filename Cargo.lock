@@ -603,9 +603,9 @@ dependencies = [
 name = "clinnet"
 version = "0.1.8"
 dependencies = [
- "anyhow",
  "blake3",
  "clap",
+ "eyre",
  "indicatif 0.17.11",
  "parking_lot",
  "pathdiff",

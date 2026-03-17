@@ -51,19 +51,6 @@
         },
       },
     },
-
-    "nls": {
-      "binary": {
-        "ignore_system_version": false,
-      },
-      "enable_lsp_tasks": true,
-      "initialization_options": {
-        "experimentalFeatures": true,
-        "trace": {
-          "server": "verbose",
-        },
-      },
-    },
     "rust-analyzer": {
       "binary": {
         "ignore_system_version": false,

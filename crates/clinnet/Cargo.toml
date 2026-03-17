@@ -15,7 +15,7 @@ categories = ["command-line-utilities", "graphics"]
 name = "linnet"
 path = "src/main.rs"
 [dependencies]
-anyhow = "1.0"
+eyre = {workspace =true}
 blake3 = "1.5"
 clap = { version = "4.5", features = ["derive"] }
 pathdiff = "0.2"
