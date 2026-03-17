@@ -26,7 +26,7 @@ use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol}
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        esurface::GroupEsurfaceId,
+        esurface::{self, GroupEsurfaceId, RaisedEsurfaceData},
         expression::{CFFExpression, OrientationData, OrientationID},
         generation::{PostProcessingSetup, get_orientations_from_subgraph},
     },
@@ -56,8 +56,8 @@ use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{HedgePair, Orientation},
-        subgraph::{Inclusion, SuBitGraph, SubGraphLike, SubSetOps},
+        involution::{EdgeVec, HedgePair, Orientation},
+        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
     },
     parser::DotGraph,
 };
@@ -800,17 +800,102 @@ impl AmplitudeGraph {
         err
     )]
     fn build_threshold_counterterm_parametric_integrand(
-        &self,
+        &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
-        let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = TiVec::new();
+        let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = ti_vec![
+            AmplitudeCountertermAtom::new();
+            self.graph.surface_cache.esurface_cache.len()
+        ];
 
         let (local_prefactor, integrated_prefactor) = self.th_counterterm_prefactor_helpter();
 
-        todo!()
+        let global_cff = self.derived_data.cff_expression.as_ref().unwrap(); // should always be set at this point
+        let esurface_raising = self
+            .graph
+            .determine_raised_esurfaces_from_expression(global_cff);
+
+        let mut cuts = vec![];
+
+        for raised_data in esurface_raising.raised_groups.into_iter() {
+            assert!(
+                raised_data.esurface_ids.len() == 1,
+                "raise threshold subtraction not yet implemented"
+            );
+
+            assert!(
+                raised_data.max_occurence == 1,
+                "raise threshold subtraction not yet implemented"
+            );
+
+            let esurface_id = raised_data.esurface_ids[0];
+            let esurface = &global_cff.surfaces.esurface_cache[esurface_id];
+
+            if settings.threshold_subtraction.check_esurface_at_generation {
+                let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
+                let lmb = &self.graph.loop_momentum_basis;
+                if locked_runtime_settings.existence_check(
+                    esurface,
+                    &masses,
+                    &self.graph.get_external_signature(),
+                    lmb,
+                ) {
+                    continue;
+                }
+            }
+
+            let mut cut_union: SuBitGraph = self.graph.empty_subgraph();
+
+            for energy in esurface.energies.iter() {
+                let (_, hedge_pair) = self.graph[energy];
+                match hedge_pair {
+                    HedgePair::Paired { source, sink } => {
+                        cut_union.add(source);
+                        cut_union.add(sink);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            let cutset = CutSet {
+                esurfaces: Some(raised_data.clone()),
+                union: cut_union,
+            };
+
+            cuts.push(cutset);
+        }
+
+        let cut_structure = CutStructure { cuts };
+
+        let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv.vakint);
+        let mut forests = woods.unfold(&self.graph);
+        forests.compute(&mut self.graph, vakint, &settings.uv)?;
+
+        let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, false)?;
+
+        for mut expr in exprs.into_iter() {
+            assert!(
+                expr.integrands.len() == 1,
+                "threshold counterterm generation not yet implemented for raised"
+            );
+            let integrand = expr.integrands.pop().unwrap();
+            let local = &local_prefactor * &integrand;
+            let integrated = &integrated_prefactor * integrand;
+
+            let counterterm_atom = AmplitudeCountertermAtom {
+                parametric_local: local,
+                parametric_integrated: integrated,
+            };
+            let esurfaces = expr.cuts.esurfaces.unwrap();
+            let esurface_id = esurfaces.esurface_ids[0];
+
+            counterterms[esurface_id] = counterterm_atom;
+        }
+
+        Ok(counterterms)
     }
 
     fn th_counterterm_prefactor_helpter(&self) -> (Atom, Atom) {
@@ -838,125 +923,6 @@ impl AmplitudeGraph {
             -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
 
         (local_prefactor, integrated_prefactor)
-    }
-
-    #[instrument(
-        skip_all,
-          fields(
-              amplitude_graph.name = %self.graph.name,
-          )
-      )]
-    fn build_original_parametric_integrand(
-        &self,
-        settings: &GenerationSettings,
-        vakint: &Vakint,
-    ) -> Result<Atom> {
-        let wood = self.graph.wood(&self.graph.no_dummy());
-        debug!(
-            "Wood for {}{}",
-            self.graph.name,
-            wood.show_graphs(&self.graph)
-        );
-
-        let mut vk_settings = settings.uv.vakint.true_settings();
-        //  it needs to be the max number of loops across all divergent spinneys of that graph
-        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
-        let vakint = (vakint, &vk_settings);
-
-        // debug!("{}", wood.dot(&self.graph));
-        let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-        debug!("Forest: {}", forest.graphs(&self.graph));
-
-        let canonize_esurface = self
-            .graph
-            .get_esurface_canonization(&self.graph.loop_momentum_basis);
-
-        let mut bridgeless = self.graph.full_filter();
-        bridgeless.subtract_with(&self.graph.tree_edges);
-
-        let orientations: TiVec<OrientationID, OrientationData> =
-            get_orientations_from_subgraph(&self.graph.underlying, &bridgeless, &[])
-                .into_iter()
-                .map(|a| OrientationData {
-                    orientation: a
-                        .global_orientation
-                        .into_iter()
-                        .map(|(e, o)| {
-                            if self.graph.tree_edges.intersects(&self.graph[&e].1) {
-                                Orientation::Default
-                            } else {
-                                o
-                            }
-                        })
-                        .collect(),
-                })
-                .filter(|a| settings.orientation_pattern.filter(a))
-                .collect();
-
-        let post = PostProcessingSetup {
-            constraint_data: None,
-            rewrite_esurfaces: None,
-        };
-        todo!("compute forest");
-        disable! {
-            forest.compute(
-                &self.graph,
-                &self.graph.tree_edges,
-                &self.graph.no_dummy(),
-                vakint,
-                &orientations,
-                &canonize_esurface,
-                &[],
-                &self.graph.get_edges_in_initial_state_cut(),
-                post.clone(),
-                &settings.uv,
-                false,
-            )?;
-
-            let global_num = self.graph.global_network();
-            let mut full = forest.orientation_parametric_expr(None, &self.graph, settings.uv.add_sigma);
-
-            full *= global_num;
-
-            debug!(dot = %full.dot_pretty(),"Full before execution");
-
-            full.execute::<Sequential, SmallestDegree, _, _, _>(
-                TENSORLIB.read().unwrap().deref(),
-                FUN_LIB.deref(),
-            )
-            .unwrap();
-
-            let mut scalar: Atom = full
-                .result_scalar()
-                .with_context(|| {
-                    "Failed to get scalar from network when building original paramteric integrand."
-                        .to_string()
-                })
-                .with_note(|| {
-                    format!(
-                        "Network: \n{}\nGraph:\n{}",
-                        full.dot_pretty(),
-                        DotGraph::from(&self.graph).debug_dot()
-                    )
-                })?
-                .into();
-
-            debug!("All parametric before color atom:{}", scalar.log_print(None));
-            scalar = scalar
-                .unwrap_function(GS.color_wrap)
-                .simplify_color()
-                .expand_dots();
-
-            scalar = self.add_additional_factors_to_cff_atom(&scalar);
-
-            debug!(
-                "All parametric integrand atom:{}",
-                scalar.printer(LOGPRINTOPTS)
-            );
-
-            Ok(scalar)
-        }
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Loop Momentum Bases"))]
