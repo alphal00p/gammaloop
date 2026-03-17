@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use gammalooprs, cite it with this metadata."
+title: "gammalooprs"
+type: software
+authors:
+  - family-names: Hirschi
+    given-names: Valentin
+    email: valentin.hirschi@gmail.com
+abstract: "A Rust implementation of the Local Unitarity method for computing differential collider cross-sections."
+version: "0.3.3"
+license: "MIT OR Apache-2.0"
+repository-code: "https://github.com/alphal00p/gammaloop"
+url: "https://github.com/alphal00p/gammaloop"
+keywords:
+  - cross-section
+  - loop
+  - perturbative
+  - physics

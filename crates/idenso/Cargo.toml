@@ -3,29 +3,28 @@ name = "idenso"
 version = "0.3.0"
 edition = "2024"
 description = "Tensor identities for symbolica"
+license.workspace = true
 
 [dependencies]
-
-eyre = { workspace=true }
-bincode = { workspace = true ,optional =true}
-bincode-trait-derive = { workspace = true ,optional =true }
-symbolica = { workspace = true }
+bincode = { workspace = true, optional = true }
+bincode-trait-derive = { workspace = true, optional = true }
+eyre = { workspace = true }
+itertools = { workspace = true }
+linnet = { workspace = true }
 spenso = { workspace = true }
-spenso-macros =  { workspace = true }
-itertools =  { workspace = true }
-linnet =  { workspace = true }
+spenso-macros = { workspace = true }
+symbolica = { workspace = true }
 
-thiserror =  { workspace = true }
-pyo3 =  { workspace = true ,optional =true }
-pyo3-stub-gen = { workspace = true ,optional =true }
 nu-ansi-term = { workspace = true }
+pyo3 = { workspace = true, optional = true }
+pyo3-stub-gen = { workspace = true, optional = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
+insta = { version = "1.38.0", features = ["json", "ron", "toml", "yaml"] }
 
 [features]
-
 default = []
 bincode = ["dep:bincode", "dep:bincode-trait-derive"]
 python = ["dep:pyo3"]
-python_stubgen = ["symbolica/python_stubgen", "python", "dep:pyo3-stub-gen"]
+python_stubgen = ["dep:pyo3-stub-gen", "python", "symbolica/python_stubgen"]

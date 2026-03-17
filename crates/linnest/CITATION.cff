@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use linnest, cite it with this metadata."
+title: "linnest"
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+abstract: "A WebAssembly-oriented companion crate for working with linnet data structures."
+version: "0.1.0"
+license: "MIT"
+repository-code: "https://github.com/lcnbr/linnet"
+url: "https://github.com/lcnbr/linnet"

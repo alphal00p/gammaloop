@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use idenso, cite it with this metadata."
+title: "idenso"
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+abstract: "Symbolic tensor-identity and simplification routines for spenso-compatible expressions in high-energy physics."
+version: "0.3.0"
+license: "MIT OR Apache-2.0"
+repository-code: "https://github.com/alphal00p/gammaloop/tree/main/crates/idenso"

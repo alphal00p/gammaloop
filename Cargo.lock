@@ -1124,12 +1124,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "distrs"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb3b3318a6ce94bae6f71c71dfbb5c91059ea2afa3c2ac86d8fb9b1f6ea5de83"
-
-[[package]]
 name = "dot-parser"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1385,7 +1379,7 @@ dependencies = [
  "indicatif 0.18.4",
  "itertools 0.14.0",
  "json5",
- "linnet 0.17.0",
+ "linnet",
  "ndarray",
  "nu-ansi-term",
  "numpy",
@@ -1470,7 +1464,7 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "libc",
- "linnet 0.17.0",
+ "linnet",
  "linreg",
  "momtrop",
  "nalgebra 0.34.1",
@@ -1507,7 +1501,6 @@ dependencies = [
  "twofloat",
  "typed-index-collections",
  "vakint",
- "varpro",
  "vectorize",
  "vergen-gitcl",
  "which",
@@ -1852,7 +1845,7 @@ dependencies = [
  "eyre",
  "insta",
  "itertools 0.14.0",
- "linnet 0.17.0",
+ "linnet",
  "nu-ansi-term",
  "pyo3",
  "pyo3-stub-gen",
@@ -2129,18 +2122,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
 
 [[package]]
-name = "levenberg-marquardt"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8be7a65739a815308eef33a6d8c78e435a7317305d5b0af0c8c465a2d7ac6fc6"
-dependencies = [
- "cfg-if",
- "nalgebra 0.34.1",
- "num-traits",
- "rustc_version",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.183"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2179,7 +2160,7 @@ dependencies = [
  "ciborium",
  "figment",
  "getrandom 0.2.17",
- "linnet 0.17.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "linnet",
  "rand 0.8.5",
  "serde",
  "thiserror 2.0.18",
@@ -2217,35 +2198,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "linnet"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a11800ee2afd86b85b50262931227bbacb25ce3dd41cd1f5a2588c7ea705204"
-dependencies = [
- "ahash",
- "bincode-trait-derive",
- "bitvec",
- "cgmath",
- "dot-parser",
- "duplicate 2.0.1",
- "figment",
- "getrandom 0.2.17",
- "indenter",
- "indexmap",
- "itertools 0.14.0",
- "kurbo",
- "paste",
- "rand 0.8.5",
- "serde",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "linnet-py"
 version = "0.1.0"
 dependencies = [
  "dot-parser",
- "linnet 0.17.0",
+ "linnet",
  "pyo3",
  "pyo3-build-config 0.25.1",
  "pyo3-stub-gen",
@@ -4005,7 +3962,7 @@ dependencies = [
  "indexmap",
  "insta",
  "itertools 0.14.0",
- "linnet 0.17.0",
+ "linnet",
  "log",
  "nu-ansi-term",
  "num",
@@ -4042,7 +3999,7 @@ dependencies = [
 name = "spenso-macros"
 version = "0.3.2"
 dependencies = [
- "linnet 0.17.0",
+ "linnet",
  "proc-macro2",
  "quote",
  "serde",
@@ -4835,19 +4792,6 @@ name = "valuable"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
-
-[[package]]
-name = "varpro"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8c411a97c8b24ada2024ed6e69f7b48badc029f6bd5e74679d34bffb4a0bd9e"
-dependencies = [
- "distrs",
- "levenberg-marquardt",
- "nalgebra 0.34.1",
- "num-traits",
- "thiserror 1.0.69",
-]
 
 [[package]]
 name = "vectorize"
