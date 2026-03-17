@@ -9,13 +9,10 @@ use idenso::color::CS;
 
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::involution::EdgeIndex;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
-    algebra::{
-        algebraic_traits::{RefOne, RefZero},
-        complex::Complex,
-    },
+    algebra::{algebraic_traits::RefZero, complex::Complex},
     iterators::IteratableTensor,
     network::{ExecutionResult, parsing::ParseSettings},
     structure::concrete_index::ExpandedIndex,
@@ -34,7 +31,6 @@ use tracing::warn;
 
 use crate::{
     GammaLoopContext,
-    cff::expression::GraphOrientation,
     graph::{Graph, LoopMomentumBasis},
     integrands::process::{
         amplitude::export::ExportAtomTo,
@@ -1296,51 +1292,6 @@ impl<T: FloatLike> ParamBuilder<T> {
                 &mut self.values[value_index],
                 multiplicative_offset,
             );
-        }
-    }
-
-    pub(crate) fn orientation_value<O: GraphOrientation>(
-        &mut self,
-        orientation: &O,
-        multiplicative_offset: usize,
-    ) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
-        let one = zero.ref_one();
-        let minusone = -(one.clone());
-
-        let mut o_start = self.pairs.orientations.value_range.start * multiplicative_offset;
-        let value_index = multiplicative_offset - 1;
-
-        for (_eid, i) in orientation.orientation() {
-            // debug!("Setting orientation for edge {}: {:?}", eid, i);
-            match i {
-                Orientation::Default => {
-                    self.values[value_index][o_start] = one.clone();
-                    o_start += multiplicative_offset;
-                }
-                Orientation::Reversed => {
-                    self.values[value_index][o_start] = minusone.clone();
-                    o_start += multiplicative_offset;
-                }
-                Orientation::Undirected => {
-                    self.values[value_index][o_start] = zero.clone();
-                    o_start += multiplicative_offset;
-                }
-            }
-        }
-    }
-
-    pub(crate) fn set_override_if(&mut self, over_ride: bool, multiplicative_offset: usize) {
-        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
-        let one = zero.ref_one();
-
-        let o_start = self.pairs.override_if.value_range.start * multiplicative_offset;
-        let value_index = multiplicative_offset - 1;
-
-        if over_ride {
-            self.values[value_index][o_start] = zero;
-        } else {
-            self.values[value_index][o_start] = one;
         }
     }
 
