@@ -8,7 +8,7 @@ use linnet::half_edge::{
     algorithms::trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold},
     involution::{EdgeIndex, Flow, HedgePair},
     nodestore::{NodeStorageOps, NodeStorageVec},
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps, subset::SubSet},
 };
 use spenso::network::library::TensorLibraryData;
 use symbolica::{
@@ -18,10 +18,12 @@ use symbolica::{
 use vakint::Vakint;
 
 use crate::{
-    graph::{Graph, LMBext, LoopMomentumBasis},
+    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     uv::{
         UVgenerationSettings, UltravioletGraph,
-        approx::{ApproximationKernel, ForestNodeLike, UVCtx, integrated::Integrated},
+        approx::{
+            ApproximationKernel, CutStructure, ForestNodeLike, UVCtx, integrated::Integrated,
+        },
     },
 };
 use color_eyre::Result;
@@ -37,6 +39,10 @@ pub struct Spinney {
 }
 
 impl Spinney {
+    pub fn compatible_with(&self, cut: &CutSet) -> bool {
+        !self.subgraph.intersects(&cut.union)
+    }
+
     pub fn empty<E, V, H, G: AsRef<HedgeGraph<E, V, H>> + LMBext>(g: &G) -> Self {
         Spinney {
             components: vec![],
@@ -85,12 +91,12 @@ impl PartialOrd for Spinney {
     }
 }
 
-pub struct SpinneyWood {
+pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
     pub root: NodeIndex,
 }
 
-impl Independence<HiddenData<SuBitGraph, EdgeIndex>> for SpinneyWood {
+impl Independence<HiddenData<SuBitGraph, EdgeIndex>> for Wood {
     fn independent(
         &self,
         a: &HiddenData<SuBitGraph, EdgeIndex>,
@@ -100,7 +106,7 @@ impl Independence<HiddenData<SuBitGraph, EdgeIndex>> for SpinneyWood {
     }
 }
 
-impl TraceUnfold<SuBitGraph> for SpinneyWood {
+impl TraceUnfold<SuBitGraph> for Wood {
     type EdgeData = SuBitGraph;
     type HedgeData = NoData;
     type NodeData = Spinney;
@@ -117,7 +123,7 @@ impl TraceUnfold<SuBitGraph> for SpinneyWood {
     }
 }
 
-impl SpinneyWood {
+impl Wood {
     pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: impl AsRef<HedgeGraph<E, V, H>> + LMBext,
@@ -190,14 +196,26 @@ impl SpinneyWood {
             .find(|(_, _, s)| s.subgraph.is_empty())
             .map(|(n, _, _)| n);
 
-        SpinneyWood {
+        Wood {
             graph: poset,
             root: root.expect("no empty spinney found"),
         }
     }
 
-    pub fn unfold(&self) -> SpinneyForest {
-        SpinneyForest {
+    fn compatible_with(&self, cut: &CutSet) -> SuBitGraph {
+        let mut compatible: SuBitGraph = self.graph.empty_subgraph();
+        for (_, crown, s) in self.graph.iter_nodes() {
+            if s.compatible_with(cut) {
+                for h in crown {
+                    compatible.add(h);
+                }
+            }
+        }
+        compatible
+    }
+
+    pub fn unfold(&self) -> Forests {
+        Forests {
             graph: self.trace_unfold::<NodeStorageVec<_>>(self.root).map(
                 |_, _, key| OperationNode { key },
                 |_, _, _, _, e| e,
@@ -209,7 +227,7 @@ impl SpinneyWood {
     }
 }
 
-impl Display for SpinneyWood {
+impl Display for Wood {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.graph.dot_impl_fmt(
             f,
@@ -229,7 +247,7 @@ impl Display for SpinneyWood {
 //     }
 // }
 
-pub struct SpinneyForest {
+pub struct Forests {
     pub graph: HedgeGraph<EdgeIndex, OperationNode>,
     pub root: NodeIndex,
     pub compute_store: AHashMap<OperationNode, ComputeNode>,
@@ -246,11 +264,7 @@ pub struct ForestNode<'a> {
 }
 
 impl OperationNode {
-    pub fn current<'a>(
-        &'a self,
-        wood: &'a SpinneyWood,
-        topo_order: usize,
-    ) -> Option<Vec<ForestNode<'a>>> {
+    pub fn current<'a>(&'a self, wood: &'a Wood, topo_order: usize) -> Option<Vec<ForestNode<'a>>> {
         Some(
             self.key
                 .levels
@@ -396,12 +410,12 @@ impl Default for ComputeNode {
     }
 }
 
-impl SpinneyForest {
+impl Forests {
     pub fn iter_parents<'a>(
         &'a self,
         node: NodeIndex,
         order: usize,
-        wood: &'a SpinneyWood,
+        wood: &'a Wood,
     ) -> impl Iterator<
         Item = Result<(
             &'a ComputeNode,
@@ -459,7 +473,7 @@ impl SpinneyForest {
     pub fn integrate(
         &mut self,
         graph: &mut Graph,
-        wood: &SpinneyWood,
+        wood: &Wood,
         vakint: (&Vakint, &vakint::VakintSettings),
         settings: &UVgenerationSettings,
     ) -> Result<()> {
@@ -490,6 +504,15 @@ impl SpinneyForest {
                 .integrated_4d = Integrand::Single(integrand);
         }
 
+        Ok(())
+    }
+
+    pub fn local_subtract(
+        &mut self,
+        graph: &mut Graph,
+        wood: &Wood,
+        settings: &UVgenerationSettings,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -526,7 +549,7 @@ impl SpinneyForest {
     }
 }
 
-impl Display for SpinneyForest {
+impl Display for Forests {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.graph.dot_impl_fmt(
             f,
@@ -545,7 +568,7 @@ mod tests {
         dot,
         graph::{Graph, parse::IntoGraph},
         initialisation::test_initialise,
-        uv::{UltravioletGraph, Wood},
+        uv::{UltravioletGraph, Wood as OldWood},
     };
 
     use super::*;
@@ -564,7 +587,7 @@ mod tests {
         )?;
 
         let spinneys = dumbell.spinneys(&dumbell.full_filter());
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
@@ -587,7 +610,7 @@ mod tests {
                 dumbell.dot(&d.subgraph)
             );
         }
-        let ff = Wood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
+        let ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
 
         println!("{}", ff.dot(&dumbell));
 
@@ -620,7 +643,7 @@ mod tests {
             Ok(g) => {
                 let g: Graph = g;
                 let spinneys = g.spinneys(&g.full_filter());
-                let f = SpinneyWood::from_spinneys(
+                let f = Wood::from_spinneys(
                     g.spinneys(&g.full_filter())
                         .into_iter()
                         .map(|a| Spinney::new(a.filter, &g, &g.loop_momentum_basis)),
@@ -643,7 +666,7 @@ mod tests {
                         g.dot_lmb_of(&d.subgraph, &d.lmb)
                     );
                 }
-                let ff = Wood::from_spinneys(spinneys, &g); //.unfold(&g, &g.loop_momentum_basis);
+                let ff = OldWood::from_spinneys(spinneys, &g); //.unfold(&g, &g.loop_momentum_basis);
 
                 println!("{}", ff.dot(&g));
 
@@ -690,7 +713,7 @@ mod tests {
             },"scalars"
         )?;
 
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             mercedes
                 .spinneys(&mercedes.full_filter())
                 .into_iter()
@@ -727,7 +750,7 @@ mod tests {
             A -> B    [ id=2 ]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             sunrise
                 .spinneys(&sunrise.full_filter())
                 .into_iter()
@@ -765,7 +788,7 @@ mod tests {
             A -> B    [ id=2]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             sunrise
                 .spinneys(&sunrise.full_filter())
                 .into_iter()
@@ -805,7 +828,7 @@ mod tests {
 
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             sunrise
                 .spinneys(&sunrise.full_filter())
                 .into_iter()
@@ -846,7 +869,7 @@ mod tests {
         )?;
 
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             spectacles
                 .spinneys(&spectacles.full_filter())
                 .into_iter()
@@ -882,7 +905,7 @@ mod tests {
             },"scalars"
         )?;
 
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             basketball
                 .spinneys(&basketball.full_filter())
                 .into_iter()
@@ -922,7 +945,7 @@ mod tests {
         )?;
 
         // let spinneys = fourloop_b.spinneys(&fourloop_b.full_filter());
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             fourloop_b
                 .spinneys(&fourloop_b.full_filter())
                 .into_iter()
@@ -961,7 +984,7 @@ mod tests {
             },"scalars"
         )?;
 
-        let f = SpinneyWood::from_spinneys(
+        let f = Wood::from_spinneys(
             four_loop_a
                 .spinneys(&four_loop_a.full_filter())
                 .into_iter()

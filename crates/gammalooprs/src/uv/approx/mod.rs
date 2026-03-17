@@ -456,7 +456,7 @@ impl Approximation {
             resnum = resnum.replace_multiple(&reps);
             resnum *= cff * &global_num;
 
-            resnum = resnum.replace(GS.dim).with(4).simplify_color().to_dots();
+            resnum = resnum.replace(GS.dim).with(4).simplify_color(); //.to_dots();
             // println!(
             //     "Resnum {}",
             //     resnum.printer(

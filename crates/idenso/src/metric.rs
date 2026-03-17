@@ -1,4 +1,9 @@
-use std::{collections::HashSet, panic::catch_unwind, sync::LazyLock};
+use std::{
+    collections::HashSet,
+    panic::catch_unwind,
+    rc::Rc,
+    sync::{Arc, LazyLock, atomic::AtomicBool},
+};
 
 use spenso::{
     network::{
@@ -27,6 +32,7 @@ use symbolica::{
     },
     symbol,
 };
+use tracing::warn;
 
 use crate::parsing_ind::Parsind;
 use eyre::{Result, eyre};
@@ -616,19 +622,29 @@ impl MetricSimplifier for AtomView<'_> {
     fn expand_dots(&self) -> Result<Atom> {
         let set = ParseSettings::default();
         let pat = function!(SPENSO_TAG.dot, RS.f_, RS.g_, RS.h_).to_pattern();
+        let has_errored = Arc::new(AtomicBool::new(false));
+        let has_errored_for_closure = has_errored.clone();
+        let out = self.replace(pat.clone()).with_map(move |a| {
+            let filled = pat.replace_wildcards_with_matches(a);
 
-        Ok(self.replace(pat.clone()).with_map(move |a| {
-            let mut net = pat
-                .replace_wildcards_with_matches(a)
-                .parse_to_atom_net::<AbstractIndex>(&set)
-                .expect(&format!(
-                    "failed to parse {}",
-                    pat.replace_wildcards_with_matches(a)
-                ));
+            match filled.parse_to_atom_net::<AbstractIndex>(&set) {
+                Err(e) => {
+                    warn!("Failed to parse network from {}:{}", filled, e);
+                    has_errored_for_closure.store(true, std::sync::atomic::Ordering::Relaxed);
+                    filled
+                }
+                Ok(mut net) => {
+                    net.simple_execute();
+                    net.result_scalar().unwrap().into()
+                }
+            }
+        });
 
-            net.simple_execute();
-            net.result_scalar().unwrap().into()
-        }))
+        if has_errored.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(eyre!("Failed to parse network"));
+        } else {
+            return Ok(out);
+        }
     }
     fn simplify_metrics(&self) -> Atom {
         simplify_metrics_impl(*self)

@@ -850,7 +850,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             has_branch = false;
 
             for n in &nodes {
-                let int = self.sub_iter_crown(*n, subgraph).collect::<Vec<_>>();
+                let int = self.iter_crown_in(subgraph, *n).collect::<Vec<_>>();
                 let first = int.first();
                 let next = int.get(1);
 
@@ -1227,7 +1227,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 
             // Count the number of edges in the subgraph incident to this node
             let incident_edges = SuBitGraph::from_hedge_iter(
-                self.sub_iter_crown(node_pos, subgraph),
+                self.iter_crown_in(subgraph, node_pos),
                 subgraph.size(),
             );
             let degree = incident_edges.n_included();
@@ -1323,10 +1323,10 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.node_store.get_neighbor_iterator(id)
     }
 
-    pub fn sub_iter_crown<'a, S: SubSetLike>(
+    pub fn iter_crown_in<'a, S: SubSetLike>(
         &'a self,
-        id: NodeIndex,
         subgraph: &'a S,
+        id: NodeIndex,
     ) -> impl Iterator<Item = Hedge> + 'a {
         self.iter_crown(id).filter(|i| subgraph.includes(i))
     }

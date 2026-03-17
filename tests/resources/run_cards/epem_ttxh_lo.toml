@@ -1,0 +1,56 @@
+commands = [
+  "import model sm",
+  "save dot",
+
+  "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p epem_a_tth -i LO",
+]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [
+    1000.0,
+    0.0,
+    0.0,
+    1000.0,
+  ],
+  [
+    1000.0,
+    0.0,
+    0.0,
+    -1000.0,
+  ],
+]
+helicities = [
+  1,
+  -1,
+]
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[cli_settings.global.generation.compile]
+inline_asm = true
+optimization_level = "O1"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = true
+compile = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10

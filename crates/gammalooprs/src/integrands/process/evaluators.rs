@@ -416,7 +416,10 @@ impl EvaluatorStack {
         let parsed_atoms = atoms
             .iter()
             .map(|a| {
+                // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
                 let mut net = a.as_atom_view().parse_into_net()?;
+
+                // println!("Executing {}", net.dot_pretty());
                 net.execute::<Sequential, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
                     FUN_LIB.deref(),

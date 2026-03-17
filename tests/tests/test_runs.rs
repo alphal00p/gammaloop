@@ -94,6 +94,37 @@ fn test_z_decay() -> Result<()> {
 }
 
 #[test]
+fn epem_ttxh_lo() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("epem_ttxh_lo.toml".into()),
+        get_tests_workspace_path().join("epem_ttxh_lo"),
+        None,
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("epem_ttxh_lo/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(get_tests_workspace_path().join("epem_ttxh_lo/integration_workspace")),
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    };
+
+    let intergal = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        intergal.is_compatible_with_target(
+            Complex::new(F(1.0185532594130467e-4), F(-2.7124366612352106e-7)),
+            1
+        ),
+        "Not compatible: {intergal}",
+    );
+    Ok(())
+}
+
+#[test]
 fn test_epem_dd_dt() -> Result<()> {
     let mut cli = get_test_cli(
         Some("test_epem_dd_dt.toml".into()),

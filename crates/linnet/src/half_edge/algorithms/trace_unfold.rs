@@ -9,6 +9,7 @@ use indexmap::IndexSet;
 use crate::half_edge::builder::HedgeGraphBuilder;
 use crate::half_edge::involution::{EdgeIndex, Flow};
 use crate::half_edge::nodestore::NodeStorageOps;
+use crate::half_edge::subgraph::SubSetLike;
 use crate::half_edge::{HedgeGraph, NoData, NodeIndex};
 
 /// Ops must be owned, hashable, and totally ordered for canonicalization.
@@ -38,8 +39,9 @@ where
 
     fn key(&self, e: EdgeIndex) -> Key;
 
-    fn trace_unfold<M: NodeStorageOps<NodeData = usize>>(
+    fn trace_unfold_of<M: NodeStorageOps<NodeData = usize>, S: SubSetLike>(
         &self,
+        subgraph: &S,
         start: NodeIndex,
     ) -> HedgeGraph<
         EdgeIndex,
@@ -57,7 +59,7 @@ where
         let g = self.graph();
 
         while let Some((bnid, nid, key)) = q.pop_front() {
-            for hedge in g.iter_crown(nid) {
+            for hedge in g.iter_crown_in(subgraph, nid) {
                 if g.flow(hedge) == Flow::Source {
                     if let Some(to_node) = g.involved_node_id(hedge) {
                         let edge = self.key(g[&hedge]);
@@ -93,6 +95,18 @@ where
             |_, _, _, _, a| a,
             |_, h| h,
         )
+    }
+
+    fn trace_unfold<M: NodeStorageOps<NodeData = usize>>(
+        &self,
+        start: NodeIndex,
+    ) -> HedgeGraph<
+        EdgeIndex,
+        TraceKey<Key, EdgeIndex>,
+        NoData,
+        M::OpStorage<TraceKey<Key, EdgeIndex>>,
+    > {
+        self.trace_unfold_of::<M, _>(&self.graph().full_filter(), start)
     }
 }
 
