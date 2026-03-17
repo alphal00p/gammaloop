@@ -32,6 +32,7 @@ use super::{
 pub struct CutForests {
     pub cuts: CutStructure,
     pub forests: Vec<Forest>,
+    pub settings: Vec<vakint::VakintSettings>,
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -54,11 +55,16 @@ impl CutForests {
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        for (forest, cuts) in &mut self.forests.iter_mut().zip(self.cuts.cuts.iter()) {
-            forest.compute(graph, vakint, &cuts, settings)?;
+        for ((forest, cuts), vakint_settings) in &mut self
+            .forests
+            .iter_mut()
+            .zip(self.cuts.cuts.iter())
+            .zip(self.settings.iter())
+        {
+            forest.compute(graph, (vakint, vakint_settings), &cuts, settings)?;
         }
         Ok(())
     }

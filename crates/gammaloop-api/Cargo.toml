@@ -38,7 +38,7 @@ dirs = "6.0.0"
 eyre = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
 gammalooprs = { workspace = true }
-git-version = { workspace = true }
+git-version = { workspace = true, optional = true }
 idenso = { workspace = true }
 include_dir = { workspace = true }
 indicatif = "0.18.4"
@@ -112,6 +112,7 @@ walkdir = "2.5"
 # Keep Python optional unless explicitly enabled.
 default = ["cli"]
 cli = []
+vergen_gitcl = ["dep:git-version"]
 no_pyo3 = []
 pyo3-extension-module = [
   "dep:pyo3",

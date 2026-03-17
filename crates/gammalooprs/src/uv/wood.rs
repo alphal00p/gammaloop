@@ -1,6 +1,6 @@
 use crate::{
     graph::{Edge, Graph, LoopMomentumBasis, Vertex},
-    uv::{approx::CutStructure, forest::CutForests},
+    uv::{approx::CutStructure, forest::CutForests, settings::VakintSettings},
 };
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
@@ -22,20 +22,30 @@ use super::{
 pub struct CutWoods {
     pub cuts: CutStructure,
     pub woods: Vec<Wood>,
+    pub settings: Vec<vakint::VakintSettings>,
 }
 
 impl CutWoods {
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph) -> Self {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph, vakint_settings: &VakintSettings) -> Self {
         let mut woods = vec![];
+        let mut settings = vec![];
         for cut in cuts.cuts.iter() {
             let mut subgraph = graph.full_filter();
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
             let wood = Wood::from_spinneys(graph.spinneys(&subgraph).iter().cloned(), graph);
+
+            let mut lvk_settings = vakint_settings.true_settings();
+            lvk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+            settings.push(lvk_settings);
             woods.push(wood);
         }
-        CutWoods { cuts, woods }
+        CutWoods {
+            cuts,
+            woods,
+            settings,
+        }
     }
 
     pub(crate) fn unfold(self, graph: &Graph) -> CutForests {
@@ -46,6 +56,7 @@ impl CutWoods {
                 .iter()
                 .map(|a| a.unfold(graph, &graph.loop_momentum_basis))
                 .collect(),
+            settings: self.settings,
         }
     }
 }

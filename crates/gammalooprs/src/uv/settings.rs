@@ -173,7 +173,7 @@ impl VakintSettings {
             epsilon_symbol: GS.dim_epsilon.get_name().into(),
             mu_r_sq_symbol: GS.mu_r_sq.get_name().into(),
             integral_normalization_factor: match self.normalization.as_str() {
-                "MSbar" => vakint::LoopNormalizationFactor::Custom("1".to_string()),
+                "MSbar" => vakint::LoopNormalizationFactor::MSbar,
                 "FMFTandMATAD" => vakint::LoopNormalizationFactor::FMFTandMATAD,
                 "pySecDec" => vakint::LoopNormalizationFactor::pySecDec,
                 _ => vakint::LoopNormalizationFactor::Custom(self.normalization.clone()),

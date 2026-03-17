@@ -72,6 +72,7 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         / -8)
         .expand_num()
 }
+
 #[test]
 fn finite_part_ghost_3loop() {
     test_initialise().unwrap();

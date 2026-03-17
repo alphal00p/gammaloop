@@ -606,8 +606,8 @@ mod test {
         }).unwrap();
 
         let set = GenerationSettings::default();
-        let vk_settings = set.uv.vakint.true_settings();
-        let vk = (crate::utils::vakint().unwrap(), &vk_settings);
+        // let vk_settings = set.uv.vakint.true_settings();
+        let vk = crate::utils::vakint().unwrap();
 
         // let model = crate::utils::test_utils::load_generic_model("sm");
 

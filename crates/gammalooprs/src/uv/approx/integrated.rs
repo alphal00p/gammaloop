@@ -57,6 +57,7 @@ impl Integrated<'_> {
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
+    #[instrument(skip_all)]
     fn kernel<S: ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,

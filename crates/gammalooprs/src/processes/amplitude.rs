@@ -500,8 +500,7 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<()> {
-        let vk_settings = settings.uv.vakint.true_settings();
-        let vk = (crate::utils::vakint()?, &vk_settings);
+        let vk = crate::utils::vakint()?;
 
         self.generate_cff()?;
 
@@ -785,13 +784,13 @@ impl AmplitudeGraph {
     pub(crate) fn build_integrands(
         &mut self,
         settings: &GenerationSettings,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
     ) -> Result<()> {
         //TODO actual cut structure
         let cutstructure = CutStructure {
             cuts: vec![CutSet::empty(self.graph.n_hedges())],
         };
-        let woods = CutWoods::new(cutstructure, &self.graph);
+        let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv.vakint);
         let mut forests = woods.unfold(&self.graph);
         forests.compute(&mut self.graph, vakint, &settings.uv)?;
         let exprs: Vec<_> = forests
@@ -824,7 +823,7 @@ impl AmplitudeGraph {
     fn build_threshold_counterterm_parametric_integrand(
         &self,
         settings: &GenerationSettings,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
         locked_runtime_settings: &LockedRuntimeSettings,
         model: &Model,
     ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
@@ -1104,7 +1103,7 @@ impl AmplitudeGraph {
     fn build_original_parametric_integrand(
         &self,
         settings: &GenerationSettings,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
     ) -> Result<Atom> {
         let wood = self.graph.wood(&self.graph.no_dummy());
         debug!(
@@ -1113,10 +1112,10 @@ impl AmplitudeGraph {
             wood.show_graphs(&self.graph)
         );
 
-        let mut vk_settings = vakint.1.clone();
+        let mut vk_settings = settings.uv.vakint.true_settings();
         //  it needs to be the max number of loops across all divergent spinneys of that graph
         vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
-        let vakint = (vakint.0, &vk_settings);
+        let vakint = (vakint, &vk_settings);
 
         // debug!("{}", wood.dot(&self.graph));
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);

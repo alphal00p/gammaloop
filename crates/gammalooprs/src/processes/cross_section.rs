@@ -696,8 +696,7 @@ impl CrossSectionGraph {
             self.build_multi_channeling_channels();
         }
 
-        let vk_settings = settings.uv.vakint.true_settings();
-        let vk = (crate::utils::vakint()?, &vk_settings);
+        let vk = crate::utils::vakint()?;
         debug!("building parametric integrand");
         self.build_parametric_integrand(settings, vk)?;
         //self.build_parametric_integrand_raised_cuts(settings)?;
@@ -875,7 +874,7 @@ impl CrossSectionGraph {
     pub(crate) fn build_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
     ) -> Result<()> {
         self.derived_data.cut_paramatric_integrand = self.build_integrand(settings, vakint)?;
         Ok(())
@@ -948,7 +947,7 @@ impl CrossSectionGraph {
     fn build_integrand(
         &mut self,
         settings: &GenerationSettings,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
     ) -> Result<TiVec<RaisedCutId, ParametricIntegrands>> {
         let max_order = self
             .derived_data
@@ -981,7 +980,7 @@ impl CrossSectionGraph {
 
         let cut_structure = CutStructure { cuts };
 
-        let cut_woods = CutWoods::new(cut_structure, &self.graph);
+        let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv.vakint);
 
         let lu_prefactor = self.lu_prefactor_helper_new();
 
@@ -1139,8 +1138,9 @@ impl CrossSectionGraph {
     fn build_threshold_counterterm(
         &mut self,
         settings: &GenerationSettings,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
     ) -> Result<()> {
+        disable!(
         // thershold enumeration as st cuts
         let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
             let mut unsorted = self.graph.all_st_cuts_for_cs(
@@ -1496,7 +1496,7 @@ impl CrossSectionGraph {
             counterterms.push(lu_counterterm_atom);
         }
 
-        self.derived_data.threshold_counterterms = counterterms;
+        self.derived_data.threshold_counterterms = counterterms;);
         Ok(())
     }
 

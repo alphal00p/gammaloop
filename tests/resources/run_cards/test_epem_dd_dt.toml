@@ -12,13 +12,13 @@ commands = [
 
 [cli_settings.global]
 logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "info,gammalooprs::fill_in_reduced=debug"
+display_directive = "info,gammalooprs[kernel]=debug"
 
 [cli_settings.global.log_style]
 include_fields = true
 
 [cli_settings.global.generation.evaluator]
-iterative_orientation_optimization = true
+iterative_orientation_optimization = false
 compile = true
 summed_function_map = true
 do_fn_map_replacements = false
@@ -30,7 +30,7 @@ check_esurface_at_generation = true
 # pat = "orientation_delta(1,1,1,-1,1,-1,1)"
 
 [cli_settings.global.generation.uv]
-generate_integrated = false
+generate_integrated = true
 softct = false
 add_sigma = false
 inner_products = false
