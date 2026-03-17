@@ -2,9 +2,9 @@
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        cut_expression::{CutOrientationData, SuperGraphOrientationID},
+        cut_expression::CutOrientationData,
         esurface::Esurface,
-        expression::GraphOrientation,
+        expression::{GraphOrientation, OrientationID},
     },
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
@@ -272,8 +272,8 @@ pub struct CrossSectionGraphTerm {
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder<f64>,
-    pub orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>>,
-    pub orientation_filter: SubSet<SuperGraphOrientationID>,
+    pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
+    pub orientation_filter: SubSet<OrientationID>,
     #[allow(private_interfaces)]
     pub counterterm: LUCounterTerm,
     pub raised_data: RaisedCutData,
@@ -284,7 +284,7 @@ impl CrossSectionGraphTerm {
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
     ) -> Result<Self> {
-        let orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>> = graph
+        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
             .derived_data
             .global_cff_expression
             .as_ref()

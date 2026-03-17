@@ -27,7 +27,7 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::GroupEsurfaceId,
-        expression::{AmplitudeOrientationID, CFFExpression, OrientationData},
+        expression::{CFFExpression, OrientationData, OrientationID},
         generation::{
             PostProcessingSetup, generate_cff_expression, get_orientations_from_subgraph,
         },
@@ -482,12 +482,7 @@ impl AmplitudeGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_expression = generate_cff_expression(
-            &self.graph.underlying,
-            &shift_rewrite,
-            &self.graph.get_edges_in_initial_state_cut(),
-            &self.graph.dummy_list(),
-        )?;
+        let cff_expression = self.graph.generate_cff(&[], &shift_rewrite)?;
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
@@ -882,7 +877,7 @@ impl AmplitudeGraph {
         let mut bridgeless = self.graph.full_filter();
         bridgeless.subtract_with(&self.graph.tree_edges);
 
-        let orientations: TiVec<AmplitudeOrientationID, OrientationData> =
+        let orientations: TiVec<OrientationID, OrientationData> =
             get_orientations_from_subgraph(&self.graph.underlying, &bridgeless, &[])
                 .into_iter()
                 .map(|a| OrientationData {
@@ -1114,7 +1109,7 @@ pub struct AmplitudeDerivedData {
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
-    pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
+    pub cff_expression: Option<CFFExpression<OrientationID>>,
 }
 
 pub trait AmplitudeState:

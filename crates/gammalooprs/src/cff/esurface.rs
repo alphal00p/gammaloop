@@ -22,8 +22,8 @@ use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 
-use crate::cff::cut_expression::{CFFCutsExpression, SuperGraphOrientationID};
-use crate::cff::expression::CFFExpression;
+use crate::cff::cut_expression::CFFCutsExpression;
+use crate::cff::expression::{CFFExpression, OrientationID};
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::{GammaLoopContext, define_index};
 
@@ -943,7 +943,7 @@ pub struct RaisedEsurfaceGroup {
 impl Graph {
     pub(crate) fn determine_raised_esurfaces_from_expression(
         &self,
-        expr: &CFFExpression<SuperGraphOrientationID>,
+        expr: &CFFExpression<OrientationID>,
     ) -> RaisedEsurfaceData {
         let raised_edges = self.get_raised_edge_groups();
 

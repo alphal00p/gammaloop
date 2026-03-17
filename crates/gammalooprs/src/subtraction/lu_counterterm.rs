@@ -14,9 +14,8 @@ use typed_index_collections::TiVec;
 use crate::{
     GammaLoopContext,
     cff::{
-        cut_expression::SuperGraphOrientationID,
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
-        expression::GraphOrientation,
+        expression::{GraphOrientation, OrientationID},
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     integrands::process::{
@@ -58,7 +57,7 @@ impl LUCounterTermEvaluators {
         counterterm_data: &LUCounterTermData,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
-        orientations: &TiVec<SuperGraphOrientationID, EdgeVec<Orientation>>,
+        orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
     ) -> Self {
         let parametric_left_thresholds_evaluator = counterterm_data
             .left_atoms
@@ -208,7 +207,7 @@ impl LUCounterTerm {
         rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
-        orientations: SingleOrAllOrientations<'_, SuperGraphOrientationID>,
+        orientations: SingleOrAllOrientations<'_, OrientationID>,
     ) -> Complex<F<T>> {
         let (left_subspace, right_subspace) = &self.subspaces[cut_id];
         let (sample_left_transformed, sample_right_transformed) = (

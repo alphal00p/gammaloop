@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
-use crate::cff::expression::AmplitudeOrientationID;
+use crate::cff::expression::OrientationID;
 
 use crate::graph::edge::ParseEdge;
 use crate::graph::global::ParseData;
@@ -60,7 +60,7 @@ fn four_photon_one_loop_amp() {
                 .cff_expression
                 .as_ref()
                 .unwrap()
-                .orientations[AmplitudeOrientationID(0)],
+                .orientations[OrientationID(0)],
         ),
         uv: UVgenerationSettings {
             generate_integrated: true,

@@ -31,7 +31,7 @@ use crate::{
         esurface::{
             EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId, get_representative,
         },
-        expression::AmplitudeOrientationID,
+        expression::OrientationID,
     },
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
@@ -61,8 +61,8 @@ use super::{
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
     pub original_integrand: EvaluatorStack,
-    pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
-    pub orientation_filter: SubSet<AmplitudeOrientationID>,
+    pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
+    pub orientation_filter: SubSet<OrientationID>,
     pub esurfaces: EsurfaceCollection,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -83,7 +83,7 @@ impl AmplitudeGraphTerm {
         _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<Self> {
-        let orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>> = graph
+        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
             .derived_data
             .cff_expression
             .as_ref()

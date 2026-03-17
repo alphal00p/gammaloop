@@ -26,10 +26,7 @@ use symbolica::{
 use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
-use super::{
-    cut_expression::SuperGraphOrientationID, generation::SurfaceCache, surface::HybridSurfaceID,
-    tree::Tree,
-};
+use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
 
 use crate::utils::GS;
 
@@ -49,12 +46,7 @@ use crate::utils::GS;
     PartialOrd,
     Ord,
 )]
-pub struct AmplitudeOrientationID(pub usize);
-
-#[derive(
-    Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode, Decode,
-)]
-pub struct SubgraphOrientationID(pub usize);
+pub struct OrientationID(pub usize);
 
 impl GraphOrientation for EdgeVec<Orientation> {
     fn orientation(&self) -> &EdgeVec<Orientation> {
@@ -143,39 +135,23 @@ pub trait GraphOrientation {
     }
 }
 
-pub trait OrientationID: From<usize> + Into<usize> {
-    fn symbol() -> Symbol;
+impl OrientationID {
+    pub fn symbol() -> Symbol {
+        symbol!("sigma")
+    }
 
-    fn atom(self) -> Atom {
+    pub fn atom(self) -> Atom {
         let id: usize = self.into();
         function!(Self::symbol(), id as i64)
     }
 
-    fn select<'a>(self, atom: impl Into<AtomOrView<'a>>) -> Atom {
+    pub fn select<'a>(self, atom: impl Into<AtomOrView<'a>>) -> Atom {
         atom.into()
             .as_view()
             .replace(self.atom())
             .with(Atom::num(1))
             .replace(function!(Self::symbol(), W_.x_))
             .with(Atom::Zero)
-    }
-}
-
-impl OrientationID for AmplitudeOrientationID {
-    fn symbol() -> Symbol {
-        symbol!("amp_sigma")
-    }
-}
-
-impl OrientationID for SubgraphOrientationID {
-    fn symbol() -> Symbol {
-        symbol!("subg_sigma")
-    }
-}
-
-impl OrientationID for SuperGraphOrientationID {
-    fn symbol() -> Symbol {
-        symbol!("superg_sigma")
     }
 }
 
@@ -265,7 +241,10 @@ pub struct OrientationExpression {
     pub expression: Tree<HybridSurfaceID>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
-pub struct CFFExpression<O: OrientationID> {
+pub struct CFFExpression<O>
+where
+    O: From<usize> + Into<usize>,
+{
     pub orientations: TiVec<O, OrientationExpression>,
     pub surfaces: SurfaceCache,
 }
@@ -276,7 +255,7 @@ impl GraphOrientation for OrientationExpression {
     }
 }
 
-impl<O: OrientationID + Clone> CFFExpression<O>
+impl<O: Clone + From<usize> + Into<usize>> CFFExpression<O>
 where
     usize: From<O>,
 {
@@ -307,7 +286,7 @@ where
     pub(crate) fn get_orientation_atoms(
         &self,
         pattern: OrientationPattern,
-    ) -> TiVec<AmplitudeOrientationID, Atom> {
+    ) -> TiVec<OrientationID, Atom> {
         self.orientations
             .iter()
             .map(|orientation| {
@@ -323,7 +302,7 @@ where
     pub fn get_orientation_atoms_with_data(
         &self,
         pattern: OrientationPattern,
-    ) -> TiVec<AmplitudeOrientationID, (Atom, OrientationData)> {
+    ) -> TiVec<OrientationID, (Atom, OrientationData)> {
         self.orientations
             .iter()
             .map(|orientation| {
@@ -441,24 +420,6 @@ where
                     }
                     _ => (),
                 });
-        }
-    }
-}
-
-impl From<CFFExpression<AmplitudeOrientationID>> for CFFExpression<SubgraphOrientationID> {
-    fn from(value: CFFExpression<AmplitudeOrientationID>) -> Self {
-        Self {
-            orientations: value.orientations.raw.into(),
-            surfaces: value.surfaces,
-        }
-    }
-}
-
-impl From<CFFExpression<SubgraphOrientationID>> for CFFExpression<AmplitudeOrientationID> {
-    fn from(value: CFFExpression<SubgraphOrientationID>) -> Self {
-        Self {
-            orientations: value.orientations.raw.into(),
-            surfaces: value.surfaces,
         }
     }
 }

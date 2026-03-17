@@ -23,9 +23,8 @@ use vakint::Vakint;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        cut_expression::SuperGraphOrientationID,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup},
-        expression::CFFExpression,
+        expression::{CFFExpression, OrientationID},
     },
     define_index, disable,
     graph::{
@@ -160,7 +159,7 @@ impl CsAmplitudeCTDiagram {
             .into_iter()
             .map(|cff_graph| cff_graph.global_orientation)
             .filter(|or| settings.orientation_pattern.alt_filter(or))
-            .collect::<TiVec<SuperGraphOrientationID, _>>();
+            .collect::<TiVec<OrientationID, _>>();
 
             let right_orientations = get_orientations_from_subgraph(
                 graph,
@@ -170,7 +169,7 @@ impl CsAmplitudeCTDiagram {
             .into_iter()
             .map(|cff_graph| cff_graph.global_orientation)
             .filter(|or| settings.orientation_pattern.alt_filter(or))
-            .collect::<TiVec<SuperGraphOrientationID, _>>();
+            .collect::<TiVec<OrientationID, _>>();
 
             let left_wood = graph.wood(&self.left_subgraph);
             let right_wood = graph.wood(&self.right_subgraph);
@@ -1542,9 +1541,9 @@ impl CrossSectionGraph {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
-    pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
+    pub orientations: Option<TiVec<OrientationID, CutOrientationData>>,
     pub cut_paramatric_integrand: TiVec<RaisedCutId, ParametricIntegrands>,
-    pub global_cff_expression: Option<CFFExpression<SuperGraphOrientationID>>,
+    pub global_cff_expression: Option<CFFExpression<OrientationID>>,
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,

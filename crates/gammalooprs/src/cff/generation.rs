@@ -42,10 +42,10 @@ use super::{
     cff_graph::CFFGenerationGraph,
     cut_expression::{
         CutOrientationData, OrientationMap, SingleCutExpression, SingleCutOrientationExpression,
-        SuperGraphOrientationID, amplitude_orientations_to_sg_orientaion,
+        amplitude_orientations_to_sg_orientaion,
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
-    expression::{AmplitudeOrientationID, CFFExpression, OrientationID, SubgraphOrientationID},
+    expression::{CFFExpression, OrientationID},
     hsurface::HsurfaceCollection,
     surface::{HybridSurfaceRef, UnitSurface},
 };
@@ -149,9 +149,7 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-pub(crate) fn generate_supergraph_cff(
-    graph: &Graph,
-) -> Result<CFFExpression<SuperGraphOrientationID>> {
+pub(crate) fn generate_supergraph_cff(graph: &Graph) -> Result<CFFExpression<OrientationID>> {
     // lots of gymnastics to handle the is cut
 
     let graph_without_is_cut = graph.underlying.full_filter().subtract(
@@ -392,7 +390,7 @@ fn get_orientations_with_cut<E, V, H>(
 fn get_possible_orientations_for_cut_list<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     cuts: &TiVec<CutId, CrossSectionCut>,
-) -> TiVec<SuperGraphOrientationID, CutOrientationData> {
+) -> TiVec<OrientationID, CutOrientationData> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
     let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
 
@@ -459,7 +457,7 @@ pub(crate) fn generate_cff_expression<E, V, H>(
     canonize_esurface: &Option<ShiftRewrite>,
     edges_in_initial_state_cut: &[EdgeIndex],
     dummy_edges: &[EdgeIndex],
-) -> Result<CFFExpression<AmplitudeOrientationID>> {
+) -> Result<CFFExpression<OrientationID>> {
     let graphs = get_orientations(graph, dummy_edges);
     debug!("number of orientations: {}", graphs.len());
     let mut surface_cache = SurfaceCache {
@@ -482,7 +480,7 @@ impl Graph {
         &mut self,
         contract_edges: &[EdgeIndex],
         canonize_esurface: &Option<ShiftRewrite>,
-    ) -> Result<CFFExpression<SuperGraphOrientationID>> {
+    ) -> Result<CFFExpression<OrientationID>> {
         let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
 
         for edge in contract_edges {
@@ -545,7 +543,7 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     reversed_dangling: &[EdgeIndex],
     edges_in_initial_state_cut: &[EdgeIndex],
     surface_cache: &mut SurfaceCache,
-) -> Result<CFFExpression<SubgraphOrientationID>> {
+) -> Result<CFFExpression<OrientationID>> {
     let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling);
     let cff = generate_cff_from_orientations(
         graphs,
@@ -914,7 +912,7 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
     cuts: &TiVec<CutId, CrossSectionCut>,
 ) -> Result<CFFCutsExpression> {
     // let super_graph_orientations = get_possible_orientations_for_cut_list(graph, cuts);
-    let mut super_graph_orientations = TiVec::<SuperGraphOrientationID, CutOrientationData>::new();
+    let mut super_graph_orientations = TiVec::<OrientationID, CutOrientationData>::new();
 
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
@@ -936,27 +934,25 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
             })
             .collect_vec();
 
-        let left_amplitude: CFFExpression<AmplitudeOrientationID> =
-            generate_cff_expression_from_subgraph(
-                graph,
-                &cut.left,
-                canonize_esurface,
-                &reversed_dangling,
-                edges_in_initial_state_cut,
-                &mut surface_cache,
-            )?
-            .into();
+        let left_amplitude: CFFExpression<OrientationID> = generate_cff_expression_from_subgraph(
+            graph,
+            &cut.left,
+            canonize_esurface,
+            &reversed_dangling,
+            edges_in_initial_state_cut,
+            &mut surface_cache,
+        )?
+        .into();
 
-        let right_amplitude: CFFExpression<AmplitudeOrientationID> =
-            generate_cff_expression_from_subgraph(
-                graph,
-                &cut.right,
-                canonize_esurface,
-                &reversed_dangling,
-                edges_in_initial_state_cut,
-                &mut surface_cache,
-            )?
-            .into();
+        let right_amplitude: CFFExpression<OrientationID> = generate_cff_expression_from_subgraph(
+            graph,
+            &cut.right,
+            canonize_esurface,
+            &reversed_dangling,
+            edges_in_initial_state_cut,
+            &mut surface_cache,
+        )?
+        .into();
 
         // build the orientation map
         let mut orientation_map = OrientationMap::new();
@@ -1013,7 +1009,7 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
     })
 }
 
-fn generate_cff_from_orientations<O: OrientationID>(
+fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
     orientations_and_graphs: Vec<CFFGenerationGraph>,
     generator_cache: &mut SurfaceCache,
     edges_in_initial_state_cut: &[EdgeIndex],
@@ -1385,7 +1381,7 @@ mod tests_cff {
     use super::*;
 
     // helper function to make a symbolica evaluator
-    impl CFFExpression<AmplitudeOrientationID> {
+    impl CFFExpression<OrientationID> {
         fn quick_symbolica_evaluator(
             &self,
             external_range: Range<usize>,
@@ -1979,7 +1975,7 @@ mod tests_cff {
 
         let mut surface_cache = SurfaceCache::new();
 
-        let _cff = generate_cff_from_orientations::<AmplitudeOrientationID>(
+        let _cff = generate_cff_from_orientations::<OrientationID>(
             orientations,
             &mut surface_cache,
             &[],
@@ -2036,7 +2032,7 @@ mod tests_cff {
 
         let mut surface_cache = SurfaceCache::new();
 
-        let _cff = generate_cff_from_orientations::<AmplitudeOrientationID>(
+        let _cff = generate_cff_from_orientations::<OrientationID>(
             orientations,
             &mut surface_cache,
             &[],

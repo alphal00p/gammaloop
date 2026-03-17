@@ -17,7 +17,7 @@ use crate::{
     GammaLoopContext,
     cff::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId},
-        expression::AmplitudeOrientationID,
+        expression::OrientationID,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
     integrands::{
@@ -71,7 +71,7 @@ impl AmplitudeCountertermAtom {
     pub(crate) fn to_evaluator(
         &self,
         param_builder: &ParamBuilder,
-        orientations: &TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
+        orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
     ) -> AmplitudeCountertermEvaluator {
         AmplitudeCountertermEvaluator {
@@ -128,7 +128,7 @@ impl AmplitudeCountertermData {
         rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
-        orientation: SingleOrAllOrientations<'_, AmplitudeOrientationID>,
+        orientation: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
     ) -> Complex<F<T>> {
@@ -385,7 +385,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
     fn evaluate<'b, 'c: 'b>(
         self,
         param_builder: &mut ParamBuilder<f64>,
-        orientations: SingleOrAllOrientations<'a, AmplitudeOrientationID>,
+        orientations: SingleOrAllOrientations<'a, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
     ) -> Complex<F<T>> {

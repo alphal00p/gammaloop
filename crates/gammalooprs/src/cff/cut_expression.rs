@@ -2,7 +2,6 @@
 
 use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
-use derive_more::{From, Into};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     swap::Swap,
@@ -14,29 +13,11 @@ use typed_index_collections::TiVec;
 use crate::{processes::CutId, settings::global::OrientationPattern};
 
 use super::{
-    expression::{AmplitudeOrientationID, CFFExpression, GraphOrientation},
+    expression::{CFFExpression, GraphOrientation, OrientationID},
     generation::SurfaceCache,
     surface::HybridSurfaceID,
     tree::Tree,
 };
-
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    From,
-    Into,
-    Hash,
-    PartialEq,
-    Eq,
-    Copy,
-    Encode,
-    Decode,
-    PartialOrd,
-    Ord,
-)]
-pub struct SuperGraphOrientationID(pub usize);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CutOrientationData {
@@ -66,24 +47,23 @@ impl From<&SingleCutOrientationExpression> for Atom {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationMap {
-    pub map: HashMap<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
-    pub revesed_map:
-        HashMap<(AmplitudeOrientationID, AmplitudeOrientationID), SuperGraphOrientationID>,
+    pub map: HashMap<OrientationID, (OrientationID, OrientationID)>,
+    pub revesed_map: HashMap<(OrientationID, OrientationID), OrientationID>,
 }
 
 impl OrientationMap {
     pub(crate) fn get_lr_or(
         &self,
-        orientation_id: SuperGraphOrientationID,
-    ) -> Option<(AmplitudeOrientationID, AmplitudeOrientationID)> {
+        orientation_id: OrientationID,
+    ) -> Option<(OrientationID, OrientationID)> {
         self.map.get(&orientation_id).copied()
     }
 
     pub(crate) fn get_sg_or(
         &self,
-        left: AmplitudeOrientationID,
-        right: AmplitudeOrientationID,
-    ) -> Option<SuperGraphOrientationID> {
+        left: OrientationID,
+        right: OrientationID,
+    ) -> Option<OrientationID> {
         self.revesed_map.get(&(left, right)).copied()
     }
 }
@@ -98,9 +78,9 @@ impl OrientationMap {
 
     pub(crate) fn insert(
         &mut self,
-        orientation_id: SuperGraphOrientationID,
-        left: AmplitudeOrientationID,
-        right: AmplitudeOrientationID,
+        orientation_id: OrientationID,
+        left: OrientationID,
+        right: OrientationID,
     ) {
         self.map.insert(orientation_id, (left, right));
         self.revesed_map.insert((left, right), orientation_id);
@@ -109,8 +89,8 @@ impl OrientationMap {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct SingleCutExpression {
-    pub left_amplitude: CFFExpression<AmplitudeOrientationID>,
-    pub right_amplitude: CFFExpression<AmplitudeOrientationID>,
+    pub left_amplitude: CFFExpression<OrientationID>,
+    pub right_amplitude: CFFExpression<OrientationID>,
     pub orientation_map: OrientationMap,
 }
 
@@ -118,7 +98,7 @@ pub struct SingleCutExpression {
 pub struct CFFCutsExpression {
     pub cut_expressions: TiVec<CutId, SingleCutExpression>,
     pub surfaces: SurfaceCache,
-    pub orientation_data: TiVec<SuperGraphOrientationID, CutOrientationData>,
+    pub orientation_data: TiVec<OrientationID, CutOrientationData>,
 }
 
 impl CFFCutsExpression {
@@ -147,7 +127,7 @@ impl CFFCutsExpression {
 
     pub(crate) fn get_atom_for_orientation_and_cut(
         &self,
-        orientation_id: SuperGraphOrientationID,
+        orientation_id: OrientationID,
         cut: CutId,
     ) -> (Atom, Atom) {
         let cut_expression = &self.cut_expressions[cut];
@@ -167,10 +147,7 @@ impl CFFCutsExpression {
         }
     }
 
-    pub(crate) fn get_orientation_atom(
-        &self,
-        orientation_id: SuperGraphOrientationID,
-    ) -> Vec<(Atom, Atom)> {
+    pub(crate) fn get_orientation_atom(&self, orientation_id: OrientationID) -> Vec<(Atom, Atom)> {
         self.orientation_data[orientation_id]
             .cuts
             .iter()
@@ -194,9 +171,7 @@ impl CFFCutsExpression {
             .collect()
     }
 
-    pub(crate) fn get_orientation_atoms(
-        &self,
-    ) -> TiVec<SuperGraphOrientationID, Vec<(Atom, Atom)>> {
+    pub(crate) fn get_orientation_atoms(&self) -> TiVec<OrientationID, Vec<(Atom, Atom)>> {
         self.orientation_data
             .iter_enumerated()
             .map(|(orientation_id, _)| self.get_orientation_atom(orientation_id))
