@@ -45,7 +45,7 @@ use crate::{
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
+    involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
@@ -62,10 +62,7 @@ use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::{
-        cut_expression::{CFFCutsExpression, CutOrientationData},
-        esurface::{Esurface, EsurfaceID},
-    },
+    cff::esurface::{Esurface, EsurfaceID},
     graph::{ExternalConnection, FeynmanGraph, Graph},
     integrands::process::{
         ProcessIntegrand,
@@ -1541,10 +1538,9 @@ impl CrossSectionGraph {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
-    pub orientations: Option<TiVec<OrientationID, CutOrientationData>>,
+    pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
     pub cut_paramatric_integrand: TiVec<RaisedCutId, ParametricIntegrands>,
     pub global_cff_expression: Option<CFFExpression<OrientationID>>,
-    pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
@@ -1645,7 +1641,6 @@ impl CrossSectionDerivedData {
         Self {
             orientations: None,
             global_cff_expression: None,
-            cff_expression: None,
             cut_paramatric_integrand: TiVec::new(),
             lmbs: None,
             multi_channeling_setup: None,

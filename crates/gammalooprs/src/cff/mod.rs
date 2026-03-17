@@ -12,7 +12,7 @@ use color_eyre::Result;
 use eyre::eyre;
 
 pub mod cff_graph;
-pub mod cut_expression;
+//pub mod cut_expression;
 pub mod esurface;
 pub mod expression;
 pub mod generation;

@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::{

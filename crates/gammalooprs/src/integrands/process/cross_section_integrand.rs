@@ -2,7 +2,6 @@
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        cut_expression::CutOrientationData,
         esurface::Esurface,
         expression::{GraphOrientation, OrientationID},
     },
@@ -251,13 +250,6 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
     // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
     //     &self.data.builder_cache
     // }
-}
-
-#[derive(Clone, Encode, Decode)]
-#[trait_decode(trait = GammaLoopContext)]
-pub struct OrientationEvaluator {
-    pub orientation_data: CutOrientationData,
-    pub evaluators: Vec<GenericEvaluator>,
 }
 
 #[derive(Clone, Encode, Decode)]
