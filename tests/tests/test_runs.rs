@@ -127,6 +127,20 @@ momenta = [
 helicities = [0, 0, 0, 0]
 '"#;
 
+const SCALAR_BOX_COPY_ABOVE_EXTERNALS: &str = r#"set process -p box_copy -i scalar_box_copy string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+    [3.0, 0.0, 0.0, 3.0],
+    [3.0, 0.0, 0.0, -3.0],
+    [3.0, 0.0, 3.0, 0.0],
+    "dependent"
+]
+helicities = [0, 0, 0, 0]
+'"#;
+
 const SCALAR_BOX_COPY_BELOW_EXTERNALS: &str = r#"set process -p box_copy -i scalar_box_copy string '
 [kinematics.externals]
 type = "constant"
@@ -199,6 +213,12 @@ fn scalar_topology_integrate_command(
 
 fn load_integration_result(path: &Path) -> Result<RuntimeIntegrationResult> {
     Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
+}
+
+fn complex_distance(lhs: Complex<f64>, rhs: Complex<f64>) -> f64 {
+    let delta_re = lhs.re - rhs.re;
+    let delta_im = lhs.im - rhs.im;
+    (delta_re * delta_re + delta_im * delta_im).sqrt()
 }
 
 #[test]
@@ -1641,6 +1661,109 @@ fn test_multi_integrand_with_local_model_parameters() -> Result<()> {
         "local-model box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
         box_local_slot.integral,
         single_slot_integral(&box_local_baseline),
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_inspect_uses_per_integrand_model_parameters() -> Result<()> {
+    let test_name = "test_inspect_uses_per_integrand_model_parameters";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+
+    cli.run_command(
+        "duplicate integrand -p box -i scalar_box --output_process_name box_copy --output_integrand_name scalar_box_copy",
+    )?;
+
+    let inspect_point = vec![0.31, 0.52, 0.73];
+    let (_, default_inspect) = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: inspect_point.clone(),
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+    let (_, copied_inspect_before_override) = Inspect {
+        process: Some(ProcessRef::Unqualified("box_copy".to_string())),
+        integrand_name: Some("scalar_box_copy".to_string()),
+        point: inspect_point.clone(),
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert!(
+        complex_distance(default_inspect, copied_inspect_before_override) < 1e-12,
+        "duplicated integrand should initially inspect identically: {} vs {}",
+        default_inspect,
+        copied_inspect_before_override,
+    );
+
+    cli.run_command("set model -p box_copy mass_scalar_2=1.0")?;
+
+    let (_, copied_inspect_after_override) = Inspect {
+        process: Some(ProcessRef::Unqualified("box_copy".to_string())),
+        integrand_name: Some("scalar_box_copy".to_string()),
+        point: inspect_point.clone(),
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert!(
+        complex_distance(default_inspect, copied_inspect_after_override) > 1e-12,
+        "per-integrand model override should change the inspect result: {} vs {}",
+        default_inspect,
+        copied_inspect_after_override,
+    );
+
+    let box_copy_process = ProcessRef::Unqualified("box_copy".to_string());
+    let box_copy_integrand = "scalar_box_copy".to_string();
+    let (box_copy_process_id, box_copy_integrand_name) = cli
+        .state
+        .find_integrand_ref(Some(&box_copy_process), Some(&box_copy_integrand))?;
+    let box_copy_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_copy_process_id,
+            &box_copy_integrand_name,
+        )?;
+    assert_eq!(
+        box_copy_card.data.get("mass_scalar_2"),
+        Some(&(F(1.0), F(0.0)))
+    );
+
+    cli.run_command("set process -p box_copy -i scalar_box_copy defaults")?;
+
+    let box_copy_reset_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_copy_process_id,
+            &box_copy_integrand_name,
+        )?;
+    assert_eq!(
+        box_copy_reset_card.data.get("mass_scalar_2"),
+        Some(&(F(2.0), F(0.0)))
+    );
+
+    cli.run_command(SCALAR_BOX_COPY_ABOVE_EXTERNALS)?;
+
+    let (_, copied_inspect_after_defaults) = Inspect {
+        process: Some(ProcessRef::Unqualified("box_copy".to_string())),
+        integrand_name: Some("scalar_box_copy".to_string()),
+        point: inspect_point,
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert!(
+        complex_distance(default_inspect, copied_inspect_after_defaults) < 1e-12,
+        "resetting process defaults should clear the local model override: {} vs {}",
+        default_inspect,
+        copied_inspect_after_defaults,
     );
 
     clean_test(&cli.cli_settings.state.folder);

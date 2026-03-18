@@ -16,9 +16,9 @@ use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
 use crate::{
-    CLISettings,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
+    CLISettings,
 };
 
 #[cfg_attr(
@@ -77,6 +77,9 @@ impl Evaluate {
                 ));
             }
         };
+        // Always resolve the model through the targeted integrand. `state.model` only carries the
+        // shared structural/default model and would ignore any per-integrand parameter overlay.
+        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
 
         let mut true_settings = global_cli_settings
             .global
@@ -84,6 +87,7 @@ impl Evaluate {
             .uv
             .vakint
             .true_settings();
+        let refresh_model_values = amplitude.integrand.is_some();
 
         let vakint = vakint()?;
 
@@ -118,7 +122,8 @@ impl Evaluate {
                     graph_term.graph.name.blue()
                 );
                 complete_evaluation_for_this_graph *= graph_term.analytical_evaluation(
-                    &state.model,
+                    &model,
+                    refresh_model_values,
                     gc,
                     self.numerical,
                     vakint,

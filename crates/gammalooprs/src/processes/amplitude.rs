@@ -653,7 +653,8 @@ impl AmplitudeGraph {
 
     pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(
         &self,
-        _model: &Model,
+        model: &Model,
+        refresh_model_values: bool,
         component: &S,
         evaluate_numerically: bool,
         vakint: &Vakint,
@@ -676,6 +677,9 @@ impl AmplitudeGraph {
         let complex_params_vakint = if evaluate_numerically || pysec_dec_enabled_in_vakint.is_some()
         {
             let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
+            if refresh_model_values {
+                param_builder.update_model_values(model);
+            }
             param_builder.m_uv_value(Complex::new_re(F(run_time_settings.general.m_uv)));
             param_builder.mu_r_sq_value(Complex::new_re(F(run_time_settings.general.mu_r_sq)));
 
