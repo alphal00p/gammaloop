@@ -161,6 +161,14 @@ struct FilterHandles {
 
 static FILTER_HANDLES: OnceLock<FilterHandles> = OnceLock::new();
 
+fn log_filter_env_override(specific_env: &str) -> Option<String> {
+    if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
+        Some(all)
+    } else {
+        std::env::var(specific_env).ok()
+    }
+}
+
 struct LazyJsonWriterState {
     dir: PathBuf,
     filename: String,
@@ -263,7 +271,7 @@ pub fn file_log_boot_disabled_reason() -> Option<String> {
 
 /// Set the file log filter at runtime while preserving required targets.
 pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
-    let user_spec = if let Ok(file) = std::env::var(ENV_FILE_LOG_FILTER) {
+    let user_spec = if let Some(file) = log_filter_env_override(ENV_FILE_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
             println!(
                 "WARNING, file log filter is set to {file}, will override settings {}",
@@ -331,7 +339,7 @@ pub fn clear_file_log_filter_override_on_settings_change() -> Result<()> {
 
 /// Set the stderr log filter at runtime.
 pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
-    let user_spec = if let Ok(display) = std::env::var(ENV_DISPLAY_LOG_FILTER) {
+    let user_spec = if let Some(display) = log_filter_env_override(ENV_DISPLAY_LOG_FILTER) {
         if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
             println!(
                 "WARNING, display log filter is set to {display}, will override settings {}",
@@ -407,13 +415,26 @@ pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>)
         .store(false, std::sync::atomic::Ordering::Relaxed);
     FILTER_HANDLES.get_or_init(|| {
         let file_state = FILE_LOG_SPEC.lock().unwrap().clone();
-        let file_filter = EnvFilter::new(file_state.effective_spec_string());
+        let file_spec = file_state.effective_spec_string();
+        // Keep startup filter semantics aligned with runtime reloads.
+        let file_filter = file_filter_from(&file_spec).unwrap_or_else(|err| {
+            eprintln!(
+                "Invalid initial file log filter '{file_spec}': {err}. Falling back to warn."
+            );
+            file_filter_from("").expect("default file log filter must parse")
+        });
         // println!(
         //     "File filter: {file_filter},:{}",
         //     FILE_LOG_SPEC.lock().unwrap().as_str()
         // );
-        let stderr_filter =
-            EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().effective_spec_string());
+        let stderr_spec = STDERR_LOG_SPEC.lock().unwrap().effective_spec_string();
+        // Keep startup filter semantics aligned with runtime reloads.
+        let stderr_filter = display_filter_from(&stderr_spec).unwrap_or_else(|err| {
+            eprintln!(
+                "Invalid initial display log filter '{stderr_spec}': {err}. Falling back to off."
+            );
+            display_filter_from("").expect("default display log filter must parse")
+        });
         // println!(
         //     "Stderr filter: {stderr_filter},:{}",
         //     STDERR_LOG_SPEC.lock().unwrap().as_str()
@@ -756,17 +777,32 @@ pub(crate) fn format_full_source(meta: &tracing::Metadata<'_>) -> ColoredString 
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Mutex;
+    use tracing_subscriber::filter::LevelFilter;
 
     use super::{
-        collapse_scoped_gamma_level, get_stderr_log_filter, get_stderr_log_filter_label,
-        set_stderr_log_filter, set_stderr_log_filter_override,
+        collapse_scoped_gamma_level, display_filter_from, file_filter_from, get_stderr_log_filter,
+        get_stderr_log_filter_label, set_stderr_log_filter, set_stderr_log_filter_override,
+        StderrLogSpecState, STDERR_LOG_SPEC,
     };
+
+    struct StderrStateRestore(StderrLogSpecState);
+
+    impl Drop for StderrStateRestore {
+        fn drop(&mut self) {
+            *STDERR_LOG_SPEC.lock().unwrap() = self.0.clone();
+        }
+    }
+
+    fn preserve_stderr_filter_state() -> StderrStateRestore {
+        StderrStateRestore(STDERR_LOG_SPEC.lock().unwrap().clone())
+    }
 
     #[test]
     fn stderr_filter_override_supersedes_base_and_can_be_cleared() {
-        static TEST_MUTEX: Mutex<()> = Mutex::new(());
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _restore = preserve_stderr_filter_state();
 
         set_stderr_log_filter("warn").unwrap();
         set_stderr_log_filter_override(Some("debug".to_string())).unwrap();
@@ -797,8 +833,10 @@ mod tests {
 
     #[test]
     fn stderr_filter_label_prefers_collapsed_scoped_gamma_directive() {
-        static TEST_MUTEX: Mutex<()> = Mutex::new(());
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        let _restore = preserve_stderr_filter_state();
 
         set_stderr_log_filter("warn").unwrap();
         set_stderr_log_filter_override(Some("gammaloop_api=trace,gammalooprs=trace".to_string()))
@@ -807,5 +845,21 @@ mod tests {
 
         set_stderr_log_filter_override(None).unwrap();
         assert_eq!(get_stderr_log_filter_label(), "warn");
+    }
+
+    #[test]
+    fn display_filter_empty_spec_defaults_to_off() {
+        assert_eq!(
+            display_filter_from("").unwrap().max_level_hint(),
+            Some(LevelFilter::OFF)
+        );
+    }
+
+    #[test]
+    fn file_filter_empty_spec_defaults_to_warn() {
+        assert_eq!(
+            file_filter_from("").unwrap().max_level_hint(),
+            Some(LevelFilter::WARN)
+        );
     }
 }

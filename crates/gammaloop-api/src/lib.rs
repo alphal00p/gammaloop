@@ -80,6 +80,9 @@ pub mod state;
 pub mod templates;
 pub mod tracing;
 
+#[cfg(test)]
+pub(crate) static LOG_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub(crate) const GLOBAL_SETTINGS_FILENAME: &str = "global_settings.toml";
 pub(crate) const DEFAULT_RUNTIME_SETTINGS_FILENAME: &str = "default_runtime_settings.toml";
 const BANNER_ART: &str = r"              ██         ▄████████▄  ▄████████▄  ██████████▄
@@ -1297,7 +1300,7 @@ pub fn write_schemas() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::{ffi::OsString, fs, path::PathBuf};
 
     use clap::Parser;
     use serde_json::Value as JsonValue;
@@ -1311,11 +1314,79 @@ mod tests {
     use crate::commands::Reset;
     use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
+    use crate::tracing::{
+        configure_file_log_boot_mode, get_file_log_filter, get_stderr_log_filter,
+        set_file_log_filter, set_file_log_filter_override, set_log_format_override, set_log_style,
+        set_stderr_log_filter, set_stderr_log_filter_override,
+    };
 
     use super::{
         generate_completion_script, CLISettings, Commands, CompletionShell, LogFormat, LogLevel,
-        OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
+        OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX,
     };
+
+    const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
+    const ENV_DISPLAY_LOG_FILTER: &str = "GL_DISPLAY_FILTER";
+    const ENV_ALL_LOG_FILTER: &str = "GL_ALL_LOG_FILTER";
+
+    struct LogEnvGuard {
+        file: Option<OsString>,
+        display: Option<OsString>,
+        all: Option<OsString>,
+    }
+
+    impl LogEnvGuard {
+        fn capture() -> Self {
+            Self {
+                file: std::env::var_os(ENV_FILE_LOG_FILTER),
+                display: std::env::var_os(ENV_DISPLAY_LOG_FILTER),
+                all: std::env::var_os(ENV_ALL_LOG_FILTER),
+            }
+        }
+
+        fn clear() {
+            unsafe {
+                std::env::remove_var(ENV_FILE_LOG_FILTER);
+                std::env::remove_var(ENV_DISPLAY_LOG_FILTER);
+                std::env::remove_var(ENV_ALL_LOG_FILTER);
+            }
+        }
+
+        fn set(var: &str, value: &str) {
+            unsafe {
+                std::env::set_var(var, value);
+            }
+        }
+    }
+
+    impl Drop for LogEnvGuard {
+        fn drop(&mut self) {
+            fn restore_var(name: &str, value: &Option<OsString>) {
+                unsafe {
+                    if let Some(value) = value {
+                        std::env::set_var(name, value);
+                    } else {
+                        std::env::remove_var(name);
+                    }
+                }
+            }
+
+            restore_var(ENV_FILE_LOG_FILTER, &self.file);
+            restore_var(ENV_DISPLAY_LOG_FILTER, &self.display);
+            restore_var(ENV_ALL_LOG_FILTER, &self.all);
+        }
+    }
+
+    fn reset_tracing_state() {
+        LogEnvGuard::clear();
+        configure_file_log_boot_mode(false, None).unwrap();
+        set_stderr_log_filter_override(None).unwrap();
+        set_file_log_filter_override(None).unwrap();
+        set_stderr_log_filter("info").unwrap();
+        set_file_log_filter("off").unwrap();
+        set_log_style(Default::default());
+        set_log_format_override(None);
+    }
 
     fn write_run_card(path: &PathBuf, state_folder: &str) {
         let run_history = RunHistory {
@@ -1482,6 +1553,85 @@ mod tests {
                 .unwrap();
         assert!(parsed.read_only_state);
         assert_eq!(parsed.logfile_level, Some(LogLevel::Off));
+    }
+
+    #[test]
+    fn configure_startup_tracing_uses_global_defaults_without_overrides() {
+        let _guard = LOG_TEST_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
+        let _env = LogEnvGuard::capture();
+        reset_tracing_state();
+
+        let cli = OneShot::try_parse_from(["gammaloop"]).unwrap();
+        let cli_settings = CLISettings::default();
+
+        cli.configure_startup_tracing(&cli_settings).unwrap();
+
+        assert_eq!(get_stderr_log_filter(), "info");
+        assert_eq!(get_file_log_filter(), "off");
+    }
+
+    #[test]
+    fn configure_startup_tracing_prefers_all_env_override_over_specific_envs() {
+        let _guard = LOG_TEST_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
+        let _env = LogEnvGuard::capture();
+        reset_tracing_state();
+
+        LogEnvGuard::set(ENV_ALL_LOG_FILTER, "trace");
+        LogEnvGuard::set(ENV_DISPLAY_LOG_FILTER, "warn");
+        LogEnvGuard::set(ENV_FILE_LOG_FILTER, "error");
+
+        let cli = OneShot::try_parse_from(["gammaloop"]).unwrap();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.global.display_directive = "info".into();
+        cli_settings.global.logfile_directive = "off".into();
+
+        cli.configure_startup_tracing(&cli_settings).unwrap();
+
+        assert_eq!(get_stderr_log_filter(), "trace");
+        assert_eq!(get_file_log_filter(), "trace");
+    }
+
+    #[test]
+    fn configure_startup_tracing_cli_overrides_supersede_settings_and_env() {
+        let _guard = LOG_TEST_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
+        let _env = LogEnvGuard::capture();
+        reset_tracing_state();
+
+        LogEnvGuard::set(ENV_DISPLAY_LOG_FILTER, "warn");
+        LogEnvGuard::set(ENV_FILE_LOG_FILTER, "error");
+
+        let cli = OneShot::try_parse_from(["gammaloop", "-l", "debug", "--logfile-level", "trace"])
+            .unwrap();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.global.display_directive = "info".into();
+        cli_settings.global.logfile_directive = "off".into();
+
+        cli.configure_startup_tracing(&cli_settings).unwrap();
+
+        assert_eq!(
+            get_stderr_log_filter(),
+            "gammaloop_api=debug,gammalooprs=debug"
+        );
+        assert_eq!(
+            get_file_log_filter(),
+            "gammaloop_api=trace,gammalooprs=trace"
+        );
+    }
+
+    #[test]
+    fn configure_startup_tracing_read_only_state_forces_logfile_off() {
+        let _guard = LOG_TEST_MUTEX.lock().unwrap_or_else(|err| err.into_inner());
+        let _env = LogEnvGuard::capture();
+        reset_tracing_state();
+
+        let cli = OneShot::try_parse_from(["gammaloop", "--read-only-state"]).unwrap();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.global.logfile_directive = "debug".into();
+
+        cli.configure_startup_tracing(&cli_settings).unwrap();
+
+        assert_eq!(get_stderr_log_filter(), "info");
+        assert_eq!(get_file_log_filter(), "gammaloop_api=off,gammalooprs=off");
     }
 
     #[test]

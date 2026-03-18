@@ -509,7 +509,7 @@ fn yaml_to_json(v: Y) -> Result<J> {
 
 #[cfg(test)]
 mod test {
-    use std::{str::FromStr, sync::Mutex};
+    use std::str::FromStr;
 
     use clap::Parser;
     use figment::{providers::Serialized, Figment};
@@ -1060,8 +1060,9 @@ integrate = 10
 
     #[test]
     fn set_global_display_directive_clears_cli_stderr_override() {
-        static TEST_MUTEX: Mutex<()> = Mutex::new(());
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
 
         let mut state = State::new_test();
         let mut cli_settings = CLISettings::default();
@@ -1088,8 +1089,9 @@ integrate = 10
 
     #[test]
     fn set_global_logfile_directive_errors_when_file_logger_was_boot_disabled() {
-        static TEST_MUTEX: Mutex<()> = Mutex::new(());
-        let _guard = TEST_MUTEX.lock().unwrap();
+        let _guard = crate::LOG_TEST_MUTEX
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
 
         let mut state = State::new_test();
         let mut cli_settings = CLISettings::default();
