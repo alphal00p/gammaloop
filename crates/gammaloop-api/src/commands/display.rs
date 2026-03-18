@@ -5,27 +5,26 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use tabled::{
     builder::Builder,
-    settings::{Style, style::HorizontalLine, themes::Theme},
+    settings::{style::HorizontalLine, themes::Theme, Style},
 };
 use tracing::info;
 
 use color_eyre::Result;
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use gammalooprs::processes::{Amplitude, CrossSection, Process, ProcessCollection};
 use gammalooprs::settings::RuntimeSettings;
 
 use crate::{
-    CLISettings,
     commands::generate::ProcessArgs,
     commands::process_settings::{
-        NamedProcessSettingKind, observable_kind, quantity_kind, selector_kind,
-        serialize_runtime_named_settings, summarize_observable, summarize_quantity,
-        summarize_selector,
+        observable_kind, quantity_kind, selector_kind, serialize_runtime_named_settings,
+        summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
     },
     completion::CompletionArgExt,
     session::display_command,
     settings_tree::{serialize_settings_with_defaults, value_at_path},
     state::{CommandsBlock, ProcessRef, RunHistory, State},
+    CLISettings,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -37,10 +36,28 @@ pub enum Display {
         show_vertices: bool,
         #[arg(short = 'r', long = "show-parameters", default_value_t = false)]
         show_parameters: bool,
-        #[arg(short = 'p', long = "show-particles", default_value_t = false)]
+        #[arg(long = "show-particles", default_value_t = false)]
         show_particles: bool,
         #[arg(short = 'a', long = "show-all", default_value_t = false)]
         show_all: bool,
+        /// Process reference: #<id>, name:<name>, or <id>/<name>
+        #[arg(
+            short = 'p',
+            long = "process",
+            value_name = "PROCESS",
+            requires = "integrand_name",
+            completion_process_selector(crate::completion::SelectorKind::Any)
+        )]
+        process: Option<ProcessRef>,
+        /// Integrand name inside the selected process
+        #[arg(
+            short = 'i',
+            long = "integrand-name",
+            value_name = "NAME",
+            requires = "process",
+            completion_integrand_selector(crate::completion::SelectorKind::Any)
+        )]
+        integrand_name: Option<String>,
     },
     Processes,
     Integrands {
@@ -143,10 +160,20 @@ impl Display {
                 show_parameters,
                 show_particles,
                 show_all,
+                process,
+                integrand_name,
             } => {
+                let model = if let (Some(process), Some(integrand_name)) =
+                    (process.as_ref(), integrand_name.as_ref())
+                {
+                    let process_id = state.resolve_process_ref(Some(process))?;
+                    state.resolve_model_for_integrand(process_id, integrand_name)?
+                } else {
+                    state.model.clone()
+                };
                 info!(
                     "\n{}",
-                    state.model.get_description(
+                    model.get_description(
                         *show_particles || *show_all,
                         *show_parameters || *show_all,
                         *show_vertices || *show_all,
@@ -788,15 +815,15 @@ mod test {
     use serde_json::json;
 
     use crate::{
-        CLISettings, Repl,
         commands::Commands,
         state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory},
+        CLISettings, Repl,
     };
     use gammalooprs::settings::RuntimeSettings;
 
     use super::{
-        Display, DisplaySettingsTarget, command_block_contents, format_bytes,
-        render_command_blocks_table, serialize_settings_with_defaults, value_at_path,
+        command_block_contents, format_bytes, render_command_blocks_table,
+        serialize_settings_with_defaults, value_at_path, Display, DisplaySettingsTarget,
     };
 
     #[test]
@@ -853,6 +880,45 @@ mod test {
             },
             other => panic!("Expected display settings command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parse_display_model_target() {
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "display",
+            "model",
+            "-p",
+            "epem_a_tth",
+            "-i",
+            "LO",
+            "--show-particles",
+        ])
+        .unwrap();
+
+        match repl.command {
+            Commands::Display(Display::Model {
+                process,
+                integrand_name,
+                show_particles,
+                ..
+            }) => {
+                assert_eq!(
+                    process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(integrand_name, Some("LO".to_string()));
+                assert!(show_particles);
+            }
+            other => panic!("Expected display model command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn display_model_requires_process_and_integrand_together() {
+        let err = Repl::try_parse_from(["gammaloop", "display", "model", "-p", "epem_a_tth"])
+            .unwrap_err();
+        assert!(err.to_string().contains("--integrand-name"));
     }
 
     #[test]

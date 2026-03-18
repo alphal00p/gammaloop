@@ -2,13 +2,13 @@ use color_eyre::Result;
 use eyre::eyre;
 use gammalooprs::{
     integrands::{
-        HasIntegrand,
         evaluation::{
             BatchSampleEvaluationResult, PreciseBatchSampleEvaluationResult,
             PreciseSampleEvaluationResult, PreciseSingleSampleEvaluationResult,
             SampleEvaluationResult, SingleSampleEvaluationResult,
         },
         process::MomentumSpaceEvaluationInput,
+        HasIntegrand,
     },
     momentum::ThreeMomentum,
     observables::ObservableSnapshotBundle,
@@ -39,11 +39,12 @@ impl<'a> EvaluateSamples<'a> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
+        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
 
         let integrand = state
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
-        integrand.warm_up(&state.model)?;
+        integrand.warm_up(&model)?;
 
         let batch_len = self.points.nrows();
         let graph_names =
@@ -80,7 +81,7 @@ impl<'a> EvaluateSamples<'a> {
             let mut evaluation = if self.momentum_space {
                 evaluate_momentum_point(
                     integrand,
-                    &state.model,
+                    &model,
                     point.as_slice().expect("point rows are contiguous"),
                     graph_name,
                     orientation,
@@ -94,7 +95,7 @@ impl<'a> EvaluateSamples<'a> {
                     .unwrap_or_else(Vec::new);
                 evaluate_x_point(
                     integrand,
-                    &state.model,
+                    &model,
                     point.as_slice().expect("point rows are contiguous"),
                     &discrete_dim,
                     self.force_radius,
@@ -147,11 +148,12 @@ impl<'a> EvaluateSamplesPrecise<'a> {
         let process_ref = self.process_id.map(ProcessRef::Id);
         let (process_id, integrand_name) =
             state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
+        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
 
         let integrand = state
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
-        integrand.warm_up(&state.model)?;
+        integrand.warm_up(&model)?;
 
         let batch_len = self.points.nrows();
         let graph_names =
@@ -188,7 +190,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
             let mut evaluation = if self.momentum_space {
                 evaluate_momentum_point_precise(
                     integrand,
-                    &state.model,
+                    &model,
                     point.as_slice().expect("point rows are contiguous"),
                     graph_name,
                     orientation,
@@ -202,7 +204,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                     .unwrap_or_else(Vec::new);
                 evaluate_x_point_precise(
                     integrand,
-                    &state.model,
+                    &model,
                     point.as_slice().expect("point rows are contiguous"),
                     &discrete_dim,
                     self.force_radius,

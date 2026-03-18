@@ -1,18 +1,18 @@
 use std::path::PathBuf;
 
 use crate::{
-    CLISettings,
     completion::CompletionArgExt,
     state::{ProcessListExt, ProcessRef, State},
+    CLISettings,
 };
 use color_eyre::Result;
 use eyre::eyre;
 use gammalooprs::{
-    integrands::process::ProcessIntegrand,
     integrands::process::ir::{IRProfileSetting, IrLimitTestReport},
+    integrands::process::ProcessIntegrand,
     uv::{
-        UVProfileAnalysis,
         profile::{ProfileSettings, UVProfileable},
+        UVProfileAnalysis,
     },
 };
 use schemars::JsonSchema;
@@ -171,9 +171,13 @@ impl Profile {
                 analyse_analytically,
                 output_file,
             }) => {
+                let (process_id, integrand_name) =
+                    state.find_integrand_ref(process.as_ref(), integrand_name.as_ref())?;
+                let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
+                let process_ref = ProcessRef::Id(process_id);
                 let amplitude = state
                     .process_list
-                    .get_amplitude_mut_ref(process.as_ref(), integrand_name.as_ref())?;
+                    .get_amplitude_mut_ref(Some(&process_ref), Some(&integrand_name))?;
 
                 amplitude
                     .integrand
@@ -182,7 +186,7 @@ impl Profile {
                         "Integrand {} has not yet been generated, but exists",
                         amplitude.name
                     ))?
-                    .warm_up(&state.model)?;
+                    .warm_up(&model)?;
 
                 let profile_settings = ProfileSettings {
                     n_points: *n_points,
@@ -193,9 +197,7 @@ impl Profile {
                     analyse_analytically: *analyse_analytically,
                     ..Default::default()
                 };
-                let profile_res = amplitude
-                    .profile(&state.model, &profile_settings)?
-                    .analyse();
+                let profile_res = amplitude.profile(&model, &profile_settings)?.analyse();
 
                 for t in profile_res.tables_per_graph(-0.9) {
                     info!("\n{}", t);
@@ -232,16 +234,20 @@ impl Profile {
                     select_limits_and_graphs: select.clone(),
                 };
 
+                let (process_id, integrand_name) =
+                    state.find_integrand_ref(process.as_ref(), integrand_name.as_ref())?;
+                let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
+                let process_ref = ProcessRef::Id(process_id);
                 let cross_section = state
                     .process_list
-                    .get_cross_section_mut_ref(process.as_ref(), integrand_name.as_ref())?;
+                    .get_cross_section_mut_ref(Some(&process_ref), Some(&integrand_name))?;
 
                 let profile_result = match cross_section.integrand.as_mut().ok_or(eyre!(
                     "Integrand {} has not yet been generated",
                     cross_section.name
                 ))? {
                     ProcessIntegrand::CrossSection(cross_section_integrand) => {
-                        cross_section_integrand.test_ir(&ir_profile_settings, &state.model)?
+                        cross_section_integrand.test_ir(&ir_profile_settings, &model)?
                     }
                     _ => unreachable!(),
                 };

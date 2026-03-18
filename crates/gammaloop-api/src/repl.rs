@@ -15,20 +15,21 @@ use serde_json::Value as JsonValue;
 use reedline::{Prompt, Reedline, Signal, Span, Suggestion, ValidationResult};
 
 use crate::{
-    CLISettings,
     command_parser::split_command_line,
     commands::import::model::{builtin_json_model_names, builtin_json_model_restriction_names},
     commands::process_settings::{
-        NamedProcessSettingKind, ProcessSettingsCompletionEntry, observable_completion_root,
-        observable_schema, quantity_completion_root_for_kind, quantity_kind_names, quantity_schema,
-        selector_completion_root_for_kind, selector_kind_names, selector_schema,
+        observable_completion_root, observable_schema, quantity_completion_root_for_kind,
+        quantity_kind_names, quantity_schema, selector_completion_root_for_kind,
+        selector_kind_names, selector_schema, NamedProcessSettingKind,
+        ProcessSettingsCompletionEntry,
     },
-    completion::{ArgValueCompletion, SelectorKind, arg_value_completion},
+    completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
     session::CliSession,
     settings_tree::{
         schema_at_path, schema_enum_values, serialize_schema, serialize_settings_with_defaults,
         value_at_path,
     },
+    CLISettings,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -118,8 +119,8 @@ mod builder {
     use clap::Parser;
     use nu_ansi_term::{Color, Style};
     use reedline::{
-        DefaultHinter, DefaultPrompt, EditMode, Emacs, IdeMenu, KeyModifiers, MenuBuilder, Prompt,
-        Reedline, ReedlineEvent, ReedlineMenu, default_emacs_keybindings,
+        default_emacs_keybindings, DefaultHinter, DefaultPrompt, EditMode, Emacs, IdeMenu,
+        KeyModifiers, MenuBuilder, Prompt, Reedline, ReedlineEvent, ReedlineMenu,
     };
 
     use crate::repl::{ClapEditor, ReedCompleter, SharedCompletionState, ShellLikeValidator};
@@ -1163,9 +1164,22 @@ fn add_model_parameter_suggestions(
     suggestions: &mut Vec<Suggestion>,
     seen: &mut HashSet<String>,
 ) {
+    if context.completed_tokens.last().is_some_and(|token| {
+        matches!(
+            token.cooked.as_str(),
+            "-p" | "--process" | "-i" | "--integrand-name"
+        )
+    }) {
+        return;
+    }
+
     let current = context.current_token.cooked.as_str();
     if current.contains('=') {
         add_model_parameter_value_hint(context, completion_state, pos, suggestions, seen);
+        return;
+    }
+
+    if current == "defaults" {
         return;
     }
 
@@ -1181,6 +1195,20 @@ fn add_model_parameter_suggestions(
         .collect::<HashSet<_>>();
     if let Some((key, _)) = current.split_once('=') {
         assigned.insert(key.trim().to_string());
+    }
+
+    if !current.contains('=') && ("defaults".starts_with(current) || current.is_empty()) {
+        let rendered = render_value_completion("defaults", context.current_token.quote_style);
+        if seen.insert(rendered.clone()) {
+            suggestions.push(Suggestion {
+                value: rendered,
+                description: Some("Reset targeted model settings to defaults".to_string()),
+                style: None,
+                extra: None,
+                span: Span::new(context.current_token.start, pos),
+                append_whitespace: true,
+            });
+        }
     }
 
     for entry in &completion_state.model_parameter_entries {
@@ -1222,7 +1250,7 @@ fn add_model_parameter_value_hint(
                 .find(|entry| entry.name == name.trim())
                 .map(|entry| entry.parameter_type.clone())
         });
-    let hint = crate::commands::set::model_value_format_hint(parameter_type);
+    let hint = crate::model_parameters::model_value_format_hint(parameter_type);
     let rendered = render_value_completion(
         context.current_token.cooked.as_str(),
         context.current_token.quote_style,
@@ -3343,14 +3371,14 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        Repl,
         commands::process_settings::ProcessSettingsCompletionEntry,
-        completion::{ArgValueCompletion, arg_value_completion},
+        completion::{arg_value_completion, ArgValueCompletion},
+        Repl,
     };
 
     use super::{
-        CompletionState, IrProfileCompletionEntry, ModelParameterCompletionEntry,
-        ProcessCompletionEntry, ProcessKind, collect_completions,
+        collect_completions, CompletionState, IrProfileCompletionEntry,
+        ModelParameterCompletionEntry, ProcessCompletionEntry, ProcessKind,
     };
 
     fn sample_process_entries() -> Vec<ProcessCompletionEntry> {
@@ -3629,6 +3657,28 @@ mod tests {
     }
 
     #[test]
+    fn completion_skips_model_parameter_suggestions_for_target_flags() {
+        let completion_state = CompletionState {
+            model_parameter_entries: vec![ModelParameterCompletionEntry {
+                name: "alpha".to_string(),
+                parameter_type: ParameterType::Real,
+            }],
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("set model -p pro", &completion_state);
+
+        assert!(!values.contains(&"alpha=".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_defaults_for_set_model() {
+        let values = completion_values("set model d", &CompletionState::default());
+
+        assert_eq!(values, vec!["defaults".to_string()]);
+    }
+
+    #[test]
     fn completion_skips_already_assigned_model_parameters() {
         let completion_state = CompletionState {
             model_parameter_entries: vec![
@@ -3669,7 +3719,7 @@ mod tests {
 
         assert!(suggestions.iter().any(|suggestion| {
             suggestion.description.as_deref()
-                == Some(crate::commands::set::MODEL_REAL_VALUE_FORMAT_HINT)
+                == Some(crate::model_parameters::MODEL_REAL_VALUE_FORMAT_HINT)
                 && suggestion.value == "alpha="
         }));
     }
@@ -3689,7 +3739,7 @@ mod tests {
 
         assert!(suggestions.iter().any(|suggestion| {
             suggestion.description.as_deref()
-                == Some(crate::commands::set::MODEL_COMPLEX_VALUE_FORMAT_HINT)
+                == Some(crate::model_parameters::MODEL_COMPLEX_VALUE_FORMAT_HINT)
                 && suggestion.value == "beta="
         }));
     }

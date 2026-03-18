@@ -2,140 +2,35 @@ use std::{collections::BTreeMap, fs, path::PathBuf, str::FromStr};
 
 use clap::Subcommand;
 use color_eyre::Result;
-use eyre::{Context, Report, eyre};
+use eyre::{eyre, Context, Report};
 use figment::{
-    Figment,
     providers::{Format, Serialized},
+    Figment,
 };
 use gammalooprs::{
-    model::{ParameterNature, ParameterType, UFOSymbol},
+    model::{ParameterNature, UFOSymbol},
     processes::ProcessCollection,
     settings::RuntimeSettings,
     utils::F,
 };
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use spenso::algebra::complex::Complex;
 use tracing::warn;
 
 use crate::{
-    CLISettings,
-    commands::Commands,
     commands::generate::ProcessArgs,
     commands::process_settings::{
         observable_template, parse_quantity_kind, parse_selector_kind, quantity_template,
         selector_template,
     },
+    commands::Commands,
+    model_parameters::{parse_model_parameter_value, validate_model_parameter_type},
     state::{State, SyncSettings},
     tracing::{clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason},
+    CLISettings,
 };
-
-pub(crate) const MODEL_COMPLEX_VALUE_FORMAT_HINT: &str =
-    "expects complex like 1.0, -1.0e13, 1.0+2.0i, or 1.0-2.0j";
-pub(crate) const MODEL_REAL_VALUE_FORMAT_HINT: &str = "expects real like 1.0, -1.0, or 1.0e13";
-
-pub(crate) fn model_value_format_hint(parameter_type: Option<ParameterType>) -> &'static str {
-    match parameter_type {
-        Some(ParameterType::Real) => MODEL_REAL_VALUE_FORMAT_HINT,
-        _ => MODEL_COMPLEX_VALUE_FORMAT_HINT,
-    }
-}
-
-fn parse_model_parameter_value(value: &str) -> Result<Complex<F<f64>>> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(eyre!("Model parameter value cannot be empty"));
-    }
-    if value.starts_with('{') || value.starts_with('[') {
-        return Err(eyre!(
-            "Legacy model-parameter syntax like '{{re:...,im:...}}' or '[re,im]' is deprecated; use {MODEL_COMPLEX_VALUE_FORMAT_HINT}"
-        ));
-    }
-
-    let (re, im) = parse_complex_literal(value)?;
-    Ok(Complex::new(F(re), F(im)))
-}
-
-fn parse_complex_literal(value: &str) -> Result<(f64, f64)> {
-    let value = value.trim();
-    if value.is_empty() {
-        return Err(eyre!("Complex literal cannot be empty"));
-    }
-
-    if let Some(unit) = value.chars().last() {
-        if matches!(unit, 'i' | 'j' | 'I' | 'J') {
-            let body = &value[..value.len() - unit.len_utf8()];
-            let body = body.trim();
-            if body.is_empty() {
-                return Err(eyre!(
-                    "Missing coefficient before imaginary unit in '{value}'"
-                ));
-            }
-
-            if let Some(index) = find_imaginary_separator(body) {
-                let re = parse_float_literal(&body[..index], value)?;
-                let im = parse_imaginary_literal(&body[index..], value)?;
-                return Ok((re, im));
-            }
-
-            let im = parse_imaginary_literal(body, value)?;
-            return Ok((0.0, im));
-        }
-    }
-
-    Ok((parse_float_literal(value, value)?, 0.0))
-}
-
-fn find_imaginary_separator(value: &str) -> Option<usize> {
-    let bytes = value.as_bytes();
-    for index in (1..bytes.len()).rev() {
-        let current = bytes[index] as char;
-        if !matches!(current, '+' | '-') {
-            continue;
-        }
-        let previous = bytes[index - 1] as char;
-        if matches!(previous, 'e' | 'E') {
-            continue;
-        }
-        return Some(index);
-    }
-    None
-}
-
-fn parse_float_literal(value: &str, full_value: &str) -> Result<f64> {
-    value
-        .trim()
-        .parse::<f64>()
-        .with_context(|| format!("Failed to parse real part of complex literal '{full_value}'"))
-}
-
-fn parse_imaginary_literal(value: &str, full_value: &str) -> Result<f64> {
-    let value = value.trim();
-    if value == "+" {
-        return Ok(1.0);
-    }
-    if value == "-" {
-        return Ok(-1.0);
-    }
-    value.parse::<f64>().with_context(|| {
-        format!("Failed to parse imaginary part of complex literal '{full_value}'")
-    })
-}
-
-fn validate_model_parameter_type(
-    parameter_name: &str,
-    parameter_type: ParameterType,
-    value: &Complex<F<f64>>,
-) -> Result<()> {
-    if parameter_type == ParameterType::Real && value.im.0 != 0.0 {
-        return Err(eyre!(
-            "Model parameter '{parameter_name}' is Real and cannot be assigned an imaginary component; {}",
-            MODEL_REAL_VALUE_FORMAT_HINT
-        ));
-    }
-    Ok(())
-}
 
 impl FromStr for Set {
     type Err = Report;
@@ -169,9 +64,15 @@ pub enum Set {
 
     /// Set Model parameters
     Model {
-        /// Any number of PARAM=COMPLEX pairs
-        #[arg(value_name = "PARAM=COMPLEX", num_args = 1.., value_parser = KvPair::from_str)]
-        pairs: Vec<KvPair>,
+        #[command(flatten)]
+        target: ProcessArgs,
+        /// Any number of PARAM=COMPLEX pairs, or 'defaults' for process-targeted resets
+        #[arg(
+            value_name = "defaults|PARAM=COMPLEX",
+            num_args = 1..,
+            value_parser = ModelSetValue::from_str
+        )]
+        values: Vec<ModelSetValue>,
     },
 
     /// Set settings for a PROCESS
@@ -183,6 +84,150 @@ pub enum Set {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub enum ModelSetValue {
+    Defaults,
+    Assignment(KvPair),
+}
+
+impl FromStr for ModelSetValue {
+    type Err = String;
+
+    fn from_str(value: &str) -> std::result::Result<Self, Self::Err> {
+        if value.trim() == "defaults" {
+            return Ok(Self::Defaults);
+        }
+        KvPair::from_str(value).map(Self::Assignment)
+    }
+}
+
+fn resolve_generated_model_targets(
+    state: &State,
+    target: &ProcessArgs,
+) -> Result<Option<Vec<(usize, String)>>> {
+    match (&target.process, &target.integrand_name) {
+        (None, None) => Ok(None),
+        (None, Some(integrand_name)) => Ok(Some(vec![
+            state.find_generated_integrand_ref_by_name(integrand_name)?
+        ])),
+        (Some(process), None) => {
+            let process_id = state.resolve_process_ref(Some(process))?;
+            let process = &state.process_list.processes[process_id];
+            let generated = match &process.collection {
+                ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                    .iter()
+                    .filter(|(_, amplitude)| amplitude.integrand.is_some())
+                    .map(|(name, _)| (process_id, name.clone()))
+                    .collect::<Vec<_>>(),
+                ProcessCollection::CrossSections(cross_sections) => cross_sections
+                    .iter()
+                    .filter(|(_, cross_section)| cross_section.integrand.is_some())
+                    .map(|(name, _)| (process_id, name.clone()))
+                    .collect::<Vec<_>>(),
+            };
+            if generated.is_empty() {
+                return Err(eyre!(
+                    "Process '{}' has no generated integrands. Per-integrand model parameters are only supported for generated integrands.",
+                    process.definition.folder_name
+                ));
+            }
+            Ok(Some(generated))
+        }
+        (Some(process), Some(integrand_name)) => {
+            let process_id = state.resolve_process_ref(Some(process))?;
+            let canonical_name = state.process_list.processes[process_id]
+                .collection
+                .find_integrand(Some(integrand_name.clone()))?;
+            state
+                .process_list
+                .get_integrand(process_id, &canonical_name)
+                .with_context(|| {
+                    format!(
+                        "Per-integrand model parameters are only supported for generated integrands"
+                    )
+                })?;
+            Ok(Some(vec![(process_id, canonical_name)]))
+        }
+    }
+}
+
+fn parse_model_assignments(
+    state: &State,
+    values: &[ModelSetValue],
+) -> Result<Option<Vec<(String, Complex<F<f64>>)>>> {
+    if values
+        .iter()
+        .any(|value| matches!(value, ModelSetValue::Defaults))
+    {
+        if values.len() != 1 {
+            return Err(eyre!(
+                "Model parameter updates cannot mix 'defaults' with explicit PARAM=VALUE assignments"
+            ));
+        }
+        return Ok(None);
+    }
+
+    let assignments = values
+        .iter()
+        .map(|value| match value {
+            ModelSetValue::Assignment(KvPair { key, value }) => {
+                let parameter = state
+                    .model
+                    .get_parameter_opt(key)
+                    .filter(|parameter| parameter.nature == ParameterNature::External);
+                if parameter.is_none() {
+                    let possibilities = state
+                        .model_parameters
+                        .keys()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>();
+                    return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
+                        format!(
+                            "Possible model parameters are: {}",
+                            possibilities.join(", ")
+                        )
+                    });
+                }
+                let parameter_type = parameter.unwrap().parameter_type.clone();
+                let value = parse_model_parameter_value(value).with_context(|| {
+                    format!("While parsing model parameter value {value} for key '{key}'")
+                })?;
+                validate_model_parameter_type(key, parameter_type, &value)?;
+                Ok((key.clone(), value))
+            }
+            ModelSetValue::Defaults => unreachable!("defaults handled above"),
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Some(assignments))
+}
+
+fn apply_model_assignments(
+    settings: &mut RuntimeSettings,
+    default_model_parameters: &gammalooprs::model::InputParamCard<F<f64>>,
+    assignments: &[(String, Complex<F<f64>>)],
+) -> Result<()> {
+    for (parameter_name, value) in assignments {
+        let symbol = UFOSymbol::from(parameter_name.as_str());
+        let default_value = default_model_parameters.get(&symbol).ok_or_else(|| {
+            eyre!(
+                "Model parameter '{parameter_name}' cannot be overridden because it is not present in the shared top-level model_parameters.json"
+            )
+        })?;
+
+        if default_value == value {
+            settings.model.external_parameters.remove(parameter_name);
+        } else {
+            settings
+                .model
+                .external_parameters
+                .insert(parameter_name.clone(), (value.re, value.im));
+        }
+    }
+
+    Ok(())
+}
+
 impl Set {
     pub fn run(
         &self,
@@ -191,51 +236,63 @@ impl Set {
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<()> {
         match self {
-            Set::Model { pairs } => {
-                for KvPair { key, value } in pairs.iter() {
-                    let parameter = state
-                        .model
-                        .get_parameter_opt(key)
-                        .filter(|parameter| parameter.nature == ParameterNature::External);
-                    if parameter.is_none() {
-                        let possiblilities: Vec<String> = state
+            Set::Model { target, values } => {
+                let targets = resolve_generated_model_targets(state, target)?;
+                let assignments = parse_model_assignments(state, values)?;
+
+                if let Some(targets) = targets {
+                    let default_model_parameters = state.model_parameters.clone();
+                    if let Some(assignments) = assignments.as_ref() {
+                        for (process_id, integrand_name) in targets {
+                            let settings = state
+                                .process_list
+                                .get_integrand_mut(process_id, &integrand_name)?
+                                .get_mut_settings();
+                            apply_model_assignments(
+                                settings,
+                                &default_model_parameters,
+                                assignments,
+                            )?;
+                        }
+                    } else {
+                        for (process_id, integrand_name) in targets {
+                            let settings = state
+                                .process_list
+                                .get_integrand_mut(process_id, &integrand_name)?
+                                .get_mut_settings();
+                            settings.model = default_runtime_settings.model.clone();
+                        }
+                    }
+                } else {
+                    let Some(assignments) = assignments else {
+                        return Err(eyre!(
+                            "The 'defaults' shortcut for set model requires a process or integrand target"
+                        ));
+                    };
+
+                    for (parameter_name, value) in assignments {
+                        if let Some(parameter) = state
+                            .model_parameters
+                            .get_mut(&UFOSymbol::from(parameter_name.as_str()))
+                        {
+                            *parameter = value;
+                            continue;
+                        }
+                        let possibilities = state
                             .model_parameters
                             .keys()
                             .map(|s| s.to_string())
-                            .collect();
-                        return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
-                            format!(
-                                "Possible model parameters are: {}",
-                                possiblilities.join(", ")
-                            )
-                        });
+                            .collect::<Vec<_>>();
+                        return Err(eyre!("No model parameter named '{parameter_name}'"))
+                            .with_context(|| {
+                                format!(
+                                    "Possible model parameters are: {}",
+                                    possibilities.join(", ")
+                                )
+                            });
                     }
-                    let parameter_type = parameter.unwrap().parameter_type.clone();
-                    let value = parse_model_parameter_value(value).with_context(|| {
-                        format!("While parsing model parameter value {value} for key '{key}'")
-                    })?;
-                    validate_model_parameter_type(key, parameter_type, &value)?;
-
-                    if let Some(p) = state
-                        .model_parameters
-                        .get_mut(&UFOSymbol::from(key.as_str()))
-                    {
-                        *p = value;
-                        continue;
-                    }
-                    let possiblilities: Vec<String> = state
-                        .model_parameters
-                        .keys()
-                        .map(|s| s.to_string())
-                        .collect();
-                    return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
-                        format!(
-                            "Possible model parameters are: {}",
-                            possiblilities.join(", ")
-                        )
-                    });
+                    state.model_parameters.apply_to_model(&mut state.model)?;
                 }
-                state.model_parameters.apply_to_model(&mut state.model)?;
             }
             Set::BaseDir { path } => {
                 warn!(
@@ -787,29 +844,30 @@ mod test {
     use std::{str::FromStr, sync::Mutex};
 
     use clap::Parser;
-    use figment::{Figment, providers::Serialized};
+    use figment::{providers::Serialized, Figment};
     use gammalooprs::{
         model::{ParameterNature, ParameterType, UFOSymbol},
         observables::{FilterQuantity, QuantitySettings, SelectorDefinitionSettings},
         settings::RuntimeSettings,
-        utils::{F, test_utils::load_generic_model},
+        utils::{test_utils::load_generic_model, F},
     };
     use serde::{Deserialize, Serialize};
     use spenso::algebra::complex::Complex;
 
     use crate::{
-        CLISettings, Repl,
+        model_parameters::{
+            model_value_format_hint, parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT,
+            MODEL_REAL_VALUE_FORMAT_HINT,
+        },
         state::{ProcessRef, State},
         tracing::{get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override},
+        CLISettings, Repl,
     };
 
     use super::{
-        super::Commands, KvPair, ProcessAddTarget, ProcessRemoveTarget, ProcessSetArgs,
-        ProcessUpdateTarget, Set, SetArgs, apply_process_set_args, model_value_format_hint,
-        validate_model_parameter_type,
-    };
-    use super::{
-        MODEL_COMPLEX_VALUE_FORMAT_HINT, MODEL_REAL_VALUE_FORMAT_HINT, parse_model_parameter_value,
+        super::Commands, apply_process_set_args, validate_model_parameter_type, KvPair,
+        ModelSetValue, ProcessAddTarget, ProcessArgs, ProcessRemoveTarget, ProcessSetArgs,
+        ProcessUpdateTarget, Set, SetArgs,
     };
 
     #[test]
@@ -869,10 +927,9 @@ mod test {
             &Complex::new(F(1.0), F(2.0)),
         )
         .unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("cannot be assigned an imaginary component")
-        );
+        assert!(err
+            .to_string()
+            .contains("cannot be assigned an imaginary component"));
         assert!(err.to_string().contains(MODEL_REAL_VALUE_FORMAT_HINT));
     }
 
@@ -904,12 +961,48 @@ mod test {
     }
 
     #[test]
+    fn parse_set_model_targeted_defaults() {
+        let cmd = Set::from_str("set model -p epem_a_tth -i LO defaults").unwrap();
+
+        match cmd {
+            Set::Model { target, values } => {
+                assert_eq!(
+                    target.process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(target.integrand_name, Some("LO".to_string()));
+                assert_eq!(values, vec![ModelSetValue::Defaults]);
+            }
+            other => panic!("Expected set model command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_set_model_targeted_assignment() {
+        let cmd = Set::from_str("set model -i LO alpha=1.0+2.0i").unwrap();
+
+        match cmd {
+            Set::Model { target, values } => {
+                assert_eq!(target.process, None);
+                assert_eq!(target.integrand_name, Some("LO".to_string()));
+                assert_eq!(
+                    values,
+                    vec![ModelSetValue::Assignment(KvPair {
+                        key: "alpha".to_string(),
+                        value: "1.0+2.0i".to_string(),
+                    })]
+                );
+            }
+            other => panic!("Expected set model command, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn defaults_is_rejected_outside_set_process() {
         let err = SetArgs::Defaults.merge_figment(Figment::new()).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("'defaults' is only supported for 'set process'")
-        );
+        assert!(err
+            .to_string()
+            .contains("'defaults' is only supported for 'set process'"));
     }
 
     #[test]
@@ -1396,17 +1489,19 @@ integrate = 10
         state.model = model;
         state.model_parameters =
             gammalooprs::model::InputParamCard::default_from_model(&state.model);
-        assert!(
-            !state
-                .model_parameters
-                .contains_key(&UFOSymbol::from(internal_param.as_str()))
-        );
+        assert!(!state
+            .model_parameters
+            .contains_key(&UFOSymbol::from(internal_param.as_str())));
 
         let err = Set::Model {
-            pairs: vec![KvPair {
+            target: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+            values: vec![ModelSetValue::Assignment(KvPair {
                 key: internal_param.clone(),
                 value: "1.0".to_string(),
-            }],
+            })],
         }
         .run(
             &mut state,
@@ -1433,10 +1528,14 @@ integrate = 10
             .to_string();
 
         Set::Model {
-            pairs: vec![KvPair {
+            target: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+            values: vec![ModelSetValue::Assignment(KvPair {
                 key: parameter.clone(),
                 value: "-1.0e13-33.0e12i".to_string(),
-            }],
+            })],
         }
         .run(
             &mut state,
@@ -1470,10 +1569,14 @@ integrate = 10
             .to_string();
 
         let err = Set::Model {
-            pairs: vec![KvPair {
+            target: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+            values: vec![ModelSetValue::Assignment(KvPair {
                 key: parameter,
                 value: "1.0+2.0i".to_string(),
-            }],
+            })],
         }
         .run(
             &mut state,
@@ -1482,10 +1585,9 @@ integrate = 10
         )
         .unwrap_err();
 
-        assert!(
-            err.to_string()
-                .contains("cannot be assigned an imaginary component")
-        );
+        assert!(err
+            .to_string()
+            .contains("cannot be assigned an imaginary component"));
     }
 
     #[test]
@@ -1505,43 +1607,35 @@ integrate = 10
         )
         .unwrap();
 
-        assert!(
-            SetArgs::Kv {
-                pairs: vec![KvPair {
-                    key: "global.display_directive".to_string(),
-                    value: "warn".to_string(),
-                }]
-            }
-            .updates_global_display_directive()
-            .unwrap()
-        );
+        assert!(SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.display_directive".to_string(),
+                value: "warn".to_string(),
+            }]
+        }
+        .updates_global_display_directive()
+        .unwrap());
 
-        assert!(
-            SetArgs::String {
-                string: "[global]\ndisplay_directive = \"warn\"\n".to_string(),
-            }
-            .updates_global_display_directive()
-            .unwrap()
-        );
+        assert!(SetArgs::String {
+            string: "[global]\ndisplay_directive = \"warn\"\n".to_string(),
+        }
+        .updates_global_display_directive()
+        .unwrap());
 
-        assert!(
-            SetArgs::File {
-                file: file_path.clone(),
-            }
-            .updates_global_display_directive()
-            .unwrap()
-        );
+        assert!(SetArgs::File {
+            file: file_path.clone(),
+        }
+        .updates_global_display_directive()
+        .unwrap());
 
-        assert!(
-            !SetArgs::Kv {
-                pairs: vec![KvPair {
-                    key: "global.n_cores.generate".to_string(),
-                    value: "4".to_string(),
-                }]
-            }
-            .updates_global_display_directive()
-            .unwrap()
-        );
+        assert!(!SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.n_cores.generate".to_string(),
+                value: "4".to_string(),
+            }]
+        }
+        .updates_global_display_directive()
+        .unwrap());
 
         let _ = std::fs::remove_file(file_path);
     }
@@ -1563,43 +1657,35 @@ integrate = 10
         )
         .unwrap();
 
-        assert!(
-            SetArgs::Kv {
-                pairs: vec![KvPair {
-                    key: "global.logfile_directive".to_string(),
-                    value: "debug".to_string(),
-                }]
-            }
-            .updates_global_logfile_directive()
-            .unwrap()
-        );
+        assert!(SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.logfile_directive".to_string(),
+                value: "debug".to_string(),
+            }]
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
 
-        assert!(
-            SetArgs::String {
-                string: "[global]\nlogfile_directive = \"debug\"\n".to_string(),
-            }
-            .updates_global_logfile_directive()
-            .unwrap()
-        );
+        assert!(SetArgs::String {
+            string: "[global]\nlogfile_directive = \"debug\"\n".to_string(),
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
 
-        assert!(
-            SetArgs::File {
-                file: file_path.clone(),
-            }
-            .updates_global_logfile_directive()
-            .unwrap()
-        );
+        assert!(SetArgs::File {
+            file: file_path.clone(),
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
 
-        assert!(
-            !SetArgs::Kv {
-                pairs: vec![KvPair {
-                    key: "global.display_directive".to_string(),
-                    value: "warn".to_string(),
-                }]
-            }
-            .updates_global_logfile_directive()
-            .unwrap()
-        );
+        assert!(!SetArgs::Kv {
+            pairs: vec![KvPair {
+                key: "global.display_directive".to_string(),
+                value: "warn".to_string(),
+            }]
+        }
+        .updates_global_logfile_directive()
+        .unwrap());
 
         let _ = std::fs::remove_file(file_path);
     }
