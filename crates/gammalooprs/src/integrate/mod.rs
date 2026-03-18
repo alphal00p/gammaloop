@@ -318,7 +318,7 @@ struct IntegralResultCells {
     mwi: String,
 }
 
-const MAX_SHARED_TABLE_WIDTH: usize = 150;
+const DEFAULT_MAX_SHARED_TABLE_WIDTH: usize = 250;
 
 struct StatusTable {
     table: Table,
@@ -331,6 +331,10 @@ struct StatusTable {
 
 fn slot_label(slot_meta: &SlotMeta) -> String {
     format!("itg {}", slot_meta.key())
+}
+
+fn slot_key_label(slot_meta: &SlotMeta) -> String {
+    slot_meta.key()
 }
 
 fn format_max_eval_coordinate(value: F<f64>) -> String {
@@ -412,15 +416,11 @@ fn format_max_eval_sample(
 }
 
 fn format_iteration_points(points: usize) -> String {
-    format!("{:.0}K", points as f64 / 1000.0)
+    format_abbreviated_count(points)
 }
 
 fn format_total_points(points: usize) -> String {
-    if points >= 10_000_000 {
-        format!("{:.0}M", points as f64 / 1_000_000.0)
-    } else {
-        format!("{:.0}K", points as f64 / 1000.0)
-    }
+    format_abbreviated_count(points)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -877,13 +877,96 @@ fn format_percentage_sig(value: f64, significant_digits: usize) -> String {
     format!("{value:.decimals$}%")
 }
 
-fn format_signed_uncertainty(avg: F<f64>, err: F<f64>) -> String {
-    let formatted = utils::format_uncertainty(avg, err);
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum UncertaintyNotation {
+    Dynamic,
+    Scientific,
+}
+
+fn format_significant_percentage(
+    value: f64,
+    significant_digits: usize,
+    scientific_threshold: Option<(f64, f64)>,
+) -> String {
+    if !value.is_finite() {
+        return "None".red().to_string();
+    }
+
+    if value == 0.0 {
+        return format!("{:.*}%", significant_digits.saturating_sub(1), 0.0);
+    }
+
+    let abs_value = value.abs();
+    if scientific_threshold.is_some_and(|(upper, lower)| abs_value >= upper || abs_value < lower) {
+        return format!("{:.*e}%", significant_digits.saturating_sub(1), value);
+    }
+
+    let exponent = abs_value.log10().floor() as i32;
+    let decimals = (significant_digits as i32 - exponent - 1).max(0) as usize;
+    format!("{value:.decimals$}%")
+}
+
+fn should_use_scientific_uncertainty_notation(avg: F<f64>, err: F<f64>) -> bool {
+    let avg_abs = avg.abs().0;
+    let err_abs = err.abs().0;
+    avg_abs >= 1e6
+        || (avg_abs != 0.0 && avg_abs < 1e-5)
+        || (avg.is_zero() && !(1e-4..1e5).contains(&err_abs))
+}
+
+fn format_uncertainty_with_notation(
+    avg: F<f64>,
+    err: F<f64>,
+    notation: UncertaintyNotation,
+) -> String {
+    if !matches!(notation, UncertaintyNotation::Scientific)
+        && !should_use_scientific_uncertainty_notation(avg, err)
+    {
+        return utils::format_uncertainty(avg, err);
+    }
+
+    if !avg.0.is_finite() || !err.0.is_finite() {
+        return utils::format_uncertainty(avg, err);
+    }
+
+    let exponent = if avg.is_non_zero() {
+        avg.abs().0.log10().floor() as i32
+    } else if err.is_non_zero() {
+        err.abs().0.log10().floor() as i32
+    } else {
+        0
+    };
+    let scale = 10_f64.powi(exponent);
+    let mantissa = utils::format_uncertainty(F(avg.0 / scale), F(err.0 / scale));
+    format!("{mantissa}e{exponent}")
+}
+
+fn format_signed_uncertainty(avg: F<f64>, err: F<f64>, notation: UncertaintyNotation) -> String {
+    let formatted = format_uncertainty_with_notation(avg, err, notation);
     if avg.0.is_sign_negative() {
         formatted
     } else {
         format!("+{formatted}")
     }
+}
+
+fn format_abbreviated_count(value: usize) -> String {
+    if value < 1_000 {
+        return value.to_string();
+    }
+
+    let value = value as f64;
+    if value < 1_000_000.0 {
+        return format!("{:.2}K", value / 1_000.0);
+    }
+    if value < 1_000_000_000.0 {
+        return format!("{:.2}M", value / 1_000_000.0);
+    }
+    if value < 1_000_000_000_000.0 {
+        return format!("{:.2}B", value / 1_000_000_000.0);
+    }
+
+    format!("{:.3}T", value / 1_000_000_000_000.0)
 }
 
 fn build_integral_result_cells(
@@ -904,7 +987,7 @@ fn build_integral_result_cells(
             slot_label(slot_meta),
             format!("{:-2}", tag).blue().bold(),
         ),
-        value: format_signed_uncertainty(itg.avg, itg.err)
+        value: format_signed_uncertainty(itg.avg, itg.err, UncertaintyNotation::Scientific)
             .blue()
             .bold()
             .to_string(),
@@ -925,7 +1008,8 @@ fn format_relative_error_from_estimate(avg: F<f64>, err: F<f64>) -> String {
         return String::new();
     }
 
-    let formatted = format!("{:.3}%", (err / avg).abs().0 * 100.);
+    let formatted =
+        format_significant_percentage((err / avg).abs().0 * 100.0, 3, Some((1.0e4, 1.0e-4)));
     if (err / avg).abs().0 > 0.01 {
         formatted.red().to_string()
     } else {
@@ -934,7 +1018,7 @@ fn format_relative_error_from_estimate(avg: F<f64>, err: F<f64>) -> String {
 }
 
 fn format_chi_sq_cell(itg: &StatisticsAccumulator<F<f64>>, i_iter: usize) -> String {
-    let chi_sq = format!("{:.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64));
+    let chi_sq = format!("{:.3}", itg.chi_sq.0 / (i_iter as f64));
     if itg.chi_sq / F::<f64>::new_from_usize(i_iter) > F(5.) {
         chi_sq.red().to_string()
     } else {
@@ -987,7 +1071,7 @@ fn format_delta_cells_from_estimate(
 
 fn format_mwi_cell(itg: &StatisticsAccumulator<F<f64>>) -> String {
     let mwi_value = max_weight_impact(itg);
-    let formatted = format!("mwi: {:.4e}", mwi_value.0);
+    let formatted = format!("{:.4e}", mwi_value.0);
     if mwi_value > F(1.) {
         formatted.red().to_string()
     } else {
@@ -1112,9 +1196,15 @@ fn build_iteration_status_header_left(elapsed_time: Duration, iter: usize) -> St
 }
 
 fn build_iteration_status_header_middle(cur_points: usize, total_points: usize) -> String {
+    let per_iteration = format!(
+        "# samples per iteration = {}",
+        format_iteration_points(cur_points)
+    )
+    .blue()
+    .bold();
     format!(
-        "# samples per iteration = {} {}",
-        format_iteration_points(cur_points),
+        "{} {}",
+        per_iteration,
         format!("# samples total = {}", format_total_points(total_points))
             .bold()
             .green(),
@@ -1154,6 +1244,7 @@ fn build_iteration_results_table(
         value: String,
         relative_error: String,
         sample_fraction: String,
+        sample_count: String,
         target_pdf: String,
     }
 
@@ -1211,7 +1302,7 @@ fn build_iteration_results_table(
     }
 
     fn format_value_cell(avg: F<f64>, err: F<f64>) -> String {
-        format_signed_uncertainty(avg, err)
+        format_signed_uncertainty(avg, err, UncertaintyNotation::Scientific)
             .blue()
             .bold()
             .to_string()
@@ -1239,6 +1330,7 @@ fn build_iteration_results_table(
                         value: format_value_cell(accumulator.avg, accumulator.err),
                         relative_error: format_relative_error_cell(accumulator),
                         sample_fraction: String::new(),
+                        sample_count: String::new(),
                         target_pdf: String::new(),
                     })
                 }
@@ -1252,6 +1344,7 @@ fn build_iteration_results_table(
                         value: format_value_cell(avg, err),
                         relative_error: format_relative_error_from_estimate(avg, err),
                         sample_fraction: String::new(),
+                        sample_count: String::new(),
                         target_pdf: String::new(),
                     })
                 }
@@ -1272,6 +1365,13 @@ fn build_iteration_results_table(
                     } else {
                         String::new()
                     };
+                    let sample_count = if show_discrete_columns {
+                        format_abbreviated_count(bin.accumulator.processed_samples)
+                            .blue()
+                            .to_string()
+                    } else {
+                        String::new()
+                    };
                     let target_pdf = if show_discrete_columns {
                         discrete_context
                             .and_then(|ctx| ctx.pdfs.get(bin_index).copied())
@@ -1284,6 +1384,7 @@ fn build_iteration_results_table(
                         value: format_value_cell(bin.accumulator.avg, bin.accumulator.err),
                         relative_error: format_relative_error_cell(&bin.accumulator),
                         sample_fraction,
+                        sample_count,
                         target_pdf,
                     })
                 }
@@ -1376,7 +1477,7 @@ fn build_iteration_results_table(
         && (render_options.show_top_discrete_grid
             || render_options.show_discrete_contributions_sum);
     let has_target_columns = targets.first().is_some_and(Option::is_some);
-    let slot_block_width = if show_discrete_columns { 4 } else { 2 };
+    let slot_block_width = if show_discrete_columns { 5 } else { 2 };
     let metadata_columns = if has_target_columns { 4 } else { 2 };
     let n_columns = 2 + integration_state.slot_metas.len() * slot_block_width + metadata_columns;
 
@@ -1487,12 +1588,9 @@ fn build_iteration_results_table(
         String::new(),
         build_iteration_status_header_middle(cur_points, integration_state.num_points),
     ];
-    first_row.resize(n_columns - 1, String::new());
-    first_row.push(build_iteration_status_header_tail(
-        cores,
-        elapsed_time,
-        n_samples_evaluated,
-    ));
+    first_row.resize(n_columns, String::new());
+    first_row[n_columns - 2] =
+        build_iteration_status_header_tail(cores, elapsed_time, n_samples_evaluated);
     builder.push_record(first_row);
 
     let mut header_row = vec![
@@ -1522,6 +1620,7 @@ fn build_iteration_results_table(
                 record.push(slot_cells.relative_error.clone());
                 if show_discrete_columns {
                     record.push(slot_cells.sample_fraction.clone());
+                    record.push(slot_cells.sample_count.clone());
                     record.push(slot_cells.target_pdf.clone());
                 }
             }
@@ -1537,7 +1636,8 @@ fn build_iteration_results_table(
 
     let mut table = builder.build();
     table.modify((0, 0), Span::column(2));
-    table.modify((0, 2), Span::column((n_columns - 3) as isize));
+    table.modify((0, 2), Span::column((n_columns - 4) as isize));
+    table.modify((0, n_columns - 2), Span::column(2));
     table.modify((1, 0), Span::column(2));
     for (slot_index, _) in integration_state.slot_metas.iter().enumerate() {
         table.modify(
@@ -1563,7 +1663,7 @@ fn build_iteration_results_table(
     table.with(BorderCorrection::span());
     table.with(Modify::new(Rows::new(0..)).with(Alignment::left()));
     table.with(Modify::new(Cell::new(0, 2)).with(Alignment::center()));
-    table.with(Modify::new(Cell::new(0, n_columns - 1)).with(Alignment::center()));
+    table.with(Modify::new(Cell::new(0, n_columns - 2)).with(Alignment::center()));
     table.with(Modify::new(Rows::new(1..2)).with(Alignment::center()));
 
     let mut hidden_vertical_boundaries = vec![0usize];
@@ -1571,6 +1671,7 @@ fn build_iteration_results_table(
         let block_start = 2 + slot_index * slot_block_width;
         hidden_vertical_boundaries.extend(block_start..(block_start + slot_block_width - 1));
     }
+    hidden_vertical_boundaries.push(first_metadata_column);
     if has_target_columns {
         hidden_vertical_boundaries.push(first_metadata_column + 2);
     }
@@ -1638,30 +1739,42 @@ fn build_max_weight_details_table(
         "Max eval coordinates".bold().blue().to_string(),
     ]);
 
-    for (slot_meta, integral) in integration_state
+    let row_groups = integration_state
         .slot_metas
         .iter()
         .zip(integration_state.all_integrals.iter())
-    {
-        for (component, sign, positive) in max_weight_row_descriptors(render_options.phase_display)
-        {
-            let accumulator = match component {
-                ComponentKind::Real => &integral.re,
-                ComponentKind::Imag => &integral.im,
-            };
-            let Some((value, coordinates)) = max_eval_entry(accumulator, positive) else {
-                continue;
-            };
-            builder.push_record([
-                slot_label(slot_meta),
-                format!("{} [{}]", component.colorized_tag(), sign.blue()),
-                format!("{:+.16e}", value),
-                coordinates
-                    .map(|sample| {
-                        format_max_eval_sample(sample, &integration_state.discrete_axis_labels, &[])
-                    })
-                    .unwrap_or_else(|| "N/A".to_string()),
-            ]);
+        .filter_map(|(slot_meta, integral)| {
+            let rows = max_weight_row_descriptors(render_options.phase_display)
+                .into_iter()
+                .filter_map(|(component, sign, positive)| {
+                    let accumulator = match component {
+                        ComponentKind::Real => &integral.re,
+                        ComponentKind::Imag => &integral.im,
+                    };
+                    let (value, coordinates) = max_eval_entry(accumulator, positive)?;
+                    Some([
+                        slot_key_label(slot_meta).green().to_string(),
+                        format!("{} [{}]", component.colorized_tag(), sign.blue()),
+                        format!("{:+.16e}", value),
+                        coordinates
+                            .map(|sample| {
+                                format_max_eval_sample(
+                                    sample,
+                                    &integration_state.discrete_axis_labels,
+                                    &[],
+                                )
+                            })
+                            .unwrap_or_else(|| "N/A".to_string()),
+                    ])
+                })
+                .collect_vec();
+            (!rows.is_empty()).then_some(rows)
+        })
+        .collect_vec();
+
+    for group in &row_groups {
+        for row in group {
+            builder.push_record(row.clone());
         }
     }
 
@@ -1674,9 +1787,18 @@ fn build_max_weight_details_table(
     table.with(BorderCorrection::span());
     table.with(Modify::new(Rows::new(0..2)).with(Alignment::center()));
     table.with(Modify::new(Rows::new(2..)).with(Alignment::left()));
+
+    let mut separator_rows = vec![0usize, 1usize];
+    let mut row_offset = 1usize;
+    for (group_index, group) in row_groups.iter().enumerate() {
+        row_offset += group.len();
+        if group_index + 1 < row_groups.len() {
+            separator_rows.push(row_offset);
+        }
+    }
     StatusTable {
         table,
-        separator_after_rows: vec![0, 1],
+        separator_after_rows: separator_rows,
         hidden_vertical_boundaries: vec![0],
         full_row_vertical_count: 5,
         suppress_header_middle_separator: false,
@@ -1929,13 +2051,13 @@ fn insert_separator_rows(rendered: &str, separator_after_rows: &[usize]) -> Stri
     lines.join("\n")
 }
 
-fn render_tables_with_shared_width(mut tables: Vec<StatusTable>) -> String {
+fn render_tables_with_shared_width(mut tables: Vec<StatusTable>, max_table_width: usize) -> String {
     let max_width = tables
         .iter()
         .map(|table| table.table.total_width())
         .max()
         .unwrap_or(0)
-        .min(MAX_SHARED_TABLE_WIDTH);
+        .min(max_table_width.max(1));
 
     for table in &mut tables {
         if table.table.total_width() < max_width {
@@ -2086,6 +2208,7 @@ pub struct IntegrationStatusRenderOptions {
     pub show_discrete_contributions_sum: bool,
     pub contribution_sort: ContributionSortMode,
     pub show_max_weight_info_for_discrete_bins: bool,
+    pub max_table_width: usize,
 }
 
 impl IntegrationStatusRenderOptions {
@@ -2544,7 +2667,8 @@ where
     }
 
     if let Some(owner_core) = user_data.first() {
-        emit_observable_output_summary(
+        emit_results_output_summary(
+            workspace.as_deref(),
             &integration_state.slot_metas,
             owner_core,
             &emitted_latest_observable_paths,
@@ -2928,7 +3052,15 @@ fn write_integration_result_snapshots(
     Ok(())
 }
 
-fn emit_observable_output_summary(
+fn workspace_relative_display_path(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+fn emit_results_output_summary(
+    workspace: Option<&Path>,
     slot_metas: &[SlotMeta],
     slot_integrands: &[Integrand],
     emitted_paths: &[Option<PathBuf>],
@@ -2964,18 +3096,42 @@ fn emit_observable_output_summary(
     }
 
     if summary_rows.is_empty() {
-        return;
+        if workspace.is_none() {
+            return;
+        }
     }
 
     info!("");
-    info!("{}", "Observable outputs emitted:".green().bold());
+    info!("{}", "Integration results emitted:".green().bold());
+    if let Some(workspace) = workspace {
+        info!(
+            "results -> {}",
+            workspace_relative_display_path(workspace, &workspace_result_snapshot_path(workspace))
+        );
+        if output_control.write_iteration_archives {
+            info!(
+                "results iteration snapshots -> {}",
+                workspace_relative_display_path(
+                    workspace,
+                    &workspace_result_archive_path(workspace, 1),
+                )
+                .replace("iter_0001", "iter_*")
+            );
+        }
+    }
     for (slot_meta, final_path, iteration_pattern) in summary_rows {
-        info!("{} -> {}", slot_label(slot_meta), final_path.display());
+        let display_path = workspace
+            .map(|root| workspace_relative_display_path(root, final_path))
+            .unwrap_or_else(|| final_path.display().to_string());
+        info!("{} -> {}", slot_key_label(slot_meta), display_path);
         if let Some(iteration_pattern) = iteration_pattern {
+            let display_pattern = workspace
+                .map(|root| workspace_relative_display_path(root, Path::new(&iteration_pattern)))
+                .unwrap_or(iteration_pattern);
             info!(
                 "{} iteration snapshots -> {}",
-                format!("{} ", slot_label(slot_meta)).dimmed(),
-                iteration_pattern
+                format!("{} ", slot_key_label(slot_meta)).dimmed(),
+                display_pattern
             );
         }
     }
@@ -3442,7 +3598,7 @@ fn render_iteration_status_block(
         });
     }
 
-    render_tables_with_shared_width(tables)
+    render_tables_with_shared_width(tables, render_options.max_table_width)
 }
 
 pub fn render_saved_integration_summary(
@@ -3715,6 +3871,7 @@ mod tests {
             show_discrete_contributions_sum: false,
             contribution_sort: ContributionSortMode::Error,
             show_max_weight_info_for_discrete_bins: false,
+            max_table_width: DEFAULT_MAX_SHARED_TABLE_WIDTH,
         }
     }
 
@@ -3749,21 +3906,21 @@ mod tests {
             vec![None],
         );
         state.all_integrals = vec![accumulator];
-        let rendered = render_tables_with_shared_width(vec![build_max_weight_details_table(
-            &state,
-            &default_render_options(),
-        )]);
+        let rendered = render_tables_with_shared_width(
+            vec![build_max_weight_details_table(
+                &state,
+                &default_render_options(),
+            )],
+            DEFAULT_MAX_SHARED_TABLE_WIDTH,
+        );
 
         assert!(rendered.contains("Maximum weight details"), "{rendered}");
         assert!(rendered.contains("Integrand"), "{rendered}");
         assert!(rendered.contains("Max eval"), "{rendered}");
         assert!(rendered.contains("Max eval coordinates"), "{rendered}");
-        assert!(rendered.contains("itg proc@itg"), "{rendered}");
+        assert!(rendered.contains("proc@itg"), "{rendered}");
         assert!(rendered.contains("re [+]"), "{rendered}");
-        assert!(
-            rendered.contains("graph: 0, channel: 0, xs: [ "),
-            "{rendered}"
-        );
+        assert!(rendered.contains("idx: 0, idx: 0, xs: [ "), "{rendered}");
         assert!(rendered.contains("e-01"), "{rendered}");
         assert!(rendered.contains("e-03 ]"), "{rendered}");
         assert!(!rendered.contains(", 0.532"), "{rendered}");
@@ -3789,14 +3946,14 @@ mod tests {
 
         assert!(rendered.contains("Iteration #   1"), "{rendered}");
         assert!(
-            rendered.contains("# samples per iteration = 100K # samples total = 100K"),
+            rendered.contains("# samples per iteration = 100.00K # samples total = 100.00K"),
             "{rendered}"
         );
         assert!(rendered.contains("/sample/core"), "{rendered}");
         assert!(rendered.contains("Contribution"), "{rendered}");
         assert!(rendered.contains("proc_a@itg_a"), "{rendered}");
         assert!(rendered.contains("proc_b@itg_b"), "{rendered}");
-        assert!(rendered.contains("+0.000075(98)"), "{rendered}");
+        assert!(rendered.contains("+7.5(9.8)e-5"), "{rendered}");
         assert!(rendered.contains("Δ = 0.255σ"), "{rendered}");
         assert!(!rendered.contains("Integration statistics"), "{rendered}");
         let lines = rendered.lines().collect::<Vec<_>>();

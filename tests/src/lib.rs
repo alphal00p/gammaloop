@@ -104,6 +104,21 @@ impl CLIState {
         self.with_session(|session| session.apply_boot_run_history(run_history, run_history, false))
     }
 
+    pub fn apply_boot_run_history_with_conflict_resolution(
+        &mut self,
+        run_history: &RunHistory,
+        accept_conflicts: bool,
+    ) -> Result<ControlFlow<SaveState>> {
+        self.with_session(|session| {
+            session.apply_boot_run_history_with_conflict_resolver(
+                run_history,
+                run_history,
+                false,
+                |_| Ok(accept_conflicts),
+            )
+        })
+    }
+
     pub fn dismiss_pending_commands_block(&mut self, trigger: &str) -> bool {
         self.with_session(|session| Ok(session.dismiss_pending_commands_block(trigger)))
             .unwrap_or(false)

@@ -51,7 +51,6 @@ commands = [
 
     """integrate --process gg_hhh -i 3L --n-cores 10
         --workspace-path ./GL_OUTPUT/gg_hhh/3L/integration_workspace
-        --result-path ./GL_OUTPUT/gg_hhh/3L/integration_workspace/result.txt
         --restart
     """,
 

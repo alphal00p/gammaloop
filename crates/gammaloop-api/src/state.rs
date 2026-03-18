@@ -599,10 +599,33 @@ impl RunHistory {
         Ok(selected)
     }
 
-    pub fn merge_command_blocks(&mut self, command_blocks: &[CommandsBlock]) -> Result<()> {
+    pub fn conflicting_command_block_names(&self, command_blocks: &[CommandsBlock]) -> Vec<String> {
+        command_blocks
+            .iter()
+            .filter_map(|new_block| match self.command_block(&new_block.name) {
+                Some(existing_block) if !existing_block.semantically_eq(new_block) => {
+                    Some(new_block.name.clone())
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    pub fn merge_command_blocks_with_overwrite(
+        &mut self,
+        command_blocks: &[CommandsBlock],
+        overwrite_conflicts: bool,
+    ) -> Result<()> {
         for new_block in command_blocks {
-            match self.command_block(&new_block.name) {
-                Some(existing_block) if existing_block.semantically_eq(new_block) => {}
+            match self
+                .command_blocks
+                .iter()
+                .position(|existing| existing.name == new_block.name)
+            {
+                Some(index) if self.command_blocks[index].semantically_eq(new_block) => {}
+                Some(index) if overwrite_conflicts => {
+                    self.command_blocks[index] = new_block.clone();
+                }
                 Some(_) => {
                     return Err(eyre!(
                         "Run card command block '{}' redefines an existing block with different commands",
@@ -613,6 +636,10 @@ impl RunHistory {
             }
         }
         self.validate()
+    }
+
+    pub fn merge_command_blocks(&mut self, command_blocks: &[CommandsBlock]) -> Result<()> {
+        self.merge_command_blocks_with_overwrite(command_blocks, false)
     }
 
     pub fn apply_session_settings(

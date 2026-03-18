@@ -1,4 +1,7 @@
-use std::ops::ControlFlow;
+use std::{
+    io::{self, IsTerminal, Write},
+    ops::ControlFlow,
+};
 
 use color_eyre::{eyre::eyre, Result};
 use colored::Colorize;
@@ -18,6 +21,45 @@ use crate::{
     state::{CommandHistory, CommandsBlock, RunHistory, State},
     CLISettings,
 };
+
+fn format_command_block_conflict_message(conflicting_blocks: &[String]) -> String {
+    match conflicting_blocks {
+        [] => String::new(),
+        [single] => format!(
+            "Run card command block '{}' redefines an existing block with different commands",
+            single
+        ),
+        many => format!(
+            "Run card command blocks {} redefine existing blocks with different commands",
+            many.iter()
+                .map(|name| format!("'{}'", name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+fn prompt_command_block_conflict_override(conflicting_blocks: &[String]) -> Result<bool> {
+    let prompt = format!(
+        "{}. Proceed anyway? (it may break reproducibility of the state from run.toml) [y/n] > ",
+        format_command_block_conflict_message(conflicting_blocks)
+    );
+    let mut stderr = io::stderr();
+    let mut input = String::new();
+    loop {
+        eprint!("{prompt}");
+        stderr.flush()?;
+        input.clear();
+        io::stdin().read_line(&mut input)?;
+        match input.trim().to_ascii_lowercase().as_str() {
+            "y" | "yes" => return Ok(true),
+            "n" | "no" => return Ok(false),
+            _ => {
+                eprintln!("Please answer 'y' or 'n'.");
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct CliSessionState {
@@ -84,6 +126,34 @@ impl<'a> CliSession<'a> {
         effective_boot_run_history: &RunHistory,
         booted_existing_state: bool,
     ) -> Result<ControlFlow<SaveState>> {
+        let interactive_prompt_available = io::stdin().is_terminal() && io::stdout().is_terminal();
+        self.apply_boot_run_history_with_conflict_resolver(
+            boot_run_history,
+            effective_boot_run_history,
+            booted_existing_state,
+            |conflicting_blocks| {
+                if interactive_prompt_available {
+                    return prompt_command_block_conflict_override(conflicting_blocks);
+                }
+
+                Err(eyre!(
+                    "{}. Cannot continue non-interactively; rerun in an interactive terminal or align the command block definitions.",
+                    format_command_block_conflict_message(conflicting_blocks)
+                ))
+            },
+        )
+    }
+
+    pub fn apply_boot_run_history_with_conflict_resolver<F>(
+        &mut self,
+        boot_run_history: &RunHistory,
+        effective_boot_run_history: &RunHistory,
+        booted_existing_state: bool,
+        mut resolve_conflicts: F,
+    ) -> Result<ControlFlow<SaveState>>
+    where
+        F: FnMut(&[String]) -> Result<bool>,
+    {
         boot_run_history.validate()?;
 
         if booted_existing_state
@@ -107,7 +177,28 @@ impl<'a> CliSession<'a> {
         }
 
         let mut merged_history = self.run_history.clone();
-        merged_history.merge_command_blocks(&effective_boot_run_history.command_blocks)?;
+        let conflicting_blocks = merged_history
+            .conflicting_command_block_names(&effective_boot_run_history.command_blocks);
+        let overwrite_conflicting_blocks = if conflicting_blocks.is_empty() {
+            false
+        } else if self.cli_settings.session.read_only_state {
+            return Err(eyre!(
+                "{}. Cannot proceed while --read-only-state is enabled.",
+                format_command_block_conflict_message(&conflicting_blocks)
+            ));
+        } else if resolve_conflicts(&conflicting_blocks)? {
+            true
+        } else {
+            info!(
+                "{}",
+                "Boot run card application cancelled by user.".yellow()
+            );
+            return Ok(ControlFlow::Break(SaveState::default()));
+        };
+        merged_history.merge_command_blocks_with_overwrite(
+            &effective_boot_run_history.command_blocks,
+            overwrite_conflicting_blocks,
+        )?;
 
         for block in &effective_boot_run_history.command_blocks {
             let block_context = format!("command block '{}'", block.name);
@@ -126,8 +217,10 @@ impl<'a> CliSession<'a> {
             "boot",
         )?;
 
-        self.run_history
-            .merge_command_blocks(&effective_boot_run_history.command_blocks)?;
+        self.run_history.merge_command_blocks_with_overwrite(
+            &effective_boot_run_history.command_blocks,
+            overwrite_conflicting_blocks,
+        )?;
         effective_boot_run_history
             .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;
         self.execute_prepared_commands(prepared, HistoryMode::Record)

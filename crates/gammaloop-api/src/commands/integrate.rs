@@ -134,6 +134,10 @@ pub struct Integrate {
     #[arg(long = "no-stream")]
     pub no_stream: bool,
 
+    /// Maximum width used when normalizing integration status tables
+    #[arg(long = "max-table-width", default_value_t = 250)]
+    pub max_table_width: usize,
+
     /// Keep per-iteration result and observable snapshot files in addition to the latest snapshots
     #[arg(long = "write-results-for-each-iteration")]
     pub write_results_for_each_iteration: bool,
@@ -157,6 +161,7 @@ impl Default for Integrate {
             show_max_weight_info_for_discrete_bins: false,
             show_summary_only: false,
             no_stream: false,
+            max_table_width: 250,
             write_results_for_each_iteration: false,
         }
     }
@@ -506,6 +511,7 @@ impl Integrate {
             show_discrete_contributions_sum: self.show_discrete_contributions_sum,
             contribution_sort: self.sort_contributions.into(),
             show_max_weight_info_for_discrete_bins: self.show_max_weight_info_for_discrete_bins,
+            max_table_width: self.max_table_width,
         }
     }
 
@@ -899,6 +905,11 @@ impl Integrate {
         if self.show_summary_only && self.restart {
             return Err(eyre!(
                 "The integrate options `--show-summary-only` and `--restart` cannot be used together"
+            ));
+        }
+        if self.max_table_width == 0 {
+            return Err(eyre!(
+                "The integrate option `--max-table-width` must be greater than zero"
             ));
         }
 

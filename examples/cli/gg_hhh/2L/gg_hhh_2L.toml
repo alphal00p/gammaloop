@@ -70,7 +70,6 @@ commands = [
 
     """integrate --process gg_hhh -i 2L --n-cores 10
         --workspace-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace
-        --result-path ./GL_OUTPUT/gg_hhh/2L/integration_workspace/result.txt
         --restart
     """,
 

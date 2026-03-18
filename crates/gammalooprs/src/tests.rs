@@ -36,6 +36,7 @@ fn default_render_options() -> IntegrationStatusRenderOptions {
         show_discrete_contributions_sum: false,
         contribution_sort: ContributionSortMode::Error,
         show_max_weight_info_for_discrete_bins: false,
+        max_table_width: 250,
     }
 }
 

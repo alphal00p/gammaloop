@@ -3618,7 +3618,7 @@ mod tests {
         fs::write(&file_path, "test").unwrap();
 
         let line = format!(
-            "integrate --result-path={}",
+            "integrate --workspace-path={}",
             temp.path().join("pro").display()
         );
         let values = completion_values(&line, &CompletionState::default());

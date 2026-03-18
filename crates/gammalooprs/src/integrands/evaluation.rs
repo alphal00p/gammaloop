@@ -927,7 +927,7 @@ impl StatisticsCounter {
                     .green()
                     .to_string()
             })
-            .unwrap_or_else(|| pad_status_value("None", 9).red().to_string());
+            .unwrap_or_else(|| pad_status_value("N/A", 9));
         let nan_or_unstable = self.get_percentage_nan_or_unstable();
         let nan_or_unstable_display = if nan_or_unstable > 0.0 {
             pad_status_value(format_percentage(nan_or_unstable, 2), 9)
