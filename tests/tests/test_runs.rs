@@ -1541,6 +1541,141 @@ fn test_multi_integrand() -> Result<()> {
 }
 
 #[test]
+fn test_multi_integrand_with_local_model_parameters() -> Result<()> {
+    let test_name = "test_multi_integrand_with_local_model_parameters";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let box_default_baseline = scalar_topology_integrate_command(
+        test_name,
+        "box_default_model",
+        &[("box", "scalar_box")],
+        &[],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command(
+        "duplicate integrand -p box -i scalar_box --output_process_name box_copy --output_integrand_name scalar_box_copy",
+    )?;
+    cli.run_command("set model -p box_copy mass_scalar_2=1.0")?;
+    cli.run_command(&format!(
+        "set process -p box_copy -i scalar_box_copy {shared_integrator_settings}"
+    ))?;
+
+    let box_process = ProcessRef::Unqualified("box".to_string());
+    let box_integrand = "scalar_box".to_string();
+    let (box_process_id, box_integrand_name) = cli
+        .state
+        .find_integrand_ref(Some(&box_process), Some(&box_integrand))?;
+    let box_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_process_id,
+            &box_integrand_name,
+        )?;
+    assert_eq!(box_card.data.get("mass_scalar_2"), Some(&(F(2.0), F(0.0))));
+
+    let box_copy_process = ProcessRef::Unqualified("box_copy".to_string());
+    let box_copy_integrand = "scalar_box_copy".to_string();
+    let (box_copy_process_id, box_copy_integrand_name) = cli
+        .state
+        .find_integrand_ref(Some(&box_copy_process), Some(&box_copy_integrand))?;
+    let box_copy_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(
+            box_copy_process_id,
+            &box_copy_integrand_name,
+        )?;
+    assert_eq!(
+        box_copy_card.data.get("mass_scalar_2"),
+        Some(&(F(1.0), F(0.0)))
+    );
+
+    let box_local_baseline = scalar_topology_integrate_command(
+        test_name,
+        "box_local_model",
+        &[("box_copy", "scalar_box_copy")],
+        &[],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let box_default_target = single_slot_integral(&box_default_baseline).result;
+    let box_local_target = single_slot_integral(&box_local_baseline).result;
+
+    let shared_workspace = get_tests_workspace_path()
+        .join(test_name)
+        .join("box_default_and_local_model");
+    scalar_topology_integrate_command(
+        test_name,
+        "box_default_and_local_model",
+        &[("box", "scalar_box"), ("box_copy", "scalar_box_copy")],
+        &[
+            ("box@scalar_box", box_default_target),
+            ("box_copy@scalar_box_copy", box_local_target),
+        ],
+    )
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let multi_result = load_integration_result(&shared_workspace.join("integration_result.json"))?;
+
+    let box_default_slot = multi_result
+        .slot("box@scalar_box")
+        .expect("box slot must be present");
+    let box_local_slot = multi_result
+        .slot("box_copy@scalar_box_copy")
+        .expect("box_copy slot must be present");
+    assert!(
+        box_default_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&box_default_baseline), 4),
+        "default-model box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        box_default_slot.integral,
+        single_slot_integral(&box_default_baseline),
+    );
+    assert!(
+        box_local_slot
+            .integral
+            .is_compatible_with_result(single_slot_integral(&box_local_baseline), 4),
+        "local-model box correlated result deviates from baseline beyond 4 sigma: {} vs {}",
+        box_local_slot.integral,
+        single_slot_integral(&box_local_baseline),
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_integration_workspace_model_mismatch_requires_restart() -> Result<()> {
+    let test_name = "test_integration_workspace_model_mismatch_requires_restart";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let workspace_name = "box_workspace_model_mismatch";
+    scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[])
+        .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command("set model mass_scalar_2=1.0")?;
+    let mut resume_command =
+        scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[]);
+    resume_command.restart = false;
+    let err = resume_command
+        .run(&mut cli.state, &cli.cli_settings)
+        .expect_err("workspace resume should fail on model-parameter mismatch");
+    let err_text = format!("{err:?}");
+    assert!(err_text.contains("Workspace effective model parameters do not match"));
+    assert!(err_text.contains("box@scalar_box"));
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 fn test_broken_network() -> Result<()> {
     let cli = get_test_cli(
         Some("photon_box.toml".into()),

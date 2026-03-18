@@ -26,7 +26,7 @@ use crate::Integrand;
 use crate::integrands::HasIntegrand;
 use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
-use crate::model::Model;
+use crate::model::{Model, SerializableInputParamCard};
 use crate::observables::{EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat};
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
@@ -85,6 +85,7 @@ impl SlotMeta {
 pub struct IntegrationWorkspaceManifest {
     pub slots: Vec<SlotMeta>,
     pub targets: Vec<Option<Complex<F<f64>>>>,
+    pub effective_model_parameters: Vec<SerializableInputParamCard<F<f64>>>,
     pub training_slot: usize,
     pub integrator_settings_slot: usize,
 }
@@ -1804,7 +1805,7 @@ impl IntegrationStatusRenderOptions {
 /// Integrate function used for local runs
 pub fn havana_integrate<S>(
     settings: &RuntimeSettings,
-    model: &Model,
+    slot_models: Vec<Model>,
     slot_metas: Vec<SlotMeta>,
     slot_integrands: Vec<Integrand>,
     n_cores: usize,
@@ -1822,9 +1823,12 @@ where
             "At least one integrand must be selected for integration",
         ));
     }
-    if slot_metas.len() != slot_integrands.len() || slot_metas.len() != targets.len() {
+    if slot_metas.len() != slot_integrands.len()
+        || slot_metas.len() != slot_models.len()
+        || slot_metas.len() != targets.len()
+    {
         return Err(Report::msg(
-            "Multi-integrand integration received inconsistent slot metadata, integrands, or targets",
+            "Multi-integrand integration received inconsistent slot metadata, models, integrands, or targets",
         ));
     }
 
@@ -1929,115 +1933,130 @@ where
             cores,
         );
 
-        let core_results: Vec<Result<CoreResult>> = pool.install(|| {
-            user_data
-                .par_iter_mut()
-                .enumerate()
-                .zip(grids)
-                .zip(n_points_per_core)
-                .map(
-                    |(((core_id, slot_integrands), mut sampling_grid), n_points)| -> Result<CoreResult> {
-                        let mut rng = MonteCarloRng::new(
-                            settings.integrator.seed + integration_state.iter as u64,
-                            0,
-                        );
+        let core_results: Vec<Result<CoreResult>> =
+            pool.install(|| {
+                user_data
+                    .par_iter_mut()
+                    .enumerate()
+                    .zip(repeat_n(slot_models.clone(), cores))
+                    .zip(grids)
+                    .zip(n_points_per_core)
+                    .map(
+                        |(
+                            (((core_id, slot_integrands), slot_models), mut sampling_grid),
+                            n_points,
+                        )|
+                         -> Result<CoreResult> {
+                            let mut rng = MonteCarloRng::new(
+                                settings.integrator.seed + integration_state.iter as u64,
+                                0,
+                            );
 
-                        for _ in 0..(target_points_per_core * core_id) {
-                            let mut sample = Sample::new();
-                            sampling_grid.sample(&mut rng, &mut sample);
-                        }
-
-                        let samples = (0..n_points)
-                            .map(|_| {
+                            for _ in 0..(target_points_per_core * core_id) {
                                 let mut sample = Sample::new();
                                 sampling_grid.sample(&mut rng, &mut sample);
-                                sample
-                            })
-                            .collect_vec();
-
-                        let mut core_accumulators = vec![ComplexAccumulator::new(); n_slots];
-                        let mut slot_re_grids =
-                            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
-                        let mut slot_im_grids =
-                            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
-
-                        let mut results = Vec::new();
-                        for s in samples.iter() {
-                            if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
-                                break;
                             }
 
-                            for (
-                                slot_index,
-                                (((integrand, core_accumulator), re_grid), im_grid),
-                            ) in slot_integrands
-                                .iter_mut()
-                                .zip(core_accumulators.iter_mut())
-                                .zip(slot_re_grids.iter_mut())
-                                .zip(slot_im_grids.iter_mut())
-                                .enumerate()
-                            {
-                                let mut result = integrand.evaluate_sample(
-                                    s,
-                                    model,
-                                    s.get_weight(),
-                                    integration_state.iter,
-                                    false,
-                                    current_max_evals[slot_index],
-                                )?;
+                            let samples = (0..n_points)
+                                .map(|_| {
+                                    let mut sample = Sample::new();
+                                    sampling_grid.sample(&mut rng, &mut sample);
+                                    sample
+                                })
+                                .collect_vec();
 
-                                integrand.process_evaluation_result(&result);
-                                maybe_discard_generated_events_for_integrand(
-                                    &mut result,
-                                    &*integrand,
-                                );
-                                let jacobian =
-                                    result.parameterization_jacobian.unwrap_or(F(1.0));
-                                let effective_integrand_result =
-                                    result.integrand_result * Complex::new_re(jacobian);
+                            let mut core_accumulators = vec![ComplexAccumulator::new(); n_slots];
+                            let mut slot_re_grids =
+                                vec![
+                                    integration_state.sampling_grid.clone_without_samples();
+                                    n_slots
+                                ];
+                            let mut slot_im_grids =
+                                vec![
+                                    integration_state.sampling_grid.clone_without_samples();
+                                    n_slots
+                                ];
 
-                                core_accumulator.add_sample(
-                                    effective_integrand_result,
-                                    s.get_weight(),
-                                    Some(s),
-                                );
-                                re_grid
-                                    .add_training_sample(s, effective_integrand_result.re)
-                                    .map_err(Report::msg)?;
-                                im_grid
-                                    .add_training_sample(s, effective_integrand_result.im)
-                                    .map_err(Report::msg)?;
-
-                                if slot_index == 0 {
-                                    let training_eval = match settings.integrator.integrated_phase {
-                                        IntegratedPhase::Real => effective_integrand_result.re,
-                                        IntegratedPhase::Imag => effective_integrand_result.im,
-                                        IntegratedPhase::Both => unimplemented!(),
-                                    };
-
-                                    sampling_grid
-                                        .add_training_sample(s, training_eval)
-                                        .map_err(Report::msg)?;
+                            let mut results = Vec::new();
+                            for s in samples.iter() {
+                                if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                                    break;
                                 }
 
-                                results.push(result);
+                                for (
+                                    slot_index,
+                                    (((integrand, core_accumulator), re_grid), im_grid),
+                                ) in slot_integrands
+                                    .iter_mut()
+                                    .zip(core_accumulators.iter_mut())
+                                    .zip(slot_re_grids.iter_mut())
+                                    .zip(slot_im_grids.iter_mut())
+                                    .enumerate()
+                                {
+                                    let mut result = integrand.evaluate_sample(
+                                        s,
+                                        &slot_models[slot_index],
+                                        s.get_weight(),
+                                        integration_state.iter,
+                                        false,
+                                        current_max_evals[slot_index],
+                                    )?;
+
+                                    integrand.process_evaluation_result(&result);
+                                    maybe_discard_generated_events_for_integrand(
+                                        &mut result,
+                                        &*integrand,
+                                    );
+                                    let jacobian =
+                                        result.parameterization_jacobian.unwrap_or(F(1.0));
+                                    let effective_integrand_result =
+                                        result.integrand_result * Complex::new_re(jacobian);
+
+                                    core_accumulator.add_sample(
+                                        effective_integrand_result,
+                                        s.get_weight(),
+                                        Some(s),
+                                    );
+                                    re_grid
+                                        .add_training_sample(s, effective_integrand_result.re)
+                                        .map_err(Report::msg)?;
+                                    im_grid
+                                        .add_training_sample(s, effective_integrand_result.im)
+                                        .map_err(Report::msg)?;
+
+                                    if slot_index == 0 {
+                                        let training_eval = match settings
+                                            .integrator
+                                            .integrated_phase
+                                        {
+                                            IntegratedPhase::Real => effective_integrand_result.re,
+                                            IntegratedPhase::Imag => effective_integrand_result.im,
+                                            IntegratedPhase::Both => unimplemented!(),
+                                        };
+
+                                        sampling_grid
+                                            .add_training_sample(s, training_eval)
+                                            .map_err(Report::msg)?;
+                                    }
+
+                                    results.push(result);
+                                }
                             }
-                        }
 
-                        let evaluation_statistics =
-                            StatisticsCounter::from_evaluation_results(&results);
+                            let evaluation_statistics =
+                                StatisticsCounter::from_evaluation_results(&results);
 
-                        Ok(CoreResult {
-                            stats: evaluation_statistics,
-                            integrals: core_accumulators,
-                            sampling_grid,
-                            slot_re_grids,
-                            slot_im_grids,
-                        })
-                    },
-                )
-                .collect()
-        });
+                            Ok(CoreResult {
+                                stats: evaluation_statistics,
+                                integrals: core_accumulators,
+                                sampling_grid,
+                                slot_re_grids,
+                                slot_im_grids,
+                            })
+                        },
+                    )
+                    .collect()
+            });
         let core_results: Vec<CoreResult> = core_results.into_iter().collect::<Result<_>>()?;
 
         if is_interrupted() {

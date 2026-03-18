@@ -324,9 +324,8 @@ impl Set {
                 global_settings.sync_settings()?;
             }
             Self::DefaultRuntime { input } => {
-                let fig = Figment::from(Serialized::defaults(&default_runtime_settings));
-
-                *default_runtime_settings = input.merge_figment(fig)?.extract()?;
+                *default_runtime_settings =
+                    merge_runtime_settings_input(default_runtime_settings, input)?;
             }
             Self::Process { input, process } => {
                 let process_id = state.resolve_process_ref(process.process.as_ref())?;
@@ -631,11 +630,10 @@ fn apply_process_set_args(
             Ok(())
         }
         _ => {
-            let fig = Figment::from(Serialized::defaults(&settings));
             let input = input
                 .as_set_args()
                 .expect("non-mutation process set args should convert to SetArgs");
-            *settings = input.merge_figment(fig)?.extract()?;
+            *settings = merge_runtime_settings_input(settings, &input)?;
             Ok(())
         }
     }
@@ -794,6 +792,194 @@ fn infer_cli_value(raw: &str) -> Result<J> {
     Ok(J::String(raw.to_string()))
 }
 
+fn json_number_to_f64(value: &serde_json::Number) -> Result<f64> {
+    value
+        .as_f64()
+        .ok_or_else(|| eyre!("Could not represent JSON number '{value}' as f64"))
+}
+
+fn parse_runtime_model_setting_value(value: &J) -> Result<(F<f64>, F<f64>)> {
+    match value {
+        J::Number(number) => Ok((F(json_number_to_f64(number)?), F(0.0))),
+        J::String(string) => {
+            let parsed = parse_model_parameter_value(string)?;
+            Ok((parsed.re, parsed.im))
+        }
+        J::Array(entries) if entries.len() == 2 => {
+            let parse_component = |entry: &J| -> Result<F<f64>> {
+                match entry {
+                    J::Number(number) => Ok(F(json_number_to_f64(number)?)),
+                    other => Err(eyre!(
+                        "Runtime model setting components must be numeric, found {other:?}"
+                    )),
+                }
+            };
+            Ok((parse_component(&entries[0])?, parse_component(&entries[1])?))
+        }
+        other => Err(eyre!(
+            "Runtime model settings must be specified as a number, a complex string, or a two-element numeric array, found {other:?}"
+        )),
+    }
+}
+
+fn extract_runtime_model_updates_from_json(
+    value: &mut J,
+) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
+    let Some(object) = value.as_object_mut() else {
+        return Ok(BTreeMap::new());
+    };
+
+    let Some(model_value) = object.remove("model") else {
+        return Ok(BTreeMap::new());
+    };
+
+    let J::Object(model_object) = model_value else {
+        return Err(eyre!(
+            "The runtime settings 'model' block must be a table/object"
+        ));
+    };
+
+    model_object
+        .into_iter()
+        .map(|(parameter_name, value)| {
+            parse_runtime_model_setting_value(&value)
+                .map(|parsed| (parameter_name.clone(), parsed))
+                .with_context(|| format!("While parsing runtime model setting '{parameter_name}'"))
+        })
+        .collect()
+}
+
+fn extract_runtime_model_updates_from_toml(
+    value: &mut toml::Value,
+) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
+    let Some(table) = value.as_table_mut() else {
+        return Ok(BTreeMap::new());
+    };
+
+    let Some(model_value) = table.remove("model") else {
+        return Ok(BTreeMap::new());
+    };
+
+    let mut model_json = serde_json::json!({ "model": serde_json::to_value(model_value)? });
+    extract_runtime_model_updates_from_json(&mut model_json)
+}
+
+fn merge_runtime_settings_input(
+    settings: &RuntimeSettings,
+    input: &SetArgs,
+) -> Result<RuntimeSettings> {
+    let mut settings_without_model = settings.clone();
+    let preserved_model = settings_without_model.model.clone();
+    settings_without_model.model = Default::default();
+
+    let mut merged_settings: Option<RuntimeSettings> = None;
+    let mut model_updates = BTreeMap::new();
+
+    match input {
+        SetArgs::File { file } => {
+            let ext = file
+                .extension()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            match ext.as_str() {
+                "toml" => {
+                    let raw = fs::read_to_string(file).with_context(|| {
+                        format!("Trying to read runtime settings file {}", file.display())
+                    })?;
+                    let mut value = toml::from_str::<toml::Value>(&raw).with_context(|| {
+                        format!(
+                            "Trying to parse TOML runtime settings file {}",
+                            file.display()
+                        )
+                    })?;
+                    model_updates = extract_runtime_model_updates_from_toml(&mut value)?;
+                    if value.as_table().is_some_and(|table| !table.is_empty()) {
+                        let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                        merged_settings = Some(
+                            fig.merge(figment::providers::Toml::string(&toml::to_string(&value)?))
+                                .extract()?,
+                        );
+                    }
+                }
+                "json" => {
+                    let raw = fs::read_to_string(file).with_context(|| {
+                        format!("Trying to read runtime settings file {}", file.display())
+                    })?;
+                    let mut value = serde_json::from_str::<J>(&raw).with_context(|| {
+                        format!(
+                            "Trying to parse JSON runtime settings file {}",
+                            file.display()
+                        )
+                    })?;
+                    model_updates = extract_runtime_model_updates_from_json(&mut value)?;
+                    if value.as_object().is_some_and(|object| !object.is_empty()) {
+                        let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                        merged_settings = Some(
+                            fig.merge(figment::providers::Json::string(&serde_json::to_string(
+                                &value,
+                            )?))
+                            .extract()?,
+                        );
+                    }
+                }
+                _ => {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Unsupported settings file extension: {}",
+                        ext
+                    ));
+                }
+            }
+        }
+        SetArgs::String { string } => {
+            let mut value = toml::from_str::<toml::Value>(string)
+                .with_context(|| "Trying to parse runtime settings TOML string")?;
+            model_updates = extract_runtime_model_updates_from_toml(&mut value)?;
+            if value.as_table().is_some_and(|table| !table.is_empty()) {
+                let fig = Figment::from(Serialized::defaults(&settings_without_model));
+                merged_settings = Some(
+                    fig.merge(figment::providers::Toml::string(&toml::to_string(&value)?))
+                        .extract()?,
+                );
+            }
+        }
+        SetArgs::Kv { pairs } => {
+            let mut fig = Figment::from(Serialized::defaults(&settings_without_model));
+            let mut saw_non_model_pair = false;
+            for KvPair { key, value } in pairs {
+                if let Some(parameter_name) = key.strip_prefix("model.") {
+                    model_updates.insert(
+                        parameter_name.to_string(),
+                        parse_runtime_model_setting_value(&infer_cli_value(value)?).with_context(
+                            || format!("While parsing runtime model setting '{parameter_name}'"),
+                        )?,
+                    );
+                } else {
+                    saw_non_model_pair = true;
+                    fig = fig.adjoin((key.clone(), infer_cli_value(value)?));
+                }
+            }
+
+            if saw_non_model_pair {
+                merged_settings = Some(fig.extract()?);
+            }
+        }
+        SetArgs::Stored => {}
+        SetArgs::Defaults => unreachable!("defaults should be handled by the caller"),
+    }
+
+    let mut merged_settings = merged_settings.unwrap_or_else(|| settings.clone());
+    merged_settings.model = preserved_model;
+    for (parameter_name, value) in model_updates {
+        merged_settings
+            .model
+            .external_parameters
+            .insert(parameter_name, value);
+    }
+
+    Ok(merged_settings)
+}
+
 fn yaml_to_json(v: Y) -> Result<J> {
     match v {
         Y::Null => Ok(J::Null),
@@ -941,6 +1127,48 @@ mod test {
             &Complex::new(F(1.0), F(2.0)),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn merge_runtime_settings_input_preserves_existing_model_overrides() {
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(2.0), F(0.0)));
+
+        let merged = super::merge_runtime_settings_input(
+            &settings,
+            &SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "integrator.n_start".to_string(),
+                    value: "123".to_string(),
+                }],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(merged.integrator.n_start, 123);
+        assert_eq!(
+            merged.model.external_parameters.get("mass_scalar_2"),
+            Some(&(F(2.0), F(0.0)))
+        );
+    }
+
+    #[test]
+    fn merge_runtime_settings_input_accepts_model_block_updates() {
+        let merged = super::merge_runtime_settings_input(
+            &RuntimeSettings::default(),
+            &SetArgs::String {
+                string: "[model]\nmass_scalar_2 = [1.0, 0.0]\n".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            merged.model.external_parameters.get("mass_scalar_2"),
+            Some(&(F(1.0), F(0.0)))
+        );
     }
 
     #[test]

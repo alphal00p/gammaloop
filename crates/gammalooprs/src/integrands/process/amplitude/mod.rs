@@ -5,9 +5,9 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 
-use color_eyre::Result;
+use color_eyre::{Help, Result};
 
-use eyre::Context;
+use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -48,6 +48,7 @@ use crate::{
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
+        amplitude_counterterm::AmplitudeCountertermAtom,
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
@@ -111,6 +112,12 @@ impl AmplitudeGraphTerm {
             .threshold_counterterms
             .iter()
             .map(|ct| ct.to_evaluator(&graph.graph.param_builder, &orientations, settings))
+            .collect();
+        threshold_counterterm.generated_mask = graph
+            .derived_data
+            .threshold_counterterms
+            .iter()
+            .map(AmplitudeCountertermAtom::is_generated)
             .collect();
 
         threshold_counterterm.esurface_map = esurface_map;
@@ -546,6 +553,54 @@ impl AmplitudeIntegrand {
             })
             .collect()
     }
+
+    fn validate_runtime_threshold_counterterms(
+        &self,
+        existing_esurfaces: &TiVec<GroupId, ExistingEsurfaces>,
+    ) -> Result<()> {
+        for (group_id, group_existing_esurfaces) in existing_esurfaces.iter_enumerated() {
+            for group_esurface_id in group_existing_esurfaces.iter().copied() {
+                for (graph_group_pos, local_esurface_id) in self.data.group_derived_data[group_id]
+                    .esurface_map[group_esurface_id]
+                    .iter_enumerated()
+                    .filter_map(|(graph_group_pos, local_esurface_id)| {
+                        local_esurface_id
+                            .map(|local_esurface_id| (graph_group_pos, local_esurface_id))
+                    })
+                {
+                    let graph_id = self.data.graph_group_structure[group_id][graph_group_pos];
+                    let graph_term = &self.data.graph_terms[graph_id];
+                    let is_generated = graph_term
+                        .threshold_counterterm
+                        .generated_mask
+                        .get(local_esurface_id)
+                        .copied()
+                        .ok_or_else(|| {
+                            eyre!(
+                                "Threshold counterterm generation mask is inconsistent for graph '{}' and e-surface {}",
+                                graph_term.graph.name,
+                                local_esurface_id.0
+                            )
+                        })?;
+
+                    if !is_generated {
+                        return Err(eyre!(
+                            "Amplitude integrand '{}' was generated with specialized threshold-subtraction assumptions, but the current runtime model parameters require a trimmed threshold counterterm for graph '{}' and group e-surface {} ({})",
+                            self.name(),
+                            graph_term.graph.name,
+                            group_esurface_id.0,
+                            self.data.group_derived_data[group_id].esurface_atoms[group_esurface_id]
+                        ))
+                        .with_note(|| {
+                            "Regenerate the integrand or restore compatible shared/per-integrand model parameters.".to_string()
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl ProcessIntegrandImpl for AmplitudeIntegrand {
@@ -646,6 +701,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         if !self.settings.subtraction.disable_threshold_subtraction && !is_tree_level {
             debug!("esurface existence check");
             let existing_esurfaces = self.get_existing_esurfaces(model);
+            self.validate_runtime_threshold_counterterms(&existing_esurfaces)?;
             for (group_id, existing_esurfaces) in existing_esurfaces.iter_enumerated() {
                 debug!(
                     "solving overlap for group {}, number of thresholds: {}",

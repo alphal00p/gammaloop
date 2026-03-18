@@ -63,7 +63,7 @@ use crate::utils::GS;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{function, get_symbol, parse, symbol};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SerializableInputParamCard<T> {
     pub data: BTreeMap<String, (T, T)>,
 }

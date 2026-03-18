@@ -28,6 +28,7 @@ use gammalooprs::{
         IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
         IntegrationWorkspaceManifest, SlotMeta,
     },
+    model::{Model, SerializableInputParamCard},
     settings::{
         runtime::{IntegratedPhase, IntegrationResult},
         RuntimeSettings,
@@ -575,6 +576,7 @@ impl Integrate {
         &self,
         state: &mut State,
         selected_slots: &[ResolvedIntegrandSlot],
+        current_effective_model_parameters: &[SerializableInputParamCard<F<f64>>],
         workspace_path: &std::path::Path,
         targets: &mut Vec<Option<Complex<F<f64>>>>,
     ) -> Result<Option<IntegrationState>> {
@@ -599,6 +601,20 @@ impl Integrate {
                 if manifest.targets != *targets {
                     warn!("targets have changed with respect to workspace, reverting changes");
                     *targets = manifest.targets.clone();
+                }
+                let mismatched_slots = selected_slots
+                    .iter()
+                    .zip(manifest.effective_model_parameters.iter())
+                    .zip(current_effective_model_parameters.iter())
+                    .filter_map(|((slot, saved_card), current_card)| {
+                        (saved_card != current_card).then(|| slot.slot_meta.key())
+                    })
+                    .collect_vec();
+                if !mismatched_slots.is_empty() {
+                    return Err(eyre!(
+                        "Workspace effective model parameters do not match the current state for {}. Resume requires an exact match; use --restart or restore the shared/per-integrand model parameters.",
+                        mismatched_slots.join(", ")
+                    ));
                 }
 
                 info!(
@@ -677,6 +693,7 @@ impl Integrate {
         &self,
         state: &mut State,
         selected_slots: &[ResolvedIntegrandSlot],
+        slot_models: &[Model],
     ) -> Result<Vec<gammalooprs::integrands::process::ProcessIntegrand>> {
         info!(
             "Gammaloop now integrates {}",
@@ -688,12 +705,43 @@ impl Integrate {
 
         selected_slots
             .iter()
+            .zip(slot_models.iter())
             .map(|slot| {
+                let (slot, model) = slot;
                 let gloop_integrand = state
                     .process_list
                     .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?;
-                gloop_integrand.warm_up(&state.model)?;
+                gloop_integrand.warm_up(model)?;
                 Ok(gloop_integrand.clone())
+            })
+            .collect()
+    }
+
+    fn resolve_slot_models(
+        &self,
+        state: &State,
+        selected_slots: &[ResolvedIntegrandSlot],
+    ) -> Result<Vec<Model>> {
+        selected_slots
+            .iter()
+            .map(|slot| {
+                state.resolve_model_for_integrand(slot.process_id, &slot.slot_meta.integrand_name)
+            })
+            .collect()
+    }
+
+    fn resolve_effective_model_parameters(
+        &self,
+        state: &State,
+        selected_slots: &[ResolvedIntegrandSlot],
+    ) -> Result<Vec<SerializableInputParamCard<F<f64>>>> {
+        selected_slots
+            .iter()
+            .map(|slot| {
+                state.resolve_effective_model_parameter_card_for_integrand(
+                    slot.process_id,
+                    &slot.slot_meta.integrand_name,
+                )
             })
             .collect()
     }
@@ -736,6 +784,7 @@ impl Integrate {
         slot_integrands: &[gammalooprs::integrands::process::ProcessIntegrand],
         selected_slots: &[ResolvedIntegrandSlot],
         targets: &[Option<Complex<F<f64>>>],
+        effective_model_parameters: &[SerializableInputParamCard<F<f64>>],
         workspace_path: &std::path::Path,
     ) -> Result<()> {
         let manifest = IntegrationWorkspaceManifest {
@@ -744,6 +793,7 @@ impl Integrate {
                 .map(|slot| slot.slot_meta.clone())
                 .collect(),
             targets: targets.to_vec(),
+            effective_model_parameters: effective_model_parameters.to_vec(),
             training_slot: 0,
             integrator_settings_slot: 0,
         };
@@ -848,13 +898,18 @@ impl Integrate {
             );
         }
         let mut targets = self.resolve_targets(&selected_slots)?;
+        let slot_models = self.resolve_slot_models(state, &selected_slots)?;
+        let effective_model_parameters =
+            self.resolve_effective_model_parameters(state, &selected_slots)?;
         let integration_state = self.load_or_prepare_workspace_state(
             state,
             &selected_slots,
+            &effective_model_parameters,
             &workspace_path,
             &mut targets,
         )?;
-        let slot_integrands = self.warm_and_clone_integrands(state, &selected_slots)?;
+        let slot_integrands =
+            self.warm_and_clone_integrands(state, &selected_slots, &slot_models)?;
         self.validate_slot_compatibility(&selected_slots, &slot_integrands)?;
         let settings = slot_integrands[0].get_settings().clone();
         let render_options =
@@ -863,6 +918,7 @@ impl Integrate {
             &slot_integrands,
             &selected_slots,
             &targets,
+            &effective_model_parameters,
             &workspace_path,
         )?;
 
@@ -884,7 +940,7 @@ impl Integrate {
 
         let result = havana_integrate(
             &settings,
-            &state.model,
+            slot_models,
             selected_slots
                 .iter()
                 .map(|slot| slot.slot_meta.clone())

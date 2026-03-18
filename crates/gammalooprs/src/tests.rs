@@ -77,7 +77,7 @@ fn compare_integration(
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(
                 settings,
-                model,
+                vec![model.clone()],
                 vec![slot_meta.clone()],
                 vec![crate::integrand_factory(settings)],
                 N_CORES_FOR_INTEGRATION_IN_TESTS,
@@ -106,7 +106,7 @@ fn compare_integration(
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(
                 settings,
-                model,
+                vec![model.clone()],
                 vec![slot_meta.clone()],
                 vec![crate::integrand_factory(settings)],
                 N_CORES_FOR_INTEGRATION_IN_TESTS,
@@ -137,7 +137,7 @@ fn compare_integration(
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(
                 settings,
-                model,
+                vec![model.clone()],
                 vec![slot_meta.clone()],
                 vec![crate::integrand_factory(settings)],
                 N_CORES_FOR_INTEGRATION_IN_TESTS,
@@ -168,7 +168,7 @@ fn compare_integration(
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(
                 settings,
-                model,
+                vec![model.clone()],
                 vec![slot_meta],
                 vec![crate::integrand_factory(settings)],
                 N_CORES_FOR_INTEGRATION_IN_TESTS,
