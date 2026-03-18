@@ -1257,9 +1257,13 @@ fn build_iteration_status_header_left(
     live_progress: Option<LiveIterationProgress>,
 ) -> String {
     let iteration_label = if live_progress.is_some() {
-        format!("Iteration #{:-4} (running)", iter).bold().green()
+        format!("Iteration #{:-4} ( running   )", iter)
+            .bold()
+            .green()
     } else {
-        format!("Iteration #{:-4}", iter).bold().green()
+        format!("Iteration #{:-4} ( completed )", iter)
+            .bold()
+            .green()
     };
 
     format!(
@@ -4272,7 +4276,10 @@ mod tests {
             None,
         );
 
-        assert!(rendered.contains("Iteration #   1"), "{rendered}");
+        assert!(
+            rendered.contains("Iteration #   1 ( completed )"),
+            "{rendered}"
+        );
         assert!(
             rendered.contains("# samples per iteration = 100.00K # samples total = 100.00K"),
             "{rendered}"
@@ -4344,7 +4351,10 @@ mod tests {
             }),
         );
 
-        assert!(rendered.contains("Iteration #   2 (running)"), "{rendered}");
+        assert!(
+            rendered.contains("Iteration #   2 ( running   )"),
+            "{rendered}"
+        );
         assert!(
             rendered.contains("Iteration progress 25.00K/100.00K"),
             "{rendered}"
