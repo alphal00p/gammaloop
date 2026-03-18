@@ -2134,7 +2134,7 @@ fn lu_differential_integration_writes_json_observables() -> Result<()> {
 
     assert!(single_slot_integral(&integration_result).neval > 0);
     let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
-    let iteration_file = slot_workspace.join("observables_iter_0001.json");
+    let iteration_file = slot_workspace.join("observables_final_iteration_0001.json");
     let final_file = slot_workspace.join("observables_final.json");
     assert!(iteration_file.exists());
     assert!(final_file.exists());
@@ -2145,6 +2145,44 @@ fn lu_differential_integration_writes_json_observables() -> Result<()> {
         gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
     assert!(iter_bundle.histograms.contains_key("leading_jet_pt_hist"));
     assert!(final_bundle.histograms.contains_key("leading_jet_pt_hist"));
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result<()> {
+    let _hack = enable_lu_e2e_hack();
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json integrator.observables_output.per_iteration=false",
+    )?;
+
+    let workspace =
+        get_tests_workspace_path().join("lu_differential_integration_json/cli_flag_workspace");
+    let result_path = workspace.join("integration_results.yaml");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        result_path: Some(result_path),
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        write_observables_each_iteration: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    assert!(
+        slot_workspace
+            .join("observables_final_iteration_0001.json")
+            .exists()
+    );
+    assert!(slot_workspace.join("observables_final.json").exists());
 
     Ok(())
 }
@@ -2200,7 +2238,135 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
     let hwu_contents = std::fs::read_to_string(hwu_file)?;
     assert!(hwu_contents.contains("<histogram>"));
     assert!(hwu_contents.contains("leading_jet_pt_hist"));
-    assert!(!slot_workspace.join("observables_iter_0001.hwu").exists());
+    assert!(
+        !slot_workspace
+            .join("observables_final_iteration_0001.hwu")
+            .exists()
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
+    let _hack = enable_lu_e2e_hack();
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json integrator.observables_output.per_iteration=false",
+    )?;
+
+    let workspace =
+        get_tests_workspace_path().join("lu_differential_integration_json/resume_workspace");
+    let result_path = workspace.join("integration_results.yaml");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        result_path: Some(result_path.clone()),
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let (process_id, resolved_integrand_name) = cli
+        .state
+        .find_integrand_ref(None, Some(&"default".to_string()))?;
+    let slot_meta = gammalooprs::integrate::SlotMeta {
+        process_name: cli.state.process_list.processes[process_id]
+            .definition
+            .folder_name
+            .clone(),
+        integrand_name: resolved_integrand_name,
+    };
+    let final_file = slot_workspace.join("observables_final.json");
+    let checkpoint_file =
+        gammalooprs::integrate::observable_resume_state_path(&workspace, &slot_meta, 1);
+    assert!(checkpoint_file.exists());
+    let before_resume =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        result_path: Some(result_path),
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: false,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let after_resume =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+    assert_eq!(before_resume, after_resume);
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
+    let _hack = enable_lu_e2e_hack();
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    configure_differential_leading_jet_selector(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu integrator.observables_output.per_iteration=false",
+    )?;
+
+    let workspace =
+        get_tests_workspace_path().join("lu_differential_integration_hwu/resume_workspace");
+    let result_path = workspace.join("integration_results.yaml");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        result_path: Some(result_path.clone()),
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let final_file = slot_workspace.join("observables_final.hwu");
+    let before_resume = std::fs::read_to_string(&final_file)?;
+    let (process_id, resolved_integrand_name) = cli
+        .state
+        .find_integrand_ref(None, Some(&"default".to_string()))?;
+    let slot_meta = gammalooprs::integrate::SlotMeta {
+        process_name: cli.state.process_list.processes[process_id]
+            .definition
+            .folder_name
+            .clone(),
+        integrand_name: resolved_integrand_name,
+    };
+    let checkpoint_file =
+        gammalooprs::integrate::observable_resume_state_path(&workspace, &slot_meta, 1);
+    assert!(checkpoint_file.exists());
+
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        result_path: Some(result_path),
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: false,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let after_resume = std::fs::read_to_string(final_file)?;
+    assert_eq!(before_resume, after_resume);
 
     Ok(())
 }

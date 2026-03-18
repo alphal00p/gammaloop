@@ -1428,6 +1428,16 @@ impl ObservableSnapshotBundle {
         Ok(())
     }
 
+    pub fn into_accumulator_bundle(self) -> ObservableAccumulatorBundle {
+        ObservableAccumulatorBundle {
+            histograms: self
+                .histograms
+                .into_iter()
+                .map(|(name, histogram)| (name, histogram.into_accumulator_state()))
+                .collect(),
+        }
+    }
+
     pub fn merge_in_place(&mut self, other: &ObservableSnapshotBundle) -> Result<()> {
         for (name, other_histogram) in other.histograms.iter() {
             let histogram = self
@@ -1666,6 +1676,24 @@ impl EventProcessingRuntime {
                 .map(|(name, observable)| (name.clone(), observable.snapshot()))
                 .collect(),
         }
+    }
+
+    pub fn restore_snapshot_bundle(&mut self, bundle: &ObservableSnapshotBundle) -> Result<()> {
+        if self.observables.len() != bundle.histograms.len() {
+            return Err(eyre!(
+                "Cannot restore observables from a snapshot with a different histogram count"
+            ));
+        }
+
+        for (name, observable) in self.observables.iter_mut() {
+            let snapshot = bundle
+                .histograms
+                .get(name)
+                .ok_or_else(|| eyre!("Cannot restore unknown histogram snapshot '{}'", name))?;
+            observable.restore_snapshot(snapshot)?;
+        }
+
+        Ok(())
     }
 
     pub fn accumulator_bundle(&self) -> ObservableAccumulatorBundle {
@@ -2085,6 +2113,12 @@ impl Observables {
         }
     }
 
+    pub(crate) fn restore_snapshot(&mut self, snapshot: &HistogramSnapshot) -> Result<()> {
+        match self {
+            Observables::Histogram(observable) => observable.restore_snapshot(snapshot),
+        }
+    }
+
     pub(crate) fn cleared_clone(&self) -> Self {
         match self {
             Observables::Histogram(observable) => Observables::Histogram(HistogramObservable {
@@ -2128,6 +2162,23 @@ impl Observables {
         match self {
             Observables::Histogram(observable) => observable.state.merge_samples(other),
         }
+    }
+}
+
+impl HistogramObservable {
+    fn restore_snapshot(&mut self, snapshot: &HistogramSnapshot) -> Result<()> {
+        let restored_state = snapshot.clone().into_accumulator_state();
+        self.state.ensure_compatible(&restored_state)?;
+        self.state = restored_state;
+        self.pending_contributions.clear();
+        self.candidate_pairs.clear();
+        self.used_contributions.clear();
+        self.grouped_contributions
+            .fill(GroupBinContribution::default());
+        self.grouped_underflow = GroupBinContribution::default();
+        self.grouped_overflow = GroupBinContribution::default();
+        self.touched_bins.clear();
+        Ok(())
     }
 }
 

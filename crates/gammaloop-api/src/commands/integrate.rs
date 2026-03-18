@@ -23,12 +23,13 @@ use gammalooprs::{
     integrands::{HasIntegrand, Integrand},
     integrate::{
         build_integration_result, emit_integration_status_via_tracing, havana_integrate,
-        print_integral_result, render_saved_integration_summary, slot_workspace_path,
-        ContributionSortMode, IntegrationState, IntegrationStatusKind,
+        observable_resume_state_path, print_integral_result, render_saved_integration_summary,
+        slot_workspace_path, ContributionSortMode, IntegrationState, IntegrationStatusKind,
         IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
-        IntegrationWorkspaceManifest, SlotMeta,
+        IntegrationWorkspaceManifest, ObservableOutputControl, SlotMeta,
     },
     model::{Model, SerializableInputParamCard},
+    observables::ObservableSnapshotBundle,
     settings::{
         runtime::{IntegratedPhase, IntegrationResult},
         RuntimeSettings,
@@ -135,6 +136,10 @@ pub struct Integrate {
     /// Disable live streaming of intermediate integration updates in interactive terminals
     #[arg(long = "no-stream")]
     pub no_stream: bool,
+
+    /// Emit user-facing observable files after every completed iteration for this command
+    #[arg(long = "write-observables-each-iteration")]
+    pub write_observables_each_iteration: bool,
 }
 
 impl Default for Integrate {
@@ -156,6 +161,7 @@ impl Default for Integrate {
             show_max_weight_info_for_discrete_bins: false,
             show_summary_only: false,
             no_stream: false,
+            write_observables_each_iteration: false,
         }
     }
 }
@@ -515,6 +521,12 @@ impl Integrate {
         }
     }
 
+    fn observable_output_control(&self) -> ObservableOutputControl {
+        ObservableOutputControl {
+            write_user_facing_each_iteration: self.write_observables_each_iteration,
+        }
+    }
+
     fn parse_target_components(first: &str, second: Option<&str>) -> Result<Complex<F<f64>>> {
         if let Some(second) = second {
             return Ok(Complex::new(F(first.parse()?), F(second.parse()?)));
@@ -717,6 +729,49 @@ impl Integrate {
             .collect()
     }
 
+    fn restore_workspace_observables(
+        &self,
+        workspace_path: &std::path::Path,
+        selected_slots: &[ResolvedIntegrandSlot],
+        integration_state: Option<&IntegrationState>,
+        slot_integrands: &mut [gammalooprs::integrands::process::ProcessIntegrand],
+    ) -> Result<()> {
+        let Some(integration_state) = integration_state else {
+            return Ok(());
+        };
+        if integration_state.iter == 0 {
+            return Ok(());
+        }
+
+        for ((slot, integrand), slot_meta) in selected_slots
+            .iter()
+            .zip(slot_integrands.iter_mut())
+            .zip(integration_state.slot_metas.iter())
+        {
+            debug_assert_eq!(slot.slot_meta, *slot_meta);
+            if integrand.observable_snapshot_bundle().is_none() {
+                continue;
+            }
+
+            let snapshot_path = observable_resume_state_path(
+                workspace_path,
+                &slot.slot_meta,
+                integration_state.iter,
+            );
+            let snapshot =
+                ObservableSnapshotBundle::from_json_file(&snapshot_path).map_err(|err| {
+                    eyre!(
+                        "Could not restore observable checkpoint for {} from {}: {err}",
+                        slot.slot_meta.key(),
+                        snapshot_path.display()
+                    )
+                })?;
+            integrand.restore_observable_snapshot_bundle(&snapshot)?;
+        }
+
+        Ok(())
+    }
+
     fn resolve_slot_models(
         &self,
         state: &State,
@@ -908,8 +963,14 @@ impl Integrate {
             &workspace_path,
             &mut targets,
         )?;
-        let slot_integrands =
+        let mut slot_integrands =
             self.warm_and_clone_integrands(state, &selected_slots, &slot_models)?;
+        self.restore_workspace_observables(
+            &workspace_path,
+            &selected_slots,
+            integration_state.as_ref(),
+            &mut slot_integrands,
+        )?;
         self.validate_slot_compatibility(&selected_slots, &slot_integrands)?;
         let settings = slot_integrands[0].get_settings().clone();
         let render_options =
@@ -953,6 +1014,7 @@ impl Integrate {
             targets,
             integration_state,
             Some(workspace_path.clone()),
+            self.observable_output_control(),
             render_options,
             move |kind, status_block| {
                 if let Some(renderer) = stream_renderer.as_mut() {

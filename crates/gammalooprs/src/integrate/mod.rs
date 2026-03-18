@@ -70,6 +70,11 @@ enum ObservableFlushReason {
     Interrupted,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ObservableOutputControl {
+    pub write_user_facing_each_iteration: bool,
+}
+
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
@@ -2049,6 +2054,7 @@ pub fn havana_integrate<S>(
     targets: Vec<Option<Complex<F<f64>>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
+    output_control: ObservableOutputControl,
     render_options: IntegrationStatusRenderOptions,
     mut status_emitter: S,
 ) -> Result<IntegrationResult>
@@ -2389,18 +2395,31 @@ where
             }
         }
 
-        // now write the observables to disk
+        // Update observable accumulators, persist the resume checkpoint, then emit any user-facing files.
         for (slot_index, integrand) in owner_core.iter_mut().enumerate() {
             integrand.update_runtime_results(integration_state.iter);
-            if integrand_observables_output_enabled(integrand, true) {
-                write_observables_output(
-                    integrand,
-                    workspace.as_deref().map(|root| {
-                        slot_workspace_path(root, &integration_state.slot_metas[slot_index])
-                    }),
-                    ObservableFlushReason::Iteration(integration_state.iter),
-                );
-            }
+            write_observable_resume_state(
+                integrand,
+                workspace.as_deref(),
+                &integration_state.slot_metas[slot_index],
+                integration_state.iter,
+            )?;
+        }
+
+        if let Some(ref workspace_path) = workspace {
+            write_integration_state_to_workspace(workspace_path, &integration_state)?;
+        }
+
+        for (slot_index, integrand) in owner_core.iter().enumerate() {
+            let workspace_path = workspace
+                .as_deref()
+                .map(|root| slot_workspace_path(root, &integration_state.slot_metas[slot_index]));
+            let _ = write_observables_output(
+                integrand,
+                workspace_path.as_deref(),
+                ObservableFlushReason::Iteration(integration_state.iter),
+                output_control,
+            );
         }
 
         status_emitter(
@@ -2415,36 +2434,25 @@ where
                 &IntegrationStatusRenderOptions { ..render_options },
             ),
         )?;
-
-        // now write the integration state to disk if a workspace has been provided.
-        if let Some(ref workspace_path) = workspace {
-            let integration_state_path = workspace_path.join("integration_state.bin");
-
-            match fs::write(
-                integration_state_path,
-                bincode::encode_to_vec(&integration_state, bincode::config::standard())
-                    .unwrap_or_else(|_| panic!("failed to serialize the integration state")),
-            ) {
-                Ok(_) => {}
-                Err(_) => warn!("Warning: failed to write integration state to disk"),
-            }
-        }
     }
     // Reset the interrupted flag
     set_interrupted(false);
 
+    let mut emitted_final_observable_paths = vec![None; n_slots];
     if let Some(owner_core) = user_data.first() {
         for (slot_index, integrand) in owner_core.iter().enumerate() {
-            write_observables_output(
+            let workspace_path = workspace
+                .as_deref()
+                .map(|root| slot_workspace_path(root, &integration_state.slot_metas[slot_index]));
+            emitted_final_observable_paths[slot_index] = write_observables_output(
                 integrand,
-                workspace.as_deref().map(|root| {
-                    slot_workspace_path(root, &integration_state.slot_metas[slot_index])
-                }),
+                workspace_path.as_deref(),
                 if interrupted {
                     ObservableFlushReason::Interrupted
                 } else {
                     ObservableFlushReason::Final
                 },
+                output_control,
             );
         }
     }
@@ -2469,6 +2477,15 @@ where
             "No final integration results to display since no iteration completed.".yellow()
         );
         info!("");
+    }
+
+    if let Some(owner_core) = user_data.first() {
+        emit_observable_output_summary(
+            &integration_state.slot_metas,
+            owner_core,
+            &emitted_final_observable_paths,
+            output_control,
+        );
     }
 
     Ok(build_integration_result(&integration_state, &targets))
@@ -2632,55 +2649,112 @@ pub fn slot_workspace_path(workspace: &Path, slot_meta: &SlotMeta) -> PathBuf {
     workspace.join("integrands").join(slot_meta.key())
 }
 
+pub fn observable_resume_state_path(
+    workspace: &Path,
+    slot_meta: &SlotMeta,
+    iter: usize,
+) -> PathBuf {
+    slot_workspace_path(workspace, slot_meta)
+        .join(format!("observables_resume_state_iteration_{iter:04}.json"))
+}
+
+fn observable_output_extension(format: ObservableFileFormat) -> Option<&'static str> {
+    match format {
+        ObservableFileFormat::None => None,
+        ObservableFileFormat::Hwu => Some("hwu"),
+        ObservableFileFormat::Json => Some("json"),
+    }
+}
+
 fn observable_output_path(
     workspace: &Path,
     format: ObservableFileFormat,
     reason: ObservableFlushReason,
 ) -> Option<PathBuf> {
-    let extension = match format {
-        ObservableFileFormat::None => return None,
-        ObservableFileFormat::Hwu => "hwu",
-        ObservableFileFormat::Json => "json",
-    };
-
+    let extension = observable_output_extension(format)?;
     let file_name = match reason {
-        ObservableFlushReason::Iteration(iter) => format!("observables_iter_{iter:04}.{extension}"),
+        ObservableFlushReason::Iteration(iter) => {
+            format!("observables_final_iteration_{iter:04}.{extension}")
+        }
         ObservableFlushReason::Final => format!("observables_final.{extension}"),
         ObservableFlushReason::Interrupted => format!("observables_interrupted.{extension}"),
     };
-
     Some(workspace.join(file_name))
 }
 
-fn integrand_observables_output_enabled(integrand: &Integrand, per_iteration: bool) -> bool {
+fn observable_iteration_output_pattern(
+    workspace: &Path,
+    format: ObservableFileFormat,
+) -> Option<String> {
+    let extension = observable_output_extension(format)?;
+    Some(
+        workspace
+            .join(format!("observables_final_iteration_<iter>.{extension}"))
+            .display()
+            .to_string(),
+    )
+}
+
+fn user_facing_observables_output_enabled(
+    integrand: &Integrand,
+    reason: ObservableFlushReason,
+    output_control: ObservableOutputControl,
+) -> bool {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
         return false;
     };
     let settings = process_integrand.get_settings();
-    if per_iteration && !settings.integrator.observables_output.per_iteration {
+    if settings.integrator.observables_output.format == ObservableFileFormat::None {
         return false;
     }
-    settings.integrator.observables_output.format != ObservableFileFormat::None
+    match reason {
+        ObservableFlushReason::Iteration(_) => {
+            settings.integrator.observables_output.per_iteration
+                || output_control.write_user_facing_each_iteration
+        }
+        ObservableFlushReason::Final | ObservableFlushReason::Interrupted => true,
+    }
+}
+
+fn write_observable_resume_state(
+    integrand: &Integrand,
+    workspace: Option<&Path>,
+    slot_meta: &SlotMeta,
+    iter: usize,
+) -> Result<Option<PathBuf>> {
+    let Some(bundle) = integrand.observable_snapshot_bundle() else {
+        return Ok(None);
+    };
+    let Some(workspace) = workspace else {
+        return Ok(None);
+    };
+    let path = observable_resume_state_path(workspace, slot_meta, iter);
+    bundle.to_json_file(&path)?;
+    Ok(Some(path))
 }
 
 fn write_observables_output(
     integrand: &Integrand,
-    workspace: Option<PathBuf>,
+    workspace: Option<&Path>,
     reason: ObservableFlushReason,
-) {
+    output_control: ObservableOutputControl,
+) -> Option<PathBuf> {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return;
+        return None;
     };
+    if !user_facing_observables_output_enabled(integrand, reason, output_control) {
+        return None;
+    }
     let format = process_integrand
         .get_settings()
         .integrator
         .observables_output
         .format;
     let Some(workspace) = workspace else {
-        return;
+        return None;
     };
-    let Some(path) = observable_output_path(&workspace, format, reason) else {
-        return;
+    let Some(path) = observable_output_path(workspace, format, reason) else {
+        return None;
     };
 
     if let Err(err) = integrand.write_observable_snapshots(&path, format) {
@@ -2689,6 +2763,79 @@ fn write_observables_output(
             path.display(),
             err
         );
+        None
+    } else {
+        Some(path)
+    }
+}
+
+fn write_integration_state_to_workspace(
+    workspace_path: &Path,
+    integration_state: &IntegrationState,
+) -> Result<()> {
+    let integration_state_path = workspace_path.join("integration_state.bin");
+    fs::write(
+        integration_state_path,
+        bincode::encode_to_vec(integration_state, bincode::config::standard())
+            .unwrap_or_else(|_| panic!("failed to serialize the integration state")),
+    )?;
+    Ok(())
+}
+
+fn emit_observable_output_summary(
+    slot_metas: &[SlotMeta],
+    slot_integrands: &[Integrand],
+    emitted_paths: &[Option<PathBuf>],
+    output_control: ObservableOutputControl,
+) {
+    let mut summary_rows = Vec::new();
+    for ((slot_meta, integrand), emitted_path) in slot_metas
+        .iter()
+        .zip(slot_integrands.iter())
+        .zip(emitted_paths.iter())
+    {
+        let Some(final_path) = emitted_path else {
+            continue;
+        };
+        let Integrand::ProcessIntegrand(process_integrand) = integrand else {
+            continue;
+        };
+        let format = process_integrand
+            .get_settings()
+            .integrator
+            .observables_output
+            .format;
+        let per_iteration_enabled = user_facing_observables_output_enabled(
+            integrand,
+            ObservableFlushReason::Iteration(1),
+            output_control,
+        );
+        let iteration_pattern = per_iteration_enabled
+            .then(|| {
+                observable_iteration_output_pattern(
+                    final_path.parent().unwrap_or_else(|| Path::new(".")),
+                    format,
+                )
+            })
+            .flatten();
+        summary_rows.push((slot_meta, final_path, iteration_pattern));
+    }
+
+    if summary_rows.is_empty() {
+        return;
+    }
+
+    info!("");
+    info!("{}", "Observable outputs emitted:".green().bold());
+    for (slot_meta, final_path, iteration_pattern) in summary_rows {
+        info!("{} -> {}", slot_label(slot_meta), final_path.display());
+        if let Some(iteration_pattern) = iteration_pattern {
+            info!(
+                "{} iteration snapshots -> {}",
+                format!("{} ", slot_label(slot_meta)).dimmed(),
+                iteration_pattern
+            );
+        }
     }
 }
 

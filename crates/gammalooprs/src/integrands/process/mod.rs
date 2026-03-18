@@ -447,6 +447,20 @@ impl ProcessIntegrand {
 
         write_observable_snapshot_bundle(&bundle, path.as_ref(), format)
     }
+
+    pub fn restore_observable_snapshot_bundle(
+        &mut self,
+        bundle: &ObservableSnapshotBundle,
+    ) -> Result<()> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                restore_observable_snapshot_bundle(integrand, bundle)
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                restore_observable_snapshot_bundle(integrand, bundle)
+            }
+        }
+    }
 }
 
 fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
@@ -516,6 +530,21 @@ fn build_observable_snapshots_for_event_groups<I: ProcessIntegrandImpl, T: Float
     let mut runtime = runtime.cleared_observable_clone();
     runtime.process_event_groups(event_groups);
     Some(runtime.snapshot_bundle())
+}
+
+fn restore_observable_snapshot_bundle<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    bundle: &ObservableSnapshotBundle,
+) -> Result<()> {
+    let runtime = integrand.event_processing_runtime_mut().ok_or_else(|| {
+        eyre!("Cannot restore observables before the integrand has been warmed up")
+    })?;
+    if !runtime.has_observables() {
+        return Err(eyre!(
+            "Cannot restore observable snapshots for an integrand without configured observables"
+        ));
+    }
+    runtime.restore_snapshot_bundle(bundle)
 }
 
 fn full_event_multiplicative_factor(
