@@ -115,8 +115,8 @@
 
         "check": {
           "onSave": true,
-          // "features": ["python_api"],
-          "features": ["no_pyo3"],
+          "features": ["python_api"],
+          // "features": ["no_pyo3"],
           "command": "check",
         },
         "runnables": {

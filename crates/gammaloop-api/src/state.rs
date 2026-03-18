@@ -746,7 +746,7 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 
 #[cfg_attr(
     feature = "python_api",
-    pyo3::pyclass(unsendable, name = "GammaLoopState")
+    pyo3::pyclass(from_py_object, unsendable, name = "GammaLoopState")
 )]
 #[derive(Clone)]
 pub struct State {

@@ -35,14 +35,14 @@ use gammalooprs::feyngen::{
 };
 */
 
-use git_version::git_version;
+// use git_version::git_version;
 use itertools::{self, Itertools};
 use ndarray::Array2;
 use pyo3::types::PyFloat;
 use std::path::PathBuf;
 
 use symbolica::{atom::AtomCore, parse};
-const GIT_VERSION: &str = git_version!(fallback = "unavailable");
+// const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
 use pyo3::{
@@ -88,7 +88,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     // m.add_class::<PyFeynGenOptions>()?;
     m.add_class::<PyNumeratorAwareGroupingOption>()?;
     */
-    m.add("git_version", GIT_VERSION)?;
+    // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
@@ -682,13 +682,13 @@ impl GammaLoopAPI {
                     .as_ref()
                     .unwrap()
                     .derived_data
-                    .cff_expression
+                    .global_cff_expression
                     .as_ref()
                     .unwrap();
 
-                cff.orientation_data
+                cff.orientations
                     .iter()
-                    .map(|or_data| or_data.orientation.clone())
+                    .map(|or_data| or_data.data.orientation.clone())
                     .collect_vec()
             }
         };
