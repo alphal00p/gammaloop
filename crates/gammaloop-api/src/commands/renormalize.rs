@@ -1,14 +1,14 @@
 use std::fs::File;
 use std::{fs, path::PathBuf};
 
-use crate::CLISettings;
 use crate::completion::CompletionArgExt;
 use crate::state::{ProcessListExt, ProcessRef, State};
+use crate::CLISettings;
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::utils::symbolica_ext::TypstFormat;
-use idenso::color::{CS, ColorSimplifier};
+use idenso::color::{ColorSimplifier, CS};
 use idenso::metric::MetricSimplifier;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

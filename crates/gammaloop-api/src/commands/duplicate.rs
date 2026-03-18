@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use clap::{Args, Subcommand};
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::{eyre::eyre, Result};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

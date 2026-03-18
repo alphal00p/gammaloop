@@ -1,5 +1,5 @@
-use clap::Arg;
 use clap::builder::ArgExt;
+use clap::Arg;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SelectorKind {

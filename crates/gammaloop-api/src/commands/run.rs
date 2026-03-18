@@ -5,15 +5,15 @@ use gammalooprs::settings::RuntimeSettings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::{eyre::eyre, Result};
 
 use crate::{
-    CLISettings,
     command_parser::{split_command_line, split_command_list},
     state::{CommandHistory, RunHistory, State},
+    CLISettings,
 };
 
-use super::{Commands, save::SaveState};
+use super::{save::SaveState, Commands};
 
 pub const MAX_RUN_DEPTH: usize = 100;
 

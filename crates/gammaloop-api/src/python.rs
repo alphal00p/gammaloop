@@ -1,5 +1,5 @@
 use gammalooprs::{
-    cff::generation::{SurfaceCache, generate_cff_expression_from_subgraph},
+    cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
@@ -10,7 +10,7 @@ use gammalooprs::{
         HistogramStatisticsSnapshot,
     },
     processes::{DotExportSettings, ProcessCollection},
-    settings::{RuntimeSettings, global::OrientationPattern},
+    settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::{LogFormat, LogLevel},
 };
 use linnet::half_edge::{
@@ -21,10 +21,10 @@ use numpy::PyReadonlyArray2;
 use typed_index_collections::TiVec;
 
 use crate::{
-    CLISettings, LoadedState, StateLoadOption,
-    commands::{Evaluate, evaluate_samples::EvaluateSamples, import::model::ImportModel},
+    commands::{evaluate_samples::EvaluateSamples, import::model::ImportModel, Evaluate},
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
+    CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
 
@@ -47,13 +47,13 @@ const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
 use pyo3::{
-    FromPyObject, PyRef, Python, exceptions,
+    exceptions,
     prelude::*,
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyComplex, PyDict, PyModule, PyTuple, PyType},
-    wrap_pyfunction,
+    wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
 #[pyfunction]

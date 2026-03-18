@@ -1764,7 +1764,11 @@ fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
             // single name without '=' is allowed but ignored
         }
     }
-    if out.is_empty() { None } else { Some(out) }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 // =================== Tests ===================
@@ -1847,17 +1851,16 @@ mod tests {
 
         let spec = parse_spec_with_model(&args, GenerationType::Amplitude, model).unwrap();
 
-        assert!(
-            spec.process_definition
-                .amplitude_filters
-                .0
-                .iter()
-                .any(|filter| matches!(
-                    filter,
-                    FeynGenFilter::VertexAllow(vertex_names)
-                        if vertex_names == &vec!["V_6".to_string(), "V_9".to_string()]
-                ))
-        );
+        assert!(spec
+            .process_definition
+            .amplitude_filters
+            .0
+            .iter()
+            .any(|filter| matches!(
+                filter,
+                FeynGenFilter::VertexAllow(vertex_names)
+                    if vertex_names == &vec!["V_6".to_string(), "V_9".to_string()]
+            )));
     }
 
     #[test]
@@ -1996,28 +1999,20 @@ mod tests {
         let xs_filters = &ps.process_definition.cross_section_filters.0;
 
         // Smart defaults for vacuum-like graphs
-        assert!(
-            xs_filters
-                .iter()
-                .any(|f| matches!(f, FeynGenFilter::MaxNumberOfBridges(0)))
-        );
-        assert!(
-            xs_filters
-                .iter()
-                .any(|f| matches!(f, FeynGenFilter::FactorizedLoopTopologiesCountRange((1, 1))))
-        );
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::MaxNumberOfBridges(0))));
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::FactorizedLoopTopologiesCountRange((1, 1)))));
 
         // Default cut ranges present
-        assert!(
-            xs_filters
-                .iter()
-                .any(|f| matches!(f, FeynGenFilter::BlobRange(r) if r.clone()==(1..=1)))
-        );
-        assert!(
-            xs_filters
-                .iter()
-                .any(|f| matches!(f, FeynGenFilter::SpectatorRange(r) if r.clone()==(0..=0)))
-        );
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::BlobRange(r) if r.clone()==(1..=1))));
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::SpectatorRange(r) if r.clone()==(0..=0))));
     }
 
     #[test]

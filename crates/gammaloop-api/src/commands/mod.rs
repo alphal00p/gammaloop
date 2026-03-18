@@ -8,9 +8,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CLISettings,
     completion::CompletionArgExt,
     state::{CommandHistory, ProcessRef, RunHistory, State},
+    CLISettings,
 };
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;

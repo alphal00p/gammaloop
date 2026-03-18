@@ -1,6 +1,6 @@
 use std::ops::ControlFlow;
 
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::{eyre::eyre, Result};
 use colored::Colorize;
 use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::processes::ProcessCollection;
@@ -8,15 +8,15 @@ use gammalooprs::settings::RuntimeSettings;
 use tracing::{info, warn};
 
 use crate::{
-    CLISettings,
     commands::{
-        Commands, StartCommandsBlock,
-        process_settings::{ProcessSettingsCompletionEntry, serialize_runtime_named_settings},
-        run::{PreparedCommand, PreparedRun, prepare_command_histories_with_context},
+        process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
+        run::{prepare_command_histories_with_context, PreparedCommand, PreparedRun},
         save::SaveState,
+        Commands, StartCommandsBlock,
     },
     repl::{IrProfileCompletionEntry, ProcessCompletionEntry, ProcessKind},
     state::{CommandHistory, CommandsBlock, RunHistory, State},
+    CLISettings,
 };
 
 #[derive(Debug, Clone, Default)]

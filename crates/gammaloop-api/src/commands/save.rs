@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::{Args, Subcommand};
-use color_eyre::{Result, eyre::eyre, owo_colors::OwoColorize};
+use color_eyre::{eyre::eyre, owo_colors::OwoColorize, Result};
 use gammalooprs::{
     processes::{
         DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
@@ -14,13 +14,12 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
 use crate::{
-    CLISettings, DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME,
     state::{
-        RunHistory, State, StateFolderKind, classify_state_folder,
-        set_serialize_commands_as_strings,
+        classify_state_folder, set_serialize_commands_as_strings, RunHistory, State,
+        StateFolderKind,
     },
     templates::Assets,
-    write_schemas,
+    write_schemas, CLISettings, DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -275,7 +274,7 @@ impl SaveState {
 #[cfg(test)]
 mod tests {
     use super::SaveState;
-    use crate::{CLISettings, state::RunHistory};
+    use crate::{state::RunHistory, CLISettings};
     use gammalooprs::settings::RuntimeSettings;
     use std::path::PathBuf;
 
