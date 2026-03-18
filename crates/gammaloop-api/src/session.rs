@@ -15,7 +15,7 @@ use crate::{
         process_settings::{serialize_runtime_named_settings, ProcessSettingsCompletionEntry},
         run::{prepare_command_histories_with_context, PreparedCommand, PreparedRun},
         save::SaveState,
-        Commands, StartCommandsBlock,
+        CommandExecution, Commands, StartCommandsBlock,
     },
     repl::{IrProfileCompletionEntry, ProcessCompletionEntry, ProcessKind},
     state::{CommandHistory, CommandsBlock, RunHistory, State},
@@ -103,7 +103,7 @@ impl<'a> CliSession<'a> {
         }
     }
 
-    pub fn execute_top_level(&mut self, command: CommandHistory) -> Result<ControlFlow<SaveState>> {
+    pub fn execute_command(&mut self, command: CommandHistory) -> Result<CommandExecution> {
         let prepared = PreparedCommand::prepare(command, self.run_history, 1)?;
         self.execute_prepared(prepared, HistoryMode::Record)
     }
@@ -437,7 +437,8 @@ impl<'a> CliSession<'a> {
         history_mode: HistoryMode,
     ) -> Result<ControlFlow<SaveState>> {
         for command in commands {
-            if let ControlFlow::Break(save_state) = self.execute_prepared(command, history_mode)? {
+            let execution = self.execute_prepared(command, history_mode)?;
+            if let ControlFlow::Break(save_state) = execution.flow {
                 return Ok(ControlFlow::Break(save_state));
             }
         }
@@ -448,7 +449,7 @@ impl<'a> CliSession<'a> {
         &mut self,
         command: PreparedCommand,
         history_mode: HistoryMode,
-    ) -> Result<ControlFlow<SaveState>> {
+    ) -> Result<CommandExecution> {
         match command {
             PreparedCommand::Plain(command) => self.execute_plain(command, history_mode),
             PreparedCommand::Run { command, plan } => self.execute_run(command, plan, history_mode),
@@ -459,7 +460,7 @@ impl<'a> CliSession<'a> {
         &mut self,
         command: CommandHistory,
         history_mode: HistoryMode,
-    ) -> Result<ControlFlow<SaveState>> {
+    ) -> Result<CommandExecution> {
         if self.session_state.pending_commands_block.is_some() {
             return self.handle_recording_mode(command);
         }
@@ -477,18 +478,23 @@ impl<'a> CliSession<'a> {
                 false
             }
             _ => {
-                if let ControlFlow::Break(save_state) = command.command.clone().run(
+                let execution = command.command.clone().run(
                     self.state,
                     self.run_history,
                     self.cli_settings,
                     self.default_runtime_settings,
-                )? {
+                )?;
+                if let ControlFlow::Break(save_state) = execution.flow {
                     if history_mode == HistoryMode::Record {
                         self.record_command(&command);
                     }
-                    return Ok(ControlFlow::Break(save_state));
+                    return Ok(CommandExecution::break_with(save_state));
                 }
-                history_mode == HistoryMode::Record
+                let output = execution.output;
+                if history_mode == HistoryMode::Record {
+                    self.record_command(&command);
+                }
+                return Ok(CommandExecution::continue_with(output));
             }
         };
 
@@ -496,7 +502,7 @@ impl<'a> CliSession<'a> {
             self.record_command(&command);
         }
 
-        Ok(ControlFlow::Continue(()))
+        Ok(CommandExecution::continue_without_output())
     }
 
     fn execute_run(
@@ -504,13 +510,13 @@ impl<'a> CliSession<'a> {
         command: CommandHistory,
         plan: PreparedRun,
         history_mode: HistoryMode,
-    ) -> Result<ControlFlow<SaveState>> {
+    ) -> Result<CommandExecution> {
         if self.session_state.pending_commands_block.is_some() {
             return self.handle_recording_mode(command);
         }
 
         if plan.is_empty() {
-            return Ok(ControlFlow::Continue(()));
+            return Ok(CommandExecution::continue_without_output());
         }
 
         let display_text = display_command(&command);
@@ -521,7 +527,7 @@ impl<'a> CliSession<'a> {
             if let ControlFlow::Break(save_state) =
                 self.execute_prepared_commands(block.commands, HistoryMode::Suppress)?
             {
-                return Ok(ControlFlow::Break(save_state));
+                return Ok(CommandExecution::break_with(save_state));
             }
         }
 
@@ -536,28 +542,28 @@ impl<'a> CliSession<'a> {
         if let ControlFlow::Break(save_state) =
             self.execute_prepared_commands(plan.commands, HistoryMode::Suppress)?
         {
-            return Ok(ControlFlow::Break(save_state));
+            return Ok(CommandExecution::break_with(save_state));
         }
 
         if history_mode == HistoryMode::Record {
             self.record_command(&command);
         }
 
-        Ok(ControlFlow::Continue(()))
+        Ok(CommandExecution::continue_without_output())
     }
 
-    fn handle_recording_mode(&mut self, command: CommandHistory) -> Result<ControlFlow<SaveState>> {
+    fn handle_recording_mode(&mut self, command: CommandHistory) -> Result<CommandExecution> {
         match command.command.clone() {
             Commands::StartCommandsBlock(_) => Err(eyre!(
                 "Cannot start a new command block definition before finishing the current one"
             )),
             Commands::FinishCommandsBlock => {
                 self.finish_commands_block()?;
-                Ok(ControlFlow::Continue(()))
+                Ok(CommandExecution::continue_without_output())
             }
             Commands::Quit(_) => {
                 self.dismiss_pending_commands_block("quit");
-                Ok(ControlFlow::Continue(()))
+                Ok(CommandExecution::continue_without_output())
             }
             _ => {
                 let stored = normalize_command_history(&command);
@@ -567,7 +573,7 @@ impl<'a> CliSession<'a> {
                     .as_mut()
                     .expect("recording mode requires a pending block");
                 pending.commands.push(stored);
-                Ok(ControlFlow::Continue(()))
+                Ok(CommandExecution::continue_without_output())
             }
         }
     }

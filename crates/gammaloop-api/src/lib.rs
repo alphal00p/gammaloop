@@ -1060,7 +1060,7 @@ impl OneShot {
                 } else {
                     CommandHistory::new_with_raw(a, raw)
                 };
-                match session.execute_top_level(command)? {
+                match session.execute_command(command)?.flow {
                     ControlFlow::Break(a) => save_state = a,
                     ControlFlow::Continue(()) => {
                         enter_repl =
@@ -1129,19 +1129,21 @@ fn run_repl_session(session: &mut CliSession<'_>, save_state: &mut SaveState) {
         match editor.read_command() {
             ReadCommandOutput::Command(command, raw_input) => {
                 match session
-                    .execute_top_level(CommandHistory::new_with_raw(command.command, raw_input))
+                    .execute_command(CommandHistory::new_with_raw(command.command, raw_input))
                 {
                     Err(e) => {
                         eprintln!("{e:?}");
                     }
-                    Ok(ControlFlow::Break(a)) => {
-                        refresh_repl_state(&mut editor, session);
-                        *save_state = a;
-                        break;
-                    }
-                    Ok(ControlFlow::Continue(())) => {
-                        refresh_repl_state(&mut editor, session);
-                    }
+                    Ok(execution) => match execution.flow {
+                        ControlFlow::Break(a) => {
+                            refresh_repl_state(&mut editor, session);
+                            *save_state = a;
+                            break;
+                        }
+                        ControlFlow::Continue(()) => {
+                            refresh_repl_state(&mut editor, session);
+                        }
+                    },
                 }
             }
             ReadCommandOutput::EmptyLine => (),

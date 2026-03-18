@@ -21,12 +21,16 @@ use numpy::PyReadonlyArray2;
 use typed_index_collections::TiVec;
 
 use crate::{
-    commands::{evaluate_samples::EvaluateSamples, import::model::ImportModel, Evaluate},
+    commands::{
+        evaluate_samples::EvaluateSamples, import::model::ImportModel, integrate::Integrate,
+        Evaluate,
+    },
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
+use clap::ValueEnum;
 
 use color_eyre::Result;
 use eyre::eyre;
@@ -40,7 +44,7 @@ use gammalooprs::feyngen::{
 
 use git_version::git_version;
 use itertools::{self, Itertools};
-use std::path::PathBuf;
+use std::{path::PathBuf, str::FromStr};
 
 use symbolica::{atom::AtomCore, parse};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
@@ -52,7 +56,7 @@ use pyo3::{
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
-    types::{PyComplex, PyDict, PyModule, PyTuple, PyType},
+    types::{PyComplex, PyComplexMethods, PyDict, PyModule, PyTuple, PyType},
     wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
@@ -88,6 +92,17 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyHistogramSnapshot>()?;
     m.add_class::<PyHistogramBinSnapshot>()?;
     m.add_class::<PyHistogramStatisticsSnapshot>()?;
+    m.add_class::<PyIntegrationOutput>()?;
+    m.add_class::<PyIntegralEstimate>()?;
+    m.add_class::<PyIntegrationTableComponentResult>()?;
+    m.add_class::<PyIntegrationStatisticsSnapshot>()?;
+    m.add_class::<PyMaxWeightInfoEntry>()?;
+    m.add_class::<PyDiscreteCoordinate>()?;
+    m.add_class::<PyDiscreteBreakdownEntry>()?;
+    m.add_class::<PyDiscreteBreakdown>()?;
+    m.add_class::<PyComponentDiscreteBreakdown>()?;
+    m.add_class::<PySlotIntegrationResult>()?;
+    m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
     /*
     m.add_class::<PyFeynGenFilters>()?;
@@ -192,6 +207,120 @@ pub struct PyHistogramSnapshot {
     pub statistics: PyHistogramStatisticsSnapshot,
 }
 
+#[pyclass(name = "IntegrationOutput", skip_from_py_object)]
+#[derive(Clone)]
+pub struct PyIntegrationOutput {
+    inner: crate::commands::integrate::IntegrationOutput,
+}
+
+#[pyclass(from_py_object, name = "IntegralEstimate", get_all)]
+#[derive(Clone)]
+pub struct PyIntegralEstimate {
+    pub neval: usize,
+    pub real_zero: usize,
+    pub im_zero: usize,
+    pub result: PyComplexValue,
+    pub error: PyComplexValue,
+    pub real_chisq: f64,
+    pub im_chisq: f64,
+}
+
+#[pyclass(from_py_object, name = "IntegrationTableComponentResult", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrationTableComponentResult {
+    pub component: String,
+    pub value: f64,
+    pub error: f64,
+    pub relative_error_percent: Option<f64>,
+    pub chi_sq_per_dof: f64,
+    pub target_delta_sigma: Option<f64>,
+    pub target_delta_percent: Option<f64>,
+    pub max_weight_impact: f64,
+}
+
+#[pyclass(from_py_object, name = "IntegrationStatisticsSnapshot", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrationStatisticsSnapshot {
+    pub num_evals: usize,
+    pub average_total_time_seconds: f64,
+    pub average_parameterization_time_seconds: f64,
+    pub average_integrand_time_seconds: f64,
+    pub average_evaluator_time_seconds: f64,
+    pub average_observable_time_seconds: f64,
+    pub f64_percentage: f64,
+    pub f128_percentage: f64,
+    pub arb_percentage: f64,
+    pub nan_percentage: f64,
+    pub nan_or_unstable_percentage: f64,
+    pub generated_event_count: usize,
+    pub accepted_event_count: usize,
+    pub selection_efficiency_percentage: Option<f64>,
+}
+
+#[pyclass(from_py_object, name = "MaxWeightInfoEntry", get_all)]
+#[derive(Clone)]
+pub struct PyMaxWeightInfoEntry {
+    pub component: String,
+    pub sign: String,
+    pub max_eval: f64,
+    pub coordinates: Option<String>,
+}
+
+#[pyclass(from_py_object, name = "DiscreteCoordinate", get_all)]
+#[derive(Clone)]
+pub struct PyDiscreteCoordinate {
+    pub axis_label: String,
+    pub bin_index: usize,
+    pub bin_label: Option<String>,
+}
+
+#[pyclass(from_py_object, name = "DiscreteBreakdownEntry", get_all)]
+#[derive(Clone)]
+pub struct PyDiscreteBreakdownEntry {
+    pub bin_index: usize,
+    pub bin_label: Option<String>,
+    pub pdf: f64,
+    pub value: f64,
+    pub error: f64,
+    pub chi_sq: f64,
+    pub processed_samples: usize,
+}
+
+#[pyclass(from_py_object, name = "DiscreteBreakdown", get_all)]
+#[derive(Clone)]
+pub struct PyDiscreteBreakdown {
+    pub axis_label: String,
+    pub fixed_coordinates: Vec<PyDiscreteCoordinate>,
+    pub entries: Vec<PyDiscreteBreakdownEntry>,
+}
+
+#[pyclass(from_py_object, name = "ComponentDiscreteBreakdown", get_all)]
+#[derive(Clone)]
+pub struct PyComponentDiscreteBreakdown {
+    pub re: Option<PyDiscreteBreakdown>,
+    pub im: Option<PyDiscreteBreakdown>,
+}
+
+#[pyclass(from_py_object, name = "SlotIntegrationResult", get_all)]
+#[derive(Clone)]
+pub struct PySlotIntegrationResult {
+    pub key: String,
+    pub process: String,
+    pub integrand: String,
+    pub target: Option<PyComplexValue>,
+    pub integral: PyIntegralEstimate,
+    pub table_results: Vec<PyIntegrationTableComponentResult>,
+    pub integration_statistics: PyIntegrationStatisticsSnapshot,
+    pub max_weight_info: Vec<PyMaxWeightInfoEntry>,
+    pub grid_breakdown: PyComponentDiscreteBreakdown,
+}
+
+#[pyclass(from_py_object, name = "IntegrationResult", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrationResult {
+    pub slots: Vec<PySlotIntegrationResult>,
+}
+
 #[pymethods]
 impl PyHistogramBinSnapshot {
     fn average(&self, sample_count: usize) -> f64 {
@@ -214,6 +343,47 @@ impl PyHistogramBinSnapshot {
         } else {
             (variance_numerator / (n * (n - 1.0))).sqrt()
         }
+    }
+}
+
+#[pymethods]
+impl PyIntegrationOutput {
+    #[getter]
+    fn workspace_path(&self) -> PathBuf {
+        self.inner.workspace_path.clone()
+    }
+
+    #[getter]
+    fn result(&self) -> PyIntegrationResult {
+        py_integration_result_from_result(self.inner.result.clone())
+    }
+
+    #[getter]
+    fn observables<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let dict = PyDict::new(py);
+        for (slot_key, bundle) in &self.inner.observables {
+            dict.set_item(slot_key, py_observable_dict_from_bundle(py, bundle)?)?;
+        }
+        Ok(dict)
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "IntegrationOutput(workspace_path='{}', slots={})",
+            self.inner.workspace_path.display(),
+            self.inner.result.slots.len()
+        )
+    }
+}
+
+#[pymethods]
+impl PyIntegrationResult {
+    fn slot(&self, key: &str) -> Option<PySlotIntegrationResult> {
+        self.slots.iter().find(|slot| slot.key == key).cloned()
+    }
+
+    fn single_slot(&self) -> Option<PySlotIntegrationResult> {
+        (self.slots.len() == 1).then(|| self.slots[0].clone())
     }
 }
 
@@ -678,6 +848,307 @@ fn py_histogram_statistics_from_snapshot(
         nan_value_count: stats.nan_value_count,
         mitigated_pair_count: stats.mitigated_pair_count,
     }
+}
+
+fn py_integral_estimate_from_estimate(
+    estimate: gammalooprs::settings::runtime::IntegralEstimate,
+) -> PyIntegralEstimate {
+    PyIntegralEstimate {
+        neval: estimate.neval,
+        real_zero: estimate.real_zero,
+        im_zero: estimate.im_zero,
+        result: py_complex_from_complex(estimate.result),
+        error: py_complex_from_complex(estimate.error),
+        real_chisq: estimate.real_chisq.0,
+        im_chisq: estimate.im_chisq.0,
+    }
+}
+
+fn py_table_component_result_from_result(
+    result: gammalooprs::settings::runtime::IntegrationTableComponentResult,
+) -> PyIntegrationTableComponentResult {
+    PyIntegrationTableComponentResult {
+        component: result.component,
+        value: result.value.0,
+        error: result.error.0,
+        relative_error_percent: result.relative_error_percent,
+        chi_sq_per_dof: result.chi_sq_per_dof,
+        target_delta_sigma: result.target_delta_sigma,
+        target_delta_percent: result.target_delta_percent,
+        max_weight_impact: result.max_weight_impact,
+    }
+}
+
+fn py_integration_statistics_from_snapshot(
+    snapshot: gammalooprs::settings::runtime::IntegrationStatisticsSnapshot,
+) -> PyIntegrationStatisticsSnapshot {
+    PyIntegrationStatisticsSnapshot {
+        num_evals: snapshot.num_evals,
+        average_total_time_seconds: snapshot.average_total_time_seconds,
+        average_parameterization_time_seconds: snapshot.average_parameterization_time_seconds,
+        average_integrand_time_seconds: snapshot.average_integrand_time_seconds,
+        average_evaluator_time_seconds: snapshot.average_evaluator_time_seconds,
+        average_observable_time_seconds: snapshot.average_observable_time_seconds,
+        f64_percentage: snapshot.f64_percentage,
+        f128_percentage: snapshot.f128_percentage,
+        arb_percentage: snapshot.arb_percentage,
+        nan_percentage: snapshot.nan_percentage,
+        nan_or_unstable_percentage: snapshot.nan_or_unstable_percentage,
+        generated_event_count: snapshot.generated_event_count,
+        accepted_event_count: snapshot.accepted_event_count,
+        selection_efficiency_percentage: snapshot.selection_efficiency_percentage,
+    }
+}
+
+fn py_max_weight_info_entry_from_entry(
+    entry: gammalooprs::settings::runtime::MaxWeightInfoEntry,
+) -> PyMaxWeightInfoEntry {
+    PyMaxWeightInfoEntry {
+        component: entry.component,
+        sign: entry.sign,
+        max_eval: entry.max_eval.0,
+        coordinates: entry.coordinates,
+    }
+}
+
+fn py_discrete_coordinate_from_coordinate(
+    coordinate: gammalooprs::settings::runtime::DiscreteCoordinate,
+) -> PyDiscreteCoordinate {
+    PyDiscreteCoordinate {
+        axis_label: coordinate.axis_label,
+        bin_index: coordinate.bin_index,
+        bin_label: coordinate.bin_label,
+    }
+}
+
+fn py_discrete_breakdown_entry_from_entry(
+    entry: gammalooprs::settings::runtime::DiscreteBreakdownEntry,
+) -> PyDiscreteBreakdownEntry {
+    PyDiscreteBreakdownEntry {
+        bin_index: entry.bin_index,
+        bin_label: entry.bin_label,
+        pdf: entry.pdf.0,
+        value: entry.value.0,
+        error: entry.error.0,
+        chi_sq: entry.chi_sq.0,
+        processed_samples: entry.processed_samples,
+    }
+}
+
+fn py_discrete_breakdown_from_breakdown(
+    breakdown: gammalooprs::settings::runtime::DiscreteBreakdown,
+) -> PyDiscreteBreakdown {
+    PyDiscreteBreakdown {
+        axis_label: breakdown.axis_label,
+        fixed_coordinates: breakdown
+            .fixed_coordinates
+            .into_iter()
+            .map(py_discrete_coordinate_from_coordinate)
+            .collect(),
+        entries: breakdown
+            .entries
+            .into_iter()
+            .map(py_discrete_breakdown_entry_from_entry)
+            .collect(),
+    }
+}
+
+fn py_component_discrete_breakdown_from_breakdown(
+    breakdown: gammalooprs::settings::runtime::ComponentDiscreteBreakdown,
+) -> PyComponentDiscreteBreakdown {
+    PyComponentDiscreteBreakdown {
+        re: breakdown.re.map(py_discrete_breakdown_from_breakdown),
+        im: breakdown.im.map(py_discrete_breakdown_from_breakdown),
+    }
+}
+
+fn py_slot_integration_result_from_result(
+    result: gammalooprs::settings::runtime::SlotIntegrationResult,
+) -> PySlotIntegrationResult {
+    PySlotIntegrationResult {
+        key: result.key,
+        process: result.process,
+        integrand: result.integrand,
+        target: result.target.map(py_complex_from_complex),
+        integral: py_integral_estimate_from_estimate(result.integral),
+        table_results: result
+            .table_results
+            .into_iter()
+            .map(py_table_component_result_from_result)
+            .collect(),
+        integration_statistics: py_integration_statistics_from_snapshot(
+            result.integration_statistics,
+        ),
+        max_weight_info: result
+            .max_weight_info
+            .into_iter()
+            .map(py_max_weight_info_entry_from_entry)
+            .collect(),
+        grid_breakdown: py_component_discrete_breakdown_from_breakdown(result.grid_breakdown),
+    }
+}
+
+fn py_integration_result_from_result(
+    result: gammalooprs::settings::runtime::IntegrationResult,
+) -> PyIntegrationResult {
+    PyIntegrationResult {
+        slots: result
+            .slots
+            .into_iter()
+            .map(py_slot_integration_result_from_result)
+            .collect(),
+    }
+}
+
+fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
+    if let Ok(process_id) = process.extract::<usize>() {
+        return Ok(ProcessRef::Id(process_id));
+    }
+
+    let process = process.extract::<String>().map_err(|_| {
+        exceptions::PyTypeError::new_err(
+            "process selectors must be either an integer process id or a string selector",
+        )
+    })?;
+    ProcessRef::from_str(&process).map_err(exceptions::PyValueError::new_err)
+}
+
+fn py_complex_target_from_any(
+    target: &Bound<'_, PyAny>,
+) -> PyResult<spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>> {
+    if let Ok(complex) = target.cast::<PyComplex>() {
+        return Ok(spenso::algebra::complex::Complex::new(
+            gammalooprs::utils::F(complex.real()),
+            gammalooprs::utils::F(complex.imag()),
+        ));
+    }
+
+    if let Ok((re, im)) = target.extract::<(f64, f64)>() {
+        return Ok(spenso::algebra::complex::Complex::new(
+            gammalooprs::utils::F(re),
+            gammalooprs::utils::F(im),
+        ));
+    }
+
+    Err(exceptions::PyTypeError::new_err(
+        "targets must be a Python complex number or a two-element numeric tuple/list",
+    ))
+}
+
+fn resolve_python_slot_key(
+    state: &State,
+    process: &ProcessRef,
+    integrand_name: &str,
+) -> PyResult<String> {
+    let (process_id, resolved_integrand_name) = state
+        .find_integrand_ref(Some(process), Some(&integrand_name.to_string()))
+        .map_err(|err| {
+            exceptions::PyException::new_err(format!("Could not resolve slot: {err}"))
+        })?;
+    Ok(format!(
+        "{}@{}",
+        state.process_list.processes[process_id]
+            .definition
+            .folder_name,
+        resolved_integrand_name
+    ))
+}
+
+fn build_python_integrate_command(
+    state: &State,
+    slots: Option<Vec<(ProcessRef, String)>>,
+    process: Option<ProcessRef>,
+    integrand_name: Option<String>,
+    target: Option<&Bound<'_, PyAny>>,
+    n_cores: Option<usize>,
+    workspace_path: Option<PathBuf>,
+    restart: bool,
+    show_max_weight_info: bool,
+    no_show_integration_statistics: bool,
+    show_phase: String,
+    show_top_discrete_grid: bool,
+    show_discrete_contributions_sum: bool,
+    sort_contributions: String,
+    show_max_weight_info_for_discrete_bins: bool,
+    show_summary_only: bool,
+    no_stream: bool,
+    max_table_width: usize,
+    write_results_for_each_iteration: bool,
+) -> PyResult<Integrate> {
+    let mut integrate = if let Some(slots) = slots {
+        if process.is_some() || integrand_name.is_some() {
+            return Err(exceptions::PyValueError::new_err(
+                "`slots` cannot be combined with `process` or `integrand_name`",
+            ));
+        }
+        Integrate::from_slots(slots)
+    } else {
+        let mut integrate = Integrate::default();
+        if let Some(process) = process {
+            integrate.process.push(process);
+        }
+        if let Some(integrand_name) = integrand_name {
+            integrate.integrand_name.push(integrand_name);
+        }
+        integrate
+    };
+
+    integrate.n_cores = n_cores;
+    integrate.workspace_path = workspace_path;
+    integrate.restart = restart;
+    integrate.show_max_weight_info = show_max_weight_info;
+    integrate.no_show_integration_statistics = no_show_integration_statistics;
+    integrate.show_phase = crate::commands::integrate::ShowPhaseOption::from_str(&show_phase, true)
+        .map_err(|_| {
+            exceptions::PyValueError::new_err(format!("Unknown show_phase value '{show_phase}'"))
+        })?;
+    integrate.show_top_discrete_grid = show_top_discrete_grid;
+    integrate.show_discrete_contributions_sum = show_discrete_contributions_sum;
+    integrate.sort_contributions =
+        crate::commands::integrate::ContributionSortOption::from_str(&sort_contributions, true)
+            .map_err(|_| {
+                exceptions::PyValueError::new_err(format!(
+                    "Unknown sort_contributions value '{sort_contributions}'"
+                ))
+            })?;
+    integrate.show_max_weight_info_for_discrete_bins = show_max_weight_info_for_discrete_bins;
+    integrate.show_summary_only = show_summary_only;
+    integrate.no_stream = no_stream;
+    integrate.max_table_width = max_table_width;
+    integrate.write_results_for_each_iteration = write_results_for_each_iteration;
+
+    if let Some(target) = target {
+        if let Ok(target_dict) = target.cast::<PyDict>() {
+            let keyed_targets = target_dict
+                .iter()
+                .map(|(key, value)| {
+                    let slot_key = if let Ok(slot_key) = key.extract::<String>() {
+                        slot_key
+                    } else {
+                        let tuple = key.cast::<PyTuple>().map_err(|_| {
+                            exceptions::PyTypeError::new_err(
+                                "multi-slot target keys must be slot-key strings or `(process, integrand_name)` tuples",
+                            )
+                        })?;
+                        if tuple.len() != 2 {
+                            return Err(exceptions::PyValueError::new_err(
+                                "multi-slot target tuple keys must contain exactly two items",
+                            ));
+                        }
+                        let process = py_process_ref_from_any(&tuple.get_item(0)?)?;
+                        let integrand_name = tuple.get_item(1)?.extract::<String>()?;
+                        resolve_python_slot_key(state, &process, &integrand_name)?
+                    };
+                    Ok((slot_key, py_complex_target_from_any(&value)?))
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            integrate = integrate.with_keyed_targets(keyed_targets);
+        } else {
+            integrate = integrate.with_single_target(py_complex_target_from_any(target)?);
+        }
+    }
+
+    Ok(integrate)
 }
 
 /*
@@ -1499,7 +1970,7 @@ impl GammaLoopAPI {
         );
 
         session
-            .execute_top_level(command_history)
+            .execute_command(command_history)
             .map_err(|e| {
                 exceptions::PyException::new_err(format!(
                     "Execution of command '{}' failed: {}",
@@ -1776,40 +2247,77 @@ impl GammaLoopAPI {
     //     Ok("Exported coupling substitutions".to_string())
     // }
 
-    pub fn integrate<'py>(
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(
+        name = "integrate",
+        signature = (
+            slots = None,
+            process = None,
+            integrand_name = None,
+            n_cores = None,
+            workspace_path = None,
+            target = None,
+            restart = false,
+            show_max_weight_info = true,
+            no_show_integration_statistics = false,
+            show_phase = "both".to_string(),
+            show_top_discrete_grid = false,
+            show_discrete_contributions_sum = false,
+            sort_contributions = "error".to_string(),
+            show_max_weight_info_for_discrete_bins = false,
+            show_summary_only = false,
+            no_stream = false,
+            max_table_width = 250,
+            write_results_for_each_iteration = false
+        )
+    )]
+    pub fn integrate(
         &mut self,
-        py: Python<'py>,
-        process_id: Option<usize>,
+        py: Python<'_>,
+        slots: Option<Vec<(ProcessRef, String)>>,
+        process: Option<ProcessRef>,
         integrand_name: Option<String>,
-        result_path: Option<PathBuf>,
-        n_cores: usize,
-        workspace_path: PathBuf,
-        target: Option<Vec<f64>>,
+        n_cores: Option<usize>,
+        workspace_path: Option<PathBuf>,
+        target: Option<PyObject>,
         restart: bool,
-    ) -> Result<Vec<Bound<'py, PyComplex>>> {
-        let a = Integrate {
-            process: process_id.into_iter().map(ProcessRef::Id).collect(),
-            integrand_name: integrand_name.into_iter().collect(),
-            result_path,
-            workspace_path: Some(workspace_path),
-            n_cores: Some(n_cores),
-            target: target
-                .map(|components| components.into_iter().map(|value| value.to_string()).collect())
-                .unwrap_or_default(),
+        show_max_weight_info: bool,
+        no_show_integration_statistics: bool,
+        show_phase: String,
+        show_top_discrete_grid: bool,
+        show_discrete_contributions_sum: bool,
+        sort_contributions: String,
+        show_max_weight_info_for_discrete_bins: bool,
+        show_summary_only: bool,
+        no_stream: bool,
+        max_table_width: usize,
+        write_results_for_each_iteration: bool,
+    ) -> Result<PyIntegrationOutput> {
+        let integrate = build_python_integrate_command(
+            &self.gammaloop_state,
+            slots,
+            process,
+            integrand_name,
+            target.as_ref().map(|target| target.bind(py)),
+            n_cores,
+            workspace_path,
             restart,
-            ..Default::default()
-        }
-        .run(
-            &mut self.gammaloop_state,
-            &CLISettings {
-                ..Default::default()
-            },
+            show_max_weight_info,
+            no_show_integration_statistics,
+            show_phase,
+            show_top_discrete_grid,
+            show_discrete_contributions_sum,
+            sort_contributions,
+            show_max_weight_info_for_discrete_bins,
+            show_summary_only,
+            no_stream,
+            max_table_width,
+            write_results_for_each_iteration,
         )?;
 
-        Ok(a.slots
-            .into_iter()
-            .map(|slot| PyComplex::from_doubles(py, slot.integral.result.re.0, slot.integral.result.im.0))
-            .collect())
+        Ok(PyIntegrationOutput {
+            inner: integrate.run(&mut self.gammaloop_state, &self.cli_settings)?,
+        })
     }
 
     // pub(crate) fn inspect_lmw_integrand(

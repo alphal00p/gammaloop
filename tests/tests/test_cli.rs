@@ -506,7 +506,7 @@ fn quit_during_block_definition_dismisses_the_pending_block() -> Result<()> {
     cli.run_command("start_commands_block demo")?;
     cli.run_command("set global kv global.display_directive=warn")?;
 
-    let flow = cli.run_command_flow("quit -o")?;
+    let flow = cli.run_command_flow("quit -o")?.flow;
 
     assert!(matches!(flow, ControlFlow::Continue(())));
     assert!(cli.run_history.command_blocks.is_empty());

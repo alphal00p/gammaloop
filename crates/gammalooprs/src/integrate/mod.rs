@@ -2051,6 +2051,39 @@ fn insert_separator_rows(rendered: &str, separator_after_rows: &[usize]) -> Stri
     lines.join("\n")
 }
 
+fn suppress_spanned_metadata_header_separators(rendered: &str) -> String {
+    rendered
+        .lines()
+        .map(|line| {
+            if !line.contains("χ²/dof") || !line.contains("max. wgt. infl.") {
+                return line.to_string();
+            }
+
+            let mut updated = line.to_string();
+            let separators_to_remove = [("χ²/dof", "max. wgt. infl."), ("Δ [σ]", "Δ [%]")];
+
+            for (left_label, right_label) in separators_to_remove {
+                let Some(left_start) = updated.find(left_label) else {
+                    continue;
+                };
+                let Some(right_start) = updated.find(right_label) else {
+                    continue;
+                };
+                let left_end = left_start + left_label.len();
+                if let Some((separator_index, _)) = updated[left_end..right_start]
+                    .match_indices('│')
+                    .next_back()
+                {
+                    let separator_index = left_end + separator_index;
+                    updated.replace_range(separator_index..separator_index + '│'.len_utf8(), " ");
+                }
+            }
+
+            updated
+        })
+        .join("\n")
+}
+
 fn render_tables_with_shared_width(mut tables: Vec<StatusTable>, max_table_width: usize) -> String {
     let max_width = tables
         .iter()
@@ -2081,6 +2114,7 @@ fn render_tables_with_shared_width(mut tables: Vec<StatusTable>, max_table_width
                     table.suppress_header_tail_separator,
                 );
             }
+            rendered = suppress_spanned_metadata_header_separators(&rendered);
             rendered = insert_separator_rows(&rendered, &table.separator_after_rows);
             normalize_tabled_separator_rows(&rendered)
         })
@@ -4022,6 +4056,41 @@ mod tests {
             rendered.contains("xs: [ 2.5000000000000000e-01 ]"),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn iteration_status_block_hides_spanned_metadata_header_separators() {
+        let state = make_discrete_integration_state();
+        let rendered = render_iteration_status_block(
+            &state,
+            4,
+            Duration::from_secs(2),
+            110_000,
+            210_000,
+            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+            &IntegrationStatusRenderOptions {
+                show_statistics: false,
+                show_max_weight_details: false,
+                show_top_discrete_grid: true,
+                show_discrete_contributions_sum: true,
+                contribution_sort: ContributionSortMode::Index,
+                show_max_weight_info_for_discrete_bins: false,
+                ..default_render_options()
+            },
+        );
+
+        let header_line = rendered
+            .lines()
+            .find(|line| line.contains("χ²/dof") && line.contains("max. wgt. infl."))
+            .expect("expected spanned metadata header line");
+
+        let chi_to_mwi = &header_line
+            [header_line.find("χ²/dof").unwrap()..header_line.find("max. wgt. infl.").unwrap()];
+        assert!(!chi_to_mwi.contains('│'), "{rendered}");
+
+        let delta_sigma_to_percent =
+            &header_line[header_line.find("Δ [σ]").unwrap()..header_line.find("Δ [%]").unwrap()];
+        assert!(!delta_sigma_to_percent.contains('│'), "{rendered}");
     }
 
     #[test]

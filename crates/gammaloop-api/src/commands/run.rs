@@ -1,5 +1,3 @@
-use std::ops::ControlFlow;
-
 use clap::Args;
 use gammalooprs::settings::RuntimeSettings;
 use schemars::JsonSchema;
@@ -13,7 +11,7 @@ use crate::{
     CLISettings,
 };
 
-use super::{save::SaveState, Commands};
+use super::{CommandExecution, Commands};
 
 pub const MAX_RUN_DEPTH: usize = 100;
 
@@ -145,7 +143,7 @@ impl Run {
         global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
         run_history: &mut RunHistory,
-    ) -> Result<ControlFlow<SaveState>> {
+    ) -> Result<CommandExecution> {
         let mut session_state = crate::session::CliSessionState::default();
         let mut session = crate::session::CliSession::new(
             state,
@@ -154,7 +152,7 @@ impl Run {
             default_runtime_settings,
             &mut session_state,
         );
-        session.execute_top_level(CommandHistory::new_with_raw(
+        session.execute_command(CommandHistory::new_with_raw(
             Commands::Run(self.clone()),
             self.canonical_raw_string(),
         ))

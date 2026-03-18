@@ -1,7 +1,8 @@
 use std::{
-    collections::HashSet,
-    fs,
+    collections::{BTreeMap, HashSet},
+    fmt, fs,
     io::{self, IsTerminal, Write},
+    ops::Deref,
     path::PathBuf,
 };
 
@@ -141,6 +142,40 @@ pub struct Integrate {
     /// Keep per-iteration result and observable snapshot files in addition to the latest snapshots
     #[arg(long = "write-results-for-each-iteration")]
     pub write_results_for_each_iteration: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct IntegrationOutput {
+    pub result: IntegrationResult,
+    pub observables: BTreeMap<String, ObservableSnapshotBundle>,
+    pub workspace_path: PathBuf,
+}
+
+impl IntegrationOutput {
+    pub fn slot_observables(&self, key: &str) -> Option<&ObservableSnapshotBundle> {
+        self.observables.get(key)
+    }
+
+    pub fn single_slot_observables(&self) -> Option<&ObservableSnapshotBundle> {
+        (self.observables.len() == 1)
+            .then(|| self.observables.values().next())
+            .flatten()
+    }
+}
+
+impl Deref for IntegrationOutput {
+    type Target = IntegrationResult;
+
+    fn deref(&self) -> &Self::Target {
+        &self.result
+    }
+}
+
+impl fmt::Display for IntegrationOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.result.fmt(f)
+    }
 }
 
 impl Default for Integrate {
@@ -404,6 +439,36 @@ fn grids_have_compatible_sample_shape(lhs: &Grid<F<f64>>, rhs: &Grid<F<f64>>) ->
 }
 
 impl Integrate {
+    pub fn from_slots<I, S>(slots: I) -> Self
+    where
+        I: IntoIterator<Item = (ProcessRef, S)>,
+        S: Into<String>,
+    {
+        let mut integrate = Self::default();
+        for (process, integrand_name) in slots {
+            integrate.process.push(process);
+            integrate.integrand_name.push(integrand_name.into());
+        }
+        integrate
+    }
+
+    pub fn with_single_target(mut self, target: Complex<F<f64>>) -> Self {
+        self.target = vec![target.re.to_string(), target.im.to_string()];
+        self
+    }
+
+    pub fn with_keyed_targets<I, S>(mut self, targets: I) -> Self
+    where
+        I: IntoIterator<Item = (S, Complex<F<f64>>)>,
+        S: Into<String>,
+    {
+        self.target = targets
+            .into_iter()
+            .map(|(slot_key, target)| format!("{}={},{}", slot_key.into(), target.re, target.im))
+            .collect();
+        self
+    }
+
     fn default_workspace_path(&self, global_cli_settings: &CLISettings) -> PathBuf {
         if global_cli_settings.session.read_only_state {
             let workspace_name = global_cli_settings
@@ -897,11 +962,35 @@ impl Integrate {
         Ok(())
     }
 
+    fn collect_workspace_observable_snapshots(
+        &self,
+        workspace_path: &std::path::Path,
+        slot_metas: impl IntoIterator<Item = SlotMeta>,
+    ) -> Result<BTreeMap<String, ObservableSnapshotBundle>> {
+        let mut observables = BTreeMap::new();
+        for slot_meta in slot_metas {
+            let snapshot_path = latest_observable_resume_state_path(workspace_path, &slot_meta);
+            if !snapshot_path.exists() {
+                continue;
+            }
+            let snapshot =
+                ObservableSnapshotBundle::from_json_file(&snapshot_path).map_err(|err| {
+                    eyre!(
+                        "Could not load observable snapshot for {} from {}: {err}",
+                        slot_meta.key(),
+                        snapshot_path.display()
+                    )
+                })?;
+            observables.insert(slot_meta.key(), snapshot);
+        }
+        Ok(observables)
+    }
+
     pub fn run(
         &self,
         state: &mut State,
         global_cli_settings: &CLISettings,
-    ) -> Result<IntegrationResult> {
+    ) -> Result<IntegrationOutput> {
         if self.show_summary_only && self.restart {
             return Err(eyre!(
                 "The integrate options `--show-summary-only` and `--restart` cannot be used together"
@@ -967,7 +1056,14 @@ impl Integrate {
                 render_saved_integration_summary(&integration_state, &targets, &render_options),
             )?;
 
-            return Ok(build_integration_result(&integration_state, &targets));
+            return Ok(IntegrationOutput {
+                result: build_integration_result(&integration_state, &targets),
+                observables: self.collect_workspace_observable_snapshots(
+                    &workspace_path,
+                    selected_slots.iter().map(|slot| slot.slot_meta.clone()),
+                )?,
+                workspace_path,
+            });
         }
 
         let selected_slots = self.resolve_selected_slots(state)?;
@@ -1066,22 +1162,32 @@ impl Integrate {
             },
         )?;
 
-        Ok(result)
+        Ok(IntegrationOutput {
+            observables: self.collect_workspace_observable_snapshots(
+                &workspace_path,
+                selected_slots.iter().map(|slot| slot.slot_meta.clone()),
+            )?,
+            result,
+            workspace_path,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::Integrate;
+    use super::IntegrationOutput;
     use super::ResolvedIntegrandSlot;
     use super::{ContributionSortOption, ShowPhaseOption};
-    use crate::{CLISettings, SessionSettings, StateSettings};
+    use crate::{state::ProcessRef, CLISettings, SessionSettings, StateSettings};
     use gammalooprs::{
         integrate::{ContributionSortMode, IntegrationStatusPhaseDisplay, SlotMeta},
+        observables::ObservableSnapshotBundle,
         settings::{runtime::IntegratedPhase, IntegratorSettings, RuntimeSettings},
         utils::F,
     };
     use spenso::algebra::complex::Complex;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
     use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid};
 
@@ -1180,6 +1286,38 @@ mod tests {
         let targets = integrate.resolve_targets(&slots).unwrap();
 
         assert_eq!(targets, vec![Some(Complex::new(F(1.0), F(2.0)))]);
+    }
+
+    #[test]
+    fn from_slots_preserves_slot_order() {
+        let integrate = Integrate::from_slots([
+            (ProcessRef::Id(2), "first"),
+            (ProcessRef::Name("triangle".to_string()), "second"),
+        ]);
+
+        assert_eq!(
+            integrate.process,
+            vec![ProcessRef::Id(2), ProcessRef::Name("triangle".to_string())]
+        );
+        assert_eq!(
+            integrate.integrand_name,
+            vec!["first".to_string(), "second".to_string()]
+        );
+    }
+
+    #[test]
+    fn integration_output_single_slot_observables_returns_only_bundle() {
+        let mut observables = BTreeMap::new();
+        observables.insert(
+            "box@scalar_box".to_string(),
+            ObservableSnapshotBundle::default(),
+        );
+        let output = IntegrationOutput {
+            observables,
+            ..IntegrationOutput::default()
+        };
+
+        assert!(output.single_slot_observables().is_some());
     }
 
     #[test]

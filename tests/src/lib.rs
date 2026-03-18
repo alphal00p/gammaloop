@@ -6,6 +6,7 @@ use color_eyre::Result;
 
 use gammaloop_api::{
     CLISettings,
+    commands::CommandExecution,
     commands::save::SaveState,
     session::{CliSession, CliSessionState},
     state::{RunHistory, State, SyncSettings},
@@ -88,9 +89,9 @@ impl CLIState {
         f(&mut session)
     }
 
-    pub fn run_command_flow(&mut self, command: &str) -> Result<ControlFlow<SaveState>> {
+    pub fn run_command_flow(&mut self, command: &str) -> Result<CommandExecution> {
         let command_history = gammaloop_api::state::CommandHistory::from_raw_string(command)?;
-        self.with_session(|session| session.execute_top_level(command_history))
+        self.with_session(|session| session.execute_command(command_history))
     }
 
     pub fn run_command(&mut self, command: &str) -> Result<()> {

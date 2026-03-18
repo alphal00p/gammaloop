@@ -113,6 +113,24 @@ impl<'de> Deserialize<'de> for ProcessRef {
     }
 }
 
+#[cfg(feature = "python_api")]
+impl<'a, 'py> pyo3::FromPyObject<'a, 'py> for ProcessRef {
+    type Error = pyo3::PyErr;
+
+    fn extract(obj: pyo3::Borrowed<'a, 'py, pyo3::types::PyAny>) -> pyo3::PyResult<Self> {
+        if let Ok(process_id) = <usize as pyo3::FromPyObject<'a, 'py>>::extract(obj) {
+            return Ok(ProcessRef::Id(process_id));
+        }
+
+        let selector = <String as pyo3::FromPyObject<'a, 'py>>::extract(obj).map_err(|_| {
+            pyo3::exceptions::PyTypeError::new_err(
+                "process selectors must be either an integer process id or a string selector",
+            )
+        })?;
+        ProcessRef::from_str(&selector).map_err(pyo3::exceptions::PyValueError::new_err)
+    }
+}
+
 impl FromStr for ProcessRef {
     type Err = String;
 
