@@ -2,10 +2,10 @@ use std::{collections::BTreeMap, fs, path::PathBuf, str::FromStr};
 
 use clap::Subcommand;
 use color_eyre::Result;
-use eyre::{eyre, Context, Report};
+use eyre::{Context, Report, eyre};
 use figment::{
-    providers::{Format, Serialized},
     Figment,
+    providers::{Format, Serialized},
 };
 use gammalooprs::{
     model::{ParameterNature, ParameterType, UFOSymbol},
@@ -14,21 +14,21 @@ use gammalooprs::{
     utils::F,
 };
 use schemars::JsonSchema;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value as JsonValue;
 use spenso::algebra::complex::Complex;
 use tracing::warn;
 
 use crate::{
+    CLISettings,
+    commands::Commands,
     commands::generate::ProcessArgs,
     commands::process_settings::{
         observable_template, parse_quantity_kind, parse_selector_kind, quantity_template,
         selector_template,
     },
-    commands::Commands,
     state::{State, SyncSettings},
     tracing::{clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason},
-    CLISettings,
 };
 
 pub(crate) const MODEL_COMPLEX_VALUE_FORMAT_HINT: &str =
@@ -787,29 +787,29 @@ mod test {
     use std::{str::FromStr, sync::Mutex};
 
     use clap::Parser;
-    use figment::{providers::Serialized, Figment};
+    use figment::{Figment, providers::Serialized};
     use gammalooprs::{
         model::{ParameterNature, ParameterType, UFOSymbol},
         observables::{FilterQuantity, QuantitySettings, SelectorDefinitionSettings},
         settings::RuntimeSettings,
-        utils::{test_utils::load_generic_model, F},
+        utils::{F, test_utils::load_generic_model},
     };
     use serde::{Deserialize, Serialize};
     use spenso::algebra::complex::Complex;
 
     use crate::{
+        CLISettings, Repl,
         state::{ProcessRef, State},
         tracing::{get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override},
-        CLISettings, Repl,
     };
 
     use super::{
-        super::Commands, apply_process_set_args, model_value_format_hint,
-        validate_model_parameter_type, KvPair, ProcessAddTarget, ProcessRemoveTarget,
-        ProcessSetArgs, ProcessUpdateTarget, Set, SetArgs,
+        super::Commands, KvPair, ProcessAddTarget, ProcessRemoveTarget, ProcessSetArgs,
+        ProcessUpdateTarget, Set, SetArgs, apply_process_set_args, model_value_format_hint,
+        validate_model_parameter_type,
     };
     use super::{
-        parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT, MODEL_REAL_VALUE_FORMAT_HINT,
+        MODEL_COMPLEX_VALUE_FORMAT_HINT, MODEL_REAL_VALUE_FORMAT_HINT, parse_model_parameter_value,
     };
 
     #[test]
@@ -869,9 +869,10 @@ mod test {
             &Complex::new(F(1.0), F(2.0)),
         )
         .unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("cannot be assigned an imaginary component"));
+        assert!(
+            err.to_string()
+                .contains("cannot be assigned an imaginary component")
+        );
         assert!(err.to_string().contains(MODEL_REAL_VALUE_FORMAT_HINT));
     }
 
@@ -905,9 +906,10 @@ mod test {
     #[test]
     fn defaults_is_rejected_outside_set_process() {
         let err = SetArgs::Defaults.merge_figment(Figment::new()).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("'defaults' is only supported for 'set process'"));
+        assert!(
+            err.to_string()
+                .contains("'defaults' is only supported for 'set process'")
+        );
     }
 
     #[test]
@@ -1394,9 +1396,11 @@ integrate = 10
         state.model = model;
         state.model_parameters =
             gammalooprs::model::InputParamCard::default_from_model(&state.model);
-        assert!(!state
-            .model_parameters
-            .contains_key(&UFOSymbol::from(internal_param.as_str())));
+        assert!(
+            !state
+                .model_parameters
+                .contains_key(&UFOSymbol::from(internal_param.as_str()))
+        );
 
         let err = Set::Model {
             pairs: vec![KvPair {
@@ -1478,9 +1482,10 @@ integrate = 10
         )
         .unwrap_err();
 
-        assert!(err
-            .to_string()
-            .contains("cannot be assigned an imaginary component"));
+        assert!(
+            err.to_string()
+                .contains("cannot be assigned an imaginary component")
+        );
     }
 
     #[test]
@@ -1500,35 +1505,43 @@ integrate = 10
         )
         .unwrap();
 
-        assert!(SetArgs::Kv {
-            pairs: vec![KvPair {
-                key: "global.display_directive".to_string(),
-                value: "warn".to_string(),
-            }]
-        }
-        .updates_global_display_directive()
-        .unwrap());
+        assert!(
+            SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.display_directive".to_string(),
+                    value: "warn".to_string(),
+                }]
+            }
+            .updates_global_display_directive()
+            .unwrap()
+        );
 
-        assert!(SetArgs::String {
-            string: "[global]\ndisplay_directive = \"warn\"\n".to_string(),
-        }
-        .updates_global_display_directive()
-        .unwrap());
+        assert!(
+            SetArgs::String {
+                string: "[global]\ndisplay_directive = \"warn\"\n".to_string(),
+            }
+            .updates_global_display_directive()
+            .unwrap()
+        );
 
-        assert!(SetArgs::File {
-            file: file_path.clone(),
-        }
-        .updates_global_display_directive()
-        .unwrap());
+        assert!(
+            SetArgs::File {
+                file: file_path.clone(),
+            }
+            .updates_global_display_directive()
+            .unwrap()
+        );
 
-        assert!(!SetArgs::Kv {
-            pairs: vec![KvPair {
-                key: "global.n_cores.generate".to_string(),
-                value: "4".to_string(),
-            }]
-        }
-        .updates_global_display_directive()
-        .unwrap());
+        assert!(
+            !SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.n_cores.generate".to_string(),
+                    value: "4".to_string(),
+                }]
+            }
+            .updates_global_display_directive()
+            .unwrap()
+        );
 
         let _ = std::fs::remove_file(file_path);
     }
@@ -1550,35 +1563,43 @@ integrate = 10
         )
         .unwrap();
 
-        assert!(SetArgs::Kv {
-            pairs: vec![KvPair {
-                key: "global.logfile_directive".to_string(),
-                value: "debug".to_string(),
-            }]
-        }
-        .updates_global_logfile_directive()
-        .unwrap());
+        assert!(
+            SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.logfile_directive".to_string(),
+                    value: "debug".to_string(),
+                }]
+            }
+            .updates_global_logfile_directive()
+            .unwrap()
+        );
 
-        assert!(SetArgs::String {
-            string: "[global]\nlogfile_directive = \"debug\"\n".to_string(),
-        }
-        .updates_global_logfile_directive()
-        .unwrap());
+        assert!(
+            SetArgs::String {
+                string: "[global]\nlogfile_directive = \"debug\"\n".to_string(),
+            }
+            .updates_global_logfile_directive()
+            .unwrap()
+        );
 
-        assert!(SetArgs::File {
-            file: file_path.clone(),
-        }
-        .updates_global_logfile_directive()
-        .unwrap());
+        assert!(
+            SetArgs::File {
+                file: file_path.clone(),
+            }
+            .updates_global_logfile_directive()
+            .unwrap()
+        );
 
-        assert!(!SetArgs::Kv {
-            pairs: vec![KvPair {
-                key: "global.display_directive".to_string(),
-                value: "warn".to_string(),
-            }]
-        }
-        .updates_global_logfile_directive()
-        .unwrap());
+        assert!(
+            !SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.display_directive".to_string(),
+                    value: "warn".to_string(),
+                }]
+            }
+            .updates_global_logfile_directive()
+            .unwrap()
+        );
 
         let _ = std::fs::remove_file(file_path);
     }

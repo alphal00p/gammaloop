@@ -2,13 +2,13 @@ use color_eyre::Result;
 use eyre::eyre;
 use gammalooprs::{
     integrands::{
+        HasIntegrand,
         evaluation::{
             BatchSampleEvaluationResult, PreciseBatchSampleEvaluationResult,
             PreciseSampleEvaluationResult, PreciseSingleSampleEvaluationResult,
             SampleEvaluationResult, SingleSampleEvaluationResult,
         },
         process::MomentumSpaceEvaluationInput,
-        HasIntegrand,
     },
     momentum::ThreeMomentum,
     observables::ObservableSnapshotBundle,

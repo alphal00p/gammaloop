@@ -1,18 +1,18 @@
 use std::path::PathBuf;
 
 use crate::{
+    CLISettings,
     completion::CompletionArgExt,
     state::{ProcessListExt, ProcessRef, State},
-    CLISettings,
 };
 use color_eyre::Result;
 use eyre::eyre;
 use gammalooprs::{
-    integrands::process::ir::{IRProfileSetting, IrLimitTestReport},
     integrands::process::ProcessIntegrand,
+    integrands::process::ir::{IRProfileSetting, IrLimitTestReport},
     uv::{
-        profile::{ProfileSettings, UVProfileable},
         UVProfileAnalysis,
+        profile::{ProfileSettings, UVProfileable},
     },
 };
 use schemars::JsonSchema;

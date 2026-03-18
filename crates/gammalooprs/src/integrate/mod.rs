@@ -17,7 +17,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::Constructible;
-use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
+use symbolica::numerical_integration::{
+    DiscreteGrid, Grid, MonteCarloRng, Sample, StatisticsAccumulator,
+};
 
 use crate::INTERRUPTED;
 use crate::Integrand;
@@ -28,7 +30,11 @@ use crate::model::Model;
 use crate::observables::{EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat};
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
-use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
+use crate::settings::runtime::{
+    ComponentDiscreteBreakdown, DiscreteBreakdown, DiscreteBreakdownEntry,
+    DiscreteGraphSamplingType, IntegralEstimate, IntegratedPhase, IntegrationResult,
+    IntegrationTableComponentResult, MaxWeightInfoEntry, SamplingSettings, SlotIntegrationResult,
+};
 use crate::utils;
 use crate::utils::F;
 use crate::utils::normalize_tabled_separator_rows;
@@ -46,7 +52,7 @@ use tabled::{
     settings::{
         Alignment, Modify, Panel, Span,
         object::{Cell, Rows},
-        style::{HorizontalLine, On, Style, VerticalLine},
+        style::Style,
         themes::BorderCorrection,
         width::Width,
     },
@@ -63,9 +69,39 @@ enum ObservableFlushReason {
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
 
-/// Intended to be a copy of the integrand for each core.
-pub struct UserData {
-    pub integrand: Vec<Integrand>,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+pub struct SlotMeta {
+    pub process_name: String,
+    pub integrand_name: String,
+}
+
+impl SlotMeta {
+    pub fn key(&self) -> String {
+        format!("{}@{}", self.process_name, self.integrand_name)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct IntegrationWorkspaceManifest {
+    pub slots: Vec<SlotMeta>,
+    pub targets: Vec<Option<Complex<F<f64>>>>,
+    pub training_slot: usize,
+    pub integrator_settings_slot: usize,
+}
+
+impl crate::utils::serde_utils::SmartSerde for IntegrationWorkspaceManifest {}
+
+#[derive(Serialize, Deserialize, Encode, Decode, Clone)]
+struct DiscreteGridAccumulatorSummary {
+    #[bincode(with_serde)]
+    bins: Vec<DiscreteGridBinAccumulatorSummary>,
+}
+
+#[derive(Serialize, Deserialize, Encode, Decode, Clone)]
+struct DiscreteGridBinAccumulatorSummary {
+    #[bincode(with_serde)]
+    accumulator: StatisticsAccumulator<F<f64>>,
+    sub_summary: Option<Box<DiscreteGridAccumulatorSummary>>,
 }
 
 #[derive(Tabled)]
@@ -85,7 +121,7 @@ pub struct IntegralResult {
     pdf: String,
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode)]
+#[derive(Serialize, Deserialize, Encode, Decode, Clone)]
 pub struct ComplexAccumulator {
     #[bincode(with_serde)]
     pub re: StatisticsAccumulator<F<f64>>,
@@ -136,7 +172,11 @@ impl ComplexAccumulator {
         self.im.update_iter(use_weighted_average);
     }
 
-    pub(crate) fn max_weight_rows(&self, i_itg: usize) -> Vec<[String; 3]> {
+    pub(crate) fn max_weight_rows(
+        &self,
+        slot_meta: &SlotMeta,
+        discrete_axis_labels: &[String],
+    ) -> Vec<[String; 3]> {
         let max_evals = [
             &self.re.max_eval_positive,
             &self.re.max_eval_negative,
@@ -164,14 +204,14 @@ impl ComplexAccumulator {
             if max_eval.is_non_zero() {
                 Some([
                     format!(
-                        "itg #{:-3} {} [{}] ",
-                        format!("{:<3}", i_itg + 1),
+                        "{} {} [{}] ",
+                        slot_label(slot_meta),
                         format!("{:<2}", phase_str).blue(),
                         format!("{:<1}", sign_str).blue()
                     ),
                     format!("{:+.16e}", max_eval),
                     if let Some(sample) = max_eval_sample {
-                        format_max_eval_sample(sample)
+                        format_max_eval_sample(sample, discrete_axis_labels, &[])
                     } else {
                         "N/A".to_string()
                     },
@@ -181,6 +221,79 @@ impl ComplexAccumulator {
             }
         })
         .collect()
+    }
+}
+
+impl DiscreteGridAccumulatorSummary {
+    fn from_grid(grid: &Grid<F<f64>>) -> Option<Self> {
+        match grid {
+            Grid::Discrete(discrete_grid) => Some(Self {
+                bins: discrete_grid
+                    .bins
+                    .iter()
+                    .map(|bin| DiscreteGridBinAccumulatorSummary {
+                        accumulator: StatisticsAccumulator::new(),
+                        sub_summary: bin
+                            .sub_grid
+                            .as_ref()
+                            .and_then(Self::from_grid)
+                            .map(Box::new),
+                    })
+                    .collect(),
+            }),
+            Grid::Continuous(_) | Grid::Uniform(_, _) => None,
+        }
+    }
+
+    fn merge_iteration_grid(&mut self, grid: &Grid<F<f64>>) {
+        let Grid::Discrete(discrete_grid) = grid else {
+            return;
+        };
+
+        for (summary_bin, grid_bin) in self.bins.iter_mut().zip(discrete_grid.bins.iter()) {
+            summary_bin
+                .accumulator
+                .merge_samples_no_reset(&grid_bin.accumulator);
+            if let (Some(sub_summary), Some(sub_grid)) =
+                (summary_bin.sub_summary.as_mut(), grid_bin.sub_grid.as_ref())
+            {
+                sub_summary.merge_iteration_grid(sub_grid);
+            }
+        }
+    }
+
+    fn update_iter(&mut self) {
+        for bin in &mut self.bins {
+            bin.accumulator.update_iter(false);
+            if let Some(sub_summary) = bin.sub_summary.as_mut() {
+                sub_summary.update_iter();
+            }
+        }
+    }
+
+    fn first_non_trivial_breakdown(&self, depth: usize) -> Option<DiscreteBreakdown> {
+        if self.bins.len() > 1 {
+            return Some(DiscreteBreakdown {
+                discrete_depth: depth,
+                entries: self
+                    .bins
+                    .iter()
+                    .enumerate()
+                    .map(|(bin_index, bin)| DiscreteBreakdownEntry {
+                        bin_index,
+                        value: bin.accumulator.avg,
+                        error: bin.accumulator.err,
+                        chi_sq: bin.accumulator.chi_sq,
+                        processed_samples: bin.accumulator.processed_samples,
+                    })
+                    .collect(),
+            });
+        }
+
+        self.bins
+            .first()
+            .and_then(|bin| bin.sub_summary.as_ref())
+            .and_then(|sub_summary| sub_summary.first_non_trivial_breakdown(depth + 1))
     }
 }
 
@@ -196,8 +309,17 @@ struct IntegralResultCells {
 
 const MAX_SHARED_TABLE_WIDTH: usize = 150;
 
-fn result_group_separator() -> VerticalLine<On, On, ()> {
-    VerticalLine::new('│').top('┬').bottom('┴')
+struct StatusTable {
+    table: Table,
+    separator_after_rows: Vec<usize>,
+    hidden_vertical_boundaries: Vec<usize>,
+    full_row_vertical_count: usize,
+    suppress_header_middle_separator: bool,
+    suppress_header_tail_separator: bool,
+}
+
+fn slot_label(slot_meta: &SlotMeta) -> String {
+    format!("itg {}", slot_meta.key())
 }
 
 fn format_max_eval_coordinate(value: F<f64>) -> String {
@@ -218,30 +340,63 @@ fn format_max_eval_coordinates(xs: &[F<f64>]) -> String {
     )
 }
 
-fn format_max_eval_sample(sample: &Sample<F<f64>>) -> String {
+fn discrete_axis_label<'a>(axis_labels: &'a [String], depth: usize) -> &'a str {
+    axis_labels.get(depth).map(String::as_str).unwrap_or("idx")
+}
+
+fn append_max_eval_sample_parts(
+    sample: &Sample<F<f64>>,
+    axis_labels: &[String],
+    depth: usize,
+    parts: &mut Vec<String>,
+) {
     match sample {
         Sample::Continuous(_, xs) => {
-            format!("xs: {}", format_max_eval_coordinates(xs))
+            parts.push(format!("xs: {}", format_max_eval_coordinates(xs)));
         }
-        Sample::Discrete(_, graph_index, Some(nested_sample)) => match nested_sample.as_ref() {
-            Sample::Continuous(_, xs) => {
-                format!(
-                    "graph: {graph_index}, xs: {}",
-                    format_max_eval_coordinates(xs)
-                )
+        Sample::Discrete(_, index, Some(nested_sample)) => {
+            parts.push(format!(
+                "{}: {}",
+                discrete_axis_label(axis_labels, depth),
+                index
+            ));
+            append_max_eval_sample_parts(nested_sample, axis_labels, depth + 1, parts);
+        }
+        Sample::Discrete(_, index, None) => {
+            parts.push(format!(
+                "{}: {}",
+                discrete_axis_label(axis_labels, depth),
+                index
+            ));
+        }
+        Sample::Uniform(_, indices, xs) => {
+            for (offset, index) in indices.iter().enumerate() {
+                parts.push(format!(
+                    "{}: {}",
+                    discrete_axis_label(axis_labels, depth + offset),
+                    index
+                ));
             }
-            Sample::Discrete(_, channel_index, Some(nested_cont_sample)) => {
-                match nested_cont_sample.as_ref() {
-                    Sample::Continuous(_, xs) => format!(
-                        "graph: {graph_index}, channel: {channel_index}, xs: {}",
-                        format_max_eval_coordinates(xs)
-                    ),
-                    _ => String::from("N/A"),
-                }
-            }
-            _ => String::from("N/A"),
-        },
-        _ => String::from("N/A"),
+            parts.push(format!("xs: {}", format_max_eval_coordinates(xs)));
+        }
+    }
+}
+
+fn format_max_eval_sample(
+    sample: &Sample<F<f64>>,
+    axis_labels: &[String],
+    prefix_path: &[usize],
+) -> String {
+    let mut parts = prefix_path
+        .iter()
+        .enumerate()
+        .map(|(depth, index)| format!("{}: {}", discrete_axis_label(axis_labels, depth), index))
+        .collect_vec();
+    append_max_eval_sample_parts(sample, axis_labels, prefix_path.len(), &mut parts);
+    if parts.is_empty() {
+        String::from("N/A")
+    } else {
+        parts.join(", ")
     }
 }
 
@@ -257,100 +412,406 @@ fn format_total_points(points: usize) -> String {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+enum ComponentKind {
+    Real,
+    Imag,
+}
+
+impl ComponentKind {
+    fn all_for_display(display: IntegrationStatusPhaseDisplay) -> Vec<Self> {
+        let mut components = Vec::new();
+        if display.shows_real() {
+            components.push(Self::Real);
+        }
+        if display.shows_imag() {
+            components.push(Self::Imag);
+        }
+        components
+    }
+
+    fn tag(self) -> &'static str {
+        match self {
+            Self::Real => "re",
+            Self::Imag => "im",
+        }
+    }
+
+    fn colorized_tag(self) -> String {
+        self.tag().blue().bold().to_string()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ContributionKind {
+    All,
+    Sum,
+    Bin(usize),
+}
+
+impl ContributionKind {
+    fn label(self) -> String {
+        match self {
+            Self::All => "All".bold().green().to_string(),
+            Self::Sum => "Sum".bold().green().to_string(),
+            Self::Bin(bin_index) => format!("idx = {bin_index}").bold().green().to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct DiscreteLevelContext {
+    path: Vec<usize>,
+    pdfs: Vec<F<f64>>,
+}
+
+fn first_non_trivial_discrete_path(grid: &Grid<F<f64>>) -> Option<Vec<usize>> {
+    match grid {
+        Grid::Discrete(discrete_grid) => {
+            if discrete_grid.bins.len() > 1 {
+                Some(Vec::new())
+            } else {
+                discrete_grid
+                    .bins
+                    .first()
+                    .and_then(|bin| bin.sub_grid.as_ref())
+                    .and_then(first_non_trivial_discrete_path)
+                    .map(|mut path| {
+                        path.insert(0, 0);
+                        path
+                    })
+            }
+        }
+        Grid::Continuous(_) | Grid::Uniform(_, _) => None,
+    }
+}
+
+fn discrete_grid_at_path<'a>(
+    grid: &'a Grid<F<f64>>,
+    path: &[usize],
+) -> Option<&'a DiscreteGrid<F<f64>>> {
+    match (grid, path.split_first()) {
+        (Grid::Discrete(discrete_grid), None) => Some(discrete_grid),
+        (Grid::Discrete(discrete_grid), Some((bin_index, rest))) => discrete_grid
+            .bins
+            .get(*bin_index)?
+            .sub_grid
+            .as_ref()
+            .and_then(|sub_grid| discrete_grid_at_path(sub_grid, rest)),
+        _ => None,
+    }
+}
+
+fn summary_at_path<'a>(
+    summary: &'a DiscreteGridAccumulatorSummary,
+    path: &[usize],
+) -> Option<&'a DiscreteGridAccumulatorSummary> {
+    match path.split_first() {
+        None => Some(summary),
+        Some((bin_index, rest)) => summary
+            .bins
+            .get(*bin_index)?
+            .sub_summary
+            .as_deref()
+            .and_then(|sub_summary| summary_at_path(sub_summary, rest)),
+    }
+}
+
+fn first_non_trivial_discrete_context(
+    sampling_grid: &Grid<F<f64>>,
+) -> Option<DiscreteLevelContext> {
+    let path = first_non_trivial_discrete_path(sampling_grid)?;
+    let discrete_grid = discrete_grid_at_path(sampling_grid, &path)?;
+    Some(DiscreteLevelContext {
+        path,
+        pdfs: discrete_grid.bins.iter().map(|bin| bin.pdf).collect(),
+    })
+}
+
+fn discrete_axis_labels(sampling: &SamplingSettings) -> Vec<&'static str> {
+    match sampling {
+        SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => Vec::new(),
+        SamplingSettings::DiscreteGraphs(settings) => {
+            let mut labels = vec!["graph"];
+            match &settings.sampling_type {
+                DiscreteGraphSamplingType::Default(_)
+                | DiscreteGraphSamplingType::MultiChanneling(_)
+                | DiscreteGraphSamplingType::TropicalSampling(_) => {
+                    if settings.sample_orientations {
+                        labels.push("orientation");
+                    }
+                }
+                DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                    if settings.sample_orientations {
+                        labels.push("orientation");
+                    }
+                    labels.push("LMB channel");
+                }
+            }
+            labels
+        }
+    }
+}
+
+fn contribution_header_label(
+    integration_state: &IntegrationState,
+    discrete_monitoring_enabled: bool,
+) -> String {
+    if discrete_monitoring_enabled {
+        if let Some(label) = integration_state
+            .first_non_trivial_discrete_label
+            .as_deref()
+        {
+            return format!("Contribution (idx={label})")
+                .bold()
+                .blue()
+                .to_string();
+        }
+    }
+
+    "Contribution".bold().blue().to_string()
+}
+
+fn format_percentage_sig(value: f64, significant_digits: usize) -> String {
+    if !value.is_finite() {
+        return "None".red().to_string();
+    }
+
+    if value == 0.0 {
+        let decimals = significant_digits.saturating_sub(1);
+        return format!("{:.*}%", decimals, 0.0);
+    }
+
+    let abs_value = value.abs();
+    let exponent = abs_value.log10().floor() as i32;
+    if exponent < -2 || exponent >= significant_digits as i32 {
+        return format!("{:.*e}%", significant_digits.saturating_sub(1), value);
+    }
+
+    let decimals = (significant_digits as i32 - exponent - 1).max(0) as usize;
+    format!("{value:.decimals$}%")
+}
+
+fn format_signed_uncertainty(avg: F<f64>, err: F<f64>) -> String {
+    let formatted = utils::format_uncertainty(avg, err);
+    if avg.0.is_sign_negative() {
+        formatted
+    } else {
+        format!("+{formatted}")
+    }
+}
+
 fn build_integral_result_cells(
     itg: &StatisticsAccumulator<F<f64>>,
-    i_itg: usize,
+    slot_meta: &SlotMeta,
     i_iter: usize,
     tag: &str,
     trgt: Option<F<f64>>,
 ) -> IntegralResultCells {
-    let relative_error = if itg.avg.is_non_zero() {
-        if (itg.err / itg.avg).abs().0 > 0.01 {
-            format!(
-                "{:-8}",
-                format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).red()
-            )
-        } else {
-            format!(
-                "{:-8}",
-                format!("{:.3}%", (itg.err / itg.avg).abs().0 * 100.).green()
-            )
-        }
-    } else {
-        format!("{:-8}", "")
-    };
-
-    let chi_sq = if itg.chi_sq / F::<f64>::new_from_usize(i_iter) > F(5.) {
-        format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).red()
-    } else {
-        format!("{:-6.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64)).normal()
-    };
-
-    let (delta_sigma, delta_percent) = if i_itg == 1 {
-        if let Some(t) = trgt {
-            let delta_in_sigmas = (t - itg.avg).abs().0 / itg.err.0;
-            let delta_in_percent = if t.abs() > F(0.) {
-                (t - itg.avg).abs().0 / t.abs().0 * 100.
-            } else {
-                0.
-            };
-            let is_outside_target = delta_in_sigmas > 5.
-                || (t.abs().is_non_zero() && ((t - itg.avg).abs() / t.abs()).0 > 0.01);
-            let sigma_display = if is_outside_target {
-                delta_in_sigmas
-            } else if t.is_non_zero() && itg.avg.is_non_zero() {
-                delta_in_sigmas
-            } else {
-                0.
-            };
-            let sigma_text = format!("Δ = {:.3}σ", sigma_display);
-            let percent_text = format!("Δ = {:.3}%", delta_in_percent);
-            if is_outside_target {
-                (
-                    Some(sigma_text.red().to_string()),
-                    Some(percent_text.red().to_string()),
-                )
-            } else {
-                (
-                    Some(sigma_text.green().to_string()),
-                    Some(percent_text.green().to_string()),
-                )
-            }
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
-    };
-
-    let mwi = if itg.avg.abs().0 != 0. {
-        let mwi = itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
-            / (itg.avg.abs() * F::<f64>::new_from_usize(itg.processed_samples));
-        if mwi > F(1.) {
-            format!("  mwi: {:<10.4e}", mwi.0).red().to_string()
-        } else {
-            format!("  mwi: {:<10.4e}", mwi.0).normal().to_string()
-        }
-    } else {
-        format!("  mwi: {:<10.4e}", 0.).normal().to_string()
-    };
+    let relative_error = format_relative_error_cell(itg);
+    let chi_sq = format_chi_sq_cell(itg, i_iter);
+    let (delta_sigma, delta_percent) = format_delta_cells(itg, trgt);
+    let mwi = format_mwi_cell(itg);
 
     IntegralResultCells {
         integrand: format!(
-            "itg #{:-3} {}:",
-            format!("{:<3}", i_itg),
+            "{} {}:",
+            slot_label(slot_meta),
             format!("{:-2}", tag).blue().bold(),
         ),
-        value: utils::format_uncertainty(itg.avg, itg.err)
+        value: format_signed_uncertainty(itg.avg, itg.err)
             .blue()
             .bold()
             .to_string(),
-        relative_error: relative_error.to_string(),
-        chi_sq: chi_sq.to_string(),
+        relative_error,
+        chi_sq,
         delta_sigma,
         delta_percent,
         mwi,
     }
+}
+
+fn format_relative_error_cell(itg: &StatisticsAccumulator<F<f64>>) -> String {
+    format_relative_error_from_estimate(itg.avg, itg.err)
+}
+
+fn format_relative_error_from_estimate(avg: F<f64>, err: F<f64>) -> String {
+    if avg.is_zero() {
+        return String::new();
+    }
+
+    let formatted = format!("{:.3}%", (err / avg).abs().0 * 100.);
+    if (err / avg).abs().0 > 0.01 {
+        formatted.red().to_string()
+    } else {
+        formatted.green().to_string()
+    }
+}
+
+fn format_chi_sq_cell(itg: &StatisticsAccumulator<F<f64>>, i_iter: usize) -> String {
+    let chi_sq = format!("{:.3} χ²/dof", itg.chi_sq.0 / (i_iter as f64));
+    if itg.chi_sq / F::<f64>::new_from_usize(i_iter) > F(5.) {
+        chi_sq.red().to_string()
+    } else {
+        chi_sq
+    }
+}
+
+fn format_delta_cells(
+    itg: &StatisticsAccumulator<F<f64>>,
+    trgt: Option<F<f64>>,
+) -> (Option<String>, Option<String>) {
+    format_delta_cells_from_estimate(itg.avg, itg.err, trgt)
+}
+
+fn format_delta_cells_from_estimate(
+    avg: F<f64>,
+    err: F<f64>,
+    trgt: Option<F<f64>>,
+) -> (Option<String>, Option<String>) {
+    let Some(t) = trgt else {
+        return (None, None);
+    };
+
+    let delta_in_sigmas = if err.is_zero() {
+        0.0
+    } else {
+        (t - avg).abs().0 / err.0
+    };
+    let delta_in_percent = if t.abs().is_non_zero() {
+        (t - avg).abs().0 / t.abs().0 * 100.
+    } else {
+        0.
+    };
+    let is_outside_target =
+        delta_in_sigmas > 5. || (t.abs().is_non_zero() && ((t - avg).abs() / t.abs()).0 > 0.01);
+    let sigma_text = format!("Δ = {:.3}σ", delta_in_sigmas);
+    let percent_text = format!("Δ = {:.3}%", delta_in_percent);
+    if is_outside_target {
+        (
+            Some(sigma_text.red().to_string()),
+            Some(percent_text.red().to_string()),
+        )
+    } else {
+        (
+            Some(sigma_text.green().to_string()),
+            Some(percent_text.green().to_string()),
+        )
+    }
+}
+
+fn format_mwi_cell(itg: &StatisticsAccumulator<F<f64>>) -> String {
+    let mwi_value = max_weight_impact(itg);
+    let formatted = format!("mwi: {:.4e}", mwi_value.0);
+    if mwi_value > F(1.) {
+        formatted.red().to_string()
+    } else {
+        formatted
+    }
+}
+
+fn max_weight_impact(itg: &StatisticsAccumulator<F<f64>>) -> F<f64> {
+    if itg.avg.abs().0 == 0. || itg.processed_samples == 0 {
+        return F(0.0);
+    }
+
+    itg.max_eval_negative.abs().max(itg.max_eval_positive.abs())
+        / (itg.avg.abs() * F::<f64>::new_from_usize(itg.processed_samples))
+}
+
+fn build_table_result_summary(
+    slot_meta: &SlotMeta,
+    accumulator: &ComplexAccumulator,
+    iter: usize,
+    target: Option<Complex<F<f64>>>,
+) -> Vec<IntegrationTableComponentResult> {
+    [
+        ("re", &accumulator.re, target.as_ref().map(|value| value.re)),
+        ("im", &accumulator.im, target.as_ref().map(|value| value.im)),
+    ]
+    .into_iter()
+    .map(|(component, accumulator, target_component)| {
+        let cells =
+            build_integral_result_cells(accumulator, slot_meta, iter, component, target_component);
+        IntegrationTableComponentResult {
+            component: component.to_string(),
+            value: accumulator.avg,
+            error: accumulator.err,
+            relative_error_percent: accumulator
+                .avg
+                .is_non_zero()
+                .then(|| (accumulator.err / accumulator.avg).abs().0 * 100.0),
+            chi_sq_per_dof: if iter > 0 {
+                accumulator.chi_sq.0 / (iter as f64)
+            } else {
+                0.0
+            },
+            target_delta_sigma: cells.delta_sigma.as_ref().map(|_| {
+                if accumulator.err.is_zero() || target_component.is_none() {
+                    0.0
+                } else {
+                    let target_value = target_component.expect("checked is_some");
+                    (target_value - accumulator.avg).abs().0 / accumulator.err.0
+                }
+            }),
+            target_delta_percent: target_component.map(|target_value| {
+                if target_value.is_zero() {
+                    0.0
+                } else {
+                    (target_value - accumulator.avg).abs().0 / target_value.abs().0 * 100.0
+                }
+            }),
+            max_weight_impact: max_weight_impact(accumulator).0,
+        }
+    })
+    .collect()
+}
+
+fn build_max_weight_info_summary(
+    discrete_axis_labels: &[String],
+    accumulator: &ComplexAccumulator,
+) -> Vec<MaxWeightInfoEntry> {
+    [
+        (
+            "re",
+            "+",
+            accumulator.re.max_eval_positive,
+            accumulator.re.max_eval_positive_xs.as_ref(),
+        ),
+        (
+            "re",
+            "-",
+            accumulator.re.max_eval_negative,
+            accumulator.re.max_eval_negative_xs.as_ref(),
+        ),
+        (
+            "im",
+            "+",
+            accumulator.im.max_eval_positive,
+            accumulator.im.max_eval_positive_xs.as_ref(),
+        ),
+        (
+            "im",
+            "-",
+            accumulator.im.max_eval_negative,
+            accumulator.im.max_eval_negative_xs.as_ref(),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(component, sign, max_eval, sample)| {
+        if max_eval.is_zero() {
+            return None;
+        }
+
+        Some(MaxWeightInfoEntry {
+            component: component.to_string(),
+            sign: sign.to_string(),
+            max_eval,
+            coordinates: sample
+                .map(|sample| format_max_eval_sample(sample, discrete_axis_labels, &[])),
+        })
+    })
+    .collect()
 }
 
 fn build_iteration_status_header_left(elapsed_time: Duration, iter: usize) -> String {
@@ -367,9 +828,9 @@ fn build_iteration_status_header_left(elapsed_time: Duration, iter: usize) -> St
 
 fn build_iteration_status_header_middle(cur_points: usize, total_points: usize) -> String {
     format!(
-        "n_pts = {} {}",
+        "# samples per iteration = {} {}",
         format_iteration_points(cur_points),
-        format!("n_tot = {}", format_total_points(total_points))
+        format!("# samples total = {}", format_total_points(total_points))
             .bold()
             .green(),
     )
@@ -400,10 +861,341 @@ fn build_iteration_results_table(
     elapsed_time: Duration,
     cur_points: usize,
     n_samples_evaluated: usize,
-    target: &Option<Complex<F<f64>>>,
-) -> Table {
-    let has_target_columns = target.is_some();
-    let n_columns = if has_target_columns { 7 } else { 5 };
+    targets: &[Option<Complex<F<f64>>>],
+    render_options: &IntegrationStatusRenderOptions,
+) -> StatusTable {
+    #[derive(Clone, Default)]
+    struct MainTableSlotCells {
+        value: String,
+        relative_error: String,
+        sample_fraction: String,
+        target_pdf: String,
+    }
+
+    #[derive(Clone)]
+    struct MainTableRow {
+        contribution: ContributionKind,
+        component: ComponentKind,
+        slot_cells: Vec<MainTableSlotCells>,
+        chi_sq: String,
+        delta_sigma: String,
+        delta_percent: String,
+        max_weight_impact: String,
+    }
+
+    fn component_accumulator(
+        accumulator: &ComplexAccumulator,
+        component: ComponentKind,
+    ) -> &StatisticsAccumulator<F<f64>> {
+        match component {
+            ComponentKind::Real => &accumulator.re,
+            ComponentKind::Imag => &accumulator.im,
+        }
+    }
+
+    fn slot_component_summary<'a>(
+        integration_state: &'a IntegrationState,
+        slot_index: usize,
+        component: ComponentKind,
+    ) -> Option<&'a DiscreteGridAccumulatorSummary> {
+        match component {
+            ComponentKind::Real => integration_state.slot_re_summaries[slot_index].as_ref(),
+            ComponentKind::Imag => integration_state.slot_im_summaries[slot_index].as_ref(),
+        }
+    }
+
+    fn sum_estimate_error(summary: &DiscreteGridAccumulatorSummary) -> (F<f64>, F<f64>) {
+        let (avg, err_sq) = summary
+            .bins
+            .iter()
+            .fold((F(0.0), F(0.0)), |(avg, err_sq), bin| {
+                (
+                    avg + bin.accumulator.avg,
+                    err_sq + bin.accumulator.err * bin.accumulator.err,
+                )
+            });
+        (avg, F(err_sq.0.sqrt()))
+    }
+
+    fn total_processed_samples(summary: &DiscreteGridAccumulatorSummary) -> usize {
+        summary
+            .bins
+            .iter()
+            .map(|bin| bin.accumulator.processed_samples)
+            .sum()
+    }
+
+    fn format_value_cell(avg: F<f64>, err: F<f64>) -> String {
+        format_signed_uncertainty(avg, err)
+            .blue()
+            .bold()
+            .to_string()
+    }
+
+    fn build_main_table_row(
+        integration_state: &IntegrationState,
+        targets: &[Option<Complex<F<f64>>>],
+        discrete_context: Option<&DiscreteLevelContext>,
+        contribution: ContributionKind,
+        component: ComponentKind,
+        show_discrete_columns: bool,
+    ) -> Option<MainTableRow> {
+        let slot_cells = integration_state
+            .slot_metas
+            .iter()
+            .enumerate()
+            .map(|(slot_index, _)| match contribution {
+                ContributionKind::All => {
+                    let accumulator = component_accumulator(
+                        &integration_state.all_integrals[slot_index],
+                        component,
+                    );
+                    Some(MainTableSlotCells {
+                        value: format_value_cell(accumulator.avg, accumulator.err),
+                        relative_error: format_relative_error_cell(accumulator),
+                        sample_fraction: String::new(),
+                        target_pdf: String::new(),
+                    })
+                }
+                ContributionKind::Sum => {
+                    let summary = slot_component_summary(integration_state, slot_index, component)
+                        .and_then(|summary| {
+                            discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path))
+                        })?;
+                    let (avg, err) = sum_estimate_error(summary);
+                    Some(MainTableSlotCells {
+                        value: format_value_cell(avg, err),
+                        relative_error: format_relative_error_from_estimate(avg, err),
+                        sample_fraction: String::new(),
+                        target_pdf: String::new(),
+                    })
+                }
+                ContributionKind::Bin(bin_index) => {
+                    let summary = slot_component_summary(integration_state, slot_index, component)
+                        .and_then(|summary| {
+                            discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path))
+                        })?;
+                    let bin = summary.bins.get(bin_index)?;
+                    let total_samples = total_processed_samples(summary);
+                    let sample_fraction = if show_discrete_columns && total_samples > 0 {
+                        format_percentage_sig(
+                            bin.accumulator.processed_samples as f64 / total_samples as f64 * 100.0,
+                            3,
+                        )
+                        .blue()
+                        .to_string()
+                    } else {
+                        String::new()
+                    };
+                    let target_pdf = if show_discrete_columns {
+                        discrete_context
+                            .and_then(|ctx| ctx.pdfs.get(bin_index).copied())
+                            .map(|pdf| format_percentage_sig(pdf.0 * 100.0, 3))
+                            .unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
+                    Some(MainTableSlotCells {
+                        value: format_value_cell(bin.accumulator.avg, bin.accumulator.err),
+                        relative_error: format_relative_error_cell(&bin.accumulator),
+                        sample_fraction,
+                        target_pdf,
+                    })
+                }
+            })
+            .collect::<Option<Vec<_>>>()?;
+
+        let slot0_target = targets
+            .first()
+            .and_then(|target| target.as_ref())
+            .map(|target| match component {
+                ComponentKind::Real => target.re,
+                ComponentKind::Imag => target.im,
+            });
+        let (chi_sq, delta_sigma, delta_percent, max_weight_impact) = match contribution {
+            ContributionKind::All => {
+                let accumulator =
+                    component_accumulator(&integration_state.all_integrals[0], component);
+                let (delta_sigma, delta_percent) = format_delta_cells(accumulator, slot0_target);
+                (
+                    format_chi_sq_cell(accumulator, integration_state.iter),
+                    delta_sigma.unwrap_or_default(),
+                    delta_percent.unwrap_or_default(),
+                    format_mwi_cell(accumulator),
+                )
+            }
+            ContributionKind::Sum => {
+                let summary = slot_component_summary(integration_state, 0, component).and_then(
+                    |summary| discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path)),
+                )?;
+                let (avg, err) = sum_estimate_error(summary);
+                let (delta_sigma, delta_percent) =
+                    format_delta_cells_from_estimate(avg, err, slot0_target);
+                (
+                    String::new(),
+                    delta_sigma.unwrap_or_default(),
+                    delta_percent.unwrap_or_default(),
+                    String::new(),
+                )
+            }
+            ContributionKind::Bin(bin_index) => {
+                let summary = slot_component_summary(integration_state, 0, component).and_then(
+                    |summary| discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path)),
+                )?;
+                let bin = summary.bins.get(bin_index)?;
+                (
+                    format_chi_sq_cell(&bin.accumulator, integration_state.iter),
+                    String::new(),
+                    String::new(),
+                    format_mwi_cell(&bin.accumulator),
+                )
+            }
+        };
+
+        Some(MainTableRow {
+            contribution,
+            component,
+            slot_cells,
+            chi_sq,
+            delta_sigma,
+            delta_percent,
+            max_weight_impact,
+        })
+    }
+
+    fn discrete_sort_key(
+        integration_state: &IntegrationState,
+        discrete_context: &DiscreteLevelContext,
+        component: ComponentKind,
+        bin_index: usize,
+        sort_mode: ContributionSortMode,
+    ) -> f64 {
+        let Some(summary) = slot_component_summary(integration_state, 0, component)
+            .and_then(|summary| summary_at_path(summary, &discrete_context.path))
+        else {
+            return 0.0;
+        };
+        let Some(bin) = summary.bins.get(bin_index) else {
+            return 0.0;
+        };
+        match sort_mode {
+            ContributionSortMode::Integral => bin.accumulator.avg.abs().0,
+            ContributionSortMode::Error => bin.accumulator.err.0,
+            ContributionSortMode::Index => bin_index as f64,
+        }
+    }
+
+    let components = ComponentKind::all_for_display(render_options.phase_display);
+    let discrete_context = first_non_trivial_discrete_context(&integration_state.sampling_grid);
+    let show_discrete_columns = discrete_context.is_some()
+        && (render_options.show_top_discrete_grid
+            || render_options.show_discrete_contributions_sum);
+    let has_target_columns = targets.first().is_some_and(Option::is_some);
+    let slot_block_width = if show_discrete_columns { 4 } else { 2 };
+    let metadata_columns = if has_target_columns { 4 } else { 2 };
+    let n_columns = 2 + integration_state.slot_metas.len() * slot_block_width + metadata_columns;
+
+    let mut row_groups = vec![
+        components
+            .iter()
+            .filter_map(|component| {
+                build_main_table_row(
+                    integration_state,
+                    targets,
+                    discrete_context.as_ref(),
+                    ContributionKind::All,
+                    *component,
+                    show_discrete_columns,
+                )
+            })
+            .collect_vec(),
+    ];
+
+    if let Some(discrete_context) = discrete_context.as_ref() {
+        if render_options.show_discrete_contributions_sum {
+            let sum_rows = components
+                .iter()
+                .filter_map(|component| {
+                    build_main_table_row(
+                        integration_state,
+                        targets,
+                        Some(discrete_context),
+                        ContributionKind::Sum,
+                        *component,
+                        show_discrete_columns,
+                    )
+                })
+                .collect_vec();
+            if !sum_rows.is_empty() {
+                row_groups.push(sum_rows);
+            }
+        }
+
+        if render_options.show_top_discrete_grid {
+            let bin_count = discrete_context.pdfs.len();
+            match render_options.contribution_sort {
+                ContributionSortMode::Index => {
+                    let mut rows = Vec::new();
+                    for bin_index in 0..bin_count {
+                        for component in &components {
+                            if let Some(row) = build_main_table_row(
+                                integration_state,
+                                targets,
+                                Some(discrete_context),
+                                ContributionKind::Bin(bin_index),
+                                *component,
+                                show_discrete_columns,
+                            ) {
+                                rows.push(row);
+                            }
+                        }
+                    }
+                    if !rows.is_empty() {
+                        row_groups.push(rows);
+                    }
+                }
+                ContributionSortMode::Integral | ContributionSortMode::Error => {
+                    for component in &components {
+                        let mut bin_indices = (0..bin_count).collect_vec();
+                        bin_indices.sort_by(|lhs, rhs| {
+                            discrete_sort_key(
+                                integration_state,
+                                discrete_context,
+                                *component,
+                                *rhs,
+                                render_options.contribution_sort,
+                            )
+                            .partial_cmp(&discrete_sort_key(
+                                integration_state,
+                                discrete_context,
+                                *component,
+                                *lhs,
+                                render_options.contribution_sort,
+                            ))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        let rows = bin_indices
+                            .into_iter()
+                            .filter_map(|bin_index| {
+                                build_main_table_row(
+                                    integration_state,
+                                    targets,
+                                    Some(discrete_context),
+                                    ContributionKind::Bin(bin_index),
+                                    *component,
+                                    show_discrete_columns,
+                                )
+                            })
+                            .collect_vec();
+                        if !rows.is_empty() {
+                            row_groups.push(rows);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut builder = Builder::new();
     let mut first_row = vec![
         build_iteration_status_header_left(elapsed_time, integration_state.iter),
@@ -418,156 +1210,360 @@ fn build_iteration_results_table(
     ));
     builder.push_record(first_row);
 
-    let mut rows_without_target = Vec::new();
-    let mut row_index = 1usize;
+    let mut header_row = vec![
+        contribution_header_label(integration_state, show_discrete_columns),
+        String::new(),
+    ];
+    for slot_meta in &integration_state.slot_metas {
+        header_row.push(slot_meta.key().bold().blue().to_string());
+        header_row.extend(std::iter::repeat_n(String::new(), slot_block_width - 1));
+    }
+    header_row.push("χ²/dof".bold().blue().to_string());
+    header_row.push("max. wgt. infl.".bold().blue().to_string());
+    if has_target_columns {
+        header_row.push("Δ [σ]".bold().blue().to_string());
+        header_row.push("Δ [%]".bold().blue().to_string());
+    }
+    builder.push_record(header_row);
 
-    for (i_integrand, integrand) in integration_state.all_integrals.iter().enumerate() {
-        for (tag, accumulator, target_component) in [
-            (
-                "re",
-                &integrand.re,
-                if i_integrand == 0 {
-                    target.map(|value| value.re)
-                } else {
-                    None
-                },
-            ),
-            (
-                "im",
-                &integrand.im,
-                if i_integrand == 0 {
-                    target.map(|value| value.im)
-                } else {
-                    None
-                },
-            ),
-        ] {
-            let cells = build_integral_result_cells(
-                accumulator,
-                i_integrand + 1,
-                integration_state.iter,
-                tag,
-                target_component,
-            );
-            if has_target_columns {
-                if let (Some(delta_sigma), Some(delta_percent)) =
-                    (cells.delta_sigma, cells.delta_percent)
-                {
-                    builder.push_record(vec![
-                        cells.integrand,
-                        cells.value,
-                        cells.relative_error,
-                        cells.chi_sq,
-                        delta_sigma,
-                        delta_percent,
-                        cells.mwi,
-                    ]);
-                } else {
-                    builder.push_record(vec![
-                        cells.integrand,
-                        cells.value,
-                        cells.relative_error,
-                        cells.chi_sq,
-                        cells.mwi,
-                        String::new(),
-                        String::new(),
-                    ]);
-                    rows_without_target.push(row_index);
+    for group in &row_groups {
+        for row in group {
+            let mut record = vec![row.contribution.label(), row.component.colorized_tag()];
+            for slot_cells in &row.slot_cells {
+                record.push(slot_cells.value.clone());
+                record.push(slot_cells.relative_error.clone());
+                if show_discrete_columns {
+                    record.push(slot_cells.sample_fraction.clone());
+                    record.push(slot_cells.target_pdf.clone());
                 }
-            } else {
-                builder.push_record(vec![
-                    cells.integrand,
-                    cells.value,
-                    cells.relative_error,
-                    cells.chi_sq,
-                    cells.mwi,
-                ]);
             }
-            row_index += 1;
+            record.push(row.chi_sq.clone());
+            record.push(row.max_weight_impact.clone());
+            if has_target_columns {
+                record.push(row.delta_sigma.clone());
+                record.push(row.delta_percent.clone());
+            }
+            builder.push_record(record);
         }
     }
 
     let mut table = builder.build();
     table.modify((0, 0), Span::column(2));
     table.modify((0, 2), Span::column((n_columns - 3) as isize));
-    for row in rows_without_target {
-        table.modify((row, 4), Span::column(3));
-    }
-
-    if has_target_columns {
-        table.with(
-            Style::rounded()
-                .remove_horizontals()
-                .verticals([
-                    (3, result_group_separator()),
-                    (4, result_group_separator()),
-                    (6, result_group_separator()),
-                ])
-                .horizontals([(
-                    1,
-                    HorizontalLine::new('─')
-                        .intersection('┬')
-                        .left('├')
-                        .right('┤'),
-                )])
-                .remove_vertical(),
-        );
-    } else {
-        table.with(
-            Style::rounded()
-                .remove_horizontals()
-                .verticals([(3, result_group_separator()), (4, result_group_separator())])
-                .horizontals([(
-                    1,
-                    HorizontalLine::new('─')
-                        .intersection('┬')
-                        .left('├')
-                        .right('┤'),
-                )])
-                .remove_vertical(),
+    table.modify((1, 0), Span::column(2));
+    for (slot_index, _) in integration_state.slot_metas.iter().enumerate() {
+        table.modify(
+            (1, 2 + slot_index * slot_block_width),
+            Span::column(slot_block_width as isize),
         );
     }
 
+    let first_metadata_column = 2 + integration_state.slot_metas.len() * slot_block_width;
+
+    let mut separator_rows = vec![1usize, 2usize];
+    let mut row_offset = 2usize;
+    for (group_index, group) in row_groups.iter().enumerate() {
+        row_offset += group.len();
+        if group_index + 1 < row_groups.len() {
+            separator_rows.push(row_offset);
+        }
+    }
+    separator_rows.sort_unstable();
+    separator_rows.dedup();
+
+    table.with(Style::rounded().remove_horizontals());
     table.with(BorderCorrection::span());
     table.with(Modify::new(Rows::new(0..)).with(Alignment::left()));
     table.with(Modify::new(Cell::new(0, 2)).with(Alignment::center()));
     table.with(Modify::new(Cell::new(0, n_columns - 1)).with(Alignment::center()));
-    table
+    table.with(Modify::new(Rows::new(1..2)).with(Alignment::center()));
+
+    let mut hidden_vertical_boundaries = vec![0usize];
+    for slot_index in 0..integration_state.slot_metas.len() {
+        let block_start = 2 + slot_index * slot_block_width;
+        hidden_vertical_boundaries.extend(block_start..(block_start + slot_block_width - 1));
+    }
+    if has_target_columns {
+        hidden_vertical_boundaries.push(first_metadata_column + 2);
+    }
+
+    StatusTable {
+        table,
+        separator_after_rows: separator_rows
+            .into_iter()
+            .map(|row| row.saturating_sub(1))
+            .collect(),
+        hidden_vertical_boundaries,
+        full_row_vertical_count: n_columns + 1,
+        suppress_header_middle_separator: true,
+        suppress_header_tail_separator: true,
+    }
 }
 
-fn build_max_weight_details_table(all_integrals: &[ComplexAccumulator]) -> Table {
+fn max_weight_row_descriptors(
+    phase_display: IntegrationStatusPhaseDisplay,
+) -> Vec<(ComponentKind, &'static str, bool)> {
+    let mut rows = Vec::new();
+    if phase_display.shows_real() {
+        rows.push((ComponentKind::Real, "+", true));
+        rows.push((ComponentKind::Real, "-", false));
+    }
+    if phase_display.shows_imag() {
+        rows.push((ComponentKind::Imag, "+", true));
+        rows.push((ComponentKind::Imag, "-", false));
+    }
+    rows
+}
+
+fn max_eval_entry<'a>(
+    accumulator: &'a StatisticsAccumulator<F<f64>>,
+    positive: bool,
+) -> Option<(F<f64>, Option<&'a Sample<F<f64>>>)> {
+    let (value, sample) = if positive {
+        (
+            accumulator.max_eval_positive,
+            accumulator.max_eval_positive_xs.as_ref(),
+        )
+    } else {
+        (
+            accumulator.max_eval_negative,
+            accumulator.max_eval_negative_xs.as_ref(),
+        )
+    };
+
+    if value.is_zero() {
+        None
+    } else {
+        Some((value, sample))
+    }
+}
+
+fn build_max_weight_details_table(
+    integration_state: &IntegrationState,
+    render_options: &IntegrationStatusRenderOptions,
+) -> StatusTable {
     let mut builder = Builder::new();
     builder.push_record([
         "Integrand".bold().blue().to_string(),
+        String::new(),
         "Max eval".bold().blue().to_string(),
         "Max eval coordinates".bold().blue().to_string(),
     ]);
 
-    for (i_itg, integral) in all_integrals.iter().enumerate() {
-        for row in integral.max_weight_rows(i_itg) {
-            builder.push_record(row);
+    for (slot_meta, integral) in integration_state
+        .slot_metas
+        .iter()
+        .zip(integration_state.all_integrals.iter())
+    {
+        for (component, sign, positive) in max_weight_row_descriptors(render_options.phase_display)
+        {
+            let accumulator = match component {
+                ComponentKind::Real => &integral.re,
+                ComponentKind::Imag => &integral.im,
+            };
+            let Some((value, coordinates)) = max_eval_entry(accumulator, positive) else {
+                continue;
+            };
+            builder.push_record([
+                slot_label(slot_meta),
+                format!("{} [{}]", component.colorized_tag(), sign.blue()),
+                format!("{:+.16e}", value),
+                coordinates
+                    .map(|sample| {
+                        format_max_eval_sample(sample, &integration_state.discrete_axis_labels, &[])
+                    })
+                    .unwrap_or_else(|| "N/A".to_string()),
+            ]);
         }
     }
 
     let mut table = builder.build();
+    table.modify((0, 0), Span::column(2));
     table.with(Panel::header(
         "Maximum weight details".bold().green().to_string(),
     ));
-    table.with(Style::rounded().remove_horizontals().horizontals([
-        (1, HorizontalLine::full('─', '┬', '├', '┤')),
-        (2, HorizontalLine::full('─', '┼', '├', '┤')),
-    ]));
+    table.with(Style::rounded().remove_horizontals());
     table.with(BorderCorrection::span());
     table.with(Modify::new(Rows::new(0..2)).with(Alignment::center()));
     table.with(Modify::new(Rows::new(2..)).with(Alignment::left()));
-    table
+    StatusTable {
+        table,
+        separator_after_rows: vec![0, 1],
+        hidden_vertical_boundaries: vec![0],
+        full_row_vertical_count: 5,
+        suppress_header_middle_separator: false,
+        suppress_header_tail_separator: false,
+    }
 }
 
-fn render_max_weight_details_table(all_integrals: &[ComplexAccumulator]) -> String {
-    normalize_tabled_separator_rows(&build_max_weight_details_table(all_integrals).to_string())
+fn build_discrete_bin_max_weight_details_table(
+    integration_state: &IntegrationState,
+    render_options: &IntegrationStatusRenderOptions,
+) -> Option<StatusTable> {
+    fn slot_component_summary<'a>(
+        integration_state: &'a IntegrationState,
+        slot_index: usize,
+        component: ComponentKind,
+    ) -> Option<&'a DiscreteGridAccumulatorSummary> {
+        match component {
+            ComponentKind::Real => integration_state.slot_re_summaries[slot_index].as_ref(),
+            ComponentKind::Imag => integration_state.slot_im_summaries[slot_index].as_ref(),
+        }
+    }
+
+    let discrete_context = first_non_trivial_discrete_context(&integration_state.sampling_grid)?;
+    let mut builder = Builder::new();
+    let mut header = vec![
+        contribution_header_label(integration_state, true),
+        String::new(),
+    ];
+    for slot_meta in &integration_state.slot_metas {
+        header.push(slot_meta.key().bold().blue().to_string());
+    }
+    header.push("Max eval coordinates".bold().blue().to_string());
+    builder.push_record(header);
+
+    let contributions = std::iter::once(ContributionKind::All)
+        .chain((0..discrete_context.pdfs.len()).map(ContributionKind::Bin))
+        .collect_vec();
+
+    let mut row_groups = Vec::new();
+    for contribution in contributions {
+        let mut rows = Vec::new();
+        for (component, sign, positive) in max_weight_row_descriptors(render_options.phase_display)
+        {
+            let slot_values = integration_state
+                .slot_metas
+                .iter()
+                .enumerate()
+                .map(|(slot_index, _)| {
+                    let accumulator = match contribution {
+                        ContributionKind::All => {
+                            let integral = &integration_state.all_integrals[slot_index];
+                            match component {
+                                ComponentKind::Real => &integral.re,
+                                ComponentKind::Imag => &integral.im,
+                            }
+                        }
+                        ContributionKind::Bin(bin_index) => {
+                            let summary =
+                                slot_component_summary(integration_state, slot_index, component)
+                                    .and_then(|summary| {
+                                        summary_at_path(summary, &discrete_context.path)
+                                    })?;
+                            &summary.bins.get(bin_index)?.accumulator
+                        }
+                        ContributionKind::Sum => return None,
+                    };
+                    Some(
+                        max_eval_entry(accumulator, positive)
+                            .map(|(value, _)| format!("{:+.16e}", value))
+                            .unwrap_or_default(),
+                    )
+                })
+                .collect::<Option<Vec<_>>>()?;
+
+            let slot0_coordinates = match contribution {
+                ContributionKind::All => {
+                    let accumulator = match component {
+                        ComponentKind::Real => &integration_state.all_integrals[0].re,
+                        ComponentKind::Imag => &integration_state.all_integrals[0].im,
+                    };
+                    max_eval_entry(accumulator, positive)
+                        .and_then(|(_, sample)| sample)
+                        .map(|sample| {
+                            format_max_eval_sample(
+                                sample,
+                                &integration_state.discrete_axis_labels,
+                                &[],
+                            )
+                        })
+                        .unwrap_or_else(|| "N/A".to_string())
+                }
+                ContributionKind::Bin(bin_index) => {
+                    let summary = slot_component_summary(integration_state, 0, component)
+                        .and_then(|summary| summary_at_path(summary, &discrete_context.path))?;
+                    max_eval_entry(&summary.bins.get(bin_index)?.accumulator, positive)
+                        .and_then(|(_, sample)| sample)
+                        .map(|sample| {
+                            format_max_eval_sample(
+                                sample,
+                                &integration_state.discrete_axis_labels,
+                                &discrete_context.path,
+                            )
+                        })
+                        .unwrap_or_else(|| "N/A".to_string())
+                }
+                ContributionKind::Sum => String::new(),
+            };
+
+            if slot_values.iter().all(String::is_empty) && slot0_coordinates == "N/A" {
+                continue;
+            }
+
+            let mut record = vec![
+                contribution.label(),
+                format!("{} [{}]", component.colorized_tag(), sign.blue()),
+            ];
+            record.extend(slot_values);
+            record.push(slot0_coordinates);
+            rows.push(record);
+        }
+        if !rows.is_empty() {
+            row_groups.push(rows);
+        }
+    }
+
+    if row_groups.is_empty() {
+        return None;
+    }
+
+    for group in &row_groups {
+        for row in group {
+            builder.push_record(row.clone());
+        }
+    }
+
+    let mut table = builder.build();
+    table.modify((0, 0), Span::column(2));
+    table.with(Panel::header(
+        "Maximum weight details by discrete bin"
+            .bold()
+            .green()
+            .to_string(),
+    ));
+
+    let mut separator_rows = vec![1usize, 2usize];
+    let mut row_offset = 1usize;
+    for (group_index, group) in row_groups.iter().enumerate() {
+        row_offset += group.len();
+        if group_index + 1 < row_groups.len() {
+            separator_rows.push(row_offset + 1);
+        }
+    }
+
+    table.with(Style::rounded().remove_horizontals());
+    table.with(BorderCorrection::span());
+    table.with(Modify::new(Rows::new(0..2)).with(Alignment::center()));
+    table.with(Modify::new(Rows::new(2..)).with(Alignment::left()));
+    Some(StatusTable {
+        table,
+        separator_after_rows: separator_rows
+            .into_iter()
+            .map(|row| row.saturating_sub(1))
+            .collect(),
+        hidden_vertical_boundaries: vec![0],
+        full_row_vertical_count: integration_state.slot_metas.len() + 4,
+        suppress_header_middle_separator: false,
+        suppress_header_tail_separator: false,
+    })
 }
 
-fn suppress_iteration_header_tail_separator(rendered: &str) -> String {
+fn suppress_iteration_header_separators(
+    rendered: &str,
+    suppress_middle_separator: bool,
+    suppress_tail_separator: bool,
+) -> String {
     rendered
         .lines()
         .enumerate()
@@ -581,38 +1577,101 @@ fn suppress_iteration_header_tail_separator(rendered: &str) -> String {
                 return line.to_string();
             }
 
-            let suppressed_index = vertical_positions[vertical_positions.len() - 2];
             let mut updated = line.to_string();
-            updated.replace_range(suppressed_index..suppressed_index + '│'.len_utf8(), " ");
+            if suppress_tail_separator {
+                let suppressed_index = vertical_positions[vertical_positions.len() - 2];
+                updated.replace_range(suppressed_index..suppressed_index + '│'.len_utf8(), " ");
+            }
+            if suppress_middle_separator && vertical_positions.len() >= 4 {
+                let suppressed_index = vertical_positions[1];
+                updated.replace_range(suppressed_index..suppressed_index + '│'.len_utf8(), " ");
+            }
             updated
         })
         .join("\n")
 }
 
-fn render_tables_with_shared_width(mut tables: Vec<Table>) -> String {
+fn hide_hidden_vertical_boundaries(
+    rendered: &str,
+    hidden_vertical_boundaries: &[usize],
+    full_row_vertical_count: usize,
+) -> String {
+    rendered
+        .lines()
+        .map(|line| {
+            let vertical_positions = line.match_indices('│').map(|(idx, _)| idx).collect_vec();
+            if vertical_positions.len() != full_row_vertical_count {
+                return line.to_string();
+            }
+
+            let mut updated = line.to_string();
+            for boundary in hidden_vertical_boundaries.iter().rev() {
+                let Some(position) = vertical_positions.get(boundary + 1).copied() else {
+                    continue;
+                };
+                updated.replace_range(position..position + '│'.len_utf8(), " ");
+            }
+            updated
+        })
+        .join("\n")
+}
+
+fn insert_separator_rows(rendered: &str, separator_after_rows: &[usize]) -> String {
+    if separator_after_rows.is_empty() {
+        return rendered.to_string();
+    }
+
+    let mut lines = rendered.lines().map(str::to_string).collect_vec();
+    let width = lines
+        .first()
+        .map(|line| line.chars().count())
+        .unwrap_or_default();
+    if width < 2 {
+        return rendered.to_string();
+    }
+    let separator = format!("├{}┤", "─".repeat(width - 2));
+
+    let mut inserted = 0usize;
+    for row in separator_after_rows {
+        let insert_at = row + 2 + inserted;
+        lines.insert(insert_at, separator.clone());
+        inserted += 1;
+    }
+
+    lines.join("\n")
+}
+
+fn render_tables_with_shared_width(mut tables: Vec<StatusTable>) -> String {
     let max_width = tables
         .iter()
-        .map(Table::total_width)
+        .map(|table| table.table.total_width())
         .max()
         .unwrap_or(0)
         .min(MAX_SHARED_TABLE_WIDTH);
 
     for table in &mut tables {
-        if table.total_width() < max_width {
-            table.with(Width::increase(max_width));
+        if table.table.total_width() < max_width {
+            table.table.with(Width::increase(max_width));
         }
     }
 
     tables
         .into_iter()
-        .enumerate()
-        .map(|(table_index, table)| {
-            let rendered = table.to_string();
-            let rendered = if table_index == 0 {
-                suppress_iteration_header_tail_separator(&rendered)
-            } else {
-                rendered
-            };
+        .map(|table| {
+            let mut rendered = table.table.to_string();
+            rendered = hide_hidden_vertical_boundaries(
+                &rendered,
+                &table.hidden_vertical_boundaries,
+                table.full_row_vertical_count,
+            );
+            if table.suppress_header_middle_separator || table.suppress_header_tail_separator {
+                rendered = suppress_iteration_header_separators(
+                    &rendered,
+                    table.suppress_header_middle_separator,
+                    table.suppress_header_tail_separator,
+                );
+            }
+            rendered = insert_separator_rows(&rendered, &table.separator_after_rows);
             normalize_tabled_separator_rows(&rendered)
         })
         .collect_vec()
@@ -625,89 +1684,71 @@ fn render_tables_with_shared_width(mut tables: Vec<Table>) -> String {
 pub struct IntegrationState {
     pub num_points: usize,
     #[bincode(with_serde)]
-    pub integral: ComplexAccumulator,
-    #[bincode(with_serde)]
     pub all_integrals: Vec<ComplexAccumulator>,
-    pub stats: StatisticsCounter,
-    pub max_stream_id: usize,
     #[bincode(with_serde)]
-    pub grid: Grid<F<f64>>,
+    slot_re_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
+    #[bincode(with_serde)]
+    slot_im_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
+    pub stats: StatisticsCounter,
+    pub slot_metas: Vec<SlotMeta>,
+    #[bincode(with_serde)]
+    pub sampling_grid: Grid<F<f64>>,
+    pub discrete_axis_labels: Vec<String>,
+    pub first_non_trivial_discrete_label: Option<String>,
     pub iter: usize,
+    pub elapsed_seconds: f64,
+    pub n_cores: usize,
 }
 
 impl IntegrationState {
-    fn new_from_settings<GridGenerator>(create_grid: GridGenerator) -> Self
+    fn new_from_settings<GridGenerator>(
+        create_grid: GridGenerator,
+        slot_metas: Vec<SlotMeta>,
+        discrete_axis_labels: Vec<String>,
+    ) -> Self
     where
         GridGenerator: Fn() -> Grid<F<f64>>,
     {
         let num_points = 0;
         let iter = 0;
-        //let rng = MonteCarloRng::new(settings.integrator.seed, 0); // in havana_integrate, samples are generated on a single thread
-        let grid = create_grid();
-        let integral = ComplexAccumulator::new();
-        let all_integrals = vec![ComplexAccumulator::new()];
+        let sampling_grid = create_grid();
+        let first_non_trivial_discrete_label = first_non_trivial_discrete_path(&sampling_grid)
+            .and_then(|path| discrete_axis_labels.get(path.len()).cloned());
+        let all_integrals = vec![ComplexAccumulator::new(); slot_metas.len()];
+        let summary_template = DiscreteGridAccumulatorSummary::from_grid(&sampling_grid);
+        let slot_re_summaries = vec![summary_template.clone(); slot_metas.len()];
+        let slot_im_summaries = vec![summary_template; slot_metas.len()];
         let stats = StatisticsCounter::new_empty();
-        let max_stream_id = 0;
 
         Self {
             num_points,
-            integral,
             all_integrals,
+            slot_re_summaries,
+            slot_im_summaries,
             stats,
-            max_stream_id,
-            grid,
+            slot_metas,
+            sampling_grid,
+            discrete_axis_labels,
+            first_non_trivial_discrete_label,
             iter,
+            elapsed_seconds: 0.0,
+            n_cores: 1,
         }
     }
 
     fn update_iter(&mut self, use_weighted_average: bool) {
-        self.integral.update_iter(use_weighted_average);
         self.all_integrals
             .iter_mut()
             .for_each(|acc| acc.update_iter(use_weighted_average));
-    }
-
-    // this thing is an unholy mess
-    fn display_orientation_results(&self, settings: &RuntimeSettings) {
-        if settings.sampling.sample_orientations()
-            && let Grid::Discrete(graph_grids) = &self.grid
-        {
-            for (i_graph, graph_grid) in graph_grids.bins.iter().enumerate() {
-                info!("results for graph #{}", i_graph);
-                info!("-------------------------");
-                if let Grid::Discrete(orientation_grids) = graph_grid.sub_grid.as_ref().unwrap() {
-                    let mut sum_all_positive = F(0.0);
-                    let mut sum_all_negative = F(0.0);
-                    for (i_orientation, orientation_grid) in
-                        orientation_grids.bins.iter().enumerate()
-                    {
-                        print_integral_result(
-                            &orientation_grid.accumulator,
-                            1,
-                            self.iter,
-                            &format!("orientation_{i_orientation}"),
-                            None,
-                        );
-
-                        if orientation_grid.accumulator.avg.positive() {
-                            sum_all_positive += orientation_grid.accumulator.avg;
-                        } else {
-                            sum_all_negative += orientation_grid.accumulator.avg;
-                        }
-                    }
-
-                    info!("sum_all_positive: {}", sum_all_positive);
-                    info!("sum_all_negative: {}", sum_all_negative);
-                }
-            }
-        }
     }
 }
 
 pub struct CoreResult {
     pub stats: StatisticsCounter,
-    pub integral: ComplexAccumulator,
-    pub grid: Grid<F<f64>>,
+    pub integrals: Vec<ComplexAccumulator>,
+    pub sampling_grid: Grid<F<f64>>,
+    pub slot_re_grids: Vec<Grid<F<f64>>>,
+    pub slot_im_grids: Vec<Grid<F<f64>>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -716,32 +1757,101 @@ pub enum IntegrationStatusKind {
     Final,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IntegrationStatusPhaseDisplay {
+    Both,
+    Real,
+    Imag,
+}
+
+impl IntegrationStatusPhaseDisplay {
+    fn shows_real(self) -> bool {
+        matches!(self, Self::Both | Self::Real)
+    }
+
+    fn shows_imag(self) -> bool {
+        matches!(self, Self::Both | Self::Imag)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContributionSortMode {
+    Index,
+    Integral,
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IntegrationStatusRenderOptions {
+    pub phase_display: IntegrationStatusPhaseDisplay,
+    pub show_statistics: bool,
+    pub show_max_weight_details: bool,
+    pub show_top_discrete_grid: bool,
+    pub show_discrete_contributions_sum: bool,
+    pub contribution_sort: ContributionSortMode,
+    pub show_max_weight_info_for_discrete_bins: bool,
+}
+
+impl IntegrationStatusRenderOptions {
+    fn for_final(self) -> Self {
+        Self {
+            show_statistics: true,
+            ..self
+        }
+    }
+}
+
 /// Integrate function used for local runs
-pub fn havana_integrate<T, S>(
+pub fn havana_integrate<S>(
     settings: &RuntimeSettings,
     model: &Model,
-    user_data_generator: T,
-    target: Option<Complex<F<f64>>>,
+    slot_metas: Vec<SlotMeta>,
+    slot_integrands: Vec<Integrand>,
+    n_cores: usize,
+    targets: Vec<Option<Complex<F<f64>>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
-    show_max_wgt_info_per_iteration: bool,
-    show_integration_statistics_per_iteration: bool,
+    render_options: IntegrationStatusRenderOptions,
     mut status_emitter: S,
 ) -> Result<IntegrationResult>
 where
-    T: Fn(&RuntimeSettings) -> UserData,
     S: FnMut(IntegrationStatusKind, String) -> Result<()>,
 {
-    let mut user_data = user_data_generator(settings);
+    if slot_metas.is_empty() {
+        return Err(Report::msg(
+            "At least one integrand must be selected for integration",
+        ));
+    }
+    if slot_metas.len() != slot_integrands.len() || slot_metas.len() != targets.len() {
+        return Err(Report::msg(
+            "Multi-integrand integration received inconsistent slot metadata, integrands, or targets",
+        ));
+    }
+
+    let mut user_data = vec![slot_integrands.clone(); n_cores];
 
     let mut integration_state = if let Some(integration_state) = state {
         integration_state
     } else {
-        IntegrationState::new_from_settings(|| user_data.integrand[0].create_grid())
+        let sampling_grid = slot_integrands[0].create_grid();
+        let discrete_axis_labels = discrete_axis_labels(&settings.sampling)
+            .into_iter()
+            .map(str::to_string)
+            .collect_vec();
+        IntegrationState::new_from_settings(
+            || sampling_grid.clone(),
+            slot_metas.clone(),
+            discrete_axis_labels,
+        )
     };
+    if integration_state.slot_metas != slot_metas {
+        return Err(Report::msg(
+            "Saved integration state slots do not match the currently selected integrands",
+        ));
+    }
 
     let sampling_str = settings.sampling.describe_settings();
-    let dimension = user_data.integrand[0].get_n_dim();
+    let dimension = slot_integrands[0].get_n_dim();
     let discrete_depth = settings.sampling.discrete_depth();
     let is_tropical_sampling = settings.sampling.get_parameterization_settings().is_none();
 
@@ -752,7 +1862,7 @@ where
     };
 
     let graph_string = if discrete_depth > 0 {
-        let num_graphs = match &integration_state.grid {
+        let num_graphs = match &integration_state.sampling_grid {
             Grid::Discrete(g) => g.bins.len(),
             _ => unreachable!(),
         };
@@ -767,7 +1877,8 @@ where
 
     let grid_str = format!("{graph_string}{cont_dim_str} using {sampling_str}");
 
-    let cores = user_data.integrand.len();
+    let cores = user_data.len();
+    let n_slots = integration_state.slot_metas.len();
 
     let t_start = Instant::now();
 
@@ -807,19 +1918,25 @@ where
             rayon::iter::once(cur_points - target_points_per_core * (cores - 1)),
         );
 
-        let current_max_evals = integration_state.integral.get_worst_case();
+        let current_max_evals = integration_state
+            .all_integrals
+            .iter()
+            .map(ComplexAccumulator::get_worst_case)
+            .collect_vec();
 
-        let grids = repeat_n(integration_state.grid.clone_without_samples(), cores);
+        let grids = repeat_n(
+            integration_state.sampling_grid.clone_without_samples(),
+            cores,
+        );
 
         let core_results: Vec<Result<CoreResult>> = pool.install(|| {
             user_data
-                .integrand
                 .par_iter_mut()
                 .enumerate()
                 .zip(grids)
                 .zip(n_points_per_core)
                 .map(
-                    |(((core_id, integrand), mut grid), n_points)| -> Result<CoreResult> {
+                    |(((core_id, slot_integrands), mut sampling_grid), n_points)| -> Result<CoreResult> {
                         let mut rng = MonteCarloRng::new(
                             settings.integrator.seed + integration_state.iter as u64,
                             0,
@@ -827,18 +1944,22 @@ where
 
                         for _ in 0..(target_points_per_core * core_id) {
                             let mut sample = Sample::new();
-                            grid.sample(&mut rng, &mut sample);
+                            sampling_grid.sample(&mut rng, &mut sample);
                         }
 
                         let samples = (0..n_points)
                             .map(|_| {
                                 let mut sample = Sample::new();
-                                grid.sample(&mut rng, &mut sample);
+                                sampling_grid.sample(&mut rng, &mut sample);
                                 sample
                             })
                             .collect_vec();
 
-                        let mut core_accumulator = ComplexAccumulator::new();
+                        let mut core_accumulators = vec![ComplexAccumulator::new(); n_slots];
+                        let mut slot_re_grids =
+                            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
+                        let mut slot_im_grids =
+                            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
 
                         let mut results = Vec::new();
                         for s in samples.iter() {
@@ -846,38 +1967,61 @@ where
                                 break;
                             }
 
-                            let mut result = integrand.evaluate_sample(
-                                s,
-                                model,
-                                s.get_weight(),
-                                integration_state.iter,
-                                false,
-                                current_max_evals,
-                            )?;
+                            for (
+                                slot_index,
+                                (((integrand, core_accumulator), re_grid), im_grid),
+                            ) in slot_integrands
+                                .iter_mut()
+                                .zip(core_accumulators.iter_mut())
+                                .zip(slot_re_grids.iter_mut())
+                                .zip(slot_im_grids.iter_mut())
+                                .enumerate()
+                            {
+                                let mut result = integrand.evaluate_sample(
+                                    s,
+                                    model,
+                                    s.get_weight(),
+                                    integration_state.iter,
+                                    false,
+                                    current_max_evals[slot_index],
+                                )?;
 
-                            integrand.process_evaluation_result(&result);
-                            maybe_discard_generated_events(&mut result, settings);
-                            let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
-                            let effective_integrand_result =
-                                result.integrand_result * Complex::new_re(jacobian);
+                                integrand.process_evaluation_result(&result);
+                                maybe_discard_generated_events_for_integrand(
+                                    &mut result,
+                                    &*integrand,
+                                );
+                                let jacobian =
+                                    result.parameterization_jacobian.unwrap_or(F(1.0));
+                                let effective_integrand_result =
+                                    result.integrand_result * Complex::new_re(jacobian);
 
-                            core_accumulator.add_sample(
-                                effective_integrand_result,
-                                s.get_weight(),
-                                Some(s),
-                            );
+                                core_accumulator.add_sample(
+                                    effective_integrand_result,
+                                    s.get_weight(),
+                                    Some(s),
+                                );
+                                re_grid
+                                    .add_training_sample(s, effective_integrand_result.re)
+                                    .map_err(Report::msg)?;
+                                im_grid
+                                    .add_training_sample(s, effective_integrand_result.im)
+                                    .map_err(Report::msg)?;
 
-                            let training_eval = match settings.integrator.integrated_phase {
-                                IntegratedPhase::Real => effective_integrand_result.re,
-                                IntegratedPhase::Imag => effective_integrand_result.im,
-                                IntegratedPhase::Both => unimplemented!(),
-                            };
+                                if slot_index == 0 {
+                                    let training_eval = match settings.integrator.integrated_phase {
+                                        IntegratedPhase::Real => effective_integrand_result.re,
+                                        IntegratedPhase::Imag => effective_integrand_result.im,
+                                        IntegratedPhase::Both => unimplemented!(),
+                                    };
 
-                            if let Err(err) = grid.add_training_sample(s, training_eval) {
-                                println!("Error adding training sample to grid: {}", err);
-                            };
+                                    sampling_grid
+                                        .add_training_sample(s, training_eval)
+                                        .map_err(Report::msg)?;
+                                }
 
-                            results.push(result);
+                                results.push(result);
+                            }
                         }
 
                         let evaluation_statistics =
@@ -885,8 +2029,10 @@ where
 
                         Ok(CoreResult {
                             stats: evaluation_statistics,
-                            integral: core_accumulator,
-                            grid,
+                            integrals: core_accumulators,
+                            sampling_grid,
+                            slot_re_grids,
+                            slot_im_grids,
                         })
                     },
                 )
@@ -902,18 +2048,57 @@ where
 
         for core_result in core_results.iter() {
             integration_state.stats = integration_state.stats.merged(&core_result.stats);
-            integration_state.integral.merge(&core_result.integral);
-            integration_state.all_integrals[0].merge(&core_result.integral);
+            for (integral, core_integral) in integration_state
+                .all_integrals
+                .iter_mut()
+                .zip(core_result.integrals.iter())
+            {
+                integral.merge(core_integral);
+            }
         }
+
+        let mut merged_re_grids =
+            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
+        let mut merged_im_grids =
+            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
 
         for core_result in core_results.iter() {
             integration_state
-                .grid
-                .merge(&core_result.grid)
+                .sampling_grid
+                .merge(&core_result.sampling_grid)
                 .expect("could not merge grids");
+            for slot_index in 0..n_slots {
+                merged_re_grids[slot_index]
+                    .merge(&core_result.slot_re_grids[slot_index])
+                    .expect("could not merge real accumulation grids");
+                merged_im_grids[slot_index]
+                    .merge(&core_result.slot_im_grids[slot_index])
+                    .expect("could not merge imaginary accumulation grids");
+            }
         }
 
-        integration_state.grid.update(
+        for (summary, grid) in integration_state
+            .slot_re_summaries
+            .iter_mut()
+            .zip(merged_re_grids.iter())
+        {
+            if let Some(summary) = summary.as_mut() {
+                summary.merge_iteration_grid(grid);
+                summary.update_iter();
+            }
+        }
+        for (summary, grid) in integration_state
+            .slot_im_summaries
+            .iter_mut()
+            .zip(merged_im_grids.iter())
+        {
+            if let Some(summary) = summary.as_mut() {
+                summary.merge_iteration_grid(grid);
+                summary.update_iter();
+            }
+        }
+
+        integration_state.sampling_grid.update(
             F(settings.integrator.discrete_dim_learning_rate),
             F(settings.integrator.continuous_dim_learning_rate),
         );
@@ -921,24 +2106,30 @@ where
         integration_state.update_iter(false);
 
         integration_state.iter += 1;
+        integration_state.elapsed_seconds = t_start.elapsed().as_secs_f64();
+        integration_state.n_cores = cores;
 
         integration_state.num_points += cur_points;
         n_samples_evaluated += cur_points;
 
-        // now merge all statistics and observables into the first
-        let (first, others) = user_data.integrand.split_at_mut(1);
-        for other_itg in others {
-            first[0].merge_runtime_results(other_itg)?;
+        // merge runtime state per slot into the owner core
+        let (owner_core_slice, other_cores) = user_data.split_at_mut(1);
+        let owner_core = &mut owner_core_slice[0];
+        for other_core in other_cores {
+            for (owner_slot, other_slot) in owner_core.iter_mut().zip(other_core.iter_mut()) {
+                owner_slot.merge_runtime_results(other_slot)?;
+            }
         }
 
         // now write the observables to disk
-        if let Some(itg) = user_data.integrand.first_mut() {
-            itg.update_runtime_results(integration_state.iter);
-            if settings.integrator.observables_output.per_iteration {
+        for (slot_index, integrand) in owner_core.iter_mut().enumerate() {
+            integrand.update_runtime_results(integration_state.iter);
+            if integrand_observables_output_enabled(integrand, true) {
                 write_observables_output(
-                    itg,
-                    settings,
-                    workspace.as_deref(),
+                    integrand,
+                    workspace.as_deref().map(|root| {
+                        slot_workspace_path(root, &integration_state.slot_metas[slot_index])
+                    }),
                     ObservableFlushReason::Iteration(integration_state.iter),
                 );
             }
@@ -952,15 +2143,14 @@ where
                 t_start.elapsed(),
                 cur_points,
                 n_samples_evaluated,
-                &target,
-                show_max_wgt_info_per_iteration && settings.integrator.show_max_wgt_info,
-                show_integration_statistics_per_iteration,
+                &targets,
+                &IntegrationStatusRenderOptions { ..render_options },
             ),
         )?;
 
         // now write the integration state to disk if a workspace has been provided.
         if let Some(ref workspace_path) = workspace {
-            let integration_state_path = workspace_path.join("integration_state");
+            let integration_state_path = workspace_path.join("integration_state.bin");
 
             match fs::write(
                 integration_state_path,
@@ -970,32 +2160,25 @@ where
                 Ok(_) => {}
                 Err(_) => warn!("Warning: failed to write integration state to disk"),
             }
-
-            // write the settings to the workspace as well
-            let settings_path = workspace_path.join("settings.yaml");
-            let settings_string = serde_yaml::to_string(settings)
-                .unwrap_or_else(|_| panic!("failed to serialize the settings to a yaml string"));
-
-            match fs::write(settings_path, settings_string) {
-                Ok(_) => {}
-                Err(_) => warn!("Warning: failed to write settings to disk"),
-            }
         }
     }
     // Reset the interrupted flag
     set_interrupted(false);
 
-    if let Some(itg) = user_data.integrand.first() {
-        write_observables_output(
-            itg,
-            settings,
-            workspace.as_deref(),
-            if interrupted {
-                ObservableFlushReason::Interrupted
-            } else {
-                ObservableFlushReason::Final
-            },
-        );
+    if let Some(owner_core) = user_data.first() {
+        for (slot_index, integrand) in owner_core.iter().enumerate() {
+            write_observables_output(
+                integrand,
+                workspace.as_deref().map(|root| {
+                    slot_workspace_path(root, &integration_state.slot_metas[slot_index])
+                }),
+                if interrupted {
+                    ObservableFlushReason::Interrupted
+                } else {
+                    ObservableFlushReason::Final
+                },
+            );
+        }
     }
 
     if integration_state.num_points > 0 {
@@ -1007,9 +2190,8 @@ where
                 t_start.elapsed(),
                 0,
                 n_samples_evaluated,
-                &target,
-                true,
-                true,
+                &targets,
+                &render_options.for_final(),
             ),
         )?;
     } else {
@@ -1021,23 +2203,7 @@ where
         info!("");
     }
 
-    integration_state.display_orientation_results(settings);
-
-    Ok(IntegrationResult {
-        neval: integration_state.integral.re.processed_samples,
-        real_zero: integration_state.integral.re.num_zero_evaluations,
-        im_zero: integration_state.integral.im.num_zero_evaluations,
-        result: Complex::new(
-            integration_state.integral.re.avg,
-            integration_state.integral.im.avg,
-        ),
-        error: Complex::new(
-            integration_state.integral.re.err,
-            integration_state.integral.im.err,
-        ),
-        real_chisq: integration_state.integral.re.chi_sq,
-        im_chisq: integration_state.integral.im.chi_sq,
-    })
+    Ok(build_integration_result(&integration_state, &targets))
 }
 
 /// Batch integrate function used for distributed runs, used by the worker nodes.
@@ -1194,6 +2360,10 @@ fn maybe_discard_generated_events_for_integrand(
     }
 }
 
+pub fn slot_workspace_path(workspace: &Path, slot_meta: &SlotMeta) -> PathBuf {
+    workspace.join("integrands").join(slot_meta.key())
+}
+
 fn observable_output_path(
     workspace: &Path,
     format: ObservableFileFormat,
@@ -1214,17 +2384,34 @@ fn observable_output_path(
     Some(workspace.join(file_name))
 }
 
+fn integrand_observables_output_enabled(integrand: &Integrand, per_iteration: bool) -> bool {
+    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
+        return false;
+    };
+    let settings = process_integrand.get_settings();
+    if per_iteration && !settings.integrator.observables_output.per_iteration {
+        return false;
+    }
+    settings.integrator.observables_output.format != ObservableFileFormat::None
+}
+
 fn write_observables_output(
     integrand: &Integrand,
-    settings: &RuntimeSettings,
-    workspace: Option<&Path>,
+    workspace: Option<PathBuf>,
     reason: ObservableFlushReason,
 ) {
-    let format = settings.integrator.observables_output.format;
+    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
+        return;
+    };
+    let format = process_integrand
+        .get_settings()
+        .integrator
+        .observables_output
+        .format;
     let Some(workspace) = workspace else {
         return;
     };
-    let Some(path) = observable_output_path(workspace, format, reason) else {
+    let Some(path) = observable_output_path(&workspace, format, reason) else {
         return;
     };
 
@@ -1613,14 +2800,14 @@ impl MasterNode {
         let status_block = [
             render_integral_result(
                 &self.master_accumulator_re,
-                1,
+                "itg",
                 self.current_iter,
                 "re",
                 None,
             ),
             render_integral_result(
                 &self.master_accumulator_im,
-                1,
+                "itg",
                 self.current_iter,
                 "im",
                 None,
@@ -1661,9 +2848,8 @@ fn render_iteration_status_block(
     elapsed_time: Duration,
     cur_points: usize,
     n_samples_evaluated: usize,
-    target: &Option<Complex<F<f64>>>,
-    show_max_wgt_info: bool,
-    show_statistics: bool,
+    targets: &[Option<Complex<F<f64>>>],
+    render_options: &IntegrationStatusRenderOptions,
 ) -> String {
     let mut tables = vec![build_iteration_results_table(
         integration_state,
@@ -1671,41 +2857,128 @@ fn render_iteration_status_block(
         elapsed_time,
         cur_points,
         n_samples_evaluated,
-        target,
+        targets,
+        render_options,
     )];
 
-    if show_max_wgt_info {
+    if render_options.show_max_weight_details {
         tables.push(build_max_weight_details_table(
-            &integration_state.all_integrals,
+            integration_state,
+            render_options,
         ));
+        if render_options.show_max_weight_info_for_discrete_bins
+            && let Some(discrete_table) =
+                build_discrete_bin_max_weight_details_table(integration_state, render_options)
+        {
+            tables.push(discrete_table);
+        }
     }
 
-    if show_statistics {
-        tables.push(integration_state.stats.build_status_table());
+    if render_options.show_statistics {
+        tables.push(StatusTable {
+            table: integration_state.stats.build_status_table(),
+            separator_after_rows: Vec::new(),
+            hidden_vertical_boundaries: Vec::new(),
+            full_row_vertical_count: 0,
+            suppress_header_middle_separator: false,
+            suppress_header_tail_separator: false,
+        });
     }
 
     render_tables_with_shared_width(tables)
 }
 
+pub fn render_saved_integration_summary(
+    integration_state: &IntegrationState,
+    targets: &[Option<Complex<F<f64>>>],
+    render_options: &IntegrationStatusRenderOptions,
+) -> String {
+    render_iteration_status_block(
+        integration_state,
+        integration_state.n_cores.max(1),
+        Duration::from_secs_f64(integration_state.elapsed_seconds.max(0.0)),
+        0,
+        integration_state.num_points,
+        targets,
+        &render_options.for_final(),
+    )
+}
+
+pub fn build_integration_result(
+    integration_state: &IntegrationState,
+    targets: &[Option<Complex<F<f64>>>],
+) -> IntegrationResult {
+    let integration_statistics = integration_state.stats.snapshot();
+    let slots = integration_state
+        .slot_metas
+        .iter()
+        .enumerate()
+        .map(|(slot_index, slot_meta)| {
+            let accumulator = &integration_state.all_integrals[slot_index];
+            SlotIntegrationResult {
+                key: slot_meta.key(),
+                process: slot_meta.process_name.clone(),
+                integrand: slot_meta.integrand_name.clone(),
+                target: targets[slot_index].clone(),
+                integral: IntegralEstimate {
+                    neval: accumulator.re.processed_samples,
+                    real_zero: accumulator.re.num_zero_evaluations,
+                    im_zero: accumulator.im.num_zero_evaluations,
+                    result: Complex::new(accumulator.re.avg, accumulator.im.avg),
+                    error: Complex::new(accumulator.re.err, accumulator.im.err),
+                    real_chisq: accumulator.re.chi_sq,
+                    im_chisq: accumulator.im.chi_sq,
+                },
+                table_results: build_table_result_summary(
+                    slot_meta,
+                    accumulator,
+                    integration_state.iter,
+                    targets[slot_index].clone(),
+                ),
+                integration_statistics: integration_statistics.clone(),
+                max_weight_info: build_max_weight_info_summary(
+                    &integration_state.discrete_axis_labels,
+                    accumulator,
+                ),
+                grid_breakdown: ComponentDiscreteBreakdown {
+                    re: integration_state.slot_re_summaries[slot_index]
+                        .as_ref()
+                        .and_then(|summary| summary.first_non_trivial_breakdown(0)),
+                    im: integration_state.slot_im_summaries[slot_index]
+                        .as_ref()
+                        .and_then(|summary| summary.first_non_trivial_breakdown(0)),
+                },
+            }
+        })
+        .collect();
+
+    IntegrationResult { slots }
+}
+
 pub fn print_integral_result(
     itg: &StatisticsAccumulator<F<f64>>,
-    i_itg: usize,
+    label: &str,
     i_iter: usize,
     tag: &str,
     trgt: Option<F<f64>>,
 ) {
-    info!("{}", render_integral_result(itg, i_itg, i_iter, tag, trgt));
+    info!("{}", render_integral_result(itg, label, i_iter, tag, trgt));
 }
 
 #[allow(clippy::format_in_format_args)]
 fn render_integral_result(
     itg: &StatisticsAccumulator<F<f64>>,
-    i_itg: usize,
+    label: &str,
     i_iter: usize,
     tag: &str,
     trgt: Option<F<f64>>,
 ) -> String {
-    let cells = build_integral_result_cells(itg, i_itg, i_iter, tag, trgt);
+    let slot_meta = SlotMeta {
+        process_name: label.to_string(),
+        integrand_name: String::new(),
+    };
+    let mut cells = build_integral_result_cells(itg, &slot_meta, i_iter, tag, trgt);
+    cells.integrand = format!("{label} {}:", format!("{:-2}", tag).blue().bold());
     let delta = match (cells.delta_sigma.as_ref(), cells.delta_percent.as_ref()) {
         (Some(delta_sigma), Some(delta_percent)) => format!("{delta_sigma}, {delta_percent}"),
         _ => String::new(),
@@ -1745,9 +3018,20 @@ mod tests {
     }
 
     fn make_integration_state() -> IntegrationState {
-        let mut state = IntegrationState::new_from_settings(|| {
-            Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false))
-        });
+        let mut state = IntegrationState::new_from_settings(
+            || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false)),
+            vec![
+                SlotMeta {
+                    process_name: "proc_a".to_string(),
+                    integrand_name: "itg_a".to_string(),
+                },
+                SlotMeta {
+                    process_name: "proc_b".to_string(),
+                    integrand_name: "itg_b".to_string(),
+                },
+            ],
+            Vec::new(),
+        );
         state.iter = 1;
         state.num_points = 100_000;
         let mut evaluation = EvaluationResult::zero();
@@ -1761,6 +3045,81 @@ mod tests {
             make_accumulator(2.1e-5, 2.0e-6, 0.221, -1.7e-5, 3.0e-6, 0.187),
         ];
         state
+    }
+
+    fn make_discrete_integration_state() -> IntegrationState {
+        let make_continuous_grid =
+            || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
+        let mut state = IntegrationState::new_from_settings(
+            || {
+                Grid::Discrete(DiscreteGrid::new(
+                    vec![Some(make_continuous_grid()), Some(make_continuous_grid())],
+                    F(10.0),
+                    false,
+                ))
+            },
+            vec![
+                SlotMeta {
+                    process_name: "proc_a".to_string(),
+                    integrand_name: "itg_a".to_string(),
+                },
+                SlotMeta {
+                    process_name: "proc_b".to_string(),
+                    integrand_name: "itg_b".to_string(),
+                },
+            ],
+            vec!["graph".to_string()],
+        );
+        state.iter = 2;
+        state.num_points = 210_000;
+        let mut evaluation = EvaluationResult::zero();
+        evaluation.evaluation_metadata.integrand_evaluation_time = Duration::from_micros(414);
+        evaluation.evaluation_metadata.evaluator_evaluation_time = Duration::from_micros(279);
+        evaluation.evaluation_metadata.parameterization_time = Duration::from_nanos(5_800);
+        evaluation.evaluation_metadata.total_timing = Duration::from_micros(462);
+        state.stats = StatisticsCounter::from_evaluation_results(&[evaluation]);
+        state.all_integrals = vec![
+            make_accumulator(7.5e-5, 9.8e-5, 0.394, 3.2e-5, 1.5e-5, 0.378),
+            make_accumulator(2.1e-5, 2.0e-6, 0.221, -1.7e-5, 3.0e-6, 0.187),
+        ];
+        if let Grid::Discrete(discrete_grid) = &mut state.sampling_grid {
+            discrete_grid.bins[0].pdf = F(0.75);
+            discrete_grid.bins[1].pdf = F(0.25);
+        }
+
+        for summaries in [&mut state.slot_re_summaries, &mut state.slot_im_summaries] {
+            for (slot_index, summary) in summaries.iter_mut().enumerate() {
+                let summary = summary.as_mut().expect("discrete summary expected");
+                summary.bins[0].accumulator.avg = F(1.0e-5 * (slot_index as f64 + 1.0));
+                summary.bins[0].accumulator.err = F(2.0e-6);
+                summary.bins[0].accumulator.chi_sq = F(0.2);
+                summary.bins[0].accumulator.processed_samples = 150;
+                summary.bins[0].accumulator.max_eval_positive = F(0.75);
+                summary.bins[0].accumulator.max_eval_positive_xs =
+                    Some(Sample::Continuous(F(1.0), vec![F(0.25)]));
+                summary.bins[1].accumulator.avg = F(5.0e-6 * (slot_index as f64 + 1.0));
+                summary.bins[1].accumulator.err = F(1.0e-6);
+                summary.bins[1].accumulator.chi_sq = F(0.1);
+                summary.bins[1].accumulator.processed_samples = 50;
+                summary.bins[1].accumulator.max_eval_positive = F(0.25);
+                summary.bins[1].accumulator.max_eval_positive_xs =
+                    Some(Sample::Continuous(F(1.0), vec![F(0.75)]));
+            }
+        }
+
+        state
+    }
+
+    fn default_render_options() -> IntegrationStatusRenderOptions {
+        IntegrationStatusRenderOptions {
+            phase_display: IntegrationStatusPhaseDisplay::Both,
+            show_statistics: true,
+            show_max_weight_details: true,
+            show_top_discrete_grid: false,
+            show_discrete_contributions_sum: false,
+            contribution_sort: ContributionSortMode::Error,
+            show_max_weight_info_for_discrete_bins: false,
+        }
     }
 
     #[test]
@@ -1784,12 +3143,26 @@ mod tests {
             ))),
         ));
 
-        let rendered = render_max_weight_details_table(&[accumulator]);
+        let mut state = IntegrationState::new_from_settings(
+            || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false)),
+            vec![SlotMeta {
+                process_name: "proc".to_string(),
+                integrand_name: "itg".to_string(),
+            }],
+            Vec::new(),
+        );
+        state.all_integrals = vec![accumulator];
+        let rendered = render_tables_with_shared_width(vec![build_max_weight_details_table(
+            &state,
+            &default_render_options(),
+        )]);
 
         assert!(rendered.contains("Maximum weight details"), "{rendered}");
         assert!(rendered.contains("Integrand"), "{rendered}");
         assert!(rendered.contains("Max eval"), "{rendered}");
         assert!(rendered.contains("Max eval coordinates"), "{rendered}");
+        assert!(rendered.contains("itg proc@itg"), "{rendered}");
+        assert!(rendered.contains("re [+]"), "{rendered}");
         assert!(
             rendered.contains("graph: 0, channel: 0, xs: [ "),
             "{rendered}"
@@ -1809,21 +3182,27 @@ mod tests {
             Duration::from_secs(1),
             100_000,
             100_000,
-            &Some(Complex::new(F(1.0e-4), F(2.0e-5))),
-            false,
-            false,
+            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+            &IntegrationStatusRenderOptions {
+                show_statistics: false,
+                show_max_weight_details: false,
+                ..default_render_options()
+            },
         );
 
         assert!(rendered.contains("Iteration #   1"), "{rendered}");
-        assert!(rendered.contains("n_pts = 100K n_tot = 100K"), "{rendered}");
-        assert!(rendered.contains("/sample/core"), "{rendered}");
-        assert!(rendered.contains("Δ ="), "{rendered}");
-        assert!(!rendered.contains("Integration statistics"), "{rendered}");
-        let lines = rendered.lines().collect::<Vec<_>>();
         assert!(
-            lines.first().is_some_and(|line| !line.contains('┬')),
+            rendered.contains("# samples per iteration = 100K # samples total = 100K"),
             "{rendered}"
         );
+        assert!(rendered.contains("/sample/core"), "{rendered}");
+        assert!(rendered.contains("Contribution"), "{rendered}");
+        assert!(rendered.contains("proc_a@itg_a"), "{rendered}");
+        assert!(rendered.contains("proc_b@itg_b"), "{rendered}");
+        assert!(rendered.contains("+0.000075(98)"), "{rendered}");
+        assert!(rendered.contains("Δ = 0.255σ"), "{rendered}");
+        assert!(!rendered.contains("Integration statistics"), "{rendered}");
+        let lines = rendered.lines().collect::<Vec<_>>();
         assert_eq!(lines[1].matches('│').count(), 2, "{rendered}");
         assert!(lines[2].contains('┬'), "{rendered}");
         assert!(
@@ -1841,14 +3220,106 @@ mod tests {
             Duration::from_secs(1),
             100_000,
             100_000,
-            &None,
-            false,
-            true,
+            &[None, None],
+            &IntegrationStatusRenderOptions {
+                show_statistics: true,
+                show_max_weight_details: false,
+                ..default_render_options()
+            },
         );
 
-        assert!(!rendered.contains("Δ="), "{rendered}");
+        assert!(!rendered.contains("Δ [σ]"), "{rendered}");
+        assert!(!rendered.contains("Δ ="), "{rendered}");
         assert!(rendered.contains("Integration statistics"), "{rendered}");
-        assert!(rendered.contains("mwi:"), "{rendered}");
+        assert!(rendered.contains("max. wgt. infl."), "{rendered}");
+    }
+
+    #[test]
+    fn iteration_status_block_shows_discrete_contributions_and_discrete_max_weights() {
+        let state = make_discrete_integration_state();
+        let rendered = render_iteration_status_block(
+            &state,
+            4,
+            Duration::from_secs(2),
+            110_000,
+            210_000,
+            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+            &IntegrationStatusRenderOptions {
+                show_statistics: false,
+                show_max_weight_details: true,
+                show_top_discrete_grid: true,
+                show_discrete_contributions_sum: true,
+                contribution_sort: ContributionSortMode::Index,
+                show_max_weight_info_for_discrete_bins: true,
+                ..default_render_options()
+            },
+        );
+
+        assert!(rendered.contains("Sum"), "{rendered}");
+        assert!(rendered.contains("Contribution (idx=graph)"), "{rendered}");
+        assert!(rendered.contains("idx = 0"), "{rendered}");
+        assert!(rendered.contains("75.0%"), "{rendered}");
+        assert!(rendered.contains("25.0%"), "{rendered}");
+        assert!(
+            rendered.contains("Maximum weight details by discrete bin"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("xs: [ 2.5000000000000000e-01 ]"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn format_max_eval_sample_keeps_full_discrete_coordinates() {
+        let axis_labels = vec!["graph".to_string(), "LMB channel".to_string()];
+        let full_sample = Sample::Discrete(
+            F(1.0),
+            0,
+            Some(Box::new(Sample::Discrete(
+                F(1.0),
+                1,
+                Some(Box::new(Sample::Continuous(F(1.0), vec![F(0.25)]))),
+            ))),
+        );
+        let nested_sample = Sample::Discrete(
+            F(1.0),
+            1,
+            Some(Box::new(Sample::Continuous(F(1.0), vec![F(0.75)]))),
+        );
+
+        assert_eq!(
+            format_max_eval_sample(&full_sample, &axis_labels, &[]),
+            "graph: 0, LMB channel: 1, xs: [ 2.5000000000000000e-01 ]"
+        );
+        assert_eq!(
+            format_max_eval_sample(&nested_sample, &axis_labels, &[0]),
+            "graph: 0, LMB channel: 1, xs: [ 7.5000000000000000e-01 ]"
+        );
+    }
+
+    #[test]
+    fn final_summary_omits_discrete_max_weight_block_when_disabled() {
+        let state = make_discrete_integration_state();
+        let rendered = render_saved_integration_summary(
+            &state,
+            &[None, None],
+            &IntegrationStatusRenderOptions {
+                show_statistics: true,
+                show_max_weight_details: true,
+                show_top_discrete_grid: false,
+                show_discrete_contributions_sum: false,
+                contribution_sort: ContributionSortMode::Index,
+                show_max_weight_info_for_discrete_bins: false,
+                ..default_render_options()
+            },
+        );
+
+        assert!(rendered.contains("Maximum weight details"), "{rendered}");
+        assert!(
+            !rendered.contains("Maximum weight details by discrete bin"),
+            "{rendered}"
+        );
     }
 }
 

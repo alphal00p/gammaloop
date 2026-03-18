@@ -1,7 +1,7 @@
 use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use gammalooprs::utils::F;
 #[cfg(feature = "ufo_support")]
 use pyo3::sync::PyOnceLock;
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
 use gammalooprs::model::{InputParamCard, Model};
-use include_dir::{include_dir, Dir, File};
+use include_dir::{Dir, File, include_dir};
 use std::{env, fs, sync::OnceLock};
 use tracing::info;
 

@@ -12,23 +12,22 @@ use colored::{ColoredString, Colorize};
 use eyre::Context;
 use gammalooprs::utils::tracing::{LogFormat, LogStyle};
 use indicatif::ProgressState;
-use tracing::{level_filters::LevelFilter, Event, Subscriber};
-use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, IndicatifLayer};
-use tracing_subscriber::field::RecordFields;
+use tracing::{Event, Subscriber, level_filters::LevelFilter};
+use tracing_indicatif::{IndicatifLayer, filter::IndicatifFilter, style::ProgressStyle};
 use tracing_subscriber::Layer;
+use tracing_subscriber::field::RecordFields;
 use tracing_subscriber::{
+    EnvFilter,
     filter::Filtered,
     fmt::{
-        self,
+        self, FmtContext, FormatEvent, FormatFields,
         format::Writer,
         writer::{BoxMakeWriter, MakeWriter},
-        FmtContext, FormatEvent, FormatFields,
     },
     layer::SubscriberExt,
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter,
 };
 
 use color_eyre::Result;

@@ -15,7 +15,10 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Complex as SymComplex;
 
 use crate::integrands::inspect::inspect;
-use crate::integrate::{UserData, havana_integrate};
+use crate::integrate::{
+    ContributionSortMode, IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions, SlotMeta,
+    havana_integrate,
+};
 
 const CENTRAL_VALUE_TOLERANCE: F<f64> = F(2.0e-2);
 const INSPECT_TOLERANCE: F<f64> = F(1.0e-15);
@@ -23,6 +26,18 @@ const DIFF_TARGET_TO_ERROR_MUST_BE_LESS_THAN: F<f64> = F(3.);
 const BASE_N_START_SAMPLE: usize = 100_000;
 
 const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
+
+fn default_render_options() -> IntegrationStatusRenderOptions {
+    IntegrationStatusRenderOptions {
+        phase_display: IntegrationStatusPhaseDisplay::Both,
+        show_statistics: true,
+        show_max_weight_details: true,
+        show_top_discrete_grid: false,
+        show_discrete_contributions_sum: false,
+        contribution_sort: ContributionSortMode::Error,
+        show_max_weight_info_for_discrete_bins: false,
+    }
+}
 
 pub(crate) fn load_default_settings() -> RuntimeSettings {
     RuntimeSettings::default()
@@ -53,10 +68,9 @@ fn compare_integration(
         .build_global()
         .unwrap_or(());
 
-    let user_data_generator = |settings: &RuntimeSettings| UserData {
-        integrand: (0..N_CORES_FOR_INTEGRATION_IN_TESTS)
-            .map(|_i| crate::integrand_factory(settings))
-            .collect(),
+    let slot_meta = SlotMeta {
+        process_name: "test".to_string(),
+        integrand_name: "default".to_string(),
     };
     match phase {
         IntegratedPhase::Both => {
@@ -64,22 +78,24 @@ fn compare_integration(
             let res = havana_integrate(
                 settings,
                 model,
-                user_data_generator,
-                Some(target),
+                vec![slot_meta.clone()],
+                vec![crate::integrand_factory(settings)],
+                N_CORES_FOR_INTEGRATION_IN_TESTS,
+                vec![Some(target)],
                 None,
                 None,
-                true,
-                true,
+                default_render_options(),
                 |_, _| Ok(()),
             )?;
-            if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
-                || !validate_error(res.error.re, target.re - res.result.re)
+            let integral = &res.single_slot().expect("single slot expected").integral;
+            if !F::approx_eq(&integral.result.re, &target.re, &applied_tolerance)
+                || !validate_error(integral.error.re, target.re - integral.result.re)
             {
                 println!(
                     "Incorrect real part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result.re, res.error.re)
+                        utils::format_uncertainty(integral.result.re, integral.error.re)
                     )
                     .red()
                     .bold(),
@@ -91,22 +107,24 @@ fn compare_integration(
             let res = havana_integrate(
                 settings,
                 model,
-                user_data_generator,
-                Some(target),
+                vec![slot_meta.clone()],
+                vec![crate::integrand_factory(settings)],
+                N_CORES_FOR_INTEGRATION_IN_TESTS,
+                vec![Some(target)],
                 None,
                 None,
-                true,
-                true,
+                default_render_options(),
                 |_, _| Ok(()),
             )?;
-            if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
-                || !validate_error(res.error.im, target.re - res.result.im)
+            let integral = &res.single_slot().expect("single slot expected").integral;
+            if !F::approx_eq(&integral.result.im, &target.im, &applied_tolerance)
+                || !validate_error(integral.error.im, target.re - integral.result.im)
             {
                 println!(
                     "Incorrect imag part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result.im, res.error.im)
+                        utils::format_uncertainty(integral.result.im, integral.error.im)
                     )
                     .red()
                     .bold(),
@@ -120,22 +138,24 @@ fn compare_integration(
             let res = havana_integrate(
                 settings,
                 model,
-                user_data_generator,
-                Some(target),
+                vec![slot_meta.clone()],
+                vec![crate::integrand_factory(settings)],
+                N_CORES_FOR_INTEGRATION_IN_TESTS,
+                vec![Some(target)],
                 None,
                 None,
-                true,
-                true,
+                default_render_options(),
                 |_, _| Ok(()),
             )?;
-            if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
-                || !validate_error(res.error.re, target.im - res.result.re)
+            let integral = &res.single_slot().expect("single slot expected").integral;
+            if !F::approx_eq(&integral.result.re, &target.re, &applied_tolerance)
+                || !validate_error(integral.error.re, target.im - integral.result.re)
             {
                 println!(
                     "Incorrect real part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result.re, res.error.re)
+                        utils::format_uncertainty(integral.result.re, integral.error.re)
                     )
                     .red()
                     .bold(),
@@ -149,22 +169,24 @@ fn compare_integration(
             let res = havana_integrate(
                 settings,
                 model,
-                user_data_generator,
-                Some(target),
+                vec![slot_meta],
+                vec![crate::integrand_factory(settings)],
+                N_CORES_FOR_INTEGRATION_IN_TESTS,
+                vec![Some(target)],
                 None,
                 None,
-                true,
-                true,
+                default_render_options(),
                 |_, _| Ok(()),
             )?;
-            if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
-                || !validate_error(res.error.im, target.im - res.result.im)
+            let integral = &res.single_slot().expect("single slot expected").integral;
+            if !F::approx_eq(&integral.result.im, &target.im, &applied_tolerance)
+                || !validate_error(integral.error.im, target.im - integral.result.im)
             {
                 println!(
                     "Incorrect imag part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result.im, res.error.im)
+                        utils::format_uncertainty(integral.result.im, integral.error.im)
                     )
                     .red()
                     .bold(),

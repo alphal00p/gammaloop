@@ -21,7 +21,7 @@ use crate::observables::{
     events::{format_complex_generic, format_optional_real_generic, format_real_generic},
 };
 use crate::{
-    settings::runtime::Precision,
+    settings::runtime::{IntegrationStatisticsSnapshot, Precision},
     utils::{ArbPrec, F, FloatLike, f128, format_evaluation_time, normalize_tabled_separator_rows},
 };
 
@@ -892,6 +892,25 @@ impl StatisticsCounter {
                 self.sum_accepted_event_count as f64 / self.sum_generated_event_count as f64
                     * 100.0,
             )
+        }
+    }
+
+    pub(crate) fn snapshot(&self) -> IntegrationStatisticsSnapshot {
+        IntegrationStatisticsSnapshot {
+            num_evals: self.num_evals,
+            average_total_time_seconds: self.get_avg_total_timing().as_secs_f64(),
+            average_parameterization_time_seconds: self.get_avg_param_timing().as_secs_f64(),
+            average_integrand_time_seconds: self.get_avg_integrand_timing().as_secs_f64(),
+            average_evaluator_time_seconds: self.get_avg_evaluator_timing().as_secs_f64(),
+            average_observable_time_seconds: self.get_avg_event_timing().as_secs_f64(),
+            f64_percentage: self.get_percentage_f64(),
+            f128_percentage: self.get_percentage_f128(),
+            arb_percentage: self.get_percentage_arb(),
+            nan_percentage: self.get_percentage_nan(),
+            nan_or_unstable_percentage: self.get_percentage_nan_or_unstable(),
+            generated_event_count: self.sum_generated_event_count,
+            accepted_event_count: self.sum_accepted_event_count,
+            selection_efficiency_percentage: self.selection_efficiency_percentage(),
         }
     }
 

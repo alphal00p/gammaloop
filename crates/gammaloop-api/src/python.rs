@@ -1,5 +1,5 @@
 use gammalooprs::{
-    cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
+    cff::generation::{SurfaceCache, generate_cff_expression_from_subgraph},
     feyngen::diagram_generator::evaluate_overall_factor,
     graph::{self, FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
@@ -10,7 +10,7 @@ use gammalooprs::{
         HistogramStatisticsSnapshot,
     },
     processes::{DotExportSettings, ProcessCollection},
-    settings::{global::OrientationPattern, RuntimeSettings},
+    settings::{RuntimeSettings, global::OrientationPattern},
     utils::tracing::{LogFormat, LogLevel},
 };
 use linnet::half_edge::{
@@ -21,10 +21,10 @@ use numpy::PyReadonlyArray2;
 use typed_index_collections::TiVec;
 
 use crate::{
-    commands::{evaluate_samples::EvaluateSamples, import::model::ImportModel, Evaluate},
+    CLISettings, LoadedState, StateLoadOption,
+    commands::{Evaluate, evaluate_samples::EvaluateSamples, import::model::ImportModel},
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
-    CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
 
@@ -47,13 +47,13 @@ const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
 use pyo3::{
-    exceptions,
+    FromPyObject, PyRef, Python, exceptions,
     prelude::*,
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyComplex, PyDict, PyModule, PyTuple, PyType},
-    wrap_pyfunction, FromPyObject, PyRef, Python,
+    wrap_pyfunction,
 };
 
 #[pyfunction]
@@ -1788,13 +1788,16 @@ impl GammaLoopAPI {
         restart: bool,
     ) -> Result<Vec<Bound<'py, PyComplex>>> {
         let a = Integrate {
-            process: process_id.map(ProcessRef::Id),
-            integrand_name,
+            process: process_id.into_iter().map(ProcessRef::Id).collect(),
+            integrand_name: integrand_name.into_iter().collect(),
             result_path,
             workspace_path: Some(workspace_path),
             n_cores: Some(n_cores),
-            target,
+            target: target
+                .map(|components| components.into_iter().map(|value| value.to_string()).collect())
+                .unwrap_or_default(),
             restart,
+            ..Default::default()
         }
         .run(
             &mut self.gammaloop_state,
@@ -1803,11 +1806,10 @@ impl GammaLoopAPI {
             },
         )?;
 
-        Ok(vec![PyComplex::from_doubles(
-            py,
-            a.result.re.0,
-            a.result.im.0,
-        )])
+        Ok(a.slots
+            .into_iter()
+            .map(|slot| PyComplex::from_doubles(py, slot.integral.result.re.0, slot.integral.result.im.0))
+            .collect())
     }
 
     // pub(crate) fn inspect_lmw_integrand(

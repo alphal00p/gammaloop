@@ -15,21 +15,20 @@ use serde_json::Value as JsonValue;
 use reedline::{Prompt, Reedline, Signal, Span, Suggestion, ValidationResult};
 
 use crate::{
+    CLISettings,
     command_parser::split_command_line,
     commands::import::model::{builtin_json_model_names, builtin_json_model_restriction_names},
     commands::process_settings::{
-        observable_completion_root, observable_schema, quantity_completion_root_for_kind,
-        quantity_kind_names, quantity_schema, selector_completion_root_for_kind,
-        selector_kind_names, selector_schema, NamedProcessSettingKind,
-        ProcessSettingsCompletionEntry,
+        NamedProcessSettingKind, ProcessSettingsCompletionEntry, observable_completion_root,
+        observable_schema, quantity_completion_root_for_kind, quantity_kind_names, quantity_schema,
+        selector_completion_root_for_kind, selector_kind_names, selector_schema,
     },
-    completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
+    completion::{ArgValueCompletion, SelectorKind, arg_value_completion},
     session::CliSession,
     settings_tree::{
         schema_at_path, schema_enum_values, serialize_schema, serialize_settings_with_defaults,
         value_at_path,
     },
-    CLISettings,
 };
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -119,8 +118,8 @@ mod builder {
     use clap::Parser;
     use nu_ansi_term::{Color, Style};
     use reedline::{
-        default_emacs_keybindings, DefaultHinter, DefaultPrompt, EditMode, Emacs, IdeMenu,
-        KeyModifiers, MenuBuilder, Prompt, Reedline, ReedlineEvent, ReedlineMenu,
+        DefaultHinter, DefaultPrompt, EditMode, Emacs, IdeMenu, KeyModifiers, MenuBuilder, Prompt,
+        Reedline, ReedlineEvent, ReedlineMenu, default_emacs_keybindings,
     };
 
     use crate::repl::{ClapEditor, ReedCompleter, SharedCompletionState, ShellLikeValidator};
@@ -478,6 +477,17 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                         &mut seen,
                     );
                 }
+                ArgValueCompletion::SelectedIntegrandTarget => {
+                    add_selected_integrand_target_suggestions(
+                        completion_state,
+                        context.all_completed_tokens,
+                        context.root_cmd,
+                        &value_request,
+                        pos,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
                 ArgValueCompletion::Disabled => {}
             }
         } else if is_ir_profile_select_argument(&context, arg) {
@@ -749,10 +759,20 @@ fn collect_used_arg_ids(
     let mut used_arg_ids = HashSet::new();
     for token in completed_tokens {
         if let Some(arg) = find_flag(cmd, token.cooked.as_str()) {
+            if arg_allows_multiple_occurrences(arg) {
+                continue;
+            }
             used_arg_ids.insert(arg_id(arg));
         }
     }
     used_arg_ids
+}
+
+fn arg_allows_multiple_occurrences(arg: &clap::Arg) -> bool {
+    matches!(
+        arg.get_action(),
+        clap::ArgAction::Append | clap::ArgAction::Count
+    )
 }
 
 fn positional_path_completion_request(
@@ -1801,6 +1821,16 @@ fn add_process_settings_add_suggestions(
     suggestions: &mut Vec<Suggestion>,
     seen: &mut HashSet<String>,
 ) {
+    if context.completed_tokens.is_empty() {
+        let request = ValueCompletionRequest {
+            partial_value: context.current_token.cooked.clone(),
+            span_start: context.current_token.start,
+            quote_style: context.current_token.quote_style,
+        };
+        add_type_hint_suggestion(SettingsValueKind::String, &request, pos, suggestions, seen);
+        return;
+    }
+
     match setting_kind {
         NamedProcessSettingKind::Quantity | NamedProcessSettingKind::Selector
             if context.completed_tokens.len() == 1 =>
@@ -2319,6 +2349,47 @@ fn add_integrand_suggestions(
     }
 }
 
+fn add_selected_integrand_target_suggestions(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+    request: &PathCompletionRequest,
+    pos: usize,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let prefix = request.partial_path.as_str();
+    if prefix.contains('=') {
+        return;
+    }
+
+    let selected_keys =
+        selected_integrand_keys_for_target_completion(completion_state, completed_tokens, root_cmd);
+    let specified_target_keys = specified_target_keys(completed_tokens, root_cmd);
+
+    for slot_key in selected_keys {
+        if specified_target_keys.contains(&slot_key) {
+            continue;
+        }
+        let suggestion = format!("{slot_key}=");
+        if !suggestion.starts_with(prefix) {
+            continue;
+        }
+        let rendered = render_value_completion(&suggestion, request.quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(reedline::Suggestion {
+            value: rendered,
+            description: Some("Target for selected integrand".to_string()),
+            style: None,
+            extra: None,
+            span: Span::new(request.span_start, pos),
+            append_whitespace: false,
+        });
+    }
+}
+
 fn is_ir_profile_select_argument(context: &CommandContext<'_>, arg: &clap::Arg) -> bool {
     matches_command_path(context, &["profile", "infra-red"]) && arg.get_long() == Some("select")
 }
@@ -2672,6 +2743,138 @@ fn find_last_flag_value(
     }
 
     result
+}
+
+fn selected_integrand_keys_for_target_completion(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+) -> Vec<String> {
+    let mut keys = Vec::new();
+    let mut pending_process: Option<String> = None;
+    let mut cmd = root_cmd;
+    let mut index = 0usize;
+
+    while index < completed_tokens.len() {
+        let token = completed_tokens[index].cooked.as_str();
+        if let Some(subcmd) = find_subcommand(cmd, token) {
+            cmd = subcmd;
+            index += 1;
+            continue;
+        }
+
+        let Some(arg) = find_flag(cmd, token) else {
+            index += 1;
+            continue;
+        };
+
+        let inline_start = inline_flag_value_start(token);
+        let value = if let Some(start) = inline_start {
+            Some(token[start..].to_string())
+        } else if arg_takes_value(arg) {
+            completed_tokens
+                .get(index + 1)
+                .map(|next| next.cooked.clone())
+        } else {
+            None
+        };
+
+        match arg.get_long() {
+            Some("process") => pending_process = value,
+            Some("integrand-name") => {
+                let Some(integrand_name) = value else {
+                    index += 1;
+                    if arg_takes_value(arg) && inline_start.is_none() {
+                        index = index.saturating_add(1);
+                    }
+                    continue;
+                };
+
+                let Some(process_value) = pending_process.as_deref() else {
+                    index += 1;
+                    if arg_takes_value(arg) && inline_start.is_none() {
+                        index = index.saturating_add(1);
+                    }
+                    continue;
+                };
+
+                let Some(process_entry) =
+                    resolve_process_reference(&completion_state.process_entries, process_value)
+                else {
+                    index += 1;
+                    if arg_takes_value(arg) && inline_start.is_none() {
+                        index = index.saturating_add(1);
+                    }
+                    continue;
+                };
+
+                if process_entry
+                    .integrand_names
+                    .iter()
+                    .any(|candidate| candidate == &integrand_name)
+                {
+                    keys.push(format!("{}@{}", process_entry.name, integrand_name));
+                }
+            }
+            _ => {}
+        }
+
+        index += 1;
+        if arg_takes_value(arg) && inline_start.is_none() {
+            index = index.saturating_add(1);
+        }
+    }
+
+    keys
+}
+
+fn specified_target_keys(
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+) -> HashSet<String> {
+    let mut specified = HashSet::new();
+    let mut cmd = root_cmd;
+    let mut index = 0usize;
+
+    while index < completed_tokens.len() {
+        let token = completed_tokens[index].cooked.as_str();
+        if let Some(subcmd) = find_subcommand(cmd, token) {
+            cmd = subcmd;
+            index += 1;
+            continue;
+        }
+
+        let Some(arg) = find_flag(cmd, token) else {
+            index += 1;
+            continue;
+        };
+
+        let inline_start = inline_flag_value_start(token);
+        let value = if let Some(start) = inline_start {
+            Some(token[start..].to_string())
+        } else if arg_takes_value(arg) {
+            completed_tokens
+                .get(index + 1)
+                .map(|next| next.cooked.clone())
+        } else {
+            None
+        };
+
+        if arg.get_long() == Some("target") {
+            if let Some(value) = value {
+                if let Some((key, _)) = value.split_once('=') {
+                    specified.insert(key.to_string());
+                }
+            }
+        }
+
+        index += 1;
+        if arg_takes_value(arg) && inline_start.is_none() {
+            index = index.saturating_add(1);
+        }
+    }
+
+    specified
 }
 
 fn resolve_process_reference<'a>(
@@ -3140,14 +3343,14 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        commands::process_settings::ProcessSettingsCompletionEntry,
-        completion::{arg_value_completion, ArgValueCompletion},
         Repl,
+        commands::process_settings::ProcessSettingsCompletionEntry,
+        completion::{ArgValueCompletion, arg_value_completion},
     };
 
     use super::{
-        collect_completions, CompletionState, IrProfileCompletionEntry,
-        ModelParameterCompletionEntry, ProcessCompletionEntry, ProcessKind,
+        CompletionState, IrProfileCompletionEntry, ModelParameterCompletionEntry,
+        ProcessCompletionEntry, ProcessKind, collect_completions,
     };
 
     fn sample_process_entries() -> Vec<ProcessCompletionEntry> {
@@ -3548,6 +3751,19 @@ mod tests {
     }
 
     #[test]
+    fn completion_keeps_repeatable_integrate_selectors_available() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values("integrate -p triangle -i LO -", &completion_state);
+
+        assert!(values.contains(&"-p".to_string()));
+        assert!(values.contains(&"-i".to_string()));
+    }
+
+    #[test]
     fn completion_offers_integrands_for_reset_processes() {
         let completion_state = CompletionState {
             process_entries: sample_process_entries(),
@@ -3656,6 +3872,38 @@ mod tests {
         );
 
         assert_eq!(values, vec!["subtracted".to_string()]);
+    }
+
+    #[test]
+    fn completion_offers_selected_integrand_target_keys() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values(
+            "integrate -p triangle -i LO -p epem_xs -i subtracted --target ",
+            &completion_state,
+        );
+
+        assert!(values.contains(&"triangle@LO=".to_string()));
+        assert!(values.contains(&"epem_xs@subtracted=".to_string()));
+    }
+
+    #[test]
+    fn completion_hides_already_targeted_slot_keys() {
+        let completion_state = CompletionState {
+            process_entries: sample_process_entries(),
+            ..CompletionState::default()
+        };
+
+        let values = completion_values(
+            "integrate -p triangle -i LO -p epem_xs -i subtracted --target triangle@LO=0,1 --target ",
+            &completion_state,
+        );
+
+        assert!(!values.contains(&"triangle@LO=".to_string()));
+        assert!(values.contains(&"epem_xs@subtracted=".to_string()));
     }
 
     #[test]
@@ -3774,6 +4022,21 @@ mod tests {
         );
         assert!(values.contains(&"jet_pt".to_string()), "{values:?}");
         assert!(values.contains(&"cross_section".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_shows_type_hint_for_process_add_name() {
+        let suggestions = completion_suggestions(
+            "set process -p triangle add quantity ",
+            &generate_completion_state(),
+        );
+
+        assert!(
+            suggestions
+                .iter()
+                .any(|suggestion| suggestion.description.as_deref() == Some("expects a string")),
+            "{suggestions:?}"
+        );
     }
 
     #[test]

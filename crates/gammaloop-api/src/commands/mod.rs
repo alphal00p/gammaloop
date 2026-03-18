@@ -8,14 +8,16 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    CLISettings,
     completion::CompletionArgExt,
     state::{CommandHistory, ProcessRef, RunHistory, State},
-    CLISettings,
 };
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;
 pub mod display;
 pub use display::Display;
+pub mod duplicate;
+pub use duplicate::Duplicate;
 pub mod generate;
 pub use generate::Generate;
 pub mod import;
@@ -47,6 +49,8 @@ pub(crate) mod process_settings;
 pub enum Commands {
     #[clap(subcommand)]
     Display(Display),
+    #[clap(subcommand)]
+    Duplicate(Duplicate),
     #[clap(subcommand)]
     Set(Set),
     #[clap(subcommand)]
@@ -186,6 +190,9 @@ impl Commands {
                     default_runtime_settings,
                     run_history,
                 )?;
+            }
+            Commands::Duplicate(command) => {
+                command.run(state)?;
             }
             Commands::Run(r) => {
                 return r.run(

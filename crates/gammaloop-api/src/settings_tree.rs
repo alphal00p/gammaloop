@@ -1,7 +1,7 @@
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use gammalooprs::utils::serde_utils::ShowDefaultsGuard;
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 

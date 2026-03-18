@@ -12,13 +12,13 @@ use std::{
 use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
 };
 use linnet::half_edge::subgraph::SubGraphLike;
-use schemars::{schema_for, JsonSchema, Schema};
+use schemars::{JsonSchema, Schema, schema_for};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
@@ -27,26 +27,26 @@ use tracing::debug;
 use tracing::info;
 
 use gammalooprs::{
+    GammaLoopContextContainer,
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
     integrands::HasIntegrand,
     model::{InputParamCard, Model},
     processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
-    settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     utils::{
-        serde_utils::{get_schema_folder, SmartSerde},
-        tracing::{init_bench_tracing, init_test_tracing},
         F,
+        serde_utils::{SmartSerde, get_schema_folder},
+        tracing::{init_bench_tracing, init_test_tracing},
     },
-    GammaLoopContextContainer,
 };
 
 use crate::{
-    command_parser::split_command_line,
-    commands::{save::SaveState, Commands},
-    tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
+    command_parser::split_command_line,
+    commands::{Commands, save::SaveState},
+    tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
@@ -447,8 +447,8 @@ impl CommandHistory {
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
         use crate::Repl;
-        use clap::error::ErrorKind;
         use clap::Parser;
+        use clap::error::ErrorKind;
 
         let args = split_command_line(raw_string).map_err(|_| {
             clap::Error::raw(
@@ -1439,7 +1439,7 @@ mod tests {
     use gammalooprs::{
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
-        settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
+        settings::{KinematicsSettings, RuntimeSettings, runtime::kinematic::Externals},
         utils::serde_utils::SHOWDEFAULTS,
     };
     use tempfile::tempdir;
@@ -1517,7 +1517,7 @@ subtype = "tropical"
 
     #[test]
     fn test_command_history_serialization() {
-        use super::{set_serialize_commands_as_strings, CommandHistory};
+        use super::{CommandHistory, set_serialize_commands_as_strings};
         use crate::commands::Commands;
 
         // Test basic construction
@@ -1551,7 +1551,7 @@ subtype = "tropical"
 
     #[test]
     fn test_command_history_toml_and_json_formats() {
-        use super::{set_serialize_commands_as_strings, CommandHistory};
+        use super::{CommandHistory, set_serialize_commands_as_strings};
         use crate::commands::Commands;
 
         // Test different command types
@@ -1619,7 +1619,7 @@ subtype = "tropical"
     #[test]
     fn run_history_push_with_raw_skips_quit_and_definition_commands() {
         use super::RunHistory;
-        use crate::commands::{run::Run, StartCommandsBlock};
+        use crate::commands::{StartCommandsBlock, run::Run};
 
         let mut run_history = RunHistory::default();
         run_history.push_with_raw(

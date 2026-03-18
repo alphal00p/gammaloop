@@ -2,13 +2,11 @@ use std::fs;
 use std::path::Path;
 
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
-use crate::integrands::Integrand;
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
     LoopMomentaEscalationMetrics, PreciseEvaluationResult, RotatedEvaluation,
     StabilityFailureReason, StabilityResult,
 };
-use crate::integrate::UserData;
 use crate::model::Model;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::momentum::{Rotation, ThreeMomentum};
@@ -221,13 +219,6 @@ impl ProcessIntegrand {
         match self {
             ProcessIntegrand::Amplitude(integrand) => &integrand.settings,
             ProcessIntegrand::CrossSection(integrand) => &integrand.settings,
-        }
-    }
-
-    /// Used to create the use_data_generator closure for havana_integrate
-    pub fn user_data_generator(&self, num_cores: usize, _settings: &RuntimeSettings) -> UserData {
-        UserData {
-            integrand: vec![Integrand::ProcessIntegrand(self.clone()); num_cores],
         }
     }
 

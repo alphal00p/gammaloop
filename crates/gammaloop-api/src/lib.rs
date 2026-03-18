@@ -21,10 +21,10 @@ use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh};
 use clap_complete_nushell::Nushell;
-use commands::save::SaveState;
 use commands::Commands;
+use commands::save::SaveState;
 
-use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
+use gammalooprs::utils::serde_utils::{SHOWDEFAULTS, SerdeFileError};
 use reedline::FileBackedHistory;
 use repl::ClapEditor;
 use repl::ReadCommandOutput;
@@ -51,18 +51,18 @@ use gammalooprs::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
-        serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
-        tracing::{LogFormat, LogLevel},
         GIT_VERSION,
+        serde_utils::{SmartSerde, get_schema_folder, is_false, is_true},
+        tracing::{LogFormat, LogLevel},
     },
 };
 use reedline::{Prompt, PromptEditMode, PromptHistorySearch};
-use schemars::{schema_for, JsonSchema};
+use schemars::{JsonSchema, schema_for};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::command_parser::normalize_generate_argv;
 use state::{
-    classify_state_folder, CommandHistory, RunHistory, State, StateFolderKind, SyncSettings,
+    CommandHistory, RunHistory, State, StateFolderKind, SyncSettings, classify_state_folder,
 };
 use std::{
     borrow::Cow, ffi::OsString, io::IsTerminal, path::Path, path::PathBuf, sync::atomic::Ordering,
@@ -1334,13 +1334,13 @@ mod tests {
         utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
     };
 
-    use crate::commands::Reset;
+    use crate::commands::{Duplicate, Reset};
     use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
 
     use super::{
-        generate_completion_script, CLISettings, Commands, CompletionShell, LogFormat, LogLevel,
-        OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
+        CLISettings, Commands, CompletionShell, GLOBAL_SETTINGS_FILENAME, LogFormat, LogLevel,
+        OneShot, Repl, RunHistory, StateSettings, generate_completion_script,
     };
 
     fn write_run_card(path: &PathBuf, state_folder: &str) {
@@ -1559,9 +1559,38 @@ mod tests {
         };
         assert_eq!(
             integrate.process,
-            Some(ProcessRef::Unqualified("triangle".to_string()))
+            vec![ProcessRef::Unqualified("triangle".to_string())]
         );
-        assert_eq!(integrate.integrand_name, Some("LO".to_string()));
+        assert_eq!(integrate.integrand_name, vec!["LO".to_string()]);
+    }
+
+    #[test]
+    fn repl_parses_duplicate_integrand_output_selectors() {
+        let parsed = Repl::try_parse_from([
+            "gammaloop",
+            "duplicate",
+            "integrand",
+            "-p",
+            "box",
+            "-i",
+            "scalar_box",
+            "--output_process_name",
+            "box_copy",
+            "--output_integrand_name",
+            "scalar_box_copy",
+        ])
+        .unwrap();
+
+        let Commands::Duplicate(Duplicate::Integrand(command)) = parsed.command else {
+            panic!("expected duplicate integrand command");
+        };
+        assert_eq!(
+            command.process,
+            Some(ProcessRef::Unqualified("box".to_string()))
+        );
+        assert_eq!(command.integrand_name, Some("scalar_box".to_string()));
+        assert_eq!(command.output_process_name, "box_copy");
+        assert_eq!(command.output_integrand_name, "scalar_box_copy");
     }
 
     #[test]

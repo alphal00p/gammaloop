@@ -16,9 +16,9 @@ use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
 use crate::{
+    CLISettings,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
-    CLISettings,
 };
 
 #[cfg_attr(
