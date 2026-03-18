@@ -21,10 +21,10 @@ use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh};
 use clap_complete_nushell::Nushell;
-use commands::Commands;
 use commands::save::SaveState;
+use commands::Commands;
 
-use gammalooprs::utils::serde_utils::{SHOWDEFAULTS, SerdeFileError};
+use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
 use reedline::FileBackedHistory;
 use repl::ClapEditor;
 use repl::ReadCommandOutput;
@@ -51,18 +51,18 @@ use gammalooprs::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
-        GIT_VERSION,
-        serde_utils::{SmartSerde, get_schema_folder, is_false, is_true},
+        serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
         tracing::{LogFormat, LogLevel},
+        GIT_VERSION,
     },
 };
 use reedline::{Prompt, PromptEditMode, PromptHistorySearch};
-use schemars::{JsonSchema, schema_for};
+use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::command_parser::normalize_generate_argv;
 use state::{
-    CommandHistory, RunHistory, State, StateFolderKind, SyncSettings, classify_state_folder,
+    classify_state_folder, CommandHistory, RunHistory, State, StateFolderKind, SyncSettings,
 };
 use std::{
     borrow::Cow, ffi::OsString, io::IsTerminal, path::Path, path::PathBuf, sync::atomic::Ordering,
@@ -73,6 +73,7 @@ use walkdir::WalkDir;
 // use tracing::LogLevel;
 mod command_parser;
 pub(crate) mod completion;
+pub(crate) mod model_parameters;
 #[cfg(feature = "python_api")]
 pub mod python;
 pub mod repl;
@@ -1339,8 +1340,8 @@ mod tests {
     use crate::state::ProcessRef;
 
     use super::{
-        CLISettings, Commands, CompletionShell, GLOBAL_SETTINGS_FILENAME, LogFormat, LogLevel,
-        OneShot, Repl, RunHistory, StateSettings, generate_completion_script,
+        generate_completion_script, CLISettings, Commands, CompletionShell, LogFormat, LogLevel,
+        OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
     };
 
     fn write_run_card(path: &PathBuf, state_folder: &str) {

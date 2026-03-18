@@ -48,6 +48,8 @@ pub struct RuntimeSettings {
     // Runtime settings
     #[serde(rename = "general", skip_serializing_if = "IsDefault::is_default")]
     pub general: GeneralSettings,
+    #[serde(rename = "model", skip_serializing_if = "IsDefault::is_default")]
+    pub model: RuntimeModelSettings,
     #[serde(rename = "integrand", skip_serializing_if = "IsDefault::is_default")]
     pub hard_coded_integrand: Option<IntegrandSettings>,
     #[serde(rename = "kinematics", skip_serializing_if = "IsDefault::is_default")]
@@ -123,8 +125,8 @@ impl Default for GlobalSettings {
 
 pub mod global;
 pub use runtime::{
-    GeneralSettings, IntegratorSettings, ObservablesOutputSettings, SamplingSettings,
-    StabilitySettings, SubtractionSettings, kinematic::KinematicsSettings,
+    GeneralSettings, IntegratorSettings, ObservablesOutputSettings, RuntimeModelSettings,
+    SamplingSettings, StabilitySettings, SubtractionSettings, kinematic::KinematicsSettings,
 };
 pub mod runtime;
 
@@ -208,6 +210,28 @@ mod tests {
     #[test]
     fn runtime_test_serialize_deserialize() {
         generic_test_settings::<RuntimeSettings>();
+    }
+
+    #[test]
+    fn runtime_model_settings_serialize_deserialize() {
+        use crate::settings::runtime::RuntimeModelSettings;
+        generic_test_settings::<RuntimeModelSettings>();
+    }
+
+    #[test]
+    fn runtime_settings_serializes_model_overrides_under_model_block() {
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(2.0), F(0.0)));
+
+        let serialized = toml::to_string_pretty(&settings).unwrap();
+        assert!(serialized.contains("[model]"));
+        assert!(serialized.contains("mass_scalar_2 = [2.0, 0.0]"));
+
+        let deserialized: RuntimeSettings = toml::from_str(&serialized).unwrap();
+        assert_eq!(settings, deserialized);
     }
 
     #[test]

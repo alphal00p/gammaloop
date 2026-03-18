@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
@@ -31,6 +31,17 @@ use crate::{
 use symbolica::domains::float::Real;
 
 use super::{RuntimeSettings, global::OrientationPattern};
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
+pub struct RuntimeModelSettings {
+    #[serde(flatten, skip_serializing_if = "IsDefault::is_default")]
+    pub external_parameters: BTreeMap<String, (F<f64>, F<f64>)>,
+}
 
 #[cfg_attr(
     feature = "python_api",

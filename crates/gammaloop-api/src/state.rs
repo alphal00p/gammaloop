@@ -12,13 +12,13 @@ use std::{
 use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
 };
 use linnet::half_edge::subgraph::SubGraphLike;
-use schemars::{JsonSchema, Schema, schema_for};
+use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
@@ -27,26 +27,27 @@ use tracing::debug;
 use tracing::info;
 
 use gammalooprs::{
-    GammaLoopContextContainer,
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
     integrands::HasIntegrand,
-    model::{InputParamCard, Model},
+    model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
-    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
+    settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     utils::{
-        F,
-        serde_utils::{SmartSerde, get_schema_folder},
+        serde_utils::{get_schema_folder, SmartSerde},
         tracing::{init_bench_tracing, init_test_tracing},
+        F,
     },
+    GammaLoopContextContainer,
 };
 
 use crate::{
-    CLISettings,
     command_parser::split_command_line,
-    commands::{Commands, save::SaveState},
+    commands::{save::SaveState, Commands},
+    model_parameters::{external_model_parameter_type, validate_model_parameter_type},
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
+    CLISettings,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
@@ -447,8 +448,8 @@ impl CommandHistory {
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
         use crate::Repl;
-        use clap::Parser;
         use clap::error::ErrorKind;
+        use clap::Parser;
 
         let args = split_command_line(raw_string).map_err(|_| {
             clap::Error::raw(
@@ -893,6 +894,85 @@ fn save_state_manifest(save_path: &Path) -> Result<()> {
 }
 
 impl State {
+    fn overridable_model_parameter_names(&self) -> Vec<String> {
+        let mut names = self
+            .model_parameters
+            .keys()
+            .map(|symbol| symbol.to_string())
+            .collect::<Vec<_>>();
+        names.sort();
+        names
+    }
+
+    fn resolve_overridable_model_parameter_type(
+        &self,
+        parameter_name: &str,
+    ) -> Result<gammalooprs::model::ParameterType> {
+        let possibilities = self.overridable_model_parameter_names();
+        let parameter_type = external_model_parameter_type(&self.model, parameter_name)
+            .ok_or_else(|| eyre!("No model parameter named '{parameter_name}'"))
+            .with_note(|| {
+                format!(
+                    "Possible model parameters are: {}",
+                    possibilities.join(", ")
+                )
+            })?;
+
+        let symbol = UFOSymbol::from(parameter_name);
+        if !self.model_parameters.contains_key(&symbol) {
+            return Err(eyre!(
+                "Model parameter '{parameter_name}' cannot be overridden because it is not present in the shared top-level model_parameters.json"
+            ))
+            .with_note(|| format!("Possible model parameters are: {}", possibilities.join(", ")));
+        }
+
+        Ok(parameter_type)
+    }
+
+    pub fn find_generated_integrand_ref_by_name(
+        &self,
+        integrand_name: &str,
+    ) -> Result<(usize, String)> {
+        let matches = self
+            .process_list
+            .processes
+            .iter()
+            .enumerate()
+            .filter_map(|(process_id, process)| {
+                let found = match &process.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                        .get(integrand_name)
+                        .filter(|amplitude| amplitude.integrand.is_some())
+                        .map(|_| (process_id, process.definition.folder_name.clone())),
+                    ProcessCollection::CrossSections(cross_sections) => cross_sections
+                        .get(integrand_name)
+                        .filter(|cross_section| cross_section.integrand.is_some())
+                        .map(|_| (process_id, process.definition.folder_name.clone())),
+                };
+                found.map(|(process_id, process_name)| {
+                    (process_id, process_name, integrand_name.to_string())
+                })
+            })
+            .collect::<Vec<_>>();
+
+        match matches.as_slice() {
+            [(process_id, _, canonical_name)] => Ok((*process_id, canonical_name.clone())),
+            [] => Err(eyre!(
+                "No generated integrand named '{integrand_name}' was found. Per-integrand model parameters are only supported for generated integrands."
+            )),
+            _ => {
+                let names = matches
+                    .iter()
+                    .map(|(process_id, process_name, _)| format!("#{process_id} ({process_name})"))
+                    .collect::<Vec<_>>();
+                Err(eyre!(
+                    "Integrand name '{integrand_name}' is ambiguous across generated integrands"
+                ))
+                .with_note(|| format!("Matching processes: {}", names.join(", ")))
+            }
+        }
+    }
+
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.model = Model::from_file(path)?;
         Ok(())
@@ -953,6 +1033,70 @@ impl State {
             .find_integrand(integrand_name.cloned())
             .with_note(|| format!("in process id {process_id}"))?;
         Ok((process_id, integrand_name))
+    }
+
+    pub fn resolve_effective_model_parameter_card_for_settings(
+        &self,
+        settings: &RuntimeSettings,
+    ) -> Result<InputParamCard<F<f64>>> {
+        let mut card = self.model_parameters.clone();
+
+        for (parameter_name, value) in &settings.model.external_parameters {
+            let parameter_type = self.resolve_overridable_model_parameter_type(parameter_name)?;
+            let value = Complex::new(value.0, value.1);
+            validate_model_parameter_type(parameter_name, parameter_type, &value)?;
+
+            let parameter = card
+                .get_mut(&UFOSymbol::from(parameter_name.as_str()))
+                .ok_or_else(|| {
+                    eyre!(
+                        "Model parameter '{parameter_name}' is missing from the shared top-level model_parameters.json"
+                    )
+                })?;
+            *parameter = value;
+        }
+
+        Ok(card)
+    }
+
+    pub fn resolve_serializable_model_parameter_card_for_settings(
+        &self,
+        settings: &RuntimeSettings,
+    ) -> Result<SerializableInputParamCard<F<f64>>> {
+        Ok(self
+            .resolve_effective_model_parameter_card_for_settings(settings)?
+            .to_serializable())
+    }
+
+    pub fn resolve_effective_model_parameter_card_for_integrand(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+    ) -> Result<SerializableInputParamCard<F<f64>>> {
+        let settings = self
+            .process_list
+            .get_integrand(process_id, integrand_name)?
+            .get_settings();
+        self.resolve_serializable_model_parameter_card_for_settings(settings)
+    }
+
+    pub fn resolve_model_for_settings(&self, settings: &RuntimeSettings) -> Result<Model> {
+        let mut model = self.model.clone();
+        self.resolve_effective_model_parameter_card_for_settings(settings)?
+            .apply_to_model(&mut model)?;
+        Ok(model)
+    }
+
+    pub fn resolve_model_for_integrand(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+    ) -> Result<Model> {
+        let settings = self
+            .process_list
+            .get_integrand(process_id, integrand_name)?
+            .get_settings();
+        self.resolve_model_for_settings(settings)
     }
 
     pub fn generate_integrands(
@@ -1439,8 +1583,8 @@ mod tests {
     use gammalooprs::{
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
-        settings::{KinematicsSettings, RuntimeSettings, runtime::kinematic::Externals},
-        utils::serde_utils::SHOWDEFAULTS,
+        settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
+        utils::{serde_utils::SHOWDEFAULTS, test_utils::load_generic_model},
     };
     use tempfile::tempdir;
 
@@ -1517,7 +1661,7 @@ subtype = "tropical"
 
     #[test]
     fn test_command_history_serialization() {
-        use super::{CommandHistory, set_serialize_commands_as_strings};
+        use super::{set_serialize_commands_as_strings, CommandHistory};
         use crate::commands::Commands;
 
         // Test basic construction
@@ -1551,7 +1695,7 @@ subtype = "tropical"
 
     #[test]
     fn test_command_history_toml_and_json_formats() {
-        use super::{CommandHistory, set_serialize_commands_as_strings};
+        use super::{set_serialize_commands_as_strings, CommandHistory};
         use crate::commands::Commands;
 
         // Test different command types
@@ -1619,7 +1763,7 @@ subtype = "tropical"
     #[test]
     fn run_history_push_with_raw_skips_quit_and_definition_commands() {
         use super::RunHistory;
-        use crate::commands::{StartCommandsBlock, run::Run};
+        use crate::commands::{run::Run, StartCommandsBlock};
 
         let mut run_history = RunHistory::default();
         run_history.push_with_raw(
@@ -1962,6 +2106,56 @@ commands = ["quit -n"]
             classify_state_folder(temp.path()).unwrap(),
             StateFolderKind::Scratch
         );
+    }
+
+    #[test]
+    fn resolve_effective_model_parameter_card_overlays_runtime_model_settings() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(7.5), F(0.0)));
+
+        let resolved = state
+            .resolve_effective_model_parameter_card_for_settings(&settings)
+            .unwrap();
+
+        assert_eq!(
+            resolved[&UFOSymbol::from("mass_scalar_2")],
+            Complex::new(F(7.5), F(0.0))
+        );
+        assert_eq!(
+            resolved[&UFOSymbol::from("mass_scalar_1")],
+            state.model_parameters[&UFOSymbol::from("mass_scalar_1")]
+        );
+    }
+
+    #[test]
+    fn resolve_effective_model_parameter_card_rejects_non_overridable_parameters() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state
+            .model_parameters
+            .remove(&UFOSymbol::from("mass_scalar_2"));
+
+        let mut settings = RuntimeSettings::default();
+        settings
+            .model
+            .external_parameters
+            .insert("mass_scalar_2".to_string(), (F(7.5), F(0.0)));
+
+        let err = state
+            .resolve_effective_model_parameter_card_for_settings(&settings)
+            .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("cannot be overridden because it is not present"));
     }
 }
 
