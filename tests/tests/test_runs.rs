@@ -22,6 +22,7 @@ use gammalooprs::{
 use insta::assert_snapshot;
 use itertools::Itertools;
 use momtrop::assert_approx_eq;
+use serde_json::Value as JsonValue;
 use serial_test::serial;
 use spenso::{
     algebra::complex::Complex,
@@ -211,6 +212,36 @@ fn scalar_topology_integrate_command(
 
 fn load_integration_result(path: &Path) -> Result<RuntimeIntegrationResult> {
     Ok(serde_json::from_str(&std::fs::read_to_string(path)?)?)
+}
+
+fn normalized_integration_result_json(result: &RuntimeIntegrationResult) -> JsonValue {
+    let mut value = serde_json::to_value(result).expect("integration result must serialize");
+    let Some(slots) = value.get_mut("slots").and_then(JsonValue::as_array_mut) else {
+        return value;
+    };
+    for slot in slots {
+        if let Some(statistics) = slot
+            .get_mut("integration_statistics")
+            .and_then(JsonValue::as_object_mut)
+        {
+            statistics.remove("average_total_time_seconds");
+            statistics.remove("average_parameterization_time_seconds");
+            statistics.remove("average_integrand_time_seconds");
+            statistics.remove("average_evaluator_time_seconds");
+            statistics.remove("average_observable_time_seconds");
+        }
+    }
+    value
+}
+
+fn assert_integration_results_match_ignoring_timings(
+    lhs: &RuntimeIntegrationResult,
+    rhs: &RuntimeIntegrationResult,
+) {
+    assert_eq!(
+        normalized_integration_result_json(lhs),
+        normalized_integration_result_json(rhs),
+    );
 }
 
 fn complex_distance(lhs: Complex<f64>, rhs: Complex<f64>) -> f64 {
@@ -1510,6 +1541,60 @@ fn test_multi_integrand() -> Result<()> {
             .join("integrands/box_copy@scalar_box_copy/settings.toml")
             .exists()
     );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+fn test_multi_integrand_batching_preserves_results() -> Result<()> {
+    let test_name = "test_multi_integrand_batching_preserves_results";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p triangle -i scalar_tri {shared_integrator_settings}"
+    ))?;
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+
+    let mut single_batch = scalar_topology_integrate_command(
+        test_name,
+        "triangle_and_box_single_batch",
+        &[("triangle", "scalar_tri"), ("box", "scalar_box")],
+        &[],
+    );
+    single_batch.batch_size = Some(10_000);
+    single_batch.no_stream_iterations = true;
+    single_batch.no_stream_updates = true;
+    single_batch.run(&mut cli.state, &cli.cli_settings)?;
+
+    let mut many_batches = scalar_topology_integrate_command(
+        test_name,
+        "triangle_and_box_many_batches",
+        &[("triangle", "scalar_tri"), ("box", "scalar_box")],
+        &[],
+    );
+    many_batches.batch_size = Some(7);
+    many_batches.no_stream_iterations = true;
+    many_batches.no_stream_updates = true;
+    many_batches.run(&mut cli.state, &cli.cli_settings)?;
+
+    let single_batch_result = load_integration_result(
+        &get_tests_workspace_path()
+            .join(test_name)
+            .join("triangle_and_box_single_batch")
+            .join("integration_result.json"),
+    )?;
+    let many_batches_result = load_integration_result(
+        &get_tests_workspace_path()
+            .join(test_name)
+            .join("triangle_and_box_many_batches")
+            .join("integration_result.json"),
+    )?;
+
+    assert_integration_results_match_ignoring_timings(&single_batch_result, &many_batches_result);
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())

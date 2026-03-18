@@ -22,7 +22,10 @@ use crate::observables::{
 };
 use crate::{
     settings::runtime::{IntegrationStatisticsSnapshot, Precision},
-    utils::{ArbPrec, F, FloatLike, f128, format_evaluation_time, normalize_tabled_separator_rows},
+    utils::{
+        ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_evaluation_time,
+        normalize_tabled_separator_rows,
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -813,41 +816,56 @@ impl StatisticsCounter {
         }
     }
 
+    fn avg_duration(sum: Duration, count: usize) -> Duration {
+        if count == 0 {
+            return Duration::ZERO;
+        }
+
+        duration_from_secs_f64_saturating(sum.as_secs_f64() / count as f64)
+    }
+
+    fn eval_percentage(&self, count: usize) -> f64 {
+        if self.num_evals == 0 {
+            0.0
+        } else {
+            count as f64 / self.num_evals as f64 * 100.0
+        }
+    }
+
     /// Compute the average time spent in the evaluate_sample function.
     pub(crate) fn get_avg_total_timing(&self) -> Duration {
-        let avg_total_timing = self.sum_total_evaluation_time.as_secs_f64() / self.num_evals as f64;
-        Duration::from_secs_f64(avg_total_timing)
+        Self::avg_duration(self.sum_total_evaluation_time, self.num_evals)
     }
 
     /// Compute the average time spent in the original integrand evaluation call.
     pub(crate) fn get_avg_integrand_timing(&self) -> Duration {
-        let avg_integrand_timing =
-            self.sum_integrand_evaluation_time.as_secs_f64() / self.num_evals as f64;
-        Duration::from_secs_f64(avg_integrand_timing)
+        Self::avg_duration(self.sum_integrand_evaluation_time, self.num_evals)
     }
 
     /// Compute the average time spent inside Symbolica evaluator function calls.
     pub(crate) fn get_avg_evaluator_timing(&self) -> Duration {
-        let avg_evaluator_timing =
-            self.sum_evaluator_evaluation_time.as_secs_f64() / self.num_evals as f64;
-        Duration::from_secs_f64(avg_evaluator_timing)
+        Self::avg_duration(self.sum_evaluator_evaluation_time, self.num_evals)
     }
 
     /// Compute the average time spent in the parameterization of the integrand. Especaially useful for monitoring the performance of tropical sampling.
     pub(crate) fn get_avg_param_timing(&self) -> Duration {
-        let avg_param_timing = self.sum_parameterization_time.as_secs_f64() / self.num_evals as f64;
-
-        Duration::from_secs_f64(avg_param_timing)
+        Self::avg_duration(self.sum_parameterization_time, self.num_evals)
     }
 
     pub(crate) fn get_avg_event_timing(&self) -> Duration {
-        let avg_event_timing = self.sum_event_time.as_secs_f64() / self.num_evals as f64;
-        Duration::from_secs_f64(avg_event_timing)
+        Self::avg_duration(self.sum_event_time, self.num_evals)
     }
 
     /// Get the average relative error computed during instability checks
     #[allow(dead_code)]
     pub(crate) fn get_avg_instabillity_error(&self) -> (F<f64>, F<f64>) {
+        if self.num_evals == 0 {
+            return (
+                self.sum_relative_instability_error.0.zero(),
+                self.sum_relative_instability_error.1.zero(),
+            );
+        }
+
         (
             self.sum_relative_instability_error.0
                 / self
@@ -864,24 +882,24 @@ impl StatisticsCounter {
 
     /// Get the percentage of evaluations that were done in double precision and were stable.
     pub(crate) fn get_percentage_f64(&self) -> f64 {
-        self.num_double_precision_evals as f64 / self.num_evals as f64 * 100.0
+        self.eval_percentage(self.num_double_precision_evals)
     }
 
     /// Get the percentage of evaluations that went to quadruple precision and were stable.
     pub(crate) fn get_percentage_f128(&self) -> f64 {
-        self.num_quadruple_precision_evals as f64 / self.num_evals as f64 * 100.0
+        self.eval_percentage(self.num_quadruple_precision_evals)
     }
 
     pub(crate) fn get_percentage_arb(&self) -> f64 {
-        self.num_arb_precision_evals as f64 / self.num_evals as f64 * 100.0
+        self.eval_percentage(self.num_arb_precision_evals)
     }
 
     pub(crate) fn get_percentage_nan(&self) -> f64 {
-        self.num_nan_evals as f64 / self.num_evals as f64 * 100.0
+        self.eval_percentage(self.num_nan_evals)
     }
 
     pub(crate) fn get_percentage_nan_or_unstable(&self) -> f64 {
-        self.num_nan_or_unstable_evals as f64 / self.num_evals as f64 * 100.0
+        self.eval_percentage(self.num_nan_or_unstable_evals)
     }
 
     pub(crate) fn selection_efficiency_percentage(&self) -> Option<f64> {
@@ -1082,5 +1100,29 @@ mod tests {
         assert!(rendered.contains("evals"), "{rendered}");
         assert!(rendered.contains("events"), "{rendered}");
         assert!(rendered.contains("nans+unstable % :"), "{rendered}");
+    }
+
+    #[test]
+    fn zero_eval_statistics_snapshot_and_render_are_sanitized() {
+        let stats = StatisticsCounter::new_empty();
+        let snapshot = stats.snapshot();
+
+        assert_eq!(snapshot.num_evals, 0);
+        assert_eq!(snapshot.average_total_time_seconds, 0.0);
+        assert_eq!(snapshot.average_parameterization_time_seconds, 0.0);
+        assert_eq!(snapshot.average_integrand_time_seconds, 0.0);
+        assert_eq!(snapshot.average_evaluator_time_seconds, 0.0);
+        assert_eq!(snapshot.average_observable_time_seconds, 0.0);
+        assert_eq!(snapshot.f64_percentage, 0.0);
+        assert_eq!(snapshot.f128_percentage, 0.0);
+        assert_eq!(snapshot.arb_percentage, 0.0);
+        assert_eq!(snapshot.nan_percentage, 0.0);
+        assert_eq!(snapshot.nan_or_unstable_percentage, 0.0);
+        assert_eq!(snapshot.selection_efficiency_percentage, None);
+
+        let rendered = stats.render_status_table();
+        assert!(rendered.contains("sel. % :     N/A"), "{rendered}");
+        assert!(rendered.contains("f64 :     0.00%"), "{rendered}");
+        assert!(rendered.contains("nan :     0.0%"), "{rendered}");
     }
 }

@@ -3511,8 +3511,22 @@ pub(crate) fn format_evaluation_time(time: Duration) -> String {
     format!("{value:.precision$} {unit}")
 }
 
+pub(crate) fn duration_from_secs_f64_saturating(time: f64) -> Duration {
+    if !time.is_finite() || time <= 0.0 {
+        return Duration::ZERO;
+    }
+
+    let max_seconds = Duration::MAX.as_secs_f64();
+    let clamped = if time >= max_seconds {
+        max_seconds
+    } else {
+        time
+    };
+    Duration::from_secs_f64(clamped)
+}
+
 pub(crate) fn format_evaluation_time_from_f64(time: f64) -> String {
-    format_evaluation_time(Duration::from_secs_f64(time))
+    format_evaluation_time(duration_from_secs_f64_saturating(time))
 }
 
 pub(crate) fn format_sample(sample: &Sample<F<f64>>) -> String {

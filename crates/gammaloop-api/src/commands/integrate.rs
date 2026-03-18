@@ -28,7 +28,8 @@ use gammalooprs::{
         render_saved_integration_summary, slot_workspace_path, workspace_manifest_path,
         workspace_state_path, ContributionSortMode, IntegrationState, IntegrationStatusKind,
         IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
-        IntegrationWorkspaceManifest, SlotMeta, WorkspaceSnapshotControl,
+        IntegrationWorkspaceManifest, IterationBatchingSettings, SlotMeta,
+        WorkspaceSnapshotControl,
     },
     model::{Model, SerializableInputParamCard},
     observables::ObservableSnapshotBundle,
@@ -131,9 +132,25 @@ pub struct Integrate {
     #[arg(long = "show-summary-only")]
     pub show_summary_only: bool,
 
-    /// Disable live streaming of intermediate integration updates in interactive terminals
-    #[arg(long = "no-stream")]
-    pub no_stream: bool,
+    /// Disable streaming of end-of-iteration integration summaries in interactive terminals
+    #[arg(long = "no-stream-iterations")]
+    pub no_stream_iterations: bool,
+
+    /// Disable live streaming of in-iteration integration status updates
+    #[arg(long = "no-stream-updates")]
+    pub no_stream_updates: bool,
+
+    /// Evaluate each iteration in per-core batches of this size
+    #[arg(long = "batch-size")]
+    pub batch_size: Option<usize>,
+
+    /// Target per-core batch wall time in seconds when batch size is not specified
+    #[arg(long = "batch-timing", default_value_t = 5.0)]
+    pub batch_timing: f64,
+
+    /// Minimum time between streamed in-iteration status updates
+    #[arg(long = "min-time-between-status-updates", default_value_t = 0.0)]
+    pub min_time_between_status_updates: f64,
 
     /// Maximum width used when normalizing integration status tables
     #[arg(long = "max-table-width", default_value_t = 250)]
@@ -195,7 +212,11 @@ impl Default for Integrate {
             sort_contributions: ContributionSortOption::Error,
             show_max_weight_info_for_discrete_bins: false,
             show_summary_only: false,
-            no_stream: false,
+            no_stream_iterations: false,
+            no_stream_updates: false,
+            batch_size: None,
+            batch_timing: 5.0,
+            min_time_between_status_updates: 0.0,
             max_table_width: 250,
             write_results_for_each_iteration: false,
         }
@@ -583,6 +604,15 @@ impl Integrate {
     fn workspace_snapshot_control(&self) -> WorkspaceSnapshotControl {
         WorkspaceSnapshotControl {
             write_iteration_archives: self.write_results_for_each_iteration,
+        }
+    }
+
+    fn build_batching_settings(&self, emit_live_status_updates: bool) -> IterationBatchingSettings {
+        IterationBatchingSettings {
+            batch_size: self.batch_size,
+            batch_timing_seconds: self.batch_timing,
+            min_time_between_status_updates_seconds: self.min_time_between_status_updates,
+            emit_live_status_updates,
         }
     }
 
@@ -1001,6 +1031,21 @@ impl Integrate {
                 "The integrate option `--max-table-width` must be greater than zero"
             ));
         }
+        if self.batch_size == Some(0) {
+            return Err(eyre!(
+                "The integrate option `--batch-size` must be greater than zero"
+            ));
+        }
+        if self.batch_timing < 0.0 {
+            return Err(eyre!(
+                "The integrate option `--batch-timing` must be greater than or equal to zero"
+            ));
+        }
+        if self.min_time_between_status_updates < 0.0 {
+            return Err(eyre!(
+                "The integrate option `--min-time-between-status-updates` must be greater than or equal to zero"
+            ));
+        }
 
         let default_workspace_path = self.default_workspace_path(global_cli_settings);
         let workspace_path = if let Some(p) = self.workspace_path.clone() {
@@ -1116,17 +1161,15 @@ impl Integrate {
             .n_cores
             .unwrap_or(global_cli_settings.global.n_cores.integrate);
 
-        let enable_streaming = if self.no_stream {
-            false
-        } else if io::stderr().is_terminal() {
-            true
-        } else {
+        let stderr_is_tty = io::stderr().is_terminal();
+        let stream_updates = !self.no_stream_updates && stderr_is_tty;
+        let stream_iterations = !self.no_stream_iterations && stderr_is_tty;
+        if !stderr_is_tty && (!self.no_stream_updates || !self.no_stream_iterations) {
             info!(
-                "Streaming integration updates disabled because stderr is not a TTY; falling back to append-only logging."
+                "Streaming integration updates disabled because stderr is not a TTY; live updates will be skipped and iteration summaries will be logged."
             );
-            false
-        };
-        let mut stream_renderer = enable_streaming.then(StreamRenderer::new);
+        }
+        let mut stream_renderer = (stream_updates || stream_iterations).then(StreamRenderer::new);
 
         let result = havana_integrate(
             &settings,
@@ -1144,18 +1187,33 @@ impl Integrate {
             integration_state,
             Some(workspace_path.clone()),
             self.workspace_snapshot_control(),
+            self.build_batching_settings(stream_updates),
             render_options,
             move |kind, status_block| {
                 if let Some(renderer) = stream_renderer.as_mut() {
                     match kind {
-                        IntegrationStatusKind::Iteration => renderer.render(&status_block)?,
+                        IntegrationStatusKind::Live => {
+                            if stream_updates {
+                                renderer.render(&status_block)?;
+                            }
+                        }
+                        IntegrationStatusKind::Iteration => {
+                            if stream_iterations {
+                                renderer.render(&status_block)?;
+                            } else {
+                                renderer.clear()?;
+                                emit_integration_status_via_tracing(kind, &status_block)?;
+                            }
+                        }
                         IntegrationStatusKind::Final => {
                             renderer.clear()?;
                             emit_integration_status_via_tracing(kind, &status_block)?;
                         }
                     }
                 } else {
-                    emit_integration_status_via_tracing(kind, &status_block)?;
+                    if kind != IntegrationStatusKind::Live {
+                        emit_integration_status_via_tracing(kind, &status_block)?;
+                    }
                 }
 
                 Ok(())

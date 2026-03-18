@@ -86,6 +86,7 @@ fn compare_integration(
                 None,
                 None,
                 crate::integrate::WorkspaceSnapshotControl::default(),
+                crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;
@@ -116,6 +117,7 @@ fn compare_integration(
                 None,
                 None,
                 crate::integrate::WorkspaceSnapshotControl::default(),
+                crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;
@@ -148,6 +150,7 @@ fn compare_integration(
                 None,
                 None,
                 crate::integrate::WorkspaceSnapshotControl::default(),
+                crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;
@@ -180,6 +183,7 @@ fn compare_integration(
                 None,
                 None,
                 crate::integrate::WorkspaceSnapshotControl::default(),
+                crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;

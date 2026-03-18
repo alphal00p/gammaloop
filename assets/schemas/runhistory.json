@@ -1538,12 +1538,37 @@
     "Integrate": {
       "type": "object",
       "properties": {
+        "batch_size": {
+          "description": "Evaluate each iteration in per-core batches of this size",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "batch_timing": {
+          "description": "Target per-core batch wall time in seconds when batch size is not specified",
+          "type": "number",
+          "format": "double"
+        },
         "integrand_name": {
           "description": "The integrand name to integrate; repeat with -p to select multiple integrands",
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "max_table_width": {
+          "description": "Maximum width used when normalizing integration status tables",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "min_time_between_status_updates": {
+          "description": "Minimum time between streamed in-iteration status updates",
+          "type": "number",
+          "format": "double"
         },
         "n_cores": {
           "description": "Number of cores to parallelize over",
@@ -1558,8 +1583,12 @@
           "description": "Hide integration statistics during intermediate iteration updates",
           "type": "boolean"
         },
-        "no_stream": {
-          "description": "Disable live streaming of intermediate integration updates in interactive terminals",
+        "no_stream_iterations": {
+          "description": "Disable streaming of end-of-iteration integration summaries in interactive terminals",
+          "type": "boolean"
+        },
+        "no_stream_updates": {
+          "description": "Disable live streaming of in-iteration integration status updates",
           "type": "boolean"
         },
         "process": {
@@ -1633,7 +1662,11 @@
         "sort_contributions",
         "show_max_weight_info_for_discrete_bins",
         "show_summary_only",
-        "no_stream",
+        "no_stream_iterations",
+        "no_stream_updates",
+        "batch_timing",
+        "min_time_between_status_updates",
+        "max_table_width",
         "write_results_for_each_iteration"
       ]
     },

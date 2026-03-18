@@ -13,7 +13,6 @@ use itertools::Itertools;
 use itertools::izip;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use rayon::ThreadPoolBuilder;
-use rayon::iter::repeat_n;
 use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -66,6 +65,25 @@ use tracing::{debug, error, info, trace, warn};
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WorkspaceSnapshotControl {
     pub write_iteration_archives: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct IterationBatchingSettings {
+    pub batch_size: Option<usize>,
+    pub batch_timing_seconds: f64,
+    pub min_time_between_status_updates_seconds: f64,
+    pub emit_live_status_updates: bool,
+}
+
+impl Default for IterationBatchingSettings {
+    fn default() -> Self {
+        Self {
+            batch_size: None,
+            batch_timing_seconds: 5.0,
+            min_time_between_status_updates_seconds: 0.0,
+            emit_live_status_updates: true,
+        }
+    }
 }
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
@@ -575,6 +593,18 @@ fn orientation_description(orientation: &EdgeVec<Orientation>) -> String {
         .collect()
 }
 
+fn graph_group_description<I>(graph_names: I) -> String
+where
+    I: IntoIterator<Item = String>,
+{
+    let graph_names = graph_names.into_iter().collect_vec();
+    if graph_names.len() <= 1 {
+        return graph_names.into_iter().next().unwrap_or_default();
+    }
+
+    format!("[{}]", graph_names.join(","))
+}
+
 fn lmb_channel_description(lmb: &LoopMomentumBasis) -> String {
     format!(
         "({})",
@@ -591,32 +621,34 @@ fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
     axis_label: &str,
 ) -> Option<Vec<String>> {
     match (integrand, axis_label) {
-        (ProcessIntegrand::Amplitude(integrand), "graph") => Some(
-            integrand
-                .data
-                .graph_group_structure
-                .iter()
-                .map(|group| {
-                    integrand.data.graph_terms[group.master()]
-                        .graph
-                        .name
-                        .clone()
-                })
-                .collect(),
-        ),
-        (ProcessIntegrand::CrossSection(integrand), "graph") => Some(
-            integrand
-                .data
-                .graph_group_structure
-                .iter()
-                .map(|group| {
-                    integrand.data.graph_terms[group.master()]
-                        .graph
-                        .name
-                        .clone()
-                })
-                .collect(),
-        ),
+        (ProcessIntegrand::Amplitude(integrand), "graph") => {
+            Some(
+                integrand
+                    .data
+                    .graph_group_structure
+                    .iter()
+                    .map(|group| {
+                        graph_group_description(group.into_iter().map(|graph_id| {
+                            integrand.data.graph_terms[graph_id].graph.name.clone()
+                        }))
+                    })
+                    .collect(),
+            )
+        }
+        (ProcessIntegrand::CrossSection(integrand), "graph") => {
+            Some(
+                integrand
+                    .data
+                    .graph_group_structure
+                    .iter()
+                    .map(|group| {
+                        graph_group_description(group.into_iter().map(|graph_id| {
+                            integrand.data.graph_terms[graph_id].graph.name.clone()
+                        }))
+                    })
+                    .collect(),
+            )
+        }
         (ProcessIntegrand::Amplitude(integrand), "orientation") => {
             let group_id = GroupId(*path.first()?);
             let group = integrand.data.graph_group_structure.get(group_id)?;
@@ -809,11 +841,41 @@ fn render_orientation_description(description: &str) -> String {
         .join("")
 }
 
+fn render_graph_description(description: &str) -> String {
+    if let Some(inner) = description
+        .strip_prefix('[')
+        .and_then(|trimmed| trimmed.strip_suffix(']'))
+    {
+        let names = inner
+            .split(',')
+            .filter(|name| !name.is_empty())
+            .collect_vec();
+        if names.is_empty() {
+            return description.bold().green().to_string();
+        }
+
+        let rendered = names
+            .into_iter()
+            .enumerate()
+            .map(|(index, name)| {
+                if index == 0 {
+                    name.bold().green().to_string()
+                } else {
+                    name.bold().blue().to_string()
+                }
+            })
+            .join(",");
+        return format!("[{rendered}]");
+    }
+
+    description.bold().green().to_string()
+}
+
 fn render_bin_description(axis_label: &str, description: &str) -> String {
-    if axis_label == "orientation" {
-        render_orientation_description(description)
-    } else {
-        description.bold().green().to_string()
+    match axis_label {
+        "orientation" => render_orientation_description(description),
+        "graph" => render_graph_description(description),
+        _ => description.bold().green().to_string(),
     }
 }
 
@@ -1183,7 +1245,23 @@ fn build_max_weight_info_summary(
     .collect()
 }
 
-fn build_iteration_status_header_left(elapsed_time: Duration, iter: usize) -> String {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct LiveIterationProgress {
+    completed_points: usize,
+    target_points: usize,
+}
+
+fn build_iteration_status_header_left(
+    elapsed_time: Duration,
+    iter: usize,
+    live_progress: Option<LiveIterationProgress>,
+) -> String {
+    let iteration_label = if live_progress.is_some() {
+        format!("Iteration #{:-4} (running)", iter).bold().green()
+    } else {
+        format!("Iteration #{:-4}", iter).bold().green()
+    };
+
     format!(
         "[ {} ] {}",
         format!(
@@ -1191,15 +1269,38 @@ fn build_iteration_status_header_left(elapsed_time: Duration, iter: usize) -> St
             utils::format_wdhms(elapsed_time.as_secs() as usize)
         )
         .bold(),
-        format!("Iteration #{:-4}", iter).bold().green(),
+        iteration_label,
     )
 }
 
-fn build_iteration_status_header_middle(cur_points: usize, total_points: usize) -> String {
-    let per_iteration = format!(
-        "# samples per iteration = {}",
-        format_iteration_points(cur_points)
-    )
+fn build_iteration_status_header_middle(
+    cur_points: usize,
+    total_points: usize,
+    live_progress: Option<LiveIterationProgress>,
+) -> String {
+    let per_iteration = if let Some(progress) = live_progress {
+        let percentage = if progress.target_points == 0 {
+            String::from("0.0%")
+        } else {
+            format!(
+                "{:.1}%",
+                (progress.completed_points as f64) / (progress.target_points as f64) * 100.0
+            )
+            .green()
+            .to_string()
+        };
+        format!(
+            "Iteration progress {}/{} {}",
+            format_iteration_points(progress.completed_points),
+            format_iteration_points(progress.target_points),
+            percentage
+        )
+    } else {
+        format!(
+            "# samples per iteration = {}",
+            format_iteration_points(cur_points)
+        )
+    }
     .blue()
     .bold();
     format!(
@@ -1235,9 +1336,11 @@ fn build_iteration_results_table(
     cores: usize,
     elapsed_time: Duration,
     cur_points: usize,
+    total_points_display: usize,
     n_samples_evaluated: usize,
     targets: &[Option<Complex<F<f64>>>],
     render_options: &IntegrationStatusRenderOptions,
+    live_progress: Option<LiveIterationProgress>,
 ) -> StatusTable {
     #[derive(Clone, Default)]
     struct MainTableSlotCells {
@@ -1584,9 +1687,9 @@ fn build_iteration_results_table(
 
     let mut builder = Builder::new();
     let mut first_row = vec![
-        build_iteration_status_header_left(elapsed_time, integration_state.iter),
+        build_iteration_status_header_left(elapsed_time, integration_state.iter, live_progress),
         String::new(),
-        build_iteration_status_header_middle(cur_points, integration_state.num_points),
+        build_iteration_status_header_middle(cur_points, total_points_display, live_progress),
     ];
     first_row.resize(n_columns, String::new());
     first_row[n_columns - 2] =
@@ -2124,7 +2227,7 @@ fn render_tables_with_shared_width(mut tables: Vec<StatusTable>, max_table_width
 
 /// struct to keep track of state, used in the havana_integrate function
 /// the idea is to save this to disk after each iteration, so that the integration can be resumed
-#[derive(Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct IntegrationState {
     pub num_points: usize,
     #[bincode(with_serde)]
@@ -2195,6 +2298,18 @@ impl IntegrationState {
     }
 }
 
+struct CoreIterationState {
+    slot_integrands: Vec<Integrand>,
+    stats: StatisticsCounter,
+    integrals: Vec<ComplexAccumulator>,
+    sampling_grid: Grid<F<f64>>,
+    slot_re_grids: Vec<Grid<F<f64>>>,
+    slot_im_grids: Vec<Grid<F<f64>>>,
+    rng: MonteCarloRng,
+    remaining_points: usize,
+    completed_points: usize,
+}
+
 pub struct CoreResult {
     pub stats: StatisticsCounter,
     pub integrals: Vec<ComplexAccumulator>,
@@ -2203,8 +2318,125 @@ pub struct CoreResult {
     pub slot_im_grids: Vec<Grid<F<f64>>>,
 }
 
+impl CoreIterationState {
+    fn new(
+        slot_integrands: Vec<Integrand>,
+        sampling_grid_template: &Grid<F<f64>>,
+        n_slots: usize,
+        seed: u64,
+        sample_skip: usize,
+        remaining_points: usize,
+    ) -> Self {
+        let mut rng = MonteCarloRng::new(seed, 0);
+        let mut sampling_grid = sampling_grid_template.clone_without_samples();
+
+        for _ in 0..sample_skip {
+            let mut sample = Sample::new();
+            sampling_grid.sample(&mut rng, &mut sample);
+        }
+
+        Self {
+            slot_integrands,
+            stats: StatisticsCounter::new_empty(),
+            integrals: vec![ComplexAccumulator::new(); n_slots],
+            sampling_grid,
+            slot_re_grids: vec![sampling_grid_template.clone_without_samples(); n_slots],
+            slot_im_grids: vec![sampling_grid_template.clone_without_samples(); n_slots],
+            rng,
+            remaining_points,
+            completed_points: 0,
+        }
+    }
+
+    fn evaluate_chunk(
+        &mut self,
+        settings: &RuntimeSettings,
+        slot_models: &[Model],
+        iter: usize,
+        current_max_evals: &[Complex<F<f64>>],
+        chunk_size: usize,
+    ) -> Result<usize> {
+        let n_points = chunk_size.min(self.remaining_points);
+        if n_points == 0 {
+            return Ok(0);
+        }
+
+        let mut results = Vec::new();
+        let mut processed_points = 0;
+        for _ in 0..n_points {
+            if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                break;
+            }
+
+            let mut sample = Sample::new();
+            self.sampling_grid.sample(&mut self.rng, &mut sample);
+            processed_points += 1;
+
+            for (slot_index, (((integrand, core_accumulator), re_grid), im_grid)) in self
+                .slot_integrands
+                .iter_mut()
+                .zip(self.integrals.iter_mut())
+                .zip(self.slot_re_grids.iter_mut())
+                .zip(self.slot_im_grids.iter_mut())
+                .enumerate()
+            {
+                let mut result = integrand.evaluate_sample(
+                    &sample,
+                    &slot_models[slot_index],
+                    sample.get_weight(),
+                    iter,
+                    false,
+                    current_max_evals[slot_index],
+                )?;
+
+                integrand.process_evaluation_result(&result);
+                maybe_discard_generated_events_for_integrand(&mut result, &*integrand);
+                let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
+                let effective_integrand_result =
+                    result.integrand_result * Complex::new_re(jacobian);
+
+                core_accumulator.add_sample(
+                    effective_integrand_result,
+                    sample.get_weight(),
+                    Some(&sample),
+                );
+                re_grid
+                    .add_training_sample(&sample, effective_integrand_result.re)
+                    .map_err(Report::msg)?;
+                im_grid
+                    .add_training_sample(&sample, effective_integrand_result.im)
+                    .map_err(Report::msg)?;
+
+                if slot_index == 0 {
+                    let training_eval = match settings.integrator.integrated_phase {
+                        IntegratedPhase::Real => effective_integrand_result.re,
+                        IntegratedPhase::Imag => effective_integrand_result.im,
+                        IntegratedPhase::Both => unimplemented!(),
+                    };
+
+                    self.sampling_grid
+                        .add_training_sample(&sample, training_eval)
+                        .map_err(Report::msg)?;
+                }
+
+                results.push(result);
+            }
+        }
+
+        if processed_points > 0 {
+            self.remaining_points -= processed_points;
+            self.completed_points += processed_points;
+            let chunk_stats = StatisticsCounter::from_evaluation_results(&results);
+            self.stats = self.stats.merged(&chunk_stats);
+        }
+
+        Ok(processed_points)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IntegrationStatusKind {
+    Live,
     Iteration,
     Final,
 }
@@ -2254,6 +2486,131 @@ impl IntegrationStatusRenderOptions {
     }
 }
 
+fn initial_batch_size(batching: IterationBatchingSettings) -> usize {
+    batching.batch_size.unwrap_or(100).max(1)
+}
+
+fn next_batch_size(
+    batching: IterationBatchingSettings,
+    current_batch_size: usize,
+    round_elapsed: Duration,
+) -> usize {
+    if let Some(batch_size) = batching.batch_size {
+        return batch_size.max(1);
+    }
+
+    let round_seconds = round_elapsed.as_secs_f64();
+    if round_seconds <= 0.0 {
+        return current_batch_size.max(1);
+    }
+
+    let estimated = ((current_batch_size as f64) * batching.batch_timing_seconds / round_seconds)
+        .round() as usize;
+    estimated.max(1)
+}
+
+fn total_completed_points(core_states: &[CoreIterationState]) -> usize {
+    core_states.iter().map(|state| state.completed_points).sum()
+}
+
+fn total_remaining_points(core_states: &[CoreIterationState]) -> usize {
+    core_states.iter().map(|state| state.remaining_points).sum()
+}
+
+fn apply_iteration_core_states(
+    integration_state: &mut IntegrationState,
+    settings: &RuntimeSettings,
+    cores: usize,
+    cur_points: usize,
+    elapsed_seconds: f64,
+    core_states: &[CoreIterationState],
+) {
+    let n_slots = integration_state.slot_metas.len();
+
+    for core_state in core_states {
+        integration_state.stats = integration_state.stats.merged(&core_state.stats);
+        for (integral, core_integral) in integration_state
+            .all_integrals
+            .iter_mut()
+            .zip(core_state.integrals.iter())
+        {
+            integral.merge(core_integral);
+        }
+    }
+
+    let mut merged_re_grids =
+        vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
+    let mut merged_im_grids =
+        vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
+
+    for core_state in core_states {
+        integration_state
+            .sampling_grid
+            .merge(&core_state.sampling_grid)
+            .expect("could not merge grids");
+        for slot_index in 0..n_slots {
+            merged_re_grids[slot_index]
+                .merge(&core_state.slot_re_grids[slot_index])
+                .expect("could not merge real accumulation grids");
+            merged_im_grids[slot_index]
+                .merge(&core_state.slot_im_grids[slot_index])
+                .expect("could not merge imaginary accumulation grids");
+        }
+    }
+
+    for (summary, grid) in integration_state
+        .slot_re_summaries
+        .iter_mut()
+        .zip(merged_re_grids.iter())
+    {
+        if let Some(summary) = summary.as_mut() {
+            summary.merge_iteration_grid(grid);
+            summary.update_iter();
+        }
+    }
+    for (summary, grid) in integration_state
+        .slot_im_summaries
+        .iter_mut()
+        .zip(merged_im_grids.iter())
+    {
+        if let Some(summary) = summary.as_mut() {
+            summary.merge_iteration_grid(grid);
+            summary.update_iter();
+        }
+    }
+
+    integration_state.sampling_grid.update(
+        F(settings.integrator.discrete_dim_learning_rate),
+        F(settings.integrator.continuous_dim_learning_rate),
+    );
+
+    integration_state.update_iter(false);
+    integration_state.iter += 1;
+    integration_state.elapsed_seconds = elapsed_seconds;
+    integration_state.n_cores = cores;
+    integration_state.num_points += cur_points;
+}
+
+fn build_preview_integration_state(
+    integration_state: &IntegrationState,
+    settings: &RuntimeSettings,
+    cores: usize,
+    completed_points: usize,
+    elapsed_seconds: f64,
+    core_states: &[CoreIterationState],
+) -> IntegrationState {
+    let mut preview = integration_state.clone();
+    apply_iteration_core_states(
+        &mut preview,
+        settings,
+        cores,
+        completed_points,
+        elapsed_seconds,
+        core_states,
+    );
+    preview
+}
+
 /// Integrate function used for local runs
 pub fn havana_integrate<S>(
     settings: &RuntimeSettings,
@@ -2265,6 +2622,7 @@ pub fn havana_integrate<S>(
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
     output_control: WorkspaceSnapshotControl,
+    batching: IterationBatchingSettings,
     render_options: IntegrationStatusRenderOptions,
     mut status_emitter: S,
 ) -> Result<IntegrationResult>
@@ -2285,7 +2643,7 @@ where
         ));
     }
 
-    let mut user_data = vec![slot_integrands.clone(); n_cores];
+    let mut slot_integrands = slot_integrands;
 
     let sampling_grid = slot_integrands[0].create_grid();
     let discrete_axis_labels = discrete_axis_labels(&settings.sampling)
@@ -2364,7 +2722,7 @@ where
 
     let grid_str = format!("{graph_string}{cont_dim_str} using {sampling_str}");
 
-    let cores = user_data.len();
+    let cores = n_cores.max(1);
     let n_slots = integration_state.slot_metas.len();
     let elapsed_seconds_offset = integration_state.elapsed_seconds;
 
@@ -2402,9 +2760,15 @@ where
 
         // the number of points per core is the same for all cores, except for the last one
         let target_points_per_core = (cur_points - 1) / cores + 1;
-        let n_points_per_core = repeat_n(target_points_per_core, cores - 1).chain(
-            rayon::iter::once(cur_points - target_points_per_core * (cores - 1)),
-        );
+        let n_points_per_core = (0..cores)
+            .map(|core_id| {
+                if core_id + 1 == cores {
+                    cur_points - target_points_per_core * (cores - 1)
+                } else {
+                    target_points_per_core
+                }
+            })
+            .collect_vec();
 
         let current_max_evals = integration_state
             .all_integrals
@@ -2412,225 +2776,137 @@ where
             .map(ComplexAccumulator::get_worst_case)
             .collect_vec();
 
-        let grids = repeat_n(
-            integration_state.sampling_grid.clone_without_samples(),
-            cores,
-        );
+        let mut worker_states = n_points_per_core
+            .iter()
+            .enumerate()
+            .map(|(core_id, &n_points)| {
+                CoreIterationState::new(
+                    slot_integrands.clone(),
+                    &integration_state.sampling_grid,
+                    n_slots,
+                    settings.integrator.seed + integration_state.iter as u64,
+                    target_points_per_core * core_id,
+                    n_points,
+                )
+            })
+            .collect_vec();
 
-        let core_results: Vec<Result<CoreResult>> = pool.install(|| {
-            user_data
+        let mut current_batch_size = initial_batch_size(batching);
+        let mut last_live_status = None;
+        while total_remaining_points(&worker_states) > 0 {
+            let round_started_at = Instant::now();
+            let processed_per_core: Vec<Result<usize>> = pool.install(|| {
+                worker_states
                     .par_iter_mut()
-                    .enumerate()
-                    .zip(repeat_n(slot_models.clone(), cores))
-                    .zip(grids)
-                    .zip(n_points_per_core)
-                    .map(
-                        |(
-                            (((core_id, slot_integrands), slot_models), mut sampling_grid),
-                            n_points,
-                        )|
-                         -> Result<CoreResult> {
-                            let mut rng = MonteCarloRng::new(
-                                settings.integrator.seed + integration_state.iter as u64,
-                                0,
-                            );
-
-                            for _ in 0..(target_points_per_core * core_id) {
-                                let mut sample = Sample::new();
-                                sampling_grid.sample(&mut rng, &mut sample);
-                            }
-
-                            let samples = (0..n_points)
-                                .map(|_| {
-                                    let mut sample = Sample::new();
-                                    sampling_grid.sample(&mut rng, &mut sample);
-                                    sample
-                                })
-                                .collect_vec();
-
-                            let mut core_accumulators = vec![ComplexAccumulator::new(); n_slots];
-                            let mut slot_re_grids =
-                                vec![
-                                    integration_state.sampling_grid.clone_without_samples();
-                                    n_slots
-                                ];
-                            let mut slot_im_grids =
-                                vec![
-                                    integration_state.sampling_grid.clone_without_samples();
-                                    n_slots
-                                ];
-
-                            let mut results = Vec::new();
-                            for s in samples.iter() {
-                                if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
-                                    break;
-                                }
-
-                                for (
-                                    slot_index,
-                                    (((integrand, core_accumulator), re_grid), im_grid),
-                                ) in slot_integrands
-                                    .iter_mut()
-                                    .zip(core_accumulators.iter_mut())
-                                    .zip(slot_re_grids.iter_mut())
-                                    .zip(slot_im_grids.iter_mut())
-                                    .enumerate()
-                                {
-                                    let mut result = integrand.evaluate_sample(
-                                        s,
-                                        &slot_models[slot_index],
-                                        s.get_weight(),
-                                        integration_state.iter,
-                                        false,
-                                        current_max_evals[slot_index],
-                                    )?;
-
-                                    integrand.process_evaluation_result(&result);
-                                    maybe_discard_generated_events_for_integrand(
-                                        &mut result,
-                                        &*integrand,
-                                    );
-                                    let jacobian =
-                                        result.parameterization_jacobian.unwrap_or(F(1.0));
-                                    let effective_integrand_result =
-                                        result.integrand_result * Complex::new_re(jacobian);
-
-                                    core_accumulator.add_sample(
-                                        effective_integrand_result,
-                                        s.get_weight(),
-                                        Some(s),
-                                    );
-                                    re_grid
-                                        .add_training_sample(s, effective_integrand_result.re)
-                                        .map_err(Report::msg)?;
-                                    im_grid
-                                        .add_training_sample(s, effective_integrand_result.im)
-                                        .map_err(Report::msg)?;
-
-                                    if slot_index == 0 {
-                                        let training_eval = match settings
-                                            .integrator
-                                            .integrated_phase
-                                        {
-                                            IntegratedPhase::Real => effective_integrand_result.re,
-                                            IntegratedPhase::Imag => effective_integrand_result.im,
-                                            IntegratedPhase::Both => unimplemented!(),
-                                        };
-
-                                        sampling_grid
-                                            .add_training_sample(s, training_eval)
-                                            .map_err(Report::msg)?;
-                                    }
-
-                                    results.push(result);
-                                }
-                            }
-
-                            let evaluation_statistics =
-                                StatisticsCounter::from_evaluation_results(&results);
-
-                            Ok(CoreResult {
-                                stats: evaluation_statistics,
-                                integrals: core_accumulators,
-                                sampling_grid,
-                                slot_re_grids,
-                                slot_im_grids,
-                            })
-                        },
-                    )
+                    .map(|worker_state| {
+                        worker_state.evaluate_chunk(
+                            settings,
+                            &slot_models,
+                            integration_state.iter,
+                            &current_max_evals,
+                            current_batch_size,
+                        )
+                    })
                     .collect()
-        });
-        let core_results: Vec<CoreResult> = core_results.into_iter().collect::<Result<_>>()?;
+            });
+            let processed_this_round = processed_per_core
+                .into_iter()
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .sum::<usize>();
+
+            if processed_this_round == 0 {
+                break;
+            }
+
+            let completed_points = total_completed_points(&worker_states);
+            if batching.emit_live_status_updates
+                && completed_points < cur_points
+                && !is_interrupted()
+            {
+                let now = Instant::now();
+                let should_emit_live_status = last_live_status.is_none_or(|previous| {
+                    now.duration_since(previous).as_secs_f64()
+                        >= batching.min_time_between_status_updates_seconds
+                });
+                if should_emit_live_status {
+                    let preview_state = build_preview_integration_state(
+                        &integration_state,
+                        settings,
+                        cores,
+                        completed_points,
+                        elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
+                        &worker_states,
+                    );
+                    status_emitter(
+                        IntegrationStatusKind::Live,
+                        render_iteration_status_block(
+                            IntegrationStatusKind::Live,
+                            &preview_state,
+                            cores,
+                            t_start.elapsed(),
+                            completed_points,
+                            integration_state.num_points + completed_points,
+                            n_samples_evaluated + completed_points,
+                            &targets,
+                            &render_options,
+                            Some(LiveIterationProgress {
+                                completed_points,
+                                target_points: cur_points,
+                            }),
+                        ),
+                    )?;
+                    last_live_status = Some(now);
+                }
+            }
+
+            if is_interrupted() {
+                warn!("{}", "Integration iterrupted by user".yellow());
+                break 'integrateLoop;
+            }
+
+            if total_remaining_points(&worker_states) > 0 {
+                current_batch_size =
+                    next_batch_size(batching, current_batch_size, round_started_at.elapsed());
+            }
+        }
 
         if is_interrupted() {
             warn!("{}", "Integration iterrupted by user".yellow());
             break 'integrateLoop;
         }
 
-        for core_result in core_results.iter() {
-            integration_state.stats = integration_state.stats.merged(&core_result.stats);
-            for (integral, core_integral) in integration_state
-                .all_integrals
-                .iter_mut()
-                .zip(core_result.integrals.iter())
-            {
-                integral.merge(core_integral);
-            }
-        }
-
-        let mut merged_re_grids =
-            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
-        let mut merged_im_grids =
-            vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
-
-        for core_result in core_results.iter() {
-            integration_state
-                .sampling_grid
-                .merge(&core_result.sampling_grid)
-                .expect("could not merge grids");
-            for slot_index in 0..n_slots {
-                merged_re_grids[slot_index]
-                    .merge(&core_result.slot_re_grids[slot_index])
-                    .expect("could not merge real accumulation grids");
-                merged_im_grids[slot_index]
-                    .merge(&core_result.slot_im_grids[slot_index])
-                    .expect("could not merge imaginary accumulation grids");
-            }
-        }
-
-        for (summary, grid) in integration_state
-            .slot_re_summaries
-            .iter_mut()
-            .zip(merged_re_grids.iter())
-        {
-            if let Some(summary) = summary.as_mut() {
-                summary.merge_iteration_grid(grid);
-                summary.update_iter();
-            }
-        }
-        for (summary, grid) in integration_state
-            .slot_im_summaries
-            .iter_mut()
-            .zip(merged_im_grids.iter())
-        {
-            if let Some(summary) = summary.as_mut() {
-                summary.merge_iteration_grid(grid);
-                summary.update_iter();
-            }
-        }
-
-        integration_state.sampling_grid.update(
-            F(settings.integrator.discrete_dim_learning_rate),
-            F(settings.integrator.continuous_dim_learning_rate),
+        n_samples_evaluated += cur_points;
+        apply_iteration_core_states(
+            &mut integration_state,
+            settings,
+            cores,
+            cur_points,
+            elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
+            &worker_states,
         );
 
-        integration_state.update_iter(false);
-
-        integration_state.iter += 1;
-        integration_state.elapsed_seconds =
-            elapsed_seconds_offset + t_start.elapsed().as_secs_f64();
-        integration_state.n_cores = cores;
-
-        integration_state.num_points += cur_points;
-        n_samples_evaluated += cur_points;
-
         // merge runtime state per slot into the owner core
-        let (owner_core_slice, other_cores) = user_data.split_at_mut(1);
-        let owner_core = &mut owner_core_slice[0];
+        let (owner_core_slice, other_cores) = worker_states.split_at_mut(1);
+        let owner_core = &mut owner_core_slice[0].slot_integrands;
         for other_core in other_cores {
-            for (owner_slot, other_slot) in owner_core.iter_mut().zip(other_core.iter_mut()) {
+            for (owner_slot, other_slot) in owner_core
+                .iter_mut()
+                .zip(other_core.slot_integrands.iter_mut())
+            {
                 owner_slot.merge_runtime_results(other_slot)?;
             }
         }
+        slot_integrands = owner_core.clone();
 
         // Update observable accumulators, persist authoritative resume state, then refresh
         // the latest user-facing snapshots.
-        for integrand in owner_core.iter_mut() {
+        for integrand in slot_integrands.iter_mut() {
             integrand.update_runtime_results(integration_state.iter);
         }
 
         if let Some(ref workspace_path) = workspace {
-            for (slot_index, integrand) in owner_core.iter().enumerate() {
+            for (slot_index, integrand) in slot_integrands.iter().enumerate() {
                 write_observable_resume_state(
                     integrand,
                     Some(workspace_path.as_path()),
@@ -2648,7 +2924,7 @@ where
             )?;
         }
 
-        for (slot_index, integrand) in owner_core.iter().enumerate() {
+        for (slot_index, integrand) in slot_integrands.iter().enumerate() {
             let workspace_path = workspace
                 .as_deref()
                 .map(|root| slot_workspace_path(root, &integration_state.slot_metas[slot_index]));
@@ -2665,13 +2941,16 @@ where
         status_emitter(
             IntegrationStatusKind::Iteration,
             render_iteration_status_block(
+                IntegrationStatusKind::Iteration,
                 &integration_state,
                 cores,
                 t_start.elapsed(),
                 cur_points,
+                integration_state.num_points,
                 n_samples_evaluated,
                 &targets,
                 &IntegrationStatusRenderOptions { ..render_options },
+                None,
             ),
         )?;
     }
@@ -2682,13 +2961,16 @@ where
         status_emitter(
             IntegrationStatusKind::Final,
             render_iteration_status_block(
+                IntegrationStatusKind::Final,
                 &integration_state,
                 cores,
                 t_start.elapsed(),
                 0,
+                integration_state.num_points,
                 n_samples_evaluated,
                 &targets,
                 &render_options.for_final(),
+                None,
             ),
         )?;
     } else {
@@ -2700,11 +2982,11 @@ where
         info!("");
     }
 
-    if let Some(owner_core) = user_data.first() {
+    if !slot_integrands.is_empty() {
         emit_results_output_summary(
             workspace.as_deref(),
             &integration_state.slot_metas,
-            owner_core,
+            &slot_integrands,
             &emitted_latest_observable_paths,
             output_control,
         );
@@ -3573,6 +3855,7 @@ pub fn emit_integration_status_via_tracing(
 ) -> Result<()> {
     let status_block = status_block.as_ref();
     match kind {
+        IntegrationStatusKind::Live => {}
         IntegrationStatusKind::Iteration => {
             info!("\n{status_block}");
             info!("");
@@ -3590,22 +3873,27 @@ pub fn emit_integration_status_via_tracing(
 }
 
 fn render_iteration_status_block(
+    _kind: IntegrationStatusKind,
     integration_state: &IntegrationState,
     cores: usize,
     elapsed_time: Duration,
     cur_points: usize,
+    total_points_display: usize,
     n_samples_evaluated: usize,
     targets: &[Option<Complex<F<f64>>>],
     render_options: &IntegrationStatusRenderOptions,
+    live_progress: Option<LiveIterationProgress>,
 ) -> String {
     let mut tables = vec![build_iteration_results_table(
         integration_state,
         cores,
         elapsed_time,
         cur_points,
+        total_points_display,
         n_samples_evaluated,
         targets,
         render_options,
+        live_progress,
     )];
 
     if render_options.show_max_weight_details {
@@ -3641,13 +3929,16 @@ pub fn render_saved_integration_summary(
     render_options: &IntegrationStatusRenderOptions,
 ) -> String {
     render_iteration_status_block(
+        IntegrationStatusKind::Final,
         integration_state,
         integration_state.n_cores.max(1),
-        Duration::from_secs_f64(integration_state.elapsed_seconds.max(0.0)),
+        utils::duration_from_secs_f64_saturating(integration_state.elapsed_seconds),
         0,
+        integration_state.num_points,
         integration_state.num_points,
         targets,
         &render_options.for_final(),
+        None,
     )
 }
 
@@ -3965,9 +4256,11 @@ mod tests {
     fn iteration_status_block_uses_compact_header_and_optional_statistics() {
         let state = make_integration_state();
         let rendered = render_iteration_status_block(
+            IntegrationStatusKind::Iteration,
             &state,
             4,
             Duration::from_secs(1),
+            100_000,
             100_000,
             100_000,
             &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
@@ -3976,6 +4269,7 @@ mod tests {
                 show_max_weight_details: false,
                 ..default_render_options()
             },
+            None,
         );
 
         assert!(rendered.contains("Iteration #   1"), "{rendered}");
@@ -4003,9 +4297,11 @@ mod tests {
     fn iteration_status_block_omits_delta_columns_when_no_target_is_provided() {
         let state = make_integration_state();
         let rendered = render_iteration_status_block(
+            IntegrationStatusKind::Iteration,
             &state,
             4,
             Duration::from_secs(1),
+            100_000,
             100_000,
             100_000,
             &[None, None],
@@ -4014,6 +4310,7 @@ mod tests {
                 show_max_weight_details: false,
                 ..default_render_options()
             },
+            None,
         );
 
         assert!(!rendered.contains("Δ [σ]"), "{rendered}");
@@ -4023,13 +4320,49 @@ mod tests {
     }
 
     #[test]
+    fn live_iteration_status_block_uses_progress_header() {
+        let mut state = make_integration_state();
+        state.iter = 2;
+        state.num_points = 125_000;
+        let rendered = render_iteration_status_block(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(1),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+            &IntegrationStatusRenderOptions {
+                show_statistics: false,
+                show_max_weight_details: false,
+                ..default_render_options()
+            },
+            Some(LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+        );
+
+        assert!(rendered.contains("Iteration #   2 (running)"), "{rendered}");
+        assert!(
+            rendered.contains("Iteration progress 25.00K/100.00K"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("25.0%"), "{rendered}");
+        assert!(rendered.contains("# samples total = 125.00K"), "{rendered}");
+    }
+
+    #[test]
     fn iteration_status_block_shows_discrete_contributions_and_discrete_max_weights() {
         let state = make_discrete_integration_state();
         let rendered = render_iteration_status_block(
+            IntegrationStatusKind::Iteration,
             &state,
             4,
             Duration::from_secs(2),
             110_000,
+            210_000,
             210_000,
             &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
             &IntegrationStatusRenderOptions {
@@ -4041,6 +4374,7 @@ mod tests {
                 show_max_weight_info_for_discrete_bins: true,
                 ..default_render_options()
             },
+            None,
         );
 
         assert!(rendered.contains("Sum"), "{rendered}");
@@ -4059,13 +4393,23 @@ mod tests {
     }
 
     #[test]
+    fn grouped_graph_descriptions_include_all_group_members() {
+        let description =
+            graph_group_description(["GL0".to_string(), "GL1".to_string(), "GL2".to_string()]);
+
+        assert_eq!(description, "[GL0,GL1,GL2]");
+    }
+
+    #[test]
     fn iteration_status_block_hides_spanned_metadata_header_separators() {
         let state = make_discrete_integration_state();
         let rendered = render_iteration_status_block(
+            IntegrationStatusKind::Iteration,
             &state,
             4,
             Duration::from_secs(2),
             110_000,
+            210_000,
             210_000,
             &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
             &IntegrationStatusRenderOptions {
@@ -4077,6 +4421,7 @@ mod tests {
                 show_max_weight_info_for_discrete_bins: false,
                 ..default_render_options()
             },
+            None,
         );
 
         let header_line = rendered

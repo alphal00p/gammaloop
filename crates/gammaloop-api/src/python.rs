@@ -1071,7 +1071,11 @@ fn build_python_integrate_command(
     sort_contributions: String,
     show_max_weight_info_for_discrete_bins: bool,
     show_summary_only: bool,
-    no_stream: bool,
+    no_stream_iterations: bool,
+    no_stream_updates: bool,
+    batch_size: Option<usize>,
+    batch_timing: f64,
+    min_time_between_status_updates: f64,
     max_table_width: usize,
     write_results_for_each_iteration: bool,
 ) -> PyResult<Integrate> {
@@ -1113,7 +1117,11 @@ fn build_python_integrate_command(
             })?;
     integrate.show_max_weight_info_for_discrete_bins = show_max_weight_info_for_discrete_bins;
     integrate.show_summary_only = show_summary_only;
-    integrate.no_stream = no_stream;
+    integrate.no_stream_iterations = no_stream_iterations;
+    integrate.no_stream_updates = no_stream_updates;
+    integrate.batch_size = batch_size;
+    integrate.batch_timing = batch_timing;
+    integrate.min_time_between_status_updates = min_time_between_status_updates;
     integrate.max_table_width = max_table_width;
     integrate.write_results_for_each_iteration = write_results_for_each_iteration;
 
@@ -2266,7 +2274,11 @@ impl GammaLoopAPI {
             sort_contributions = "error".to_string(),
             show_max_weight_info_for_discrete_bins = false,
             show_summary_only = false,
-            no_stream = false,
+            no_stream_iterations = false,
+            no_stream_updates = false,
+            batch_size = None,
+            batch_timing = 5.0,
+            min_time_between_status_updates = 0.0,
             max_table_width = 250,
             write_results_for_each_iteration = false
         )
@@ -2289,7 +2301,11 @@ impl GammaLoopAPI {
         sort_contributions: String,
         show_max_weight_info_for_discrete_bins: bool,
         show_summary_only: bool,
-        no_stream: bool,
+        no_stream_iterations: bool,
+        no_stream_updates: bool,
+        batch_size: Option<usize>,
+        batch_timing: f64,
+        min_time_between_status_updates: f64,
         max_table_width: usize,
         write_results_for_each_iteration: bool,
     ) -> Result<PyIntegrationOutput> {
@@ -2310,7 +2326,11 @@ impl GammaLoopAPI {
             sort_contributions,
             show_max_weight_info_for_discrete_bins,
             show_summary_only,
-            no_stream,
+            no_stream_iterations,
+            no_stream_updates,
+            batch_size,
+            batch_timing,
+            min_time_between_status_updates,
             max_table_width,
             write_results_for_each_iteration,
         )?;
