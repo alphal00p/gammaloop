@@ -84,7 +84,7 @@ fn compare_integration(
                 vec![Some(target)],
                 None,
                 None,
-                crate::integrate::ObservableOutputControl::default(),
+                crate::integrate::WorkspaceSnapshotControl::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;
@@ -114,7 +114,7 @@ fn compare_integration(
                 vec![Some(target)],
                 None,
                 None,
-                crate::integrate::ObservableOutputControl::default(),
+                crate::integrate::WorkspaceSnapshotControl::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;
@@ -146,7 +146,7 @@ fn compare_integration(
                 vec![Some(target)],
                 None,
                 None,
-                crate::integrate::ObservableOutputControl::default(),
+                crate::integrate::WorkspaceSnapshotControl::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;
@@ -178,7 +178,7 @@ fn compare_integration(
                 vec![Some(target)],
                 None,
                 None,
-                crate::integrate::ObservableOutputControl::default(),
+                crate::integrate::WorkspaceSnapshotControl::default(),
                 default_render_options(),
                 |_, _| Ok(()),
             )?;

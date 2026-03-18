@@ -131,4 +131,3 @@ disable_threshold_subtraction = true
 
 [default_runtime_settings.integrator.observables_output]
 format = "json"
-per_iteration = false

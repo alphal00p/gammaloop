@@ -56,7 +56,6 @@ fn default_integrate_for(name: &str) -> Integrate {
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: None,
         n_cores: Some(1),
         workspace_path: Some(
             get_tests_workspace_path().join(format!("{name}/integration_workspace")),
@@ -199,7 +198,6 @@ fn scalar_topology_integrate_command(
             .iter()
             .map(|(_, integrand)| (*integrand).to_string())
             .collect(),
-        result_path: Some(workspace.join("integration_result.json")),
         workspace_path: Some(workspace),
         n_cores: Some(1),
         target: targets
@@ -255,10 +253,6 @@ fn test_z_decay() -> Result<()> {
     let result = Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("z_decay_test/integration_workspace/integration_results.yaml"),
-        ),
         workspace_path: Some(
             get_tests_workspace_path().join("z_decay_test/integration_workspace/"),
         ),
@@ -375,10 +369,6 @@ fn photons_1l_integrate() -> Result<()> {
     let integrate = Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("photons_eu_integrate/integration_workspace/integration_results.yaml"),
-        ),
         n_cores: Some(1),
         workspace_path: Some(
             get_tests_workspace_path().join("photons_eu_integrate/integration_workspace/"),
@@ -645,7 +635,6 @@ fn photonic_amplitudes() -> Result<()> {
         let integrated_result = Integrate {
             process: vec![],
             integrand_name: vec!["default".to_string()],
-            result_path: None,
             workspace_path: None,
             n_cores: Some(1),
             target: bench_data
@@ -827,9 +816,6 @@ fn test_grouped_subtraction() -> Result<()> {
     let int1 = Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(get_tests_workspace_path().join(
-            "test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
-        )),
         workspace_path: Some(
             get_tests_workspace_path()
                 .join("test_grouped_subtraction/integration_workspace_no_group/"),
@@ -839,22 +825,18 @@ fn test_grouped_subtraction() -> Result<()> {
         restart: true,
         ..Default::default()
     };
-    let int2 =
-        Integrate {
-            process: vec![ProcessRef::Id(1)],
-            integrand_name: vec!["default".to_string()],
-            result_path: Some(get_tests_workspace_path().join(
-                "test_grouped_subtraction/integration_workspace_group/integration_results.yaml",
-            )),
-            workspace_path: Some(
-                get_tests_workspace_path()
-                    .join("test_grouped_subtraction/integration_workspace_group/"),
-            ),
-            target: vec![],
-            n_cores: Some(1),
-            restart: true,
-            ..Default::default()
-        };
+    let int2 = Integrate {
+        process: vec![ProcessRef::Id(1)],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("test_grouped_subtraction/integration_workspace_group/"),
+        ),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    };
 
     let integration_results_no_group = int1.run(&mut cli.state, &cli.cli_settings)?;
     let integration_results_group = int2.run(&mut cli.state, &cli.cli_settings)?;
@@ -902,10 +884,6 @@ fn scalar_bubble() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_bubble/integration_workspace/integration_results.toml"),
-        ),
         ..default_integrate_for("scalar_bubble")
     };
 
@@ -951,10 +929,6 @@ fn scalar_sunrise() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_sunrise/integration_workspace/integration_results.toml"),
-        ),
         ..default_integrate_for("scalar_sunrise")
     };
     let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
@@ -1010,10 +984,6 @@ fn scalar_mercedes() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_mercedes/integration_workspace/integration_results.toml"),
-        ),
         ..default_integrate_for("scalar_mercedes")
     };
 
@@ -1066,10 +1036,6 @@ fn scalar_basketball() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_basketball/integration_workspace/integration_results.toml"),
-        ),
         ..default_integrate_for("scalar_basketball")
     };
 
@@ -1127,9 +1093,6 @@ fn scalar_mercedes_with_extra_loop() -> Result<()> {
     )?;
 
     let integrate_command = Integrate {
-        result_path: Some(get_tests_workspace_path().join(
-            "scalar_mercedes_with_extra_loop/integration_workspace/integration_results.toml",
-        )),
         ..default_integrate_for("scalar_mercedes_with_extra_loop")
     };
 
@@ -1336,20 +1299,12 @@ fn scalar_box() -> Result<()> {
 
     cli.run_command("set process -p 0 -i default kv general.enable_cache=false")?;
     let integral_no_cache = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_box/integration_workspace/integration_results.toml"),
-        ),
         ..default_integrate_for("scalar_box")
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
     cli.run_command("set process -p 0 -i default kv general.enable_cache=true")?;
     let integral_with_cache = Integrate {
-        result_path: Some(
-            get_tests_workspace_path()
-                .join("scalar_box/integration_workspace/integration_results.toml"),
-        ),
         ..default_integrate_for("scalar_box")
     }
     .run(&mut cli.state, &cli.cli_settings)?;
@@ -2115,15 +2070,13 @@ fn lu_differential_integration_writes_json_observables() -> Result<()> {
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json integrator.observables_output.per_iteration=true",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
     )?;
 
     let workspace = get_tests_workspace_path().join("lu_differential_integration_json/workspace");
-    let result_path = workspace.join("integration_results.yaml");
     let integration_result = Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(result_path),
         workspace_path: Some(workspace.clone()),
         target: vec![],
         n_cores: Some(1),
@@ -2133,17 +2086,18 @@ fn lu_differential_integration_writes_json_observables() -> Result<()> {
     .run(&mut cli.state, &cli.cli_settings)?;
 
     assert!(single_slot_integral(&integration_result).neval > 0);
+    assert!(workspace.join("integration_result.json").exists());
     let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
-    let iteration_file = slot_workspace.join("observables_final_iteration_0001.json");
     let final_file = slot_workspace.join("observables_final.json");
-    assert!(iteration_file.exists());
     assert!(final_file.exists());
+    assert!(
+        !slot_workspace
+            .join("observables_final_iter_0001.json")
+            .exists()
+    );
 
-    let iter_bundle =
-        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&iteration_file)?;
     let final_bundle =
         gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
-    assert!(iter_bundle.histograms.contains_key("leading_jet_pt_hist"));
     assert!(final_bundle.histograms.contains_key("leading_jet_pt_hist"));
 
     Ok(())
@@ -2157,29 +2111,33 @@ fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json integrator.observables_output.per_iteration=false",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
     )?;
 
     let workspace =
         get_tests_workspace_path().join("lu_differential_integration_json/cli_flag_workspace");
-    let result_path = workspace.join("integration_results.yaml");
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(result_path),
         workspace_path: Some(workspace.clone()),
         target: vec![],
         n_cores: Some(1),
         restart: true,
-        write_observables_each_iteration: true,
+        write_results_for_each_iteration: true,
         ..Default::default()
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
     let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    assert!(workspace.join("integration_result.json").exists());
+    assert!(
+        workspace
+            .join("results/integration_result_iter_0001.json")
+            .exists()
+    );
     assert!(
         slot_workspace
-            .join("observables_final_iteration_0001.json")
+            .join("observables_final_iter_0001.json")
             .exists()
     );
     assert!(slot_workspace.join("observables_final.json").exists());
@@ -2193,7 +2151,7 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
     let _hack = enable_lu_e2e_hack();
     let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
     cli.run_command(
-        "set process kv integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu integrator.observables_output.per_iteration=false",
+        "set process kv integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu",
     )?;
 
     let workspace_without_observables =
@@ -2201,7 +2159,6 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(workspace_without_observables.join("integration_results.yaml")),
         workspace_path: Some(workspace_without_observables.clone()),
         target: vec![],
         n_cores: Some(1),
@@ -2209,6 +2166,11 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
         ..Default::default()
     }
     .run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        workspace_without_observables
+            .join("integration_result.json")
+            .exists()
+    );
     assert!(
         !selected_slot_workspace(&cli, &workspace_without_observables, None, Some("default"))?
             .join("observables_final.hwu")
@@ -2222,7 +2184,6 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(workspace_with_observables.join("integration_results.yaml")),
         workspace_path: Some(workspace_with_observables.clone()),
         target: vec![],
         n_cores: Some(1),
@@ -2230,6 +2191,11 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
         ..Default::default()
     }
     .run(&mut cli.state, &cli.cli_settings)?;
+    assert!(
+        workspace_with_observables
+            .join("integration_result.json")
+            .exists()
+    );
 
     let slot_workspace =
         selected_slot_workspace(&cli, &workspace_with_observables, None, Some("default"))?;
@@ -2240,7 +2206,7 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
     assert!(hwu_contents.contains("leading_jet_pt_hist"));
     assert!(
         !slot_workspace
-            .join("observables_final_iteration_0001.hwu")
+            .join("observables_final_iter_0001.hwu")
             .exists()
     );
 
@@ -2255,16 +2221,14 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json integrator.observables_output.per_iteration=false",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
     )?;
 
     let workspace =
         get_tests_workspace_path().join("lu_differential_integration_json/resume_workspace");
-    let result_path = workspace.join("integration_results.yaml");
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(result_path.clone()),
         workspace_path: Some(workspace.clone()),
         target: vec![],
         n_cores: Some(1),
@@ -2286,15 +2250,18 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
     };
     let final_file = slot_workspace.join("observables_final.json");
     let checkpoint_file =
-        gammalooprs::integrate::observable_resume_state_path(&workspace, &slot_meta, 1);
+        gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
     assert!(checkpoint_file.exists());
+    let result_snapshot_path = workspace.join("integration_result.json");
+    let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
+    let state_before_resume =
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
     let before_resume =
         gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
 
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(result_path),
         workspace_path: Some(workspace.clone()),
         target: vec![],
         n_cores: Some(1),
@@ -2306,6 +2273,14 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
     let after_resume =
         gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
     assert_eq!(before_resume, after_resume);
+    assert_eq!(
+        result_before_resume,
+        std::fs::read_to_string(result_snapshot_path)?
+    );
+    assert_eq!(
+        state_before_resume,
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
+    );
 
     Ok(())
 }
@@ -2318,16 +2293,14 @@ fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu integrator.observables_output.per_iteration=false",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu",
     )?;
 
     let workspace =
         get_tests_workspace_path().join("lu_differential_integration_hwu/resume_workspace");
-    let result_path = workspace.join("integration_results.yaml");
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(result_path.clone()),
         workspace_path: Some(workspace.clone()),
         target: vec![],
         n_cores: Some(1),
@@ -2350,13 +2323,16 @@ fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
         integrand_name: resolved_integrand_name,
     };
     let checkpoint_file =
-        gammalooprs::integrate::observable_resume_state_path(&workspace, &slot_meta, 1);
+        gammalooprs::integrate::latest_observable_resume_state_path(&workspace, &slot_meta);
     assert!(checkpoint_file.exists());
+    let result_snapshot_path = workspace.join("integration_result.json");
+    let result_before_resume = std::fs::read_to_string(&result_snapshot_path)?;
+    let state_before_resume =
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?;
 
     Integrate {
         process: vec![],
         integrand_name: vec!["default".to_string()],
-        result_path: Some(result_path),
         workspace_path: Some(workspace.clone()),
         target: vec![],
         n_cores: Some(1),
@@ -2367,6 +2343,14 @@ fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
 
     let after_resume = std::fs::read_to_string(final_file)?;
     assert_eq!(before_resume, after_resume);
+    assert_eq!(
+        result_before_resume,
+        std::fs::read_to_string(result_snapshot_path)?
+    );
+    assert_eq!(
+        state_before_resume,
+        std::fs::read(gammalooprs::integrate::workspace_state_path(&workspace))?
+    );
 
     Ok(())
 }

@@ -151,6 +151,39 @@ pub enum ProcessIntegrand {
 }
 
 impl ProcessIntegrand {
+    pub fn resume_fingerprint(&self) -> Result<String> {
+        let mut bytes = match self {
+            Self::Amplitude(integrand) => {
+                bincode::encode_to_vec(&integrand.data, bincode::config::standard())
+            }
+            Self::CrossSection(integrand) => {
+                bincode::encode_to_vec(&integrand.data, bincode::config::standard())
+            }
+        }
+        .map_err(|err| eyre!("Could not serialize integrand fingerprint payload: {err}"))?;
+
+        let mut hash = 0xcbf29ce484222325u64;
+        for byte in self
+            .variant_tag()
+            .as_bytes()
+            .iter()
+            .copied()
+            .chain(bytes.drain(..))
+        {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+
+        Ok(format!("{hash:016x}"))
+    }
+
+    fn variant_tag(&self) -> &'static str {
+        match self {
+            Self::Amplitude(_) => "amplitude",
+            Self::CrossSection(_) => "cross_section",
+        }
+    }
+
     pub fn export_standalone(
         &self,
         path: impl AsRef<Path>,

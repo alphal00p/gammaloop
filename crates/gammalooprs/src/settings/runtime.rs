@@ -215,15 +215,12 @@ pub mod kinematic;
 pub struct ObservablesOutputSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub format: ObservableFileFormat,
-    #[serde(skip_serializing_if = "is_false")]
-    pub per_iteration: bool,
 }
 
 impl Default for ObservablesOutputSettings {
     fn default() -> Self {
         Self {
             format: ObservableFileFormat::default(),
-            per_iteration: false,
         }
     }
 }
@@ -451,8 +448,18 @@ pub struct MaxWeightInfoEntry {
 
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[serde(default, deny_unknown_fields)]
+pub struct DiscreteCoordinate {
+    pub axis_label: String,
+    pub bin_index: usize,
+    pub bin_label: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug, Clone)]
+#[serde(default, deny_unknown_fields)]
 pub struct DiscreteBreakdownEntry {
     pub bin_index: usize,
+    pub bin_label: Option<String>,
+    pub pdf: F<f64>,
     pub value: F<f64>,
     pub error: F<f64>,
     pub chi_sq: F<f64>,
@@ -462,7 +469,8 @@ pub struct DiscreteBreakdownEntry {
 #[derive(Serialize, Deserialize, Default, Debug, Clone)]
 #[serde(default, deny_unknown_fields)]
 pub struct DiscreteBreakdown {
-    pub discrete_depth: usize,
+    pub axis_label: String,
+    pub fixed_coordinates: Vec<DiscreteCoordinate>,
     pub entries: Vec<DiscreteBreakdownEntry>,
 }
 

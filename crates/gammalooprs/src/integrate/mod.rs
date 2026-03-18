@@ -34,7 +34,7 @@ use crate::observables::{EventGroupList, ObservableAccumulatorBundle, Observable
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime::{
-    ComponentDiscreteBreakdown, DiscreteBreakdown, DiscreteBreakdownEntry,
+    ComponentDiscreteBreakdown, DiscreteBreakdown, DiscreteBreakdownEntry, DiscreteCoordinate,
     DiscreteGraphSamplingType, IntegralEstimate, IntegratedPhase, IntegrationResult,
     IntegrationTableComponentResult, MaxWeightInfoEntry, SamplingSettings, SlotIntegrationResult,
 };
@@ -63,16 +63,9 @@ use tabled::{
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
-#[derive(Clone, Copy)]
-enum ObservableFlushReason {
-    Iteration(usize),
-    Final,
-    Interrupted,
-}
-
 #[derive(Clone, Copy, Debug, Default)]
-pub struct ObservableOutputControl {
-    pub write_user_facing_each_iteration: bool,
+pub struct WorkspaceSnapshotControl {
+    pub write_iteration_archives: bool,
 }
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
@@ -94,6 +87,7 @@ pub struct IntegrationWorkspaceManifest {
     pub slots: Vec<SlotMeta>,
     pub targets: Vec<Option<Complex<F<f64>>>>,
     pub effective_model_parameters: Vec<SerializableInputParamCard<F<f64>>>,
+    pub integrand_fingerprints: Vec<String>,
     pub training_slot: usize,
     pub integrator_settings_slot: usize,
 }
@@ -111,6 +105,14 @@ struct DiscreteGridBinAccumulatorSummary {
     #[bincode(with_serde)]
     accumulator: StatisticsAccumulator<F<f64>>,
     sub_summary: Option<Box<DiscreteGridAccumulatorSummary>>,
+}
+
+#[derive(Serialize, Deserialize, Encode, Decode, Clone, Default)]
+struct PersistedDiscreteBreakdownMetadata {
+    axis_label: String,
+    #[bincode(with_serde)]
+    fixed_coordinates: Vec<DiscreteCoordinate>,
+    bin_labels: Vec<String>,
 }
 
 #[derive(Tabled)]
@@ -280,29 +282,29 @@ impl DiscreteGridAccumulatorSummary {
         }
     }
 
-    fn first_non_trivial_breakdown(&self, depth: usize) -> Option<DiscreteBreakdown> {
-        if self.bins.len() > 1 {
-            return Some(DiscreteBreakdown {
-                discrete_depth: depth,
-                entries: self
-                    .bins
-                    .iter()
-                    .enumerate()
-                    .map(|(bin_index, bin)| DiscreteBreakdownEntry {
-                        bin_index,
-                        value: bin.accumulator.avg,
-                        error: bin.accumulator.err,
-                        chi_sq: bin.accumulator.chi_sq,
-                        processed_samples: bin.accumulator.processed_samples,
-                    })
-                    .collect(),
-            });
-        }
-
-        self.bins
-            .first()
-            .and_then(|bin| bin.sub_summary.as_ref())
-            .and_then(|sub_summary| sub_summary.first_non_trivial_breakdown(depth + 1))
+    fn first_non_trivial_breakdown(
+        &self,
+        metadata: &PersistedDiscreteBreakdownMetadata,
+        pdfs: &[F<f64>],
+    ) -> Option<DiscreteBreakdown> {
+        (self.bins.len() > 1).then(|| DiscreteBreakdown {
+            axis_label: metadata.axis_label.clone(),
+            fixed_coordinates: metadata.fixed_coordinates.clone(),
+            entries: self
+                .bins
+                .iter()
+                .enumerate()
+                .map(|(bin_index, bin)| DiscreteBreakdownEntry {
+                    bin_index,
+                    bin_label: metadata.bin_labels.get(bin_index).cloned(),
+                    pdf: pdfs.get(bin_index).copied().unwrap_or(F(0.0)),
+                    value: bin.accumulator.avg,
+                    error: bin.accumulator.err,
+                    chi_sq: bin.accumulator.chi_sq,
+                    processed_samples: bin.accumulator.processed_samples,
+                })
+                .collect(),
+        })
     }
 }
 
@@ -694,6 +696,51 @@ fn first_non_trivial_discrete_bin_descriptions_for_integrand(
         }
         _ => None,
     }
+}
+
+fn discrete_coordinate_label(
+    integrand: &Integrand,
+    path_prefix: &[usize],
+    axis_label: &str,
+    bin_index: usize,
+) -> Option<String> {
+    first_non_trivial_discrete_bin_descriptions_for_integrand(integrand, path_prefix, axis_label)?
+        .get(bin_index)
+        .cloned()
+}
+
+fn build_persisted_discrete_breakdown_metadata(
+    integrand: &Integrand,
+    path: &[usize],
+    discrete_axis_labels: &[String],
+) -> Option<PersistedDiscreteBreakdownMetadata> {
+    let axis_label = discrete_axis_labels.get(path.len())?.clone();
+    let bin_labels =
+        first_non_trivial_discrete_bin_descriptions_for_integrand(integrand, path, &axis_label)?;
+
+    let fixed_coordinates = path
+        .iter()
+        .enumerate()
+        .map(|(axis_index, &bin_index)| {
+            let fixed_axis_label = discrete_axis_labels.get(axis_index)?.clone();
+            Some(DiscreteCoordinate {
+                axis_label: fixed_axis_label.clone(),
+                bin_index,
+                bin_label: discrete_coordinate_label(
+                    integrand,
+                    &path[..axis_index],
+                    &fixed_axis_label,
+                    bin_index,
+                ),
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+
+    Some(PersistedDiscreteBreakdownMetadata {
+        axis_label,
+        fixed_coordinates,
+        bin_labels,
+    })
 }
 
 fn coalesce_first_non_trivial_discrete_bin_descriptions(
@@ -1937,6 +1984,8 @@ pub struct IntegrationState {
     pub discrete_axis_labels: Vec<String>,
     pub first_non_trivial_discrete_label: Option<String>,
     pub first_non_trivial_discrete_bin_descriptions: Option<Vec<String>>,
+    slot_first_non_trivial_discrete_breakdown_metadata:
+        Vec<Option<PersistedDiscreteBreakdownMetadata>>,
     pub iter: usize,
     pub elapsed_seconds: f64,
     pub n_cores: usize,
@@ -1947,6 +1996,9 @@ impl IntegrationState {
         create_grid: GridGenerator,
         slot_metas: Vec<SlotMeta>,
         discrete_axis_labels: Vec<String>,
+        slot_first_non_trivial_discrete_breakdown_metadata: Vec<
+            Option<PersistedDiscreteBreakdownMetadata>,
+        >,
     ) -> Self
     where
         GridGenerator: Fn() -> Grid<F<f64>>,
@@ -1973,6 +2025,7 @@ impl IntegrationState {
             discrete_axis_labels,
             first_non_trivial_discrete_label,
             first_non_trivial_discrete_bin_descriptions: None,
+            slot_first_non_trivial_discrete_breakdown_metadata,
             iter,
             elapsed_seconds: 0.0,
             n_cores: 1,
@@ -2054,7 +2107,7 @@ pub fn havana_integrate<S>(
     targets: Vec<Option<Complex<F<f64>>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
-    output_control: ObservableOutputControl,
+    output_control: WorkspaceSnapshotControl,
     render_options: IntegrationStatusRenderOptions,
     mut status_emitter: S,
 ) -> Result<IntegrationResult>
@@ -2089,6 +2142,22 @@ where
             &sampling_grid,
             &discrete_axis_labels,
         );
+    let first_non_trivial_discrete_path = first_non_trivial_discrete_path(&sampling_grid);
+    let slot_first_non_trivial_discrete_breakdown_metadata = first_non_trivial_discrete_path
+        .as_ref()
+        .map(|path| {
+            slot_integrands
+                .iter()
+                .map(|integrand| {
+                    build_persisted_discrete_breakdown_metadata(
+                        integrand,
+                        path,
+                        &discrete_axis_labels,
+                    )
+                })
+                .collect_vec()
+        })
+        .unwrap_or_else(|| vec![None; slot_metas.len()]);
     if let Some(label_warning) = label_warning {
         warn!("{label_warning}");
     }
@@ -2100,6 +2169,7 @@ where
             || sampling_grid.clone(),
             slot_metas.clone(),
             discrete_axis_labels,
+            slot_first_non_trivial_discrete_breakdown_metadata,
         )
     };
     integration_state.first_non_trivial_discrete_bin_descriptions =
@@ -2139,6 +2209,7 @@ where
 
     let cores = user_data.len();
     let n_slots = integration_state.slot_metas.len();
+    let elapsed_seconds_offset = integration_state.elapsed_seconds;
 
     let t_start = Instant::now();
 
@@ -2158,7 +2229,7 @@ where
     let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
 
     let mut n_samples_evaluated = 0;
-    let mut interrupted = false;
+    let mut emitted_latest_observable_paths = vec![None; n_slots];
     'integrateLoop: while integration_state.num_points < settings.integrator.n_max {
         // ensure we do not overshoot
         let cur_points = {
@@ -2316,7 +2387,6 @@ where
 
         if is_interrupted() {
             warn!("{}", "Integration iterrupted by user".yellow());
-            interrupted = true;
             break 'integrateLoop;
         }
 
@@ -2380,7 +2450,8 @@ where
         integration_state.update_iter(false);
 
         integration_state.iter += 1;
-        integration_state.elapsed_seconds = t_start.elapsed().as_secs_f64();
+        integration_state.elapsed_seconds =
+            elapsed_seconds_offset + t_start.elapsed().as_secs_f64();
         integration_state.n_cores = cores;
 
         integration_state.num_points += cur_points;
@@ -2395,31 +2466,43 @@ where
             }
         }
 
-        // Update observable accumulators, persist the resume checkpoint, then emit any user-facing files.
-        for (slot_index, integrand) in owner_core.iter_mut().enumerate() {
+        // Update observable accumulators, persist authoritative resume state, then refresh
+        // the latest user-facing snapshots.
+        for integrand in owner_core.iter_mut() {
             integrand.update_runtime_results(integration_state.iter);
-            write_observable_resume_state(
-                integrand,
-                workspace.as_deref(),
-                &integration_state.slot_metas[slot_index],
-                integration_state.iter,
-            )?;
         }
 
         if let Some(ref workspace_path) = workspace {
+            for (slot_index, integrand) in owner_core.iter().enumerate() {
+                write_observable_resume_state(
+                    integrand,
+                    Some(workspace_path.as_path()),
+                    &integration_state.slot_metas[slot_index],
+                    integration_state.iter,
+                    output_control,
+                )?;
+            }
             write_integration_state_to_workspace(workspace_path, &integration_state)?;
+            write_integration_result_snapshots(
+                workspace_path,
+                &integration_state,
+                &targets,
+                output_control,
+            )?;
         }
 
         for (slot_index, integrand) in owner_core.iter().enumerate() {
             let workspace_path = workspace
                 .as_deref()
                 .map(|root| slot_workspace_path(root, &integration_state.slot_metas[slot_index]));
-            let _ = write_observables_output(
+            emitted_latest_observable_paths[slot_index] =
+                write_latest_observables_output(integrand, workspace_path.as_deref())?;
+            write_observable_snapshot_archive(
                 integrand,
                 workspace_path.as_deref(),
-                ObservableFlushReason::Iteration(integration_state.iter),
+                integration_state.iter,
                 output_control,
-            );
+            )?;
         }
 
         status_emitter(
@@ -2437,25 +2520,6 @@ where
     }
     // Reset the interrupted flag
     set_interrupted(false);
-
-    let mut emitted_final_observable_paths = vec![None; n_slots];
-    if let Some(owner_core) = user_data.first() {
-        for (slot_index, integrand) in owner_core.iter().enumerate() {
-            let workspace_path = workspace
-                .as_deref()
-                .map(|root| slot_workspace_path(root, &integration_state.slot_metas[slot_index]));
-            emitted_final_observable_paths[slot_index] = write_observables_output(
-                integrand,
-                workspace_path.as_deref(),
-                if interrupted {
-                    ObservableFlushReason::Interrupted
-                } else {
-                    ObservableFlushReason::Final
-                },
-                output_control,
-            );
-        }
-    }
 
     if integration_state.num_points > 0 {
         status_emitter(
@@ -2483,7 +2547,7 @@ where
         emit_observable_output_summary(
             &integration_state.slot_metas,
             owner_core,
-            &emitted_final_observable_paths,
+            &emitted_latest_observable_paths,
             output_control,
         );
     }
@@ -2649,13 +2713,44 @@ pub fn slot_workspace_path(workspace: &Path, slot_meta: &SlotMeta) -> PathBuf {
     workspace.join("integrands").join(slot_meta.key())
 }
 
-pub fn observable_resume_state_path(
+pub fn workspace_manifest_path(workspace: &Path) -> PathBuf {
+    workspace.join("manifest.json")
+}
+
+pub fn workspace_state_dir(workspace: &Path) -> PathBuf {
+    workspace.join("state")
+}
+
+pub fn workspace_state_path(workspace: &Path) -> PathBuf {
+    workspace_state_dir(workspace).join("integration_state.bin")
+}
+
+fn workspace_observable_state_dir(workspace: &Path, slot_meta: &SlotMeta) -> PathBuf {
+    workspace_state_dir(workspace)
+        .join("observables")
+        .join(slot_meta.key())
+}
+
+pub fn latest_observable_resume_state_path(workspace: &Path, slot_meta: &SlotMeta) -> PathBuf {
+    workspace_observable_state_dir(workspace, slot_meta).join("latest.json")
+}
+
+fn archived_observable_resume_state_path(
     workspace: &Path,
     slot_meta: &SlotMeta,
     iter: usize,
 ) -> PathBuf {
-    slot_workspace_path(workspace, slot_meta)
-        .join(format!("observables_resume_state_iteration_{iter:04}.json"))
+    workspace_observable_state_dir(workspace, slot_meta).join(format!("iter_{iter:04}.json"))
+}
+
+pub fn workspace_result_snapshot_path(workspace: &Path) -> PathBuf {
+    workspace.join("integration_result.json")
+}
+
+fn workspace_result_archive_path(workspace: &Path, iter: usize) -> PathBuf {
+    workspace
+        .join("results")
+        .join(format!("integration_result_iter_{iter:04}.json"))
 }
 
 fn observable_output_extension(format: ObservableFileFormat) -> Option<&'static str> {
@@ -2666,20 +2761,21 @@ fn observable_output_extension(format: ObservableFileFormat) -> Option<&'static 
     }
 }
 
-fn observable_output_path(
+fn latest_observable_output_path(
     workspace: &Path,
     format: ObservableFileFormat,
-    reason: ObservableFlushReason,
 ) -> Option<PathBuf> {
     let extension = observable_output_extension(format)?;
-    let file_name = match reason {
-        ObservableFlushReason::Iteration(iter) => {
-            format!("observables_final_iteration_{iter:04}.{extension}")
-        }
-        ObservableFlushReason::Final => format!("observables_final.{extension}"),
-        ObservableFlushReason::Interrupted => format!("observables_interrupted.{extension}"),
-    };
-    Some(workspace.join(file_name))
+    Some(workspace.join(format!("observables_final.{extension}")))
+}
+
+fn archived_observable_output_path(
+    workspace: &Path,
+    format: ObservableFileFormat,
+    iter: usize,
+) -> Option<PathBuf> {
+    let extension = observable_output_extension(format)?;
+    Some(workspace.join(format!("observables_final_iter_{iter:04}.{extension}")))
 }
 
 fn observable_iteration_output_pattern(
@@ -2689,31 +2785,42 @@ fn observable_iteration_output_pattern(
     let extension = observable_output_extension(format)?;
     Some(
         workspace
-            .join(format!("observables_final_iteration_<iter>.{extension}"))
+            .join(format!("observables_final_iter_<iter>.{extension}"))
             .display()
             .to_string(),
     )
 }
 
-fn user_facing_observables_output_enabled(
-    integrand: &Integrand,
-    reason: ObservableFlushReason,
-    output_control: ObservableOutputControl,
-) -> bool {
+fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
         return false;
     };
-    let settings = process_integrand.get_settings();
-    if settings.integrator.observables_output.format == ObservableFileFormat::None {
-        return false;
-    }
-    match reason {
-        ObservableFlushReason::Iteration(_) => {
-            settings.integrator.observables_output.per_iteration
-                || output_control.write_user_facing_each_iteration
-        }
-        ObservableFlushReason::Final | ObservableFlushReason::Interrupted => true,
-    }
+    process_integrand
+        .get_settings()
+        .integrator
+        .observables_output
+        .format
+        != ObservableFileFormat::None
+}
+
+fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| Report::msg("Atomic write target is missing a parent directory"))?;
+    fs::create_dir_all(parent)?;
+    let tmp_path = path.with_extension(format!(
+        "{}.tmp",
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("tmp")
+    ));
+    fs::write(&tmp_path, bytes)?;
+    fs::rename(&tmp_path, path)?;
+    Ok(())
+}
+
+fn write_atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
+    write_atomic_bytes(path, &serde_json::to_vec_pretty(value)?)
 }
 
 fn write_observable_resume_state(
@@ -2721,6 +2828,7 @@ fn write_observable_resume_state(
     workspace: Option<&Path>,
     slot_meta: &SlotMeta,
     iter: usize,
+    output_control: WorkspaceSnapshotControl,
 ) -> Result<Option<PathBuf>> {
     let Some(bundle) = integrand.observable_snapshot_bundle() else {
         return Ok(None);
@@ -2728,22 +2836,26 @@ fn write_observable_resume_state(
     let Some(workspace) = workspace else {
         return Ok(None);
     };
-    let path = observable_resume_state_path(workspace, slot_meta, iter);
-    bundle.to_json_file(&path)?;
-    Ok(Some(path))
+    let latest_path = latest_observable_resume_state_path(workspace, slot_meta);
+    write_atomic_json(&latest_path, &bundle)?;
+    if output_control.write_iteration_archives {
+        let archived_path = archived_observable_resume_state_path(workspace, slot_meta, iter);
+        write_atomic_json(&archived_path, &bundle)?;
+    }
+    Ok(Some(latest_path))
 }
 
-fn write_observables_output(
+fn write_observable_snapshot_archive(
     integrand: &Integrand,
     workspace: Option<&Path>,
-    reason: ObservableFlushReason,
-    output_control: ObservableOutputControl,
-) -> Option<PathBuf> {
+    iter: usize,
+    output_control: WorkspaceSnapshotControl,
+) -> Result<Option<PathBuf>> {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return None;
+        return Ok(None);
     };
-    if !user_facing_observables_output_enabled(integrand, reason, output_control) {
-        return None;
+    if !output_control.write_iteration_archives {
+        return Ok(None);
     }
     let format = process_integrand
         .get_settings()
@@ -2751,34 +2863,68 @@ fn write_observables_output(
         .observables_output
         .format;
     let Some(workspace) = workspace else {
-        return None;
+        return Ok(None);
     };
-    let Some(path) = observable_output_path(workspace, format, reason) else {
-        return None;
+    let Some(path) = archived_observable_output_path(workspace, format, iter) else {
+        return Ok(None);
     };
 
-    if let Err(err) = integrand.write_observable_snapshots(&path, format) {
-        warn!(
-            "failed to write observables output to {}: {}",
-            path.display(),
-            err
-        );
-        None
-    } else {
-        Some(path)
+    integrand.write_observable_snapshots(&path, format)?;
+    Ok(Some(path))
+}
+
+fn write_latest_observables_output(
+    integrand: &Integrand,
+    workspace: Option<&Path>,
+) -> Result<Option<PathBuf>> {
+    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
+        return Ok(None);
+    };
+    if !user_facing_observables_output_enabled(integrand) {
+        return Ok(None);
     }
+    let format = process_integrand
+        .get_settings()
+        .integrator
+        .observables_output
+        .format;
+    let Some(workspace) = workspace else {
+        return Ok(None);
+    };
+    let Some(path) = latest_observable_output_path(workspace, format) else {
+        return Ok(None);
+    };
+
+    integrand.write_observable_snapshots(&path, format)?;
+    Ok(Some(path))
 }
 
 fn write_integration_state_to_workspace(
     workspace_path: &Path,
     integration_state: &IntegrationState,
 ) -> Result<()> {
-    let integration_state_path = workspace_path.join("integration_state.bin");
-    fs::write(
-        integration_state_path,
-        bincode::encode_to_vec(integration_state, bincode::config::standard())
+    write_atomic_bytes(
+        &workspace_state_path(workspace_path),
+        &bincode::encode_to_vec(integration_state, bincode::config::standard())
             .unwrap_or_else(|_| panic!("failed to serialize the integration state")),
     )?;
+    Ok(())
+}
+
+fn write_integration_result_snapshots(
+    workspace_path: &Path,
+    integration_state: &IntegrationState,
+    targets: &[Option<Complex<F<f64>>>],
+    output_control: WorkspaceSnapshotControl,
+) -> Result<()> {
+    let result = build_integration_result(integration_state, targets);
+    write_atomic_json(&workspace_result_snapshot_path(workspace_path), &result)?;
+    if output_control.write_iteration_archives {
+        write_atomic_json(
+            &workspace_result_archive_path(workspace_path, integration_state.iter),
+            &result,
+        )?;
+    }
     Ok(())
 }
 
@@ -2786,7 +2932,7 @@ fn emit_observable_output_summary(
     slot_metas: &[SlotMeta],
     slot_integrands: &[Integrand],
     emitted_paths: &[Option<PathBuf>],
-    output_control: ObservableOutputControl,
+    output_control: WorkspaceSnapshotControl,
 ) {
     let mut summary_rows = Vec::new();
     for ((slot_meta, integrand), emitted_path) in slot_metas
@@ -2805,12 +2951,8 @@ fn emit_observable_output_summary(
             .integrator
             .observables_output
             .format;
-        let per_iteration_enabled = user_facing_observables_output_enabled(
-            integrand,
-            ObservableFlushReason::Iteration(1),
-            output_control,
-        );
-        let iteration_pattern = per_iteration_enabled
+        let iteration_pattern = output_control
+            .write_iteration_archives
             .then(|| {
                 observable_iteration_output_pattern(
                     final_path.parent().unwrap_or_else(|| Path::new(".")),
@@ -3324,6 +3466,7 @@ pub fn build_integration_result(
     targets: &[Option<Complex<F<f64>>>],
 ) -> IntegrationResult {
     let integration_statistics = integration_state.stats.snapshot();
+    let discrete_context = first_non_trivial_discrete_context(&integration_state.sampling_grid);
     let slots = integration_state
         .slot_metas
         .iter()
@@ -3356,12 +3499,34 @@ pub fn build_integration_result(
                     accumulator,
                 ),
                 grid_breakdown: ComponentDiscreteBreakdown {
-                    re: integration_state.slot_re_summaries[slot_index]
-                        .as_ref()
-                        .and_then(|summary| summary.first_non_trivial_breakdown(0)),
-                    im: integration_state.slot_im_summaries[slot_index]
-                        .as_ref()
-                        .and_then(|summary| summary.first_non_trivial_breakdown(0)),
+                    re: discrete_context.as_ref().and_then(|context| {
+                        integration_state.slot_re_summaries[slot_index]
+                            .as_ref()
+                            .zip(
+                                integration_state
+                                    .slot_first_non_trivial_discrete_breakdown_metadata[slot_index]
+                                    .as_ref(),
+                            )
+                            .and_then(|(summary, metadata)| {
+                                summary_at_path(summary, &context.path).and_then(|summary| {
+                                    summary.first_non_trivial_breakdown(metadata, &context.pdfs)
+                                })
+                            })
+                    }),
+                    im: discrete_context.as_ref().and_then(|context| {
+                        integration_state.slot_im_summaries[slot_index]
+                            .as_ref()
+                            .zip(
+                                integration_state
+                                    .slot_first_non_trivial_discrete_breakdown_metadata[slot_index]
+                                    .as_ref(),
+                            )
+                            .and_then(|(summary, metadata)| {
+                                summary_at_path(summary, &context.path).and_then(|summary| {
+                                    summary.first_non_trivial_breakdown(metadata, &context.pdfs)
+                                })
+                            })
+                    }),
                 },
             }
         })
@@ -3447,6 +3612,7 @@ mod tests {
                 },
             ],
             Vec::new(),
+            vec![None, None],
         );
         state.iter = 1;
         state.num_points = 100_000;
@@ -3485,6 +3651,18 @@ mod tests {
                 },
             ],
             vec!["graph".to_string()],
+            vec![
+                Some(PersistedDiscreteBreakdownMetadata {
+                    axis_label: "graph".to_string(),
+                    fixed_coordinates: Vec::new(),
+                    bin_labels: vec!["GL0".to_string(), "GL1".to_string()],
+                }),
+                Some(PersistedDiscreteBreakdownMetadata {
+                    axis_label: "graph".to_string(),
+                    fixed_coordinates: Vec::new(),
+                    bin_labels: vec!["GL0".to_string(), "GL1".to_string()],
+                }),
+            ],
         );
         state.first_non_trivial_discrete_bin_descriptions =
             Some(vec!["GL0".to_string(), "GL1".to_string()]);
@@ -3568,6 +3746,7 @@ mod tests {
                 integrand_name: "itg".to_string(),
             }],
             Vec::new(),
+            vec![None],
         );
         state.all_integrals = vec![accumulator];
         let rendered = render_tables_with_shared_width(vec![build_max_weight_details_table(
@@ -3686,6 +3865,34 @@ mod tests {
             rendered.contains("xs: [ 2.5000000000000000e-01 ]"),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn integration_result_always_contains_first_non_trivial_discrete_breakdown() {
+        let state = make_discrete_integration_state();
+        let result =
+            build_integration_result(&state, &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None]);
+
+        let slot = result
+            .slot("proc_a@itg_a")
+            .expect("discrete slot must be present");
+        let breakdown = slot
+            .grid_breakdown
+            .re
+            .as_ref()
+            .expect("discrete breakdown must be persisted");
+
+        assert_eq!(breakdown.axis_label, "graph");
+        assert!(breakdown.fixed_coordinates.is_empty());
+        assert_eq!(breakdown.entries.len(), 2);
+        assert_eq!(breakdown.entries[0].bin_index, 0);
+        assert_eq!(breakdown.entries[0].bin_label.as_deref(), Some("GL0"));
+        assert_eq!(breakdown.entries[0].pdf, F(0.75));
+        assert_eq!(breakdown.entries[0].processed_samples, 150);
+        assert_eq!(breakdown.entries[1].bin_index, 1);
+        assert_eq!(breakdown.entries[1].bin_label.as_deref(), Some("GL1"));
+        assert_eq!(breakdown.entries[1].pdf, F(0.25));
+        assert_eq!(breakdown.entries[1].processed_samples, 50);
     }
 
     #[test]

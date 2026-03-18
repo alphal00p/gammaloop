@@ -111,6 +111,8 @@
 
 ## CLI / State Notes
 - The run-card field is `command_blocks` (singular `command`), not `commands_blocks`. No compatibility alias is kept.
+- Integration workspace resume must restore the exact state at the end of the last completed iteration. The authoritative resume data lives in the workspace manifest/internal state plus per-slot settings and internal observable checkpoints, not in user-facing `integration_result.json`.
+- Treat workspace snapshots as completed-iteration checkpoints only: do not persist partial-iteration state, and keep user-facing latest snapshots plus optional `_iter_0001` history separate from the internal resume state.
 
 ## Configuration & State Tips
 - CLI runs create a `gammaloop_state/` directory by default; keep it out of commits unless intentionally sharing a reproducible state.

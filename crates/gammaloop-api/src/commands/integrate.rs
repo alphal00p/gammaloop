@@ -23,10 +23,11 @@ use gammalooprs::{
     integrands::{HasIntegrand, Integrand},
     integrate::{
         build_integration_result, emit_integration_status_via_tracing, havana_integrate,
-        observable_resume_state_path, print_integral_result, render_saved_integration_summary,
-        slot_workspace_path, ContributionSortMode, IntegrationState, IntegrationStatusKind,
+        latest_observable_resume_state_path, print_integral_result,
+        render_saved_integration_summary, slot_workspace_path, workspace_manifest_path,
+        workspace_state_path, ContributionSortMode, IntegrationState, IntegrationStatusKind,
         IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
-        IntegrationWorkspaceManifest, ObservableOutputControl, SlotMeta,
+        IntegrationWorkspaceManifest, SlotMeta, WorkspaceSnapshotControl,
     },
     model::{Model, SerializableInputParamCard},
     observables::ObservableSnapshotBundle,
@@ -69,10 +70,6 @@ pub struct Integrate {
         completion_integrand_selector(crate::completion::SelectorKind::Any)
     )]
     pub integrand_name: Vec<String>,
-
-    /// The path to store results in
-    #[arg(short = 's', long, value_hint = clap::ValueHint::FilePath)]
-    pub result_path: Option<PathBuf>,
 
     /// Number of cores to parallelize over
     #[arg(short = 'c', long)]
@@ -137,9 +134,9 @@ pub struct Integrate {
     #[arg(long = "no-stream")]
     pub no_stream: bool,
 
-    /// Emit user-facing observable files after every completed iteration for this command
-    #[arg(long = "write-observables-each-iteration")]
-    pub write_observables_each_iteration: bool,
+    /// Keep per-iteration result and observable snapshot files in addition to the latest snapshots
+    #[arg(long = "write-results-for-each-iteration")]
+    pub write_results_for_each_iteration: bool,
 }
 
 impl Default for Integrate {
@@ -147,7 +144,6 @@ impl Default for Integrate {
         Self {
             process: Vec::new(),
             integrand_name: Vec::new(),
-            result_path: None,
             n_cores: None,
             workspace_path: None,
             target: Vec::new(),
@@ -161,7 +157,7 @@ impl Default for Integrate {
             show_max_weight_info_for_discrete_bins: false,
             show_summary_only: false,
             no_stream: false,
-            write_observables_each_iteration: false,
+            write_results_for_each_iteration: false,
         }
     }
 }
@@ -343,14 +339,6 @@ struct ResolvedIntegrandSlot {
     slot_meta: SlotMeta,
 }
 
-fn workspace_manifest_path(workspace: &std::path::Path) -> PathBuf {
-    workspace.join("integration_manifest.json")
-}
-
-fn workspace_state_path(workspace: &std::path::Path) -> PathBuf {
-    workspace.join("integration_state.bin")
-}
-
 fn slot_settings_path(workspace: &std::path::Path, slot_meta: &SlotMeta) -> PathBuf {
     slot_workspace_path(workspace, slot_meta).join("settings.toml")
 }
@@ -521,9 +509,9 @@ impl Integrate {
         }
     }
 
-    fn observable_output_control(&self) -> ObservableOutputControl {
-        ObservableOutputControl {
-            write_user_facing_each_iteration: self.write_observables_each_iteration,
+    fn workspace_snapshot_control(&self) -> WorkspaceSnapshotControl {
+        WorkspaceSnapshotControl {
+            write_iteration_archives: self.write_results_for_each_iteration,
         }
     }
 
@@ -589,6 +577,7 @@ impl Integrate {
         state: &mut State,
         selected_slots: &[ResolvedIntegrandSlot],
         current_effective_model_parameters: &[SerializableInputParamCard<F<f64>>],
+        current_integrand_fingerprints: &[String],
         workspace_path: &std::path::Path,
         targets: &mut Vec<Option<Complex<F<f64>>>>,
     ) -> Result<Option<IntegrationState>> {
@@ -613,6 +602,25 @@ impl Integrate {
                 if manifest.targets != *targets {
                     warn!("targets have changed with respect to workspace, reverting changes");
                     *targets = manifest.targets.clone();
+                }
+                if manifest.integrand_fingerprints.len() != selected_slots.len() {
+                    return Err(eyre!(
+                        "Workspace integrand fingerprint metadata is inconsistent with the selected slots"
+                    ));
+                }
+                let mismatched_fingerprint_slots = selected_slots
+                    .iter()
+                    .zip(manifest.integrand_fingerprints.iter())
+                    .zip(current_integrand_fingerprints.iter())
+                    .filter_map(|((slot, saved), current)| {
+                        (saved != current).then(|| slot.slot_meta.key())
+                    })
+                    .collect_vec();
+                if !mismatched_fingerprint_slots.is_empty() {
+                    return Err(eyre!(
+                        "Workspace integrand fingerprints do not match the current generated integrands for {}. Resume requires the exact same generated integrands; use --restart or restore the previous generation.",
+                        mismatched_fingerprint_slots.join(", ")
+                    ));
                 }
                 let mismatched_slots = selected_slots
                     .iter()
@@ -753,11 +761,8 @@ impl Integrate {
                 continue;
             }
 
-            let snapshot_path = observable_resume_state_path(
-                workspace_path,
-                &slot.slot_meta,
-                integration_state.iter,
-            );
+            let snapshot_path =
+                latest_observable_resume_state_path(workspace_path, &slot.slot_meta);
             let snapshot =
                 ObservableSnapshotBundle::from_json_file(&snapshot_path).map_err(|err| {
                     eyre!(
@@ -797,6 +802,22 @@ impl Integrate {
                     slot.process_id,
                     &slot.slot_meta.integrand_name,
                 )
+            })
+            .collect()
+    }
+
+    fn resolve_integrand_fingerprints(
+        &self,
+        state: &mut State,
+        selected_slots: &[ResolvedIntegrandSlot],
+    ) -> Result<Vec<String>> {
+        selected_slots
+            .iter()
+            .map(|slot| {
+                state
+                    .process_list
+                    .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?
+                    .resume_fingerprint()
             })
             .collect()
     }
@@ -842,6 +863,10 @@ impl Integrate {
         effective_model_parameters: &[SerializableInputParamCard<F<f64>>],
         workspace_path: &std::path::Path,
     ) -> Result<()> {
+        let integrand_fingerprints = slot_integrands
+            .iter()
+            .map(|integrand| integrand.resume_fingerprint())
+            .collect::<Result<Vec<_>>>()?;
         let manifest = IntegrationWorkspaceManifest {
             slots: selected_slots
                 .iter()
@@ -849,6 +874,7 @@ impl Integrate {
                 .collect(),
             targets: targets.to_vec(),
             effective_model_parameters: effective_model_parameters.to_vec(),
+            integrand_fingerprints,
             training_slot: 0,
             integrator_settings_slot: 0,
         };
@@ -881,12 +907,6 @@ impl Integrate {
             p
         } else {
             default_workspace_path.clone()
-        };
-
-        let result_path = if let Some(p) = self.result_path.clone() {
-            p
-        } else {
-            default_workspace_path.join("integration_result.json")
         };
 
         if self.show_summary_only {
@@ -956,10 +976,12 @@ impl Integrate {
         let slot_models = self.resolve_slot_models(state, &selected_slots)?;
         let effective_model_parameters =
             self.resolve_effective_model_parameters(state, &selected_slots)?;
+        let integrand_fingerprints = self.resolve_integrand_fingerprints(state, &selected_slots)?;
         let integration_state = self.load_or_prepare_workspace_state(
             state,
             &selected_slots,
             &effective_model_parameters,
+            &integrand_fingerprints,
             &workspace_path,
             &mut targets,
         )?;
@@ -1014,7 +1036,7 @@ impl Integrate {
             targets,
             integration_state,
             Some(workspace_path.clone()),
-            self.observable_output_control(),
+            self.workspace_snapshot_control(),
             render_options,
             move |kind, status_block| {
                 if let Some(renderer) = stream_renderer.as_mut() {
@@ -1032,8 +1054,6 @@ impl Integrate {
                 Ok(())
             },
         )?;
-
-        fs::write(&result_path, serde_json::to_string(&result)?)?;
 
         Ok(result)
     }
