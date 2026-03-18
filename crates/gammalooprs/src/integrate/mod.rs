@@ -11,6 +11,7 @@ use color_eyre::{Report, Result};
 use colored::Colorize;
 use itertools::Itertools;
 use itertools::izip;
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use rayon::ThreadPoolBuilder;
 use rayon::iter::repeat_n;
 use serde::Deserialize;
@@ -23,9 +24,11 @@ use symbolica::numerical_integration::{
 
 use crate::INTERRUPTED;
 use crate::Integrand;
+use crate::graph::{GroupId, LoopMomentumBasis};
 use crate::integrands::HasIntegrand;
 use crate::integrands::evaluation::EvaluationResult;
 use crate::integrands::evaluation::StatisticsCounter;
+use crate::integrands::process::ProcessIntegrand;
 use crate::model::{Model, SerializableInputParamCard};
 use crate::observables::{EventGroupList, ObservableAccumulatorBundle, ObservableFileFormat};
 use crate::settings::IntegratorSettings;
@@ -451,11 +454,11 @@ enum ContributionKind {
 }
 
 impl ContributionKind {
-    fn label(self) -> String {
+    fn label(self, integration_state: &IntegrationState) -> String {
         match self {
             Self::All => "All".bold().green().to_string(),
             Self::Sum => "Sum".bold().green().to_string(),
-            Self::Bin(bin_index) => format!("idx = {bin_index}").bold().green().to_string(),
+            Self::Bin(bin_index) => contribution_bin_label(integration_state, bin_index),
         }
     }
 }
@@ -552,6 +555,235 @@ fn discrete_axis_labels(sampling: &SamplingSettings) -> Vec<&'static str> {
             labels
         }
     }
+}
+
+fn orientation_description(orientation: &EdgeVec<Orientation>) -> String {
+    orientation
+        .iter()
+        .map(|(_, orientation)| match *orientation {
+            Orientation::Default => '+',
+            Orientation::Reversed => '-',
+            Orientation::Undirected => '0',
+        })
+        .collect()
+}
+
+fn lmb_channel_description(lmb: &LoopMomentumBasis) -> String {
+    format!(
+        "({})",
+        lmb.loop_edges
+            .iter()
+            .map(|edge_id| edge_id.0.to_string())
+            .join(",")
+    )
+}
+
+fn first_non_trivial_discrete_bin_descriptions_for_process_integrand(
+    integrand: &ProcessIntegrand,
+    path: &[usize],
+    axis_label: &str,
+) -> Option<Vec<String>> {
+    match (integrand, axis_label) {
+        (ProcessIntegrand::Amplitude(integrand), "graph") => Some(
+            integrand
+                .data
+                .graph_group_structure
+                .iter()
+                .map(|group| {
+                    integrand.data.graph_terms[group.master()]
+                        .graph
+                        .name
+                        .clone()
+                })
+                .collect(),
+        ),
+        (ProcessIntegrand::CrossSection(integrand), "graph") => Some(
+            integrand
+                .data
+                .graph_group_structure
+                .iter()
+                .map(|group| {
+                    integrand.data.graph_terms[group.master()]
+                        .graph
+                        .name
+                        .clone()
+                })
+                .collect(),
+        ),
+        (ProcessIntegrand::Amplitude(integrand), "orientation") => {
+            let group_id = GroupId(*path.first()?);
+            let group = integrand.data.graph_group_structure.get(group_id)?;
+            let master = group.master();
+            Some(
+                integrand.data.graph_terms[master]
+                    .orientations
+                    .iter()
+                    .map(orientation_description)
+                    .collect(),
+            )
+        }
+        (ProcessIntegrand::CrossSection(integrand), "orientation") => {
+            let group_id = GroupId(*path.first()?);
+            let group = integrand.data.graph_group_structure.get(group_id)?;
+            let master = group.master();
+            Some(
+                integrand.data.graph_terms[master]
+                    .orientations
+                    .iter()
+                    .map(orientation_description)
+                    .collect(),
+            )
+        }
+        (ProcessIntegrand::Amplitude(integrand), "LMB channel") => {
+            let group_id = GroupId(*path.first()?);
+            let group = integrand.data.graph_group_structure.get(group_id)?;
+            let master = group.master();
+            let graph_term = &integrand.data.graph_terms[master];
+            Some(
+                graph_term
+                    .multi_channeling_setup
+                    .channels
+                    .iter()
+                    .map(|&channel_lmb| {
+                        lmb_channel_description(
+                            &graph_term.multi_channeling_setup.all_bases[channel_lmb],
+                        )
+                    })
+                    .collect(),
+            )
+        }
+        (ProcessIntegrand::CrossSection(integrand), "LMB channel") => {
+            let group_id = GroupId(*path.first()?);
+            let group = integrand.data.graph_group_structure.get(group_id)?;
+            let master = group.master();
+            let graph_term = &integrand.data.graph_terms[master];
+            Some(
+                graph_term
+                    .multi_channeling_setup
+                    .channels
+                    .iter()
+                    .map(|&channel_lmb| {
+                        lmb_channel_description(
+                            &graph_term.multi_channeling_setup.all_bases[channel_lmb],
+                        )
+                    })
+                    .collect(),
+            )
+        }
+        _ => None,
+    }
+}
+
+fn first_non_trivial_discrete_bin_descriptions_for_integrand(
+    integrand: &Integrand,
+    path: &[usize],
+    axis_label: &str,
+) -> Option<Vec<String>> {
+    match integrand {
+        Integrand::ProcessIntegrand(process_integrand) => {
+            first_non_trivial_discrete_bin_descriptions_for_process_integrand(
+                process_integrand,
+                path,
+                axis_label,
+            )
+        }
+        _ => None,
+    }
+}
+
+fn coalesce_first_non_trivial_discrete_bin_descriptions(
+    axis_label: &str,
+    slot_descriptions: &[(String, Vec<String>)],
+) -> (Option<Vec<String>>, Option<String>) {
+    let Some((reference_slot, reference_descriptions)) = slot_descriptions.first() else {
+        return (None, None);
+    };
+
+    if let Some((slot_key, _)) = slot_descriptions
+        .iter()
+        .skip(1)
+        .find(|(_, descriptions)| descriptions != reference_descriptions)
+    {
+        return (
+            None,
+            Some(format!(
+                "Selected integrands do not share the same semantic labels for the monitored discrete dimension '{axis_label}' ({} vs {}). Falling back to raw bin indices in integration reporting.",
+                reference_slot.blue(),
+                slot_key.blue()
+            )),
+        );
+    }
+
+    (Some(reference_descriptions.clone()), None)
+}
+
+fn resolve_first_non_trivial_discrete_bin_descriptions(
+    slot_metas: &[SlotMeta],
+    slot_integrands: &[Integrand],
+    sampling_grid: &Grid<F<f64>>,
+    discrete_axis_labels: &[String],
+) -> (Option<Vec<String>>, Option<String>) {
+    let Some(path) = first_non_trivial_discrete_path(sampling_grid) else {
+        return (None, None);
+    };
+    let Some(axis_label) = discrete_axis_labels.get(path.len()) else {
+        return (None, None);
+    };
+
+    let Some(slot_descriptions) = slot_metas
+        .iter()
+        .zip(slot_integrands.iter())
+        .map(|(slot_meta, integrand)| {
+            first_non_trivial_discrete_bin_descriptions_for_integrand(integrand, &path, axis_label)
+                .map(|descriptions| (slot_meta.key(), descriptions))
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return (None, None);
+    };
+
+    coalesce_first_non_trivial_discrete_bin_descriptions(axis_label, &slot_descriptions)
+}
+
+fn render_orientation_description(description: &str) -> String {
+    description
+        .chars()
+        .map(|sign| match sign {
+            '+' => "+".green().bold().to_string(),
+            '-' => "-".red().bold().to_string(),
+            '0' => "0".dimmed().to_string(),
+            other => other.to_string(),
+        })
+        .join("")
+}
+
+fn render_bin_description(axis_label: &str, description: &str) -> String {
+    if axis_label == "orientation" {
+        render_orientation_description(description)
+    } else {
+        description.bold().green().to_string()
+    }
+}
+
+fn contribution_bin_label(integration_state: &IntegrationState, bin_index: usize) -> String {
+    if let (Some(axis_label), Some(descriptions)) = (
+        integration_state
+            .first_non_trivial_discrete_label
+            .as_deref(),
+        integration_state
+            .first_non_trivial_discrete_bin_descriptions
+            .as_ref(),
+    ) {
+        if let Some(description) = descriptions.get(bin_index) {
+            return format!(
+                "{} {}",
+                render_bin_description(axis_label, description),
+                format!("(#{bin_index})").bold().green()
+            );
+        }
+    }
+
+    format!("idx = {bin_index}").bold().green().to_string()
 }
 
 fn contribution_header_label(
@@ -1229,7 +1461,10 @@ fn build_iteration_results_table(
 
     for group in &row_groups {
         for row in group {
-            let mut record = vec![row.contribution.label(), row.component.colorized_tag()];
+            let mut record = vec![
+                row.contribution.label(integration_state),
+                row.component.colorized_tag(),
+            ];
             for slot_cells in &row.slot_cells {
                 record.push(slot_cells.value.clone());
                 record.push(slot_cells.relative_error.clone());
@@ -1503,7 +1738,7 @@ fn build_discrete_bin_max_weight_details_table(
             }
 
             let mut record = vec![
-                contribution.label(),
+                contribution.label(integration_state),
                 format!("{} [{}]", component.colorized_tag(), sign.blue()),
             ];
             record.extend(slot_values);
@@ -1696,6 +1931,7 @@ pub struct IntegrationState {
     pub sampling_grid: Grid<F<f64>>,
     pub discrete_axis_labels: Vec<String>,
     pub first_non_trivial_discrete_label: Option<String>,
+    pub first_non_trivial_discrete_bin_descriptions: Option<Vec<String>>,
     pub iter: usize,
     pub elapsed_seconds: f64,
     pub n_cores: usize,
@@ -1731,6 +1967,7 @@ impl IntegrationState {
             sampling_grid,
             discrete_axis_labels,
             first_non_trivial_discrete_label,
+            first_non_trivial_discrete_bin_descriptions: None,
             iter,
             elapsed_seconds: 0.0,
             n_cores: 1,
@@ -1834,20 +2071,33 @@ where
 
     let mut user_data = vec![slot_integrands.clone(); n_cores];
 
+    let sampling_grid = slot_integrands[0].create_grid();
+    let discrete_axis_labels = discrete_axis_labels(&settings.sampling)
+        .into_iter()
+        .map(str::to_string)
+        .collect_vec();
+    let (first_non_trivial_discrete_bin_descriptions, label_warning) =
+        resolve_first_non_trivial_discrete_bin_descriptions(
+            &slot_metas,
+            &slot_integrands,
+            &sampling_grid,
+            &discrete_axis_labels,
+        );
+    if let Some(label_warning) = label_warning {
+        warn!("{label_warning}");
+    }
+
     let mut integration_state = if let Some(integration_state) = state {
         integration_state
     } else {
-        let sampling_grid = slot_integrands[0].create_grid();
-        let discrete_axis_labels = discrete_axis_labels(&settings.sampling)
-            .into_iter()
-            .map(str::to_string)
-            .collect_vec();
         IntegrationState::new_from_settings(
             || sampling_grid.clone(),
             slot_metas.clone(),
             discrete_axis_labels,
         )
     };
+    integration_state.first_non_trivial_discrete_bin_descriptions =
+        first_non_trivial_discrete_bin_descriptions;
     if integration_state.slot_metas != slot_metas {
         return Err(Report::msg(
             "Saved integration state slots do not match the currently selected integrands",
@@ -1933,9 +2183,8 @@ where
             cores,
         );
 
-        let core_results: Vec<Result<CoreResult>> =
-            pool.install(|| {
-                user_data
+        let core_results: Vec<Result<CoreResult>> = pool.install(|| {
+            user_data
                     .par_iter_mut()
                     .enumerate()
                     .zip(repeat_n(slot_models.clone(), cores))
@@ -2056,7 +2305,7 @@ where
                         },
                     )
                     .collect()
-            });
+        });
         let core_results: Vec<CoreResult> = core_results.into_iter().collect::<Result<_>>()?;
 
         if is_interrupted() {
@@ -3012,6 +3261,7 @@ fn render_integral_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use colored::control;
     use symbolica::numerical_integration::ContinuousGrid;
 
     fn make_accumulator(
@@ -3089,6 +3339,8 @@ mod tests {
             ],
             vec!["graph".to_string()],
         );
+        state.first_non_trivial_discrete_bin_descriptions =
+            Some(vec!["GL0".to_string(), "GL1".to_string()]);
         state.iter = 2;
         state.num_points = 210_000;
         let mut evaluation = EvaluationResult::zero();
@@ -3276,7 +3528,7 @@ mod tests {
 
         assert!(rendered.contains("Sum"), "{rendered}");
         assert!(rendered.contains("Contribution (idx=graph)"), "{rendered}");
-        assert!(rendered.contains("idx = 0"), "{rendered}");
+        assert!(rendered.contains("GL0 (#0)"), "{rendered}");
         assert!(rendered.contains("75.0%"), "{rendered}");
         assert!(rendered.contains("25.0%"), "{rendered}");
         assert!(
@@ -3287,6 +3539,42 @@ mod tests {
             rendered.contains("xs: [ 2.5000000000000000e-01 ]"),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn orientation_descriptions_use_colored_signs() {
+        control::set_override(true);
+        let rendered = render_bin_description("orientation", "+-0");
+        let expected_plus = "+".green().bold().to_string();
+        let expected_minus = "-".red().bold().to_string();
+        control::set_override(false);
+
+        assert!(rendered.contains(&expected_plus), "{rendered}");
+        assert!(rendered.contains(&expected_minus), "{rendered}");
+        assert!(rendered.contains("0"), "{rendered}");
+    }
+
+    #[test]
+    fn mismatched_bin_descriptions_fall_back_to_indices_with_warning() {
+        let (descriptions, warning) = coalesce_first_non_trivial_discrete_bin_descriptions(
+            "graph",
+            &[
+                (
+                    "proc_a@itg_a".to_string(),
+                    vec!["GL0".to_string(), "GL1".to_string()],
+                ),
+                (
+                    "proc_b@itg_b".to_string(),
+                    vec!["GX0".to_string(), "GX1".to_string()],
+                ),
+            ],
+        );
+
+        assert!(descriptions.is_none());
+        let warning = warning.expect("mismatch should produce a warning");
+        assert!(warning.contains("graph"), "{warning}");
+        assert!(warning.contains("proc_a@itg_a"), "{warning}");
+        assert!(warning.contains("proc_b@itg_b"), "{warning}");
     }
 
     #[test]
