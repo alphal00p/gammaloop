@@ -837,7 +837,7 @@ impl AmplitudeGraph {
             if settings.threshold_subtraction.check_esurface_at_generation {
                 let masses: EdgeVec<F<f64>> = self.graph.get_real_mass_vector(model);
                 let lmb = &self.graph.loop_momentum_basis;
-                if locked_runtime_settings.existence_check(
+                if !locked_runtime_settings.existence_check(
                     esurface,
                     &masses,
                     &self.graph.get_external_signature(),
