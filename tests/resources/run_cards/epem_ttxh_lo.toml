@@ -28,6 +28,11 @@ helicities = [
   -1,
 ]
 
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true
 
@@ -45,6 +50,9 @@ disable_tropical_generation = true
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = true
 compile = true
+store_atom = false
+summed = false
+summed_function_map = true
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = false
