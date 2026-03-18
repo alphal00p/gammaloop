@@ -702,7 +702,7 @@ impl EvaluatorStack {
     }
     #[instrument(
         name = "evaluate",
-        level = "info",
+        level = "debug",
         skip(
             self,
             input,

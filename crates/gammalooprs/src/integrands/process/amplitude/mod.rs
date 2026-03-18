@@ -176,12 +176,13 @@ impl AmplitudeGraphTerm {
         )?;
 
         self.threshold_counterterm
-            .compile(&graph_path, override_existing, settings);
+            .compile(&graph_path, override_existing, settings)?;
 
         Ok(())
     }
 
     #[instrument(
+          level = "debug",
           skip_all,
           fields(
               term.name = %self.name(),
