@@ -87,7 +87,7 @@ use std::collections::BTreeSet;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::num::TryFromIntError;
-use std::ops::{Index, IndexMut, Range, RangeBounds};
+use std::ops::{Index, IndexMut, RangeBounds};
 
 use ahash::{AHashMap, AHashSet};
 
@@ -2355,7 +2355,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     fn paton_cycle_basis(
         &self,
         subgraph: &SuBitGraph,
-    ) -> Result<((Vec<Cycle>, SuBitGraph)), HedgeGraphError> {
+    ) -> Result<(Vec<Cycle>, SuBitGraph), HedgeGraphError> {
         let mut visited_edges: SuBitGraph = self.empty_subgraph();
 
         let mut cycle_basis = vec![];

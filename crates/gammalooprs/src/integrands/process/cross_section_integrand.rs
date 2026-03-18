@@ -67,8 +67,7 @@ use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{
-    GenericEvaluator, GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid,
-    evaluate_sample,
+    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid, evaluate_sample,
 };
 
 const TOLERANCE: F<f64> = F(2.0);

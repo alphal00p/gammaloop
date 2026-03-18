@@ -15,7 +15,10 @@ use crate::{
     },
 };
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -34,7 +37,10 @@ pub struct GlobalSettings {
     pub n_cores: Parallelisation,
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]

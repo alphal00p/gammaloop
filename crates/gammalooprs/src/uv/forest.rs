@@ -310,25 +310,25 @@ impl Forest {
         Ok(sum)
     }
 
-    pub(crate) fn graphs(&self, graph: &Graph) -> String {
-        let mut out = String::new();
-        self.dag.nodes.iter().for_each(|(_, a)| {
-            writeln!(
-                out,
-                "//S_{}:\n{}",
-                a.data.subgraph.string_label(),
-                a.data.dot(graph)
-            )
-            .unwrap()
-        });
-        writeln!(
-            out,
-            "{}",
-            self.dag
-                .to_dot_impl(&|n| format!("label=S_{}", n.data.subgraph.string_label()))
-        )
-        .unwrap();
+    // pub(crate) fn graphs(&self, graph: &Graph) -> String {
+    //     let mut out = String::new();
+    //     self.dag.nodes.iter().for_each(|(_, a)| {
+    //         writeln!(
+    //             out,
+    //             "//S_{}:\n{}",
+    //             a.data.subgraph.string_label(),
+    //             a.data.dot(graph)
+    //         )
+    //         .unwrap()
+    //     });
+    //     writeln!(
+    //         out,
+    //         "{}",
+    //         self.dag
+    //             .to_dot_impl(&|n| format!("label=S_{}", n.data.subgraph.string_label()))
+    //     )
+    //     .unwrap();
 
-        out
-    }
+    //     out
+    // }
 }

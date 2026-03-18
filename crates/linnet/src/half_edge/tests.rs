@@ -145,11 +145,11 @@ fn threeloop() {
     #[cfg(feature = "serde")]
     insta::assert_ron_snapshot!("three_loop", graph);
 
-    for i in 0..graph.n_hedges() {
+    for _ in 0..graph.n_hedges() {
         assert_eq!(3, graph.cycle_basis().0.len());
     }
 
-    let (cycles, tree) = graph.cycle_basis();
+    let (cycles, _) = graph.cycle_basis();
     // assert_eq!(tree.hairs(&graph.full_filter()), graph.full_filter());
 
     assert_eq!(3, cycles.len());
@@ -194,7 +194,7 @@ fn hairythreeloop() {
         graph.dot(&graph.full_node())
     );
 
-    for i in graph.full_node().internal_graph.filter.included_iter() {
+    for _ in graph.full_node().internal_graph.filter.included_iter() {
         assert_eq!(3, graph.cycle_basis().0.len());
     }
 

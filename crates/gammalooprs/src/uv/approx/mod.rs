@@ -1,5 +1,5 @@
 use crate::{
-    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
+    graph::{Graph, LoopMomentumBasis, cuts::CutSet},
     momentum::Sign,
     numerator::symbolica_ext::AtomCoreExt,
     utils::{
@@ -223,10 +223,6 @@ impl CFFapprox {
     }
 }
 impl Approximation {
-    pub(crate) fn dot(&self, graph: &Graph) -> String {
-        graph.dot_lmb_of(&self.subgraph, &self.lmb)
-    }
-
     pub(crate) fn root(
         &mut self,
         graph: &mut Graph,

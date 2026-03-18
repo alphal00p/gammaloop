@@ -1,14 +1,13 @@
 use crate::{
-    graph::{Edge, Graph, LoopMomentumBasis, Vertex},
+    graph::{Graph, LoopMomentumBasis},
     uv::{approx::CutStructure, forest::CutForests, settings::VakintSettings},
 };
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
-use std::fmt::Write;
 
 use linnet::half_edge::{
     HedgeGraph,
-    subgraph::{InternalSubGraph, SubSetLike, SubSetOps},
+    subgraph::{InternalSubGraph, SubSetOps},
 };
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
@@ -203,64 +202,5 @@ impl Wood {
         let _ = self.unfold_bfs(graph, lmb, &mut dag, &mut unions, root);
 
         Forest { dag }
-    }
-
-    pub(crate) fn dot(&self, graph: &impl UltravioletGraph) -> String {
-        self.poset.to_dot_impl(&|n| {
-            format!(
-                "label={}, dod={},topo_order = {}",
-                n.data.string_label(),
-                graph.dod(&n.data),
-                // graph.as_ref().count_internal_edges(&n.data),
-                n.order.unwrap()
-            )
-        })
-    }
-
-    pub(crate) fn dot_spinneys<E, V, H, G>(&self, graph: &G) -> String
-    where
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-    {
-        let mut out = String::new();
-        for s in self.poset.node_values() {
-            writeln!(
-                out,
-                "found {} loop spinney with dod {}:{} ",
-                graph.n_loops(s),
-                graph.dod(s),
-                graph.as_ref().dot(s)
-            )
-            .unwrap();
-        }
-        out
-    }
-}
-
-impl Wood {
-    pub(crate) fn show_graphs<H, G>(&self, graph: &G) -> String
-    where
-        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-    {
-        let mut out = String::new();
-        out.push_str("Poset structure:\n");
-        out.push_str(&self.poset.dot_structure());
-
-        out.push_str("Graphs:\n");
-        for (k, n) in self.poset.nodes.iter() {
-            // n.data
-            out.push_str(&graph.as_ref().dot_impl(
-                &n.data,
-                format!(
-                    "dod={};nodeid ={};\n",
-                    graph.dod(&n.data),
-                    self.poset.dot_id(k)
-                ),
-                &|_h| None,
-                &|e| Some(format!("dod={}", e.dod)),
-                &|n| Some(format!("dod={}", n.dod)),
-            ));
-            out.push('\n');
-        }
-        out
     }
 }

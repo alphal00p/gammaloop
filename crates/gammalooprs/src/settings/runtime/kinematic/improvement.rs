@@ -22,7 +22,7 @@ use symbolica::{
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PhaseSpaceImprovementSettings {
@@ -48,7 +48,7 @@ impl Default for PhaseSpaceImprovementSettings {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema, Default)]
 #[serde(deny_unknown_fields)]
 pub enum ImprovementMode {

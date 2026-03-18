@@ -272,40 +272,6 @@ mod tests {
 
     use super::*;
     use ahash::HashSet;
-    use insta::assert_snapshot;
-
-    #[derive(Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Debug)]
-    enum MyOp {
-        A,
-        B,
-        C,
-    }
-
-    impl Display for MyOp {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            let s = match self {
-                MyOp::A => "A",
-                MyOp::B => "B",
-                MyOp::C => "C",
-            };
-            write!(f, "{}", s)
-        }
-    }
-
-    // Independence where A ⟂ C only; B overlaps with both.
-    struct IndepACOnly;
-    impl Independence<MyOp> for IndepACOnly {
-        fn independent(&self, a: &MyOp, b: &MyOp) -> bool {
-            matches!((a, b), (MyOp::A, MyOp::C) | (MyOp::C, MyOp::A))
-        }
-    }
-
-    struct OverlapIndep;
-    impl Independence<String> for OverlapIndep {
-        fn independent(&self, a: &String, b: &String) -> bool {
-            !has_overlap(a, b)
-        }
-    }
 
     fn has_overlap(a: &str, b: &str) -> bool {
         println!("Checking overlap between '{a}' and '{b}'");
@@ -400,9 +366,10 @@ mod tests {
             &g.full_filter(),
             "start=2;\n",
             &|_| None,
-            &|a| None,
+            &|_| None,
             &|v| Some(format!("label=\"{}\"", v.name.clone().unwrap_or_default())),
-        );
+        )
+        .unwrap();
         insta::assert_snapshot!(output, @r#"
         digraph {
           node	 [shape=circle,height=0.1,label=""];

@@ -36,7 +36,7 @@ use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, instrument, trace, warn};
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
@@ -288,7 +288,7 @@ pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitSurfaceSettings {
@@ -447,7 +447,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     }
 }
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitVolumeSettings {

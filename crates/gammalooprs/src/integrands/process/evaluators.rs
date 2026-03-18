@@ -186,7 +186,10 @@ impl CompiledComplexEvaluatorGL {
         }
     }
 }
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 pub enum EvaluatorMethod {
     SingleParametric,

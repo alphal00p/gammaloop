@@ -13,7 +13,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
+use idenso::gamma::GammaSimplifier;
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
@@ -26,11 +26,9 @@ use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol}
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        esurface::{self, GroupEsurfaceId, RaisedEsurfaceData},
-        expression::{CFFExpression, OrientationData, OrientationID},
-        generation::{PostProcessingSetup, get_orientations_from_subgraph},
+        esurface::GroupEsurfaceId,
+        expression::{CFFExpression, OrientationID},
     },
-    disable,
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis, cuts::CutSet,
     },
@@ -40,7 +38,6 @@ use crate::{
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
-    numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, StandaloneExportSettings},
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
@@ -56,8 +53,8 @@ use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{EdgeVec, HedgePair, Orientation},
-        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
+        involution::{EdgeVec, HedgePair},
+        subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
     },
     parser::DotGraph,
 };
@@ -1170,16 +1167,9 @@ impl Amplitude {
 #[cfg(test)]
 pub mod test {
 
-    use linnet::half_edge::involution::{EdgeVec, Orientation};
-    use symbolica::evaluate::OptimizationSettings;
-
     use crate::{
-        dot,
-        graph::parse::IntoGraph,
-        initialisation::test_initialise,
-        integrands::process::GenericEvaluator,
-        processes::AmplitudeGraph,
-        utils::{GS, test_utils::load_generic_model},
+        dot, graph::parse::IntoGraph, initialisation::test_initialise, processes::AmplitudeGraph,
+        utils::test_utils::load_generic_model,
     };
     #[test]
     fn amplitude_tree() {
@@ -1197,7 +1187,7 @@ pub mod test {
     })
     .unwrap();
 
-        let model = load_generic_model("sm");
+        let _model = load_generic_model("sm");
 
         graph.generate_cff().unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());

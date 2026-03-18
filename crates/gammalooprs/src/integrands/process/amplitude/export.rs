@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File},
+    fs::{self},
     path::Path,
 };
 
@@ -66,93 +66,6 @@ fn export_generic_evaluator<T: ExportAtomTo>(
         additional_fn_map_entries,
         dual_shape: evaluator.dual_shape.clone(),
     })
-}
-
-fn save_atom_export(atom: &Atom, path: &Path) -> Result<()> {
-    let mut file = File::create(path)
-        .with_context(|| format!("Failed to create atom export file {}", path.display()))?;
-    atom.as_view()
-        .export(&mut file)
-        .with_context(|| format!("Failed to export atom to {}", path.display()))?;
-    Ok(())
-}
-
-fn standalone_python_script() -> &'static str {
-    r#"#!/usr/bin/env -S uv run --script
-# /// script
-# dependencies = ["symbolica"]
-# ///
-import json
-from pathlib import Path
-from symbolica import Expression, Replacement
-
-
-def _load_expr(data_root: Path, rel: str):
-    return Expression.load(str(data_root / rel))
-
-
-def _make_evaluator(data_root: Path, evaluator_manifest: dict, params, replacements):
-    exprs = [
-        _load_expr(data_root, rel).replace_multiple(replacements)
-        for rel in evaluator_manifest["exprs"]
-    ]
-    constants = {}
-    functions = {}
-    return Expression.evaluator_multiple(
-        exprs,
-        constants,
-        functions,
-        params,
-        iterations=evaluator_manifest.get("horner_iterations", 100),
-        n_cores=evaluator_manifest.get("n_cores", 4),
-        verbose=evaluator_manifest.get("verbose", False),
-    )
-
-
-def load_standalone(data_root: str | Path | None = None):
-    data_root = Path(data_root) if data_root is not None else (Path(__file__).resolve().parent / "data")
-    manifest = json.loads((data_root / "manifest.json").read_text())
-    loaded = []
-
-    for graph in manifest["graphs"]:
-        params = [_load_expr(data_root, rel) for rel in graph["params"]]
-        replacements = [
-            Replacement(_load_expr(data_root, rep["lhs"]), _load_expr(data_root, rep["rhs"]))
-            for rep in graph["replacements"]
-        ]
-
-        original = graph["original_integrand"]
-        loaded_graph = {
-            "graph_name": graph["graph_name"],
-            "single_parametric": _make_evaluator(data_root, original["single_parametric"], params, replacements),
-            "iterative": _make_evaluator(data_root, original["iterative"], params, replacements) if original["iterative"] else None,
-            "summed_function_map": _make_evaluator(data_root, original["summed_function_map"], params, replacements) if original["summed_function_map"] else None,
-            "summed": _make_evaluator(data_root, original["summed"], params, replacements) if original["summed"] else None,
-            "threshold_counterterms": [],
-        }
-
-        for ct in graph["threshold_counterterms"]:
-            loaded_graph["threshold_counterterms"].append(
-                {
-                    "parametric": _make_evaluator(data_root, ct["parametric"], params, replacements),
-                    "iterative": _make_evaluator(data_root, ct["iterative"], params, replacements) if ct["iterative"] else None,
-                }
-            )
-
-        loaded.append(loaded_graph)
-
-    return loaded
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(description="Load standalone Symbolica evaluators")
-    parser.add_argument("data_root", nargs="?", default=None, help="Optional path to data directory")
-    args = parser.parse_args()
-
-    data_root = Path(args.data_root) if args.data_root is not None else None
-    graphs = load_standalone(data_root)
-    print(f"Loaded {len(graphs)} graph evaluator sets")
-"#
 }
 
 fn standalone_rust_script() -> String {

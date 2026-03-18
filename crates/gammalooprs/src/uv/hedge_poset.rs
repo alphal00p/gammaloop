@@ -8,7 +8,7 @@ use linnet::half_edge::{
     algorithms::trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold},
     involution::{EdgeIndex, Flow, HedgePair},
     nodestore::{NodeStorageOps, NodeStorageVec},
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps, subset::SubSet},
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
 use spenso::network::library::TensorLibraryData;
 use symbolica::{
@@ -21,9 +21,7 @@ use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     uv::{
         UVgenerationSettings, UltravioletGraph,
-        approx::{
-            ApproximationKernel, CutStructure, ForestNodeLike, UVCtx, integrated::Integrated,
-        },
+        approx::{ApproximationKernel, ForestNodeLike, UVCtx, integrated::Integrated},
     },
 };
 use color_eyre::Result;
@@ -610,9 +608,9 @@ mod tests {
                 dumbell.dot(&d.subgraph)
             );
         }
-        let ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
+        let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
 
-        println!("{}", ff.dot(&dumbell));
+        // println!("{}", ff.dot(&dumbell));
 
         let f = f.unfold();
         println!("{}", f);
@@ -666,9 +664,9 @@ mod tests {
                         g.dot_lmb_of(&d.subgraph, &d.lmb)
                     );
                 }
-                let ff = OldWood::from_spinneys(spinneys, &g); //.unfold(&g, &g.loop_momentum_basis);
+                let _ff = OldWood::from_spinneys(spinneys, &g); //.unfold(&g, &g.loop_momentum_basis);
 
-                println!("{}", ff.dot(&g));
+                // println!("{}", ff.dot(&g));
 
                 let f = f.unfold();
                 f.debug_walk();

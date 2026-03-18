@@ -3674,21 +3674,6 @@ impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
     }
 }
 
-pub(crate) fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), ()> {
-    use linnet::half_edge::NodeIndex;
-    use linnet::half_edge::builder::HedgeGraphBuilder;
-    use linnet::half_edge::involution::Orientation;
-
-    let mut graph = HedgeGraphBuilder::new();
-    graph.add_node(());
-
-    for _ in 0..num_edges {
-        graph.add_edge(NodeIndex(0), NodeIndex(0), (), Orientation::Default);
-    }
-
-    graph.build()
-}
-
 pub trait Length {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool {

@@ -265,9 +265,6 @@ impl GammaloopSymbols {
     pub(crate) fn sign(&self, edge: EdgeIndex) -> Atom {
         function!(self.sign, Atom::num(edge.0 as i64))
     }
-    pub(crate) fn sign_symbol(&self, edge: EdgeIndex) -> Symbol {
-        symbol!(format!("{}{}", self.sign, edge))
-    }
 }
 
 pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
@@ -975,9 +972,6 @@ impl GammaloopSymbols {
 
     pub(crate) fn cind(&self, e: usize) -> Atom {
         AIND_SYMBOLS.cind.f([e as i64])
-    }
-    pub(crate) fn delta_vec<'a>(&self, e: usize, index: impl Into<AtomOrView<'a>>) -> Atom {
-        function!(GS.delta_vec, self.cind(e), index.into().as_view())
     }
 
     pub(crate) fn energy_delta<'a>(&self, index: impl Into<AtomOrView<'a>>) -> Atom {

@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::half_edge::{
     builder::HedgeGraphBuilder,
-    involution::{Flow, Orientation},
+    involution::Flow,
     nodestore::NodeStorageOps,
     subgraph::{ModifySubSet, SuBitGraph},
     HedgeGraph, NoData, NodeIndex,
@@ -67,7 +67,7 @@ impl<V, S: NodeStorageOps<NodeData = V, Base = SuBitGraph>> HedgeGraph<NoData, V
 
         // Create nodes in the graph
         let mut node_indices = HashMap::new();
-        for (i, node) in nodes.iter().enumerate() {
+        for (i, _) in nodes.iter().enumerate() {
             let idx = builder.add_node(i);
             node_indices.insert(i, idx);
         }
@@ -1134,7 +1134,6 @@ mod tests {
         .unwrap();
 
         // Test various reachability scenarios
-        let nodes: Vec<_> = graph.graph.iter_node_ids().collect();
         let node_map: std::collections::HashMap<_, _> = graph
             .graph
             .iter_node_ids()

@@ -13,6 +13,7 @@
 //! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! ```
 
+#![allow(dead_code)]
 use std::{
     fs,
     io::Cursor,
@@ -247,7 +248,7 @@ pub struct StandaloneGenericEvaluatorArchive<A = Vec<u8>> {
 type SerializedFnMapEntry<A> = (A, A, Vec<A>, Vec<A>);
 type ParsedFnMapEntry = (Atom, Atom, Vec<Atom>, Vec<Indeterminate>);
 
-trait ImportWithMap {
+pub trait ImportWithMap {
     fn import_with_map(&self, state_map: &StateMap) -> Result<Atom>;
 }
 
@@ -465,7 +466,7 @@ pub struct LoadedStandaloneEvaluators {
     pub graph_terms: Vec<LoadedStandaloneGraphTerm>,
 }
 
-pub(crate) struct LoadedStandaloneGraphTerm {
+pub struct LoadedStandaloneGraphTerm {
     pub graph_name: String,
     pub orientations: Vec<Vec<i8>>,
     pub param_builder_params: Vec<Atom>,
@@ -473,7 +474,7 @@ pub(crate) struct LoadedStandaloneGraphTerm {
     pub threshold_counterterms: Vec<LoadedStandaloneEvaluatorStack>,
 }
 
-pub(crate) struct LoadedStandaloneEvaluatorStack {
+pub struct LoadedStandaloneEvaluatorStack {
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) orientation_start: usize,
     pub(crate) override_pos: usize,
