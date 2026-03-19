@@ -28,7 +28,7 @@ use gammalooprs::{
         render_saved_integration_summary, slot_workspace_path, workspace_manifest_path,
         workspace_state_path, ContributionSortMode, IntegrationState, IntegrationStatusKind,
         IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
-        IntegrationWorkspaceManifest, IterationBatchingSettings, SlotMeta,
+        IntegrationWorkspaceManifest, IterationBatchingSettings, SamplingCorrelationMode, SlotMeta,
         WorkspaceSnapshotControl,
     },
     model::{Model, SerializableInputParamCard},
@@ -96,6 +96,10 @@ pub struct Integrate {
     /// Whether to restart the integration from scratch, or continue from a previous run if possible
     #[arg(short = 'r', long)]
     pub restart: bool,
+
+    /// Use one independent sampling/training grid per selected integrand instead of a shared grid
+    #[arg(long = "uncorrelated")]
+    pub uncorrelated: bool,
 
     /// Show the overall max-weight details table
     #[arg(long = "show-max-weight-info", default_value_t = true)]
@@ -204,6 +208,7 @@ impl Default for Integrate {
             workspace_path: None,
             target: Vec::new(),
             restart: false,
+            uncorrelated: false,
             show_max_weight_info: true,
             no_show_integration_statistics: false,
             show_phase: ShowPhaseOption::Both,
@@ -607,6 +612,14 @@ impl Integrate {
         }
     }
 
+    fn sampling_correlation_mode(&self) -> SamplingCorrelationMode {
+        if self.uncorrelated {
+            SamplingCorrelationMode::Uncorrelated
+        } else {
+            SamplingCorrelationMode::Correlated
+        }
+    }
+
     fn build_batching_settings(&self, emit_live_status_updates: bool) -> IterationBatchingSettings {
         IterationBatchingSettings {
             batch_size: self.batch_size,
@@ -691,6 +704,11 @@ impl Integrate {
                         &manifest_path,
                         "integration manifest",
                     )?;
+                if manifest.sampling_correlation_mode != self.sampling_correlation_mode() {
+                    return Err(eyre!(
+                        "Workspace integration sampling mode does not match the requested mode; use --restart to switch between correlated and uncorrelated integration"
+                    ));
+                }
                 let expected_slots = selected_slots
                     .iter()
                     .map(|slot| slot.slot_meta.clone())
@@ -941,7 +959,7 @@ impl Integrate {
         selected_slots: &[ResolvedIntegrandSlot],
         slot_integrands: &[gammalooprs::integrands::process::ProcessIntegrand],
     ) -> Result<()> {
-        if slot_integrands.len() <= 1 {
+        if self.uncorrelated || slot_integrands.len() <= 1 {
             return Ok(());
         }
 
@@ -991,6 +1009,7 @@ impl Integrate {
             integrand_fingerprints,
             training_slot: 0,
             integrator_settings_slot: 0,
+            sampling_correlation_mode: self.sampling_correlation_mode(),
         };
         manifest.to_file(workspace_manifest_path(workspace_path), true)?;
 
@@ -1159,9 +1178,12 @@ impl Integrate {
             &mut slot_integrands,
         )?;
         self.validate_slot_compatibility(&selected_slots, &slot_integrands)?;
-        let settings = slot_integrands[0].get_settings().clone();
+        let slot_settings = slot_integrands
+            .iter()
+            .map(|integrand| integrand.get_settings().clone())
+            .collect_vec();
         let render_options =
-            self.build_render_options(&settings, !self.no_show_integration_statistics);
+            self.build_render_options(&slot_settings[0], !self.no_show_integration_statistics);
         self.write_workspace_manifest_and_settings(
             &slot_integrands,
             &selected_slots,
@@ -1185,7 +1207,8 @@ impl Integrate {
         let mut stream_renderer = (stream_updates || stream_iterations).then(StreamRenderer::new);
 
         let result = havana_integrate(
-            &settings,
+            slot_settings,
+            self.sampling_correlation_mode(),
             slot_models,
             selected_slots
                 .iter()

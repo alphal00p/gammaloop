@@ -108,9 +108,33 @@ pub struct IntegrationWorkspaceManifest {
     pub integrand_fingerprints: Vec<String>,
     pub training_slot: usize,
     pub integrator_settings_slot: usize,
+    pub sampling_correlation_mode: SamplingCorrelationMode,
 }
 
 impl crate::utils::serde_utils::SmartSerde for IntegrationWorkspaceManifest {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
+#[serde(rename_all = "snake_case")]
+pub enum SamplingCorrelationMode {
+    Correlated,
+    Uncorrelated,
+}
+
+impl SamplingCorrelationMode {
+    fn state_index(self, slot_index: usize) -> usize {
+        match self {
+            Self::Correlated => 0,
+            Self::Uncorrelated => slot_index,
+        }
+    }
+
+    fn state_count(self, n_slots: usize) -> usize {
+        match self {
+            Self::Correlated => 1,
+            Self::Uncorrelated => n_slots,
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Encode, Decode, Clone)]
 struct DiscreteGridAccumulatorSummary {
@@ -131,6 +155,36 @@ struct PersistedDiscreteBreakdownMetadata {
     #[bincode(with_serde)]
     fixed_coordinates: Vec<DiscreteCoordinate>,
     bin_labels: Vec<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize, Encode, Decode)]
+struct SamplingSlotState {
+    #[bincode(with_serde)]
+    grid: Grid<F<f64>>,
+    discrete_axis_labels: Vec<String>,
+}
+
+impl SamplingSlotState {
+    fn new(grid: Grid<F<f64>>, discrete_axis_labels: Vec<String>) -> Self {
+        Self {
+            grid,
+            discrete_axis_labels,
+        }
+    }
+
+    fn from_integrand(integrand: &Integrand) -> Self {
+        let grid = integrand.create_grid();
+        let discrete_axis_labels = match integrand {
+            Integrand::ProcessIntegrand(process_integrand) => {
+                discrete_axis_labels(&process_integrand.get_settings().sampling)
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect_vec()
+            }
+            _ => Vec::new(),
+        };
+        Self::new(grid, discrete_axis_labels)
+    }
 }
 
 #[derive(Tabled)]
@@ -788,6 +842,16 @@ fn build_persisted_discrete_breakdown_metadata(
     })
 }
 
+fn monitored_discrete_layout(
+    grid: &Grid<F<f64>>,
+    discrete_axis_labels: &[String],
+) -> Option<(Vec<usize>, String, usize)> {
+    let path = first_non_trivial_discrete_path(grid)?;
+    let axis_label = discrete_axis_labels.get(path.len())?.clone();
+    let discrete_grid = discrete_grid_at_path(grid, &path)?;
+    Some((path, axis_label, discrete_grid.bins.len()))
+}
+
 fn coalesce_first_non_trivial_discrete_bin_descriptions(
     axis_label: &str,
     slot_descriptions: &[(String, Vec<String>)],
@@ -817,22 +881,19 @@ fn coalesce_first_non_trivial_discrete_bin_descriptions(
 fn resolve_first_non_trivial_discrete_bin_descriptions(
     slot_metas: &[SlotMeta],
     slot_integrands: &[Integrand],
-    sampling_grid: &Grid<F<f64>>,
-    discrete_axis_labels: &[String],
+    monitored_path: &[usize],
+    axis_label: &str,
 ) -> (Option<Vec<String>>, Option<String>) {
-    let Some(path) = first_non_trivial_discrete_path(sampling_grid) else {
-        return (None, None);
-    };
-    let Some(axis_label) = discrete_axis_labels.get(path.len()) else {
-        return (None, None);
-    };
-
     let Some(slot_descriptions) = slot_metas
         .iter()
         .zip(slot_integrands.iter())
         .map(|(slot_meta, integrand)| {
-            first_non_trivial_discrete_bin_descriptions_for_integrand(integrand, &path, axis_label)
-                .map(|descriptions| (slot_meta.key(), descriptions))
+            first_non_trivial_discrete_bin_descriptions_for_integrand(
+                integrand,
+                monitored_path,
+                axis_label,
+            )
+            .map(|descriptions| (slot_meta.key(), descriptions))
         })
         .collect::<Option<Vec<_>>>()
     else {
@@ -840,6 +901,76 @@ fn resolve_first_non_trivial_discrete_bin_descriptions(
     };
 
     coalesce_first_non_trivial_discrete_bin_descriptions(axis_label, &slot_descriptions)
+}
+
+fn resolve_monitored_discrete_setup(
+    sampling_correlation_mode: SamplingCorrelationMode,
+    slot_metas: &[SlotMeta],
+    slot_integrands: &[Integrand],
+    sampling_states: &[SamplingSlotState],
+) -> (
+    Option<Vec<usize>>,
+    Option<String>,
+    Option<Vec<String>>,
+    Option<String>,
+) {
+    let Some(reference_state) = sampling_states.first() else {
+        return (None, None, None, None);
+    };
+
+    let Some((reference_path, reference_axis_label, reference_bin_count)) =
+        monitored_discrete_layout(&reference_state.grid, &reference_state.discrete_axis_labels)
+    else {
+        return (None, None, None, None);
+    };
+
+    if sampling_correlation_mode == SamplingCorrelationMode::Uncorrelated {
+        for (slot_index, sampling_state) in sampling_states.iter().enumerate().skip(1) {
+            let Some((path, axis_label, bin_count)) = monitored_discrete_layout(
+                &sampling_state.grid,
+                &sampling_state.discrete_axis_labels,
+            ) else {
+                return (
+                    None,
+                    None,
+                    None,
+                    Some(
+                        "Selected integrands do not all expose a compatible first non-trivial monitored discrete dimension. Shared discrete-bin monitoring tables will be disabled."
+                            .to_string(),
+                    ),
+                );
+            };
+
+            if path != reference_path
+                || axis_label != reference_axis_label
+                || bin_count != reference_bin_count
+            {
+                return (
+                    None,
+                    None,
+                    None,
+                    Some(format!(
+                        "Selected integrands do not share a compatible first non-trivial monitored discrete layout (mismatch at {}). Shared discrete-bin monitoring tables will be disabled.",
+                        slot_metas[slot_index].key().blue()
+                    )),
+                );
+            }
+        }
+    }
+
+    let (descriptions, label_warning) = resolve_first_non_trivial_discrete_bin_descriptions(
+        slot_metas,
+        slot_integrands,
+        &reference_path,
+        &reference_axis_label,
+    );
+
+    (
+        Some(reference_path),
+        Some(reference_axis_label),
+        descriptions,
+        label_warning,
+    )
 }
 
 fn render_orientation_description(description: &str) -> String {
@@ -1436,7 +1567,7 @@ fn build_iteration_results_table(
     fn build_main_table_row(
         integration_state: &IntegrationState,
         targets: &[Option<Complex<F<f64>>>],
-        discrete_context: Option<&DiscreteLevelContext>,
+        monitored_path: Option<&[usize]>,
         contribution: ContributionKind,
         component: ComponentKind,
         show_discrete_columns: bool,
@@ -1462,7 +1593,7 @@ fn build_iteration_results_table(
                 ContributionKind::Sum => {
                     let summary = slot_component_summary(integration_state, slot_index, component)
                         .and_then(|summary| {
-                            discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path))
+                            monitored_path.and_then(|path| summary_at_path(summary, path))
                         })?;
                     let (avg, err) = sum_estimate_error(summary);
                     Some(MainTableSlotCells {
@@ -1474,9 +1605,11 @@ fn build_iteration_results_table(
                     })
                 }
                 ContributionKind::Bin(bin_index) => {
+                    let slot_context =
+                        integration_state.monitored_discrete_context_for_slot(slot_index);
                     let summary = slot_component_summary(integration_state, slot_index, component)
                         .and_then(|summary| {
-                            discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path))
+                            monitored_path.and_then(|path| summary_at_path(summary, path))
                         })?;
                     let bin = summary.bins.get(bin_index)?;
                     let total_samples = total_processed_samples(summary);
@@ -1498,7 +1631,8 @@ fn build_iteration_results_table(
                         String::new()
                     };
                     let target_pdf = if show_discrete_columns {
-                        discrete_context
+                        slot_context
+                            .as_ref()
                             .and_then(|ctx| ctx.pdfs.get(bin_index).copied())
                             .map(|pdf| format_percentage_sig(pdf.0 * 100.0, 3))
                             .unwrap_or_default()
@@ -1537,7 +1671,7 @@ fn build_iteration_results_table(
             }
             ContributionKind::Sum => {
                 let summary = slot_component_summary(integration_state, 0, component).and_then(
-                    |summary| discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path)),
+                    |summary| monitored_path.and_then(|path| summary_at_path(summary, path)),
                 )?;
                 let (avg, err) = sum_estimate_error(summary);
                 let (delta_sigma, delta_percent) =
@@ -1551,7 +1685,7 @@ fn build_iteration_results_table(
             }
             ContributionKind::Bin(bin_index) => {
                 let summary = slot_component_summary(integration_state, 0, component).and_then(
-                    |summary| discrete_context.and_then(|ctx| summary_at_path(summary, &ctx.path)),
+                    |summary| monitored_path.and_then(|path| summary_at_path(summary, path)),
                 )?;
                 let bin = summary.bins.get(bin_index)?;
                 (
@@ -1576,13 +1710,13 @@ fn build_iteration_results_table(
 
     fn discrete_sort_key(
         integration_state: &IntegrationState,
-        discrete_context: &DiscreteLevelContext,
+        monitored_path: &[usize],
         component: ComponentKind,
         bin_index: usize,
         sort_mode: ContributionSortMode,
     ) -> f64 {
         let Some(summary) = slot_component_summary(integration_state, 0, component)
-            .and_then(|summary| summary_at_path(summary, &discrete_context.path))
+            .and_then(|summary| summary_at_path(summary, monitored_path))
         else {
             return 0.0;
         };
@@ -1597,8 +1731,9 @@ fn build_iteration_results_table(
     }
 
     let components = ComponentKind::all_for_display(render_options.phase_display);
-    let discrete_context = first_non_trivial_discrete_context(&integration_state.sampling_grid);
-    let show_discrete_columns = discrete_context.is_some()
+    let discrete_context = integration_state.monitored_discrete_context();
+    let monitored_path = integration_state.monitored_discrete_path.as_deref();
+    let show_discrete_columns = monitored_path.is_some()
         && (render_options.show_top_discrete_grid
             || render_options.show_discrete_contributions_sum);
     let has_target_columns = targets.first().is_some_and(Option::is_some);
@@ -1613,7 +1748,7 @@ fn build_iteration_results_table(
                 build_main_table_row(
                     integration_state,
                     targets,
-                    discrete_context.as_ref(),
+                    monitored_path,
                     ContributionKind::All,
                     *component,
                     show_discrete_columns,
@@ -1630,7 +1765,7 @@ fn build_iteration_results_table(
                     build_main_table_row(
                         integration_state,
                         targets,
-                        Some(discrete_context),
+                        monitored_path,
                         ContributionKind::Sum,
                         *component,
                         show_discrete_columns,
@@ -1652,7 +1787,7 @@ fn build_iteration_results_table(
                             if let Some(row) = build_main_table_row(
                                 integration_state,
                                 targets,
-                                Some(discrete_context),
+                                monitored_path,
                                 ContributionKind::Bin(bin_index),
                                 *component,
                                 show_discrete_columns,
@@ -1671,14 +1806,14 @@ fn build_iteration_results_table(
                         bin_indices.sort_by(|lhs, rhs| {
                             discrete_sort_key(
                                 integration_state,
-                                discrete_context,
+                                &discrete_context.path,
                                 *component,
                                 *rhs,
                                 render_options.contribution_sort,
                             )
                             .partial_cmp(&discrete_sort_key(
                                 integration_state,
-                                discrete_context,
+                                &discrete_context.path,
                                 *component,
                                 *lhs,
                                 render_options.contribution_sort,
@@ -1691,7 +1826,7 @@ fn build_iteration_results_table(
                                 build_main_table_row(
                                     integration_state,
                                     targets,
-                                    Some(discrete_context),
+                                    monitored_path,
                                     ContributionKind::Bin(bin_index),
                                     *component,
                                     show_discrete_columns,
@@ -1867,8 +2002,9 @@ fn build_max_weight_details_table(
     let row_groups = integration_state
         .slot_metas
         .iter()
+        .enumerate()
         .zip(integration_state.all_integrals.iter())
-        .filter_map(|(slot_meta, integral)| {
+        .filter_map(|((slot_index, slot_meta), integral)| {
             let rows = max_weight_row_descriptors(render_options.phase_display)
                 .into_iter()
                 .filter_map(|(component, sign, positive)| {
@@ -1885,7 +2021,9 @@ fn build_max_weight_details_table(
                             .map(|sample| {
                                 format_max_eval_sample(
                                     sample,
-                                    &integration_state.discrete_axis_labels,
+                                    &integration_state
+                                        .sampling_state_for_slot(slot_index)
+                                        .discrete_axis_labels,
                                     &[],
                                 )
                             })
@@ -1946,7 +2084,7 @@ fn build_discrete_bin_max_weight_details_table(
         }
     }
 
-    let discrete_context = first_non_trivial_discrete_context(&integration_state.sampling_grid)?;
+    let discrete_context = integration_state.monitored_discrete_context()?;
     let mut builder = Builder::new();
     let mut header = vec![
         contribution_header_label(integration_state, true),
@@ -1998,41 +2136,62 @@ fn build_discrete_bin_max_weight_details_table(
                 })
                 .collect::<Option<Vec<_>>>()?;
 
-            let slot0_coordinates = match contribution {
-                ContributionKind::All => {
-                    let accumulator = match component {
-                        ComponentKind::Real => &integration_state.all_integrals[0].re,
-                        ComponentKind::Imag => &integration_state.all_integrals[0].im,
-                    };
-                    max_eval_entry(accumulator, positive)
-                        .and_then(|(_, sample)| sample)
-                        .map(|sample| {
-                            format_max_eval_sample(
-                                sample,
-                                &integration_state.discrete_axis_labels,
-                                &[],
-                            )
-                        })
-                        .unwrap_or_else(|| "N/A".to_string())
-                }
-                ContributionKind::Bin(bin_index) => {
-                    let summary = slot_component_summary(integration_state, 0, component)
-                        .and_then(|summary| summary_at_path(summary, &discrete_context.path))?;
-                    max_eval_entry(&summary.bins.get(bin_index)?.accumulator, positive)
-                        .and_then(|(_, sample)| sample)
-                        .map(|sample| {
-                            format_max_eval_sample(
-                                sample,
-                                &integration_state.discrete_axis_labels,
-                                &discrete_context.path,
-                            )
-                        })
-                        .unwrap_or_else(|| "N/A".to_string())
-                }
-                ContributionKind::Sum => String::new(),
-            };
+            let slot_coordinates = integration_state
+                .slot_metas
+                .iter()
+                .enumerate()
+                .filter_map(|(slot_index, slot_meta)| {
+                    let coordinates = match contribution {
+                        ContributionKind::All => {
+                            let accumulator = match component {
+                                ComponentKind::Real => {
+                                    &integration_state.all_integrals[slot_index].re
+                                }
+                                ComponentKind::Imag => {
+                                    &integration_state.all_integrals[slot_index].im
+                                }
+                            };
+                            max_eval_entry(accumulator, positive)
+                                .and_then(|(_, sample)| sample)
+                                .map(|sample| {
+                                    format_max_eval_sample(
+                                        sample,
+                                        &integration_state
+                                            .sampling_state_for_slot(slot_index)
+                                            .discrete_axis_labels,
+                                        &[],
+                                    )
+                                })
+                        }
+                        ContributionKind::Bin(bin_index) => {
+                            let slot_context = integration_state
+                                .monitored_discrete_context_for_slot(slot_index)?;
+                            let summary =
+                                slot_component_summary(integration_state, slot_index, component)
+                                    .and_then(|summary| {
+                                        summary_at_path(summary, &slot_context.path)
+                                    })?;
+                            max_eval_entry(&summary.bins.get(bin_index)?.accumulator, positive)
+                                .and_then(|(_, sample)| sample)
+                                .map(|sample| {
+                                    format_max_eval_sample(
+                                        sample,
+                                        &integration_state
+                                            .sampling_state_for_slot(slot_index)
+                                            .discrete_axis_labels,
+                                        &slot_context.path,
+                                    )
+                                })
+                        }
+                        ContributionKind::Sum => None,
+                    }?;
 
-            if slot_values.iter().all(String::is_empty) && slot0_coordinates == "N/A" {
+                    Some(format!("{}: {}", slot_meta.key().green(), coordinates))
+                })
+                .collect_vec()
+                .join("\n");
+
+            if slot_values.iter().all(String::is_empty) && slot_coordinates.is_empty() {
                 continue;
             }
 
@@ -2041,7 +2200,7 @@ fn build_discrete_bin_max_weight_details_table(
                 format!("{} [{}]", component.colorized_tag(), sign.blue()),
             ];
             record.extend(slot_values);
-            record.push(slot0_coordinates);
+            record.push(slot_coordinates);
             rows.push(record);
         }
         if !rows.is_empty() {
@@ -2260,9 +2419,9 @@ pub struct IntegrationState {
     slot_im_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
     pub stats: StatisticsCounter,
     pub slot_metas: Vec<SlotMeta>,
-    #[bincode(with_serde)]
-    pub sampling_grid: Grid<F<f64>>,
-    pub discrete_axis_labels: Vec<String>,
+    pub sampling_correlation_mode: SamplingCorrelationMode,
+    sampling_states: Vec<SamplingSlotState>,
+    monitored_discrete_path: Option<Vec<usize>>,
     pub first_non_trivial_discrete_label: Option<String>,
     pub first_non_trivial_discrete_bin_descriptions: Option<Vec<String>>,
     slot_first_non_trivial_discrete_breakdown_metadata:
@@ -2273,26 +2432,34 @@ pub struct IntegrationState {
 }
 
 impl IntegrationState {
-    fn new_from_settings<GridGenerator>(
-        create_grid: GridGenerator,
+    fn new_from_settings(
+        sampling_correlation_mode: SamplingCorrelationMode,
+        sampling_states: Vec<SamplingSlotState>,
         slot_metas: Vec<SlotMeta>,
-        discrete_axis_labels: Vec<String>,
+        monitored_discrete_path: Option<Vec<usize>>,
+        first_non_trivial_discrete_label: Option<String>,
+        first_non_trivial_discrete_bin_descriptions: Option<Vec<String>>,
         slot_first_non_trivial_discrete_breakdown_metadata: Vec<
             Option<PersistedDiscreteBreakdownMetadata>,
         >,
-    ) -> Self
-    where
-        GridGenerator: Fn() -> Grid<F<f64>>,
-    {
+    ) -> Self {
         let num_points = 0;
         let iter = 0;
-        let sampling_grid = create_grid();
-        let first_non_trivial_discrete_label = first_non_trivial_discrete_path(&sampling_grid)
-            .and_then(|path| discrete_axis_labels.get(path.len()).cloned());
         let all_integrals = vec![ComplexAccumulator::new(); slot_metas.len()];
-        let summary_template = DiscreteGridAccumulatorSummary::from_grid(&sampling_grid);
-        let slot_re_summaries = vec![summary_template.clone(); slot_metas.len()];
-        let slot_im_summaries = vec![summary_template; slot_metas.len()];
+        let slot_re_summaries = (0..slot_metas.len())
+            .map(|slot_index| {
+                DiscreteGridAccumulatorSummary::from_grid(
+                    &sampling_states[sampling_correlation_mode.state_index(slot_index)].grid,
+                )
+            })
+            .collect();
+        let slot_im_summaries = (0..slot_metas.len())
+            .map(|slot_index| {
+                DiscreteGridAccumulatorSummary::from_grid(
+                    &sampling_states[sampling_correlation_mode.state_index(slot_index)].grid,
+                )
+            })
+            .collect();
         let stats = StatisticsCounter::new_empty();
 
         Self {
@@ -2302,10 +2469,11 @@ impl IntegrationState {
             slot_im_summaries,
             stats,
             slot_metas,
-            sampling_grid,
-            discrete_axis_labels,
+            sampling_correlation_mode,
+            sampling_states,
+            monitored_discrete_path,
             first_non_trivial_discrete_label,
-            first_non_trivial_discrete_bin_descriptions: None,
+            first_non_trivial_discrete_bin_descriptions,
             slot_first_non_trivial_discrete_breakdown_metadata,
             iter,
             elapsed_seconds: 0.0,
@@ -2318,53 +2486,98 @@ impl IntegrationState {
             .iter_mut()
             .for_each(|acc| acc.update_iter(use_weighted_average));
     }
+
+    fn sampling_state_for_slot(&self, slot_index: usize) -> &SamplingSlotState {
+        &self.sampling_states[self.sampling_correlation_mode.state_index(slot_index)]
+    }
+
+    fn sampling_state_for_slot_mut(&mut self, slot_index: usize) -> &mut SamplingSlotState {
+        let sampling_state_index = self.sampling_correlation_mode.state_index(slot_index);
+        &mut self.sampling_states[sampling_state_index]
+    }
+
+    fn monitored_discrete_context_for_slot(
+        &self,
+        slot_index: usize,
+    ) -> Option<DiscreteLevelContext> {
+        let path = self.monitored_discrete_path.clone()?;
+        let discrete_grid =
+            discrete_grid_at_path(&self.sampling_state_for_slot(slot_index).grid, &path)?;
+        Some(DiscreteLevelContext {
+            path,
+            pdfs: discrete_grid.bins.iter().map(|bin| bin.pdf).collect(),
+        })
+    }
+
+    fn monitored_discrete_context(&self) -> Option<DiscreteLevelContext> {
+        self.monitored_discrete_context_for_slot(0)
+    }
 }
 
 struct CoreIterationState {
     slot_integrands: Vec<Integrand>,
     stats: StatisticsCounter,
     integrals: Vec<ComplexAccumulator>,
-    sampling_grid: Grid<F<f64>>,
+    sampling_correlation_mode: SamplingCorrelationMode,
+    sampling_states: Vec<CoreSamplingSlotState>,
     slot_re_grids: Vec<Grid<F<f64>>>,
     slot_im_grids: Vec<Grid<F<f64>>>,
-    rng: MonteCarloRng,
     remaining_points: usize,
     completed_points: usize,
 }
 
-pub struct CoreResult {
-    pub stats: StatisticsCounter,
-    pub integrals: Vec<ComplexAccumulator>,
-    pub sampling_grid: Grid<F<f64>>,
-    pub slot_re_grids: Vec<Grid<F<f64>>>,
-    pub slot_im_grids: Vec<Grid<F<f64>>>,
+struct CoreSamplingSlotState {
+    sampling_grid: Grid<F<f64>>,
+    rng: MonteCarloRng,
 }
 
 impl CoreIterationState {
     fn new(
         slot_integrands: Vec<Integrand>,
-        sampling_grid_template: &Grid<F<f64>>,
-        n_slots: usize,
+        sampling_correlation_mode: SamplingCorrelationMode,
+        sampling_grid_templates: &[Grid<F<f64>>],
         seed: u64,
         sample_skip: usize,
         remaining_points: usize,
     ) -> Self {
-        let mut rng = MonteCarloRng::new(seed, 0);
-        let mut sampling_grid = sampling_grid_template.clone_without_samples();
+        let n_slots = slot_integrands.len();
+        let sampling_states = (0..sampling_correlation_mode.state_count(n_slots))
+            .map(|sampling_state_index| {
+                let slot_index = match sampling_correlation_mode {
+                    SamplingCorrelationMode::Correlated => 0,
+                    SamplingCorrelationMode::Uncorrelated => sampling_state_index,
+                };
+                let mut rng = MonteCarloRng::new(slot_seed(seed, slot_index), 0);
+                let mut sampling_grid =
+                    sampling_grid_templates[sampling_state_index].clone_without_samples();
 
-        for _ in 0..sample_skip {
-            let mut sample = Sample::new();
-            sampling_grid.sample(&mut rng, &mut sample);
-        }
+                for _ in 0..sample_skip {
+                    let mut sample = Sample::new();
+                    sampling_grid.sample(&mut rng, &mut sample);
+                }
+
+                CoreSamplingSlotState { sampling_grid, rng }
+            })
+            .collect_vec();
 
         Self {
             slot_integrands,
             stats: StatisticsCounter::new_empty(),
             integrals: vec![ComplexAccumulator::new(); n_slots],
-            sampling_grid,
-            slot_re_grids: vec![sampling_grid_template.clone_without_samples(); n_slots],
-            slot_im_grids: vec![sampling_grid_template.clone_without_samples(); n_slots],
-            rng,
+            sampling_correlation_mode,
+            sampling_states,
+            slot_re_grids: (0..n_slots)
+                .map(|slot_index| {
+                    sampling_grid_templates[sampling_correlation_mode.state_index(slot_index)]
+                        .clone_without_samples()
+                })
+                .collect(),
+            slot_im_grids: (0..n_slots)
+                .map(|slot_index| {
+                    sampling_grid_templates[sampling_correlation_mode.state_index(slot_index)]
+                        .clone_without_samples()
+                })
+                .collect(),
             remaining_points,
             completed_points: 0,
         }
@@ -2372,7 +2585,7 @@ impl CoreIterationState {
 
     fn evaluate_chunk(
         &mut self,
-        settings: &RuntimeSettings,
+        slot_settings: &[RuntimeSettings],
         slot_models: &[Model],
         iter: usize,
         current_max_evals: &[Complex<F<f64>>],
@@ -2384,77 +2597,162 @@ impl CoreIterationState {
         }
 
         let chunk_start = Instant::now();
-        let mut samples = Vec::with_capacity(n_points);
-        let mut processed_points = 0;
-        for _ in 0..n_points {
-            if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
-                break;
-            }
-
-            let mut sample = Sample::new();
-            self.sampling_grid.sample(&mut self.rng, &mut sample);
-            processed_points += 1;
-            samples.push(sample);
-        }
-
-        if processed_points == 0 {
-            return Ok(0);
-        }
-
         let mut batch_evaluation_time = Duration::ZERO;
         let mut batch_stats = StatisticsCounter::new_empty();
-        let mut slot_results = Vec::with_capacity(self.slot_integrands.len());
+        let mut processed_points = 0;
+        let mut total_sample_evaluations = 0;
 
-        for (slot_index, integrand) in self.slot_integrands.iter_mut().enumerate() {
-            let evaluation_start = Instant::now();
-            let raw_batch = integrand.evaluate_samples_raw(
-                &samples,
-                &slot_models[slot_index],
-                iter,
-                false,
-                current_max_evals[slot_index],
-            )?;
-            batch_evaluation_time += evaluation_start.elapsed();
-            batch_stats = batch_stats.merged(&raw_batch.statistics);
-            slot_results.push(raw_batch.samples);
-        }
+        match self.sampling_correlation_mode {
+            SamplingCorrelationMode::Correlated => {
+                let mut samples = Vec::with_capacity(n_points);
+                for _ in 0..n_points {
+                    if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
 
-        for (sample_index, sample) in samples.iter().enumerate() {
-            for (slot_index, (((core_accumulator, re_grid), im_grid), results)) in self
-                .integrals
-                .iter_mut()
-                .zip(self.slot_re_grids.iter_mut())
-                .zip(self.slot_im_grids.iter_mut())
-                .zip(slot_results.iter())
-                .enumerate()
-            {
-                let result = &results[sample_index];
-                let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
-                let effective_integrand_result =
-                    result.integrand_result * Complex::new_re(jacobian);
+                    let mut sample = Sample::new();
+                    let sampling_state = &mut self.sampling_states[0];
+                    sampling_state
+                        .sampling_grid
+                        .sample(&mut sampling_state.rng, &mut sample);
+                    processed_points += 1;
+                    samples.push(sample);
+                }
 
-                core_accumulator.add_sample(
-                    effective_integrand_result,
-                    sample.get_weight(),
-                    Some(&sample),
-                );
-                re_grid
-                    .add_training_sample(&sample, effective_integrand_result.re)
-                    .map_err(Report::msg)?;
-                im_grid
-                    .add_training_sample(&sample, effective_integrand_result.im)
-                    .map_err(Report::msg)?;
+                if processed_points == 0 {
+                    return Ok(0);
+                }
 
-                if slot_index == 0 {
-                    let training_eval = match settings.integrator.integrated_phase {
-                        IntegratedPhase::Real => effective_integrand_result.re,
-                        IntegratedPhase::Imag => effective_integrand_result.im,
-                        IntegratedPhase::Both => unimplemented!(),
-                    };
+                let mut slot_results = Vec::with_capacity(self.slot_integrands.len());
 
-                    self.sampling_grid
-                        .add_training_sample(&sample, training_eval)
-                        .map_err(Report::msg)?;
+                for (slot_index, integrand) in self.slot_integrands.iter_mut().enumerate() {
+                    let evaluation_start = Instant::now();
+                    let raw_batch = integrand.evaluate_samples_raw(
+                        &samples,
+                        &slot_models[slot_index],
+                        iter,
+                        false,
+                        current_max_evals[slot_index],
+                    )?;
+                    batch_evaluation_time += evaluation_start.elapsed();
+                    total_sample_evaluations += raw_batch.samples.len();
+                    batch_stats = batch_stats.merged(&raw_batch.statistics);
+                    slot_results.push(raw_batch.samples);
+                }
+
+                for (sample_index, sample) in samples.iter().enumerate() {
+                    for (slot_index, (((core_accumulator, re_grid), im_grid), results)) in self
+                        .integrals
+                        .iter_mut()
+                        .zip(self.slot_re_grids.iter_mut())
+                        .zip(self.slot_im_grids.iter_mut())
+                        .zip(slot_results.iter())
+                        .enumerate()
+                    {
+                        let result = &results[sample_index];
+                        let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
+                        let effective_integrand_result =
+                            result.integrand_result * Complex::new_re(jacobian);
+
+                        core_accumulator.add_sample(
+                            effective_integrand_result,
+                            sample.get_weight(),
+                            Some(sample),
+                        );
+                        re_grid
+                            .add_training_sample(sample, effective_integrand_result.re)
+                            .map_err(Report::msg)?;
+                        im_grid
+                            .add_training_sample(sample, effective_integrand_result.im)
+                            .map_err(Report::msg)?;
+
+                        if slot_index == 0 {
+                            let training_eval = match slot_settings[0].integrator.integrated_phase {
+                                IntegratedPhase::Real => effective_integrand_result.re,
+                                IntegratedPhase::Imag => effective_integrand_result.im,
+                                IntegratedPhase::Both => unimplemented!(),
+                            };
+
+                            self.sampling_states[0]
+                                .sampling_grid
+                                .add_training_sample(sample, training_eval)
+                                .map_err(Report::msg)?;
+                        }
+                    }
+                }
+            }
+            SamplingCorrelationMode::Uncorrelated => {
+                for slot_index in 0..self.slot_integrands.len() {
+                    let mut samples = Vec::with_capacity(n_points);
+                    for _ in 0..n_points {
+                        if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                            break;
+                        }
+
+                        let mut sample = Sample::new();
+                        let sampling_state = &mut self.sampling_states[slot_index];
+                        sampling_state
+                            .sampling_grid
+                            .sample(&mut sampling_state.rng, &mut sample);
+                        samples.push(sample);
+                    }
+
+                    if slot_index == 0 {
+                        processed_points = samples.len();
+                    } else if samples.len() != processed_points {
+                        return Err(Report::msg(
+                            "uncorrelated slot batch sizes diverged unexpectedly",
+                        ));
+                    }
+
+                    if samples.is_empty() {
+                        continue;
+                    }
+
+                    let evaluation_start = Instant::now();
+                    let raw_batch = self.slot_integrands[slot_index].evaluate_samples_raw(
+                        &samples,
+                        &slot_models[slot_index],
+                        iter,
+                        false,
+                        current_max_evals[slot_index],
+                    )?;
+                    batch_evaluation_time += evaluation_start.elapsed();
+                    total_sample_evaluations += raw_batch.samples.len();
+                    batch_stats = batch_stats.merged(&raw_batch.statistics);
+
+                    for (sample, result) in samples.iter().zip(raw_batch.samples.iter()) {
+                        let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
+                        let effective_integrand_result =
+                            result.integrand_result * Complex::new_re(jacobian);
+
+                        self.integrals[slot_index].add_sample(
+                            effective_integrand_result,
+                            sample.get_weight(),
+                            Some(sample),
+                        );
+                        self.slot_re_grids[slot_index]
+                            .add_training_sample(sample, effective_integrand_result.re)
+                            .map_err(Report::msg)?;
+                        self.slot_im_grids[slot_index]
+                            .add_training_sample(sample, effective_integrand_result.im)
+                            .map_err(Report::msg)?;
+
+                        let training_eval =
+                            match slot_settings[slot_index].integrator.integrated_phase {
+                                IntegratedPhase::Real => effective_integrand_result.re,
+                                IntegratedPhase::Imag => effective_integrand_result.im,
+                                IntegratedPhase::Both => unimplemented!(),
+                            };
+                        self.sampling_states[slot_index]
+                            .sampling_grid
+                            .add_training_sample(sample, training_eval)
+                            .map_err(Report::msg)?;
+                    }
+                }
+
+                if processed_points == 0 {
+                    return Ok(0);
                 }
             }
         }
@@ -2464,7 +2762,7 @@ impl CoreIterationState {
         self.stats = self.stats.merged(&batch_stats);
         self.stats.add_integrator_overhead(
             chunk_start.elapsed().saturating_sub(batch_evaluation_time),
-            processed_points,
+            total_sample_evaluations,
         );
 
         Ok(processed_points)
@@ -2554,9 +2852,19 @@ fn total_remaining_points(core_states: &[CoreIterationState]) -> usize {
     core_states.iter().map(|state| state.remaining_points).sum()
 }
 
+fn slot_seed(global_seed: u64, slot_index: usize) -> u64 {
+    let slot = (slot_index as u64).wrapping_add(1);
+    let mut mixed = global_seed.wrapping_add(0x9e37_79b9_7f4a_7c15u64.wrapping_mul(slot));
+    mixed ^= mixed >> 30;
+    mixed = mixed.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    mixed ^= mixed >> 27;
+    mixed = mixed.wrapping_mul(0x94d0_49bb_1331_11eb);
+    mixed ^ (mixed >> 31)
+}
+
 fn apply_iteration_core_states(
     integration_state: &mut IntegrationState,
-    settings: &RuntimeSettings,
+    slot_settings: &[RuntimeSettings],
     cores: usize,
     cur_points: usize,
     elapsed_seconds: f64,
@@ -2575,16 +2883,38 @@ fn apply_iteration_core_states(
         }
     }
 
-    let mut merged_re_grids =
-        vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
-    let mut merged_im_grids =
-        vec![integration_state.sampling_grid.clone_without_samples(); n_slots];
+    let mut merged_sampling_grids = integration_state
+        .sampling_states
+        .iter()
+        .map(|sampling_state| sampling_state.grid.clone_without_samples())
+        .collect_vec();
+    let mut merged_re_grids = (0..n_slots)
+        .map(|slot_index| {
+            integration_state
+                .sampling_state_for_slot(slot_index)
+                .grid
+                .clone_without_samples()
+        })
+        .collect_vec();
+    let mut merged_im_grids = (0..n_slots)
+        .map(|slot_index| {
+            integration_state
+                .sampling_state_for_slot(slot_index)
+                .grid
+                .clone_without_samples()
+        })
+        .collect_vec();
 
     for core_state in core_states {
-        integration_state
-            .sampling_grid
-            .merge(&core_state.sampling_grid)
-            .expect("could not merge grids");
+        for (sampling_state, merged_grid) in core_state
+            .sampling_states
+            .iter()
+            .zip(merged_sampling_grids.iter_mut())
+        {
+            merged_grid
+                .merge(&sampling_state.sampling_grid)
+                .expect("could not merge grids");
+        }
         for slot_index in 0..n_slots {
             merged_re_grids[slot_index]
                 .merge(&core_state.slot_re_grids[slot_index])
@@ -2616,10 +2946,29 @@ fn apply_iteration_core_states(
         }
     }
 
-    integration_state.sampling_grid.update(
-        F(settings.integrator.discrete_dim_learning_rate),
-        F(settings.integrator.continuous_dim_learning_rate),
-    );
+    for (slot_index, merged_grid) in merged_sampling_grids.into_iter().enumerate() {
+        let actual_slot_index = match integration_state.sampling_correlation_mode {
+            SamplingCorrelationMode::Correlated => 0,
+            SamplingCorrelationMode::Uncorrelated => slot_index,
+        };
+        let discrete_axis_labels = integration_state
+            .sampling_state_for_slot(actual_slot_index)
+            .discrete_axis_labels
+            .clone();
+        let sampling_state = integration_state.sampling_state_for_slot_mut(actual_slot_index);
+        *sampling_state = SamplingSlotState {
+            grid: merged_grid,
+            discrete_axis_labels,
+        };
+        sampling_state.grid.update(
+            F(slot_settings[actual_slot_index]
+                .integrator
+                .discrete_dim_learning_rate),
+            F(slot_settings[actual_slot_index]
+                .integrator
+                .continuous_dim_learning_rate),
+        );
+    }
 
     integration_state.update_iter(false);
     integration_state.iter += 1;
@@ -2630,7 +2979,7 @@ fn apply_iteration_core_states(
 
 fn build_preview_integration_state(
     integration_state: &IntegrationState,
-    settings: &RuntimeSettings,
+    slot_settings: &[RuntimeSettings],
     cores: usize,
     completed_points: usize,
     elapsed_seconds: f64,
@@ -2639,7 +2988,7 @@ fn build_preview_integration_state(
     let mut preview = integration_state.clone();
     apply_iteration_core_states(
         &mut preview,
-        settings,
+        slot_settings,
         cores,
         completed_points,
         elapsed_seconds,
@@ -2650,7 +2999,8 @@ fn build_preview_integration_state(
 
 /// Integrate function used for local runs
 pub fn havana_integrate<S>(
-    settings: &RuntimeSettings,
+    slot_settings: Vec<RuntimeSettings>,
+    sampling_correlation_mode: SamplingCorrelationMode,
     slot_models: Vec<Model>,
     slot_metas: Vec<SlotMeta>,
     slot_integrands: Vec<Integrand>,
@@ -2672,45 +3022,55 @@ where
         ));
     }
     if slot_metas.len() != slot_integrands.len()
+        || slot_metas.len() != slot_settings.len()
         || slot_metas.len() != slot_models.len()
         || slot_metas.len() != targets.len()
     {
         return Err(Report::msg(
-            "Multi-integrand integration received inconsistent slot metadata, models, integrands, or targets",
+            "Multi-integrand integration received inconsistent slot metadata, settings, models, integrands, or targets",
         ));
     }
 
     let mut slot_integrands = slot_integrands;
-
-    let sampling_grid = slot_integrands[0].create_grid();
-    let discrete_axis_labels = discrete_axis_labels(&settings.sampling)
-        .into_iter()
-        .map(str::to_string)
-        .collect_vec();
-    let (first_non_trivial_discrete_bin_descriptions, label_warning) =
-        resolve_first_non_trivial_discrete_bin_descriptions(
-            &slot_metas,
-            &slot_integrands,
-            &sampling_grid,
-            &discrete_axis_labels,
-        );
-    let first_non_trivial_discrete_path = first_non_trivial_discrete_path(&sampling_grid);
-    let slot_first_non_trivial_discrete_breakdown_metadata = first_non_trivial_discrete_path
-        .as_ref()
-        .map(|path| {
+    let slot0_settings = &slot_settings[0];
+    let sampling_states = match sampling_correlation_mode {
+        SamplingCorrelationMode::Correlated => {
+            vec![SamplingSlotState::from_integrand(&slot_integrands[0])]
+        }
+        SamplingCorrelationMode::Uncorrelated => slot_integrands
+            .iter()
+            .map(SamplingSlotState::from_integrand)
+            .collect_vec(),
+    };
+    let (
+        monitored_discrete_path,
+        first_non_trivial_discrete_label,
+        first_non_trivial_discrete_bin_descriptions,
+        label_warning,
+    ) = resolve_monitored_discrete_setup(
+        sampling_correlation_mode,
+        &slot_metas,
+        &slot_integrands,
+        &sampling_states,
+    );
+    let slot_first_non_trivial_discrete_breakdown_metadata =
+        if let Some(path) = monitored_discrete_path.as_deref() {
             slot_integrands
                 .iter()
-                .map(|integrand| {
+                .enumerate()
+                .map(|(slot_index, integrand)| {
                     build_persisted_discrete_breakdown_metadata(
                         integrand,
                         path,
-                        &discrete_axis_labels,
+                        &sampling_states[sampling_correlation_mode.state_index(slot_index)]
+                            .discrete_axis_labels,
                     )
                 })
                 .collect_vec()
-        })
-        .unwrap_or_else(|| vec![None; slot_metas.len()]);
-    if let Some(label_warning) = label_warning {
+        } else {
+            vec![None; slot_metas.len()]
+        };
+    if let Some(label_warning) = label_warning.as_ref() {
         warn!("{label_warning}");
     }
 
@@ -2718,12 +3078,17 @@ where
         integration_state
     } else {
         IntegrationState::new_from_settings(
-            || sampling_grid.clone(),
+            sampling_correlation_mode,
+            sampling_states.clone(),
             slot_metas.clone(),
-            discrete_axis_labels,
+            monitored_discrete_path.clone(),
+            first_non_trivial_discrete_label.clone(),
+            first_non_trivial_discrete_bin_descriptions.clone(),
             slot_first_non_trivial_discrete_breakdown_metadata,
         )
     };
+    integration_state.monitored_discrete_path = monitored_discrete_path;
+    integration_state.first_non_trivial_discrete_label = first_non_trivial_discrete_label;
     integration_state.first_non_trivial_discrete_bin_descriptions =
         first_non_trivial_discrete_bin_descriptions;
     if integration_state.slot_metas != slot_metas {
@@ -2731,11 +3096,35 @@ where
             "Saved integration state slots do not match the currently selected integrands",
         ));
     }
+    if integration_state.sampling_correlation_mode != sampling_correlation_mode {
+        return Err(Report::msg(
+            "Saved integration state sampling mode does not match the current integration mode",
+        ));
+    }
+    if integration_state.sampling_states.len()
+        != sampling_correlation_mode.state_count(slot_metas.len())
+    {
+        return Err(Report::msg(
+            "Saved integration state sampling metadata is inconsistent with the selected slots",
+        ));
+    }
+    if integration_state
+        .slot_first_non_trivial_discrete_breakdown_metadata
+        .len()
+        != slot_metas.len()
+    {
+        return Err(Report::msg(
+            "Saved integration state discrete breakdown metadata is inconsistent with the selected slots",
+        ));
+    }
 
-    let sampling_str = settings.sampling.describe_settings();
+    let sampling_str = slot0_settings.sampling.describe_settings();
     let dimension = slot_integrands[0].get_n_dim();
-    let discrete_depth = settings.sampling.discrete_depth();
-    let is_tropical_sampling = settings.sampling.get_parameterization_settings().is_none();
+    let discrete_depth = slot0_settings.sampling.discrete_depth();
+    let is_tropical_sampling = slot0_settings
+        .sampling
+        .get_parameterization_settings()
+        .is_none();
 
     let cont_dim_str = if is_tropical_sampling {
         format!("a median continious dimension of {}", dimension)
@@ -2744,7 +3133,7 @@ where
     };
 
     let graph_string = if discrete_depth > 0 {
-        let num_graphs = match &integration_state.sampling_grid {
+        let num_graphs = match &integration_state.sampling_state_for_slot(0).grid {
             Grid::Discrete(g) => g.bins.len(),
             _ => unreachable!(),
         };
@@ -2757,7 +3146,11 @@ where
         String::new()
     };
 
-    let grid_str = format!("{graph_string}{cont_dim_str} using {sampling_str}");
+    let correlation_str = match sampling_correlation_mode {
+        SamplingCorrelationMode::Correlated => "correlated",
+        SamplingCorrelationMode::Uncorrelated => "uncorrelated",
+    };
+    let grid_str = format!("{graph_string}{cont_dim_str} using {sampling_str} ({correlation_str})");
 
     let cores = n_cores.max(1);
     let n_slots = integration_state.slot_metas.len();
@@ -2767,7 +3160,7 @@ where
 
     info!(
         "Integrating using {} ltd with {} {} over {} ...",
-        if settings.general.use_ltd {
+        if slot0_settings.general.use_ltd {
             "naive"
         } else {
             "cff"
@@ -2782,14 +3175,15 @@ where
 
     let mut n_samples_evaluated = 0;
     let mut emitted_latest_observable_paths = vec![None; n_slots];
-    'integrateLoop: while integration_state.num_points < settings.integrator.n_max {
+    'integrateLoop: while integration_state.num_points < slot0_settings.integrator.n_max {
         // ensure we do not overshoot
         let cur_points = {
-            let cur_points_not_final_iter = settings.integrator.n_start
-                + settings.integrator.n_increase * integration_state.iter;
-            if cur_points_not_final_iter + integration_state.num_points > settings.integrator.n_max
+            let cur_points_not_final_iter = slot0_settings.integrator.n_start
+                + slot0_settings.integrator.n_increase * integration_state.iter;
+            if cur_points_not_final_iter + integration_state.num_points
+                > slot0_settings.integrator.n_max
             {
-                settings.integrator.n_max - integration_state.num_points
+                slot0_settings.integrator.n_max - integration_state.num_points
             } else {
                 cur_points_not_final_iter
             }
@@ -2819,9 +3213,13 @@ where
             .map(|(core_id, &n_points)| {
                 CoreIterationState::new(
                     slot_integrands.clone(),
-                    &integration_state.sampling_grid,
-                    n_slots,
-                    settings.integrator.seed + integration_state.iter as u64,
+                    integration_state.sampling_correlation_mode,
+                    &integration_state
+                        .sampling_states
+                        .iter()
+                        .map(|sampling_state| sampling_state.grid.clone())
+                        .collect_vec(),
+                    slot0_settings.integrator.seed + integration_state.iter as u64,
                     target_points_per_core * core_id,
                     n_points,
                 )
@@ -2837,7 +3235,7 @@ where
                     .par_iter_mut()
                     .map(|worker_state| {
                         worker_state.evaluate_chunk(
-                            settings,
+                            &slot_settings,
                             &slot_models,
                             integration_state.iter,
                             &current_max_evals,
@@ -2869,7 +3267,7 @@ where
                 if should_emit_live_status {
                     let preview_state = build_preview_integration_state(
                         &integration_state,
-                        settings,
+                        &slot_settings,
                         cores,
                         completed_points,
                         elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
@@ -2916,7 +3314,7 @@ where
         n_samples_evaluated += cur_points;
         apply_iteration_core_states(
             &mut integration_state,
-            settings,
+            &slot_settings,
             cores,
             cur_points,
             elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
@@ -3952,13 +4350,14 @@ pub fn build_integration_result(
     targets: &[Option<Complex<F<f64>>>],
 ) -> IntegrationResult {
     let integration_statistics = integration_state.stats.snapshot();
-    let discrete_context = first_non_trivial_discrete_context(&integration_state.sampling_grid);
     let slots = integration_state
         .slot_metas
         .iter()
         .enumerate()
         .map(|(slot_index, slot_meta)| {
             let accumulator = &integration_state.all_integrals[slot_index];
+            let discrete_context =
+                integration_state.monitored_discrete_context_for_slot(slot_index);
             SlotIntegrationResult {
                 key: slot_meta.key(),
                 process: slot_meta.process_name.clone(),
@@ -3981,7 +4380,9 @@ pub fn build_integration_result(
                 ),
                 integration_statistics: integration_statistics.clone(),
                 max_weight_info: build_max_weight_info_summary(
-                    &integration_state.discrete_axis_labels,
+                    &integration_state
+                        .sampling_state_for_slot(slot_index)
+                        .discrete_axis_labels,
                     accumulator,
                 ),
                 grid_breakdown: ComponentDiscreteBreakdown {
@@ -4085,8 +4486,10 @@ mod tests {
     }
 
     fn make_integration_state() -> IntegrationState {
+        let sampling_grid = Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
         let mut state = IntegrationState::new_from_settings(
-            || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false)),
+            SamplingCorrelationMode::Correlated,
+            vec![SamplingSlotState::new(sampling_grid, Vec::new())],
             vec![
                 SlotMeta {
                     process_name: "proc_a".to_string(),
@@ -4097,7 +4500,9 @@ mod tests {
                     integrand_name: "itg_b".to_string(),
                 },
             ],
-            Vec::new(),
+            None,
+            None,
+            None,
             vec![None, None],
         );
         state.iter = 1;
@@ -4118,14 +4523,17 @@ mod tests {
     fn make_discrete_integration_state() -> IntegrationState {
         let make_continuous_grid =
             || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
+        let sampling_grid = Grid::Discrete(DiscreteGrid::new(
+            vec![Some(make_continuous_grid()), Some(make_continuous_grid())],
+            F(10.0),
+            false,
+        ));
         let mut state = IntegrationState::new_from_settings(
-            || {
-                Grid::Discrete(DiscreteGrid::new(
-                    vec![Some(make_continuous_grid()), Some(make_continuous_grid())],
-                    F(10.0),
-                    false,
-                ))
-            },
+            SamplingCorrelationMode::Correlated,
+            vec![SamplingSlotState::new(
+                sampling_grid,
+                vec!["graph".to_string()],
+            )],
             vec![
                 SlotMeta {
                     process_name: "proc_a".to_string(),
@@ -4136,7 +4544,9 @@ mod tests {
                     integrand_name: "itg_b".to_string(),
                 },
             ],
-            vec!["graph".to_string()],
+            Some(vec![]),
+            Some("graph".to_string()),
+            Some(vec!["GL0".to_string(), "GL1".to_string()]),
             vec![
                 Some(PersistedDiscreteBreakdownMetadata {
                     axis_label: "graph".to_string(),
@@ -4164,7 +4574,7 @@ mod tests {
             make_accumulator(7.5e-5, 9.8e-5, 0.394, 3.2e-5, 1.5e-5, 0.378),
             make_accumulator(2.1e-5, 2.0e-6, 0.221, -1.7e-5, 3.0e-6, 0.187),
         ];
-        if let Grid::Discrete(discrete_grid) = &mut state.sampling_grid {
+        if let Grid::Discrete(discrete_grid) = &mut state.sampling_state_for_slot_mut(0).grid {
             discrete_grid.bins[0].pdf = F(0.75);
             discrete_grid.bins[1].pdf = F(0.25);
         }
@@ -4227,12 +4637,18 @@ mod tests {
         ));
 
         let mut state = IntegrationState::new_from_settings(
-            || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false)),
+            SamplingCorrelationMode::Correlated,
+            vec![SamplingSlotState::new(
+                Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false)),
+                Vec::new(),
+            )],
             vec![SlotMeta {
                 process_name: "proc".to_string(),
                 integrand_name: "itg".to_string(),
             }],
-            Vec::new(),
+            None,
+            None,
+            None,
             vec![None],
         );
         state.all_integrals = vec![accumulator];

@@ -45,6 +45,7 @@
 - Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
 - Python (bindings and helpers): 4-space indentation; `black` is listed in `pyproject.toml` dev deps.
 - Aggressively use pub(crate) except when absolutely necessary to have fully public exposure (helps monitor unused components with clippy)
+- When exposing a function to within the crate only, prefer `pub(crate)` to more permissive `pub`.
 
 ## Testing Guidelines
 - Rust integration tests live in `tests/` (files like `test_runs.rs`).
@@ -73,10 +74,12 @@
   - Not enabled by default - opt in with `--features python_abi`
 
 ## Agent Instructions
+- Always `cargo fmt` and `cargo check` before compiling to catch easy errors and ensure consistent formatting.
 - API stability is currently a non-goal for internal development: prioritize maintainability and structure over preserving external-facing module paths.
 - Breaking Rust/Python API changes are acceptable when they simplify architecture; document major moves in the change description.
 - Backward compatibility with old on-disk GammaLoop states is also currently a non-goal: it is acceptable to rename/remove legacy state files, layouts, and loaders when that simplifies the implementation.
 - Do not keep compatibility fallbacks for old state formats/names unless the task explicitly asks for migration support.
+- Never be afraid to modify existing functions to obtain the most elegant and concise code as opposed to trying to be backward compatible or leave existing code untouched.
 - In generic or arbitrary-precision code, do not introduce constants or intermediate values through `from_f64`, `std::f64::consts::*`, or other lossy `f64` routes unless that exact location is an explicit `f64` boundary by design (for example persisted settings that are already `f64`, or histogram/output accumulation that is intentionally `f64`).
 - `f64` values originating from user-supplied settings are an allowed boundary: converting those setting values into `F<T>` with `from_f64` is acceptable. Do not extend that exception to internally generated constants or intermediate values.
 - When working with `F<T>` or other precision-generic numeric code, build constants from an in-scope representative value of the correct type using helpers such as `.zero()`, `.one()`, `.epsilon()`, `.PI()`, `.TAU()`, `.from_usize()`, `.from_isize()`, etc., so the active precision is preserved exactly.

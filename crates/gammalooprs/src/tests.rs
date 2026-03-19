@@ -16,8 +16,8 @@ use symbolica::domains::float::Complex as SymComplex;
 
 use crate::integrands::inspect::inspect;
 use crate::integrate::{
-    ContributionSortMode, IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions, SlotMeta,
-    havana_integrate,
+    ContributionSortMode, IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
+    SamplingCorrelationMode, SlotMeta, havana_integrate,
 };
 
 const CENTRAL_VALUE_TOLERANCE: F<f64> = F(2.0e-2);
@@ -77,7 +77,8 @@ fn compare_integration(
         IntegratedPhase::Both => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(
-                settings,
+                vec![settings.clone()],
+                SamplingCorrelationMode::Correlated,
                 vec![model.clone()],
                 vec![slot_meta.clone()],
                 vec![crate::integrand_factory(settings)],
@@ -108,7 +109,8 @@ fn compare_integration(
             }
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(
-                settings,
+                vec![settings.clone()],
+                SamplingCorrelationMode::Correlated,
                 vec![model.clone()],
                 vec![slot_meta.clone()],
                 vec![crate::integrand_factory(settings)],
@@ -141,7 +143,8 @@ fn compare_integration(
         IntegratedPhase::Real => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(
-                settings,
+                vec![settings.clone()],
+                SamplingCorrelationMode::Correlated,
                 vec![model.clone()],
                 vec![slot_meta.clone()],
                 vec![crate::integrand_factory(settings)],
@@ -174,7 +177,8 @@ fn compare_integration(
         IntegratedPhase::Imag => {
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(
-                settings,
+                vec![settings.clone()],
+                SamplingCorrelationMode::Correlated,
                 vec![model.clone()],
                 vec![slot_meta],
                 vec![crate::integrand_factory(settings)],

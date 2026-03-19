@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     // the CLI session before switching to the lower-level evaluation APIs.
     {
         let mut session = loaded.cli_session();
-        let _ = session.execute_top_level(CommandHistory::from_raw_string(
+        let _ = session.execute_command(CommandHistory::from_raw_string(
             "run display_named_settings_examples",
         )?)?;
     }

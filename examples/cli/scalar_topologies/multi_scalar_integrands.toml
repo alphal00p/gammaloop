@@ -72,8 +72,8 @@ helicities = [
 name = "integrate_triangle"
 commands = [
 
-    "set process -p triangle -i scalar_tri kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
-    
+    "set process -p triangle -i scalar_tri kv integrator.n_increase=0 integrator.n_start=10000000 integrator.n_max=20000000000 integrator.seed=1337",
+
 	# (target is approximative)
 	"""integrate --process triangle -i scalar_tri --n-cores 1
 	             --target 0.0 8.09e-4
@@ -87,7 +87,7 @@ name = "integrate_box_above_threshold"
 commands = [
 
     "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
-    
+
 	# (target is approximative)
 	"""integrate --process box -i scalar_box --n-cores 1
 	             --target 7.6e-6 7.43e-5
@@ -120,7 +120,7 @@ helicities = [
     '""",
 
     "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
-    
+
 	# (target is approximative)
 	"""integrate --process box -i scalar_box --n-cores 1
 	             --target 6.63e-5 0.0
@@ -134,7 +134,7 @@ name = "integrate_triangle_and_box"
 commands = [
 
     "set process -p triangle -i scalar_tri kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
-    
+
 	"""integrate -p triangle -i scalar_tri -p box -i scalar_box --n-cores 1
                  --target box@scalar_box=7.6e-6,7.43e-5 triangle@scalar_tri=0.0,8.09e-4
                  --restart
@@ -182,7 +182,7 @@ helicities = [
     subtype = "multi_channeling"
     '""",
 
-    "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=200000000 integrator.seed=1337",
+    "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=2000000000 integrator.seed=1337",
     # --show-max-weight-info-for-discrete-bins
 	# --batch-size 100000
 	# --no-stream-iterations
@@ -190,9 +190,10 @@ helicities = [
                  --target box@scalar_box=7.6e-6,7.43e-5 box_copy@scalar_box_copy=6.63e-5,0.0
 				 --show-phase both
 				 --show-top-discrete-grid
-				 --show-discrete-contributions-sum 
-				 --sort-contributions integral 
-				 --show-max-weight-info 
+				 --show-discrete-contributions-sum
+				 --sort-contributions integral
+				 --show-max-weight-info
+				 --show-max-weight-info-for-discrete-bins
                  --restart
     """,
 ]

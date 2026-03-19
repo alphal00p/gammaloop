@@ -203,7 +203,7 @@ fn main() -> color_eyre::Result<()> {
 
     let command = CommandHistory::from_raw_string("display settings global")?;
     let mut session = loaded.cli_session();
-    let _ = session.execute_top_level(command)?;
+    let _ = session.execute_command(command)?;
 
     Ok(())
 }

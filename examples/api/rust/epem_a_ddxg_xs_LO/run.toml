@@ -107,6 +107,7 @@ try_strings = true
 
 [cli_settings.state]
 folder = "./state"
+name = "CLI_demo"
 
 [cli_settings.global]
 logfile_directive = "info,symbolica=off"

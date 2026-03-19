@@ -1065,6 +1065,7 @@ fn build_python_integrate_command(
     n_cores: Option<usize>,
     workspace_path: Option<PathBuf>,
     restart: bool,
+    uncorrelated: bool,
     show_max_weight_info: bool,
     no_show_integration_statistics: bool,
     show_phase: String,
@@ -1102,6 +1103,7 @@ fn build_python_integrate_command(
     integrate.n_cores = n_cores;
     integrate.workspace_path = workspace_path;
     integrate.restart = restart;
+    integrate.uncorrelated = uncorrelated;
     integrate.show_max_weight_info = show_max_weight_info;
     integrate.no_show_integration_statistics = no_show_integration_statistics;
     integrate.show_phase = crate::commands::integrate::ShowPhaseOption::from_str(&show_phase, true)
@@ -2268,6 +2270,7 @@ impl GammaLoopAPI {
             workspace_path = None,
             target = None,
             restart = false,
+            uncorrelated = false,
             show_max_weight_info = true,
             no_show_integration_statistics = false,
             show_phase = "both".to_string(),
@@ -2295,6 +2298,7 @@ impl GammaLoopAPI {
         workspace_path: Option<PathBuf>,
         target: Option<PyObject>,
         restart: bool,
+        uncorrelated: bool,
         show_max_weight_info: bool,
         no_show_integration_statistics: bool,
         show_phase: String,
@@ -2320,6 +2324,7 @@ impl GammaLoopAPI {
             n_cores,
             workspace_path,
             restart,
+            uncorrelated,
             show_max_weight_info,
             no_show_integration_statistics,
             show_phase,
