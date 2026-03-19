@@ -4,8 +4,9 @@ use std::path::Path;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
-    LoopMomentaEscalationMetrics, PreciseEvaluationResult, RotatedEvaluation,
-    StabilityFailureReason, StabilityResult,
+    LoopMomentaEscalationMetrics, PreciseEvaluationResult, RawBatchEvaluationResult,
+    RawPreciseBatchEvaluationResult, RotatedEvaluation, StabilityFailureReason, StabilityResult,
+    StatisticsCounter,
 };
 use crate::model::Model;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
@@ -375,6 +376,125 @@ impl ProcessIntegrand {
         }
     }
 
+    pub fn evaluate_samples_raw(
+        &mut self,
+        model: &Model,
+        samples: &[Sample<F<f64>>],
+        iter: usize,
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<RawBatchEvaluationResult> {
+        let mut results = Vec::with_capacity(samples.len());
+        for sample in samples {
+            let mut result = match self {
+                ProcessIntegrand::Amplitude(integrand) => evaluate_sample(
+                    integrand,
+                    model,
+                    sample,
+                    sample.get_weight(),
+                    iter,
+                    use_arb_prec,
+                    max_eval,
+                ),
+                ProcessIntegrand::CrossSection(integrand) => evaluate_sample(
+                    integrand,
+                    model,
+                    sample,
+                    sample.get_weight(),
+                    iter,
+                    use_arb_prec,
+                    max_eval,
+                ),
+            }?;
+
+            self.process_evaluation_result(&result);
+            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
+            results.push(result);
+        }
+
+        Ok(RawBatchEvaluationResult {
+            statistics: StatisticsCounter::from_evaluation_results(&results),
+            samples: results,
+        })
+    }
+
+    pub fn evaluate_momentum_configurations_raw(
+        &mut self,
+        model: &Model,
+        inputs: &[MomentumSpaceEvaluationInput],
+        use_arb_prec: bool,
+    ) -> Result<RawBatchEvaluationResult> {
+        let mut results = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            let mut result = match self {
+                ProcessIntegrand::Amplitude(integrand) => evaluate_momentum_configuration(
+                    integrand,
+                    model,
+                    input,
+                    F(1.0),
+                    use_arb_prec,
+                    Complex::new_zero(),
+                ),
+                ProcessIntegrand::CrossSection(integrand) => evaluate_momentum_configuration(
+                    integrand,
+                    model,
+                    input,
+                    F(1.0),
+                    use_arb_prec,
+                    Complex::new_zero(),
+                ),
+            }?;
+
+            self.process_evaluation_result(&result);
+            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
+            results.push(result);
+        }
+
+        Ok(RawBatchEvaluationResult {
+            statistics: StatisticsCounter::from_evaluation_results(&results),
+            samples: results,
+        })
+    }
+
+    pub fn evaluate_samples_precise_raw(
+        &mut self,
+        model: &Model,
+        samples: &[Sample<F<f64>>],
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<RawPreciseBatchEvaluationResult> {
+        let mut results = Vec::with_capacity(samples.len());
+        for sample in samples {
+            results.push(self.evaluate_sample_precise(
+                sample,
+                model,
+                sample.get_weight(),
+                use_arb_prec,
+                max_eval,
+            )?);
+        }
+
+        Ok(RawPreciseBatchEvaluationResult { samples: results })
+    }
+
+    pub fn evaluate_momentum_configurations_precise_raw(
+        &mut self,
+        model: &Model,
+        inputs: &[MomentumSpaceEvaluationInput],
+        use_arb_prec: bool,
+    ) -> Result<RawPreciseBatchEvaluationResult> {
+        let mut results = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            results.push(self.evaluate_momentum_configuration_precise(
+                model,
+                input,
+                use_arb_prec,
+            )?);
+        }
+
+        Ok(RawPreciseBatchEvaluationResult { samples: results })
+    }
+
     pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
         match self {
             ProcessIntegrand::Amplitude(integrand) => {
@@ -504,6 +624,15 @@ fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
         if runtime.has_observables() {
             runtime.process_event_groups(&result.event_groups);
         }
+    }
+}
+
+fn maybe_discard_generated_events_in_result(
+    settings: &RuntimeSettings,
+    result: &mut EvaluationResult,
+) {
+    if !settings.should_return_generated_events() {
+        result.event_groups.clear();
     }
 }
 

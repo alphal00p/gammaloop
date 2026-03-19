@@ -143,6 +143,7 @@ fn resolve_generated_model_targets(
             state
                 .process_list
                 .get_integrand(process_id, &canonical_name)
+                .and_then(|resolved| resolved.require_generated().map(|_| resolved))
                 .with_context(|| {
                     format!(
                         "Per-integrand model parameters are only supported for generated integrands"

@@ -527,7 +527,8 @@ fn render_named_process_settings(
     for integrand_name in &integrand_names {
         let integrand = state
             .process_list
-            .get_integrand(process_id, integrand_name)?;
+            .get_integrand(process_id, integrand_name)?
+            .require_generated()?;
         match setting_kind {
             NamedProcessSettingKind::Quantity => {
                 for (name, settings) in &integrand.get_settings().quantities {
@@ -623,7 +624,8 @@ fn render_named_process_setting_detail(
     for integrand_name in integrand_names {
         let integrand = state
             .process_list
-            .get_integrand(process_id, integrand_name)?;
+            .get_integrand(process_id, integrand_name)?
+            .require_generated()?;
         let serialized = serialize_runtime_named_settings(integrand.get_settings())?;
         let map = match setting_kind {
             NamedProcessSettingKind::Quantity => &serialized.quantities,
@@ -712,7 +714,10 @@ impl DisplaySettingsTarget {
                 let process_id = state.resolve_process_ref(process.process.as_ref())?;
                 let process_ref = &state.process_list.processes[process_id];
                 if let Some(name) = &process.integrand_name {
-                    let integrand = state.process_list.get_integrand(process_id, name)?;
+                    let integrand = state
+                        .process_list
+                        .get_integrand(process_id, name)?
+                        .require_generated()?;
                     let settings = serialize_settings_with_defaults(
                         integrand.get_settings(),
                         "process runtime settings for display",
@@ -731,7 +736,8 @@ impl DisplaySettingsTarget {
                     for integrand_name in process_ref.get_integrand_names() {
                         let integrand = state
                             .process_list
-                            .get_integrand(process_id, integrand_name)?;
+                            .get_integrand(process_id, integrand_name)?
+                            .require_generated()?;
                         let settings = serialize_settings_with_defaults(
                             integrand.get_settings(),
                             "process runtime settings for display",

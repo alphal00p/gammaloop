@@ -1118,22 +1118,10 @@ impl State {
         process_id: usize,
         integrand_name: &str,
     ) -> Result<SerializableInputParamCard<F<f64>>> {
-        let process = &self.process_list.processes[process_id];
-        let canonical_name = process
-            .collection
-            .find_integrand(Some(integrand_name.to_string()))?;
-        let settings = match &process.collection {
-            ProcessCollection::Amplitudes(amplitudes) => amplitudes
-                .get(&canonical_name)
-                .and_then(|amplitude| amplitude.integrand.as_ref())
-                .map(|integrand| integrand.get_settings()),
-            ProcessCollection::CrossSections(cross_sections) => cross_sections
-                .get(&canonical_name)
-                .and_then(|cross_section| cross_section.integrand.as_ref())
-                .map(|integrand| integrand.get_settings()),
-        };
-
-        match settings {
+        let resolved = self
+            .process_list
+            .get_integrand(process_id, integrand_name)?;
+        match resolved.get_settings() {
             Some(settings) => self.resolve_serializable_model_parameter_card_for_settings(settings),
             None => Ok(self.model_parameters.to_serializable()),
         }
@@ -1151,22 +1139,10 @@ impl State {
         process_id: usize,
         integrand_name: &str,
     ) -> Result<Model> {
-        let process = &self.process_list.processes[process_id];
-        let canonical_name = process
-            .collection
-            .find_integrand(Some(integrand_name.to_string()))?;
-        let settings = match &process.collection {
-            ProcessCollection::Amplitudes(amplitudes) => amplitudes
-                .get(&canonical_name)
-                .and_then(|amplitude| amplitude.integrand.as_ref())
-                .map(|integrand| integrand.get_settings()),
-            ProcessCollection::CrossSections(cross_sections) => cross_sections
-                .get(&canonical_name)
-                .and_then(|cross_section| cross_section.integrand.as_ref())
-                .map(|integrand| integrand.get_settings()),
-        };
-
-        match settings {
+        let resolved = self
+            .process_list
+            .get_integrand(process_id, integrand_name)?;
+        match resolved.get_settings() {
             Some(settings) => self.resolve_model_for_settings(settings),
             None => Ok(self.model.clone()),
         }

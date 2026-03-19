@@ -310,7 +310,8 @@ pub fn default_xspace_point(cli: &CLIState) -> Result<Vec<f64>> {
     let integrand = cli
         .state
         .process_list
-        .get_integrand(process_id, &integrand_name)?;
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?;
     let n_dim = integrand.get_n_dim();
     let seed = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67];
     Ok((0..n_dim).map(|index| seed[index % seed.len()]).collect())
@@ -321,7 +322,8 @@ pub fn default_momentum_space_point(cli: &CLIState) -> Result<Vec<f64>> {
     let integrand = cli
         .state
         .process_list
-        .get_integrand(process_id, &integrand_name)?;
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?;
     let n_dim = integrand.get_n_dim();
     let seed = [0.11, -0.07, 0.19, -0.13, 0.05, 0.29];
     Ok((0..n_dim).map(|index| seed[index % seed.len()]).collect())

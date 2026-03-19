@@ -70,60 +70,35 @@ impl<'a> EvaluateSamples<'a> {
             }
         }
 
-        let mut samples = Vec::with_capacity(batch_len);
-        let mut observables = ObservableSnapshotBundle::default();
-        let mut have_observables = false;
-        for sample_index in 0..batch_len {
-            let point = self.points.row(sample_index);
-            let graph_name = graph_names[sample_index].as_deref();
-            let orientation = orientations[sample_index];
+        let samples = if self.momentum_space {
+            let inputs =
+                build_momentum_inputs(integrand, &self.points, &graph_names, &orientations)?;
+            integrand
+                .evaluate_momentum_configurations_raw(&model, &inputs, self.use_arb_prec)?
+                .samples
+        } else {
+            let samples = build_havana_samples(
+                integrand,
+                &self.points,
+                self.discrete_dims.as_ref(),
+                self.force_radius,
+            )?;
+            integrand
+                .evaluate_samples_raw(&model, &samples, 1, self.use_arb_prec, Complex::new_zero())?
+                .samples
+        };
 
-            let mut evaluation = if self.momentum_space {
-                evaluate_momentum_point(
-                    integrand,
-                    &model,
-                    point.as_slice().expect("point rows are contiguous"),
-                    graph_name,
-                    orientation,
-                    self.use_arb_prec,
-                )?
-            } else {
-                let discrete_dim = self
-                    .discrete_dims
-                    .as_ref()
-                    .map(|dims| dims.row(sample_index).iter().copied().collect())
-                    .unwrap_or_else(Vec::new);
-                evaluate_x_point(
-                    integrand,
-                    &model,
-                    point.as_slice().expect("point rows are contiguous"),
-                    &discrete_dim,
-                    self.force_radius,
-                    self.use_arb_prec,
-                )?
-            };
-
-            let sample_observables = integrand
-                .build_observable_snapshots_for_result(&evaluation)
-                .unwrap_or_else(ObservableSnapshotBundle::default);
-            if !sample_observables.histograms.is_empty() {
-                if have_observables {
-                    observables.merge_in_place(&sample_observables)?;
-                } else {
-                    observables = sample_observables;
-                    have_observables = true;
-                }
-            }
-            if !integrand.get_settings().general.generate_events {
-                evaluation.event_groups.clear();
-            }
-            samples.push(SampleEvaluationResult {
-                evaluation: evaluation.into_output(self.minimal_output),
-            });
-        }
+        let observables = integrand
+            .observable_snapshot_bundle()
+            .unwrap_or_else(ObservableSnapshotBundle::default);
 
         Ok(BatchSampleEvaluationResult {
-            samples,
+            samples: samples
+                .into_iter()
+                .map(|evaluation| SampleEvaluationResult {
+                    evaluation: evaluation.into_output(self.minimal_output),
+                })
+                .collect(),
             observables,
         })
     }
@@ -179,60 +154,38 @@ impl<'a> EvaluateSamplesPrecise<'a> {
             }
         }
 
-        let mut samples = Vec::with_capacity(batch_len);
-        let mut observables = ObservableSnapshotBundle::default();
-        let mut have_observables = false;
-        for sample_index in 0..batch_len {
-            let point = self.points.row(sample_index);
-            let graph_name = graph_names[sample_index].as_deref();
-            let orientation = orientations[sample_index];
-
-            let mut evaluation = if self.momentum_space {
-                evaluate_momentum_point_precise(
-                    integrand,
+        let mut raw_samples = if self.momentum_space {
+            let inputs =
+                build_momentum_inputs(integrand, &self.points, &graph_names, &orientations)?;
+            integrand
+                .evaluate_momentum_configurations_precise_raw(&model, &inputs, self.use_arb_prec)?
+                .samples
+        } else {
+            let samples = build_havana_samples(
+                integrand,
+                &self.points,
+                self.discrete_dims.as_ref(),
+                self.force_radius,
+            )?;
+            integrand
+                .evaluate_samples_precise_raw(
                     &model,
-                    point.as_slice().expect("point rows are contiguous"),
-                    graph_name,
-                    orientation,
+                    &samples,
                     self.use_arb_prec,
+                    Complex::new_zero(),
                 )?
-            } else {
-                let discrete_dim = self
-                    .discrete_dims
-                    .as_ref()
-                    .map(|dims| dims.row(sample_index).iter().copied().collect())
-                    .unwrap_or_else(Vec::new);
-                evaluate_x_point_precise(
-                    integrand,
-                    &model,
-                    point.as_slice().expect("point rows are contiguous"),
-                    &discrete_dim,
-                    self.force_radius,
-                    self.use_arb_prec,
-                )?
-            };
+                .samples
+        };
 
-            let sample_observables = integrand
-                .build_observable_snapshots_for_precise_result(&evaluation)
-                .unwrap_or_else(ObservableSnapshotBundle::default);
-            if !sample_observables.histograms.is_empty() {
-                if have_observables {
-                    observables.merge_in_place(&sample_observables)?;
-                } else {
-                    observables = sample_observables;
-                    have_observables = true;
-                }
-            }
-            if !integrand.get_settings().general.generate_events {
-                clear_precise_event_groups(&mut evaluation);
-            }
-            samples.push(PreciseSampleEvaluationResult {
-                evaluation: evaluation.into_output(self.minimal_output),
-            });
-        }
+        let observables = merge_precise_observables(integrand, &mut raw_samples)?;
 
         Ok(PreciseBatchSampleEvaluationResult {
-            samples,
+            samples: raw_samples
+                .into_iter()
+                .map(|evaluation| PreciseSampleEvaluationResult {
+                    evaluation: evaluation.into_output(self.minimal_output),
+                })
+                .collect(),
             observables,
         })
     }
@@ -307,14 +260,12 @@ fn normalize_optional_per_sample<T: Clone>(
     }
 }
 
-fn evaluate_x_point(
-    integrand: &mut gammalooprs::integrands::process::ProcessIntegrand,
-    model: &gammalooprs::model::Model,
+fn build_havana_sample(
+    integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
     discrete_dim: &[usize],
     mut force_radius: bool,
-    use_arb_prec: bool,
-) -> Result<gammalooprs::integrands::evaluation::EvaluationResult> {
+) -> Result<Sample<F<f64>>> {
     if integrand.get_n_dim() as isize == point.len() as isize - 1 {
         force_radius = true;
     }
@@ -330,19 +281,40 @@ fn evaluate_x_point(
     } else {
         point
     };
-    let sample = havana_sample(continuous_sample, discrete_dim);
-
-    integrand.evaluate_sample(&sample, model, F(1.0), 1, use_arb_prec, Complex::new_zero())
+    Ok(havana_sample(continuous_sample, discrete_dim))
 }
 
-fn evaluate_momentum_point(
-    integrand: &mut gammalooprs::integrands::process::ProcessIntegrand,
-    model: &gammalooprs::model::Model,
+fn build_havana_samples(
+    integrand: &gammalooprs::integrands::process::ProcessIntegrand,
+    points: &ArrayView2<'_, f64>,
+    discrete_dims: Option<&ArrayView2<'_, usize>>,
+    force_radius: bool,
+) -> Result<Vec<Sample<F<f64>>>> {
+    (0..points.nrows())
+        .map(|sample_index| {
+            let discrete_dim = discrete_dims
+                .as_ref()
+                .map(|dims| dims.row(sample_index).iter().copied().collect())
+                .unwrap_or_else(Vec::new);
+            build_havana_sample(
+                integrand,
+                points
+                    .row(sample_index)
+                    .as_slice()
+                    .expect("point rows are contiguous"),
+                &discrete_dim,
+                force_radius,
+            )
+        })
+        .collect()
+}
+
+fn build_momentum_input(
+    integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
     graph_name: Option<&str>,
     orientation: Option<usize>,
-    use_arb_prec: bool,
-) -> Result<gammalooprs::integrands::evaluation::EvaluationResult> {
+) -> Result<MomentumSpaceEvaluationInput> {
     if orientation.is_some() && graph_name.is_none() {
         return Err(eyre!(
             "A specific orientation requires a specific graph in momentum-space evaluation."
@@ -392,111 +364,32 @@ fn evaluate_momentum_point(
             pz: F(coords[2]),
         })
         .collect();
-    integrand.evaluate_momentum_configuration(
-        model,
-        &MomentumSpaceEvaluationInput {
-            loop_momenta,
-            graph_id,
-            orientation,
-        },
-        use_arb_prec,
-    )
+    Ok(MomentumSpaceEvaluationInput {
+        loop_momenta,
+        graph_id,
+        orientation,
+    })
 }
 
-fn evaluate_x_point_precise(
+fn build_momentum_inputs(
     integrand: &mut gammalooprs::integrands::process::ProcessIntegrand,
-    model: &gammalooprs::model::Model,
-    point: &[f64],
-    discrete_dim: &[usize],
-    mut force_radius: bool,
-    use_arb_prec: bool,
-) -> Result<gammalooprs::integrands::evaluation::PreciseEvaluationResult> {
-    if integrand.get_n_dim() as isize == point.len() as isize - 1 {
-        force_radius = true;
-    }
-
-    let point = point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
-    let continuous_sample = if force_radius {
-        point
-            .get(1..)
-            .ok_or_else(|| {
-                eyre!("Force-radius x-space evaluation requires at least one radial coordinate.")
-            })?
-            .to_vec()
-    } else {
-        point
-    };
-    let sample = havana_sample(continuous_sample, discrete_dim);
-
-    integrand.evaluate_sample_precise(&sample, model, F(1.0), use_arb_prec, Complex::new_zero())
-}
-
-fn evaluate_momentum_point_precise(
-    integrand: &mut gammalooprs::integrands::process::ProcessIntegrand,
-    model: &gammalooprs::model::Model,
-    point: &[f64],
-    graph_name: Option<&str>,
-    orientation: Option<usize>,
-    use_arb_prec: bool,
-) -> Result<gammalooprs::integrands::evaluation::PreciseEvaluationResult> {
-    if orientation.is_some() && graph_name.is_none() {
-        return Err(eyre!(
-            "A specific orientation requires a specific graph in momentum-space evaluation."
-        ));
-    }
-
-    if point.len() % 3 != 0 {
-        return Err(eyre!(
-            "Momentum-space evaluation expects a multiple of 3 coordinates, got {}.",
-            point.len()
-        ));
-    }
-
-    let graph_id = graph_name
-        .map(|graph_name| {
-            integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
-                eyre!(
-                    "Unknown graph '{}' in momentum-space evaluation.",
-                    graph_name
-                )
-            })
-        })
-        .transpose()?;
-
-    if let (Some(graph_id), Some(orientation)) = (graph_id, orientation) {
-        let orientation_count = integrand.graph_orientation_count(graph_id).ok_or_else(|| {
-            eyre!(
-                "Graph id {} is invalid for momentum-space evaluation.",
-                graph_id
+    points: &ArrayView2<'_, f64>,
+    graph_names: &[Option<String>],
+    orientations: &[Option<usize>],
+) -> Result<Vec<MomentumSpaceEvaluationInput>> {
+    (0..points.nrows())
+        .map(|sample_index| {
+            build_momentum_input(
+                integrand,
+                points
+                    .row(sample_index)
+                    .as_slice()
+                    .expect("point rows are contiguous"),
+                graph_names[sample_index].as_deref(),
+                orientations[sample_index],
             )
-        })?;
-        if orientation >= orientation_count {
-            return Err(eyre!(
-                "Orientation {} is out of range for graph '{}'; the graph has {} orientations.",
-                orientation,
-                graph_name.expect("graph name should exist when graph_id exists"),
-                orientation_count
-            ));
-        }
-    }
-
-    let loop_momenta = point
-        .chunks_exact(3)
-        .map(|coords| ThreeMomentum {
-            px: F(coords[0]),
-            py: F(coords[1]),
-            pz: F(coords[2]),
         })
-        .collect();
-    integrand.evaluate_momentum_configuration_precise(
-        model,
-        &MomentumSpaceEvaluationInput {
-            loop_momenta,
-            graph_id,
-            orientation,
-        },
-        use_arb_prec,
-    )
+        .collect()
 }
 
 fn clear_precise_event_groups(
@@ -513,6 +406,33 @@ fn clear_precise_event_groups(
             result.event_groups.clear()
         }
     }
+}
+
+fn merge_precise_observables(
+    integrand: &gammalooprs::integrands::process::ProcessIntegrand,
+    results: &mut [gammalooprs::integrands::evaluation::PreciseEvaluationResult],
+) -> Result<ObservableSnapshotBundle> {
+    let mut observables = ObservableSnapshotBundle::default();
+    let mut have_observables = false;
+
+    for evaluation in results.iter_mut() {
+        let sample_observables = integrand
+            .build_observable_snapshots_for_precise_result(evaluation)
+            .unwrap_or_else(ObservableSnapshotBundle::default);
+        if !sample_observables.histograms.is_empty() {
+            if have_observables {
+                observables.merge_in_place(&sample_observables)?;
+            } else {
+                observables = sample_observables;
+                have_observables = true;
+            }
+        }
+        if !integrand.get_settings().general.generate_events {
+            clear_precise_event_groups(evaluation);
+        }
+    }
+
+    Ok(observables)
 }
 
 fn havana_sample(cont: Vec<F<f64>>, discrete_dimensions: &[usize]) -> Sample<F<f64>> {

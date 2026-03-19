@@ -394,6 +394,12 @@ pub struct BatchSampleEvaluationResult {
 }
 
 #[derive(Clone, Debug)]
+pub struct RawBatchEvaluationResult {
+    pub samples: Vec<EvaluationResult>,
+    pub statistics: StatisticsCounter,
+}
+
+#[derive(Clone, Debug)]
 pub struct PreciseSingleSampleEvaluationResult {
     pub sample: PreciseSampleEvaluationResult,
     pub observables: ObservableSnapshotBundle,
@@ -403,6 +409,11 @@ pub struct PreciseSingleSampleEvaluationResult {
 pub struct PreciseBatchSampleEvaluationResult {
     pub samples: Vec<PreciseSampleEvaluationResult>,
     pub observables: ObservableSnapshotBundle,
+}
+
+#[derive(Clone, Debug)]
+pub struct RawPreciseBatchEvaluationResult {
+    pub samples: Vec<PreciseEvaluationResult>,
 }
 
 impl Display for PreciseSampleEvaluationResult {
@@ -685,10 +696,12 @@ impl EvaluationMetaData {
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct StatisticsCounter {
     pub num_evals: usize,
+    num_sample_points: usize,
     sum_integrand_evaluation_time: Duration,
     sum_evaluator_evaluation_time: Duration,
     sum_parameterization_time: Duration,
     sum_event_time: Duration,
+    sum_integrator_overhead_time: Duration,
     sum_total_evaluation_time: Duration,
     sum_relative_instability_error: (F<f64>, F<f64>),
     num_double_precision_evals: usize,
@@ -764,11 +777,14 @@ impl StatisticsCounter {
                 + other.sum_evaluator_evaluation_time,
             sum_parameterization_time: self.sum_parameterization_time
                 + other.sum_parameterization_time,
+            sum_integrator_overhead_time: self.sum_integrator_overhead_time
+                + other.sum_integrator_overhead_time,
             sum_relative_instability_error: (
                 self.sum_relative_instability_error.0 + other.sum_relative_instability_error.0,
                 self.sum_relative_instability_error.1 + other.sum_relative_instability_error.1,
             ),
             num_evals: self.num_evals + other.num_evals,
+            num_sample_points: self.num_sample_points + other.num_sample_points,
             num_double_precision_evals: (self.num_double_precision_evals
                 + other.num_double_precision_evals),
             num_quadruple_precision_evals: (self.num_quadruple_precision_evals
@@ -793,9 +809,11 @@ impl StatisticsCounter {
             sum_evaluator_evaluation_time: Duration::ZERO,
             sum_parameterization_time: Duration::ZERO,
             sum_event_time: Duration::ZERO,
+            sum_integrator_overhead_time: Duration::ZERO,
             sum_relative_instability_error: (F(0.0), F(0.0)),
             sum_total_evaluation_time: Duration::ZERO,
             num_evals: 0,
+            num_sample_points: 0,
             num_double_precision_evals: 0,
             num_quadruple_precision_evals: 0,
             num_arb_precision_evals: 0,
@@ -832,6 +850,11 @@ impl StatisticsCounter {
         }
     }
 
+    pub(crate) fn add_integrator_overhead(&mut self, duration: Duration, sample_points: usize) {
+        self.sum_integrator_overhead_time += duration;
+        self.num_sample_points += sample_points;
+    }
+
     /// Compute the average time spent in the evaluate_sample function.
     pub(crate) fn get_avg_total_timing(&self) -> Duration {
         Self::avg_duration(self.sum_total_evaluation_time, self.num_evals)
@@ -854,6 +877,10 @@ impl StatisticsCounter {
 
     pub(crate) fn get_avg_event_timing(&self) -> Duration {
         Self::avg_duration(self.sum_event_time, self.num_evals)
+    }
+
+    pub(crate) fn get_avg_integrator_overhead_timing(&self) -> Duration {
+        Self::avg_duration(self.sum_integrator_overhead_time, self.num_sample_points)
     }
 
     /// Get the average relative error computed during instability checks
@@ -921,6 +948,9 @@ impl StatisticsCounter {
             average_integrand_time_seconds: self.get_avg_integrand_timing().as_secs_f64(),
             average_evaluator_time_seconds: self.get_avg_evaluator_timing().as_secs_f64(),
             average_observable_time_seconds: self.get_avg_event_timing().as_secs_f64(),
+            average_integrator_time_seconds: self
+                .get_avg_integrator_overhead_timing()
+                .as_secs_f64(),
             f64_percentage: self.get_percentage_f64(),
             f128_percentage: self.get_percentage_f128(),
             arb_percentage: self.get_percentage_arb(),
@@ -937,6 +967,8 @@ impl StatisticsCounter {
         let time_evaluators_formatted = format_evaluation_time(self.get_avg_evaluator_timing());
         let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());
         let event_time_formatted = format_evaluation_time(self.get_avg_event_timing());
+        let integrator_time_formatted =
+            format_evaluation_time(self.get_avg_integrator_overhead_timing());
         let total_time = format_evaluation_time(self.get_avg_total_timing());
         let selection_efficiency = self.selection_efficiency_percentage();
         let selection_efficiency_display = selection_efficiency
@@ -956,17 +988,6 @@ impl StatisticsCounter {
                 .green()
                 .to_string()
         };
-        let nan_value = self.get_percentage_nan();
-        let nan_display = if nan_value > 0.0 {
-            pad_status_value(format_percentage(nan_value, 2), 9)
-                .red()
-                .to_string()
-        } else {
-            pad_status_value(format_percentage(nan_value, 2), 9)
-                .green()
-                .to_string()
-        };
-
         let mut table = Builder::new();
         table.push_record([
             format_status_header("timing"),
@@ -999,8 +1020,8 @@ impl StatisticsCounter {
             pad_status_value(format!("{:.2}%", self.get_percentage_arb()), 9)
                 .green()
                 .to_string(),
-            format_status_key("nan"),
-            nan_display,
+            format_status_key("nans+unstable"),
+            nan_or_unstable_display.clone(),
         ]);
         table.push_record([
             format_status_header("events"),
@@ -1014,8 +1035,10 @@ impl StatisticsCounter {
             pad_status_value(event_time_formatted, 9)
                 .green()
                 .to_string(),
-            format_status_key("nans+unstable %"),
-            nan_or_unstable_display,
+            format_status_key("integrator"),
+            pad_status_value(integrator_time_formatted, 9)
+                .green()
+                .to_string(),
         ]);
 
         let mut table = table.build();
@@ -1067,10 +1090,12 @@ mod tests {
     fn status_table_renders_three_rows_without_header() {
         let stats = StatisticsCounter {
             num_evals: 10,
+            num_sample_points: 10,
             sum_integrand_evaluation_time: Duration::from_micros(414),
             sum_evaluator_evaluation_time: Duration::from_micros(279),
             sum_parameterization_time: Duration::from_nanos(5_800),
             sum_event_time: Duration::ZERO,
+            sum_integrator_overhead_time: Duration::from_micros(110),
             sum_total_evaluation_time: Duration::from_micros(462),
             sum_relative_instability_error: (0.0.into(), 0.0.into()),
             num_double_precision_evals: 10,
@@ -1099,7 +1124,8 @@ mod tests {
         assert!(rendered.contains("timing"), "{rendered}");
         assert!(rendered.contains("evals"), "{rendered}");
         assert!(rendered.contains("events"), "{rendered}");
-        assert!(rendered.contains("nans+unstable % :"), "{rendered}");
+        assert!(rendered.contains("nans+unstable :"), "{rendered}");
+        assert!(rendered.contains("integrator :"), "{rendered}");
     }
 
     #[test]
@@ -1113,6 +1139,7 @@ mod tests {
         assert_eq!(snapshot.average_integrand_time_seconds, 0.0);
         assert_eq!(snapshot.average_evaluator_time_seconds, 0.0);
         assert_eq!(snapshot.average_observable_time_seconds, 0.0);
+        assert_eq!(snapshot.average_integrator_time_seconds, 0.0);
         assert_eq!(snapshot.f64_percentage, 0.0);
         assert_eq!(snapshot.f128_percentage, 0.0);
         assert_eq!(snapshot.arb_percentage, 0.0);
@@ -1123,6 +1150,7 @@ mod tests {
         let rendered = stats.render_status_table();
         assert!(rendered.contains("sel. % :     N/A"), "{rendered}");
         assert!(rendered.contains("f64 :     0.00%"), "{rendered}");
-        assert!(rendered.contains("nan :     0.0%"), "{rendered}");
+        assert!(rendered.contains("nans+unstable :     0.0%"), "{rendered}");
+        assert!(rendered.contains("integrator :   0.00 ns"), "{rendered}");
     }
 }

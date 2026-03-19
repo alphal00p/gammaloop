@@ -3,7 +3,9 @@ pub mod evaluation;
 pub mod inspect;
 pub mod process;
 
-use crate::integrands::evaluation::{EvaluationMetaData, EvaluationResult, StabilityResult};
+use crate::integrands::evaluation::{
+    EvaluationMetaData, EvaluationResult, RawBatchEvaluationResult, StabilityResult,
+};
 use colored::Colorize;
 // use crate::integrands::process::ProcessIntegrandImpl;
 use crate::integrands::builtin::h_function::{HFunctionTestIntegrand, HFunctionTestSettings};
@@ -191,6 +193,38 @@ pub enum Integrand {
 }
 
 impl Integrand {
+    pub fn evaluate_samples_raw(
+        &mut self,
+        samples: &[Sample<F<f64>>],
+        model: &Model,
+        iter: usize,
+        use_arb_prec: bool,
+        max_eval: Complex<F<f64>>,
+    ) -> Result<RawBatchEvaluationResult> {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => {
+                integrand.evaluate_samples_raw(model, samples, iter, use_arb_prec, max_eval)
+            }
+            _ => {
+                let mut results = Vec::with_capacity(samples.len());
+                for sample in samples {
+                    results.push(self.evaluate_sample(
+                        sample,
+                        model,
+                        sample.get_weight(),
+                        iter,
+                        use_arb_prec,
+                        max_eval,
+                    )?);
+                }
+                Ok(RawBatchEvaluationResult {
+                    statistics: evaluation::StatisticsCounter::from_evaluation_results(&results),
+                    samples: results,
+                })
+            }
+        }
+    }
+
     pub fn process_evaluation_result(&mut self, result: &EvaluationResult) {
         if let Integrand::ProcessIntegrand(integrand) = self {
             integrand.process_evaluation_result(result);

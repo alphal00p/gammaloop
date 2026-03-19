@@ -329,7 +329,10 @@ impl<'a> CliSession<'a> {
 
         for (process_id, process) in self.state.process_list.processes.iter().enumerate() {
             for integrand_name in process.collection.get_integrand_names() {
-                let Ok(integrand) = process.get_integrand(integrand_name) else {
+                let Ok(resolved) = process.get_integrand(integrand_name) else {
+                    continue;
+                };
+                let Some(integrand) = resolved.integrand else {
                     continue;
                 };
                 let Ok(serialized) = serialize_runtime_named_settings(integrand.get_settings())

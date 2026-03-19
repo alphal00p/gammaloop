@@ -365,12 +365,25 @@ fn format_max_eval_coordinate(value: F<f64>) -> String {
 }
 
 fn format_max_eval_coordinates(xs: &[F<f64>]) -> String {
-    format!(
-        "[ {} ]",
-        xs.iter()
-            .map(|value| format_max_eval_coordinate(*value))
-            .join(" ")
-    )
+    if xs.len() <= 3 {
+        return format!(
+            "[ {} ]",
+            xs.iter()
+                .map(|value| format_max_eval_coordinate(*value))
+                .join(" ")
+        );
+    }
+
+    let rows = xs
+        .chunks(3)
+        .map(|chunk| {
+            chunk
+                .iter()
+                .map(|value| format_max_eval_coordinate(*value))
+                .join(" ")
+        })
+        .join("\n");
+    format!("[\n{rows} ]")
 }
 
 fn discrete_axis_label<'a>(axis_labels: &'a [String], depth: usize) -> &'a str {
@@ -890,14 +903,13 @@ fn contribution_bin_label(integration_state: &IntegrationState, bin_index: usize
     ) {
         if let Some(description) = descriptions.get(bin_index) {
             return format!(
-                "{} {}",
-                render_bin_description(axis_label, description),
-                format!("(#{bin_index})").bold().green()
+                "#{bin_index}: {}",
+                render_bin_description(axis_label, description)
             );
         }
     }
 
-    format!("idx = {bin_index}").bold().green().to_string()
+    format!("#{bin_index}")
 }
 
 fn contribution_header_label(
@@ -1299,21 +1311,27 @@ fn build_iteration_status_header_middle(
             format_iteration_points(progress.target_points),
             percentage
         )
-    } else {
+    } else if cur_points > 0 {
         format!(
             "# samples per iteration = {}",
             format_iteration_points(cur_points)
         )
+        .blue()
+        .bold()
+        .to_string()
+    } else {
+        String::new()
+    };
+
+    let total = format!("# samples total = {}", format_total_points(total_points))
+        .bold()
+        .green()
+        .to_string();
+    if per_iteration.is_empty() {
+        total
+    } else {
+        format!("{per_iteration} {total}")
     }
-    .blue()
-    .bold();
-    format!(
-        "{} {}",
-        per_iteration,
-        format!("# samples total = {}", format_total_points(total_points))
-            .bold()
-            .green(),
-    )
 }
 
 fn build_iteration_status_header_tail(
@@ -2365,7 +2383,8 @@ impl CoreIterationState {
             return Ok(0);
         }
 
-        let mut results = Vec::new();
+        let chunk_start = Instant::now();
+        let mut samples = Vec::with_capacity(n_points);
         let mut processed_points = 0;
         for _ in 0..n_points {
             if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
@@ -2375,26 +2394,41 @@ impl CoreIterationState {
             let mut sample = Sample::new();
             self.sampling_grid.sample(&mut self.rng, &mut sample);
             processed_points += 1;
+            samples.push(sample);
+        }
 
-            for (slot_index, (((integrand, core_accumulator), re_grid), im_grid)) in self
-                .slot_integrands
+        if processed_points == 0 {
+            return Ok(0);
+        }
+
+        let mut batch_evaluation_time = Duration::ZERO;
+        let mut batch_stats = StatisticsCounter::new_empty();
+        let mut slot_results = Vec::with_capacity(self.slot_integrands.len());
+
+        for (slot_index, integrand) in self.slot_integrands.iter_mut().enumerate() {
+            let evaluation_start = Instant::now();
+            let raw_batch = integrand.evaluate_samples_raw(
+                &samples,
+                &slot_models[slot_index],
+                iter,
+                false,
+                current_max_evals[slot_index],
+            )?;
+            batch_evaluation_time += evaluation_start.elapsed();
+            batch_stats = batch_stats.merged(&raw_batch.statistics);
+            slot_results.push(raw_batch.samples);
+        }
+
+        for (sample_index, sample) in samples.iter().enumerate() {
+            for (slot_index, (((core_accumulator, re_grid), im_grid), results)) in self
+                .integrals
                 .iter_mut()
-                .zip(self.integrals.iter_mut())
                 .zip(self.slot_re_grids.iter_mut())
                 .zip(self.slot_im_grids.iter_mut())
+                .zip(slot_results.iter())
                 .enumerate()
             {
-                let mut result = integrand.evaluate_sample(
-                    &sample,
-                    &slot_models[slot_index],
-                    sample.get_weight(),
-                    iter,
-                    false,
-                    current_max_evals[slot_index],
-                )?;
-
-                integrand.process_evaluation_result(&result);
-                maybe_discard_generated_events_for_integrand(&mut result, &*integrand);
+                let result = &results[sample_index];
                 let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
                 let effective_integrand_result =
                     result.integrand_result * Complex::new_re(jacobian);
@@ -2422,17 +2456,16 @@ impl CoreIterationState {
                         .add_training_sample(&sample, training_eval)
                         .map_err(Report::msg)?;
                 }
-
-                results.push(result);
             }
         }
 
-        if processed_points > 0 {
-            self.remaining_points -= processed_points;
-            self.completed_points += processed_points;
-            let chunk_stats = StatisticsCounter::from_evaluation_results(&results);
-            self.stats = self.stats.merged(&chunk_stats);
-        }
+        self.remaining_points -= processed_points;
+        self.completed_points += processed_points;
+        self.stats = self.stats.merged(&batch_stats);
+        self.stats.add_integrator_overhead(
+            chunk_start.elapsed().saturating_sub(batch_evaluation_time),
+            processed_points,
+        );
 
         Ok(processed_points)
     }
@@ -3138,21 +3171,6 @@ fn generate_event_output(
     }
 }
 
-fn maybe_discard_generated_events(result: &mut EvaluationResult, settings: &RuntimeSettings) {
-    if !settings.should_return_generated_events() {
-        result.event_groups.clear();
-    }
-}
-
-fn maybe_discard_generated_events_for_integrand(
-    result: &mut EvaluationResult,
-    integrand: &Integrand,
-) {
-    if let Integrand::ProcessIntegrand(process_integrand) = integrand {
-        maybe_discard_generated_events(result, process_integrand.get_settings());
-    }
-}
-
 pub fn slot_workspace_path(workspace: &Path, slot_meta: &SlotMeta) -> PathBuf {
     workspace.join("integrands").join(slot_meta.key())
 }
@@ -3466,61 +3484,44 @@ fn evaluate_sample_list(
     iter: usize,
     max_eval: Complex<F<f64>>,
 ) -> Result<(Vec<EvaluationResult>, StatisticsCounter)> {
-    // todo!()
     let list_size = samples.len();
     let nvec_per_core = (list_size - 1) / num_cores + 1;
+    let num_chunks = samples.chunks(nvec_per_core).len();
 
     let sample_chunks = samples.par_chunks(nvec_per_core);
-    let integrands = (0..nvec_per_core)
+    let integrands = (0..num_chunks)
         .map(|_| integrand.clone())
         .collect_vec()
         .into_par_iter();
 
-    let evaluation_results_per_core: Vec<Result<(Vec<EvaluationResult>, Integrand)>> =
-        sample_chunks
-            .zip(integrands)
-            .map(|(chunk, mut integrand)| {
-                let evaluation_results = chunk
-                    .iter()
-                    .map(|sample| {
-                        integrand
-                            .evaluate_sample(
-                                sample,
-                                model,
-                                sample.get_weight(),
-                                iter,
-                                false,
-                                max_eval,
-                            )
-                            .map(|mut result| {
-                                integrand.process_evaluation_result(&result);
-                                maybe_discard_generated_events_for_integrand(
-                                    &mut result,
-                                    &integrand,
-                                );
-                                result
-                            })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
+    let evaluation_results_per_core: Vec<
+        Result<(Vec<EvaluationResult>, StatisticsCounter, Integrand)>,
+    > = sample_chunks
+        .zip(integrands)
+        .map(|(chunk, mut integrand)| {
+            let raw_batch = integrand.evaluate_samples_raw(chunk, model, iter, false, max_eval)?;
+            Ok((raw_batch.samples, raw_batch.statistics, integrand))
+        })
+        .collect();
+    let mut evaluation_results_per_core: Vec<(
+        Vec<EvaluationResult>,
+        StatisticsCounter,
+        Integrand,
+    )> = evaluation_results_per_core
+        .into_iter()
+        .collect::<Result<_>>()?;
 
-                Ok((evaluation_results, integrand))
-            })
-            .collect();
-    let mut evaluation_results_per_core: Vec<(Vec<EvaluationResult>, Integrand)> =
-        evaluation_results_per_core
-            .into_iter()
-            .collect::<Result<_>>()?;
-
-    for (_, worker_integrand) in evaluation_results_per_core.iter_mut() {
+    for (_, _, worker_integrand) in evaluation_results_per_core.iter_mut() {
         integrand.merge_runtime_results(worker_integrand)?;
     }
 
-    let evaluation_results = evaluation_results_per_core
-        .into_iter()
-        .flat_map(|(results, _)| results)
-        .collect_vec();
-
-    let meta_data_statistics = StatisticsCounter::from_evaluation_results(&evaluation_results);
+    let (evaluation_results, meta_data_statistics) = evaluation_results_per_core.into_iter().fold(
+        (Vec::new(), StatisticsCounter::new_empty()),
+        |(mut all_results, stats), (results, worker_stats, _)| {
+            all_results.extend(results);
+            (all_results, stats.merged(&worker_stats))
+        },
+    );
 
     Ok((evaluation_results, meta_data_statistics))
 }
@@ -4389,7 +4390,7 @@ mod tests {
 
         assert!(rendered.contains("Sum"), "{rendered}");
         assert!(rendered.contains("Contribution (idx=graph)"), "{rendered}");
-        assert!(rendered.contains("GL0 (#0)"), "{rendered}");
+        assert!(rendered.contains("#0: GL0"), "{rendered}");
         assert!(rendered.contains("75.0%"), "{rendered}");
         assert!(rendered.contains("25.0%"), "{rendered}");
         assert!(
@@ -4541,6 +4542,36 @@ mod tests {
     }
 
     #[test]
+    fn format_max_eval_sample_wraps_long_coordinate_lists() {
+        let axis_labels = vec!["graph".to_string(), "orientation".to_string()];
+        let sample = Sample::Discrete(
+            F(1.0),
+            0,
+            Some(Box::new(Sample::Discrete(
+                F(1.0),
+                9,
+                Some(Box::new(Sample::Continuous(
+                    F(1.0),
+                    vec![
+                        F(0.125),
+                        F(0.25),
+                        F(0.375),
+                        F(0.5),
+                        F(0.625),
+                        F(0.75),
+                        F(0.875),
+                    ],
+                ))),
+            ))),
+        );
+
+        assert_eq!(
+            format_max_eval_sample(&sample, &axis_labels, &[]),
+            "graph: 0, orientation: 9, xs: [\n1.2500000000000000e-01 2.5000000000000000e-01 3.7500000000000000e-01\n5.0000000000000000e-01 6.2500000000000000e-01 7.5000000000000000e-01\n8.7500000000000000e-01 ]"
+        );
+    }
+
+    #[test]
     fn final_summary_omits_discrete_max_weight_block_when_disabled() {
         let state = make_discrete_integration_state();
         let rendered = render_saved_integration_summary(
@@ -4560,6 +4591,10 @@ mod tests {
         assert!(rendered.contains("Maximum weight details"), "{rendered}");
         assert!(
             !rendered.contains("Maximum weight details by discrete bin"),
+            "{rendered}"
+        );
+        assert!(
+            !rendered.contains("# samples per iteration = 0"),
             "{rendered}"
         );
     }

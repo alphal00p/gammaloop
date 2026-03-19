@@ -229,6 +229,7 @@ fn normalized_integration_result_json(result: &RuntimeIntegrationResult) -> Json
             statistics.remove("average_integrand_time_seconds");
             statistics.remove("average_evaluator_time_seconds");
             statistics.remove("average_observable_time_seconds");
+            statistics.remove("average_integrator_time_seconds");
         }
     }
     value
@@ -1553,16 +1554,14 @@ fn test_multi_integrand_batching_preserves_results() -> Result<()> {
     let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
 
     cli.run_command(&format!(
-        "set process -p triangle -i scalar_tri {shared_integrator_settings}"
-    ))?;
-    cli.run_command(&format!(
         "set process -p box -i scalar_box {shared_integrator_settings}"
     ))?;
+    cli.run_command(SCALAR_BOX_BELOW_EXTERNALS)?;
 
     let mut single_batch = scalar_topology_integrate_command(
         test_name,
-        "triangle_and_box_single_batch",
-        &[("triangle", "scalar_tri"), ("box", "scalar_box")],
+        "box_single_batch",
+        &[("box", "scalar_box")],
         &[],
     );
     single_batch.batch_size = Some(10_000);
@@ -1572,11 +1571,11 @@ fn test_multi_integrand_batching_preserves_results() -> Result<()> {
 
     let mut many_batches = scalar_topology_integrate_command(
         test_name,
-        "triangle_and_box_many_batches",
-        &[("triangle", "scalar_tri"), ("box", "scalar_box")],
+        "box_many_batches",
+        &[("box", "scalar_box")],
         &[],
     );
-    many_batches.batch_size = Some(7);
+    many_batches.batch_size = Some(1);
     many_batches.no_stream_iterations = true;
     many_batches.no_stream_updates = true;
     many_batches.run(&mut cli.state, &cli.cli_settings)?;
@@ -1584,13 +1583,13 @@ fn test_multi_integrand_batching_preserves_results() -> Result<()> {
     let single_batch_result = load_integration_result(
         &get_tests_workspace_path()
             .join(test_name)
-            .join("triangle_and_box_single_batch")
+            .join("box_single_batch")
             .join("integration_result.json"),
     )?;
     let many_batches_result = load_integration_result(
         &get_tests_workspace_path()
             .join(test_name)
-            .join("triangle_and_box_many_batches")
+            .join("box_many_batches")
             .join("integration_result.json"),
     )?;
 

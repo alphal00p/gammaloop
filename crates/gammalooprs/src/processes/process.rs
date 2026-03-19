@@ -30,7 +30,7 @@ use crate::{
     feyngen::NumeratorAwareGraphGroupingOption,
     integrands::process::ProcessIntegrand,
     numerator::GlobalPrefactor,
-    settings::{GlobalSettings, runtime::LockedRuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
 };
 use eyre::{Context, eyre};
 
@@ -45,6 +45,26 @@ use super::{Amplitude, CrossSection};
 
 const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
 const SETTINGS_HISTORY_YAML: &str = "settings_history.yaml";
+
+pub struct ResolvedIntegrandRef<'a> {
+    pub canonical_name: String,
+    pub integrand: Option<&'a ProcessIntegrand>,
+}
+
+impl<'a> ResolvedIntegrandRef<'a> {
+    pub fn get_settings(&self) -> Option<&'a RuntimeSettings> {
+        self.integrand.map(ProcessIntegrand::get_settings)
+    }
+
+    pub fn require_generated(&self) -> Result<&'a ProcessIntegrand> {
+        self.integrand.ok_or_else(|| {
+            eyre!(
+                "Integrand {} has not yet been generated, but exists",
+                self.canonical_name
+            )
+        })
+    }
+}
 
 fn create_overwriting_file(path: &Path, file_kind: &str) -> Result<File> {
     if path.exists() {
@@ -615,7 +635,10 @@ impl Process {
         Ok(())
     }
 
-    pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&ProcessIntegrand> {
+    pub fn get_integrand(
+        &self,
+        integrand_name: impl AsRef<str>,
+    ) -> Result<ResolvedIntegrandRef<'_>> {
         self.collection.get_integrand(integrand_name)
     }
 
@@ -834,46 +857,25 @@ impl ProcessCollection {
         }
     }
 
-    fn get_integrand(&self, name: impl AsRef<str>) -> Result<&ProcessIntegrand> {
-        let res = match self {
-            Self::Amplitudes(amplitudes) => {
-                if amplitudes.contains_key(name.as_ref()) {
-                    Ok(amplitudes.get(name.as_ref()).unwrap().integrand.as_ref())
-                } else {
-                    let names = amplitudes.keys().map(|a| a.as_str()).collect::<Vec<_>>();
+    fn get_integrand(&self, name: impl AsRef<str>) -> Result<ResolvedIntegrandRef<'_>> {
+        let canonical_name = self.find_integrand(Some(name.as_ref().to_string()))?;
+        let integrand = match self {
+            Self::Amplitudes(amplitudes) => amplitudes
+                .get(&canonical_name)
+                .expect("resolved amplitude name must exist")
+                .integrand
+                .as_ref(),
+            Self::CrossSections(cross_sections) => cross_sections
+                .get(&canonical_name)
+                .expect("resolved cross section name must exist")
+                .integrand
+                .as_ref(),
+        };
 
-                    Err(eyre!("Integrand {} does not exist", name.as_ref()))
-                        .suggestion(format!("Available amplitude names: {}", names.join(", ")))
-                }
-            }
-            Self::CrossSections(cross_sections) => {
-                if cross_sections.contains_key(name.as_ref()) {
-                    Ok(cross_sections
-                        .get(name.as_ref())
-                        .unwrap()
-                        .integrand
-                        .as_ref())
-                } else {
-                    let names = cross_sections
-                        .keys()
-                        .map(|a| a.as_str())
-                        .collect::<Vec<_>>();
-
-                    Err(eyre!("Integrand {} does not exist", name.as_ref())).suggestion(format!(
-                        "Available cross section names: {}",
-                        names.join(", ")
-                    ))
-                }
-            }
-        }?;
-
-        match res {
-            Some(integrand) => Ok(integrand),
-            None => Err(eyre!(
-                "Integrand {} has not yet been generated, but exists",
-                name.as_ref()
-            )),
-        }
+        Ok(ResolvedIntegrandRef {
+            canonical_name,
+            integrand,
+        })
     }
 
     pub fn find_integrand(&self, name: Option<String>) -> Result<String> {

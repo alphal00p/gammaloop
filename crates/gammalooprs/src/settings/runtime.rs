@@ -427,6 +427,7 @@ pub struct IntegrationStatisticsSnapshot {
     pub average_integrand_time_seconds: f64,
     pub average_evaluator_time_seconds: f64,
     pub average_observable_time_seconds: f64,
+    pub average_integrator_time_seconds: f64,
     pub f64_percentage: f64,
     pub f128_percentage: f64,
     pub arb_percentage: f64,

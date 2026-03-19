@@ -295,7 +295,7 @@ impl ProcessList {
         &self,
         process_id: usize,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&crate::integrands::process::ProcessIntegrand> {
+    ) -> Result<crate::processes::process::ResolvedIntegrandRef<'_>> {
         let process = &self.processes[process_id];
         process.get_integrand(integrand_name)
     }
