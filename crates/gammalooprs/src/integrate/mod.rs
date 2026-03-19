@@ -5,6 +5,10 @@
 //! The havana_integrate function is mostly used for local runs.
 //! The master node in combination with batch_integrate is for distributed runs.
 
+mod display;
+mod render_tabled;
+mod status_update;
+
 use bincode::Decode;
 use bincode::Encode;
 use color_eyre::{Report, Result};
@@ -39,26 +43,21 @@ use crate::settings::runtime::{
 };
 use crate::utils;
 use crate::utils::F;
-use crate::utils::normalize_tabled_separator_rows;
 use crate::{is_interrupted, set_interrupted};
 use rayon::prelude::*;
+pub use render_tabled::TabledRenderOptions;
 use spenso::algebra::complex::Complex;
+pub use status_update::{
+    ContributionSortMode, IntegrationStatusKind, IntegrationStatusPhaseDisplay,
+    IntegrationStatusViewOptions, StatusUpdate,
+};
+use status_update::{build_saved_status_update, build_status_update};
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
-use tabled::{
-    Table, Tabled,
-    builder::Builder,
-    settings::{
-        Alignment, Modify, Panel, Span,
-        object::{Cell, Rows},
-        style::Style,
-        themes::BorderCorrection,
-        width::Width,
-    },
-};
+use tabled::Tabled;
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
@@ -391,15 +390,6 @@ struct IntegralResultCells {
 }
 
 const DEFAULT_MAX_SHARED_TABLE_WIDTH: usize = 250;
-
-struct StatusTable {
-    table: Table,
-    separator_after_rows: Vec<usize>,
-    hidden_vertical_boundaries: Vec<usize>,
-    full_row_vertical_count: usize,
-    suppress_header_middle_separator: bool,
-    suppress_header_tail_separator: bool,
-}
 
 fn slot_label(slot_meta: &SlotMeta) -> String {
     format!("itg {}", slot_meta.key())
@@ -1484,471 +1474,6 @@ fn build_iteration_status_header_tail(
     format!("{average_sample_time} /sample/core")
 }
 
-fn build_iteration_results_table(
-    integration_state: &IntegrationState,
-    cores: usize,
-    elapsed_time: Duration,
-    cur_points: usize,
-    total_points_display: usize,
-    n_samples_evaluated: usize,
-    targets: &[Option<Complex<F<f64>>>],
-    render_options: &IntegrationStatusRenderOptions,
-    live_progress: Option<LiveIterationProgress>,
-) -> StatusTable {
-    #[derive(Clone, Default)]
-    struct MainTableSlotCells {
-        value: String,
-        relative_error: String,
-        sample_fraction: String,
-        sample_count: String,
-        target_pdf: String,
-    }
-
-    #[derive(Clone)]
-    struct MainTableRow {
-        contribution: ContributionKind,
-        component: ComponentKind,
-        slot_cells: Vec<MainTableSlotCells>,
-        chi_sq: String,
-        delta_sigma: String,
-        delta_percent: String,
-        max_weight_impact: String,
-    }
-
-    fn component_accumulator(
-        accumulator: &ComplexAccumulator,
-        component: ComponentKind,
-    ) -> &StatisticsAccumulator<F<f64>> {
-        match component {
-            ComponentKind::Real => &accumulator.re,
-            ComponentKind::Imag => &accumulator.im,
-        }
-    }
-
-    fn slot_component_summary<'a>(
-        integration_state: &'a IntegrationState,
-        slot_index: usize,
-        component: ComponentKind,
-    ) -> Option<&'a DiscreteGridAccumulatorSummary> {
-        match component {
-            ComponentKind::Real => integration_state.slot_re_summaries[slot_index].as_ref(),
-            ComponentKind::Imag => integration_state.slot_im_summaries[slot_index].as_ref(),
-        }
-    }
-
-    fn sum_estimate_error(summary: &DiscreteGridAccumulatorSummary) -> (F<f64>, F<f64>) {
-        let (avg, err_sq) = summary
-            .bins
-            .iter()
-            .fold((F(0.0), F(0.0)), |(avg, err_sq), bin| {
-                (
-                    avg + bin.accumulator.avg,
-                    err_sq + bin.accumulator.err * bin.accumulator.err,
-                )
-            });
-        (avg, F(err_sq.0.sqrt()))
-    }
-
-    fn total_processed_samples(summary: &DiscreteGridAccumulatorSummary) -> usize {
-        summary
-            .bins
-            .iter()
-            .map(|bin| bin.accumulator.processed_samples)
-            .sum()
-    }
-
-    fn format_value_cell(avg: F<f64>, err: F<f64>) -> String {
-        format_signed_uncertainty(avg, err, UncertaintyNotation::Scientific)
-            .blue()
-            .bold()
-            .to_string()
-    }
-
-    fn build_main_table_row(
-        integration_state: &IntegrationState,
-        targets: &[Option<Complex<F<f64>>>],
-        monitored_path: Option<&[usize]>,
-        contribution: ContributionKind,
-        component: ComponentKind,
-        show_discrete_columns: bool,
-    ) -> Option<MainTableRow> {
-        let slot_cells = integration_state
-            .slot_metas
-            .iter()
-            .enumerate()
-            .map(|(slot_index, _)| match contribution {
-                ContributionKind::All => {
-                    let accumulator = component_accumulator(
-                        &integration_state.all_integrals[slot_index],
-                        component,
-                    );
-                    Some(MainTableSlotCells {
-                        value: format_value_cell(accumulator.avg, accumulator.err),
-                        relative_error: format_relative_error_cell(accumulator),
-                        sample_fraction: String::new(),
-                        sample_count: String::new(),
-                        target_pdf: String::new(),
-                    })
-                }
-                ContributionKind::Sum => {
-                    let summary = slot_component_summary(integration_state, slot_index, component)
-                        .and_then(|summary| {
-                            monitored_path.and_then(|path| summary_at_path(summary, path))
-                        })?;
-                    let (avg, err) = sum_estimate_error(summary);
-                    Some(MainTableSlotCells {
-                        value: format_value_cell(avg, err),
-                        relative_error: format_relative_error_from_estimate(avg, err),
-                        sample_fraction: String::new(),
-                        sample_count: String::new(),
-                        target_pdf: String::new(),
-                    })
-                }
-                ContributionKind::Bin(bin_index) => {
-                    let slot_context =
-                        integration_state.monitored_discrete_context_for_slot(slot_index);
-                    let summary = slot_component_summary(integration_state, slot_index, component)
-                        .and_then(|summary| {
-                            monitored_path.and_then(|path| summary_at_path(summary, path))
-                        })?;
-                    let bin = summary.bins.get(bin_index)?;
-                    let total_samples = total_processed_samples(summary);
-                    let sample_fraction = if show_discrete_columns && total_samples > 0 {
-                        format_percentage_sig(
-                            bin.accumulator.processed_samples as f64 / total_samples as f64 * 100.0,
-                            3,
-                        )
-                        .blue()
-                        .to_string()
-                    } else {
-                        String::new()
-                    };
-                    let sample_count = if show_discrete_columns {
-                        format_abbreviated_count(bin.accumulator.processed_samples)
-                            .blue()
-                            .to_string()
-                    } else {
-                        String::new()
-                    };
-                    let target_pdf = if show_discrete_columns {
-                        slot_context
-                            .as_ref()
-                            .and_then(|ctx| ctx.pdfs.get(bin_index).copied())
-                            .map(|pdf| format_percentage_sig(pdf.0 * 100.0, 3))
-                            .unwrap_or_default()
-                    } else {
-                        String::new()
-                    };
-                    Some(MainTableSlotCells {
-                        value: format_value_cell(bin.accumulator.avg, bin.accumulator.err),
-                        relative_error: format_relative_error_cell(&bin.accumulator),
-                        sample_fraction,
-                        sample_count,
-                        target_pdf,
-                    })
-                }
-            })
-            .collect::<Option<Vec<_>>>()?;
-
-        let slot0_target = targets
-            .first()
-            .and_then(|target| target.as_ref())
-            .map(|target| match component {
-                ComponentKind::Real => target.re,
-                ComponentKind::Imag => target.im,
-            });
-        let (chi_sq, delta_sigma, delta_percent, max_weight_impact) = match contribution {
-            ContributionKind::All => {
-                let accumulator =
-                    component_accumulator(&integration_state.all_integrals[0], component);
-                let (delta_sigma, delta_percent) = format_delta_cells(accumulator, slot0_target);
-                (
-                    format_chi_sq_cell(accumulator, integration_state.iter),
-                    delta_sigma.unwrap_or_default(),
-                    delta_percent.unwrap_or_default(),
-                    format_mwi_cell(accumulator),
-                )
-            }
-            ContributionKind::Sum => {
-                let summary = slot_component_summary(integration_state, 0, component).and_then(
-                    |summary| monitored_path.and_then(|path| summary_at_path(summary, path)),
-                )?;
-                let (avg, err) = sum_estimate_error(summary);
-                let (delta_sigma, delta_percent) =
-                    format_delta_cells_from_estimate(avg, err, slot0_target);
-                (
-                    String::new(),
-                    delta_sigma.unwrap_or_default(),
-                    delta_percent.unwrap_or_default(),
-                    String::new(),
-                )
-            }
-            ContributionKind::Bin(bin_index) => {
-                let summary = slot_component_summary(integration_state, 0, component).and_then(
-                    |summary| monitored_path.and_then(|path| summary_at_path(summary, path)),
-                )?;
-                let bin = summary.bins.get(bin_index)?;
-                (
-                    format_chi_sq_cell(&bin.accumulator, integration_state.iter),
-                    String::new(),
-                    String::new(),
-                    format_mwi_cell(&bin.accumulator),
-                )
-            }
-        };
-
-        Some(MainTableRow {
-            contribution,
-            component,
-            slot_cells,
-            chi_sq,
-            delta_sigma,
-            delta_percent,
-            max_weight_impact,
-        })
-    }
-
-    fn discrete_sort_key(
-        integration_state: &IntegrationState,
-        monitored_path: &[usize],
-        component: ComponentKind,
-        bin_index: usize,
-        sort_mode: ContributionSortMode,
-    ) -> f64 {
-        let Some(summary) = slot_component_summary(integration_state, 0, component)
-            .and_then(|summary| summary_at_path(summary, monitored_path))
-        else {
-            return 0.0;
-        };
-        let Some(bin) = summary.bins.get(bin_index) else {
-            return 0.0;
-        };
-        match sort_mode {
-            ContributionSortMode::Integral => bin.accumulator.avg.abs().0,
-            ContributionSortMode::Error => bin.accumulator.err.0,
-            ContributionSortMode::Index => bin_index as f64,
-        }
-    }
-
-    let components = ComponentKind::all_for_display(render_options.phase_display);
-    let discrete_context = integration_state.monitored_discrete_context();
-    let monitored_path = integration_state.monitored_discrete_path.as_deref();
-    let show_discrete_columns = monitored_path.is_some()
-        && (render_options.show_top_discrete_grid
-            || render_options.show_discrete_contributions_sum);
-    let has_target_columns = targets.first().is_some_and(Option::is_some);
-    let slot_block_width = if show_discrete_columns { 5 } else { 2 };
-    let metadata_columns = if has_target_columns { 4 } else { 2 };
-    let n_columns = 2 + integration_state.slot_metas.len() * slot_block_width + metadata_columns;
-
-    let mut row_groups = vec![
-        components
-            .iter()
-            .filter_map(|component| {
-                build_main_table_row(
-                    integration_state,
-                    targets,
-                    monitored_path,
-                    ContributionKind::All,
-                    *component,
-                    show_discrete_columns,
-                )
-            })
-            .collect_vec(),
-    ];
-
-    if let Some(discrete_context) = discrete_context.as_ref() {
-        if render_options.show_discrete_contributions_sum {
-            let sum_rows = components
-                .iter()
-                .filter_map(|component| {
-                    build_main_table_row(
-                        integration_state,
-                        targets,
-                        monitored_path,
-                        ContributionKind::Sum,
-                        *component,
-                        show_discrete_columns,
-                    )
-                })
-                .collect_vec();
-            if !sum_rows.is_empty() {
-                row_groups.push(sum_rows);
-            }
-        }
-
-        if render_options.show_top_discrete_grid {
-            let bin_count = discrete_context.pdfs.len();
-            match render_options.contribution_sort {
-                ContributionSortMode::Index => {
-                    let mut rows = Vec::new();
-                    for bin_index in 0..bin_count {
-                        for component in &components {
-                            if let Some(row) = build_main_table_row(
-                                integration_state,
-                                targets,
-                                monitored_path,
-                                ContributionKind::Bin(bin_index),
-                                *component,
-                                show_discrete_columns,
-                            ) {
-                                rows.push(row);
-                            }
-                        }
-                    }
-                    if !rows.is_empty() {
-                        row_groups.push(rows);
-                    }
-                }
-                ContributionSortMode::Integral | ContributionSortMode::Error => {
-                    for component in &components {
-                        let mut bin_indices = (0..bin_count).collect_vec();
-                        bin_indices.sort_by(|lhs, rhs| {
-                            discrete_sort_key(
-                                integration_state,
-                                &discrete_context.path,
-                                *component,
-                                *rhs,
-                                render_options.contribution_sort,
-                            )
-                            .partial_cmp(&discrete_sort_key(
-                                integration_state,
-                                &discrete_context.path,
-                                *component,
-                                *lhs,
-                                render_options.contribution_sort,
-                            ))
-                            .unwrap_or(std::cmp::Ordering::Equal)
-                        });
-                        let rows = bin_indices
-                            .into_iter()
-                            .filter_map(|bin_index| {
-                                build_main_table_row(
-                                    integration_state,
-                                    targets,
-                                    monitored_path,
-                                    ContributionKind::Bin(bin_index),
-                                    *component,
-                                    show_discrete_columns,
-                                )
-                            })
-                            .collect_vec();
-                        if !rows.is_empty() {
-                            row_groups.push(rows);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let mut builder = Builder::new();
-    let mut first_row = vec![
-        build_iteration_status_header_left(elapsed_time, integration_state.iter, live_progress),
-        String::new(),
-        build_iteration_status_header_middle(cur_points, total_points_display, live_progress),
-    ];
-    first_row.resize(n_columns, String::new());
-    first_row[n_columns - 2] =
-        build_iteration_status_header_tail(cores, elapsed_time, n_samples_evaluated);
-    builder.push_record(first_row);
-
-    let mut header_row = vec![
-        contribution_header_label(integration_state, show_discrete_columns),
-        String::new(),
-    ];
-    for slot_meta in &integration_state.slot_metas {
-        header_row.push(slot_meta.key().bold().blue().to_string());
-        header_row.extend(std::iter::repeat_n(String::new(), slot_block_width - 1));
-    }
-    header_row.push("χ²/dof".bold().blue().to_string());
-    header_row.push("mwi".bold().blue().to_string());
-    if has_target_columns {
-        header_row.push("Δ [σ]".bold().blue().to_string());
-        header_row.push("Δ [%]".bold().blue().to_string());
-    }
-    builder.push_record(header_row);
-
-    for group in &row_groups {
-        for row in group {
-            let mut record = vec![
-                row.contribution.label(integration_state),
-                row.component.colorized_tag(),
-            ];
-            for slot_cells in &row.slot_cells {
-                record.push(slot_cells.value.clone());
-                record.push(slot_cells.relative_error.clone());
-                if show_discrete_columns {
-                    record.push(slot_cells.sample_fraction.clone());
-                    record.push(slot_cells.sample_count.clone());
-                    record.push(slot_cells.target_pdf.clone());
-                }
-            }
-            record.push(row.chi_sq.clone());
-            record.push(row.max_weight_impact.clone());
-            if has_target_columns {
-                record.push(row.delta_sigma.clone());
-                record.push(row.delta_percent.clone());
-            }
-            builder.push_record(record);
-        }
-    }
-
-    let mut table = builder.build();
-    table.modify((0, 0), Span::column(2));
-    table.modify((0, 2), Span::column((n_columns - 4) as isize));
-    table.modify((0, n_columns - 2), Span::column(2));
-    table.modify((1, 0), Span::column(2));
-    for (slot_index, _) in integration_state.slot_metas.iter().enumerate() {
-        table.modify(
-            (1, 2 + slot_index * slot_block_width),
-            Span::column(slot_block_width as isize),
-        );
-    }
-
-    let first_metadata_column = 2 + integration_state.slot_metas.len() * slot_block_width;
-
-    let mut separator_rows = vec![1usize, 2usize];
-    let mut row_offset = 2usize;
-    for (group_index, group) in row_groups.iter().enumerate() {
-        row_offset += group.len();
-        if group_index + 1 < row_groups.len() {
-            separator_rows.push(row_offset);
-        }
-    }
-    separator_rows.sort_unstable();
-    separator_rows.dedup();
-
-    table.with(Style::rounded().remove_horizontals());
-    table.with(BorderCorrection::span());
-    table.with(Modify::new(Rows::new(0..)).with(Alignment::left()));
-    table.with(Modify::new(Cell::new(0, 2)).with(Alignment::center()));
-    table.with(Modify::new(Cell::new(0, n_columns - 2)).with(Alignment::center()));
-    table.with(Modify::new(Rows::new(1..2)).with(Alignment::center()));
-
-    let mut hidden_vertical_boundaries = vec![0usize];
-    for slot_index in 0..integration_state.slot_metas.len() {
-        let block_start = 2 + slot_index * slot_block_width;
-        hidden_vertical_boundaries.extend(block_start..(block_start + slot_block_width - 1));
-    }
-    hidden_vertical_boundaries.push(first_metadata_column);
-    if has_target_columns {
-        hidden_vertical_boundaries.push(first_metadata_column + 2);
-    }
-
-    StatusTable {
-        table,
-        separator_after_rows: separator_rows
-            .into_iter()
-            .map(|row| row.saturating_sub(1))
-            .collect(),
-        hidden_vertical_boundaries,
-        full_row_vertical_count: n_columns + 1,
-        suppress_header_middle_separator: true,
-        suppress_header_tail_separator: true,
-    }
-}
-
 fn max_weight_row_descriptors(
     phase_display: IntegrationStatusPhaseDisplay,
 ) -> Vec<(ComponentKind, &'static str, bool)> {
@@ -1985,425 +1510,6 @@ fn max_eval_entry<'a>(
     } else {
         Some((value, sample))
     }
-}
-
-fn build_max_weight_details_table(
-    integration_state: &IntegrationState,
-    render_options: &IntegrationStatusRenderOptions,
-) -> StatusTable {
-    let mut builder = Builder::new();
-    builder.push_record([
-        "Integrand".bold().blue().to_string(),
-        String::new(),
-        "Max eval".bold().blue().to_string(),
-        "Max eval coordinates".bold().blue().to_string(),
-    ]);
-
-    let row_groups = integration_state
-        .slot_metas
-        .iter()
-        .enumerate()
-        .zip(integration_state.all_integrals.iter())
-        .filter_map(|((slot_index, slot_meta), integral)| {
-            let rows = max_weight_row_descriptors(render_options.phase_display)
-                .into_iter()
-                .filter_map(|(component, sign, positive)| {
-                    let accumulator = match component {
-                        ComponentKind::Real => &integral.re,
-                        ComponentKind::Imag => &integral.im,
-                    };
-                    let (value, coordinates) = max_eval_entry(accumulator, positive)?;
-                    Some([
-                        slot_key_label(slot_meta).green().to_string(),
-                        format!("{} [{}]", component.colorized_tag(), sign.blue()),
-                        format!("{:+.16e}", value),
-                        coordinates
-                            .map(|sample| {
-                                format_max_eval_sample(
-                                    sample,
-                                    &integration_state
-                                        .sampling_state_for_slot(slot_index)
-                                        .discrete_axis_labels,
-                                    &[],
-                                )
-                            })
-                            .unwrap_or_else(|| "N/A".to_string()),
-                    ])
-                })
-                .collect_vec();
-            (!rows.is_empty()).then_some(rows)
-        })
-        .collect_vec();
-
-    for group in &row_groups {
-        for row in group {
-            builder.push_record(row.clone());
-        }
-    }
-
-    let mut table = builder.build();
-    table.modify((0, 0), Span::column(2));
-    table.with(Panel::header(
-        "Maximum weight details".bold().green().to_string(),
-    ));
-    table.with(Style::rounded().remove_horizontals());
-    table.with(BorderCorrection::span());
-    table.with(Modify::new(Rows::new(0..2)).with(Alignment::center()));
-    table.with(Modify::new(Rows::new(2..)).with(Alignment::left()));
-
-    let mut separator_rows = vec![0usize, 1usize];
-    let mut row_offset = 1usize;
-    for (group_index, group) in row_groups.iter().enumerate() {
-        row_offset += group.len();
-        if group_index + 1 < row_groups.len() {
-            separator_rows.push(row_offset);
-        }
-    }
-    StatusTable {
-        table,
-        separator_after_rows: separator_rows,
-        hidden_vertical_boundaries: vec![0],
-        full_row_vertical_count: 5,
-        suppress_header_middle_separator: false,
-        suppress_header_tail_separator: false,
-    }
-}
-
-fn build_discrete_bin_max_weight_details_table(
-    integration_state: &IntegrationState,
-    render_options: &IntegrationStatusRenderOptions,
-) -> Option<StatusTable> {
-    fn slot_component_summary<'a>(
-        integration_state: &'a IntegrationState,
-        slot_index: usize,
-        component: ComponentKind,
-    ) -> Option<&'a DiscreteGridAccumulatorSummary> {
-        match component {
-            ComponentKind::Real => integration_state.slot_re_summaries[slot_index].as_ref(),
-            ComponentKind::Imag => integration_state.slot_im_summaries[slot_index].as_ref(),
-        }
-    }
-
-    let discrete_context = integration_state.monitored_discrete_context()?;
-    let mut builder = Builder::new();
-    let mut header = vec![
-        contribution_header_label(integration_state, true),
-        String::new(),
-    ];
-    for slot_meta in &integration_state.slot_metas {
-        header.push(slot_meta.key().bold().blue().to_string());
-    }
-    header.push("Max eval coordinates".bold().blue().to_string());
-    builder.push_record(header);
-
-    let contributions = std::iter::once(ContributionKind::All)
-        .chain((0..discrete_context.pdfs.len()).map(ContributionKind::Bin))
-        .collect_vec();
-
-    let mut row_groups = Vec::new();
-    for contribution in contributions {
-        let mut rows = Vec::new();
-        for (component, sign, positive) in max_weight_row_descriptors(render_options.phase_display)
-        {
-            let slot_values = integration_state
-                .slot_metas
-                .iter()
-                .enumerate()
-                .map(|(slot_index, _)| {
-                    let accumulator = match contribution {
-                        ContributionKind::All => {
-                            let integral = &integration_state.all_integrals[slot_index];
-                            match component {
-                                ComponentKind::Real => &integral.re,
-                                ComponentKind::Imag => &integral.im,
-                            }
-                        }
-                        ContributionKind::Bin(bin_index) => {
-                            let summary =
-                                slot_component_summary(integration_state, slot_index, component)
-                                    .and_then(|summary| {
-                                        summary_at_path(summary, &discrete_context.path)
-                                    })?;
-                            &summary.bins.get(bin_index)?.accumulator
-                        }
-                        ContributionKind::Sum => return None,
-                    };
-                    Some(
-                        max_eval_entry(accumulator, positive)
-                            .map(|(value, _)| format!("{:+.16e}", value))
-                            .unwrap_or_default(),
-                    )
-                })
-                .collect::<Option<Vec<_>>>()?;
-
-            let slot_coordinates = integration_state
-                .slot_metas
-                .iter()
-                .enumerate()
-                .filter_map(|(slot_index, slot_meta)| {
-                    let coordinates = match contribution {
-                        ContributionKind::All => {
-                            let accumulator = match component {
-                                ComponentKind::Real => {
-                                    &integration_state.all_integrals[slot_index].re
-                                }
-                                ComponentKind::Imag => {
-                                    &integration_state.all_integrals[slot_index].im
-                                }
-                            };
-                            max_eval_entry(accumulator, positive)
-                                .and_then(|(_, sample)| sample)
-                                .map(|sample| {
-                                    format_max_eval_sample(
-                                        sample,
-                                        &integration_state
-                                            .sampling_state_for_slot(slot_index)
-                                            .discrete_axis_labels,
-                                        &[],
-                                    )
-                                })
-                        }
-                        ContributionKind::Bin(bin_index) => {
-                            let slot_context = integration_state
-                                .monitored_discrete_context_for_slot(slot_index)?;
-                            let summary =
-                                slot_component_summary(integration_state, slot_index, component)
-                                    .and_then(|summary| {
-                                        summary_at_path(summary, &slot_context.path)
-                                    })?;
-                            max_eval_entry(&summary.bins.get(bin_index)?.accumulator, positive)
-                                .and_then(|(_, sample)| sample)
-                                .map(|sample| {
-                                    format_max_eval_sample(
-                                        sample,
-                                        &integration_state
-                                            .sampling_state_for_slot(slot_index)
-                                            .discrete_axis_labels,
-                                        &slot_context.path,
-                                    )
-                                })
-                        }
-                        ContributionKind::Sum => None,
-                    }?;
-
-                    Some(format!("{}: {}", slot_meta.key().green(), coordinates))
-                })
-                .collect_vec()
-                .join("\n");
-
-            if slot_values.iter().all(String::is_empty) && slot_coordinates.is_empty() {
-                continue;
-            }
-
-            let mut record = vec![
-                contribution.label(integration_state),
-                format!("{} [{}]", component.colorized_tag(), sign.blue()),
-            ];
-            record.extend(slot_values);
-            record.push(slot_coordinates);
-            rows.push(record);
-        }
-        if !rows.is_empty() {
-            row_groups.push(rows);
-        }
-    }
-
-    if row_groups.is_empty() {
-        return None;
-    }
-
-    for group in &row_groups {
-        for row in group {
-            builder.push_record(row.clone());
-        }
-    }
-
-    let mut table = builder.build();
-    table.modify((0, 0), Span::column(2));
-    table.with(Panel::header(
-        "Maximum weight details by discrete bin"
-            .bold()
-            .green()
-            .to_string(),
-    ));
-
-    let mut separator_rows = vec![1usize, 2usize];
-    let mut row_offset = 1usize;
-    for (group_index, group) in row_groups.iter().enumerate() {
-        row_offset += group.len();
-        if group_index + 1 < row_groups.len() {
-            separator_rows.push(row_offset + 1);
-        }
-    }
-
-    table.with(Style::rounded().remove_horizontals());
-    table.with(BorderCorrection::span());
-    table.with(Modify::new(Rows::new(0..2)).with(Alignment::center()));
-    table.with(Modify::new(Rows::new(2..)).with(Alignment::left()));
-    Some(StatusTable {
-        table,
-        separator_after_rows: separator_rows
-            .into_iter()
-            .map(|row| row.saturating_sub(1))
-            .collect(),
-        hidden_vertical_boundaries: vec![0],
-        full_row_vertical_count: integration_state.slot_metas.len() + 4,
-        suppress_header_middle_separator: false,
-        suppress_header_tail_separator: false,
-    })
-}
-
-fn suppress_iteration_header_separators(
-    rendered: &str,
-    suppress_middle_separator: bool,
-    suppress_tail_separator: bool,
-) -> String {
-    rendered
-        .lines()
-        .enumerate()
-        .map(|(line_index, line)| {
-            if line_index != 1 {
-                return line.to_string();
-            }
-
-            let vertical_positions = line.match_indices('│').map(|(idx, _)| idx).collect_vec();
-            if vertical_positions.len() < 3 {
-                return line.to_string();
-            }
-
-            let mut updated = line.to_string();
-            if suppress_tail_separator {
-                let suppressed_index = vertical_positions[vertical_positions.len() - 2];
-                updated.replace_range(suppressed_index..suppressed_index + '│'.len_utf8(), " ");
-            }
-            if suppress_middle_separator && vertical_positions.len() >= 4 {
-                let suppressed_index = vertical_positions[1];
-                updated.replace_range(suppressed_index..suppressed_index + '│'.len_utf8(), " ");
-            }
-            updated
-        })
-        .join("\n")
-}
-
-fn hide_hidden_vertical_boundaries(
-    rendered: &str,
-    hidden_vertical_boundaries: &[usize],
-    full_row_vertical_count: usize,
-) -> String {
-    rendered
-        .lines()
-        .map(|line| {
-            let vertical_positions = line.match_indices('│').map(|(idx, _)| idx).collect_vec();
-            if vertical_positions.len() != full_row_vertical_count {
-                return line.to_string();
-            }
-
-            let mut updated = line.to_string();
-            for boundary in hidden_vertical_boundaries.iter().rev() {
-                let Some(position) = vertical_positions.get(boundary + 1).copied() else {
-                    continue;
-                };
-                updated.replace_range(position..position + '│'.len_utf8(), " ");
-            }
-            updated
-        })
-        .join("\n")
-}
-
-fn insert_separator_rows(rendered: &str, separator_after_rows: &[usize]) -> String {
-    if separator_after_rows.is_empty() {
-        return rendered.to_string();
-    }
-
-    let mut lines = rendered.lines().map(str::to_string).collect_vec();
-    let width = lines
-        .first()
-        .map(|line| line.chars().count())
-        .unwrap_or_default();
-    if width < 2 {
-        return rendered.to_string();
-    }
-    let separator = format!("├{}┤", "─".repeat(width - 2));
-
-    let mut inserted = 0usize;
-    for row in separator_after_rows {
-        let insert_at = row + 2 + inserted;
-        lines.insert(insert_at, separator.clone());
-        inserted += 1;
-    }
-
-    lines.join("\n")
-}
-
-fn suppress_spanned_metadata_header_separators(rendered: &str) -> String {
-    rendered
-        .lines()
-        .map(|line| {
-            if !line.contains("χ²/dof") || !line.contains("mwi") {
-                return line.to_string();
-            }
-
-            let mut updated = line.to_string();
-            let separators_to_remove = [("χ²/dof", "mwi"), ("Δ [σ]", "Δ [%]")];
-
-            for (left_label, right_label) in separators_to_remove {
-                let Some(left_start) = updated.find(left_label) else {
-                    continue;
-                };
-                let Some(right_start) = updated.find(right_label) else {
-                    continue;
-                };
-                let left_end = left_start + left_label.len();
-                if let Some((separator_index, _)) = updated[left_end..right_start]
-                    .match_indices('│')
-                    .next_back()
-                {
-                    let separator_index = left_end + separator_index;
-                    updated.replace_range(separator_index..separator_index + '│'.len_utf8(), " ");
-                }
-            }
-
-            updated
-        })
-        .join("\n")
-}
-
-fn render_tables_with_shared_width(mut tables: Vec<StatusTable>, max_table_width: usize) -> String {
-    let max_width = tables
-        .iter()
-        .map(|table| table.table.total_width())
-        .max()
-        .unwrap_or(0)
-        .min(max_table_width.max(1));
-
-    for table in &mut tables {
-        if table.table.total_width() < max_width {
-            table.table.with(Width::increase(max_width));
-        }
-    }
-
-    tables
-        .into_iter()
-        .map(|table| {
-            let mut rendered = table.table.to_string();
-            rendered = hide_hidden_vertical_boundaries(
-                &rendered,
-                &table.hidden_vertical_boundaries,
-                table.full_row_vertical_count,
-            );
-            if table.suppress_header_middle_separator || table.suppress_header_tail_separator {
-                rendered = suppress_iteration_header_separators(
-                    &rendered,
-                    table.suppress_header_middle_separator,
-                    table.suppress_header_tail_separator,
-                );
-            }
-            rendered = suppress_spanned_metadata_header_separators(&rendered);
-            rendered = insert_separator_rows(&rendered, &table.separator_after_rows);
-            normalize_tabled_separator_rows(&rendered)
-        })
-        .collect_vec()
-        .join("\n")
 }
 
 /// struct to keep track of state, used in the havana_integrate function
@@ -2769,58 +1875,6 @@ impl CoreIterationState {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum IntegrationStatusKind {
-    Live,
-    Iteration,
-    Final,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum IntegrationStatusPhaseDisplay {
-    Both,
-    Real,
-    Imag,
-}
-
-impl IntegrationStatusPhaseDisplay {
-    fn shows_real(self) -> bool {
-        matches!(self, Self::Both | Self::Real)
-    }
-
-    fn shows_imag(self) -> bool {
-        matches!(self, Self::Both | Self::Imag)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ContributionSortMode {
-    Index,
-    Integral,
-    Error,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct IntegrationStatusRenderOptions {
-    pub phase_display: IntegrationStatusPhaseDisplay,
-    pub show_statistics: bool,
-    pub show_max_weight_details: bool,
-    pub show_top_discrete_grid: bool,
-    pub show_discrete_contributions_sum: bool,
-    pub contribution_sort: ContributionSortMode,
-    pub show_max_weight_info_for_discrete_bins: bool,
-    pub max_table_width: usize,
-}
-
-impl IntegrationStatusRenderOptions {
-    fn for_final(self) -> Self {
-        Self {
-            show_statistics: true,
-            ..self
-        }
-    }
-}
-
 fn initial_batch_size(batching: IterationBatchingSettings) -> usize {
     batching.batch_size.unwrap_or(100).max(1)
 }
@@ -3010,11 +2064,11 @@ pub fn havana_integrate<S>(
     workspace: Option<PathBuf>,
     output_control: WorkspaceSnapshotControl,
     batching: IterationBatchingSettings,
-    render_options: IntegrationStatusRenderOptions,
+    view_options: IntegrationStatusViewOptions,
     mut status_emitter: S,
 ) -> Result<IntegrationResult>
 where
-    S: FnMut(IntegrationStatusKind, String) -> Result<()>,
+    S: FnMut(StatusUpdate) -> Result<()>,
 {
     if slot_metas.is_empty() {
         return Err(Report::msg(
@@ -3273,24 +2327,21 @@ where
                         elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
                         &worker_states,
                     );
-                    status_emitter(
+                    status_emitter(build_status_update(
                         IntegrationStatusKind::Live,
-                        render_iteration_status_block(
-                            IntegrationStatusKind::Live,
-                            &preview_state,
-                            cores,
-                            t_start.elapsed(),
+                        &preview_state,
+                        cores,
+                        t_start.elapsed(),
+                        completed_points,
+                        integration_state.num_points + completed_points,
+                        n_samples_evaluated + completed_points,
+                        &targets,
+                        &view_options,
+                        Some(status_update::LiveIterationProgress {
                             completed_points,
-                            integration_state.num_points + completed_points,
-                            n_samples_evaluated + completed_points,
-                            &targets,
-                            &render_options,
-                            Some(LiveIterationProgress {
-                                completed_points,
-                                target_points: cur_points,
-                            }),
-                        ),
-                    )?;
+                            target_points: cur_points,
+                        }),
+                    ))?;
                     last_live_status = Some(now);
                 }
             }
@@ -3373,41 +2424,35 @@ where
             )?;
         }
 
-        status_emitter(
+        status_emitter(build_status_update(
             IntegrationStatusKind::Iteration,
-            render_iteration_status_block(
-                IntegrationStatusKind::Iteration,
-                &integration_state,
-                cores,
-                t_start.elapsed(),
-                cur_points,
-                integration_state.num_points,
-                n_samples_evaluated,
-                &targets,
-                &IntegrationStatusRenderOptions { ..render_options },
-                None,
-            ),
-        )?;
+            &integration_state,
+            cores,
+            t_start.elapsed(),
+            cur_points,
+            integration_state.num_points,
+            n_samples_evaluated,
+            &targets,
+            &view_options,
+            None,
+        ))?;
     }
     // Reset the interrupted flag
     set_interrupted(false);
 
     if integration_state.num_points > 0 {
-        status_emitter(
+        status_emitter(build_status_update(
             IntegrationStatusKind::Final,
-            render_iteration_status_block(
-                IntegrationStatusKind::Final,
-                &integration_state,
-                cores,
-                t_start.elapsed(),
-                0,
-                integration_state.num_points,
-                n_samples_evaluated,
-                &targets,
-                &render_options.for_final(),
-                None,
-            ),
-        )?;
+            &integration_state,
+            cores,
+            t_start.elapsed(),
+            0,
+            integration_state.num_points,
+            n_samples_evaluated,
+            &targets,
+            &view_options.for_final(),
+            None,
+        ))?;
     } else {
         info!("");
         warn!(
@@ -4275,74 +3320,23 @@ pub fn emit_integration_status_via_tracing(
     Ok(())
 }
 
-fn render_iteration_status_block(
-    _kind: IntegrationStatusKind,
-    integration_state: &IntegrationState,
-    cores: usize,
-    elapsed_time: Duration,
-    cur_points: usize,
-    total_points_display: usize,
-    n_samples_evaluated: usize,
-    targets: &[Option<Complex<F<f64>>>],
-    render_options: &IntegrationStatusRenderOptions,
-    live_progress: Option<LiveIterationProgress>,
-) -> String {
-    let mut tables = vec![build_iteration_results_table(
-        integration_state,
-        cores,
-        elapsed_time,
-        cur_points,
-        total_points_display,
-        n_samples_evaluated,
-        targets,
-        render_options,
-        live_progress,
-    )];
-
-    if render_options.show_max_weight_details {
-        tables.push(build_max_weight_details_table(
-            integration_state,
-            render_options,
-        ));
-        if render_options.show_max_weight_info_for_discrete_bins
-            && let Some(discrete_table) =
-                build_discrete_bin_max_weight_details_table(integration_state, render_options)
-        {
-            tables.push(discrete_table);
-        }
-    }
-
-    if render_options.show_statistics {
-        tables.push(StatusTable {
-            table: integration_state.stats.build_status_table(),
-            separator_after_rows: Vec::new(),
-            hidden_vertical_boundaries: Vec::new(),
-            full_row_vertical_count: 0,
-            suppress_header_middle_separator: false,
-            suppress_header_tail_separator: false,
-        });
-    }
-
-    render_tables_with_shared_width(tables, render_options.max_table_width)
-}
-
 pub fn render_saved_integration_summary(
     integration_state: &IntegrationState,
     targets: &[Option<Complex<F<f64>>>],
-    render_options: &IntegrationStatusRenderOptions,
+    view_options: &IntegrationStatusViewOptions,
+    tabled_options: &TabledRenderOptions,
 ) -> String {
-    render_iteration_status_block(
-        IntegrationStatusKind::Final,
-        integration_state,
-        integration_state.n_cores.max(1),
-        utils::duration_from_secs_f64_saturating(integration_state.elapsed_seconds),
-        0,
-        integration_state.num_points,
-        integration_state.num_points,
-        targets,
-        &render_options.for_final(),
-        None,
+    render_tabled::render_status_update(
+        &build_saved_status_update(integration_state, targets, view_options),
+        tabled_options,
     )
+}
+
+pub fn render_status_update_tabled(
+    update: &StatusUpdate,
+    tabled_options: &TabledRenderOptions,
+) -> String {
+    render_tabled::render_status_update(update, tabled_options)
 }
 
 pub fn build_integration_result(
@@ -4602,8 +3596,8 @@ mod tests {
         state
     }
 
-    fn default_render_options() -> IntegrationStatusRenderOptions {
-        IntegrationStatusRenderOptions {
+    fn default_view_options() -> IntegrationStatusViewOptions {
+        IntegrationStatusViewOptions {
             phase_display: IntegrationStatusPhaseDisplay::Both,
             show_statistics: true,
             show_max_weight_details: true,
@@ -4611,8 +3605,42 @@ mod tests {
             show_discrete_contributions_sum: false,
             contribution_sort: ContributionSortMode::Error,
             show_max_weight_info_for_discrete_bins: false,
+        }
+    }
+
+    fn default_tabled_options() -> TabledRenderOptions {
+        TabledRenderOptions {
             max_table_width: DEFAULT_MAX_SHARED_TABLE_WIDTH,
         }
+    }
+
+    fn render_update(
+        kind: IntegrationStatusKind,
+        state: &IntegrationState,
+        cores: usize,
+        elapsed_time: Duration,
+        cur_points: usize,
+        total_points_display: usize,
+        n_samples_evaluated: usize,
+        targets: &[Option<Complex<F<f64>>>],
+        view_options: &IntegrationStatusViewOptions,
+        live_progress: Option<status_update::LiveIterationProgress>,
+    ) -> String {
+        render_status_update_tabled(
+            &build_status_update(
+                kind,
+                state,
+                cores,
+                elapsed_time,
+                cur_points,
+                total_points_display,
+                n_samples_evaluated,
+                targets,
+                view_options,
+                live_progress,
+            ),
+            &default_tabled_options(),
+        )
     }
 
     #[test]
@@ -4652,12 +3680,25 @@ mod tests {
             vec![None],
         );
         state.all_integrals = vec![accumulator];
-        let rendered = render_tables_with_shared_width(
-            vec![build_max_weight_details_table(
+        let rendered = render_status_update_tabled(
+            &build_status_update(
+                IntegrationStatusKind::Iteration,
                 &state,
-                &default_render_options(),
-            )],
-            DEFAULT_MAX_SHARED_TABLE_WIDTH,
+                1,
+                Duration::from_secs(0),
+                0,
+                0,
+                0,
+                &[None],
+                &IntegrationStatusViewOptions {
+                    show_statistics: false,
+                    show_top_discrete_grid: false,
+                    show_discrete_contributions_sum: false,
+                    ..default_view_options()
+                },
+                None,
+            ),
+            &default_tabled_options(),
         );
 
         assert!(rendered.contains("Maximum weight details"), "{rendered}");
@@ -4676,7 +3717,7 @@ mod tests {
     #[test]
     fn iteration_status_block_uses_compact_header_and_optional_statistics() {
         let state = make_integration_state();
-        let rendered = render_iteration_status_block(
+        let rendered = render_update(
             IntegrationStatusKind::Iteration,
             &state,
             4,
@@ -4685,10 +3726,10 @@ mod tests {
             100_000,
             100_000,
             &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusRenderOptions {
+            &IntegrationStatusViewOptions {
                 show_statistics: false,
                 show_max_weight_details: false,
-                ..default_render_options()
+                ..default_view_options()
             },
             None,
         );
@@ -4720,7 +3761,7 @@ mod tests {
     #[test]
     fn iteration_status_block_omits_delta_columns_when_no_target_is_provided() {
         let state = make_integration_state();
-        let rendered = render_iteration_status_block(
+        let rendered = render_update(
             IntegrationStatusKind::Iteration,
             &state,
             4,
@@ -4729,10 +3770,10 @@ mod tests {
             100_000,
             100_000,
             &[None, None],
-            &IntegrationStatusRenderOptions {
+            &IntegrationStatusViewOptions {
                 show_statistics: true,
                 show_max_weight_details: false,
-                ..default_render_options()
+                ..default_view_options()
             },
             None,
         );
@@ -4748,7 +3789,7 @@ mod tests {
         let mut state = make_integration_state();
         state.iter = 2;
         state.num_points = 125_000;
-        let rendered = render_iteration_status_block(
+        let rendered = render_update(
             IntegrationStatusKind::Live,
             &state,
             4,
@@ -4757,12 +3798,12 @@ mod tests {
             125_000,
             125_000,
             &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusRenderOptions {
+            &IntegrationStatusViewOptions {
                 show_statistics: false,
                 show_max_weight_details: false,
-                ..default_render_options()
+                ..default_view_options()
             },
-            Some(LiveIterationProgress {
+            Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
             }),
@@ -4783,7 +3824,7 @@ mod tests {
     #[test]
     fn iteration_status_block_shows_discrete_contributions_and_discrete_max_weights() {
         let state = make_discrete_integration_state();
-        let rendered = render_iteration_status_block(
+        let rendered = render_update(
             IntegrationStatusKind::Iteration,
             &state,
             4,
@@ -4792,14 +3833,14 @@ mod tests {
             210_000,
             210_000,
             &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusRenderOptions {
+            &IntegrationStatusViewOptions {
                 show_statistics: false,
                 show_max_weight_details: true,
                 show_top_discrete_grid: true,
                 show_discrete_contributions_sum: true,
                 contribution_sort: ContributionSortMode::Index,
                 show_max_weight_info_for_discrete_bins: true,
-                ..default_render_options()
+                ..default_view_options()
             },
             None,
         );
@@ -4830,7 +3871,7 @@ mod tests {
     #[test]
     fn iteration_status_block_hides_spanned_metadata_header_separators() {
         let state = make_discrete_integration_state();
-        let rendered = render_iteration_status_block(
+        let rendered = render_update(
             IntegrationStatusKind::Iteration,
             &state,
             4,
@@ -4839,14 +3880,14 @@ mod tests {
             210_000,
             210_000,
             &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusRenderOptions {
+            &IntegrationStatusViewOptions {
                 show_statistics: false,
                 show_max_weight_details: false,
                 show_top_discrete_grid: true,
                 show_discrete_contributions_sum: true,
                 contribution_sort: ContributionSortMode::Index,
                 show_max_weight_info_for_discrete_bins: false,
-                ..default_render_options()
+                ..default_view_options()
             },
             None,
         );
@@ -4896,14 +3937,38 @@ mod tests {
     #[test]
     fn orientation_descriptions_use_colored_signs() {
         control::set_override(true);
-        let rendered = render_bin_description("orientation", "+-0");
+        let rendered = display::styled_bin_description("orientation", "+-0").to_plain_string();
         let expected_plus = "+".green().bold().to_string();
         let expected_minus = "-".red().bold().to_string();
         control::set_override(false);
 
-        assert!(rendered.contains(&expected_plus), "{rendered}");
-        assert!(rendered.contains(&expected_minus), "{rendered}");
-        assert!(rendered.contains("0"), "{rendered}");
+        let ansi = render_tabled::render_status_update(
+            &build_status_update(
+                IntegrationStatusKind::Iteration,
+                &make_discrete_integration_state(),
+                1,
+                Duration::from_secs(0),
+                0,
+                0,
+                0,
+                &[None, None],
+                &IntegrationStatusViewOptions {
+                    show_statistics: false,
+                    show_max_weight_details: false,
+                    show_top_discrete_grid: true,
+                    show_discrete_contributions_sum: false,
+                    contribution_sort: ContributionSortMode::Index,
+                    show_max_weight_info_for_discrete_bins: false,
+                    ..default_view_options()
+                },
+                None,
+            ),
+            &default_tabled_options(),
+        );
+
+        assert!(ansi.contains(&expected_plus), "{ansi}");
+        assert!(ansi.contains(&expected_minus), "{ansi}");
+        assert!(ansi.contains("0"), "{ansi}");
     }
 
     #[test]
@@ -4948,11 +4013,11 @@ mod tests {
         );
 
         assert_eq!(
-            format_max_eval_sample(&full_sample, &axis_labels, &[]),
+            display::format_max_eval_sample(&full_sample, &axis_labels, &[]),
             "graph: 0, LMB channel: 1, xs: [ 2.5000000000000000e-01 ]"
         );
         assert_eq!(
-            format_max_eval_sample(&nested_sample, &axis_labels, &[0]),
+            display::format_max_eval_sample(&nested_sample, &axis_labels, &[0]),
             "graph: 0, LMB channel: 1, xs: [ 7.5000000000000000e-01 ]"
         );
     }
@@ -4982,8 +4047,25 @@ mod tests {
         );
 
         assert_eq!(
-            format_max_eval_sample(&sample, &axis_labels, &[]),
+            display::format_max_eval_sample(&sample, &axis_labels, &[]),
             "graph: 0, orientation: 9, xs: [\n1.2500000000000000e-01 2.5000000000000000e-01 3.7500000000000000e-01\n5.0000000000000000e-01 6.2500000000000000e-01 7.5000000000000000e-01\n8.7500000000000000e-01 ]"
+        );
+    }
+
+    #[test]
+    fn discrete_bin_prefixes_use_fixed_width_within_each_range() {
+        assert_eq!(status_update::format_discrete_bin_prefix(2, 99), "#2: ");
+        assert_eq!(status_update::format_discrete_bin_prefix(12, 99), "#12:");
+        assert_eq!(status_update::format_discrete_bin_prefix(2, 999), "#2:  ");
+        assert_eq!(status_update::format_discrete_bin_prefix(12, 999), "#12: ");
+        assert_eq!(status_update::format_discrete_bin_prefix(123, 999), "#123:");
+        assert_eq!(
+            status_update::format_discrete_bin_prefix(2, 9_999),
+            "#2:   "
+        );
+        assert_eq!(
+            status_update::format_discrete_bin_prefix(1234, 9_999),
+            "#1234:"
         );
     }
 
@@ -4993,15 +4075,16 @@ mod tests {
         let rendered = render_saved_integration_summary(
             &state,
             &[None, None],
-            &IntegrationStatusRenderOptions {
+            &IntegrationStatusViewOptions {
                 show_statistics: true,
                 show_max_weight_details: true,
                 show_top_discrete_grid: false,
                 show_discrete_contributions_sum: false,
                 contribution_sort: ContributionSortMode::Index,
                 show_max_weight_info_for_discrete_bins: false,
-                ..default_render_options()
+                ..default_view_options()
             },
+            &default_tabled_options(),
         );
 
         assert!(rendered.contains("Maximum weight details"), "{rendered}");

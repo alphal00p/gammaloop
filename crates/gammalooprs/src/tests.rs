@@ -17,7 +17,7 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Complex as SymComplex;
 
 use crate::integrate::{
-    ContributionSortMode, IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
+    ContributionSortMode, IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions,
     SamplingCorrelationMode, SlotMeta, havana_integrate,
 };
 
@@ -28,8 +28,8 @@ const BASE_N_START_SAMPLE: usize = 100_000;
 
 const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 
-fn default_render_options() -> IntegrationStatusRenderOptions {
-    IntegrationStatusRenderOptions {
+fn default_render_options() -> IntegrationStatusViewOptions {
+    IntegrationStatusViewOptions {
         phase_display: IntegrationStatusPhaseDisplay::Both,
         show_statistics: true,
         show_max_weight_details: true,
@@ -37,7 +37,6 @@ fn default_render_options() -> IntegrationStatusRenderOptions {
         show_discrete_contributions_sum: false,
         contribution_sort: ContributionSortMode::Error,
         show_max_weight_info_for_discrete_bins: false,
-        max_table_width: 250,
     }
 }
 
@@ -90,7 +89,7 @@ fn compare_integration(
                 crate::integrate::WorkspaceSnapshotControl::default(),
                 crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
-                |_, _| Ok(()),
+                |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;
             if !F::approx_eq(&integral.result.re, &target.re, &applied_tolerance)
@@ -122,7 +121,7 @@ fn compare_integration(
                 crate::integrate::WorkspaceSnapshotControl::default(),
                 crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
-                |_, _| Ok(()),
+                |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;
             if !F::approx_eq(&integral.result.im, &target.im, &applied_tolerance)
@@ -156,7 +155,7 @@ fn compare_integration(
                 crate::integrate::WorkspaceSnapshotControl::default(),
                 crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
-                |_, _| Ok(()),
+                |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;
             if !F::approx_eq(&integral.result.re, &target.re, &applied_tolerance)
@@ -190,7 +189,7 @@ fn compare_integration(
                 crate::integrate::WorkspaceSnapshotControl::default(),
                 crate::integrate::IterationBatchingSettings::default(),
                 default_render_options(),
-                |_, _| Ok(()),
+                |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;
             if !F::approx_eq(&integral.result.im, &target.im, &applied_tolerance)

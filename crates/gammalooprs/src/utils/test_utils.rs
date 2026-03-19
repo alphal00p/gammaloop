@@ -45,9 +45,9 @@ pub mod test {
         assert_snapshot!(a.to_canonical_string(),@"0");
         assert_snapshot!(b.to_canonical_string(),@"gammalooprs::{}::Q(1,spenso::{}::cind(1))");
 
-        let c = GS.delta_vec(0, GS.cind(1));
+        let c = GS.energy_delta(GS.cind(1));
         assert_snapshot!(c.to_canonical_string(),@"0");
-        let c = GS.delta_vec(0, GS.cind(0));
+        let c = GS.energy_delta(GS.cind(0));
         assert_snapshot!(c.to_canonical_string(),@"1");
 
         let expr = parse_lit!(f(a + p + r));

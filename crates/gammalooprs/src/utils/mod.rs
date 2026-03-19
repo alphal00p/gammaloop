@@ -16,7 +16,10 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use idenso::representations::initialize;
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::builder::HedgeGraphBuilder;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::nodestore::NodeStorageVec;
+use linnet::half_edge::{HedgeGraph, NoData};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
 use rug::Float;
@@ -89,6 +92,18 @@ pub const PINCH_TEST_THRESHOLD: f64 = 1e-10;
 
 pub const LEFT: usize = 0;
 pub const RIGHT: usize = 1;
+
+pub(crate) fn dummy_hedge_graph(
+    n_edges: usize,
+) -> HedgeGraph<NoData, NoData, NoData, NodeStorageVec<NoData>> {
+    let mut builder = HedgeGraphBuilder::<NoData, NoData>::new();
+    let left = builder.add_node(NoData {});
+    let right = builder.add_node(NoData {});
+    for _ in 0..n_edges {
+        builder.add_edge(left, right, NoData {}, Orientation::Default);
+    }
+    builder.build()
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Side {

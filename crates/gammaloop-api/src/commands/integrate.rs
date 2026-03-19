@@ -25,11 +25,11 @@ use gammalooprs::{
     integrate::{
         build_integration_result, emit_integration_status_via_tracing, havana_integrate,
         latest_observable_resume_state_path, print_integral_result,
-        render_saved_integration_summary, slot_workspace_path, workspace_manifest_path,
-        workspace_state_path, ContributionSortMode, IntegrationState, IntegrationStatusKind,
-        IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
+        render_saved_integration_summary, render_status_update_tabled, slot_workspace_path,
+        workspace_manifest_path, workspace_state_path, ContributionSortMode, IntegrationState,
+        IntegrationStatusKind, IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions,
         IntegrationWorkspaceManifest, IterationBatchingSettings, SamplingCorrelationMode, SlotMeta,
-        WorkspaceSnapshotControl,
+        StatusUpdate, TabledRenderOptions, WorkspaceSnapshotControl,
     },
     model::{Model, SerializableInputParamCard},
     observables::ObservableSnapshotBundle,
@@ -591,8 +591,8 @@ impl Integrate {
         &self,
         settings: &RuntimeSettings,
         show_statistics: bool,
-    ) -> IntegrationStatusRenderOptions {
-        IntegrationStatusRenderOptions {
+    ) -> IntegrationStatusViewOptions {
+        IntegrationStatusViewOptions {
             phase_display: self
                 .show_phase
                 .resolve(settings.integrator.integrated_phase),
@@ -602,6 +602,11 @@ impl Integrate {
             show_discrete_contributions_sum: self.show_discrete_contributions_sum,
             contribution_sort: self.sort_contributions.into(),
             show_max_weight_info_for_discrete_bins: self.show_max_weight_info_for_discrete_bins,
+        }
+    }
+
+    fn build_tabled_render_options(&self) -> TabledRenderOptions {
+        TabledRenderOptions {
             max_table_width: self.max_table_width,
         }
     }
@@ -1127,10 +1132,16 @@ impl Integrate {
                 slot_settings_path(&workspace_path, slot0_meta),
                 &format!("workspace settings for {}", slot0_meta.key()),
             )?;
-            let render_options = self.build_render_options(&slot0_settings, true);
+            let view_options = self.build_render_options(&slot0_settings, true);
+            let tabled_options = self.build_tabled_render_options();
             emit_integration_status_via_tracing(
                 IntegrationStatusKind::Final,
-                render_saved_integration_summary(&integration_state, &targets, &render_options),
+                render_saved_integration_summary(
+                    &integration_state,
+                    &targets,
+                    &view_options,
+                    &tabled_options,
+                ),
             )?;
 
             return Ok(IntegrationOutput {
@@ -1182,8 +1193,9 @@ impl Integrate {
             .iter()
             .map(|integrand| integrand.get_settings().clone())
             .collect_vec();
-        let render_options =
+        let view_options =
             self.build_render_options(&slot_settings[0], !self.no_show_integration_statistics);
+        let tabled_options = self.build_tabled_render_options();
         self.write_workspace_manifest_and_settings(
             &slot_integrands,
             &selected_slots,
@@ -1224,8 +1236,10 @@ impl Integrate {
             Some(workspace_path.clone()),
             self.workspace_snapshot_control(),
             self.build_batching_settings(stream_updates),
-            render_options,
-            move |kind, status_block| {
+            view_options,
+            move |status_update: StatusUpdate| {
+                let status_block = render_status_update_tabled(&status_update, &tabled_options);
+                let kind = status_update.kind();
                 if let Some(renderer) = stream_renderer.as_mut() {
                     match kind {
                         IntegrationStatusKind::Live => {
