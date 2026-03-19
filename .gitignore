@@ -35,6 +35,8 @@ share/python-wheels/
 MANIFEST
 IGNORE/
 crates/gammaloop-api/python/gammaloop/libgammaloop_api*
+# Temporary cache files
+*.swo
 
 gammaloop_state_integration_workspace/
 result/

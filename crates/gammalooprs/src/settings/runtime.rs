@@ -37,7 +37,7 @@ use super::{RuntimeSettings, global::OrientationPattern};
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 pub struct RuntimeModelSettings {
     #[serde(flatten, skip_serializing_if = "IsDefault::is_default")]
     pub external_parameters: BTreeMap<String, (F<f64>, F<f64>)>,

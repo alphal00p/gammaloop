@@ -1839,6 +1839,48 @@ fn test_integration_workspace_model_mismatch_requires_restart() -> Result<()> {
 }
 
 #[test]
+fn test_integration_workspace_resume_preserves_current_effective_model_override() -> Result<()> {
+    let test_name = "test_integration_workspace_resume_preserves_current_effective_model_override";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let shared_integrator_settings = "kv integrator.n_start=5000 integrator.n_max=10000 integrator.n_increase=5000 integrator.seed=1337";
+
+    cli.run_command(&format!(
+        "set process -p box -i scalar_box {shared_integrator_settings}"
+    ))?;
+    let workspace_name = "box_workspace_effective_model_match";
+    scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[])
+        .run(&mut cli.state, &cli.cli_settings)?;
+
+    cli.run_command("set model mass_scalar_2=1.0")?;
+    cli.run_command("set process -p box -i scalar_box kv model.mass_scalar_2=2.0")?;
+
+    let mut resume_command =
+        scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[]);
+    resume_command.restart = false;
+    resume_command.run(&mut cli.state, &cli.cli_settings)?;
+
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(
+        Some(&ProcessRef::Unqualified("box".to_string())),
+        Some(&"scalar_box".to_string()),
+    )?;
+    let effective_card = cli
+        .state
+        .resolve_effective_model_parameter_card_for_integrand(process_id, &integrand_name)?;
+    assert_eq!(
+        effective_card.data.get("mass_scalar_2"),
+        Some(&(F(2.0), F(0.0)))
+    );
+
+    let mut second_resume =
+        scalar_topology_integrate_command(test_name, workspace_name, &[("box", "scalar_box")], &[]);
+    second_resume.restart = false;
+    second_resume.run(&mut cli.state, &cli.cli_settings)?;
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 fn test_broken_network() -> Result<()> {
     let cli = get_test_cli(
         Some("photon_box.toml".into()),

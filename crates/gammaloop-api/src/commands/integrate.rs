@@ -709,6 +709,16 @@ impl Integrate {
                         "Workspace integrand fingerprint metadata is inconsistent with the selected slots"
                     ));
                 }
+                if manifest.effective_model_parameters.len() != selected_slots.len() {
+                    return Err(eyre!(
+                        "Workspace effective model parameter metadata is inconsistent with the selected slots"
+                    ));
+                }
+                if current_effective_model_parameters.len() != selected_slots.len() {
+                    return Err(eyre!(
+                        "Current effective model parameter metadata is inconsistent with the selected slots"
+                    ));
+                }
                 let mismatched_fingerprint_slots = selected_slots
                     .iter()
                     .zip(manifest.integrand_fingerprints.iter())
@@ -761,12 +771,15 @@ impl Integrate {
                     let gloop_integrand = state
                         .process_list
                         .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?;
-                    if *gloop_integrand.get_mut_settings() != workspace_settings.clone() {
+                    let current_settings = gloop_integrand.get_mut_settings();
+                    if *current_settings != workspace_settings {
                         warn!(
-                            "settings for {} have changed with respect to workspace, reverting changes",
+                            "settings for {} have changed with respect to workspace, reverting non-model changes",
                             slot.slot_meta.key()
                         );
-                        *gloop_integrand.get_mut_settings() = workspace_settings.clone();
+                        let preserved_model_overrides = current_settings.model.clone();
+                        *current_settings = workspace_settings;
+                        current_settings.model = preserved_model_overrides;
                     }
 
                     let label = format!("itg {}", slot.slot_meta.key());

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs, path::PathBuf, str::FromStr};
 
 use clap::Subcommand;
-use color_eyre::Result;
+use color_eyre::{Result, Section};
 use eyre::{eyre, Context, Report};
 use figment::{
     providers::{Format, Serialized},
@@ -26,7 +26,9 @@ use crate::{
         selector_template,
     },
     commands::Commands,
-    model_parameters::{parse_model_parameter_value, validate_model_parameter_type},
+    model_parameters::{
+        external_model_parameter_type, parse_model_parameter_value, validate_model_parameter_type,
+    },
     state::{State, SyncSettings},
     tracing::{clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason},
     CLISettings,
@@ -235,6 +237,7 @@ impl Set {
         global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<()> {
+        let runtime_model_validation = RuntimeModelValidationContext::from_state(state);
         match self {
             Set::Model { target, values } => {
                 let targets = resolve_generated_model_targets(state, target)?;
@@ -324,13 +327,19 @@ impl Set {
                 global_settings.sync_settings()?;
             }
             Self::DefaultRuntime { input } => {
-                *default_runtime_settings =
-                    merge_runtime_settings_input(default_runtime_settings, input)?;
+                let merged = merge_runtime_settings_input(default_runtime_settings, input)?;
+                runtime_model_validation.validate(&merged)?;
+                *default_runtime_settings = merged;
             }
             Self::Process { input, process } => {
                 let process_id = state.resolve_process_ref(process.process.as_ref())?;
                 let apply_runtime_settings = |settings: &mut RuntimeSettings| -> Result<()> {
-                    apply_process_set_args(input, settings, default_runtime_settings)
+                    apply_process_set_args(
+                        input,
+                        settings,
+                        default_runtime_settings,
+                        Some(&runtime_model_validation),
+                    )
                 };
 
                 if let Some(name) = &process.integrand_name {
@@ -620,6 +629,7 @@ fn apply_process_set_args(
     input: &ProcessSetArgs,
     settings: &mut RuntimeSettings,
     default_runtime_settings: &RuntimeSettings,
+    validation_context: Option<&RuntimeModelValidationContext>,
 ) -> Result<()> {
     match input {
         ProcessSetArgs::Add { target } => apply_process_add_target(settings, target),
@@ -634,6 +644,9 @@ fn apply_process_set_args(
                 .as_set_args()
                 .expect("non-mutation process set args should convert to SetArgs");
             *settings = merge_runtime_settings_input(settings, &input)?;
+            if let Some(validation_context) = validation_context {
+                validation_context.validate(settings)?;
+            }
             Ok(())
         }
     }
@@ -862,6 +875,57 @@ fn extract_runtime_model_updates_from_toml(
 
     let mut model_json = serde_json::json!({ "model": serde_json::to_value(model_value)? });
     extract_runtime_model_updates_from_json(&mut model_json)
+}
+
+#[derive(Clone)]
+struct RuntimeModelValidationContext {
+    model: gammalooprs::model::Model,
+    model_parameters: gammalooprs::model::InputParamCard<F<f64>>,
+}
+
+impl RuntimeModelValidationContext {
+    fn from_state(state: &State) -> Self {
+        Self {
+            model: state.model.clone(),
+            model_parameters: state.model_parameters.clone(),
+        }
+    }
+
+    fn validate(&self, settings: &RuntimeSettings) -> Result<()> {
+        let mut possibilities = self
+            .model_parameters
+            .keys()
+            .map(|symbol| symbol.to_string())
+            .collect::<Vec<_>>();
+        possibilities.sort();
+
+        for (parameter_name, value) in &settings.model.external_parameters {
+            let parameter_type = external_model_parameter_type(&self.model, parameter_name)
+                .ok_or_else(|| eyre!("No model parameter named '{parameter_name}'"))
+                .with_note(|| {
+                    format!(
+                        "Possible model parameters are: {}",
+                        possibilities.join(", ")
+                    )
+                })?;
+
+            let symbol = UFOSymbol::from(parameter_name.as_str());
+            if !self.model_parameters.contains_key(&symbol) {
+                return Err(eyre!(
+                    "Model parameter '{parameter_name}' cannot be overridden because it is not present in the shared top-level model_parameters.json"
+                ))
+                .with_note(|| format!("Possible model parameters are: {}", possibilities.join(", ")));
+            }
+
+            validate_model_parameter_type(
+                parameter_name,
+                parameter_type,
+                &Complex::new(value.0, value.1),
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 fn merge_runtime_settings_input(
@@ -1172,6 +1236,85 @@ mod test {
     }
 
     #[test]
+    fn process_settings_reject_non_overridable_model_parameters() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("sm");
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        let removable_parameter = state
+            .model
+            .parameters
+            .values()
+            .find(|parameter| {
+                parameter.nature == ParameterNature::External
+                    && state.model_parameters.contains_key(&parameter.name)
+            })
+            .expect("SM model must contain at least one overridable external parameter")
+            .name
+            .to_string();
+        state
+            .model_parameters
+            .remove(&UFOSymbol::from(removable_parameter.as_str()));
+        let validation_context = super::RuntimeModelValidationContext::from_state(&state);
+        let mut settings = RuntimeSettings::default();
+
+        let err = super::apply_process_set_args(
+            &ProcessSetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: format!("model.{removable_parameter}"),
+                    value: "1.0".to_string(),
+                }],
+            },
+            &mut settings,
+            &RuntimeSettings::default(),
+            Some(&validation_context),
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("cannot be overridden because it is not present"));
+    }
+
+    #[test]
+    fn process_settings_reject_invalid_model_value_types() {
+        let mut state = State::new_test();
+        state.model = load_generic_model("sm");
+        state.model_parameters =
+            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        let parameter = state
+            .model
+            .parameters
+            .values()
+            .find(|parameter| {
+                parameter.nature == ParameterNature::External
+                    && parameter.parameter_type == ParameterType::Real
+            })
+            .expect("expected at least one external real model parameter")
+            .name
+            .to_string();
+        let validation_context = super::RuntimeModelValidationContext::from_state(&state);
+        let mut settings = RuntimeSettings::default();
+
+        let err = super::apply_process_set_args(
+            &ProcessSetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: format!("model.{parameter}"),
+                    value: "1.0+2.0i".to_string(),
+                }],
+            },
+            &mut settings,
+            &RuntimeSettings::default(),
+            Some(&validation_context),
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("cannot be assigned an imaginary component"));
+    }
+
+    #[test]
     fn parse_set_process_defaults() {
         let cmd = Set::from_str("set process -p epem_a_tth -i LO defaults").unwrap();
 
@@ -1406,6 +1549,7 @@ mod test {
             },
             &mut settings,
             &defaults,
+            None,
         )
         .unwrap();
 
@@ -1443,6 +1587,7 @@ mod test {
             },
             &mut settings,
             &defaults,
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -1469,6 +1614,7 @@ max = 500.0
             },
             &mut settings,
             &defaults,
+            None,
         )
         .unwrap();
         let selector = settings
@@ -1496,6 +1642,7 @@ max = 500.0
             },
             &mut settings,
             &defaults,
+            None,
         )
         .unwrap();
         assert_eq!(
@@ -1520,6 +1667,7 @@ max = 500.0
             },
             &mut settings,
             &defaults,
+            None,
         )
         .unwrap();
         match &settings
@@ -1542,6 +1690,7 @@ max = 500.0
             },
             &mut settings,
             &defaults,
+            None,
         )
         .unwrap();
         assert!(!settings.quantities.contains_key("top_pt"));

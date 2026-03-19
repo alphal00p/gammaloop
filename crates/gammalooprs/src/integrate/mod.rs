@@ -1709,7 +1709,7 @@ fn build_iteration_results_table(
         header_row.extend(std::iter::repeat_n(String::new(), slot_block_width - 1));
     }
     header_row.push("χ²/dof".bold().blue().to_string());
-    header_row.push("max. wgt. infl.".bold().blue().to_string());
+    header_row.push("mwi".bold().blue().to_string());
     if has_target_columns {
         header_row.push("Δ [σ]".bold().blue().to_string());
         header_row.push("Δ [%]".bold().blue().to_string());
@@ -2162,12 +2162,12 @@ fn suppress_spanned_metadata_header_separators(rendered: &str) -> String {
     rendered
         .lines()
         .map(|line| {
-            if !line.contains("χ²/dof") || !line.contains("max. wgt. infl.") {
+            if !line.contains("χ²/dof") || !line.contains("mwi") {
                 return line.to_string();
             }
 
             let mut updated = line.to_string();
-            let separators_to_remove = [("χ²/dof", "max. wgt. infl."), ("Δ [σ]", "Δ [%]")];
+            let separators_to_remove = [("χ²/dof", "mwi"), ("Δ [σ]", "Δ [%]")];
 
             for (left_label, right_label) in separators_to_remove {
                 let Some(left_start) = updated.find(left_label) else {
@@ -4323,7 +4323,7 @@ mod tests {
         assert!(!rendered.contains("Δ [σ]"), "{rendered}");
         assert!(!rendered.contains("Δ ="), "{rendered}");
         assert!(rendered.contains("Integration statistics"), "{rendered}");
-        assert!(rendered.contains("max. wgt. infl."), "{rendered}");
+        assert!(rendered.contains("mwi"), "{rendered}");
     }
 
     #[test]
@@ -4436,11 +4436,11 @@ mod tests {
 
         let header_line = rendered
             .lines()
-            .find(|line| line.contains("χ²/dof") && line.contains("max. wgt. infl."))
+            .find(|line| line.contains("χ²/dof") && line.contains("mwi"))
             .expect("expected spanned metadata header line");
 
-        let chi_to_mwi = &header_line
-            [header_line.find("χ²/dof").unwrap()..header_line.find("max. wgt. infl.").unwrap()];
+        let chi_to_mwi =
+            &header_line[header_line.find("χ²/dof").unwrap()..header_line.find("mwi").unwrap()];
         assert!(!chi_to_mwi.contains('│'), "{rendered}");
 
         let delta_sigma_to_percent =

@@ -87,6 +87,7 @@
 - Treat saved-state detection as manifest-based only. Empty folders or folders containing only transient runtime artifacts such as `logs/` are scratch state, not legacy state, and must be treated as blank state.
 - Do not introduce writes into the state folder outside explicit `save state` / `quit -o`, except for logfile tracing when that logger is actually enabled.
 - Honor `--read-only-state` consistently. When it is enabled, do not write into the state folder and prefer cwd-based fallbacks for transient artifacts that would otherwise default into the state.
+- Ignore unrelated untracked local artifacts by default (editor swap files, scratch docs, local example edits, profiling outputs, etc.) unless the task clearly requires them; do not stop work solely because such untracked files are present.
 
 ## Differential LU / Event Processing Notes
 - `differential_lu.md` is the detailed implementation log for the current differential LU stack; `docs/architecture/architecture-current.md` has the corresponding implemented-architecture summary. Keep both in sync when changing selectors, observables, event grouping, or sample-evaluation output.
