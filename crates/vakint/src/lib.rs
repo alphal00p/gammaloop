@@ -38,8 +38,7 @@ use std::{
 };
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::{
-    atom::NumView,
-    coefficient::{Coefficient, CoefficientView},
+    coefficient::CoefficientView,
     domains::float::{FloatLike, RealLike},
 };
 #[cfg(feature = "symbolica_community_module")]
