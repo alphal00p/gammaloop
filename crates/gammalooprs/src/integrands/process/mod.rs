@@ -67,7 +67,9 @@ pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAn
 pub struct MomentumSpaceEvaluationInput {
     pub loop_momenta: Vec<ThreeMomentum<F<f64>>>,
     pub graph_id: Option<usize>,
+    pub group_id: Option<GroupId>,
     pub orientation: Option<usize>,
+    pub channel_id: Option<ChannelIndex>,
 }
 
 #[derive(Clone)]
@@ -263,6 +265,246 @@ impl ProcessIntegrand {
                 .graph_terms
                 .iter()
                 .position(|term| term.graph.name == graph_name),
+        }
+    }
+
+    fn find_group_id_containing_graph(&self, graph_id: usize) -> Option<GroupId> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand
+                .data
+                .graph_group_structure
+                .iter_enumerated()
+                .find_map(|(group_id, group)| {
+                    group.into_iter().contains(&graph_id).then_some(group_id)
+                }),
+            ProcessIntegrand::CrossSection(integrand) => integrand
+                .data
+                .graph_group_structure
+                .iter_enumerated()
+                .find_map(|(group_id, group)| {
+                    group.into_iter().contains(&graph_id).then_some(group_id)
+                }),
+        }
+    }
+
+    pub fn resolve_group_id_by_master_name(&self, graph_name: &str) -> Result<GroupId> {
+        match self.find_graph_id_by_name(graph_name) {
+            Some(graph_id) => {
+                let group_id = self
+                    .find_group_id_containing_graph(graph_id)
+                    .ok_or_else(|| {
+                        eyre!("Could not find graph group for graph '{}'.", graph_name)
+                    })?;
+                let master_graph_name = match self {
+                    ProcessIntegrand::Amplitude(integrand) => {
+                        &integrand.data.graph_terms
+                            [integrand.data.graph_group_structure[group_id].master()]
+                        .graph
+                        .name
+                    }
+                    ProcessIntegrand::CrossSection(integrand) => {
+                        &integrand.data.graph_terms
+                            [integrand.data.graph_group_structure[group_id].master()]
+                        .graph
+                        .name
+                    }
+                };
+                if master_graph_name != graph_name {
+                    return Err(eyre!(
+                        "Graph '{}' is not the master graph of its group; use '{}' instead.",
+                        graph_name,
+                        master_graph_name
+                    ));
+                }
+                Ok(group_id)
+            }
+            None => Err(eyre!(
+                "Unknown graph '{}' in momentum-space evaluation.",
+                graph_name
+            )),
+        }
+    }
+
+    pub fn resolve_discrete_selection(
+        &self,
+        discrete_dimensions: &[usize],
+    ) -> Result<(Option<GroupId>, Option<usize>, Option<ChannelIndex>)> {
+        match &self.get_settings().sampling {
+            SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => {
+                if !discrete_dimensions.is_empty() {
+                    return Err(eyre!(
+                        "This integrand does not use discrete graph sampling; expected no discrete dimensions, got {:?}.",
+                        discrete_dimensions
+                    ));
+                }
+                Ok((None, None, None))
+            }
+            SamplingSettings::DiscreteGraphs(settings) => {
+                let expected_depth = self.discrete_sampling_depth();
+                if discrete_dimensions.len() != expected_depth {
+                    return Err(eyre!(
+                        "Expected {} discrete dimensions, got {}.",
+                        expected_depth,
+                        discrete_dimensions.len()
+                    ));
+                }
+
+                let group_id = GroupId(discrete_dimensions[0]);
+                let group_count = match self {
+                    ProcessIntegrand::Amplitude(integrand) => {
+                        integrand.data.graph_group_structure.len()
+                    }
+                    ProcessIntegrand::CrossSection(integrand) => {
+                        integrand.data.graph_group_structure.len()
+                    }
+                };
+                if group_id.0 >= group_count {
+                    return Err(eyre!(
+                        "Discrete graph group index {} is out of range; the integrand has {} groups.",
+                        group_id.0,
+                        group_count
+                    ));
+                }
+
+                let orientation = if settings.sample_orientations {
+                    let orientation = discrete_dimensions[1];
+                    let orientation_count =
+                        self.group_orientation_count(group_id).ok_or_else(|| {
+                            eyre!(
+                                "Could not determine orientation count for group {}.",
+                                group_id.0
+                            )
+                        })?;
+                    if orientation >= orientation_count {
+                        return Err(eyre!(
+                            "Orientation {} is out of range for graph group {}; the group has {} orientations.",
+                            orientation,
+                            group_id.0,
+                            orientation_count
+                        ));
+                    }
+                    Some(orientation)
+                } else {
+                    None
+                };
+
+                let channel = match &settings.sampling_type {
+                    DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                        let channel_index = *discrete_dimensions.last().expect("validated depth");
+                        let channel_count =
+                            self.group_channel_count(group_id).ok_or_else(|| {
+                                eyre!(
+                                    "Could not determine channel count for group {}.",
+                                    group_id.0
+                                )
+                            })?;
+                        if channel_index >= channel_count {
+                            return Err(eyre!(
+                                "Channel {} is out of range for graph group {}; the group has {} channels.",
+                                channel_index,
+                                group_id.0,
+                                channel_count
+                            ));
+                        }
+                        Some(ChannelIndex::from(channel_index))
+                    }
+                    _ => None,
+                };
+
+                Ok((Some(group_id), orientation, channel))
+            }
+        }
+    }
+
+    pub fn expected_x_space_dimension(&self, discrete_dimensions: &[usize]) -> Result<usize> {
+        let settings = self.get_settings();
+        if matches!(
+            &settings.sampling,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sampling_type: DiscreteGraphSamplingType::TropicalSampling(_),
+                ..
+            })
+        ) {
+            let (group_id, _, _) = self.resolve_discrete_selection(discrete_dimensions)?;
+            let group_id = group_id.ok_or_else(|| {
+                eyre!("Tropical sampling requires a discrete graph-group selection.")
+            })?;
+            let (loop_number, n_edges) = match self {
+                ProcessIntegrand::Amplitude(integrand) => {
+                    let master_graph = &integrand.data.graph_terms
+                        [integrand.data.graph_group_structure[group_id].master()];
+                    (
+                        master_graph.get_graph().get_loop_number(),
+                        master_graph.get_graph().iter_loop_edges().count(),
+                    )
+                }
+                ProcessIntegrand::CrossSection(integrand) => {
+                    let master_graph = &integrand.data.graph_terms
+                        [integrand.data.graph_group_structure[group_id].master()];
+                    (
+                        master_graph.get_graph().get_loop_number(),
+                        master_graph.get_graph().iter_loop_edges().count(),
+                    )
+                }
+            };
+            return Ok(get_n_dim_for_n_loop_momenta(
+                &settings.sampling,
+                loop_number,
+                Some(n_edges),
+            ));
+        }
+
+        let loop_number = match self {
+            ProcessIntegrand::Amplitude(integrand) => {
+                integrand.data.graph_terms[0].graph.get_loop_number()
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                integrand.data.graph_terms[0].graph.get_loop_number()
+            }
+        };
+        Ok(get_n_dim_for_n_loop_momenta(
+            &settings.sampling,
+            loop_number,
+            None,
+        ))
+    }
+
+    pub fn discrete_sampling_depth(&self) -> usize {
+        match &self.get_settings().sampling {
+            SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => 0,
+            SamplingSettings::DiscreteGraphs(settings) => {
+                let orientation_depth = usize::from(settings.sample_orientations);
+                match &settings.sampling_type {
+                    DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => 2 + orientation_depth,
+                    _ => 1 + orientation_depth,
+                }
+            }
+        }
+    }
+
+    pub fn group_orientation_count(&self, group_id: GroupId) -> Option<usize> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => Some(
+                integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
+                    .get_num_orientations(),
+            ),
+            ProcessIntegrand::CrossSection(integrand) => Some(
+                integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
+                    .get_num_orientations(),
+            ),
+        }
+    }
+
+    pub fn group_channel_count(&self, group_id: GroupId) -> Option<usize> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => Some(
+                integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
+                    .get_num_channels(),
+            ),
+            ProcessIntegrand::CrossSection(integrand) => Some(
+                integrand.data.graph_terms[integrand.data.graph_group_structure[group_id].master()]
+                    .get_num_channels(),
+            ),
         }
     }
 
@@ -2019,7 +2261,6 @@ fn create_grid_for_graph<G: GraphTerm>(
             let dimension = get_n_dim_for_n_loop_momenta(
                 &SamplingSettings::DiscreteGraphs(settings.clone()),
                 graph_term.get_graph().get_loop_number(),
-                false,
                 Some(graph_term.get_graph().iter_loop_edges().count()),
             );
 
@@ -2150,12 +2391,6 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
 ) -> Result<GammaLoopSample<T>> {
-    if input.orientation.is_some() && input.graph_id.is_none() {
-        return Err(eyre!(
-            "A specific orientation requires selecting a specific graph in momentum-space evaluation."
-        ));
-    }
-
     let expected_loop_count = integrand
         .get_group_masters()
         .next()
@@ -2191,10 +2426,73 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
         input.orientation,
     )?;
 
-    Ok(match input.graph_id {
-        Some(graph_id) => GammaLoopSample::Graph { graph_id, sample },
-        None => GammaLoopSample::Default(sample),
-    })
+    match &integrand.get_settings().sampling {
+        SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => {
+            if input.group_id.is_some() || input.channel_id.is_some() {
+                return Err(eyre!(
+                    "Discrete graph/channel selections are not supported for this sampling mode."
+                ));
+            }
+
+            Ok(match input.graph_id {
+                Some(graph_id) => GammaLoopSample::Graph { graph_id, sample },
+                None => GammaLoopSample::Default(sample),
+            })
+        }
+        SamplingSettings::DiscreteGraphs(settings) => {
+            let group_id = input.group_id.ok_or_else(|| {
+                eyre!(
+                    "Momentum-space evaluation for discrete-graph sampling requires selecting a graph group."
+                )
+            })?;
+            let discrete_sample = match &settings.sampling_type {
+                DiscreteGraphSamplingType::Default(_) => {
+                    if input.channel_id.is_some() {
+                        return Err(eyre!(
+                            "Channel selection is not available for this discrete-graph sampling mode."
+                        ));
+                    }
+                    DiscreteGraphSample::Default(sample)
+                }
+                DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
+                    if input.channel_id.is_some() {
+                        return Err(eyre!(
+                            "Channel selection is not available for this discrete-graph sampling mode."
+                        ));
+                    }
+                    DiscreteGraphSample::MultiChanneling {
+                        alpha: F::from_f64(multichanneling_settings.alpha),
+                        sample,
+                    }
+                }
+                DiscreteGraphSamplingType::TropicalSampling(_) => {
+                    if input.channel_id.is_some() {
+                        return Err(eyre!(
+                            "Channel selection is not available for tropical discrete-graph sampling."
+                        ));
+                    }
+                    DiscreteGraphSample::Tropical(sample)
+                }
+                DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
+                    let channel_id = input.channel_id.ok_or_else(|| {
+                        eyre!(
+                            "Momentum-space evaluation for discrete multichanneling requires selecting a channel."
+                        )
+                    })?;
+                    DiscreteGraphSample::DiscreteMultiChanneling {
+                        alpha: F::from_f64(multichanneling_settings.alpha),
+                        channel_id,
+                        sample,
+                    }
+                }
+            };
+
+            Ok(GammaLoopSample::DiscreteGraph {
+                group_id,
+                sample: discrete_sample,
+            })
+        }
+    }
 }
 
 fn log_rotated_samples<I: ProcessIntegrandImpl>(

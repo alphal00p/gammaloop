@@ -9,7 +9,7 @@ commands = [
 
 [cli_settings.global]
 logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "info,gammalooprs::integrands::inspect=off"
+display_directive = "info"
 
 [cli_settings.global.generation.uv]
 generate_integrated = false

@@ -1501,7 +1501,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_sample",
-        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, force_radius=false, minimal_output=false, momentum_space=false, discrete_dim=None, graph_name=None, orientation=None)
+        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, discrete_dim=None, graph_name=None, orientation=None)
     )]
     pub fn evaluate_sample<'py>(
         &mut self,
@@ -1510,7 +1510,6 @@ impl GammaLoopAPI {
         process_id: Option<usize>,
         integrand_name: Option<String>,
         use_arb_prec: bool,
-        force_radius: bool,
         minimal_output: bool,
         momentum_space: bool,
         discrete_dim: Option<Vec<usize>>,
@@ -1520,19 +1519,14 @@ impl GammaLoopAPI {
         let points =
             ndarray::Array2::from_shape_vec((1, point.len()), point).map_err(|e| eyre!(e))?;
         let discrete_dims = discrete_dim.unwrap_or_default();
-        let discrete_dims = if momentum_space {
-            None
-        } else {
-            Some(
-                ndarray::Array2::from_shape_vec((1, discrete_dims.len()), discrete_dims)
-                    .map_err(|e| eyre!(e))?,
-            )
-        };
+        let discrete_dims = Some(
+            ndarray::Array2::from_shape_vec((1, discrete_dims.len()), discrete_dims)
+                .map_err(|e| eyre!(e))?,
+        );
         let res = EvaluateSamples {
             process_id,
             integrand_name,
             use_arb_prec,
-            force_radius,
             minimal_output,
             momentum_space,
             points: points.view(),
@@ -1558,7 +1552,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_samples",
-        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, discrete_dims=None, force_radius=false, graph_names=None, orientations=None)
+        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, discrete_dims=None, graph_names=None, orientations=None)
     )]
     pub fn evaluate_samples<'py>(
         &mut self,
@@ -1570,7 +1564,6 @@ impl GammaLoopAPI {
         minimal_output: bool,
         momentum_space: bool,
         discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
-        force_radius: bool,
         graph_names: Option<Vec<Option<String>>>,
         orientations: Option<Vec<Option<usize>>>,
     ) -> Result<PyBatchEvaluationResult> {
@@ -1580,7 +1573,6 @@ impl GammaLoopAPI {
             process_id,
             integrand_name,
             use_arb_prec,
-            force_radius,
             minimal_output,
             momentum_space,
             points: points_rust,

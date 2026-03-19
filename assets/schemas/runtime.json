@@ -926,7 +926,19 @@
     },
     "RuntimeModelSettings": {
       "type": "object",
-      "additionalProperties": false
+      "additionalProperties": {
+        "type": "array",
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "$ref": "#/$defs/F"
+          },
+          {
+            "$ref": "#/$defs/F"
+          }
+        ]
+      }
     },
     "SamplingSettings": {
       "oneOf": [

@@ -8,7 +8,6 @@ use gammalooprs::{
             SampleEvaluationResult, SingleSampleEvaluationResult,
         },
         process::MomentumSpaceEvaluationInput,
-        HasIntegrand,
     },
     momentum::ThreeMomentum,
     observables::ObservableSnapshotBundle,
@@ -25,7 +24,6 @@ pub struct EvaluateSamples<'a> {
     pub process_id: Option<usize>,
     pub integrand_name: Option<String>,
     pub use_arb_prec: bool,
-    pub force_radius: bool,
     pub minimal_output: bool,
     pub momentum_space: bool,
     pub points: ArrayView2<'a, f64>,
@@ -71,18 +69,19 @@ impl<'a> EvaluateSamples<'a> {
         }
 
         let samples = if self.momentum_space {
-            let inputs =
-                build_momentum_inputs(integrand, &self.points, &graph_names, &orientations)?;
+            let inputs = build_momentum_inputs(
+                integrand,
+                &self.points,
+                self.discrete_dims.as_ref(),
+                &graph_names,
+                &orientations,
+            )?;
             integrand
                 .evaluate_momentum_configurations_raw(&model, &inputs, self.use_arb_prec)?
                 .samples
         } else {
-            let samples = build_havana_samples(
-                integrand,
-                &self.points,
-                self.discrete_dims.as_ref(),
-                self.force_radius,
-            )?;
+            let samples =
+                build_havana_samples(integrand, &self.points, self.discrete_dims.as_ref())?;
             integrand
                 .evaluate_samples_raw(&model, &samples, 1, self.use_arb_prec, Complex::new_zero())?
                 .samples
@@ -109,7 +108,6 @@ pub struct EvaluateSamplesPrecise<'a> {
     pub process_id: Option<usize>,
     pub integrand_name: Option<String>,
     pub use_arb_prec: bool,
-    pub force_radius: bool,
     pub minimal_output: bool,
     pub momentum_space: bool,
     pub points: ArrayView2<'a, f64>,
@@ -155,18 +153,19 @@ impl<'a> EvaluateSamplesPrecise<'a> {
         }
 
         let mut raw_samples = if self.momentum_space {
-            let inputs =
-                build_momentum_inputs(integrand, &self.points, &graph_names, &orientations)?;
+            let inputs = build_momentum_inputs(
+                integrand,
+                &self.points,
+                self.discrete_dims.as_ref(),
+                &graph_names,
+                &orientations,
+            )?;
             integrand
                 .evaluate_momentum_configurations_precise_raw(&model, &inputs, self.use_arb_prec)?
                 .samples
         } else {
-            let samples = build_havana_samples(
-                integrand,
-                &self.points,
-                self.discrete_dims.as_ref(),
-                self.force_radius,
-            )?;
+            let samples =
+                build_havana_samples(integrand, &self.points, self.discrete_dims.as_ref())?;
             integrand
                 .evaluate_samples_precise_raw(
                     &model,
@@ -264,31 +263,26 @@ fn build_havana_sample(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
     discrete_dim: &[usize],
-    mut force_radius: bool,
 ) -> Result<Sample<F<f64>>> {
-    if integrand.get_n_dim() as isize == point.len() as isize - 1 {
-        force_radius = true;
+    let expected_dimension = integrand.expected_x_space_dimension(discrete_dim)?;
+    if point.len() != expected_dimension {
+        return Err(eyre!(
+            "Expected {} x-space coordinates for this integrand selection, got {}.",
+            expected_dimension,
+            point.len()
+        ));
     }
 
-    let point = point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
-    let continuous_sample = if force_radius {
-        point
-            .get(1..)
-            .ok_or_else(|| {
-                eyre!("Force-radius x-space evaluation requires at least one radial coordinate.")
-            })?
-            .to_vec()
-    } else {
-        point
-    };
-    Ok(havana_sample(continuous_sample, discrete_dim))
+    Ok(havana_sample(
+        point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>(),
+        discrete_dim,
+    ))
 }
 
 fn build_havana_samples(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     points: &ArrayView2<'_, f64>,
     discrete_dims: Option<&ArrayView2<'_, usize>>,
-    force_radius: bool,
 ) -> Result<Vec<Sample<F<f64>>>> {
     (0..points.nrows())
         .map(|sample_index| {
@@ -303,7 +297,6 @@ fn build_havana_samples(
                     .as_slice()
                     .expect("point rows are contiguous"),
                 &discrete_dim,
-                force_radius,
             )
         })
         .collect()
@@ -312,48 +305,15 @@ fn build_havana_samples(
 fn build_momentum_input(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
+    discrete_dim: &[usize],
     graph_name: Option<&str>,
     orientation: Option<usize>,
 ) -> Result<MomentumSpaceEvaluationInput> {
-    if orientation.is_some() && graph_name.is_none() {
-        return Err(eyre!(
-            "A specific orientation requires a specific graph in momentum-space evaluation."
-        ));
-    }
-
     if point.len() % 3 != 0 {
         return Err(eyre!(
             "Momentum-space evaluation expects a multiple of 3 coordinates, got {}.",
             point.len()
         ));
-    }
-
-    let graph_id = graph_name
-        .map(|graph_name| {
-            integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
-                eyre!(
-                    "Unknown graph '{}' in momentum-space evaluation.",
-                    graph_name
-                )
-            })
-        })
-        .transpose()?;
-
-    if let (Some(graph_id), Some(orientation)) = (graph_id, orientation) {
-        let orientation_count = integrand.graph_orientation_count(graph_id).ok_or_else(|| {
-            eyre!(
-                "Graph id {} is invalid for momentum-space evaluation.",
-                graph_id
-            )
-        })?;
-        if orientation >= orientation_count {
-            return Err(eyre!(
-                "Orientation {} is out of range for graph '{}'; the graph has {} orientations.",
-                orientation,
-                graph_name.expect("graph name should exist when graph_id exists"),
-                orientation_count
-            ));
-        }
     }
 
     let loop_momenta = point
@@ -364,27 +324,134 @@ fn build_momentum_input(
             pz: F(coords[2]),
         })
         .collect();
-    Ok(MomentumSpaceEvaluationInput {
-        loop_momenta,
-        graph_id,
-        orientation,
-    })
+
+    match &integrand.get_settings().sampling {
+        gammalooprs::settings::runtime::SamplingSettings::Default(_)
+        | gammalooprs::settings::runtime::SamplingSettings::MultiChanneling(_) => {
+            if !discrete_dim.is_empty() {
+                return Err(eyre!(
+                    "This integrand does not use discrete graph sampling; expected no discrete dimensions, got {:?}.",
+                    discrete_dim
+                ));
+            }
+
+            if orientation.is_some() && graph_name.is_none() {
+                return Err(eyre!(
+                    "A specific orientation requires a specific graph in momentum-space evaluation."
+                ));
+            }
+
+            let graph_id = graph_name
+                .map(|graph_name| {
+                    integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
+                        eyre!(
+                            "Unknown graph '{}' in momentum-space evaluation.",
+                            graph_name
+                        )
+                    })
+                })
+                .transpose()?;
+
+            if let (Some(graph_id), Some(orientation)) = (graph_id, orientation) {
+                let orientation_count =
+                    integrand.graph_orientation_count(graph_id).ok_or_else(|| {
+                        eyre!(
+                            "Graph id {} is invalid for momentum-space evaluation.",
+                            graph_id
+                        )
+                    })?;
+                if orientation >= orientation_count {
+                    return Err(eyre!(
+                        "Orientation {} is out of range for graph '{}'; the graph has {} orientations.",
+                        orientation,
+                        graph_name.expect("graph name should exist when graph_id exists"),
+                        orientation_count
+                    ));
+                }
+            }
+
+            Ok(MomentumSpaceEvaluationInput {
+                loop_momenta,
+                graph_id,
+                group_id: None,
+                orientation,
+                channel_id: None,
+            })
+        }
+        gammalooprs::settings::runtime::SamplingSettings::DiscreteGraphs(settings) => {
+            let (group_from_dims, orientation_from_dims, channel_id) = if discrete_dim.is_empty() {
+                (None, None, None)
+            } else {
+                integrand.resolve_discrete_selection(discrete_dim)?
+            };
+
+            let group_from_name = graph_name
+                .map(|graph_name| integrand.resolve_group_id_by_master_name(graph_name))
+                .transpose()?;
+
+            let group_id = match (group_from_dims, group_from_name) {
+                (Some(group_id), Some(group_from_name)) if group_id != group_from_name => {
+                    return Err(eyre!(
+                        "Discrete dimensions select graph group {}, but graph '{}' resolves to group {}.",
+                        group_id.0,
+                        graph_name.expect("graph name must exist"),
+                        group_from_name.0
+                    ));
+                }
+                (Some(group_id), _) => Some(group_id),
+                (None, Some(group_id)) => Some(group_id),
+                (None, None) => None,
+            };
+
+            let orientation = match (orientation_from_dims, orientation) {
+                (Some(from_dims), Some(from_arg)) if from_dims != from_arg => {
+                    return Err(eyre!(
+                        "Discrete dimensions select orientation {}, but the explicit momentum-space orientation is {}.",
+                        from_dims,
+                        from_arg
+                    ));
+                }
+                (Some(from_dims), _) => Some(from_dims),
+                (None, from_arg) => from_arg,
+            };
+
+            if settings.sample_orientations && group_id.is_some() && orientation.is_none() {
+                return Err(eyre!(
+                    "Momentum-space evaluation for this integrand requires an orientation selection."
+                ));
+            }
+
+            Ok(MomentumSpaceEvaluationInput {
+                loop_momenta,
+                graph_id: None,
+                group_id,
+                orientation,
+                channel_id,
+            })
+        }
+    }
 }
 
 fn build_momentum_inputs(
-    integrand: &mut gammalooprs::integrands::process::ProcessIntegrand,
+    integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     points: &ArrayView2<'_, f64>,
+    discrete_dims: Option<&ArrayView2<'_, usize>>,
     graph_names: &[Option<String>],
     orientations: &[Option<usize>],
 ) -> Result<Vec<MomentumSpaceEvaluationInput>> {
     (0..points.nrows())
         .map(|sample_index| {
+            let discrete_dim = discrete_dims
+                .as_ref()
+                .map(|dims| dims.row(sample_index).iter().copied().collect())
+                .unwrap_or_else(Vec::new);
             build_momentum_input(
                 integrand,
                 points
                     .row(sample_index)
                     .as_slice()
                     .expect("point rows are contiguous"),
+                &discrete_dim,
                 graph_names[sample_index].as_deref(),
                 orientations[sample_index],
             )

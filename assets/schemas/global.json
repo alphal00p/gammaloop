@@ -59,6 +59,9 @@
           "format": "uint",
           "minimum": 0
         },
+        "do_fn_map_replacements": {
+          "type": "boolean"
+        },
         "horner_iterations": {
           "type": "integer",
           "format": "uint",
@@ -359,6 +362,9 @@
           "type": "boolean"
         },
         "only_integrated": {
+          "type": "boolean"
+        },
+        "pole_part": {
           "type": "boolean"
         },
         "softct": {

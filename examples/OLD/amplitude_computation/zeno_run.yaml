@@ -65,7 +65,6 @@ commands:
   #     process_name: zeno_IR
   #     point: [0.1 0.2 0.3]
   #     use_f128: false
-  #     force_radius: false
   #     momentum_space: false
   #     discrete_dim:
   #       - 0

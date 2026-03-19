@@ -51,7 +51,6 @@ commands:
 #       process_name: qqx_aaa_tree_user_numerator
 #       point: []
 #       use_f128: false
-#       force_radius: false
 #       momentum_space: false
 #       discrete_dim:
 #         - 0

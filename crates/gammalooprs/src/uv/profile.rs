@@ -17,7 +17,7 @@ use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{ExternalIndex, LoopIndex};
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::RuntimeSettings;
-use crate::utils::F;
+use crate::utils::{F, f128};
 use crate::uv::UltravioletGraph;
 use crate::{graph::LoopMomentumBasis, integrands::HasIntegrand};
 use color_eyre::{Result, eyre::Context};
@@ -32,6 +32,7 @@ use linnet::half_edge::tree::SimpleTraversalTree;
 use rand::Rng;
 use rayon::prelude::*;
 use serde::Serialize;
+use spenso::algebra::complex::Complex;
 use symbolica::domains::atom::AtomField;
 use symbolica::domains::float::Real;
 use symbolica::numerical_integration::MonteCarloRng;
@@ -853,13 +854,12 @@ impl SubSetResult {
                     })
                     .collect();
 
-                let (inspect_res_jac, inspect_res_eval) = integrand.inspect(
+                let (inspect_res_jac, inspect_res_eval) = evaluate_momentum_space_point(
+                    integrand,
                     settings,
                     model,
                     pt,
                     &[graph_id],
-                    false,
-                    true,
                     profile_settings.use_f128,
                 )?;
 
@@ -1005,6 +1005,36 @@ impl SubSetResult {
         })
     }
 }
+fn evaluate_momentum_space_point<I: HasIntegrand>(
+    integrand: &mut I,
+    settings: &RuntimeSettings,
+    model: &Model,
+    mut pt: Vec<F<f64>>,
+    discrete_dimensions: &[usize],
+    use_arb_prec: bool,
+) -> Result<(Option<f64>, EvaluationResult)> {
+    let (xs, inv_jac) = crate::utils::global_inv_parameterize::<f128>(
+        &pt.chunks_exact_mut(3)
+            .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
+            .collect::<Vec<_>>(),
+        F(settings.kinematics.e_cm).higher(),
+        &settings
+            .sampling
+            .get_parameterization_settings()
+            .ok_or_else(|| eyre!("Invalid sampling method for momentum-space inspect."))?,
+    );
+    let xs = xs.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>();
+    let mut sample = symbolica::numerical_integration::Sample::Continuous(F(1.0), xs);
+    for &d in discrete_dimensions.iter().rev() {
+        sample =
+            symbolica::numerical_integration::Sample::Discrete(F(1.0), d, Some(Box::new(sample)));
+    }
+    Ok((
+        Some(inv_jac.inv().0.to_f64()),
+        integrand.evaluate_sample(&sample, model, F(0.), 1, use_arb_prec, Complex::new_zero())?,
+    ))
+}
+
 pub struct InspectResult {
     pub(crate) result: EvaluationResult,
     pub(crate) prefactor: f64,

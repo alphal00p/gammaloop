@@ -1,10 +1,12 @@
 #![allow(unused)]
 use crate::integrands::IntegrandSettings;
 use crate::model::Model;
-use crate::utils::{self, ApproxEq, F};
+use crate::utils::{self, ApproxEq, F, f128};
 use crate::{
-    integrand_factory, integrands::UnitVolumeSettings,
-    integrands::builtin::h_function::HFunctionTestSettings, settings::RuntimeSettings,
+    integrand_factory,
+    integrands::builtin::h_function::HFunctionTestSettings,
+    integrands::{HasIntegrand, UnitVolumeSettings},
+    settings::RuntimeSettings,
     settings::runtime::IntegratedPhase,
 };
 use color_eyre::Result;
@@ -14,7 +16,6 @@ use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Complex as SymComplex;
 
-use crate::integrands::inspect::inspect;
 use crate::integrate::{
     ContributionSortMode, IntegrationStatusPhaseDisplay, IntegrationStatusRenderOptions,
     SamplingCorrelationMode, SlotMeta, havana_integrate,
@@ -220,19 +221,40 @@ fn compare_inspect(
     is_momentum_space: bool,
     target: Complex<f64>,
 ) -> Result<bool> {
-    let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
     let target = Complex::new(F(target.re), F(target.im));
     let mut integrand = integrand_factory(settings);
-    let (_, res) = inspect(
-        settings,
-        &mut integrand,
-        model,
-        pt,
-        term,
-        false,
-        is_momentum_space,
-        true,
-    )?;
+    let (xs, jac) = if is_momentum_space {
+        let mut pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
+        let (xs, inv_jac) = utils::global_inv_parameterize::<f128>(
+            &pt.chunks_exact_mut(3)
+                .map(|x| crate::momentum::ThreeMomentum::new(x[0], x[1], x[2]).higher())
+                .collect::<Vec<_>>(),
+            F(settings.kinematics.e_cm).higher(),
+            &settings
+                .sampling
+                .get_parameterization_settings()
+                .expect("momentum-space inspect requires invertible parameterization"),
+        );
+        (
+            xs.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>(),
+            Some(inv_jac.inv().0.to_f64()),
+        )
+    } else {
+        (pt.iter().map(|&x| F(x)).collect::<Vec<_>>(), None)
+    };
+    let mut sample = symbolica::numerical_integration::Sample::Continuous(F(1.0), xs.clone());
+    for &d in term.iter().rev() {
+        sample =
+            symbolica::numerical_integration::Sample::Discrete(F(1.0), d, Some(Box::new(sample)));
+    }
+    let res = integrand
+        .evaluate_sample(&sample, model, F(0.), 1, true, Complex::new_zero())?
+        .integrand_result;
+    let res = if let Some(jac) = jac {
+        res.map(|a| a / F(jac))
+    } else {
+        res
+    };
     if !F::approx_eq(&res.re, &target.re, &INSPECT_TOLERANCE)
         || !F::approx_eq(&res.im, &target.im, &INSPECT_TOLERANCE)
     {

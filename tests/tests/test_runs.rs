@@ -518,7 +518,7 @@ fn photons_1l_inspect() -> Result<()> {
     println!("Inspect result: {inspect:.16e}");
 
     // The old test at a very bad value of e_cm, so I created a new value using the example card in the old main
-    assert_snapshot!(format!("{inspect:.8e}"),@"(-4.2365441831364175e-12+-3.71072895861423e-12i)");
+    assert_snapshot!(format!("{inspect:.8e}"),@"(-4.236544183136419e-12+-3.710728958614228e-12i)");
 
     clean_test(&cli.cli_settings.state.folder);
 

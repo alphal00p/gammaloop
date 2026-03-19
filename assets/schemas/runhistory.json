@@ -893,6 +893,9 @@
           "format": "uint",
           "minimum": 0
         },
+        "do_fn_map_replacements": {
+          "type": "boolean"
+        },
         "horner_iterations": {
           "type": "integer",
           "format": "uint",
@@ -1445,10 +1448,6 @@
             "minimum": 0
           }
         },
-        "force_radius": {
-          "description": "Force the radius in the parameterisation",
-          "type": "boolean"
-        },
         "integrand_name": {
           "description": "The integrand name to inspect",
           "type": [
@@ -1457,7 +1456,7 @@
           ]
         },
         "momentum_space": {
-          "description": "Interpret point as momentum‑space coordinates",
+          "description": "Interpret point as momentum-space coordinates",
           "type": "boolean"
         },
         "point": {
@@ -1487,7 +1486,6 @@
       "required": [
         "point",
         "use_arb_prec",
-        "force_radius",
         "momentum_space",
         "discrete_dim"
       ]
@@ -1637,6 +1635,10 @@
             "type": "string"
           }
         },
+        "uncorrelated": {
+          "description": "Use one independent sampling/training grid per selected integrand instead of a shared grid",
+          "type": "boolean"
+        },
         "workspace_path": {
           "description": "The path to run the integrationg within",
           "type": [
@@ -1654,6 +1656,7 @@
         "integrand_name",
         "target",
         "restart",
+        "uncorrelated",
         "show_max_weight_info",
         "no_show_integration_statistics",
         "show_phase",
@@ -2960,7 +2963,19 @@
     },
     "RuntimeModelSettings": {
       "type": "object",
-      "additionalProperties": false
+      "additionalProperties": {
+        "type": "array",
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "$ref": "#/$defs/F"
+          },
+          {
+            "$ref": "#/$defs/F"
+          }
+        ]
+      }
     },
     "RuntimeSettings": {
       "type": "object",
@@ -4099,6 +4114,9 @@
           "type": "boolean"
         },
         "only_integrated": {
+          "type": "boolean"
+        },
+        "pole_part": {
           "type": "boolean"
         },
         "softct": {

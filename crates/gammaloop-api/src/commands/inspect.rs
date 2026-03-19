@@ -1,17 +1,19 @@
 use clap::Args;
-use eyre::Ok;
-use gammalooprs::utils::F;
-use ndarray::{Array, ArrayBase, OwnedRepr, ViewRepr};
+use colored::Colorize;
+use ndarray::Array2;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
+use tracing::info;
 
 use crate::{
+    commands::evaluate_samples::{evaluate_sample, EvaluateSamples},
     completion::CompletionArgExt,
     state::{ProcessRef, State},
 };
 use color_eyre::Result;
-use tracing::info;
+use eyre::eyre;
+use gammalooprs::utils::F;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Inspect {
@@ -32,22 +34,21 @@ pub struct Inspect {
     )]
     pub integrand_name: Option<String>,
     /// The point to inspect (x y) or (p0 px ...)
-    #[arg(short = 'x', long = "point", num_args = 2.., value_name = "POINT",
-          value_delimiter = ',',          // allow --vals 1,-2,3
-          allow_negative_numbers = true,  // treat -2 as a value, not a flag
+    #[arg(
+        short = 'x',
+        long = "point",
+        num_args = 2..,
+        value_name = "POINT",
+        value_delimiter = ',',
+        allow_negative_numbers = true,
     )]
-    // allow >2 for momentum‑space
     pub point: Vec<f64>,
 
     /// Evaluate in f128 precision
     #[arg(short = 'f', long = "use_arb_prec")]
     pub use_arb_prec: bool,
 
-    /// Force the radius in the parameterisation
-    #[arg(long)]
-    pub force_radius: bool,
-
-    /// Interpret point as momentum‑space coordinates
+    /// Interpret point as momentum-space coordinates
     #[arg(short = 'm', long)]
     pub momentum_space: bool,
 
@@ -60,120 +61,69 @@ impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
         let (process_id, integrand_name) =
             state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
-        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
+        let points = Array2::from_shape_vec((1, self.point.len()), self.point.clone())?;
+        let discrete_dims =
+            Array2::from_shape_vec((1, self.discrete_dim.len()), self.discrete_dim.clone())?;
+        let evaluation = evaluate_sample(
+            state,
+            &EvaluateSamples {
+                process_id: Some(process_id),
+                integrand_name: Some(integrand_name.clone()),
+                use_arb_prec: self.use_arb_prec,
+                minimal_output: false,
+                momentum_space: self.momentum_space,
+                points: points.view(),
+                discrete_dims: Some(discrete_dims.view()),
+                graph_names: None,
+                orientations: None,
+            },
+        )?
+        .sample
+        .evaluation;
 
-        let integrand = state
-            .process_list
-            .get_integrand_mut(process_id, &integrand_name)?;
-
-        integrand.warm_up(&model)?;
-        let pt = self.point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
-
-        let settings = integrand.get_settings().clone();
-
-        let (inspect_res_jac, inspect_res_eval) = gammalooprs::integrands::inspect::inspect(
-            &settings,
-            integrand,
-            &model,
-            pt,
-            &self.discrete_dim,
-            self.force_radius,
-            self.momentum_space,
-            self.use_arb_prec,
-        )?;
-        let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
-            info!("Jacobian for this point: {:+.16e}", jac);
-            if jac == 0. {
-                return Err(color_eyre::eyre::eyre!(
-                    "Jacobian is zero at this point, cannot divide by zero."
-                ));
-            }
-
-            inspect_res_eval.map(|a| a.0 / jac)
+        let raw_result = evaluation.integrand_result;
+        let jacobian = evaluation.parameterization_jacobian.map(|jac| jac.0);
+        let displayed_result = if self.momentum_space {
+            raw_result
         } else {
-            inspect_res_eval.map(|a| a.into())
+            let jacobian = jacobian.ok_or_else(|| {
+                eyre!("x-space inspect requires a parameterization jacobian, but none was returned")
+            })?;
+            raw_result.map(|entry| entry * F(jacobian))
         };
-        info!("Result: {}", inspect_res_eval);
 
-        Ok((inspect_res_jac, res_to_return))
+        let point_label = if self.momentum_space {
+            "Input point in momentum space"
+        } else {
+            "Input point in unit hypercube xs"
+        };
+        info!(
+            "\n{}:\n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+            point_label,
+            format!(
+                "( {} )",
+                self.point
+                    .iter()
+                    .map(|x| format!("{x:.16}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+            .blue(),
+            integrand_name.green(),
+            format!(
+                "( {:+.16e}, {:+.16e} i)",
+                displayed_result.re, displayed_result.im
+            )
+            .blue(),
+        );
 
-        //Ok(res.map(|a| a.0))
-    }
-}
-
-pub struct BatchedInspect<'a> {
-    pub process_id: Option<usize>,
-    pub integrand_name: Option<String>,
-    pub use_arb_prec: bool,
-    pub momentum_space: bool,
-    pub points: ArrayBase<ViewRepr<&'a f64>, ndarray::Dim<[usize; 2]>>,
-    pub discrete_dims: ArrayBase<ViewRepr<&'a usize>, ndarray::Dim<[usize; 2]>>,
-}
-
-impl<'a> BatchedInspect<'a> {
-    // todo add jacobians to output
-    pub fn run(
-        &self,
-        state: &mut State,
-    ) -> Result<(
-        ArrayBase<OwnedRepr<Complex<f64>>, ndarray::Dim<[usize; 1]>>,
-        Option<ArrayBase<OwnedRepr<f64>, ndarray::Dim<[usize; 1]>>>,
-    )> {
-        let process_ref = self.process_id.map(ProcessRef::Id);
-        let (process_id, integrand_name) =
-            state.find_integrand_ref(process_ref.as_ref(), self.integrand_name.as_ref())?;
-        let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
-
-        let integrand = state
-            .process_list
-            .get_integrand_mut(process_id, &integrand_name)?;
-        integrand.warm_up(&model)?;
-
-        let settings = integrand.get_settings().clone();
-
-        let mut vec_res = vec![];
-        let mut jac_res = vec![];
-
-        for (point, discrete_dim) in self
-            .points
-            .outer_iter()
-            .zip(self.discrete_dims.outer_iter())
-        {
-            let pt = point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
-            let discrete_dim = discrete_dim.iter().copied().collect::<Vec<usize>>();
-
-            let (inspect_res_jac, inspect_res_eval) = gammalooprs::integrands::inspect::inspect(
-                &settings,
-                integrand,
-                &model,
-                pt,
-                &discrete_dim,
-                false,
-                self.momentum_space,
-                self.use_arb_prec,
-            )?;
-            let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
-                jac_res.push(jac);
-                if jac == 0. {
-                    return Err(color_eyre::eyre::eyre!(
-                        "Jacobian is zero at this point, cannot divide by zero."
-                    ));
-                }
-                inspect_res_eval.map(|a| a.0 / jac)
-            } else {
-                inspect_res_eval.map(|a| a.into())
-            };
-
-            vec_res.push(res_to_return);
+        if let Some(jacobian) = jacobian {
+            info!(
+                "Parameterization jacobian for this point: {:+.16e}",
+                jacobian
+            );
         }
 
-        let res_array = Array::from_vec(vec_res);
-        let res_jac = if jac_res.is_empty() {
-            None
-        } else {
-            Some(Array::from_vec(jac_res))
-        };
-
-        Ok((res_array, res_jac))
+        Ok((jacobian, displayed_result.map(|entry| entry.0)))
     }
 }

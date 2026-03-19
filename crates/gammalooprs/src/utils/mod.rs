@@ -2825,7 +2825,6 @@ pub(crate) fn compute_surface_and_volume<T: FloatLike>(n_dim: usize, radius: F<T
 pub(crate) fn get_n_dim_for_n_loop_momenta(
     settings: &SamplingSettings,
     n_loop_momenta: usize,
-    force_radius: bool,
     n_edges: Option<usize>, // for tropical parameterization, we need to know the number of edges
 ) -> usize {
     if let Some(parameterization_settings) = settings.get_parameterization_settings() {
@@ -2836,22 +2835,12 @@ pub(crate) fn get_n_dim_for_n_loop_momenta(
                 if n_dim % 2 == 1 {
                     n_dim += 1;
                 }
-                // Then if the radius is not forced, then we need to add mul_unit more dimension
-                if !force_radius {
-                    n_dim += 1;
-                }
-                n_dim
+                n_dim + 1
             }
             ParameterizationMode::HyperSpherical
             | ParameterizationMode::Cartesian
             | ParameterizationMode::Spherical
-            | ParameterizationMode::MomentumSpace => {
-                if force_radius {
-                    3 * n_loop_momenta - 1
-                } else {
-                    3 * n_loop_momenta
-                }
-            }
+            | ParameterizationMode::MomentumSpace => 3 * n_loop_momenta,
         }
     } else {
         let tropical_part = 2 * n_edges.expect("No tropical subgraph table generated, please run without tropical sampling or regenerate with tables") - 1;
@@ -2990,7 +2979,6 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
     moms: &[ThreeMomentum<F<T>>],
     e_cm: F<T>,
     settings: &ParameterizationSettings,
-    force_radius: bool,
 ) -> (Vec<F<T>>, F<T>) {
     let one = e_cm.one();
     let zero = one.zero();
@@ -3015,21 +3003,17 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
                 return (vec![zero.clone(); cartesian_xs.len()], zero);
             }
             let k_r = k_r_sq.sqrt();
-            if force_radius {
-                xs.push(k_r.clone());
-            } else {
-                match settings.mapping {
-                    ParameterizationMapping::Log => {
-                        let b = F::<T>::from_f64(settings.b);
-                        let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
-                        inv_jac /= e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
-                        xs.push(x1);
-                    }
-                    ParameterizationMapping::Linear => {
-                        let b = F::<T>::from_f64(settings.b);
-                        inv_jac /= (&e_cm * &b + &k_r).powi(2) / &e_cm / &b;
-                        xs.push(&k_r / (&e_cm * &b + &k_r));
-                    }
+            match settings.mapping {
+                ParameterizationMapping::Log => {
+                    let b = F::<T>::from_f64(settings.b);
+                    let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
+                    inv_jac /= e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
+                    xs.push(x1);
+                }
+                ParameterizationMapping::Linear => {
+                    let b = F::<T>::from_f64(settings.b);
+                    inv_jac /= (&e_cm * &b + &k_r).powi(2) / &e_cm / &b;
+                    xs.push(&k_r / (&e_cm * &b + &k_r));
                 }
             };
 
@@ -3062,9 +3046,6 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             );
         }
         ParameterizationMode::Cartesian | ParameterizationMode::Spherical => {
-            if force_radius {
-                panic!("Cannot force radius for non-hyperspherical parameterization.");
-            }
             let mut inv_jac = one;
             let mut xs = Vec::with_capacity(moms.len() * 3);
             for (i, mom) in moms.iter().enumerate() {

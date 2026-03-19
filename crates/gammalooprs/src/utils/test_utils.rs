@@ -80,7 +80,7 @@ pub mod test {
             })
             .collect_vec();
 
-        let (xs, jac_2) = global_inv_parameterize(&actual_momenta, e_cm, &param_settings, false);
+        let (xs, jac_2) = global_inv_parameterize(&actual_momenta, e_cm, &param_settings);
 
         for i in 0..9 {
             assert_approx_eq(&x[i], &xs[i], &F(1.0e-14));
