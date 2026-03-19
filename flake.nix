@@ -52,9 +52,9 @@
       # Env var name Cargo uses to pick the linker for this target
       cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
 
-      # Force the Nix cc wrapper as both C compiler and Rust linker.
-      nixCc = "${pkgs.stdenv.cc}/bin/cc";
-      nixCxx = "${pkgs.stdenv.cc}/bin/c++";
+      # Force GCC as both C/C++ compiler and Rust linker.
+      nixCc = "${pkgs.gcc}/bin/gcc";
+      nixCxx = "${pkgs.gcc}/bin/g++";
 
       # Runtime library search path for locally-built binaries and for maturin/auditwheel
       runtimeLibPath = lib.makeLibraryPath [
@@ -257,6 +257,12 @@
 
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
+
+        shellHook = ''
+          export CC="${nixCc}"
+          export CXX="${nixCxx}"
+          export ${cargoLinkerVar}="${nixCc}"
+        '';
 
         packages = with pkgs; [
           tdf
