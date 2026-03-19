@@ -77,7 +77,7 @@ impl Graph {
         self.dot_impl(
             &self.full_filter(),
             "",
-            &|a| None,
+            &|_a| None,
             &|e| Some(format!("label=\"{}\"", e.num.log_print(None))),
             &|v| Some(format!("label=\"{}\"", v.num.log_print(None))),
         )

@@ -526,7 +526,7 @@ impl SubSetLike for OrientedCut {
     fn string_label(&self) -> String {
         self.left.string_label()
     }
-    fn from_base62(label: &str, size: usize) -> Option<Self> {
+    fn from_base62(_label: &str, _size: usize) -> Option<Self> {
         None
     }
 }

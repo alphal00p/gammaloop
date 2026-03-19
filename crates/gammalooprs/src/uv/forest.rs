@@ -17,7 +17,6 @@ use linnet::half_edge::{
     involution::HedgePair,
     subgraph::{SubSetLike, SubSetOps},
 };
-use std::fmt::Write;
 use tracing::{debug, instrument};
 
 use vakint::Vakint;

@@ -9,7 +9,6 @@ use crate::{
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
 };
 use color_eyre::Result;
-use eyre::eyre;
 
 pub mod cff_graph;
 //pub mod cut_expression;

@@ -507,9 +507,9 @@ impl Forests {
 
     pub fn local_subtract(
         &mut self,
-        graph: &mut Graph,
-        wood: &Wood,
-        settings: &UVgenerationSettings,
+        _graph: &mut Graph,
+        _wood: &Wood,
+        _settings: &UVgenerationSettings,
     ) -> Result<()> {
         Ok(())
     }

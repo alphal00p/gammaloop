@@ -63,7 +63,7 @@ impl LUCounterTermEvaluators {
             .left_atoms
             .iter()
             .map(|atom| {
-                let mut evaluator_atom = atom.clone();
+                let evaluator_atom = atom.clone();
 
                 GenericEvaluator::new_from_builder(
                     [evaluator_atom],
@@ -80,7 +80,7 @@ impl LUCounterTermEvaluators {
             .right_atoms
             .iter()
             .map(|atom| {
-                let mut evaluator_atom = atom.clone();
+                let evaluator_atom = atom.clone();
 
                 GenericEvaluator::new_from_builder(
                     [evaluator_atom],
@@ -94,7 +94,7 @@ impl LUCounterTermEvaluators {
             .collect();
 
         let parametric_iterated_evaluator = counterterm_data.iterated.map_ref(|atom| {
-            let mut evaluator_atom = atom.clone();
+            let evaluator_atom = atom.clone();
 
             GenericEvaluator::new_from_builder(
                 [evaluator_atom],
@@ -117,7 +117,7 @@ impl LUCounterTermEvaluators {
                     .iter()
                     .map(|atom| {
                         let evaluator_atoms = orientations.iter().map(|or| {
-                            let mut evaluator_atom = or.select(atom);
+                            let evaluator_atom = or.select(atom);
 
                             evaluator_atom
                         });
@@ -148,7 +148,7 @@ impl LUCounterTermEvaluators {
                     .iter()
                     .map(|atom| {
                         let evaluator_atoms = orientations.iter().map(|or| {
-                            let mut evaluator_atom = or.select(atom);
+                            let evaluator_atom = or.select(atom);
 
                             evaluator_atom
                         });
@@ -175,7 +175,7 @@ impl LUCounterTermEvaluators {
         {
             Some(counterterm_data.iterated.map_ref(|atom| {
                 let evaluator_atoms = orientations.iter().map(|or| {
-                    let mut evaluator_atom = or.select(atom);
+                    let evaluator_atom = or.select(atom);
 
                     evaluator_atom
                 });
@@ -492,7 +492,7 @@ impl LUCounterTerm {
                     let parametric_evaluator = &mut self.evaluators[cut_id]
                         .parametric_left_thresholds_evaluator[left_threshold_id];
 
-                    for (_i, orientation) in orientations.iter() {
+                    for (_i, _orientation) in orientations.iter() {
                         //param_builder.orientation_value(orientation, 1);
 
                         let params = T::get_parameters(
@@ -575,7 +575,7 @@ impl LUCounterTerm {
                     let parametric_evaluator = &mut self.evaluators[cut_id]
                         .parametric_right_threshold_evaluator[right_threshold_id];
 
-                    for (_i, orientation) in orientations.iter() {
+                    for (_i, _orientation) in orientations.iter() {
                         // param_builder.orientation_value(orientation, 1);
 
                         let params = T::get_parameters(
@@ -676,7 +676,7 @@ impl LUCounterTerm {
                 let parametric_evaluator =
                     &mut self.evaluators[cut_id].parametric_iterated_evaluator[iterated_index];
 
-                for (_i, orientation) in orientations.iter() {
+                for (_i, _orientation) in orientations.iter() {
                     //  param_builder.orientation_value(orientation, 1);
 
                     let params = T::get_parameters(

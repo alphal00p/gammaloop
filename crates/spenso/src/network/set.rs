@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use eyre::eyre;
-
 use crate::{
     algebra::algebraic_traits::{One, Zero},
     structure::{
@@ -14,6 +12,9 @@ use std::{
     borrow::Cow,
     fmt::{Debug, Display},
 };
+
+#[cfg(feature = "shadowing")]
+use eyre::eyre;
 
 #[cfg(feature = "shadowing")]
 use symbolica::{

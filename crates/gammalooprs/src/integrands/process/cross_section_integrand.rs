@@ -66,14 +66,13 @@ use symbolica::{
         dual::HyperDual,
         float::{Real, SingleFloat},
     },
-    evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
 use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{
-    GenericEvaluator, GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache,
+    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache,
     create_grid, evaluate_sample,
 };
 

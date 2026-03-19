@@ -5,11 +5,11 @@ use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 use crate::half_edge::involution::Flow;
 use crate::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubGraphOps};
 use crate::half_edge::{
-    hedgevec::Accessors, involution::HedgePair, tree::SimpleTraversalTree, Hedge, HedgeGraph,
+    hedgevec::Accessors, involution::HedgePair, Hedge, HedgeGraph,
     NodeStorageOps,
 };
 
-use super::{node::HedgeNode, Cycle, Inclusion, ModifySubSet, SubSetIter, SubSetLike, SubSetOps};
+use super::{node::HedgeNode, Inclusion, ModifySubSet, SubSetIter, SubSetLike, SubSetOps};
 
 #[derive(Clone, Debug, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

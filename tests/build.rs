@@ -23,7 +23,10 @@ fn main() {
         .cpp(true)
         .files([fjcore_dir.join("fjcore.cc"), fjcore_dir.join("wrapper.cc")])
         .include(&fjcore_dir)
-        .flag_if_supported("-std=c++14")
+        // `cc-rs` treats any stderr output during `flag_if_supported` probes as a failure.
+        // The Nix clang wrapper warns about Cargo's Darwin target spelling, so probing
+        // drops the flag and clang falls back to C++17, where `std::auto_ptr` is removed.
+        .std("c++14")
         .warnings(false)
         .compile("fjcore_test");
 }

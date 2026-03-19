@@ -3,8 +3,7 @@
 use std::{borrow::Borrow, collections::HashMap, fmt::Display};
 
 use crate::{
-    cff::esurface::{self, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
-    processes::{CutId, RaisedCutData, RaisedCutId},
+    cff::esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
     settings::global::OrientationPattern,
     utils::{W_, ose_atom_from_index},
 };

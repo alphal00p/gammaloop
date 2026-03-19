@@ -9,7 +9,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
+    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike},
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;

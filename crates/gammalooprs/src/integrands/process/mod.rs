@@ -37,10 +37,7 @@ use spenso::algebra::complex::Complex;
 use std::sync::Once;
 use std::time::{Duration, Instant};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView},
-    function,
-};
+use symbolica::atom::AtomCore;
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 pub mod amplitude;
@@ -1034,7 +1031,7 @@ fn complex_to_f64<T: FloatLike>(value: &Complex<F<T>>) -> Complex<F<f64>> {
 
 #[inline]
 fn stability_check<T: FloatLike>(
-    settings: &RuntimeSettings,
+    _settings: &RuntimeSettings,
     results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<T>>,
@@ -1148,7 +1145,7 @@ fn stability_check<T: FloatLike>(
 
 #[inline]
 fn stability_check_on_norm<T: FloatLike>(
-    settings: &RuntimeSettings,
+    _settings: &RuntimeSettings,
     results: &[Complex<F<T>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<T>>,

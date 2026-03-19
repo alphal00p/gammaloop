@@ -131,12 +131,12 @@ pub struct LUCounterTermData {
 impl CsAmplitudeCTDiagram {
     fn get_tensor_network_cached(
         &mut self,
-        graph: &Graph,
-        lu_cut: &OrientedCut,
-        vakint: (&Vakint, &vakint::VakintSettings),
-        add_lu_cut_feynman_rules: bool,
-        settings: &GenerationSettings,
-        conjugate: bool,
+        _graph: &Graph,
+        _lu_cut: &OrientedCut,
+        _vakint: (&Vakint, &vakint::VakintSettings),
+        _add_lu_cut_feynman_rules: bool,
+        _settings: &GenerationSettings,
+        _conjugate: bool,
     ) -> ParsingNet {
         disable! {
         if let Some(network) = &self.network {
@@ -1119,8 +1119,8 @@ impl CrossSectionGraph {
 
     fn build_threshold_counterterm(
         &mut self,
-        settings: &GenerationSettings,
-        vakint: &Vakint,
+        _settings: &GenerationSettings,
+        _vakint: &Vakint,
     ) -> Result<()> {
         disable!(
         // thershold enumeration as st cuts
