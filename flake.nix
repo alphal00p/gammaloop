@@ -258,11 +258,11 @@
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
 
-        shellHook = ''
-          export CC="${nixCc}"
-          export CXX="${nixCxx}"
-          export ${cargoLinkerVar}="${nixCc}"
-        '';
+        # shellHook = ''
+        #   export CC="${nixCc}"
+        #   export CXX="${nixCxx}"
+        #   export ${cargoLinkerVar}="${nixCc}"
+        # '';
 
         packages = with pkgs; [
           tdf

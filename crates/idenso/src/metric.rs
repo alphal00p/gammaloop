@@ -1,7 +1,5 @@
 use std::{
     collections::HashSet,
-    panic::catch_unwind,
-    rc::Rc,
     sync::{Arc, LazyLock, atomic::AtomicBool},
 };
 
