@@ -59,6 +59,7 @@ use crate::graph::ext::HedgeGraphExt;
 use crate::graph::parse::ParseGraph;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{FeynmanGraph, Graph, LMBext};
+use crate::integrands::process::ParamBuilder;
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
@@ -4424,6 +4425,12 @@ impl ProcessDefinition {
                         loop_momentum_basis.swap_loops(LoopIndex(a), LoopIndex(b));
                     }
                     graph.loop_momentum_basis = loop_momentum_basis;
+                    graph.param_builder = ParamBuilder::new::<_, Vec<Atom>, _>(
+                        graph,
+                        model,
+                        &graph.loop_momentum_basis,
+                        vec![],
+                    );
                 }
             }
         }

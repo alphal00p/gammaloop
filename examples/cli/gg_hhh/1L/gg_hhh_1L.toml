@@ -7,7 +7,7 @@ name = "gg_hhh_1l"
 
 [cli_settings.global.generation.compile]
 inline_asm = true
-optimization_level = "O3"
+optimization_level = "O1"
 fast_math = true
 unsafe_math = true
 custom = []
@@ -52,7 +52,7 @@ commands = [
            --only-diagrams
            --numerator-grouping only_detect_zeroes
            --select-graphs GL15
-           --loop-momentum-bases GL15=5
+           --loop-momentum-bases GL15=8
            --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
                                            * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
                                            * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
