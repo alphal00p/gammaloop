@@ -26,7 +26,7 @@ class TestProcessGeneration:
         for test, expected_graph_number, expected_total_overall_factor in tests:
             try:
                 gloop.run(CommandList.from_string(
-                    f"generate {test} --clear_existing_processes -nt {n_parallel_threads}"))
+                    f"generate xs {test} --clear_existing_processes -nt {n_parallel_threads}"))
             except GammaLoopError as e:
                 pass
             all_graphs = (

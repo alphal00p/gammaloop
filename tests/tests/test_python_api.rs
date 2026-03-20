@@ -162,7 +162,7 @@ fn base_setup_commands() -> Vec<String> {
         r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[32.0,0.0,0.0,32.0],[32.0,0.0,0.0,-32.0]],"helicities":[1,1]}}'"#
             .to_string(),
         "set default-runtime kv subtraction.disable_threshold_subtraction=true".to_string(),
-        "generate e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams".to_string(),
+        "generate xs e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams".to_string(),
         "generate".to_string(),
     ]
 }

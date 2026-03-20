@@ -1913,17 +1913,8 @@ subtype = "tropical"
     }
 
     #[test]
-    fn command_history_defaults_generate_to_cross_section_mode() {
-        let cmd = CommandHistory::from_raw_string("generate e+ e- > d d~").unwrap();
-        match cmd.command {
-            Commands::Generate(generate) => match generate.mode {
-                Some(crate::commands::generate::GenerateCmd::Xs(args)) => {
-                    assert_eq!(args.tokens, vec!["e+", "e-", ">", "d", "d~"]);
-                }
-                other => panic!("Expected default cross-section generate mode, got {other:?}"),
-            },
-            other => panic!("Expected generate command, got {other:?}"),
-        }
+    fn command_history_requires_explicit_generate_mode() {
+        assert!(CommandHistory::from_raw_string("generate e+ e- > d d~").is_err());
     }
 
     #[test]

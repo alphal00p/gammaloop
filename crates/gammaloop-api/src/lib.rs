@@ -60,7 +60,6 @@ use reedline::{Prompt, PromptEditMode, PromptHistorySearch};
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::command_parser::normalize_generate_argv;
 use state::{
     classify_state_folder, CommandHistory, RunHistory, State, StateFolderKind, SyncSettings,
 };
@@ -800,11 +799,10 @@ impl OneShot {
     /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
     pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
         let argv: Vec<OsString> = std::env::args_os().collect();
-        let normalized_argv = normalize_generate_argv(&argv);
 
         // Build a Command (same as derive(Parser)) and get matches
         let mut cmd = <OneShot as CommandFactory>::command();
-        let matches = cmd.clone().try_get_matches_from(&normalized_argv)?;
+        let matches = cmd.clone().try_get_matches_from(&argv)?;
 
         let cli = <OneShot as FromArgMatches>::from_arg_matches(&matches)
             .map_err(|e| e.format(&mut cmd))?;
@@ -1500,6 +1498,11 @@ mod tests {
                 "quit".to_string()
             ][..]
         );
+    }
+
+    #[test]
+    fn oneshot_requires_explicit_generate_mode() {
+        assert!(OneShot::try_parse_from(["gammaloop", "generate", "g", "g", ">", "h"]).is_err());
     }
 
     #[test]
