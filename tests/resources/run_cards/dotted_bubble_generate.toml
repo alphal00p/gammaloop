@@ -26,8 +26,8 @@ helicities = [
 ]
 
 [default_runtime_settings.integrator]
-n_max = 1_000_000
-n_start = 1_000_00
+n_max = 1_000_0000
+n_start = 1_000_000
 n_increase = 0
 continuous_dim_learning_rate = 1.5
 
