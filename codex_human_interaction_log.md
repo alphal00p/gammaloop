@@ -811,3 +811,386 @@ Validation:
 
 One caveat remains unchanged from the preexisting code: cross-section threshold subtraction is still on the existing `todo!()` path when enabled, so the new batching layer does not change that behavior.
 ````
+
+
+## 2026-03-20 (backfilled after compaction)
+
+### Human
+
+````
+1. Yes, it should apply to all batched inputs from our API which supports vectorizing downstream.
+
+2. For testing, you should implement in `test_runs.rs` a test function `test_batched_evaluation` which uses a process like gg_hhh (with physical kinematics, so threshold counterterms are enabled) like obtained from
+
+[@gg_hhh_1L.toml#L1:188](file:///Users/vjhirsch/Documents/Work/gammaloop_vectorize/examples/cli/gg_hhh/1L/gg_hhh_1L.toml#L1:188)
+<context ref="file:///Users/vjhirsch/Documents/Work/gammaloop_vectorize/examples/cli/gg_hhh/1L/gg_hhh_1L.toml#L1:188">
+commands = []
+
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/gg_hhh/1L/state"
+name = "gg_hhh_1l"
+
+[cli_settings.global.generation.compile]
+inline_asm = true
+optimization_level = "O1"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+# Disable thresholds with
+# [cli_settings.global.generation.threshold_subtraction]
+# enable_thresholds = false
+# [default_runtime_settings.subtraction]
+# disable_threshold_subtraction = true
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = true
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default.json",
+  "set global kv global.n_cores.feyngen=10",
+
+  "reset processes",
+  """generate amp g g > h h h / u d c s b QED==3 [{1}]
+           --only-diagrams
+           --numerator-grouping only_detect_zeroes
+           --select-graphs GL15
+           --loop-momentum-bases GL15=8
+           --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+                                           * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
+                                           * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+           -p gg_hhh
+           -i 1L
+    """,
+  "generate",
+  "save dot",
+
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "integrate_euclidean"
+commands = [
+  "set model MT=1000.0",
+  "set model WT=0.0",
+  "set model ymt=1000.0",
+
+  "set process -p gg_hhh -i 1L defaults",
+
+  # Disable stability checks
+  """set process -p gg_hhh -i 1L string '
+    [stability]
+    rotation_axis = [ ]
+    '""",
+
+  # Add stability checks
+  # """set process -p gg_hhh -i 1L string '
+  # [[stability.rotation_axis]]
+  # type = "z"
+  # [[stability.rotation_axis]]
+  # type = "x"
+  # [[stability.rotation_axis]]
+  # type = "y"
+  # '""",
+
+  "set process -p gg_hhh -i 1L kv integrator.n_start=100000 integrator.n_max=1000000",
+  # Target for "euclidean" point confirmed with MadLoop
+  """integrate --process gg_hhh -i 1L --n-cores 10
+        --target 6.56089133881216768e-4 -4.17078968913725420e-6
+        --no-show-max-weights
+        --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_physical"
+commands = [
+  "set process -p gg_hhh -i 1L defaults",
+
+  # Disable stability checks
+  """set process -p gg_hhh -i 1L string '
+    [stability]
+    rotation_axis = [ ]
+    '""",
+
+  # Target for the physical top mass of 173 GeV is also confirmed with MadLoop
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set process -p gg_hhh -i 1L kv integrator.n_start=100000 integrator.n_max=10000000",
+  """integrate --process gg_hhh -i 1L --n-cores 10
+        --target 1.89203604685291554e-6 -5.46603099163412881e-6
+        --workspace-path ./GL_OUTPUT/gg_hhh/1L/state/integration_workspace
+        --restart
+    """,
+]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [500.0, 0.0, 0.0, 500.0],
+  [500.0, 0.0, 0.0, -500.0],
+  [
+    0.4385555662246945e3,
+    0.1553322001835378e3,
+    0.3480160396513587e3,
+    -0.1773773615718412e3
+  ],
+  [
+    0.3563696374921922e3,
+    -0.1680238900851100e2,
+    -0.3187291102436005e3,
+    0.9748719163688098e2
+  ],
+  "dependent"
+]
+helicities = [1, 1, 0, 0, 0]
+
+# Default "naive" parameterization
+# [default_runtime_settings.sampling]
+# type = "default"
+# mode = "spherical"
+# mapping = "linear"
+# b = 10.0
+
+## a) Tropical sampling run.
+# [default_runtime_settings.sampling]
+# type = "discrete_graph_sampling"
+# [default_runtime_settings.sampling.sampling_type]
+# subtype = "tropical"
+
+## b) MC over LMB with explicit sum per sample point.
+# [default_runtime_settings.sampling]
+# type = "discrete_graph_sampling"
+# [default_runtime_settings.sampling.sampling_type]
+# subtype = "multi_channeling"
+
+## c) MC over LMB with importance sampling of channels
+[default_runtime_settings.sampling]
+type = "discrete_graph_sampling"
+
+[default_runtime_settings.sampling.sampling_type]
+subtype = "discrete_multi_channeling"
+
+## d) MC over LMB and single orientation per, both importance-sampled
+# [default_runtime_settings.sampling]
+# type = "discrete_graph_sampling"
+# sample_orientations = true
+# [default_runtime_settings.sampling.sampling_type]
+# subtype = "discrete_multi_channeling"
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+</context> 
+
+and also from `e+ e- > d d~ g` as in
+
+[@run.toml#L1:131](file:///Users/vjhirsch/Documents/Work/gammaloop_vectorize/examples/api/rust/epem_a_ddxg_xs_LO/run.toml#L1:131)
+<context ref="file:///Users/vjhirsch/Documents/Work/gammaloop_vectorize/examples/api/rust/epem_a_ddxg_xs_LO/run.toml#L1:131">
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/HEAD/assets/schemas/runhistory.json
+
+# Differential LU example for the real two-graph
+#   e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0]
+# process used in the end-to-end differential tests.
+#
+# This card sets up:
+# - event generation
+# - additional partial weights in the generated events
+# - one shared jet-pt quantity
+# - one shared jet-count quantity
+# - one shared down-quark energy quantity
+# - one leading-jet selector
+# - one leading-jet histogram observable
+# - one jet-count histogram observable
+# - one down/anti-down energy histogram observable
+# - reusable display examples for quantities, observables, and selectors
+# - a local state under ./state
+
+commands = [
+  "import model sm-default",
+  "run generate",
+  "run set_differential_setup",
+  "save state -o",
+  "save dot"
+]
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "reset processes",
+  "generate e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams",
+  "generate",
+]
+
+[[command_blocks]]
+name = "set_differential_setup"
+commands = [
+  """set process string '
+[quantities.leading_jet_pt]
+type = "jet_pt"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 0.0
+
+[quantities.jet_count]
+type = "jet_count"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 0.0
+
+[quantities.down_energy]
+type = "particle_scalar"
+pdgs = [1, -1]
+quantity = "E"
+
+[selectors.leading_jet_pt_cut]
+quantity = "leading_jet_pt"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 0.0
+
+[observables.leading_jet_pt_hist]
+quantity = "leading_jet_pt"
+entry_selection = "leading_only"
+phase = "real"
+x_min = 0.0
+x_max = 1000.0
+n_bins = 8
+
+[observables.down_energy_hist]
+quantity = "down_energy"
+entry_selection = "all"
+phase = "real"
+x_min = 0.0
+x_max = 1000.0
+n_bins = 8
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+phase = "real"
+x_min = 0.0
+x_max = 6.0
+n_bins = 6
+'"""
+]
+
+[[command_blocks]]
+name = "display_named_settings_examples"
+commands = [
+  "display quantities -p #0",
+  "display quantities -p #0 leading_jet_pt",
+  "display observables -p #0",
+  "display observables -p #0 leading_jet_pt_hist",
+  "display selectors -p #0",
+  "display selectors -p #0 leading_jet_pt_cut",
+]
+
+[cli_settings]
+override_state = false
+try_strings = true
+
+[cli_settings.state]
+folder = "./state"
+name = "CLI_demo"
+
+[cli_settings.global]
+logfile_directive = "info,symbolica=off"
+display_directive = "info,symbolica=off"
+
+[default_runtime_settings.general]
+generate_events = true
+store_additional_weights_in_event = true
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [32.0, 0.0, 0.0, 32.0],
+  [32.0, 0.0, 0.0, -32.0],
+]
+helicities = [1, 1]
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.integrator.observables_output]
+format = "json"
+
+</context> 
+
+which can test events surfacing in the presence of vectorization)
+
+(but make sure the test is standalone and does not rely on those toml cards).
+
+The test is then simply to compare that the outputs between the batched eval and the single eval are in agreement (bar timing).
+
+You can go on with the implementation
+````
+
+### Human
+
+````
+I commited by mistake my changes to main, can you undo the commit and place it instead in a new branch called vectorize
+````
+
+### Codex
+
+````
+Done.
+
+- Created `vectorize` at commit `b9d4daea`.
+- Moved `main` back to `250e4f7c`.
+- You are now on `vectorize`.
+- Working tree is clean.
+````
+
+### Human
+
+````
+Create a PR to main, with the body of the PR taken from your vecorize.md plan but with an additional easy-to-read header file that reads nice when displayed as a PR body and which describes well your approach.
+````
+
+### Codex
+
+````
+Created PR `#49` to `main`: https://github.com/alphal00p/gammaloop/pull/49
+
+- Title: `Vectorize f64 evaluator batching through the process stack`
+- Body: starts with a short PR-oriented overview, then includes the full contents of `vectorized_gammaloop.md`
+- Branch: `vectorize`
+
+I also updated `codex_human_interaction_log.md` on `vectorize` and pushed that to the PR.
+````
