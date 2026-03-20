@@ -421,7 +421,6 @@ mod test {
         dot,
         graph::{Graph, parse::IntoGraph},
         initialisation::{initialise, test_initialise},
-        integrands::process::param_builder::ParamBuilderGraph,
         numerator::aind::Aind,
         processes::{Amplitude, AmplitudeGraph, DotExportSettings},
         settings::{
@@ -435,7 +434,7 @@ mod test {
     #[test]
     fn evaluate_pols() {
         initialise().unwrap();
-        let model = crate::utils::test_utils::load_generic_model("sm");
+        let model = crate::utils::load_generic_model("sm");
 
         let graphs: Vec<Graph> = dot!(
         digraph bxatobx{
@@ -605,11 +604,9 @@ mod test {
                     v2 -> v3 [particle="d" id=6];
         }).unwrap();
 
-        let set = GenerationSettings::default();
-        // let vk_settings = set.uv.vakint.true_settings();
         let vk = crate::utils::vakint().unwrap();
 
-        // let model = crate::utils::test_utils::load_generic_model("sm");
+        // let model = crate::utils::load_generic_model("sm");
 
         graph.generate_cff().unwrap();
         graph
@@ -718,7 +715,7 @@ mod test {
 
         let mut a = Amplitude::from_graph_list("test", graphs.clone()).unwrap();
 
-        let model = crate::utils::test_utils::load_generic_model("sm");
+        let model = crate::utils::load_generic_model("sm");
 
         let generation_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(1)

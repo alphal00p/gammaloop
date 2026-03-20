@@ -31,7 +31,7 @@ use crate::{
     processes::{CrossSection, CutId},
     settings::RuntimeSettings,
     settings::global::GenerationSettings,
-    utils::test_utils::load_generic_model,
+    utils::load_generic_model,
 };
 use spenso::network::library::TensorLibraryData;
 use symbolica::{atom::AtomCore, function, parse};

@@ -1,4 +1,5 @@
 use crate::integrands::process::GenericEvaluatorFloat;
+use crate::model::Model;
 use crate::momentum::sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopMomenta, SubspaceData,
 };
@@ -16,10 +17,8 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use idenso::representations::initialize;
 use itertools::Itertools;
-use linnet::half_edge::builder::HedgeGraphBuilder;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use linnet::half_edge::nodestore::NodeStorageVec;
-use linnet::half_edge::{HedgeGraph, NoData};
+use linnet::half_edge::involution::EdgeIndex;
+
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
 use rug::Float;
@@ -70,7 +69,6 @@ use vakint::Vakint;
 use crate::MAX_LOOP;
 use ::tracing::debug;
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::numerical_integration::Sample;
 use typed_index_collections::{TiSlice, TiVec};
 
 use git_version::git_version;
@@ -92,18 +90,6 @@ pub const PINCH_TEST_THRESHOLD: f64 = 1e-10;
 
 pub const LEFT: usize = 0;
 pub const RIGHT: usize = 1;
-
-pub(crate) fn dummy_hedge_graph(
-    n_edges: usize,
-) -> HedgeGraph<NoData, NoData, NoData, NodeStorageVec<NoData>> {
-    let mut builder = HedgeGraphBuilder::<NoData, NoData>::new();
-    let left = builder.add_node(NoData {});
-    let right = builder.add_node(NoData {});
-    for _ in 0..n_edges {
-        builder.add_edge(left, right, NoData {}, Orientation::Default);
-    }
-    builder.build()
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Side {
@@ -1409,10 +1395,6 @@ impl<T: FloatLike> F<T> {
 
     pub(crate) fn abs(&self) -> Self {
         F(self.0.norm())
-    }
-
-    pub(crate) fn i(&self) -> Complex<Self> {
-        Complex::new(self.zero(), self.one())
     }
 
     pub(crate) fn log10(&self) -> Self {
@@ -3526,35 +3508,6 @@ pub(crate) fn format_evaluation_time_from_f64(time: f64) -> String {
     format_evaluation_time(duration_from_secs_f64_saturating(time))
 }
 
-pub(crate) fn format_sample(sample: &Sample<F<f64>>) -> String {
-    match sample {
-        Sample::Continuous(_, xs) => {
-            let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
-            format!("xs: [{}]", xs_point)
-        }
-        Sample::Discrete(_, graph_index, Some(nested_sample)) => match nested_sample.as_ref() {
-            Sample::Continuous(_, xs) => {
-                let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
-                format!("graph: {}, xs: [{}]", graph_index, xs_point)
-            }
-            Sample::Discrete(_, channel_index, Some(nested_cont_sample)) => {
-                match nested_cont_sample.as_ref() {
-                    Sample::Continuous(_, xs) => {
-                        let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
-                        format!(
-                            "graph: {}, channel: {}, xs: [{}]",
-                            graph_index, channel_index, xs_point
-                        )
-                    }
-                    _ => String::from("N/A"),
-                }
-            }
-            _ => String::from("N/A"),
-        },
-        _ => String::from("N/A"),
-    }
-}
-
 pub(crate) fn normalize_tabled_separator_rows(rendered: &str) -> String {
     let original_lines = rendered.lines().collect_vec();
     let visible_lines = original_lines
@@ -4011,6 +3964,18 @@ pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
 }
 
 pub mod newton_solver;
+use include_dir::{Dir, include_dir};
+static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/models/json");
+
+pub fn load_generic_model(name: &str) -> Model {
+    if let Some(file) = BUILTIN_MODELS.get_file(format!("{}/{}.json", name, name)) {
+        Model::from_str(file.contents_utf8().unwrap().into(), "json").unwrap()
+    } else {
+        panic!("Model {} not found in built-in models.", name);
+    }
+}
+
+#[cfg(test)]
 pub mod test_utils;
 
 #[cfg(feature = "python_api")]

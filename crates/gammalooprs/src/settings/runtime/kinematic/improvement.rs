@@ -687,7 +687,7 @@ mod tests {
         momentum::sample::ExternalIndex,
         momentum::signature::SignatureLike,
         momentum::{FourMomentum, SignOrZero},
-        utils::{F, FloatLike, f128, test_utils::load_generic_model},
+        utils::{F, FloatLike, f128, load_generic_model},
     };
 
     fn test_default_momenta_graph(graph: &Graph, model: &Model, e_cm: &F<f64>) -> Result<()> {

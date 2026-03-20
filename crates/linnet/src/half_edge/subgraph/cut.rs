@@ -1193,7 +1193,7 @@ mod tests {
             .unwrap();
 
         let mut out2 = String::new();
-        olda.dot_serialize_fmt(&mut out, (), &|h| h.clone(), &from, &|v| v.clone())
+        olda.dot_serialize_fmt(&mut out2, (), &|h| h.clone(), &from, &|v| v.clone())
             .unwrap();
 
         assert_eq!(a, olda, "{}\nvs\n{}", out, out2);

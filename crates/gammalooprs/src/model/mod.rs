@@ -2549,7 +2549,7 @@ mod tests {
             ArcPropagator, ArcVertexRule, Parameter, ParameterName, ParameterNature, ParameterType,
         },
         momentum::{Helicity, ThreeMomentum},
-        utils::{F, test_utils::load_generic_model},
+        utils::{F, load_generic_model},
     };
 
     use super::{ArcParticle, Model, UFOSymbol, parameter_display_sort_key};

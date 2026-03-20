@@ -1140,7 +1140,7 @@ mod tests_cff {
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
     };
     use symbolica::{
-        domains::float::{FloatLike as SymFloatLike, Real},
+        domains::float::Real,
         evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
         parse, symbol,
     };
@@ -1150,7 +1150,7 @@ mod tests_cff {
         cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
         settings::global::OrientationPattern,
-        utils::{self, F, RefDefault, dummy_hedge_graph},
+        utils::{self, F, RefDefault, test_utils::dummy_hedge_graph},
     };
 
     use super::*;

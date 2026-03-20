@@ -4,7 +4,7 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::Amplitude,
-    utils::test_utils::load_generic_model,
+    utils::load_generic_model,
     uv::{
         UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},

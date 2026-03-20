@@ -59,7 +59,7 @@ use crate::model::Model;
 use crate::model::VertexRule;
 use crate::numerator::GlobalPrefactor;
 use crate::processes::ProcessDefinition;
-use crate::utils::test_utils::load_generic_model;
+use crate::utils::load_generic_model;
 
 fn manual_lib<C: Into<Coefficient>>(
     loop_momenta: Vec<Vec<C>>,

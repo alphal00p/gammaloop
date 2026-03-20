@@ -4,7 +4,6 @@ version = "0.17.0"
 edition = "2021"
 description = "A library for working with half-edge data structures, and subgraphs, and drawing them"
 license = "MIT"
-authors = ["Lucien Huber"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,48 +11,31 @@ authors = ["Lucien Huber"]
 name = "linnet"
 path = "src/lib.rs"
 
-
-
 [dependencies]
-bincode = { version = "2.0.1", features = ["serde"], optional = true }
 ahash = "0.8.11"
+bincode = { version = "2.0.1", features = ["serde"], optional = true }
+bincode-trait-derive = "0.1.1"
 bitvec = { version = "1.0.1" }
 cgmath = { version = "0.18.0", optional = true }
-duplicate = "2.0.0"
-indexmap = "2.7.0"
-itertools = "0.14.0"
-rand = { version = "0.8.5", features = ["small_rng"] }
-serde = { version = "1.0", features = ["derive"], optional = true }
-figment = { version = "0.10.19" }
-symbolica = { version = "1", optional = true, default-features = false }
-thiserror = "2.0.11"
 # derive_more = "0.99.17"
 # hibit_tree = "0.1.0-alpha.3"
 dot-parser = "0.5"
-kurbo = "0.11.1"
-bincode-trait-derive = "0.1.1"
-indenter = { version = "0.3.3", features = ["std"] }
-paste = "1.0.15"
+duplicate = "2.0.0"
+figment = { version = "0.10.19" }
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }
-
-
-[features]
-serde = ["dep:serde", "bitvec/serde"]
-symbolica = ["dep:symbolica"]
-bincode = ["dep:bincode", "serde"]
-drawing = ["dep:cgmath"]
-energy_trace = []
-nodestore-vec = []
-nodestore-forest-child-vec = []
-nodestore-forest-parent-child = []
-default = ["serde", "nodestore-vec"]
-# layout = ["dep:argmin"]
+indenter = { version = "0.3.3", features = ["std"] }
+indexmap = "2.7.0"
+itertools = "0.14.0"
+kurbo = "0.11.1"
+paste = "1.0.15"
+rand = { version = "0.8.5", features = ["small_rng"] }
+serde = { version = "1.0", features = ["derive"], optional = true }
+symbolica = { version = "1", default-features = false, optional = true }
+thiserror = "2.0.11"
 
 [dev-dependencies]
-insta = { version = "1.42.0", features = ["ron"] }
-proptest = "1.6.0"
-similar-asserts = "1.7.0"
-serde = "1.0"
+criterion = "0.5"
+figment = "0.10.19"
 # vers-vecs = { version = "1.6.1", features = ["simd"] }
 # vob = "3.0.3"
 # smallbitvec = "2.6.0"
@@ -63,6 +45,20 @@ serde = "1.0"
 # hibitset = "0.6.4"
 # fixedbitset = "0.5.7"
 iai-callgrind = "0.14.0"
-criterion = "0.5"
-figment = "0.10.19"
+insta = { version = "1.42.0", features = ["ron"] }
 linnest = { workspace = true }
+proptest = "1.6.0"
+serde = "1.0"
+similar-asserts = "1.7.0"
+
+[features]
+default = ["nodestore-vec", "serde"]
+bincode = ["dep:bincode", "serde"]
+drawing = ["dep:cgmath"]
+energy_trace = []
+nodestore-forest-child-vec = []
+nodestore-forest-parent-child = []
+nodestore-vec = []
+serde = ["bitvec/serde", "dep:serde"]
+symbolica = ["dep:symbolica"]
+# layout = ["dep:argmin"]

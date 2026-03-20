@@ -1633,7 +1633,7 @@ mod tests {
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
         settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
-        utils::{serde_utils::SHOWDEFAULTS, test_utils::load_generic_model},
+        utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
     use tempfile::tempdir;
 

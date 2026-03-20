@@ -13,10 +13,7 @@ use symbolica::{
     function,
 };
 
-use linnet::half_edge::{
-    involution::HedgePair,
-    subgraph::{SubSetLike, SubSetOps},
-};
+use linnet::half_edge::{involution::HedgePair, subgraph::SubSetOps};
 use tracing::{debug, instrument};
 
 use vakint::Vakint;

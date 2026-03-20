@@ -37,7 +37,6 @@ use spenso::algebra::complex::Complex;
 use std::sync::Once;
 use std::time::{Duration, Instant};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
-use symbolica::atom::AtomCore;
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 pub mod amplitude;

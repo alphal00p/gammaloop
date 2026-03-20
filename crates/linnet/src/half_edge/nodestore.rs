@@ -161,7 +161,6 @@ pub trait NodeStorage: Sized {
         Self: 'a;
 }
 
-mod bitvec_find;
 mod forest;
 mod vec;
 

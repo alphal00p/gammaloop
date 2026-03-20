@@ -3937,7 +3937,6 @@ mod tests {
     #[test]
     fn orientation_descriptions_use_colored_signs() {
         control::set_override(true);
-        let rendered = display::styled_bin_description("orientation", "+-0").to_plain_string();
         let expected_plus = "+".green().bold().to_string();
         let expected_minus = "-".red().bold().to_string();
         control::set_override(false);

@@ -753,7 +753,16 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ),
     top: symbol!("Top"),
     num: symbol!("num"),
-    den: symbol!("denom"),
+    den: symbol!(
+        "denom",
+        der = |view, arg, out| {
+            if arg != 3 {
+                **out = Atom::Zero;
+            } else {
+                **out = Atom::num(1);
+            }
+        }
+    ),
     ubar: symbol!(
         "ubar",
         print = |a, opt| { spenso_print_scripted_indexed!(a, opt, "u̅") }

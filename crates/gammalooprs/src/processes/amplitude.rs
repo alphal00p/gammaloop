@@ -1174,7 +1174,7 @@ pub mod test {
 
     use crate::{
         dot, graph::parse::IntoGraph, initialisation::test_initialise, processes::AmplitudeGraph,
-        utils::test_utils::load_generic_model,
+        utils::load_generic_model,
     };
     #[test]
     fn amplitude_tree() {

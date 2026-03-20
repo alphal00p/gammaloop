@@ -309,7 +309,7 @@ impl CFFGenerationGraph {
         incoming_vertices: Vec<(usize, CFFEdgeType)>,
         orientation: Option<EdgeVec<Orientation>>,
     ) -> Self {
-        use crate::utils;
+        use crate::utils::test_utils;
 
         let total_num_edges = edges.len() + incoming_vertices.len();
 
@@ -366,7 +366,7 @@ impl CFFGenerationGraph {
         let nodes = unique_vertices.into_values().collect_vec();
         let global_orientation = match orientation {
             Some(orientation) => orientation,
-            None => utils::dummy_hedge_graph(total_num_edges)
+            None => test_utils::dummy_hedge_graph(total_num_edges)
                 .new_edgevec_from_iter(vec![Orientation::Default; total_num_edges])
                 .unwrap(),
         };

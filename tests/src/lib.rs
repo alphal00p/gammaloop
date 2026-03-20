@@ -13,7 +13,7 @@ use gammaloop_api::{
 };
 
 use gammalooprs::{
-    initialisation::initialise, integrands::HasIntegrand, utils::test_utils::load_generic_model,
+    initialisation::initialise, integrands::HasIntegrand, utils::load_generic_model,
 };
 use std::{
     env,

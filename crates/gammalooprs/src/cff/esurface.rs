@@ -1039,7 +1039,7 @@ mod tests {
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
-        utils::{F, dummy_hedge_graph},
+        utils::{F, test_utils::dummy_hedge_graph},
     };
 
     use super::add_external_shifts;

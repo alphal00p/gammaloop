@@ -381,7 +381,7 @@ pub fn is_default_rotation_axis(
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::test_utils::{load_generic_model, output_dir};
+    use crate::utils::{load_generic_model, test_utils::output_dir};
     use std::fs;
 
     use super::{SerdeFileError, SmartSerde};

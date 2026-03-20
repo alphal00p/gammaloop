@@ -21,7 +21,6 @@ use typed_index_collections::ti_vec;
 use super::Graph;
 use crate::{
     dot,
-    feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     graph::{
         GraphGroup, LMBext,
         parse::{IntoGraph, complete_group_parsing, string_utils::ToOrderedSimple},
@@ -30,154 +29,7 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{Numerator, UnInit, aind::Aind},
     processes::DotExportSettings,
-    utils::test_utils::load_generic_model,
 };
-
-#[test]
-fn symbolica_parse() {
-    test_initialise().unwrap();
-    let model = load_generic_model("sm");
-
-    let mut a = symbolica::graph::Graph::new();
-
-    let udwm = NodeColorWithVertexRule::from_particles(["d~", "W-", "u"], &model);
-    let udwp = NodeColorWithVertexRule::from_particles(["d", "W+", "u~"], &model);
-    let cswp = NodeColorWithVertexRule::from_particles(["s", "W+", "c~"], &model);
-    let cswm = NodeColorWithVertexRule::from_particles(["s~", "W-", "c"], &model);
-
-    let ext1 = NodeColorWithVertexRule {
-        external_tag: 1,
-        vertex_rule: model.vertex_rules[0].clone(),
-    };
-    let ext2 = NodeColorWithVertexRule {
-        external_tag: 2,
-        vertex_rule: model.vertex_rules[0].clone(),
-    };
-    let ext3 = NodeColorWithVertexRule {
-        external_tag: 3,
-        vertex_rule: model.vertex_rules[0].clone(),
-    };
-    let ext4 = NodeColorWithVertexRule {
-        external_tag: 4,
-        vertex_rule: model.vertex_rules[0].clone(),
-    };
-
-    let e1 = a.add_node(ext1.clone());
-    let e2 = a.add_node(ext2.clone());
-    let e3 = a.add_node(ext3.clone());
-    let e4 = a.add_node(ext4.clone());
-    let v1 = a.add_node(udwp.clone());
-    let v2 = a.add_node(cswm.clone());
-    let v3 = a.add_node(udwm.clone());
-    let v4 = a.add_node(cswp.clone());
-
-    let ed = EdgeColor::from_particle(model.get_particle("d"));
-    let es = EdgeColor::from_particle(model.get_particle("s"));
-    let ec = EdgeColor::from_particle(model.get_particle("c"));
-    let ewp = EdgeColor::from_particle(model.get_particle("W+"));
-    let ewm = EdgeColor::from_particle(model.get_particle("W-"));
-    let eu = EdgeColor::from_particle(model.get_particle("u"));
-
-    a.add_edge(e1, v1, true, ed).unwrap();
-    a.add_edge(e2, v2, true, ec).unwrap();
-
-    a.add_edge(v3, e3, true, ed).unwrap();
-    a.add_edge(v4, e4, true, ec).unwrap();
-
-    a.add_edge(v1, v3, true, eu).unwrap();
-    a.add_edge(v2, v4, true, es).unwrap();
-    a.add_edge(v1, v2, false, ewm).unwrap();
-    a.add_edge(v3, v4, false, ewp).unwrap();
-
-    println!("{}", a.to_dot());
-
-    let g = Graph::from_symbolica_graph(
-        &model,
-        "test",
-        &a,
-        Atom::num(1),
-        &[
-            (Some(1), None),
-            (Some(2), None),
-            (None, Some(3)),
-            (None, Some(4)),
-        ],
-    )
-    .unwrap();
-
-    println!("{}", g.dot_serialize(&DotExportSettings::default()));
-
-    let g = Graph::from_symbolica_graph(
-        &model,
-        "test",
-        &a,
-        Atom::num(1),
-        &[
-            (Some(2), None),
-            (Some(3), None),
-            (None, Some(1)),
-            (None, Some(4)),
-        ],
-    )
-    .unwrap();
-
-    println!("{}", g.dot_serialize(&DotExportSettings::default()));
-
-    let g = Graph::from_symbolica_graph(
-        &model,
-        "test",
-        &a,
-        Atom::num(1),
-        &[(Some(1), Some(3)), (Some(2), Some(4))],
-    )
-    .unwrap();
-
-    println!("{}", g.dot_serialize(&DotExportSettings::default()));
-
-    let mut a = symbolica::graph::Graph::new();
-
-    let e1 = a.add_node(ext1.clone());
-    let e2 = a.add_node(ext2.clone());
-    let e3 = a.add_node(ext3.clone());
-    let e4 = a.add_node(ext4.clone());
-    let v1 = a.add_node(udwm.clone());
-    let v2 = a.add_node(udwp.clone());
-    let v3 = a.add_node(udwp.clone());
-    let v4 = a.add_node(udwm.clone());
-
-    a.add_edge(e1, v1, true, eu).unwrap();
-    a.add_edge(e2, v2, true, ed).unwrap();
-
-    a.add_edge(v3, e3, true, eu).unwrap();
-    a.add_edge(v4, e4, true, ed).unwrap();
-
-    a.add_edge(v1, v3, true, ed).unwrap();
-    a.add_edge(v2, v4, true, eu).unwrap();
-    a.add_edge(v1, v2, false, ewp).unwrap();
-    a.add_edge(v3, v4, false, ewm).unwrap();
-
-    let g = Graph::from_symbolica_graph(
-        &model,
-        "test",
-        &a,
-        Atom::num(1),
-        &[(Some(1), Some(3)), (Some(2), Some(4))],
-    )
-    .unwrap();
-
-    println!("{}", g.dot_serialize(&DotExportSettings::default()));
-
-    // let g = Graph::from_symbolica_graph(
-    //     &model,
-    //     "test",
-    //     &a,
-    //     Atom::num(1),
-    //     &[(Some(1), Some(4)), (Some(2), Some(3))],
-    // )
-    // .unwrap();
-
-    // println!("{}", g.dot_serialize());
-}
 
 #[test]
 fn test_load() {
@@ -387,7 +239,7 @@ fn xs_parsing() {
 #[test]
 fn massive_gluon() {
     test_initialise().unwrap();
-    let g: Graph = dot!(
+    let _g: Graph = dot!(
     digraph ddxaaapentagon{
         // num = "-2";
         ext   [style=invis];

@@ -2,7 +2,6 @@ use std::ops::Index;
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
-use idenso::color::ColorSimplifier;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
@@ -29,9 +28,9 @@ use crate::{
     feyngen::diagram_generator::evaluate_overall_factor,
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
-    numerator::{GlobalPrefactor, ParsingNet, symbolica_ext::AtomCoreExt},
+    numerator::GlobalPrefactor,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    utils::{F, GS, Length, ose_atom_from_index, symbolica_ext::LogPrint},
+    utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
 };
 
 pub mod cuts;
@@ -87,24 +86,6 @@ impl Graph {
         &self.global_prefactor.num
             * &self.global_prefactor.projector
             * evaluate_overall_factor(self.overall_factor.as_view())
-    }
-
-    /// With wrapped color, so that it doesn't enter the network as a tensor. Can unwrap using `unwrap_function`
-    /// Contains the parametric sign on the OSE
-    pub(crate) fn global_network(&self) -> ParsingNet {
-        let net = self
-            .global_atom()
-            .wrap_color(GS.color_wrap)
-            .parse_into_net()
-            .unwrap();
-
-        let mut reps = Vec::new();
-        for (p, eid, _) in self.iter_edges() {
-            if p.is_paired() {
-                reps.push(GS.add_parametric_sign(eid));
-            }
-        }
-        net.replace_multiple(&reps)
     }
 
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {

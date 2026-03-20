@@ -146,11 +146,15 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             }
 
             // expand the propagator around a propagator with a UV mass
-            atomarg = atomarg
-                .replace(parse!("den(n_,q_,mass_,prop_)"))
-                .with(parse!(
-                    "den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)"
-                ));
+            atomarg = atomarg.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(
+                GS.den(
+                    W_.a_,
+                    W_.b_,
+                    Atom::var(W_.c_) + Atom::var(GS.m_uv).pow(2),
+                    Atom::var(W_.d_) - Atom::var(GS.m_uv).pow(2)
+                        + (Atom::var(GS.m_uv) * GS.rescale).pow(2),
+                ), // "den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)"
+            );
         }
 
         debug!(atomarg = %atomarg.log_print(None),"t_arg * inner_t after rescaling masses for 4d CT");
@@ -158,11 +162,11 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
         let mut a = atomarg
             .series(GS.rescale, Atom::Zero, current.dod().into(), true)
             .unwrap()
-            .to_atom()
-            .replace(parse!("der(0,0,0,1, den(y__))"))
-            .with(Atom::num(1))
-            .replace(parse!("der(x__, den(y__))"))
-            .with(Atom::num(0));
+            .to_atom();
+        // .replace(parse!("der(0,0,0,1, den(y__))"))
+        // .with(Atom::num(1))
+        // .replace(parse!("der(x__, den(y__))"))
+        // .with(Atom::num(0));
 
         debug!(a = %a.log_print(None),"Series expanded for 4d CT");
 

@@ -2,14 +2,14 @@
 name = "gammalooprs"
 version = "0.3.3"
 edition = "2024"
-authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
-categories = ["science"]
+
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
-keywords = ["cross-section", "loop", "perturbative", "physics"]
-license = "MIT OR Apache-2.0"
 # license-file = "LICENSE.md"
 readme = "../../README.md"
 repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT OR Apache-2.0"
+keywords = ["cross-section", "loop", "perturbative", "physics"]
+categories = ["science"]
 build = "build.rs"
 
 [lib]
@@ -17,34 +17,34 @@ build = "build.rs"
 bench = false
 
 [dependencies]
-base62 = "2.0.2"
-brotli = "7.0.0"
-clarabel = "0"
-delegate = "0.12.0"
-derive_more = "0.99.17"
-ctrlc = "3.4.4"
-dirs = "5"
-dot-parser = {workspace=true}
-indexmap = "2.2.2"
-enum_dispatch = "*"
-libc = "0.2.0"
-indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
-insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
-color-eyre = { version = "0.6", default-features = false }
 ahash = { workspace = true, features = ["serde"] }
+base62 = "2.0.2"
 bincode = { workspace = true, features = ["serde"] }
 bincode-trait-derive = { workspace = true }
+brotli = "7.0.0"
 clap = { workspace = true, features = [
   "derive",
   "env",
   "unicode",
   "wrap_help",
 ] }
+clarabel = "0"
+color-eyre = { version = "0.6", default-features = false }
 colored = { workspace = true }
+ctrlc = "3.4.4"
+delegate = "0.12.0"
+derive_more = "0.99.17"
+dirs = "5"
+dot-parser = { workspace = true }
+enum_dispatch = "*"
 eyre = { workspace = true }
 git-version = { workspace = true }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
+indexmap = "2.2.2"
+indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
+insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
+libc = "0.2.0"
 
 itertools = { workspace = true }
 linnet = { workspace = true, features = [
@@ -85,8 +85,8 @@ slotmap = { version = "1.0.7", features = ["serde"] }
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
 smartstring = { workspace = true, features = ["serde"] }
 spenso = { workspace = true, features = ["shadowing"] }
-spenso-hep-lib ={workspace=true}
-spenso-macros ={workspace=true}
+spenso-hep-lib = { workspace = true }
+spenso-macros = { workspace = true }
 statrs = "0.16.0"
 symbolica = { workspace = true, features = [
   "bincode",
@@ -96,7 +96,7 @@ symbolica = { workspace = true, features = [
 # serde_with = "3.9.0"
 tabled = { workspace = true, features = ["ansi"] }
 # gxhash = "3.4.1"
-thiserror = {workspace=true}
+thiserror = { workspace = true }
 toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }
 tracing-appender = { workspace = true }
@@ -113,7 +113,7 @@ typed-index-collections = { workspace = true, features = [
   "serde",
   "serde-alloc",
 ] }
-vakint = {workspace=true}
+vakint = { workspace = true }
 varpro = "0.14.0"
 vectorize = "0.2.0"
 which = "8.0.0"

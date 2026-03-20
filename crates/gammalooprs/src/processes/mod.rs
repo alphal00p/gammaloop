@@ -432,7 +432,7 @@ mod tests {
             },
             runtime::LockedRuntimeSettings,
         },
-        utils::test_utils::load_generic_model,
+        utils::load_generic_model,
     };
 
     use super::AmplitudeGraph;

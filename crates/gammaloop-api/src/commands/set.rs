@@ -1100,7 +1100,7 @@ mod test {
         model::{ParameterNature, ParameterType, UFOSymbol},
         observables::{FilterQuantity, QuantitySettings, SelectorDefinitionSettings},
         settings::RuntimeSettings,
-        utils::{test_utils::load_generic_model, F},
+        utils::{load_generic_model, F},
     };
     use serde::{Deserialize, Serialize};
     use spenso::algebra::complex::Complex;

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
@@ -77,9 +76,6 @@ use super::{
     evaluate_sample,
 };
 
-const TOLERANCE: F<f64> = F(2.0);
-const HARD_CODED_M_UV: F<f64> = F(1000.0);
-const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
 
 #[derive(Clone, Encode, Decode)]

@@ -1776,7 +1776,7 @@ fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gammalooprs::utils::test_utils::load_generic_model;
+    use gammalooprs::utils::load_generic_model;
     use gammalooprs::{feyngen::GenerationType, initialisation::test_initialise};
 
     fn base_args(tokens: &str) -> SpecArgs {

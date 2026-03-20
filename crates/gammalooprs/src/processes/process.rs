@@ -1060,7 +1060,7 @@ impl ProcessCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::{GammaLoopContextContainer, utils::test_utils::load_generic_model};
+    use crate::{GammaLoopContextContainer, utils::load_generic_model};
 
     #[test]
     fn test_proc_definition_encode() {

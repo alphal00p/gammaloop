@@ -870,7 +870,7 @@ mod tests {
         momentum::FourMomentum,
         momentum::signature::LoopExtSignature,
         settings::RuntimeSettings,
-        utils::dummy_hedge_graph,
+        utils::test_utils::dummy_hedge_graph,
     };
 
     struct HelperBoxStructure {

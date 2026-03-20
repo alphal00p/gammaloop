@@ -53,8 +53,7 @@ pub static SPENSO_TAG: std::sync::LazyLock<SpensoTags> = std::sync::LazyLock::ne
         Some(("spenso",i))=>{
             let SpensoPrintSettings{
                 parens,
-                with_dim,
-                commas,..
+                with_dim,..
             } = SpensoPrintSettings::from(i);
 
 
@@ -1158,7 +1157,6 @@ pub mod test {
             expr.printer(PrintOptions {
                 custom_print_mode: Some(("spenso", 0)),
                 color_builtin_symbols: true,
-                square_brackets_for_function: true,
                 ..Default::default()
             })
         );

@@ -668,41 +668,6 @@ impl Graph {
         g.write_fmt(writer)
     }
 
-    pub(crate) fn from_symbolica_graph(
-        model: &Model,
-        graph_name: impl AsRef<str>,
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        symmetry_factor: Atom,
-        external_connections: &[(Option<usize>, Option<usize>)],
-    ) -> Result<Self> {
-        let mut parse_graph = ParseGraph::from_symbolica_graph(
-            model,
-            graph_name,
-            graph,
-            symmetry_factor,
-            external_connections,
-        )?;
-
-        parse_graph
-            .graph
-            .sew(
-                |_, ae, _, be| {
-                    if let (Some(a), Some(b)) = (ae.data.is_cut, be.data.is_cut) {
-                        a == b
-                    } else {
-                        false
-                    }
-                },
-                |af, ae, bf, be| match (af, bf) {
-                    (Flow::Sink, Flow::Source) => (Flow::Sink, ae),
-                    (Flow::Source, Flow::Sink) => (Flow::Source, be),
-                    _ => panic!("Cannot sew hedges with flow {:?} and {:?}", af, bf),
-                },
-            )
-            .map_err(|e| eyre::eyre!("Graph sewing failed: {:?}", e))?;
-        Graph::from_parsed(parse_graph, model)
-    }
-
     #[instrument(skip_all, fields(graph= %graph.debug_dot(),name = %graph.global_data.name.as_str()))]
     pub(crate) fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let (initial_data, mut graph) = Self::extract_initial_data(&graph, model)?;
