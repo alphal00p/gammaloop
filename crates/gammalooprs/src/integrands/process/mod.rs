@@ -595,10 +595,14 @@ impl ProcessIntegrand {
         samples: &[Sample<F<f64>>],
         iter: usize,
         use_arb_prec: bool,
+        stop_on_interrupt: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<RawBatchEvaluationResult> {
         let mut results = Vec::with_capacity(samples.len());
         for sample in samples {
+            if stop_on_interrupt && crate::is_interrupted() {
+                break;
+            }
             let mut result = match self {
                 ProcessIntegrand::Amplitude(integrand) => evaluate_sample(
                     integrand,
@@ -623,6 +627,9 @@ impl ProcessIntegrand {
             self.process_evaluation_result(&result);
             maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
             results.push(result);
+            if stop_on_interrupt && crate::is_interrupted() {
+                break;
+            }
         }
 
         Ok(RawBatchEvaluationResult {

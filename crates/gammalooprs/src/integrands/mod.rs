@@ -16,6 +16,7 @@ use crate::observables::{
 };
 use crate::utils::{F, FloatLike};
 use crate::{
+    is_interrupted,
     settings::{
         RuntimeSettings,
         runtime::{IntegratorSettings, Precision},
@@ -113,15 +114,24 @@ impl Integrand {
         model: &Model,
         iter: usize,
         use_arb_prec: bool,
+        stop_on_interrupt: bool,
         max_eval: Complex<F<f64>>,
     ) -> Result<RawBatchEvaluationResult> {
         match self {
-            Integrand::ProcessIntegrand(integrand) => {
-                integrand.evaluate_samples_raw(model, samples, iter, use_arb_prec, max_eval)
-            }
+            Integrand::ProcessIntegrand(integrand) => integrand.evaluate_samples_raw(
+                model,
+                samples,
+                iter,
+                use_arb_prec,
+                stop_on_interrupt,
+                max_eval,
+            ),
             _ => {
                 let mut results = Vec::with_capacity(samples.len());
                 for sample in samples {
+                    if stop_on_interrupt && is_interrupted() {
+                        break;
+                    }
                     results.push(self.evaluate_sample(
                         sample,
                         model,
@@ -130,6 +140,9 @@ impl Integrand {
                         use_arb_prec,
                         max_eval,
                     )?);
+                    if stop_on_interrupt && is_interrupted() {
+                        break;
+                    }
                 }
                 Ok(RawBatchEvaluationResult {
                     statistics: evaluation::StatisticsCounter::from_evaluation_results(&results),

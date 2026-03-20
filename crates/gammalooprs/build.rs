@@ -1,6 +1,8 @@
 use vergen_gitcl::{Emitter, GitclBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rerun-if-env-changed=EXTRA_MACOS_LIBS_FOR_GNU_GCC");
+
     // if cfg!(feature = "python_api") {
     //    pyo3_build_config::add_extension_module_link_args();
     // }

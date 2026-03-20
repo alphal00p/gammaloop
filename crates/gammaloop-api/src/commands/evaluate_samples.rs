@@ -83,7 +83,14 @@ impl<'a> EvaluateSamples<'a> {
             let samples =
                 build_havana_samples(integrand, &self.points, self.discrete_dims.as_ref())?;
             integrand
-                .evaluate_samples_raw(&model, &samples, 1, self.use_arb_prec, Complex::new_zero())?
+                .evaluate_samples_raw(
+                    &model,
+                    &samples,
+                    1,
+                    self.use_arb_prec,
+                    false,
+                    Complex::new_zero(),
+                )?
                 .samples
         };
 

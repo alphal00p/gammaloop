@@ -6,6 +6,7 @@
 //! The master node in combination with batch_integrate is for distributed runs.
 
 mod display;
+mod render_ratatui;
 mod render_tabled;
 mod status_update;
 
@@ -25,7 +26,6 @@ use symbolica::numerical_integration::{
     DiscreteGrid, Grid, MonteCarloRng, Sample, StatisticsAccumulator,
 };
 
-use crate::INTERRUPTED;
 use crate::Integrand;
 use crate::graph::{GroupId, LoopMomentumBasis};
 use crate::integrands::HasIntegrand;
@@ -43,8 +43,11 @@ use crate::settings::runtime::{
 };
 use crate::utils;
 use crate::utils::F;
-use crate::{is_interrupted, set_interrupted};
+use crate::{
+    clear_iteration_abort_request, is_interrupted, is_iteration_abort_requested, set_interrupted,
+};
 use rayon::prelude::*;
+pub use render_ratatui::RatatuiDashboardState;
 pub use render_tabled::TabledRenderOptions;
 use spenso::algebra::complex::Complex;
 pub use status_update::{
@@ -72,6 +75,7 @@ pub struct IterationBatchingSettings {
     pub batch_timing_seconds: f64,
     pub min_time_between_status_updates_seconds: f64,
     pub emit_live_status_updates: bool,
+    pub emit_initial_status_update: bool,
 }
 
 impl Default for IterationBatchingSettings {
@@ -81,6 +85,7 @@ impl Default for IterationBatchingSettings {
             batch_timing_seconds: 5.0,
             min_time_between_status_updates_seconds: 0.0,
             emit_live_status_updates: true,
+            emit_initial_status_update: true,
         }
     }
 }
@@ -1711,7 +1716,7 @@ impl CoreIterationState {
             SamplingCorrelationMode::Correlated => {
                 let mut samples = Vec::with_capacity(n_points);
                 for _ in 0..n_points {
-                    if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                    if is_interrupted() {
                         break;
                     }
 
@@ -1737,8 +1742,12 @@ impl CoreIterationState {
                         &slot_models[slot_index],
                         iter,
                         false,
+                        true,
                         current_max_evals[slot_index],
                     )?;
+                    if raw_batch.samples.len() < samples.len() {
+                        return Ok(0);
+                    }
                     batch_evaluation_time += evaluation_start.elapsed();
                     total_sample_evaluations += raw_batch.samples.len();
                     batch_stats = batch_stats.merged(&raw_batch.statistics);
@@ -1790,7 +1799,7 @@ impl CoreIterationState {
                 for slot_index in 0..self.slot_integrands.len() {
                     let mut samples = Vec::with_capacity(n_points);
                     for _ in 0..n_points {
-                        if INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                        if is_interrupted() {
                             break;
                         }
 
@@ -1820,8 +1829,12 @@ impl CoreIterationState {
                         &slot_models[slot_index],
                         iter,
                         false,
+                        true,
                         current_max_evals[slot_index],
                     )?;
+                    if raw_batch.samples.len() < samples.len() {
+                        return Ok(0);
+                    }
                     batch_evaluation_time += evaluation_start.elapsed();
                     total_sample_evaluations += raw_batch.samples.len();
                     batch_stats = batch_stats.merged(&raw_batch.statistics);
@@ -2228,6 +2241,7 @@ where
 
     let mut n_samples_evaluated = 0;
     let mut emitted_latest_observable_paths = vec![None; n_slots];
+    clear_iteration_abort_request();
     'integrateLoop: while integration_state.num_points < slot0_settings.integrator.n_max {
         // ensure we do not overshoot
         let cur_points = {
@@ -2279,8 +2293,27 @@ where
             })
             .collect_vec();
 
+        let iteration_start = Instant::now();
         let mut current_batch_size = initial_batch_size(batching);
         let mut last_live_status = None;
+        if batching.emit_initial_status_update && !is_interrupted() {
+            status_emitter(build_status_update(
+                IntegrationStatusKind::Live,
+                &integration_state,
+                cores,
+                t_start.elapsed(),
+                iteration_start.elapsed(),
+                0,
+                integration_state.num_points,
+                n_samples_evaluated,
+                &targets,
+                &view_options,
+                Some(status_update::LiveIterationProgress {
+                    completed_points: 0,
+                    target_points: cur_points,
+                }),
+            ))?;
+        }
         while total_remaining_points(&worker_states) > 0 {
             let round_started_at = Instant::now();
             let processed_per_core: Vec<Result<usize>> = pool.install(|| {
@@ -2311,6 +2344,7 @@ where
             if batching.emit_live_status_updates
                 && completed_points < cur_points
                 && !is_interrupted()
+                && !is_iteration_abort_requested()
             {
                 let now = Instant::now();
                 let should_emit_live_status = last_live_status.is_none_or(|previous| {
@@ -2331,6 +2365,7 @@ where
                         &preview_state,
                         cores,
                         t_start.elapsed(),
+                        iteration_start.elapsed(),
                         completed_points,
                         integration_state.num_points + completed_points,
                         n_samples_evaluated + completed_points,
@@ -2346,8 +2381,12 @@ where
             }
 
             if is_interrupted() {
-                warn!("{}", "Integration iterrupted by user".yellow());
+                warn!("{}", "Integration interrupted by user".yellow());
                 break 'integrateLoop;
+            }
+
+            if is_iteration_abort_requested() {
+                break;
             }
 
             if total_remaining_points(&worker_states) > 0 {
@@ -2356,17 +2395,40 @@ where
             }
         }
 
+        let abort_current_iteration = is_iteration_abort_requested();
+        clear_iteration_abort_request();
+
         if is_interrupted() {
-            warn!("{}", "Integration iterrupted by user".yellow());
+            warn!("{}", "Integration interrupted by user".yellow());
             break 'integrateLoop;
         }
 
-        n_samples_evaluated += cur_points;
+        let completed_points = total_completed_points(&worker_states);
+        if abort_current_iteration && completed_points < cur_points {
+            if completed_points == 0 {
+                warn!(
+                    "{}",
+                    "Current iteration abort requested before any samples completed; restarting the iteration."
+                        .yellow()
+                );
+                continue;
+            }
+            warn!(
+                "{}",
+                format!(
+                    "Current iteration aborted by user after {} completed samples.",
+                    completed_points
+                )
+                .yellow()
+            );
+        }
+
+        n_samples_evaluated += completed_points;
         apply_iteration_core_states(
             &mut integration_state,
             &slot_settings,
             cores,
-            cur_points,
+            completed_points,
             elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
             &worker_states,
         );
@@ -2428,7 +2490,8 @@ where
             &integration_state,
             cores,
             t_start.elapsed(),
-            cur_points,
+            iteration_start.elapsed(),
+            completed_points,
             integration_state.num_points,
             n_samples_evaluated,
             &targets,
@@ -2438,6 +2501,7 @@ where
     }
     // Reset the interrupted flag
     set_interrupted(false);
+    clear_iteration_abort_request();
 
     if integration_state.num_points > 0 {
         status_emitter(build_status_update(
@@ -2445,6 +2509,7 @@ where
             &integration_state,
             cores,
             t_start.elapsed(),
+            Duration::ZERO,
             0,
             integration_state.num_points,
             n_samples_evaluated,
@@ -2939,7 +3004,8 @@ fn evaluate_sample_list(
     > = sample_chunks
         .zip(integrands)
         .map(|(chunk, mut integrand)| {
-            let raw_batch = integrand.evaluate_samples_raw(chunk, model, iter, false, max_eval)?;
+            let raw_batch =
+                integrand.evaluate_samples_raw(chunk, model, iter, false, false, max_eval)?;
             Ok((raw_batch.samples, raw_batch.statistics, integrand))
         })
         .collect();
@@ -3452,6 +3518,7 @@ fn render_integral_result(
 mod tests {
     use super::*;
     use colored::control;
+    use ratatui::{Terminal, backend::TestBackend};
     use symbolica::numerical_integration::ContinuousGrid;
 
     fn make_accumulator(
@@ -3596,6 +3663,8 @@ mod tests {
     fn default_view_options() -> IntegrationStatusViewOptions {
         IntegrationStatusViewOptions {
             phase_display: IntegrationStatusPhaseDisplay::Both,
+            training_phase_display: IntegrationStatusPhaseDisplay::Real,
+            training_slot: 0,
             show_statistics: true,
             show_max_weight_details: true,
             show_top_discrete_grid: false,
@@ -3608,6 +3677,23 @@ mod tests {
     fn default_tabled_options() -> TabledRenderOptions {
         TabledRenderOptions {
             max_table_width: DEFAULT_MAX_SHARED_TABLE_WIDTH,
+            show_statistics: true,
+            show_max_weight_details: true,
+            show_top_discrete_grid: false,
+            show_discrete_contributions_sum: false,
+            show_max_weight_info_for_discrete_bins: false,
+        }
+    }
+
+    fn tabled_options_for_view(view_options: &IntegrationStatusViewOptions) -> TabledRenderOptions {
+        TabledRenderOptions {
+            show_statistics: view_options.show_statistics,
+            show_max_weight_details: view_options.show_max_weight_details,
+            show_top_discrete_grid: view_options.show_top_discrete_grid,
+            show_discrete_contributions_sum: view_options.show_discrete_contributions_sum,
+            show_max_weight_info_for_discrete_bins: view_options
+                .show_max_weight_info_for_discrete_bins,
+            ..default_tabled_options()
         }
     }
 
@@ -3629,6 +3715,7 @@ mod tests {
                 state,
                 cores,
                 elapsed_time,
+                elapsed_time,
                 cur_points,
                 total_points_display,
                 n_samples_evaluated,
@@ -3636,8 +3723,56 @@ mod tests {
                 view_options,
                 live_progress,
             ),
-            &default_tabled_options(),
+            &tabled_options_for_view(view_options),
         )
+    }
+
+    fn render_ratatui_update(
+        kind: IntegrationStatusKind,
+        state: &IntegrationState,
+        elapsed_time: Duration,
+        iteration_elapsed_time: Duration,
+        cur_points: usize,
+        total_points_display: usize,
+        n_samples_evaluated: usize,
+        targets: &[Option<Complex<F<f64>>>],
+        view_options: &IntegrationStatusViewOptions,
+        live_progress: Option<status_update::LiveIterationProgress>,
+        configure: impl FnOnce(&mut RatatuiDashboardState),
+    ) -> String {
+        let mut dashboard = RatatuiDashboardState::new();
+        dashboard.update(build_status_update(
+            kind,
+            state,
+            4,
+            elapsed_time,
+            iteration_elapsed_time,
+            cur_points,
+            total_points_display,
+            n_samples_evaluated,
+            targets,
+            view_options,
+            live_progress,
+        ));
+        configure(&mut dashboard);
+
+        let backend = TestBackend::new(180, 48);
+        let mut terminal = Terminal::new(backend).expect("test terminal");
+        terminal
+            .draw(|frame| dashboard.draw(frame))
+            .expect("ratatui draw");
+
+        let buffer = terminal.backend().buffer();
+        (0..buffer.area.height)
+            .map(|y| {
+                let mut line = String::new();
+                for x in 0..buffer.area.width {
+                    line.push_str(buffer[(x, y)].symbol());
+                }
+                line.trim_end().to_string()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     #[test]
@@ -3682,6 +3817,7 @@ mod tests {
                 IntegrationStatusKind::Iteration,
                 &state,
                 1,
+                Duration::from_secs(0),
                 Duration::from_secs(0),
                 0,
                 0,
@@ -3933,34 +4069,47 @@ mod tests {
 
     #[test]
     fn orientation_descriptions_use_colored_signs() {
+        let mut state = make_discrete_integration_state();
+        state.first_non_trivial_discrete_label = Some("orientation".to_string());
+        state.first_non_trivial_discrete_bin_descriptions =
+            Some(vec!["+-0".to_string(), "0++".to_string()]);
+        for metadata in &mut state.slot_first_non_trivial_discrete_breakdown_metadata {
+            if let Some(metadata) = metadata.as_mut() {
+                metadata.axis_label = "orientation".to_string();
+                metadata.bin_labels = vec!["+-0".to_string(), "0++".to_string()];
+            }
+        }
+
         control::set_override(true);
         let expected_plus = "+".green().bold().to_string();
         let expected_minus = "-".red().bold().to_string();
-        control::set_override(false);
 
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            show_top_discrete_grid: true,
+            show_discrete_contributions_sum: false,
+            contribution_sort: ContributionSortMode::Index,
+            show_max_weight_info_for_discrete_bins: false,
+            ..default_view_options()
+        };
         let ansi = render_tabled::render_status_update(
             &build_status_update(
                 IntegrationStatusKind::Iteration,
-                &make_discrete_integration_state(),
+                &state,
                 1,
+                Duration::from_secs(0),
                 Duration::from_secs(0),
                 0,
                 0,
                 0,
                 &[None, None],
-                &IntegrationStatusViewOptions {
-                    show_statistics: false,
-                    show_max_weight_details: false,
-                    show_top_discrete_grid: true,
-                    show_discrete_contributions_sum: false,
-                    contribution_sort: ContributionSortMode::Index,
-                    show_max_weight_info_for_discrete_bins: false,
-                    ..default_view_options()
-                },
+                &view_options,
                 None,
             ),
-            &default_tabled_options(),
+            &tabled_options_for_view(&view_options),
         );
+        control::set_override(false);
 
         assert!(ansi.contains(&expected_plus), "{ansi}");
         assert!(ansi.contains(&expected_minus), "{ansi}");
@@ -4092,6 +4241,77 @@ mod tests {
             !rendered.contains("# samples per iteration = 0"),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn ratatui_overview_shows_eta_and_all_slot_metrics() {
+        let state = make_integration_state();
+        let rendered = render_ratatui_update(
+            IntegrationStatusKind::Live,
+            &state,
+            Duration::from_secs(15),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+            &IntegrationStatusViewOptions {
+                show_statistics: false,
+                show_max_weight_details: false,
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+            |_| {},
+        );
+
+        assert!(rendered.contains("iter ETA 30s"), "{rendered}");
+        assert!(rendered.contains("Iteration progress"), "{rendered}");
+        assert!(rendered.contains("rate 2.50K/s"), "{rendered}");
+        assert!(
+            rendered.contains("All-slot metrics [metrics density]"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("rel err"), "{rendered}");
+        assert!(rendered.contains("chi^2"), "{rendered}");
+        assert!(rendered.contains("mwi"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_discrete_tab_renders_selected_bin_detail() {
+        let state = make_discrete_integration_state();
+        let rendered = render_ratatui_update(
+            IntegrationStatusKind::Iteration,
+            &state,
+            Duration::from_secs(12),
+            Duration::from_secs(12),
+            110_000,
+            210_000,
+            210_000,
+            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+            &IntegrationStatusViewOptions {
+                show_statistics: false,
+                show_max_weight_details: false,
+                show_top_discrete_grid: false,
+                show_discrete_contributions_sum: false,
+                show_max_weight_info_for_discrete_bins: false,
+                ..default_view_options()
+            },
+            None,
+            |dashboard| dashboard.select_tab(1),
+        );
+
+        assert!(rendered.contains("Selected bin detail"), "{rendered}");
+        assert!(
+            rendered.contains("Discrete bins (sort: Error desc)"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("GL0"), "{rendered}");
+        assert!(rendered.contains("GL1"), "{rendered}");
+        assert!(rendered.contains("pdf"), "{rendered}");
+        assert!(rendered.contains("Selected bin detail"), "{rendered}");
     }
 }
 

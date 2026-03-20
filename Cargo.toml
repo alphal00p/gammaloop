@@ -29,6 +29,7 @@ pyo3-build-config = "0.28"
 pyo3-stub-gen = { version = "0.17", default-features = false }
 pyo3-stub-gen-derive = { version = "0.17", default-features = false }
 rand = "0.9"
+ratatui = "0.30.0"
 rayon = "1.5"
 schemars = "1.0.4"
 serde = "1.0.219"
