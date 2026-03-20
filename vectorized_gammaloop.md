@@ -1,7 +1,7 @@
 # Vectorized GammaLoop Plan
 
 Status: implementation complete for the planned f64 batching scope.
-Last updated: 2026-03-20
+Last updated: 2026-03-21
 
 ## Implementation status
 
@@ -22,6 +22,13 @@ Current intentional fallbacks:
 Validation:
 - `cargo check`
 - `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T cargo test -p gammaloop-integration-tests --test test_runs test_batched_evaluation -- --nocapture`
+
+Post-review fixes:
+- Batched summed evaluation now sets `override_if` for `OwnedOrientations::All`, matching the scalar summed paths.
+- Primary-rotation-only timing and batch-size accounting is restored; secondary stability rotations now contribute only to `total_timing`.
+- Batched `total_timing` now includes stability checks, final result assembly, rotation preparation, and batch orchestration overhead that the scalar path already counted.
+- Batch-output decoding no longer allocates one `Vec` per result chunk on the compiled f64 path.
+- `evaluate_batch_single_f64(...)` now guards its single-output assumption and allocates compiled output buffers with the correct size.
 
 Regression coverage added:
 - `tests/tests/test_runs.rs:test_batched_evaluation`

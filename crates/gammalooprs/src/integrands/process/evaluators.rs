@@ -1,9 +1,9 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
-    subgraph::{SubSetIter, SubSetLike, subset::SubSet},
+    subgraph::{subset::SubSet, SubSetIter, SubSetLike},
     typed_vec::IndexLike,
 };
 
@@ -34,7 +34,6 @@ use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
 
 use crate::{
-    GammaLoopContext,
     cff::expression::{GraphOrientation, OrientationID},
     graph::Graph,
     integrands::{
@@ -44,20 +43,22 @@ use crate::{
             param_builder::{FnMapEntry, LUParams},
         },
     },
-    momentum::{Helicity, sample::MomentumSample},
+    momentum::{sample::MomentumSample, Helicity},
     numerator::symbolica_ext::AtomCoreExt,
     processes::EvaluatorSettings,
     settings::{GlobalSettings, RuntimeSettings},
     utils::{
-        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
-        hyperdual_utils::{DualOrNot, new_from_values},
+        f128,
+        hyperdual_utils::{new_from_values, DualOrNot},
         symbolica_ext::{CallSymbol, LogPrint},
+        ArbPrec, FloatLike, Length, F, FUN_LIB, GS, TENSORLIB, W_,
     },
+    GammaLoopContext,
 };
 
 use super::{
-    ParamBuilder,
     param_builder::{ThresholdParams, UpdateAndGetParams},
+    ParamBuilder,
 };
 
 #[derive(Clone, Copy)]
@@ -357,7 +358,9 @@ impl EvaluatorStack {
         for (owner, (input, orientation_mode)) in inputs.iter().zip(orientations).enumerate() {
             if matches!(orientation_mode, OwnedOrientations::All) {
                 direct_owners.push(owner);
-                direct_inputs.push(input.clone());
+                let mut direct_input = input.clone();
+                direct_input.set_override_if(true);
+                direct_inputs.push(direct_input);
             } else {
                 for (_, orientation) in
                     Self::orientation_iter(*orientation_mode, all_orientations, filter)
@@ -1191,7 +1194,7 @@ impl GenericEvaluator {
 
             flat_out
                 .chunks(out_size)
-                .map(|chunk| self.decode_f64_output(chunk.to_vec()))
+                .map(|chunk| self.decode_f64_output(chunk))
                 .collect()
         } else {
             inputs
@@ -1199,7 +1202,7 @@ impl GenericEvaluator {
                 .map(|input| {
                     let mut out = vec![Complex::default(); out_size];
                     self.f64_eager.evaluate(input.as_slice(), &mut out);
-                    self.decode_f64_output(out)
+                    self.decode_f64_output(&out)
                 })
                 .collect()
         }
@@ -1213,17 +1216,29 @@ impl GenericEvaluator {
             return Vec::new();
         }
 
+        let out_size = self.compute_out_size();
+        assert_eq!(
+            out_size, 1,
+            "evaluate_batch_single_f64 requires evaluators with a single complex output"
+        );
+
+        let input_len = inputs[0].len();
+        assert!(
+            inputs.iter().all(|input| input.len() == input_len),
+            "evaluate_batch_single_f64 requires all inputs to have the same arity"
+        );
+
         if let Some(compiled) = &mut self.f64_compiled {
-            let mut flat_inputs = Vec::with_capacity(inputs.iter().map(Vec::len).sum());
+            let mut flat_inputs = Vec::with_capacity(inputs.len() * input_len);
             for input in inputs {
                 flat_inputs.extend_from_slice(input);
             }
 
-            let mut flat_out = vec![Complex::default(); inputs.len()];
+            let mut flat_out = vec![Complex::default(); inputs.len() * out_size];
             compiled
                 .evaluate_batch(inputs.len(), &flat_inputs, &mut flat_out)
                 .expect("compiled evaluator batch evaluation failed");
-            flat_out
+            flat_out.into_iter().step_by(out_size).collect()
         } else {
             inputs
                 .iter()
@@ -1232,7 +1247,7 @@ impl GenericEvaluator {
         }
     }
 
-    fn decode_f64_output(&self, out: Vec<Complex<F<f64>>>) -> Vec<DualOrNot<Complex<F<f64>>>> {
+    fn decode_f64_output(&self, out: &[Complex<F<f64>>]) -> Vec<DualOrNot<Complex<F<f64>>>> {
         if let Some(dual_shape) = &self.dual_shape {
             let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
             let dual_size = dual_builder.values.len();
@@ -1242,7 +1257,7 @@ impl GenericEvaluator {
                 .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
                 .collect()
         } else {
-            out.into_iter().map(DualOrNot::NonDual).collect()
+            out.iter().cloned().map(DualOrNot::NonDual).collect()
         }
     }
 }
@@ -1650,7 +1665,7 @@ impl GenericEvaluatorFloat for ArbPrec {
 mod tests {
     use symbolica::atom::Symbol;
 
-    use crate::utils::{W_, symbolica_ext::CallSymbol};
+    use crate::utils::{symbolica_ext::CallSymbol, W_};
 
     use super::*;
 

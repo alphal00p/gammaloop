@@ -83,8 +83,20 @@ impl BatchedSampleTiming {
         self.total_seconds += duration.as_secs_f64();
     }
 
+    pub(crate) fn add_total_only_time(&mut self, duration: Duration) {
+        self.total_seconds += duration.as_secs_f64();
+    }
+
+    pub(crate) fn add_total_only_seconds(&mut self, seconds: f64) {
+        self.total_seconds += seconds;
+    }
+
     pub(crate) fn add_direct_integrand_time(&mut self, duration: Duration) {
         let seconds = duration.as_secs_f64();
+        self.add_direct_integrand_seconds(seconds);
+    }
+
+    pub(crate) fn add_direct_integrand_seconds(&mut self, seconds: f64) {
         self.integrand_seconds += seconds;
         self.total_seconds += seconds;
     }
@@ -130,6 +142,21 @@ pub(crate) fn record_shared_evaluator_flush(
     let batch_size = owner_indices.len();
     for &owner_index in owner_indices {
         timings[owner_index].record_shared_evaluator_flush(batch_size, shared_duration);
+    }
+}
+
+pub(crate) fn record_shared_integrand_time(
+    timings: &mut [BatchedSampleTiming],
+    owner_indices: &[usize],
+    shared_duration: Duration,
+) {
+    if owner_indices.is_empty() {
+        return;
+    }
+
+    let shared_seconds = shared_duration.as_secs_f64() / owner_indices.len() as f64;
+    for &owner_index in owner_indices {
+        timings[owner_index].add_direct_integrand_seconds(shared_seconds);
     }
 }
 
@@ -1932,6 +1959,7 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
     let mut tasks_by_graph = vec![Vec::<GraphTask<'_>>::new(); integrand.graph_count()];
 
     for (batch_index, gammaloop_sample) in gammaloop_samples.iter().enumerate() {
+        let sample_setup_start = Instant::now();
         match gammaloop_sample {
             GammaLoopSample::Default(sample) => {
                 for graph_id in 0..integrand.graph_count() {
@@ -2003,7 +2031,6 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
                             }
                         }
                         DiscreteGraphSample::Tropical(sample) => {
-                            let start = Instant::now();
                             let master_graph = integrand.get_master_graph(*group_id).get_graph();
                             let energy_cache = master_graph.get_energy_cache(
                                 model,
@@ -2023,7 +2050,6 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
                                 .fold(sample.one(), |product, (edge_id, weight)| {
                                     product * energy_cache[edge_id].powf(&F::from_f64(2.0 * weight))
                                 });
-                            timings[batch_index].add_direct_integrand_time(start.elapsed());
                             tasks_by_graph[graph_id].push(GraphTask {
                                 batch_index,
                                 sample_index: batch_index,
@@ -2037,6 +2063,7 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
                 }
             }
         }
+        timings[batch_index].add_direct_integrand_time(sample_setup_start.elapsed());
     }
 
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
@@ -2045,6 +2072,11 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
             continue;
         }
 
+        let owner_indices = tasks
+            .iter()
+            .map(|task| task.batch_index)
+            .collect::<Vec<_>>();
+        let request_build_start = Instant::now();
         let requests = tasks
             .iter()
             .map(|task| GraphTermBatchRequest {
@@ -2053,6 +2085,7 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
                 channel_id: task.channel_id,
             })
             .collect::<Vec<_>>();
+        record_shared_integrand_time(timings, &owner_indices, request_build_start.elapsed());
         let results = evaluate_graph_term_batch_f64(
             integrand,
             graph_id,
@@ -2064,6 +2097,7 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
             event_processing_runtime.as_mut(),
         )?;
 
+        let merge_start = Instant::now();
         for (task, mut result) in tasks.into_iter().zip(results) {
             if let Some(prefactor) = task.tropical_prefactor {
                 result.integrand_result *= Complex::new_re(prefactor);
@@ -2076,6 +2110,7 @@ fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
             }
             accumulators[task.batch_index].merge_in_place(result);
         }
+        record_shared_integrand_time(timings, &owner_indices, merge_start.elapsed());
     }
     integrand.restore_event_processing_runtime(event_processing_runtime);
 
@@ -2109,18 +2144,35 @@ fn evaluate_all_rotations_batch_f64<I: ProcessIntegrandImpl>(
         .collect::<Vec<_>>();
 
     for (rotation_index, rotation) in rotations.iter().enumerate() {
-        let rotated_samples = gammaloop_samples
-            .iter()
-            .map(|sample| {
-                if rotation.is_identity() {
-                    sample.clone()
-                } else {
-                    sample.rotate(rotation, rotation_index + 1, rotation_index + 1)
-                }
-            })
-            .collect::<Vec<_>>();
+        let use_primary_timing = rotation_index == primary_rotation_index;
+        let mut secondary_timings_storage = (!use_primary_timing)
+            .then(|| vec![BatchedSampleTiming::default(); gammaloop_samples.len()]);
+        let timing_target: &mut [BatchedSampleTiming] = match secondary_timings_storage.as_mut() {
+            Some(secondary_timings) => secondary_timings.as_mut_slice(),
+            None => timings,
+        };
+
+        let mut rotated_samples = Vec::with_capacity(gammaloop_samples.len());
+        for (sample_index, sample) in gammaloop_samples.iter().enumerate() {
+            let rotation_start = Instant::now();
+            let rotated_sample = if rotation.is_identity() {
+                sample.clone()
+            } else {
+                sample.rotate(rotation, rotation_index + 1, rotation_index + 1)
+            };
+            timing_target[sample_index].add_total_only_time(rotation_start.elapsed());
+            rotated_samples.push(rotated_sample);
+        }
+
         let results =
-            evaluate_single_batch_f64(integrand, model, &rotated_samples, rotation, timings)?;
+            evaluate_single_batch_f64(integrand, model, &rotated_samples, rotation, timing_target)?;
+
+        if let Some(secondary_timings) = secondary_timings_storage.as_ref() {
+            for (timing, secondary_timing) in timings.iter_mut().zip(secondary_timings.iter()) {
+                timing.add_total_only_seconds(secondary_timing.total_seconds);
+            }
+        }
+
         for (sample_results, result) in all_results.iter_mut().zip(results) {
             sample_results.push(result);
         }
@@ -3080,11 +3132,12 @@ fn evaluate_sources_batched_f64<'a, I: ProcessIntegrandImpl>(
             escalate_if_exact_zero = false;
         }
 
-        for ((state, mut graph_results), timing) in batched_states
+        for ((state, mut graph_results), mut timing) in batched_states
             .into_iter()
             .zip(rotation_results.into_iter())
             .zip(timings.into_iter())
         {
+            let stability_start = Instant::now();
             let results_for_stability = graph_results
                 .iter()
                 .map(|result| result.integrand_result.clone())
@@ -3111,6 +3164,7 @@ fn evaluate_sources_batched_f64<'a, I: ProcessIntegrandImpl>(
                         escalate_if_exact_zero,
                     )
                 };
+            timing.add_total_only_time(stability_start.elapsed());
 
             if !is_stable {
                 results[state.source_index] = Some(evaluate_from_source(
@@ -3124,6 +3178,7 @@ fn evaluate_sources_batched_f64<'a, I: ProcessIntegrandImpl>(
                 continue;
             }
 
+            let finalization_start = Instant::now();
             let event_processing_time = graph_results.iter().fold(Duration::ZERO, |acc, result| {
                 acc + result.event_processing_time
             });
@@ -3152,6 +3207,7 @@ fn evaluate_sources_batched_f64<'a, I: ProcessIntegrandImpl>(
                 full_event_multiplicative_factor(parameterization_jacobian, state.wgt);
             let mut event_groups = graph_result.event_groups;
             apply_full_event_multiplicative_factor(&mut event_groups, &full_factor);
+            timing.add_total_only_time(finalization_start.elapsed());
 
             let mut evaluation_metadata = EvaluationMetaData::new_empty();
             timing.apply_to_metadata(&mut evaluation_metadata);
