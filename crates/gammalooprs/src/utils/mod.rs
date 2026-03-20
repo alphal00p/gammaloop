@@ -1195,14 +1195,17 @@ impl<T: FloatLike> std::fmt::Display for F<T> {
 
 impl<T: FloatLike> std::fmt::LowerExp for F<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut rendered = match f.precision() {
+        let rendered = match f.precision() {
             Some(precision) => format!("{:.*e}", precision, self.0),
             None => format!("{:e}", self.0),
         };
-        if f.sign_plus() && !rendered.starts_with('-') {
-            rendered.insert(0, '+');
-        }
-        f.pad(&rendered)
+
+        let (is_nonnegative, body) = match rendered.strip_prefix('-') {
+            Some(body) => (false, body),
+            None => (true, rendered.as_str()),
+        };
+
+        f.pad_integral(is_nonnegative, "", body)
     }
 }
 
@@ -3725,6 +3728,116 @@ fn complex_compare() {
     let cff = Complex::new(0.11773583589023458, -0.22157450446824836).map(F);
 
     ltd.approx_eq_res(&cff, &F(0.00000001)).unwrap();
+}
+
+#[cfg(test)]
+mod formatting_tests {
+    use super::{ArbPrec, F, FloatLike, f128};
+
+    fn assert_has_scientific_exponent(rendered: &str) {
+        let (mantissa, exponent) = rendered
+            .split_once('e')
+            .unwrap_or_else(|| panic!("missing exponent marker in: {rendered}"));
+        assert!(
+            !mantissa.is_empty(),
+            "missing mantissa in scientific output: {rendered}"
+        );
+        assert!(
+            exponent.parse::<i32>().is_ok(),
+            "invalid exponent in scientific output: {rendered}"
+        );
+    }
+
+    fn assert_fractional_digits(rendered: &str, expected_digits: usize) {
+        let (mantissa, _) = rendered
+            .split_once('e')
+            .unwrap_or_else(|| panic!("missing exponent marker in: {rendered}"));
+        let (_, fractional) = mantissa
+            .trim_start_matches(['+', '-'])
+            .split_once('.')
+            .unwrap_or_else(|| panic!("missing decimal point in mantissa: {rendered}"));
+        assert_eq!(
+            fractional.len(),
+            expected_digits,
+            "unexpected number of fractional digits in: {rendered}"
+        );
+    }
+
+    fn assert_scientific_formatting_for_backend<T: FloatLike>(x: F<T>) {
+        let plain = format!("{:e}", x.clone());
+        assert_has_scientific_exponent(&plain);
+
+        let plus = format!("{:+e}", x.clone());
+        assert_has_scientific_exponent(&plus);
+        assert!(plus.starts_with('+') || plus.starts_with('-'));
+
+        let precision = format!("{:+.16e}", x.clone());
+        assert_has_scientific_exponent(&precision);
+        assert!(
+            precision.contains('.'),
+            "missing decimal point in scientific output: {precision}"
+        );
+
+        let padded = format!("{:>24.6e}", x);
+        assert!(
+            padded.len() >= 24,
+            "formatted width should be at least requested width: {padded}"
+        );
+        assert_has_scientific_exponent(padded.trim_start());
+    }
+
+    #[test]
+    fn display_matches_underlying_f64() {
+        let value = F(12.5f64);
+        assert_eq!(format!("{}", value), "12.5");
+    }
+
+    #[test]
+    fn lower_exp_keeps_exponent_with_precision() {
+        let rendered = format!("{:+.16e}", F(1.23456789e-8f64));
+        assert_has_scientific_exponent(&rendered);
+        assert_fractional_digits(&rendered, 16);
+    }
+
+    #[test]
+    fn lower_exp_width_and_alignment_behave_as_expected() {
+        let rendered = format!("{:>20.4e}", F(12.345f64));
+        assert_eq!(rendered.len(), 20);
+        assert_has_scientific_exponent(rendered.trim_start());
+
+        let left_aligned = format!("{:<20.4e}", F(12.345f64));
+        assert_eq!(left_aligned.len(), 20);
+        assert_has_scientific_exponent(left_aligned.trim_end());
+    }
+
+    #[test]
+    fn lower_exp_sign_and_zero_pad_behave_as_expected() {
+        let positive = format!("{:+020.4e}", F(12.345f64));
+        assert_eq!(positive.len(), 20);
+        assert!(positive.starts_with('+'));
+        assert_has_scientific_exponent(&positive);
+
+        let negative = format!("{:+020.4e}", F(-12.345f64));
+        assert_eq!(negative.len(), 20);
+        assert!(negative.starts_with('-'));
+        assert_has_scientific_exponent(&negative);
+    }
+
+    #[test]
+    fn lower_exp_precision_controls_fractional_digits() {
+        let p2 = format!("{:.2e}", F(1.0f64 / 3.0f64));
+        assert_fractional_digits(&p2, 2);
+
+        let p9 = format!("{:.9e}", F(1.0f64 / 3.0f64));
+        assert_fractional_digits(&p9, 9);
+    }
+
+    #[test]
+    fn lower_exp_works_across_float_backends() {
+        assert_scientific_formatting_for_backend(F::<f64>::from_f64(1.23456789e-8));
+        assert_scientific_formatting_for_backend(F::<f128>::from_f64(1.23456789e-8));
+        assert_scientific_formatting_for_backend(F::<ArbPrec>::from_f64(1.23456789e-8));
+    }
 }
 
 pub mod symbols;
