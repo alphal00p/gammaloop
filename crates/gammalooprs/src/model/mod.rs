@@ -833,14 +833,14 @@ impl Particle {
         let mut rng = SmallRng::seed_from_u64(seed);
         if self.is_spinor() {
             if rng.random_bool(0.5) {
-                Helicity::Plus
+                Helicity::PLUS
             } else {
-                Helicity::Minus
+                Helicity::MINUS
             }
         } else if self.is_vector() {
             Helicity::try_from(rng.random_range(1..=1)).unwrap()
         } else {
-            Helicity::Zero
+            Helicity::ZERO
         }
     }
 
@@ -2614,41 +2614,41 @@ mod tests {
         let vals = [0., 3., 4.].into_iter().map(F).collect::<Vec<_>>();
         let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None); //Some(F(8.66025)));
 
-        let hel = Helicity::Minus;
+        let hel = Helicity::MINUS;
         println!("mom:{mom}");
         println!("hel{hel}");
-        println!("{}", mom.pol(hel));
-        println!("{}", mom.pol(hel).bar());
+        println!("{}", mom.eps_pol(hel));
+        println!("{}", mom.eps_pol(hel).bar());
         // let vals = [0.01, 0., 1.].into_iter().map(F).collect::<Vec<_>>();
         // let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None);
 
-        let hel = Helicity::Plus;
+        let hel = Helicity::PLUS;
         println!("mom:{mom}");
         println!("hel{hel}");
-        println!("{}", mom.pol(hel));
-        println!("{}", mom.pol(hel).bar());
-        let hel = Helicity::Minus;
+        println!("{}", mom.eps_pol(hel));
+        println!("{}", mom.eps_pol(hel).bar());
+        let hel = Helicity::MINUS;
 
         println!("hel{hel}");
-        println!("{}", mom.pol(hel));
-        println!("{}", mom.pol(hel).bar());
+        println!("{}", mom.eps_pol(hel));
+        println!("{}", mom.eps_pol(hel).bar());
 
         let vals = [0., 0., -1.].into_iter().map(F).collect::<Vec<_>>();
         let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None);
 
-        let hel = Helicity::Plus;
+        let hel = Helicity::PLUS;
 
         println!("mom:{mom}");
         println!("hel{hel}");
 
-        println!("{}", mom.pol(hel));
-        println!("{}", mom.pol(hel).bar());
+        println!("{}", mom.eps_pol(hel));
+        println!("{}", mom.eps_pol(hel).bar());
 
-        let hel = Helicity::Minus;
+        let hel = Helicity::MINUS;
 
         println!("hel{hel}");
-        println!("{}", mom.pol(hel));
-        println!("{}", mom.pol(hel).bar());
+        println!("{}", mom.eps_pol(hel));
+        println!("{}", mom.eps_pol(hel).bar());
     }
 
     #[test]

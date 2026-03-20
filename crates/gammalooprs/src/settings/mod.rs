@@ -135,14 +135,14 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use crate::{
-        momentum::{Dep, ExternalMomenta, SignOrZero},
-        settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
+        momentum::{Dep, ExternalMomenta, Helicity},
         settings::{
             GlobalSettings, RuntimeSettings, SamplingSettings,
             global::GenerationSettings,
             runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-                GammaloopTropicalSamplingSettings, kinematic::Externals,
+                GammaloopTropicalSamplingSettings,
+                kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
             },
         },
         utils::{F, serde_utils::SHOWDEFAULTS},
@@ -388,7 +388,7 @@ mod tests {
                     ExternalMomenta::Independent([F(1.), F(2.), F(3.), F(4.)]),
                     ExternalMomenta::Dependent(Dep::Dep),
                 ],
-                helicities: vec![SignOrZero::Plus, SignOrZero::Minus],
+                helicities: vec![Helicity::PLUS, Helicity::MINUS],
                 improvement_settings: PhaseSpaceImprovementSettings::default(),
                 f_64_cache: None,
                 f_128_cache: None,

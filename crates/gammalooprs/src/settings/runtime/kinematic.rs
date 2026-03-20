@@ -153,6 +153,9 @@ impl Externals {
                     for (i, (h, (s, is_massless))) in
                         helicities.iter().zip(spins.iter()).enumerate()
                     {
+                        let Helicity::Signed(h) = h else {
+                            continue;
+                        };
                         match *s {
                             1 => {
                                 if !h.is_zero() {
@@ -440,7 +443,7 @@ impl Externals {
 fn external_inv() {
     let mut ext = Externals::Constant {
         momenta: vec![[F(1.), F(2.), F(3.), F(4.)].into(); 3],
-        helicities: vec![Helicity::Plus; 4],
+        helicities: vec![Helicity::PLUS; 4],
         f_64_cache: None,
         f_128_cache: None,
         improvement_settings: PhaseSpaceImprovementSettings::default(),
@@ -457,7 +460,7 @@ fn external_inv() {
     ];
     let mut ext2 = Externals::Constant {
         momenta,
-        helicities: vec![Helicity::Plus; 4],
+        helicities: vec![Helicity::PLUS; 4],
         f_64_cache: None,
         f_128_cache: None,
         improvement_settings: PhaseSpaceImprovementSettings::default(),

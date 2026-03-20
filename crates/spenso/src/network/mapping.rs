@@ -77,7 +77,7 @@ use crate::{
     },
     shadowing::{ShadowMapping, Shadowable},
     structure::{StructureContract, ToSymbolic},
-    symbolica_utils::{IntoArgs, IntoSymbol, SerializableAtom},
+    symbolica_utils::{IntoArgs, IntoSymbol},
     tensor_library::{LibraryTensor, TensorLibrary},
     upgrading_arithmetic::{FallibleAdd, TrySmallestUpgrade},
 };

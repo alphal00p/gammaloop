@@ -16,7 +16,9 @@ use delegate::delegate;
 use eyre::Result;
 
 #[cfg(feature = "shadowing")]
-use crate::shadowing::symbolica_utils::{SerializableAtom, SerializableSymbol};
+use crate::shadowing::symbolica_utils::SerializableSymbol;
+#[cfg(feature = "shadowing")]
+use symbolica::atom::Atom;
 
 #[cfg(not(feature = "shadowing"))]
 use serde::{Deserialize, Serialize};
@@ -43,7 +45,7 @@ pub struct NamedStructure<
 }
 
 #[cfg(feature = "shadowing")]
-pub type AtomStructure<R, A> = NamedStructure<SerializableSymbol, Vec<SerializableAtom>, R, A>;
+pub type AtomStructure<R, A> = NamedStructure<SerializableSymbol, Vec<Atom>, R, A>;
 
 impl<Name, Args, R: RepName, Aind: AbsInd> NamedStructure<Name, Args, R, Aind> {
     #[must_use]

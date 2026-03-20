@@ -96,10 +96,10 @@ fn trees() {
         3,
         &graph.bare_graph,
         Some(vec![
-            Helicity::Plus,
-            Helicity::Zero,
-            Helicity::Plus,
-            Helicity::Zero,
+            Helicity::PLUS,
+            Helicity::ZERO,
+            Helicity::PLUS,
+            Helicity::ZERO,
         ]),
     );
     let emr = graph.bare_graph.cff_emr_from_lmb(&sample.sample, lmb);
@@ -145,10 +145,10 @@ fn trees() {
             ExternalMomenta::Dependent(Dep::Dep),                                  // 4
         ],
         helicities: vec![
-            Helicity::Minus,
-            Helicity::Zero,
-            Helicity::Plus,
-            Helicity::Zero,
+            Helicity::MINUS,
+            Helicity::ZERO,
+            Helicity::PLUS,
+            Helicity::ZERO,
         ],
     };
 
@@ -335,10 +335,10 @@ fn tree_ta_ta_1() {
             ]),
         ],
         helicities: vec![
-            Helicity::Plus,
-            Helicity::Plus,
-            Helicity::Plus,
-            Helicity::Plus,
+            Helicity::PLUS,
+            Helicity::PLUS,
+            Helicity::PLUS,
+            Helicity::PLUS,
         ],
     };
 
@@ -632,12 +632,12 @@ fn tree_hh_ttxaa_1() {
             ExternalMomenta::Dependent(crate::momentum::Dep::Dep),
         ],
         helicities: vec![
-            Helicity::Zero,
-            Helicity::Zero,
-            Helicity::Plus,
-            Helicity::Plus,
-            Helicity::Plus,
-            Helicity::Plus,
+            Helicity::ZERO,
+            Helicity::ZERO,
+            Helicity::PLUS,
+            Helicity::PLUS,
+            Helicity::PLUS,
+            Helicity::PLUS,
         ],
     };
 

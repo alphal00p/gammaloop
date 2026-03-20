@@ -2241,9 +2241,10 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "serde",
+ "serde_repr",
  "similar-asserts",
  "symbolica",
- "thiserror 2.0.18",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

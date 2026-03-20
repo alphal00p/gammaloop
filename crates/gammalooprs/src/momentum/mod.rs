@@ -12,10 +12,10 @@ use std::{
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Context;
 use linnet::half_edge::involution::EdgeIndex;
+pub use linnet::num_traits::{Pow, Sign, SignError, SignOrZero};
 use momtrop::vector::Vector;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
     algebra::{algebraic_traits::RefZero, complex::Complex, upgrading_arithmetic::FallibleAdd},
     contraction::Contract,
@@ -51,6 +51,7 @@ use symbolica::{
     evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
     poly::{Exponent, polynomial::MultivariatePolynomial},
 };
+use thiserror::Error;
 
 use symbolica::{parse, symbol};
 
@@ -1286,7 +1287,6 @@ impl<T: RefZero, U: RefZero> RefZero<FourMomentum<T, U>> for &FourMomentum<T, U>
 pub struct PolDef {
     pub pol_type: PolType,
     pub eid: EdgeIndex,
-    pub hel: Option<Helicity>,
 }
 
 #[derive(
@@ -1900,35 +1900,44 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         Polarization::lorentz([e0, e1, e2, e3])
     }
 
-    pub(crate) fn pol(&self, lambda: Helicity) -> Polarization<Complex<F<T>>> {
-        if lambda.is_zero() {
-            self.pol_three().cast()
-        } else {
-            let one = self.temporal.value.one();
-            let sqrt_2_inv: F<T> = (&one + &one).sqrt().inv();
+    pub(crate) fn eps_pol<Hel: Into<Helicity>>(&self, lambda: Hel) -> Polarization<Complex<F<T>>> {
+        match lambda.into() {
+            Helicity::Signed(lambda) => {
+                if lambda.is_zero() {
+                    self.pol_three().cast()
+                } else {
+                    let one = self.temporal.value.one();
+                    let sqrt_2_inv: F<T> = (&one + &one).sqrt().inv();
 
-            let [eone0, eone1, eone2, eone3] = self.pol_one();
+                    let [eone0, eone1, eone2, eone3] = self.pol_one();
 
-            let [etwo0, etwo1, etwo2, etwo3] = self.pol_two();
+                    let [etwo0, etwo1, etwo2, etwo3] = self.pol_two();
 
-            Polarization::lorentz([
-                Complex {
-                    re: -lambda * eone0 * &sqrt_2_inv,
-                    im: -etwo0 * &sqrt_2_inv, //using opposite convention with respect to helas to align with madgraph
-                },
-                Complex {
-                    re: -lambda * eone1 * &sqrt_2_inv,
-                    im: -etwo1 * &sqrt_2_inv,
-                },
-                Complex {
-                    re: -lambda * eone2 * &sqrt_2_inv,
-                    im: -etwo2 * &sqrt_2_inv,
-                },
-                Complex {
-                    re: -lambda * eone3 * &sqrt_2_inv,
-                    im: -etwo3 * &sqrt_2_inv,
-                },
-            ])
+                    Polarization::lorentz([
+                        Complex {
+                            re: -lambda * eone0 * &sqrt_2_inv,
+                            im: -etwo0 * &sqrt_2_inv, //using opposite convention with respect to helas to align with madgraph
+                        },
+                        Complex {
+                            re: -lambda * eone1 * &sqrt_2_inv,
+                            im: -etwo1 * &sqrt_2_inv,
+                        },
+                        Complex {
+                            re: -lambda * eone2 * &sqrt_2_inv,
+                            im: -etwo2 * &sqrt_2_inv,
+                        },
+                        Complex {
+                            re: -lambda * eone3 * &sqrt_2_inv,
+                            im: -etwo3 * &sqrt_2_inv,
+                        },
+                    ])
+                }
+            }
+            _ => {
+                let zero = self.temporal.value.zero();
+                let cmpz = Complex::new_re(zero);
+                Polarization::lorentz([cmpz.clone(), cmpz.clone(), cmpz.clone(), cmpz.clone()])
+            }
         }
     }
 
@@ -2028,203 +2037,60 @@ impl<'a, T> IntoIterator for &'a Polarization<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Hash)]
-#[repr(i8)]
-pub enum Sign {
-    Positive = 1,
-    Negative = -1,
-}
-
-pub trait Pow<E> {
-    fn pow(&self, exponent: E) -> Self;
-}
-
-macro_rules! impl_pow_for_sign {
-    ($type:ty, $exponent:ty,$pos:expr) => {
-        impl Pow<$exponent> for $type {
-            fn pow(&self, exponent: $exponent) -> Self {
-                match exponent {
-                    0 => $pos,
-                    a => {
-                        if a % 2 == 0 {
-                            $pos
-                        } else {
-                            *self
-                        }
-                    }
-                }
-            }
-        }
-    };
-}
-
-impl_pow_for_sign!(Sign, i32, Sign::Positive);
-impl_pow_for_sign!(Sign, u32, Sign::Positive);
-impl_pow_for_sign!(Sign, i64, Sign::Positive);
-impl_pow_for_sign!(Sign, u64, Sign::Positive);
-impl_pow_for_sign!(Sign, isize, Sign::Positive);
-impl_pow_for_sign!(Sign, usize, Sign::Positive);
-impl_pow_for_sign!(Sign, i128, Sign::Positive);
-impl_pow_for_sign!(Sign, u128, Sign::Positive);
-
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum SignError {
-    #[error("Invalid value for Sign")]
-    InvalidValue,
-    #[error("Zero is not a valid value for Sign")]
-    ZeroValue,
-}
-
-impl TryFrom<SignOrZero> for Sign {
-    type Error = SignError;
-    fn try_from(value: SignOrZero) -> Result<Self, Self::Error> {
-        match value {
-            SignOrZero::Zero => Err(SignError::ZeroValue),
-            SignOrZero::Plus => Ok(Sign::Positive),
-            SignOrZero::Minus => Ok(Sign::Negative),
-        }
-    }
-}
-// impl Serialize for Sign {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: Serializer,
-//     {
-//         let value = match *self {
-//             Sign::Positive => 1,
-//             Sign::Negative => -1,
-//         };
-//         serializer.serialize_i32(value)
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for Sign {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: Deserializer<'de>,
-//     {
-//         let value = i32::deserialize(deserializer)?;
-//         match value {
-//             1 => Ok(Sign::Positive),
-//             -1 => Ok(Sign::Negative),
-//             _ => Err(de::Error::custom(
-//                 "Expected 1 for Positive or -1 for Negative",
-//             )),
-//         }
-//     }
-// }
-
-impl<T: Neg<Output = T>> Mul<T> for Sign {
-    type Output = T;
-    fn mul(self, rhs: T) -> Self::Output {
-        match self {
-            Sign::Positive => rhs,
-            Sign::Negative => -rhs,
-        }
-    }
-}
-
-impl Neg for Sign {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        match self {
-            Sign::Positive => Sign::Negative,
-            Sign::Negative => Sign::Positive,
-        }
-    }
-}
-
 #[derive(
     Debug,
     PartialEq,
     Eq,
     Clone,
     Copy,
-    Serialize_repr,
-    Deserialize_repr,
-    Encode,
-    Decode,
     PartialOrd,
     Ord,
     Hash,
-    JsonSchema,
+    serde::Serialize,
+    serde::Deserialize,
+    bincode::Encode,
+    bincode::Decode,
 )]
-#[repr(i8)]
-pub enum SignOrZero {
-    Zero = 0,
-    Plus = 1,
-    Minus = -1,
+pub enum Helicity {
+    Signed(SignOrZero),
+    Summed,
+    SummedAveraged,
 }
 
-impl RefZero for SignOrZero {
-    fn ref_zero(&self) -> Self {
-        SignOrZero::Zero
-    }
-}
-
-impl From<linnet::half_edge::involution::SignOrZero> for SignOrZero {
-    fn from(value: linnet::half_edge::involution::SignOrZero) -> Self {
-        match value {
-            linnet::half_edge::involution::SignOrZero::Plus => SignOrZero::Plus,
-            linnet::half_edge::involution::SignOrZero::Minus => SignOrZero::Minus,
-            linnet::half_edge::involution::SignOrZero::Zero => SignOrZero::Zero,
-        }
-    }
-}
-
-impl_pow_for_sign!(SignOrZero, i32, SignOrZero::Plus);
-impl_pow_for_sign!(SignOrZero, u32, SignOrZero::Plus);
-impl_pow_for_sign!(SignOrZero, i64, SignOrZero::Plus);
-impl_pow_for_sign!(SignOrZero, u64, SignOrZero::Plus);
-impl_pow_for_sign!(SignOrZero, isize, SignOrZero::Plus);
-impl_pow_for_sign!(SignOrZero, usize, SignOrZero::Plus);
-impl_pow_for_sign!(SignOrZero, i128, SignOrZero::Plus);
-impl_pow_for_sign!(SignOrZero, u128, SignOrZero::Plus);
-
-impl From<linnet::half_edge::involution::Orientation> for SignOrZero {
-    fn from(value: linnet::half_edge::involution::Orientation) -> Self {
-        match value {
-            linnet::half_edge::involution::Orientation::Default => SignOrZero::Plus,
-            linnet::half_edge::involution::Orientation::Reversed => SignOrZero::Minus,
-            linnet::half_edge::involution::Orientation::Undirected => SignOrZero::Zero,
-        }
-    }
-}
-
-impl From<linnet::half_edge::involution::Flow> for SignOrZero {
-    fn from(value: linnet::half_edge::involution::Flow) -> Self {
-        match value {
-            linnet::half_edge::involution::Flow::Source => SignOrZero::Plus,
-            linnet::half_edge::involution::Flow::Sink => SignOrZero::Minus,
-        }
-    }
-}
-
-impl TryFrom<i8> for SignOrZero {
-    type Error = SignError;
-    fn try_from(value: i8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(SignOrZero::Zero),
-            1 => Ok(SignOrZero::Plus),
-            -1 => Ok(SignOrZero::Minus),
-            _ => Err(SignError::InvalidValue),
-        }
-    }
-}
-
-impl Display for SignOrZero {
+impl Display for Helicity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SignOrZero::Zero => write!(f, "."),
-            SignOrZero::Plus => write!(f, "+"),
-            SignOrZero::Minus => write!(f, "-"),
+            Helicity::Signed(s) => write!(f, "{}", s),
+            Helicity::Summed => write!(f, "Summed"),
+            Helicity::SummedAveraged => write!(f, "SummedAveraged"),
         }
     }
 }
 
-pub type Helicity = SignOrZero;
+impl TryFrom<i8> for Helicity {
+    type Error = SignError;
+    fn try_from(value: i8) -> Result<Self, Self::Error> {
+        Ok(Helicity::Signed(SignOrZero::try_from(value)?))
+    }
+}
+
+impl From<Sign> for Helicity {
+    fn from(sign: Sign) -> Self {
+        Self::Signed(sign.into())
+    }
+}
+
+impl From<SignOrZero> for Helicity {
+    fn from(sign: SignOrZero) -> Self {
+        Self::Signed(sign)
+    }
+}
+
+impl Helicity {
+    pub const ZERO: Self = Self::Signed(SignOrZero::Zero);
+    pub const PLUS: Self = Self::Signed(SignOrZero::Plus);
+    pub const MINUS: Self = Self::Signed(SignOrZero::Minus);
+}
 
 #[derive(
     Debug, PartialEq, Eq, Clone, Serialize, Deserialize, Encode, Decode, PartialOrd, Ord, Hash,
@@ -2480,7 +2346,7 @@ fn test_signature() {
 //     {
 //         match *self {
 //             Helicity::Sign(ref sign) => sign.serialize(serializer),
-//             Helicity::Zero => serializer.serialize_i32(0),
+//             Helicity::ZERO => serializer.serialize_i32(0),
 //         }
 //     }
 // }
@@ -2494,53 +2360,13 @@ fn test_signature() {
 //         match value {
 //             1 => Ok(Helicity::Sign(Sign::Positive)),
 //             -1 => Ok(Helicity::Sign(Sign::Negative)),
-//             0 => Ok(Helicity::Zero),
+//             0 => Ok(Helicity::ZERO),
 //             _ => Err(de::Error::custom(
 //                 "Expected 1 for Positive, -1 for Negative, or 0 for Zero",
 //             )),
 //         }
 //     }
 // }
-#[allow(non_upper_case_globals)]
-impl Helicity {
-    pub(crate) fn is_zero(&self) -> bool {
-        matches!(self, Helicity::Zero)
-    }
-
-    pub(crate) fn is_sign(&self) -> bool {
-        matches!(self, Helicity::Plus | Helicity::Minus)
-    }
-
-    pub(crate) fn is_positive(&self) -> bool {
-        matches!(self, Helicity::Plus)
-    }
-
-    pub(crate) fn is_negative(&self) -> bool {
-        matches!(self, Helicity::Minus)
-    }
-}
-
-impl<T: Neg<Output = T> + RefZero> Mul<T> for Helicity {
-    type Output = T;
-    fn mul(self, rhs: T) -> Self::Output {
-        match self {
-            Helicity::Plus => rhs,
-            Helicity::Minus => -rhs,
-            Helicity::Zero => rhs.ref_zero(),
-        }
-    }
-}
-
-impl Neg for Helicity {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        match self {
-            Helicity::Plus => Helicity::Minus,
-            Helicity::Minus => Helicity::Plus,
-            Helicity::Zero => Helicity::Zero,
-        }
-    }
-}
 
 impl<T> IntoIterator for FourMomentum<T> {
     type Item = T;
@@ -3368,9 +3194,9 @@ mod tests {
 
     #[test]
     fn serialization() {
-        let helicity = Helicity::Plus;
-        let minus = Helicity::Minus;
-        let hels = vec![helicity, minus, Helicity::Zero, helicity, minus];
+        let helicity = Helicity::PLUS;
+        let minus = Helicity::MINUS;
+        let hels = vec![helicity, minus, Helicity::ZERO, helicity, minus];
         let serialized = serde_json::to_string(&hels).unwrap();
         println!("{}", serialized);
         let deserialized: Vec<Helicity> = serde_json::from_str("[1,-1,0,1]").unwrap();
@@ -3387,7 +3213,7 @@ mod tests {
             F(50.81619686346704),
         );
 
-        let pol = mom.pol(SignOrZero::Plus);
+        let pol = mom.eps_pol(SignOrZero::Plus);
         println!("{}", pol);
 
         let mom = FourMomentum::from_args(
@@ -3397,12 +3223,12 @@ mod tests {
             F(-51.523329523343534),
         );
 
-        let pol = mom.pol(SignOrZero::Plus);
+        let pol = mom.eps_pol(SignOrZero::Plus);
         println!("{}", pol);
 
         let mom = FourMomentum::from_args(F(485.0355), F(0.), F(0.), F(485.0355));
 
-        let pol = mom.pol(SignOrZero::Plus);
+        let pol = mom.eps_pol(SignOrZero::Plus);
 
         println!("{}", pol);
 
@@ -3410,7 +3236,7 @@ mod tests {
 
         let mom = FourMomentum::from_args(F(485.0355), F(-107.6044), F(-431.5174), F(193.5805));
 
-        let pol = mom.pol(SignOrZero::Plus).bar();
+        let pol = mom.eps_pol(SignOrZero::Plus).bar();
 
         // Helicity=           1           1           1           1
         //  W(*,1)=               (5.4707403520912967,0.0000000000000000)               (0.0000000000000000,0.0000000000000000)               (31.622776601683793,0.0000000000000000)               (0.0000000000000000,0.0000000000000000)
@@ -3641,7 +3467,7 @@ mod tests {
             "pol_two((2,0,0,-2)) does not match target: (0,0,-1,0)"
         );
 
-        let e_p = mom.pol(SignOrZero::Plus);
+        let e_p = mom.eps_pol(SignOrZero::Plus);
 
         let zero = F(0.).into();
         let e_p_target = Polarization::lorentz([
@@ -3669,7 +3495,7 @@ mod tests {
             .wrap_err("e+bar((2,0,0,-2)) does not match target: (0,-1/sqrt(2),-i/sqrt(2),0)")
             .unwrap();
 
-        let e_m = mom.pol(SignOrZero::Minus);
+        let e_m = mom.eps_pol(SignOrZero::Minus);
 
         let e_m_target = Polarization::lorentz([
             zero,
@@ -3711,7 +3537,7 @@ mod tests {
             "pol_two((2,0,0,-2)) does not match target: (0,0,-1,0)"
         );
 
-        let e_p = mom.pol(SignOrZero::Plus);
+        let e_p = mom.eps_pol(SignOrZero::Plus);
 
         let zero = F(0.).into();
         let e_p_target = Polarization::lorentz([
@@ -3739,7 +3565,7 @@ mod tests {
             .wrap_err("e+bar((2,0,0,-2)) does not match target: (0,-1/sqrt(2),-i/sqrt(2),0)")
             .unwrap();
 
-        let e_m = mom.pol(SignOrZero::Minus);
+        let e_m = mom.eps_pol(SignOrZero::Minus);
 
         let e_m_target = Polarization::lorentz([
             zero,

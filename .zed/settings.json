@@ -52,6 +52,12 @@
         },
       },
     },
+
+    "tombi": {
+      "settings": {
+        "goto-type-definition.enabled": false,
+      },
+    },
     "json-language-server": {
       "settings": {
         "json": {

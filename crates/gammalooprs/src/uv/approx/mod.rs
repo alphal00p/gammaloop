@@ -500,7 +500,7 @@ impl Approximation {
     //     &self,
     //     graph: &UVGraph,
     //     amplitude: &InternalSubGraph,
-    // ) -> Option<SerializableAtom> {
+    // ) -> Option<Atom> {
     //     let simple_approx = self.simple_approx.as_ref()?;
 
     //     Some((simple_approx.sign * simple_approx.expr(&amplitude.filter)).into())

@@ -476,10 +476,13 @@ impl GammaLoopPairs {
 
         for (p, _) in &graph.polarizations {
             let extid = graph.loop_momentum_basis.ext_from(p.eid).unwrap();
-            let hel = p.hel.unwrap_or(helicities[extid.0]);
+            let Helicity::Signed(hel) = helicities[extid.0] else {
+                panic!("Polarization has invalid helicity type: {:?}", p.pol_type)
+            };
+
             let pol = match p.pol_type {
-                PolType::Epsilon => ext[extid].pol(hel),
-                PolType::EpsilonBar => ext[extid].pol(hel).bar(),
+                PolType::Epsilon => ext[extid].eps_pol(hel),
+                PolType::EpsilonBar => ext[extid].eps_pol(hel).bar(),
                 PolType::Scalar => {
                     continue;
                 }

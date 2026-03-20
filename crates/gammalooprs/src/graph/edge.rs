@@ -282,7 +282,7 @@ impl Edge {
         if let PossibleParticle::Particle(p) = &self.particle {
             p.random_helicity(seed)
         } else {
-            Helicity::Zero
+            Helicity::ZERO
         }
     }
 

@@ -13,16 +13,16 @@ use crate::{
     upgrading_arithmetic::FallibleSub,
 };
 use constcat::concat;
-use symbolica::parse;
+use symbolica::{atom::Atom, parse};
 
 #[test]
 fn other_network() {
     let mut net: Network<
         DataTensor<
             Complex<Rational>,
-            SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>,
+            SmartShadowStructure<SerializableSymbol, Vec<Atom>>,
         >,
-        SerializableAtom,
+        Atom,
     > = Network::new();
 
     net.contract().unwrap();

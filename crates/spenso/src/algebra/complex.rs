@@ -14,7 +14,7 @@ use ref_ops::{RefAdd, RefDiv, RefMul, RefSub};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "shadowing")]
 use symbolica::domains::{
-    float::{Complex as SymComplex, Constructible, FloatLike, Real},
+    float::{Complex as SymComplex, Constructible, Real},
     rational::Rational,
 };
 
@@ -118,13 +118,6 @@ pub mod sub_assign;
 
 #[cfg(feature = "shadowing")]
 pub mod symbolica_traits;
-
-#[cfg(feature = "shadowing")]
-impl RefZero for Rational {
-    fn ref_zero(&self) -> Self {
-        self.zero()
-    }
-}
 
 #[cfg(feature = "shadowing")]
 impl From<f64> for Complex<Rational> {

@@ -93,7 +93,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let jacobian = F(1.0);
 
-    let helicities = vec![Helicity::Plus; n_indep_externals + 1];
+    let helicities = vec![Helicity::PLUS; n_indep_externals + 1];
 
     let externals = Externals::Constant {
         momenta: external_moms,

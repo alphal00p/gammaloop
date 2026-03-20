@@ -3,7 +3,6 @@ use crate::{
     algebra::algebraic_traits::RefZero,
     algebra::complex::{Complex, RealOrComplex},
     algebra::upgrading_arithmetic::{FallibleMul, TrySmallestUpgrade},
-    shadowing::symbolica_utils::SerializableAtom,
     structure::TensorStructure,
     tensors::complex::RealOrComplexTensor,
     tensors::data::DataTensor,
@@ -11,17 +10,7 @@ use crate::{
 use duplicate::duplicate;
 use symbolica::{atom::Atom, domains::rational::Rational};
 
-use super::{ConcreteOrParam, MixedTensor, ParamOrComposite, ParamOrConcrete, ParamTensor};
-
-impl<S: TensorStructure + Clone> ScalarMul<SerializableAtom> for ParamTensor<S> {
-    type Output = ParamTensor<S>;
-    fn scalar_mul(&self, rhs: &SerializableAtom) -> Option<Self::Output> {
-        Some(ParamTensor {
-            tensor: self.tensor.scalar_mul(&rhs.0)?,
-            param_type: ParamOrComposite::Composite,
-        })
-    }
-}
+use super::{ConcreteOrParam, MixedTensor, ParamOrConcrete, ParamTensor};
 
 impl<S: TensorStructure + Clone, T> ScalarMul<T> for ParamTensor<S>
 where
@@ -233,18 +222,6 @@ where
                 ParamOrConcrete::Concrete(rt.scalar_mul(rs)?)
             }
         })
-    }
-}
-
-impl<T, I> ScalarMul<SerializableAtom> for MixedTensor<T, I>
-where
-    I: TensorStructure + Clone,
-    T: Clone + FallibleMul<Atom, Output = Atom>,
-    Complex<T>: FallibleMul<Atom, Output = Atom>,
-{
-    type Output = MixedTensor<T, I>;
-    fn scalar_mul(&self, rhs: &SerializableAtom) -> Option<Self::Output> {
-        self.scalar_mul(&rhs.0)
     }
 }
 

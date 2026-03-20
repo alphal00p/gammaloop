@@ -5,7 +5,8 @@ use std::{
     str::FromStr,
 };
 
-use crate::{define_indexed_vec, num_traits::RefZero};
+use crate::define_indexed_vec;
+pub use crate::num_traits::{Pow, Sign, SignError, SignOrZero};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use thiserror::Error;
 
@@ -1169,45 +1170,12 @@ impl From<bool> for Orientation {
     }
 }
 
-#[derive(Error, Debug)]
-pub enum SignError {
-    #[error("Invalid value for Sign")]
-    InvalidValue,
-    #[error("Zero is not a valid value for Sign")]
-    ZeroValue,
-}
-#[repr(i8)]
-/// Represents a sign (Plus or Minus) or zero.
-///
-/// Useful for calculations where direction or orientation matters,
-/// and a neutral (zero) state is also possible.
-pub enum SignOrZero {
-    /// Represents a zero or neutral value.
-    Zero = 0,
-    /// Represents a positive sign or direction.
-    Plus = 1,
-    /// Represents a negative sign or direction.
-    Minus = -1,
-}
-
-impl TryFrom<i8> for SignOrZero {
-    type Error = SignError;
-    fn try_from(value: i8) -> Result<Self, Self::Error> {
+impl From<Orientation> for SignOrZero {
+    fn from(value: Orientation) -> Self {
         match value {
-            0 => Ok(SignOrZero::Zero),
-            1 => Ok(SignOrZero::Plus),
-            -1 => Ok(SignOrZero::Minus),
-            _ => Err(SignError::InvalidValue),
-        }
-    }
-}
-
-impl Display for SignOrZero {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SignOrZero::Zero => write!(f, "."),
-            SignOrZero::Plus => write!(f, "+"),
-            SignOrZero::Minus => write!(f, "-"),
+            Orientation::Default => SignOrZero::Plus,
+            Orientation::Reversed => SignOrZero::Minus,
+            Orientation::Undirected => SignOrZero::Zero,
         }
     }
 }
@@ -1218,57 +1186,6 @@ impl From<SignOrZero> for Orientation {
             SignOrZero::Zero => Orientation::Undirected,
             SignOrZero::Plus => Orientation::Default,
             SignOrZero::Minus => Orientation::Reversed,
-        }
-    }
-}
-
-#[allow(non_upper_case_globals)]
-impl SignOrZero {
-    pub fn is_zero(&self) -> bool {
-        matches!(self, SignOrZero::Zero)
-    }
-
-    pub fn is_sign(&self) -> bool {
-        matches!(self, SignOrZero::Plus | SignOrZero::Minus)
-    }
-
-    pub fn is_positive(&self) -> bool {
-        matches!(self, SignOrZero::Plus)
-    }
-
-    pub fn is_negative(&self) -> bool {
-        matches!(self, SignOrZero::Minus)
-    }
-}
-
-impl<T: Neg<Output = T> + RefZero> Mul<T> for SignOrZero {
-    type Output = T;
-    fn mul(self, rhs: T) -> Self::Output {
-        match self {
-            SignOrZero::Plus => rhs,
-            SignOrZero::Minus => -rhs,
-            SignOrZero::Zero => rhs.ref_zero(),
-        }
-    }
-}
-
-impl Neg for SignOrZero {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        match self {
-            SignOrZero::Plus => SignOrZero::Minus,
-            SignOrZero::Minus => SignOrZero::Plus,
-            SignOrZero::Zero => SignOrZero::Zero,
-        }
-    }
-}
-
-impl From<Orientation> for SignOrZero {
-    fn from(value: Orientation) -> Self {
-        match value {
-            Orientation::Default => SignOrZero::Plus,
-            Orientation::Reversed => SignOrZero::Minus,
-            Orientation::Undirected => SignOrZero::Zero,
         }
     }
 }

@@ -1,9 +1,10 @@
 use std::iter;
 
 use crate::{
-    momentum::sample::ExternalIndex,
-    momentum::signature::SignatureLike,
-    momentum::{Dep, Energy, ExternalMomenta, FourMomentum, SignOrZero, ThreeMomentum},
+    momentum::{
+        Dep, Energy, ExternalMomenta, FourMomentum, Helicity, ThreeMomentum, sample::ExternalIndex,
+        signature::SignatureLike,
+    },
     settings::runtime::kinematic::Externals,
     utils::{F, FloatLike, newton_solver::newton_iteration_and_derivative},
 };
@@ -12,6 +13,7 @@ use crate::utils::serde_utils::{IsDefault, is_false, show_defaults_helper};
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use itertools::Itertools;
+use linnet::num_traits::SignOrZero;
 use rand::Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -177,7 +179,7 @@ pub(crate) fn generate_default_momenta(
                 ExternalMomenta::Dependent(Dep::Dep),
             ],
             improvement_settings: PhaseSpaceImprovementSettings::default(),
-            helicities: vec![SignOrZero::Plus, SignOrZero::Plus],
+            helicities: vec![Helicity::PLUS, Helicity::PLUS],
             f_64_cache: None,
             f_128_cache: None,
         });
@@ -282,7 +284,7 @@ pub(crate) fn generate_default_momenta(
         ]));
     }
 
-    let helicities = iter::from_fn(|| Some(SignOrZero::Plus))
+    let helicities = iter::from_fn(|| Some(Helicity::PLUS))
         .take(num_final + num_initial)
         .collect();
 

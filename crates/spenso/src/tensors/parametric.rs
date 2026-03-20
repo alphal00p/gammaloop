@@ -39,7 +39,7 @@ use crate::{
     },
     contraction::{Contract, ContractableWith, ContractionError, Trace},
     iterators::{IteratableTensor, IteratorEnum},
-    shadowing::symbolica_utils::{IntoArgs, IntoSymbol, SerializableAtom},
+    shadowing::symbolica_utils::{IntoArgs, IntoSymbol},
     shadowing::{ShadowMapping, Shadowable},
     structure::{
         CastStructure, HasName, HasStructure, NamedStructure, OrderedStructure, ScalarStructure,
@@ -486,11 +486,11 @@ where
     }
 }
 
-// impl<C: HasStructure<Structure = S> + Clone, S: TensorStructure + Clone> ScalarMul<SerializableAtom>
+// impl<C: HasStructure<Structure = S> + Clone, S: TensorStructure + Clone> ScalarMul<Atom>
 //     for ParamOrConcrete<C, S> where C
 // {
 //     type Output = ParamTensor<S>;
-//     fn scalar_mul(&self, rhs: &SerializableAtom) -> Option<Self::Output> {
+//     fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
 //         match self{
 
 //         }
@@ -1122,12 +1122,6 @@ impl<C: std::ops::Neg<Output = C>> std::ops::Neg for ConcreteOrParamRef<'_, C> {
             ConcreteOrParamRef::Concrete(c) => ConcreteOrParam::Concrete(-c),
             ConcreteOrParamRef::Param(p) => ConcreteOrParam::Param(-p),
         }
-    }
-}
-
-impl<C> From<SerializableAtom> for ConcreteOrParam<C> {
-    fn from(value: SerializableAtom) -> Self {
-        ConcreteOrParam::Param(value.into())
     }
 }
 
@@ -2724,17 +2718,17 @@ impl<S: TensorStructure> CompiledEvalTensorSet<S> {
     }
 }
 
-// impl FallibleMul for SerializableAtom {
-//     type Output = SerializableAtom;
+// impl FallibleMul for Atom {
+//     type Output = Atom;
 //     fn mul_fallible(&self, rhs: &Self) -> Option<Self::Output> {
-//         Some(SerializableAtom(&self.0 * &rhs.0))
+//         Some(self * rhs)
 //     }
 // }
 
-// impl FallibleAdd<SerializableAtom> for SerializableAtom {
-//     type Output = SerializableAtom;
+// impl FallibleAdd<Atom> for Atom {
+//     type Output = Atom;
 //     fn add_fallible(&self, rhs: &Self) -> Option<Self::Output> {
-//         Some(SerializableAtom(&self.0 + &rhs.0))
+//         Some(self + rhs)
 //     }
 // }
 

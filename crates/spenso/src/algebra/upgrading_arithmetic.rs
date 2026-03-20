@@ -2,11 +2,6 @@ use std::borrow::Cow;
 
 use duplicate::duplicate;
 use ref_ops::{RefAdd, RefMul, RefSub};
-#[cfg(feature = "shadowing")]
-use std::ops::{Add, Div, Mul, Sub};
-
-#[cfg(feature = "shadowing")]
-use crate::shadowing::symbolica_utils::SerializableAtom;
 
 #[cfg(feature = "shadowing")]
 use symbolica::{
@@ -994,18 +989,6 @@ impl TrySmallestUpgrade<Complex<Rational>> for Complex<Rational> {
     }
 }
 
-#[cfg(feature = "shadowing")]
-impl TrySmallestUpgrade<SerializableAtom> for SerializableAtom {
-    type LCM = SerializableAtom;
-
-    fn try_upgrade(&self) -> Option<Cow<'_, Self::LCM>>
-    where
-        Self::LCM: Clone,
-    {
-        Some(Cow::Borrowed(self))
-    }
-}
-
 duplicate! {
     [smaller larger;
     [f32] [f64];
@@ -1061,17 +1044,6 @@ impl TrySmallestUpgrade<Atom> for f64 {
 }
 
 #[cfg(feature = "shadowing")]
-impl TrySmallestUpgrade<SerializableAtom> for f64 {
-    type LCM = SerializableAtom;
-
-    fn try_upgrade(&self) -> Option<Cow<'_, Self::LCM>> {
-        let symrat = Atom::num(*self);
-
-        Some(Cow::Owned(symrat.into()))
-    }
-}
-
-#[cfg(feature = "shadowing")]
 impl TrySmallestUpgrade<Atom> for i32 {
     type LCM = Atom;
 
@@ -1083,170 +1055,10 @@ impl TrySmallestUpgrade<Atom> for i32 {
 }
 
 #[cfg(feature = "shadowing")]
-impl TrySmallestUpgrade<SerializableAtom> for i32 {
-    type LCM = SerializableAtom;
-
-    fn try_upgrade(&self) -> Option<Cow<'_, Self::LCM>> {
-        let symnum = Atom::num(*self).into();
-
-        Some(Cow::Owned(symnum))
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Add for SerializableAtom {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        SerializableAtom::from(self.0 + rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Add<&SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn add(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 + &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Add<&SerializableAtom> for SerializableAtom {
-    type Output = SerializableAtom;
-    fn add(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 + &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Add<SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn add(self, rhs: SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 + &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Sub for SerializableAtom {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        SerializableAtom::from(self.0 - rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Sub<&SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn sub(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 - &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Sub<&SerializableAtom> for SerializableAtom {
-    type Output = SerializableAtom;
-    fn sub(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 - &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Sub<SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn sub(self, rhs: SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 - &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Mul for SerializableAtom {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        SerializableAtom::from(self.0 * rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Mul<&SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn mul(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 * &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Mul<&SerializableAtom> for SerializableAtom {
-    type Output = SerializableAtom;
-    fn mul(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 * &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Mul<SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn mul(self, rhs: SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 * &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Div for SerializableAtom {
-    type Output = Self;
-    fn div(self, rhs: Self) -> Self::Output {
-        SerializableAtom::from(self.0 / rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Div<&SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn div(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 / &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Div<&SerializableAtom> for SerializableAtom {
-    type Output = SerializableAtom;
-    fn div(self, rhs: &SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 / &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl Div<SerializableAtom> for &SerializableAtom {
-    type Output = SerializableAtom;
-    fn div(self, rhs: SerializableAtom) -> Self::Output {
-        SerializableAtom::from(&self.0 / &rhs.0)
-    }
-}
-
-#[cfg(feature = "shadowing")]
-impl TrySmallestUpgrade<SerializableAtom> for Complex<f64> {
-    type LCM = SerializableAtom;
-
-    fn try_upgrade(&self) -> Option<Cow<'_, Self::LCM>> {
-        let real: Cow<'_, SerializableAtom> =
-            <f64 as TrySmallestUpgrade<SerializableAtom>>::try_upgrade(&self.re)?;
-        let imag: Cow<'_, SerializableAtom> =
-            <f64 as TrySmallestUpgrade<SerializableAtom>>::try_upgrade(&self.im)?;
-
-        let i = SerializableAtom::from(Atom::i());
-        let symrat = (i * imag.as_ref()) + real.as_ref();
-
-        Some(Cow::Owned(symrat))
-    }
-}
-
-#[cfg(feature = "shadowing")]
 duplicate! {
     [smaller larger;
 [f64] [Atom];
-[f64] [SerializableAtom];
 [i32] [Atom];
-[i32] [SerializableAtom];
-// [Complex<f64>] [Atom];
-[Complex<f64>] [SerializableAtom];
 ]
 
 impl TrySmallestUpgrade<smaller> for larger {

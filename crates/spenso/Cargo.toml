@@ -85,4 +85,4 @@ nu-ansi-term = {workspace = true }
 [features]
 python = ["dep:pyo3"]
 python_stubgen = ["dep:pyo3-stub-gen", "python"]
-shadowing = ["dep:symbolica", "spenso-macros/shadowing"]
+shadowing = ["dep:symbolica", "spenso-macros/shadowing", "linnet/symbolica"]

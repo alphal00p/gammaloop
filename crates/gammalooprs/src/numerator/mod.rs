@@ -12,7 +12,6 @@ use spenso::network::library::{DummyLibrary, TensorLibraryData};
 use spenso::network::parsing::{ParseSettings, ShadowedStructure};
 use spenso::network::store::NetworkStore;
 use spenso::network::{ContractScalars, Sequential, SingleSmallestDegree, SmallestDegree, Steps};
-use spenso::shadowing::symbolica_utils::SerializableAtom;
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
 
 use spenso::tensors::data::DataTensor;
@@ -139,7 +138,7 @@ pub enum GammaAlgebraMode {
     Concrete,
 }
 
-pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>;
+pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<Atom>>;
 
 pub struct RepeatingIterator<T> {
     elements: Vec<T>,
@@ -389,7 +388,6 @@ impl GlobalPrefactor {
                 PolDef {
                     pol_type: PolType::Epsilon,
                     eid: EdgeIndex(e as usize),
-                    hel: None,
                 },
                 pat.replace_wildcards(&m),
             ));
@@ -408,7 +406,6 @@ impl GlobalPrefactor {
                 PolDef {
                     pol_type: PolType::EpsilonBar,
                     eid: EdgeIndex(e as usize),
-                    hel: None,
                 },
                 pat.replace_wildcards(&m),
             ));
@@ -427,7 +424,6 @@ impl GlobalPrefactor {
                 PolDef {
                     pol_type: PolType::U,
                     eid: EdgeIndex(e as usize),
-                    hel: None,
                 },
                 pat.replace_wildcards(&m),
             ));
@@ -446,7 +442,6 @@ impl GlobalPrefactor {
                 PolDef {
                     pol_type: PolType::V,
                     eid: EdgeIndex(e as usize),
-                    hel: None,
                 },
                 pat.replace_wildcards(&m),
             ));
@@ -465,7 +460,6 @@ impl GlobalPrefactor {
                 PolDef {
                     pol_type: PolType::UBar,
                     eid: EdgeIndex(e as usize),
-                    hel: None,
                 },
                 pat.replace_wildcards(&m),
             ));
@@ -484,7 +478,6 @@ impl GlobalPrefactor {
                 PolDef {
                     pol_type: PolType::VBar,
                     eid: EdgeIndex(e as usize),
-                    hel: None,
                 },
                 pat.replace_wildcards(&m),
             ));
@@ -563,7 +556,7 @@ pub trait GetSingleAtom {
 }
 
 pub trait UnexpandedNumerator: NumeratorState + GetSingleAtom {
-    // fn expr(&self) -> Result<SerializableAtom, NumeratorStateError>;
+    // fn expr(&self) -> Result<Atom, NumeratorStateError>;
 
     fn map_color(self, f: impl Fn(Atom) -> Atom) -> Self;
 
@@ -603,10 +596,10 @@ impl<E: ExpressionState> SymbolicExpression<E> {
 }
 
 impl<E: ExpressionState> SymbolicExpression<E> {
-    pub(crate) fn new(expression: SerializableAtom) -> Self {
+    pub(crate) fn new(expression: Atom) -> Self {
         E::new(expression)
     }
-    pub(crate) fn new_color(expression: SerializableAtom) -> Self {
+    pub(crate) fn new_color(expression: Atom) -> Self {
         E::new_color(expression)
     }
 }
@@ -622,20 +615,20 @@ pub trait ExpressionState:
 {
     fn forget_type(data: SymbolicExpression<Self>) -> PythonState;
 
-    fn new(expression: SerializableAtom) -> SymbolicExpression<Self> {
+    fn new(expression: Atom) -> SymbolicExpression<Self> {
         SymbolicExpression {
-            // colorless: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
+            // colorless: ParamTensor::composite(DataTensor::new_scalar(expression)),
             // color: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
-            expr: expression.0,
+            expr: expression,
             state: Self::default(),
         }
     }
 
-    fn new_color(expression: SerializableAtom) -> SymbolicExpression<Self> {
+    fn new_color(expression: Atom) -> SymbolicExpression<Self> {
         SymbolicExpression {
-            // color: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
+            // color: ParamTensor::composite(DataTensor::new_scalar(expression)),
             // colorless: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
-            expr: expression.0,
+            expr: expression,
             state: Self::default(),
         }
     }
@@ -942,7 +935,7 @@ impl Numerator<AppliedFeynmanRule> {
 // #[derive(Debug, Error)]
 // pub enum ColorError {
 //     #[error("Not fully simplified: {0}")]
-//     NotFully(SerializableAtom),
+//     NotFully(Atom),
 // }
 
 impl Numerator<ColorSimplified> {
@@ -991,7 +984,7 @@ impl PolySplit {
             .colorless
             .map_data(|a| {
                 let mut net =
-                    TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
+                    TensorNetwork::<MixedTensor<f64, AtomStructure>, Atom>::try_from(
                         a.as_view(),
                     )
                     .unwrap();

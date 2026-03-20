@@ -10,7 +10,7 @@
 //     parametric::{atomcore::TensorAtomOps, MixedTensor},
 //     structure::{HasStructure, SmartShadowStructure},
 //     symbolic::SymbolicTensor,
-//     symbolica_utils::SerializableAtom,
+//     atom::Atom,
 // };
 // use symbolica::{
 //     atom::{Atom, AtomCore, AtomView, Symbol},
