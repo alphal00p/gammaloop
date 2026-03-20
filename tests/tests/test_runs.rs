@@ -7,7 +7,8 @@ use colored::{ColoredString, Colorize};
 use eyre::Ok;
 use gammaloop_api::{
     commands::{
-        Profile, Renormalize, inspect::Inspect, integrate::Integrate, profile::UltraVioletProfile,
+        Profile, Renormalize, evaluate_samples::EvaluateSamples, inspect::Inspect,
+        integrate::Integrate, profile::UltraVioletProfile,
     },
     state::{ProcessRef, RunHistory, SyncSettings},
 };
@@ -22,6 +23,7 @@ use gammalooprs::{
 use insta::assert_snapshot;
 use itertools::Itertools;
 use momtrop::assert_approx_eq;
+use ndarray::Array2;
 use serde_json::Value as JsonValue;
 use serial_test::serial;
 use spenso::{
@@ -36,14 +38,14 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     function,
     id::Pattern,
-    symbol, warn,
+    symbol,
 };
 use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
 use gammaloop_integration_tests::{
-    clean_test, get_test_cli, get_tests_workspace_path, new_cli_for_test, run_commands,
-    setup_sm_differential_lu_cli,
+    clean_test, default_momentum_space_point, default_xspace_point, get_test_cli,
+    get_tests_workspace_path, new_cli_for_test, run_commands, setup_sm_differential_lu_cli,
 };
 
 fn single_slot_integral(result: &RuntimeIntegrationResult) -> &IntegralEstimate {
@@ -249,6 +251,547 @@ fn complex_distance(lhs: Complex<f64>, rhs: Complex<f64>) -> f64 {
     let delta_re = lhs.re - rhs.re;
     let delta_im = lhs.im - rhs.im;
     (delta_re * delta_re + delta_im * delta_im).sqrt()
+}
+
+fn evaluate_samples_api(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    points: &[Vec<f64>],
+    momentum_space: bool,
+) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
+    let ncols = points.first().map(Vec::len).unwrap_or(0);
+    let flat = points
+        .iter()
+        .flat_map(|point| point.iter().copied())
+        .collect::<Vec<_>>();
+    let array = Array2::from_shape_vec((points.len(), ncols), flat)?;
+    EvaluateSamples {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: false,
+        minimal_output: false,
+        momentum_space,
+        points: array.view(),
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut cli.state)
+}
+
+fn strip_evaluation_timing_fields(value: &mut JsonValue) {
+    match value {
+        JsonValue::Object(map) => {
+            map.remove("total_timing");
+            map.remove("integrand_evaluation_time");
+            map.remove("evaluator_evaluation_time");
+            map.remove("average_evaluator_batch_size");
+            map.remove("parameterization_time");
+            map.remove("event_processing_time");
+            map.remove("total_time");
+            for nested in map.values_mut() {
+                strip_evaluation_timing_fields(nested);
+            }
+        }
+        JsonValue::Array(values) => {
+            for nested in values {
+                strip_evaluation_timing_fields(nested);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn assert_batch_evaluation_results_match_ignoring_timings(
+    lhs: &gammalooprs::integrands::evaluation::BatchSampleEvaluationResult,
+    rhs: &gammalooprs::integrands::evaluation::BatchSampleEvaluationResult,
+) {
+    assert!(
+        lhs.samples.len() == rhs.samples.len(),
+        "sample count mismatch: {} vs {}",
+        lhs.samples.len(),
+        rhs.samples.len()
+    );
+    for (sample_index, (lhs_sample, rhs_sample)) in lhs.samples.iter().zip(&rhs.samples).enumerate()
+    {
+        assert_sample_evaluation_matches(lhs_sample, rhs_sample, sample_index);
+    }
+
+    let lhs_observables =
+        serde_json::to_value(&lhs.observables).expect("observables must serialize");
+    let rhs_observables =
+        serde_json::to_value(&rhs.observables).expect("observables must serialize");
+    assert!(
+        json_values_approx_eq(&lhs_observables, &rhs_observables, 1.0e-12, 1.0e-12),
+        "observable mismatch\nlhs: {lhs_observables}\nrhs: {rhs_observables}"
+    );
+}
+
+fn json_values_approx_eq(lhs: &JsonValue, rhs: &JsonValue, abs_tol: f64, rel_tol: f64) -> bool {
+    match (lhs, rhs) {
+        (JsonValue::Null, JsonValue::Null)
+        | (JsonValue::Bool(_), JsonValue::Bool(_))
+        | (JsonValue::String(_), JsonValue::String(_)) => lhs == rhs,
+        (JsonValue::Number(lhs), JsonValue::Number(rhs)) => {
+            let Some(lhs) = lhs.as_f64() else {
+                return lhs == rhs;
+            };
+            let Some(rhs) = rhs.as_f64() else {
+                return false;
+            };
+            let delta = (lhs - rhs).abs();
+            let scale = lhs.abs().max(rhs.abs());
+            delta <= abs_tol.max(rel_tol * scale)
+        }
+        (JsonValue::Array(lhs), JsonValue::Array(rhs)) => {
+            lhs.len() == rhs.len()
+                && lhs
+                    .iter()
+                    .zip(rhs)
+                    .all(|(lhs, rhs)| json_values_approx_eq(lhs, rhs, abs_tol, rel_tol))
+        }
+        (JsonValue::Object(lhs), JsonValue::Object(rhs)) => {
+            lhs.len() == rhs.len()
+                && lhs.iter().all(|(key, lhs_value)| {
+                    rhs.get(key)
+                        .map(|rhs_value| {
+                            json_values_approx_eq(lhs_value, rhs_value, abs_tol, rel_tol)
+                        })
+                        .unwrap_or(false)
+                })
+        }
+        _ => false,
+    }
+}
+
+fn assert_sample_evaluation_matches(
+    lhs: &gammalooprs::integrands::evaluation::SampleEvaluationResult,
+    rhs: &gammalooprs::integrands::evaluation::SampleEvaluationResult,
+    sample_index: usize,
+) {
+    assert_complex_approx_eq(
+        &lhs.evaluation.integrand_result,
+        &rhs.evaluation.integrand_result,
+        &format!("sample {sample_index} integrand result"),
+    );
+    assert_optional_real_approx_eq(
+        lhs.evaluation.parameterization_jacobian.as_ref(),
+        rhs.evaluation.parameterization_jacobian.as_ref(),
+        &format!("sample {sample_index} parameterization jacobian"),
+    );
+    assert_real_approx_eq(
+        lhs.evaluation.integrator_weight.0,
+        rhs.evaluation.integrator_weight.0,
+        &format!("sample {sample_index} integrator weight"),
+    );
+    assert_evaluation_metadata_matches(
+        lhs.evaluation.evaluation_metadata.as_ref(),
+        rhs.evaluation.evaluation_metadata.as_ref(),
+        sample_index,
+    );
+    assert_event_groups_match(
+        &lhs.evaluation.event_groups,
+        &rhs.evaluation.event_groups,
+        sample_index,
+    );
+}
+
+fn assert_evaluation_metadata_matches(
+    lhs: Option<&gammalooprs::integrands::evaluation::EvaluationMetaData>,
+    rhs: Option<&gammalooprs::integrands::evaluation::EvaluationMetaData>,
+    sample_index: usize,
+) {
+    match (lhs, rhs) {
+        (None, None) => {}
+        (Some(lhs), Some(rhs)) => {
+            assert_eq!(
+                lhs.generated_event_count, rhs.generated_event_count,
+                "sample {sample_index} generated-event count mismatch"
+            );
+            assert_eq!(
+                lhs.accepted_event_count, rhs.accepted_event_count,
+                "sample {sample_index} accepted-event count mismatch"
+            );
+            assert_eq!(
+                lhs.is_nan, rhs.is_nan,
+                "sample {sample_index} nan flag mismatch"
+            );
+            assert_complex_approx_eq(
+                &lhs.relative_instability_error,
+                &rhs.relative_instability_error,
+                &format!("sample {sample_index} relative instability error"),
+            );
+            match (&lhs.loop_momenta_escalation, &rhs.loop_momenta_escalation) {
+                (None, None) => {}
+                (Some(lhs), Some(rhs)) => {
+                    assert_real_approx_eq(
+                        lhs.sum_norm,
+                        rhs.sum_norm,
+                        &format!("sample {sample_index} escalation sum_norm"),
+                    );
+                    assert_real_approx_eq(
+                        lhs.threshold,
+                        rhs.threshold,
+                        &format!("sample {sample_index} escalation threshold"),
+                    );
+                }
+                _ => panic!("sample {sample_index} escalation metadata mismatch"),
+            }
+            assert_eq!(
+                lhs.stability_results.len(),
+                rhs.stability_results.len(),
+                "sample {sample_index} stability-result count mismatch"
+            );
+            for (level, (lhs_result, rhs_result)) in lhs
+                .stability_results
+                .iter()
+                .zip(&rhs.stability_results)
+                .enumerate()
+            {
+                assert_eq!(
+                    lhs_result.precision, rhs_result.precision,
+                    "sample {sample_index} stability precision mismatch at level {level}"
+                );
+                assert_eq!(
+                    lhs_result.accepted_as_stable, rhs_result.accepted_as_stable,
+                    "sample {sample_index} stability acceptance mismatch at level {level}"
+                );
+                assert_optional_real_approx_eq(
+                    lhs_result.estimated_relative_accuracy.as_ref(),
+                    rhs_result.estimated_relative_accuracy.as_ref(),
+                    &format!("sample {sample_index} stability accuracy at level {level}"),
+                );
+            }
+        }
+        _ => panic!("sample {sample_index} metadata presence mismatch"),
+    }
+}
+
+fn assert_event_groups_match(
+    lhs: &gammalooprs::observables::events::EventGroupList,
+    rhs: &gammalooprs::observables::events::EventGroupList,
+    sample_index: usize,
+) {
+    assert_eq!(
+        lhs.len(),
+        rhs.len(),
+        "sample {sample_index} event-group count mismatch"
+    );
+    for (group_index, (lhs_group, rhs_group)) in lhs.iter().zip(rhs.iter()).enumerate() {
+        assert_eq!(
+            lhs_group.len(),
+            rhs_group.len(),
+            "sample {sample_index} event count mismatch in group {group_index}"
+        );
+        for (event_index, (lhs_event, rhs_event)) in
+            lhs_group.iter().zip(rhs_group.iter()).enumerate()
+        {
+            assert_eq!(
+                lhs_event.cut_info.particle_pdgs, rhs_event.cut_info.particle_pdgs,
+                "sample {sample_index} event {group_index}:{event_index} particle PDGs mismatch"
+            );
+            assert_eq!(
+                lhs_event.cut_info.cut_id, rhs_event.cut_info.cut_id,
+                "sample {sample_index} event {group_index}:{event_index} cut id mismatch"
+            );
+            assert_eq!(
+                lhs_event.cut_info.graph_id, rhs_event.cut_info.graph_id,
+                "sample {sample_index} event {group_index}:{event_index} graph id mismatch"
+            );
+            assert_complex_approx_eq(
+                &lhs_event.weight,
+                &rhs_event.weight,
+                &format!("sample {sample_index} event {group_index}:{event_index} weight"),
+            );
+            assert_eq!(
+                lhs_event.kinematic_configuration.0.len(),
+                rhs_event.kinematic_configuration.0.len(),
+                "sample {sample_index} event {group_index}:{event_index} incoming multiplicity mismatch"
+            );
+            assert_eq!(
+                lhs_event.kinematic_configuration.1.len(),
+                rhs_event.kinematic_configuration.1.len(),
+                "sample {sample_index} event {group_index}:{event_index} outgoing multiplicity mismatch"
+            );
+            for (mom_index, (lhs_mom, rhs_mom)) in lhs_event
+                .kinematic_configuration
+                .0
+                .iter()
+                .zip(rhs_event.kinematic_configuration.0.iter())
+                .enumerate()
+            {
+                assert_four_momentum_approx_eq(
+                    lhs_mom,
+                    rhs_mom,
+                    &format!(
+                        "sample {sample_index} event {group_index}:{event_index} incoming momentum {mom_index}"
+                    ),
+                );
+            }
+            for (mom_index, (lhs_mom, rhs_mom)) in lhs_event
+                .kinematic_configuration
+                .1
+                .iter()
+                .zip(rhs_event.kinematic_configuration.1.iter())
+                .enumerate()
+            {
+                assert_four_momentum_approx_eq(
+                    lhs_mom,
+                    rhs_mom,
+                    &format!(
+                        "sample {sample_index} event {group_index}:{event_index} outgoing momentum {mom_index}"
+                    ),
+                );
+            }
+            assert_eq!(
+                lhs_event.additional_weights.weights.len(),
+                rhs_event.additional_weights.weights.len(),
+                "sample {sample_index} event {group_index}:{event_index} additional-weight count mismatch"
+            );
+            for ((lhs_key, lhs_weight), (rhs_key, rhs_weight)) in lhs_event
+                .additional_weights
+                .weights
+                .iter()
+                .zip(rhs_event.additional_weights.weights.iter())
+            {
+                assert_eq!(
+                    lhs_key, rhs_key,
+                    "sample {sample_index} event {group_index}:{event_index} additional-weight key mismatch"
+                );
+                assert_complex_approx_eq(
+                    lhs_weight,
+                    rhs_weight,
+                    &format!(
+                        "sample {sample_index} event {group_index}:{event_index} additional weight {lhs_key:?}"
+                    ),
+                );
+            }
+        }
+    }
+}
+
+fn assert_four_momentum_approx_eq(
+    lhs: &gammalooprs::momentum::FourMomentum<gammalooprs::utils::F<f64>>,
+    rhs: &gammalooprs::momentum::FourMomentum<gammalooprs::utils::F<f64>>,
+    label: &str,
+) {
+    assert_real_approx_eq(lhs.temporal.value.0, rhs.temporal.value.0, label);
+    assert_real_approx_eq(lhs.spatial.px.0, rhs.spatial.px.0, label);
+    assert_real_approx_eq(lhs.spatial.py.0, rhs.spatial.py.0, label);
+    assert_real_approx_eq(lhs.spatial.pz.0, rhs.spatial.pz.0, label);
+}
+
+fn assert_complex_approx_eq(lhs: &Complex<F<f64>>, rhs: &Complex<F<f64>>, label: &str) {
+    let lhs = Complex::new(lhs.re.0, lhs.im.0);
+    let rhs = Complex::new(rhs.re.0, rhs.im.0);
+    let delta = complex_distance(lhs, rhs);
+    let scale = lhs
+        .re
+        .abs()
+        .max(lhs.im.abs())
+        .max(rhs.re.abs())
+        .max(rhs.im.abs());
+    let tolerance = 1.0e-12_f64.max(1.0e-12_f64 * scale);
+    assert!(
+        delta <= tolerance,
+        "{label} mismatch: left={lhs:?} right={rhs:?} delta={delta} tolerance={tolerance}"
+    );
+}
+
+fn assert_optional_real_approx_eq(lhs: Option<&F<f64>>, rhs: Option<&F<f64>>, label: &str) {
+    match (lhs, rhs) {
+        (None, None) => {}
+        (Some(lhs), Some(rhs)) => assert_real_approx_eq(lhs.0, rhs.0, label),
+        _ => panic!("{label} presence mismatch"),
+    }
+}
+
+fn assert_real_approx_eq(lhs: f64, rhs: f64, label: &str) {
+    let delta = (lhs - rhs).abs();
+    let scale = lhs.abs().max(rhs.abs());
+    let tolerance = 1.0e-12_f64.max(1.0e-12_f64 * scale);
+    assert!(
+        delta <= tolerance,
+        "{label} mismatch: left={lhs:+.16e} right={rhs:+.16e} delta={delta:+.16e} tolerance={tolerance:+.16e}"
+    );
+}
+
+fn average_evaluator_batch_sizes(
+    result: &gammalooprs::integrands::evaluation::BatchSampleEvaluationResult,
+) -> Vec<f64> {
+    result
+        .samples
+        .iter()
+        .filter_map(|sample| {
+            sample
+                .evaluation
+                .evaluation_metadata
+                .as_ref()
+                .and_then(|metadata| metadata.average_evaluator_batch_size)
+        })
+        .collect()
+}
+
+fn sample_has_additional_event_weights(
+    result: &gammalooprs::integrands::evaluation::SampleEvaluationResult,
+) -> bool {
+    result
+        .evaluation
+        .event_groups
+        .iter()
+        .flat_map(|group| group.iter())
+        .any(|event| !event.additional_weights.weights.is_empty())
+}
+
+fn setup_gg_hhh_batched_evaluation_cli(
+    test_name: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=true global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            "set global kv global.generation.compile.inline_asm=true global.generation.compile.optimization_level=O1 global.generation.compile.fast_math=true global.generation.compile.unsafe_math=true",
+            "set global kv global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=true",
+            "import model sm-default",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[500.0,0.0,0.0,500.0],[500.0,0.0,0.0,-500.0],[438.5555662246945,155.3322001835378,348.0160396513587,-177.3773615718412],[356.3696374921922,-16.802389008511,-318.7291102436005,97.48719163688098],"dependent"],"helicities":[1,1,0,0,0]}}'"#,
+            "reset processes",
+            r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
+                    --only-diagrams
+                    --numerator-grouping only_detect_zeroes
+                    --select-graphs GL15
+                    --loop-momentum-bases GL15=8
+                    --global-prefactor-projector '1𝑖 * gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
+                                                    * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
+                                                    * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+                    -p gg_hhh
+                    -i 1L"#,
+            "generate",
+            "set model MT=173.0",
+            "set model WT=0.0",
+            "set model ymt=173.0",
+            r#"set process -p gg_hhh -i 1L string '
+[general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+
+[integrator]
+gammaloop_batch_size = 1
+
+[stability]
+rotation_axis = []
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+  [500.0, 0.0, 0.0, 500.0],
+  [500.0, 0.0, 0.0, -500.0],
+  [438.5555662246945, 155.3322001835378, 348.0160396513587, -177.3773615718412],
+  [356.3696374921922, -16.802389008511, -318.7291102436005, 97.48719163688098],
+  "dependent"
+]
+helicities = [1, 1, 0, 0, 0]
+
+[subtraction]
+disable_threshold_subtraction = false
+'"#,
+        ],
+    )?;
+
+    Ok(cli)
+}
+
+fn setup_epem_ddxg_batched_evaluation_cli(
+    test_name: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+
+    run_commands(
+        &mut cli,
+        &[
+            "set global kv global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.evaluator.compile=true global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true",
+            "import model sm-default",
+            r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[32.0,0.0,0.0,32.0],[32.0,0.0,0.0,-32.0]],"helicities":[1,1]}}'"#,
+            "set default-runtime kv subtraction.disable_threshold_subtraction=true",
+            "reset processes",
+            "generate e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams",
+            "generate",
+            r#"set process string '
+[general]
+generate_events = true
+store_additional_weights_in_event = true
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+
+[integrator]
+gammaloop_batch_size = 1
+
+[quantities.leading_jet_pt]
+type = "jet_pt"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 0.0
+
+[quantities.jet_count]
+type = "jet_count"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 0.0
+
+[quantities.down_energy]
+type = "particle_scalar"
+pdgs = [1, -1]
+quantity = "E"
+
+[selectors.leading_jet_pt_cut]
+quantity = "leading_jet_pt"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 0.0
+
+[observables.leading_jet_pt_hist]
+quantity = "leading_jet_pt"
+entry_selection = "leading_only"
+phase = "real"
+x_min = 0.0
+x_max = 1000.0
+n_bins = 8
+
+[observables.down_energy_hist]
+quantity = "down_energy"
+entry_selection = "all"
+phase = "real"
+x_min = 0.0
+x_max = 1000.0
+n_bins = 8
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+phase = "real"
+x_min = 0.0
+x_max = 6.0
+n_bins = 6
+
+[subtraction]
+disable_threshold_subtraction = true
+'"#,
+        ],
+    )?;
+
+    Ok(cli)
 }
 
 #[test]
@@ -1659,6 +2202,92 @@ fn test_multi_integrand_batching_preserves_results() -> Result<()> {
     assert_integration_results_match_ignoring_timings(&single_batch_result, &many_batches_result);
 
     clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn test_batched_evaluation() -> Result<()> {
+    let gg_hhh_test_name = "test_batched_evaluation_gg_hhh";
+    let gg_hhh_base = setup_gg_hhh_batched_evaluation_cli(gg_hhh_test_name)?;
+    let gg_hhh_points = vec![default_xspace_point(&gg_hhh_base)?; 5];
+    let mut gg_hhh_scalar = gg_hhh_base.clone();
+    let mut gg_hhh_batched = gg_hhh_base;
+
+    gg_hhh_scalar
+        .run_command("set process -p gg_hhh -i 1L kv integrator.gammaloop_batch_size=1")?;
+    gg_hhh_batched
+        .run_command("set process -p gg_hhh -i 1L kv integrator.gammaloop_batch_size=3")?;
+
+    let gg_hhh_scalar_result = evaluate_samples_api(&mut gg_hhh_scalar, &gg_hhh_points, false)?;
+    let gg_hhh_batched_result = evaluate_samples_api(&mut gg_hhh_batched, &gg_hhh_points, false)?;
+
+    assert_batch_evaluation_results_match_ignoring_timings(
+        &gg_hhh_scalar_result,
+        &gg_hhh_batched_result,
+    );
+
+    let gg_hhh_scalar_batch_sizes = average_evaluator_batch_sizes(&gg_hhh_scalar_result);
+    assert!(
+        !gg_hhh_scalar_batch_sizes.is_empty(),
+        "gg_hhh scalar evaluation should surface evaluator batch statistics"
+    );
+    assert!(
+        gg_hhh_scalar_batch_sizes
+            .iter()
+            .all(|size| (*size - 1.0).abs() < 1e-12)
+    );
+    assert!(
+        average_evaluator_batch_sizes(&gg_hhh_batched_result)
+            .into_iter()
+            .any(|size| size > 1.0),
+        "gg_hhh batched evaluation should reach evaluator call sites with batches larger than one"
+    );
+
+    clean_test(&gg_hhh_scalar.cli_settings.state.folder);
+
+    let epem_test_name = "test_batched_evaluation_epem_ddxg";
+    let epem_base = setup_epem_ddxg_batched_evaluation_cli(epem_test_name)?;
+    let epem_points = vec![default_momentum_space_point(&epem_base)?; 5];
+    let mut epem_scalar = epem_base.clone();
+    let mut epem_batched = epem_base;
+
+    epem_scalar.run_command("set process kv integrator.gammaloop_batch_size=1")?;
+    epem_batched.run_command("set process kv integrator.gammaloop_batch_size=3")?;
+
+    let epem_scalar_result = evaluate_samples_api(&mut epem_scalar, &epem_points, true)?;
+    let epem_batched_result = evaluate_samples_api(&mut epem_batched, &epem_points, true)?;
+
+    assert_batch_evaluation_results_match_ignoring_timings(
+        &epem_scalar_result,
+        &epem_batched_result,
+    );
+
+    let epem_scalar_batch_sizes = average_evaluator_batch_sizes(&epem_scalar_result);
+    assert!(
+        !epem_scalar_batch_sizes.is_empty(),
+        "e+ e- > d d~ g scalar evaluation should surface evaluator batch statistics"
+    );
+    assert!(
+        epem_scalar_batch_sizes
+            .iter()
+            .all(|size| (*size - 1.0).abs() < 1e-12)
+    );
+    assert!(
+        average_evaluator_batch_sizes(&epem_batched_result)
+            .into_iter()
+            .any(|size| size > 1.0),
+        "e+ e- > d d~ g batched evaluation should reach evaluator call sites with batches larger than one"
+    );
+    assert!(
+        epem_batched_result
+            .samples
+            .iter()
+            .all(sample_has_additional_event_weights),
+        "batched differential evaluation should retain generated-event additional weights"
+    );
+
+    clean_test(&epem_scalar.cli_settings.state.folder);
     Ok(())
 }
 

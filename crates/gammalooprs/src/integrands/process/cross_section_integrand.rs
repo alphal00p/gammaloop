@@ -12,9 +12,13 @@ use crate::{
         HasIntegrand,
         evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
         process::{
-            ChannelIndex, ParamBuilder,
-            evaluators::{EvaluatorStack, evaluate_evaluator_single},
+            BatchedSampleTiming, ChannelIndex, GraphTermBatchRequest, ParamBuilder,
+            evaluators::{
+                EvaluatorStack, MaterializedInputParams, OwnedOrientations,
+                evaluate_evaluator_single,
+            },
             param_builder::LUParams,
+            record_shared_evaluator_flush,
         },
     },
     model::Model,
@@ -307,6 +311,14 @@ pub struct CrossSectionGraphTerm {
 }
 
 impl CrossSectionGraphTerm {
+    fn owned_orientations(&self, sample: &MomentumSample<f64>) -> OwnedOrientations<OrientationID> {
+        sample
+            .sample
+            .orientation
+            .map(|orientation| OwnedOrientations::Single(OrientationID::from(orientation)))
+            .unwrap_or(OwnedOrientations::All)
+    }
+
     pub fn from_cross_section_graph(
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
@@ -1078,6 +1090,539 @@ impl GraphTerm for CrossSectionGraphTerm {
         differential_result.integrand_result = final_result;
         Ok(differential_result)
     }
+
+    fn evaluate_batch_f64(
+        &mut self,
+        requests: &[GraphTermBatchRequest<'_>],
+        model: &Model,
+        settings: &RuntimeSettings,
+        mut event_processing_runtime: Option<&mut EventProcessingRuntime>,
+        _rotation: &Rotation,
+        timings: &mut [BatchedSampleTiming],
+    ) -> Result<Vec<GraphEvaluationResult<f64>>> {
+        if requests.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        #[derive(Clone)]
+        struct CrossSectionSampleState {
+            sample_index: usize,
+            momentum_sample: MomentumSample<f64>,
+            orientations: OwnedOrientations<OrientationID>,
+            cut_results: Vec<Complex<F<f64>>>,
+            cut_threshold_counterterms: Vec<Complex<F<f64>>>,
+            differential_result: GraphEvaluationResult<f64>,
+            accepted_event_group: GenericEventGroup<f64>,
+        }
+
+        struct CutBatchState {
+            accepted_event: Option<GenericEvent<f64>>,
+            threshold_counterterm_weights: Vec<Complex<F<f64>>>,
+            bare_cut_total: Complex<F<f64>>,
+        }
+
+        #[derive(Clone)]
+        struct PassOneRequest {
+            request_position: usize,
+            sample_index: usize,
+            prefactor: Complex<F<f64>>,
+            esurface_derivatives: DualOrNot<F<f64>>,
+            input: MaterializedInputParams<f64>,
+        }
+
+        #[derive(Clone)]
+        struct PassTwoRequest {
+            request_position: usize,
+            sample_index: usize,
+            prefactor: Complex<F<f64>>,
+            ct_result: Complex<F<f64>>,
+            params: Vec<Complex<F<f64>>>,
+        }
+
+        let zero = requests[0].sample.zero();
+        let center = LoopMomenta::from_iter(vec![
+            ThreeMomentum {
+                px: zero.zero(),
+                py: zero.zero(),
+                pz: zero.zero(),
+            };
+            requests[0].sample.loop_moms().len()
+        ]);
+        let masses = self.graph.get_real_mass_vector(model);
+        let hel = settings.kinematics.externals.get_helicities();
+
+        let mut sample_states = requests
+            .iter()
+            .map(|request| {
+                let momentum_sample = if let Some((channel_id, _alpha)) = request.channel_id {
+                    MomentumSample {
+                        sample: self.multi_channeling_setup.reinterpret_loop_momenta_impl(
+                            channel_id,
+                            &request.sample.sample,
+                            request.sample.sample.loop_mom_cache_id,
+                        ),
+                    }
+                } else {
+                    request.sample.clone()
+                };
+
+                CrossSectionSampleState {
+                    sample_index: request.sample_index,
+                    orientations: self.owned_orientations(&momentum_sample),
+                    momentum_sample,
+                    cut_results: Vec::new(),
+                    cut_threshold_counterterms: Vec::new(),
+                    differential_result: GraphEvaluationResult::zero(zero),
+                    accepted_event_group: GenericEventGroup::default(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        for (raised_cut, raised_cut_group) in self.raised_data.raised_cut_groups.iter_enumerated() {
+            let max_occurance = raised_cut_group.related_esurface_group.max_occurence;
+            let representative_esurface = &self.cut_esurface[raised_cut_group.cuts[0]];
+            let mut cut_states = (0..sample_states.len())
+                .map(|_| None)
+                .collect::<Vec<Option<CutBatchState>>>();
+            let mut pass_one_by_count = vec![Vec::<PassOneRequest>::new(); max_occurance];
+
+            for (request_position, sample_state) in sample_states.iter_mut().enumerate() {
+                let start = Instant::now();
+                let momentum_sample = &sample_state.momentum_sample;
+
+                let function = |t: &F<f64>| {
+                    representative_esurface.compute_self_and_r_derivative(
+                        t,
+                        momentum_sample.loop_moms(),
+                        &center,
+                        momentum_sample.external_moms(),
+                        &masses,
+                        &self.graph.loop_momentum_basis,
+                    )
+                };
+
+                let (guess, _) = representative_esurface.get_radius_guess(
+                    momentum_sample.loop_moms(),
+                    momentum_sample.external_moms(),
+                    &self.graph.loop_momentum_basis,
+                );
+
+                let solution = newton_iteration_and_derivative(
+                    &guess,
+                    function,
+                    &F::from_f64(1.0),
+                    2000,
+                    &F::from_f64(settings.kinematics.e_cm),
+                );
+
+                let mut event_timing = Duration::ZERO;
+                let event = if settings.should_generate_events() {
+                    let event_start = Instant::now();
+                    let generated = self.generate_event_for_cut(
+                        model,
+                        &solution,
+                        momentum_sample,
+                        self.raised_data.raised_cut_groups[raised_cut].cuts[0],
+                        &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
+                    )?;
+                    event_timing += event_start.elapsed();
+                    Some(generated)
+                } else {
+                    None
+                };
+
+                let mut accepted_event = event;
+                let mut selectors_pass = true;
+                if let Some(evt) = accepted_event.as_mut() {
+                    sample_state.differential_result.generated_event_count += 1;
+                    let event_start = Instant::now();
+                    if let Some(runtime) = event_processing_runtime.as_deref_mut() {
+                        if runtime.has_selectors() || runtime.has_observables() {
+                            selectors_pass = runtime.process_event(evt);
+                        }
+                    }
+                    event_timing += event_start.elapsed();
+                    if !selectors_pass {
+                        accepted_event = None;
+                    }
+                }
+                sample_state.differential_result.event_processing_time += event_timing;
+
+                if !selectors_pass {
+                    let zero = Complex::new_re(momentum_sample.zero());
+                    for _ in 1..=max_occurance {
+                        sample_state.cut_threshold_counterterms.push(zero.clone());
+                        sample_state.cut_results.push(zero.clone());
+                    }
+                    timings[sample_state.sample_index].add_direct_integrand_time(start.elapsed());
+                    continue;
+                }
+
+                cut_states[request_position] = Some(CutBatchState {
+                    accepted_event,
+                    threshold_counterterm_weights: Vec::with_capacity(max_occurance),
+                    bare_cut_total: Complex::new_re(momentum_sample.zero()),
+                });
+
+                for num_esurfaces in 1..=max_occurance {
+                    let dual_shape = if num_esurfaces > 1 {
+                        Some(HyperDual::<F<f64>>::new(
+                            self.raised_data.dual_shapes[num_esurfaces - 2].clone(),
+                        ))
+                    } else {
+                        None
+                    };
+
+                    let (tstar, h_function, esurface_derivatives, rescaled_momenta) =
+                        if let Some(dual_shape) = dual_shape {
+                            let dual_t_for_integrand =
+                                dual_shape.variable(0, solution.solution.clone());
+                            let dual_h_function =
+                                h_dual(&dual_t_for_integrand, None, None, &settings.lu_h_function);
+                            let dual_momenta_for_integrand = momentum_sample
+                                .loop_moms()
+                                .rescale_with_hyper_dual(&dual_t_for_integrand, None);
+
+                            let dual_shape_for_esurface =
+                                HyperDual::<F<f64>>::new(shape_for_t_derivatives(num_esurfaces));
+                            let dual_t_for_esurface =
+                                dual_shape_for_esurface.variable(0, solution.solution.clone());
+                            let dual_momenta_for_esurface = momentum_sample
+                                .loop_moms()
+                                .rescale_with_hyper_dual(&dual_t_for_esurface, None);
+
+                            let dual_externals = momentum_sample
+                                .external_moms()
+                                .iter()
+                                .map(|mom| FourMomentum {
+                                    temporal: Energy {
+                                        value: new_constant(
+                                            &dual_t_for_esurface,
+                                            &mom.temporal.value,
+                                        ),
+                                    },
+                                    spatial: ThreeMomentum {
+                                        px: new_constant(&dual_t_for_esurface, &mom.spatial.px),
+                                        py: new_constant(&dual_t_for_esurface, &mom.spatial.py),
+                                        pz: new_constant(&dual_t_for_esurface, &mom.spatial.pz),
+                                    },
+                                })
+                                .collect();
+
+                            let dual_e_surface = representative_esurface.compute_from_dual_momenta(
+                                &self.graph.loop_momentum_basis,
+                                &masses,
+                                &dual_momenta_for_esurface,
+                                &dual_externals,
+                            );
+
+                            let mut momentum_sample_with_duals = momentum_sample.clone();
+                            momentum_sample_with_duals.sample.dual_loop_moms =
+                                Some(dual_momenta_for_integrand);
+
+                            (
+                                DualOrNot::Dual(dual_t_for_integrand),
+                                DualOrNot::Dual(dual_h_function),
+                                DualOrNot::Dual(dual_e_surface),
+                                momentum_sample_with_duals,
+                            )
+                        } else {
+                            let h_function =
+                                h(&solution.solution, None, None, &settings.lu_h_function);
+                            let rescaled_momenta = momentum_sample
+                                .rescaled_loop_momenta(&solution.solution, Subspace::None);
+
+                            (
+                                DualOrNot::NonDual(solution.solution.clone()),
+                                DualOrNot::NonDual(h_function),
+                                DualOrNot::NonDual(solution.derivative_at_solution.clone()),
+                                rescaled_momenta,
+                            )
+                        };
+
+                    let lu_params = LUParams { h_function, tstar };
+                    let prefactor = Complex::new_re(
+                        if let Some((channel_index, alpha)) = requests[request_position].channel_id
+                        {
+                            if matches!(lu_params.tstar, DualOrNot::Dual(_)) {
+                                panic!("multi channeling with duals not supported yet");
+                            }
+                            self.multi_channeling_setup.compute_prefactor_impl(
+                                channel_index,
+                                &rescaled_momenta,
+                                model,
+                                &alpha,
+                            )
+                        } else {
+                            F::from_f64(1.0)
+                        },
+                    );
+
+                    let params = MaterializedInputParams::from_input(
+                        <f64 as crate::integrands::process::GenericEvaluatorFloat>::get_parameters(
+                            &mut self.param_builder,
+                            (settings.general.enable_cache, settings.general.debug_cache),
+                            &self.graph,
+                            &rescaled_momenta,
+                            hel,
+                            &settings.additional_params(),
+                            None,
+                            None,
+                            Some(&lu_params),
+                        ),
+                    );
+
+                    pass_one_by_count[num_esurfaces - 1].push(PassOneRequest {
+                        request_position,
+                        sample_index: sample_state.sample_index,
+                        prefactor,
+                        esurface_derivatives,
+                        input: params,
+                    });
+                }
+
+                timings[sample_state.sample_index].add_direct_integrand_time(start.elapsed());
+            }
+
+            let mut pass_two_by_count = vec![Vec::<PassTwoRequest>::new(); max_occurance];
+            for num_esurfaces in 1..=max_occurance {
+                let pass_one_requests = &pass_one_by_count[num_esurfaces - 1];
+                if pass_one_requests.is_empty() {
+                    continue;
+                }
+
+                let inputs = pass_one_requests
+                    .iter()
+                    .map(|request| request.input.clone())
+                    .collect::<Vec<_>>();
+                let orientations = pass_one_requests
+                    .iter()
+                    .map(|request| sample_states[request.request_position].orientations)
+                    .collect::<Vec<_>>();
+                let owners = pass_one_requests
+                    .iter()
+                    .map(|request| request.sample_index)
+                    .collect::<Vec<_>>();
+
+                let eval_start = Instant::now();
+                let values = self.integrand[raised_cut][num_esurfaces - 1].evaluate_batch_f64(
+                    &inputs,
+                    &orientations,
+                    &self.orientations,
+                    &self.orientation_filter,
+                    settings,
+                )?;
+                record_shared_evaluator_flush(timings, &owners, eval_start.elapsed());
+
+                for (request, value) in pass_one_requests.iter().zip(values) {
+                    let result = value
+                        .into_iter()
+                        .next()
+                        .expect("cross-section pass one should yield a single result");
+                    let ct_result = if settings.subtraction.disable_threshold_subtraction {
+                        Complex::new_re(
+                            sample_states[request.request_position]
+                                .momentum_sample
+                                .zero(),
+                        )
+                    } else {
+                        todo!();
+                    };
+
+                    let mut params_for_pass_two = vec![];
+                    match result {
+                        DualOrNot::Dual(dual_result) => {
+                            params_for_pass_two
+                                .extend_from_slice(&extract_t_derivatives_complex(dual_result));
+                        }
+                        DualOrNot::NonDual(non_dual_result) => {
+                            params_for_pass_two.push(non_dual_result);
+                        }
+                    }
+
+                    match &request.esurface_derivatives {
+                        DualOrNot::Dual(dual_e_surface) => {
+                            extract_t_derivatives(dual_e_surface.clone())[1..]
+                                .iter()
+                                .for_each(|value| {
+                                    params_for_pass_two.push(Complex::new_re(value.clone()));
+                                });
+                        }
+                        DualOrNot::NonDual(non_dual_e_surface) => {
+                            params_for_pass_two.push(Complex::new_re(non_dual_e_surface.clone()));
+                        }
+                    }
+
+                    pass_two_by_count[num_esurfaces - 1].push(PassTwoRequest {
+                        request_position: request.request_position,
+                        sample_index: request.sample_index,
+                        prefactor: request.prefactor.clone(),
+                        ct_result,
+                        params: params_for_pass_two,
+                    });
+                }
+            }
+
+            for num_esurfaces in 1..=max_occurance {
+                let pass_two_requests = &pass_two_by_count[num_esurfaces - 1];
+                if pass_two_requests.is_empty() {
+                    continue;
+                }
+
+                let params = pass_two_requests
+                    .iter()
+                    .map(|request| request.params.clone())
+                    .collect::<Vec<_>>();
+                let owners = pass_two_requests
+                    .iter()
+                    .map(|request| request.sample_index)
+                    .collect::<Vec<_>>();
+
+                let eval_start = Instant::now();
+                let values = self.raised_data.pass_two_evaluators[num_esurfaces - 1]
+                    .evaluate_batch_single_f64(&params);
+                record_shared_evaluator_flush(timings, &owners, eval_start.elapsed());
+
+                for (request, value) in pass_two_requests.iter().zip(values) {
+                    let cut_state = cut_states[request.request_position]
+                        .as_mut()
+                        .expect("missing cut state for pass-two result");
+                    let bare_contribution = value * request.prefactor.clone();
+                    cut_state.bare_cut_total += bare_contribution.clone();
+                    cut_state
+                        .threshold_counterterm_weights
+                        .push(request.ct_result.clone());
+                    sample_states[request.request_position]
+                        .cut_threshold_counterterms
+                        .push(request.ct_result.clone());
+                    sample_states[request.request_position]
+                        .cut_results
+                        .push(bare_contribution);
+                }
+            }
+
+            for (request_position, sample_state) in sample_states.iter_mut().enumerate() {
+                let Some(cut_state) = cut_states[request_position].take() else {
+                    continue;
+                };
+
+                if let Some(mut event) = cut_state.accepted_event {
+                    let threshold_counterterm_total =
+                        cut_state.threshold_counterterm_weights.iter().fold(
+                            Complex::new_re(sample_state.momentum_sample.zero()),
+                            |acc, value| acc + value.clone(),
+                        );
+                    event.weight = cut_state.bare_cut_total.clone() + threshold_counterterm_total;
+
+                    if settings.general.store_additional_weights_in_event {
+                        event.additional_weights.weights.insert(
+                            AdditionalWeightKey::Original,
+                            cut_state.bare_cut_total.clone(),
+                        );
+                        for (subset_index, threshold_counterterm) in cut_state
+                            .threshold_counterterm_weights
+                            .into_iter()
+                            .enumerate()
+                        {
+                            event.additional_weights.weights.insert(
+                                AdditionalWeightKey::ThresholdCounterterm { subset_index },
+                                threshold_counterterm,
+                            );
+                        }
+                    }
+
+                    sample_state.differential_result.accepted_event_count += 1;
+                    if settings.should_buffer_generated_events() {
+                        sample_state.accepted_event_group.push(event);
+                    }
+                }
+            }
+        }
+
+        Ok(sample_states
+            .into_iter()
+            .map(|mut sample_state| {
+                let momentum_sample = &sample_state.momentum_sample;
+                let mut all_cut_result = Complex::new_re(momentum_sample.zero());
+                for (result, ct_result) in sample_state
+                    .cut_results
+                    .iter()
+                    .zip(sample_state.cut_threshold_counterterms.iter())
+                {
+                    all_cut_result += result + ct_result;
+                }
+
+                let flux_factor = if settings.general.disable_flux_factor {
+                    F::from_f64(1.0)
+                } else {
+                    match momentum_sample.external_moms().len() {
+                        1 => {
+                            momentum_sample.one()
+                                / (F::from_f64(2.0)
+                                    * &momentum_sample
+                                        .external_moms()
+                                        .first()
+                                        .as_ref()
+                                        .unwrap()
+                                        .temporal
+                                        .value)
+                        }
+                        2 => {
+                            let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
+                            let mom_2 = &(momentum_sample.external_moms()[ExternalIndex::from(1)]);
+                            let mass_factor = self
+                                .graph
+                                .initial_state_cut
+                                .iter_edges(&self.graph)
+                                .map(|(_, e)| e.data.mass.value(model, &self.param_builder).unwrap())
+                                .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
+                                    acc * &mass * &mass
+                                })
+                                .re;
+
+                            let f = F::from_f64(4.0)
+                                * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+
+                            momentum_sample.one() / f
+                                * if settings.general.use_picobarns {
+                                    F::from_ff64(PICOBARN_CONVERSION)
+                                } else {
+                                    F::from_f64(1.0)
+                                }
+                        }
+                        _ => unimplemented!(
+                            "Flux factor for more than 3 or more incoming particles not implemented yet"
+                        ),
+                    }
+                };
+
+                let final_result = all_cut_result * flux_factor.clone();
+                if settings.should_buffer_generated_events() {
+                    let flux_factor = Complex::new_re(flux_factor);
+                    for event in sample_state.accepted_event_group.iter_mut() {
+                        event.weight *= flux_factor.clone();
+                        if !event.additional_weights.weights.is_empty() {
+                            event.additional_weights.weights.insert(
+                                AdditionalWeightKey::FullMultiplicativeFactor,
+                                flux_factor.clone(),
+                            );
+                        }
+                    }
+
+                    if !sample_state.accepted_event_group.is_empty() {
+                        sample_state
+                            .differential_result
+                            .event_groups
+                            .push(sample_state.accepted_event_group);
+                    }
+                }
+
+                sample_state.differential_result.integrand_result = final_result;
+                sample_state.differential_result
+            })
+            .collect())
+    }
+
     fn name(&self) -> String {
         self.graph.name.clone()
     }

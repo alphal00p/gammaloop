@@ -595,6 +595,8 @@ pub struct EvaluationMetaData {
     pub total_timing: Duration,
     pub integrand_evaluation_time: Duration,
     pub evaluator_evaluation_time: Duration,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_evaluator_batch_size: Option<f64>,
     pub parameterization_time: Duration,
     pub event_processing_time: Duration,
     pub generated_event_count: usize,
@@ -603,6 +605,10 @@ pub struct EvaluationMetaData {
     pub is_nan: bool,
     pub loop_momenta_escalation: Option<LoopMomentaEscalationMetrics>,
     pub stability_results: Vec<StabilityResult>,
+    #[serde(skip_serializing)]
+    pub(crate) evaluator_batch_size_sum: usize,
+    #[serde(skip_serializing)]
+    pub(crate) evaluator_batch_size_count: usize,
 }
 
 impl Display for EvaluationMetaData {
@@ -676,6 +682,7 @@ impl EvaluationMetaData {
             total_timing: Duration::ZERO,
             integrand_evaluation_time: Duration::ZERO,
             evaluator_evaluation_time: Duration::ZERO,
+            average_evaluator_batch_size: None,
             parameterization_time: Duration::ZERO,
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
@@ -684,11 +691,20 @@ impl EvaluationMetaData {
             is_nan: false,
             loop_momenta_escalation: None,
             stability_results: Vec::new(),
+            evaluator_batch_size_sum: 0,
+            evaluator_batch_size_count: 0,
         }
     }
 
     pub(crate) fn final_precision(&self) -> Option<Precision> {
         self.stability_results.last().map(|result| result.precision)
+    }
+
+    pub(crate) fn record_evaluator_batch_size(&mut self, batch_size: usize) {
+        self.evaluator_batch_size_sum += batch_size;
+        self.evaluator_batch_size_count += 1;
+        self.average_evaluator_batch_size =
+            Some(self.evaluator_batch_size_sum as f64 / self.evaluator_batch_size_count as f64);
     }
 }
 
@@ -699,6 +715,8 @@ pub struct StatisticsCounter {
     num_sample_points: usize,
     sum_integrand_evaluation_time: Duration,
     sum_evaluator_evaluation_time: Duration,
+    sum_evaluator_batch_size: usize,
+    num_evaluator_batch_requests: usize,
     sum_parameterization_time: Duration,
     sum_event_time: Duration,
     sum_integrator_overhead_time: Duration,
@@ -723,6 +741,10 @@ impl StatisticsCounter {
                     data_entry.evaluation_metadata.integrand_evaluation_time;
                 accumulator.sum_evaluator_evaluation_time +=
                     data_entry.evaluation_metadata.evaluator_evaluation_time;
+                accumulator.sum_evaluator_batch_size +=
+                    data_entry.evaluation_metadata.evaluator_batch_size_sum;
+                accumulator.num_evaluator_batch_requests +=
+                    data_entry.evaluation_metadata.evaluator_batch_size_count;
                 accumulator.sum_parameterization_time +=
                     data_entry.evaluation_metadata.parameterization_time;
                 accumulator.sum_event_time += data_entry.evaluation_metadata.event_processing_time;
@@ -775,6 +797,10 @@ impl StatisticsCounter {
                 + other.sum_integrand_evaluation_time,
             sum_evaluator_evaluation_time: self.sum_evaluator_evaluation_time
                 + other.sum_evaluator_evaluation_time,
+            sum_evaluator_batch_size: self.sum_evaluator_batch_size
+                + other.sum_evaluator_batch_size,
+            num_evaluator_batch_requests: self.num_evaluator_batch_requests
+                + other.num_evaluator_batch_requests,
             sum_parameterization_time: self.sum_parameterization_time
                 + other.sum_parameterization_time,
             sum_integrator_overhead_time: self.sum_integrator_overhead_time
@@ -807,6 +833,8 @@ impl StatisticsCounter {
         Self {
             sum_integrand_evaluation_time: Duration::ZERO,
             sum_evaluator_evaluation_time: Duration::ZERO,
+            sum_evaluator_batch_size: 0,
+            num_evaluator_batch_requests: 0,
             sum_parameterization_time: Duration::ZERO,
             sum_event_time: Duration::ZERO,
             sum_integrator_overhead_time: Duration::ZERO,
@@ -947,6 +975,7 @@ impl StatisticsCounter {
             average_parameterization_time_seconds: self.get_avg_param_timing().as_secs_f64(),
             average_integrand_time_seconds: self.get_avg_integrand_timing().as_secs_f64(),
             average_evaluator_time_seconds: self.get_avg_evaluator_timing().as_secs_f64(),
+            average_evaluator_batch_size: self.get_avg_evaluator_batch_size(),
             average_observable_time_seconds: self.get_avg_event_timing().as_secs_f64(),
             average_integrator_time_seconds: self
                 .get_avg_integrator_overhead_timing()
@@ -1078,6 +1107,14 @@ impl StatisticsCounter {
     pub(crate) fn render_status_table(&self) -> String {
         normalize_tabled_separator_rows(&self.build_status_table().to_string())
     }
+
+    pub(crate) fn get_avg_evaluator_batch_size(&self) -> Option<f64> {
+        if self.num_evaluator_batch_requests == 0 {
+            None
+        } else {
+            Some(self.sum_evaluator_batch_size as f64 / self.num_evaluator_batch_requests as f64)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1093,6 +1130,8 @@ mod tests {
             num_sample_points: 10,
             sum_integrand_evaluation_time: Duration::from_micros(414),
             sum_evaluator_evaluation_time: Duration::from_micros(279),
+            sum_evaluator_batch_size: 10,
+            num_evaluator_batch_requests: 10,
             sum_parameterization_time: Duration::from_nanos(5_800),
             sum_event_time: Duration::ZERO,
             sum_integrator_overhead_time: Duration::from_micros(110),

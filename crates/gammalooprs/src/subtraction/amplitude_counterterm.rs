@@ -20,8 +20,12 @@ use crate::{
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
-            ParamBuilder, ThresholdParams,
-            evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
+            BatchedSampleTiming, ParamBuilder, ThresholdParams,
+            evaluators::{
+                EvaluatorStack, MaterializedInputParams, OwnedOrientations,
+                SingleOrAllOrientations, evaluate_evaluator_single,
+            },
+            record_shared_evaluator_flush,
         },
     },
     model::Model,
@@ -102,6 +106,22 @@ impl AmplitudeCountertermAtom {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermEvaluator {
     pub evaluator_stack: RefCell<EvaluatorStack>,
+}
+
+pub(crate) struct AmplitudeCountertermBatchRequest<'a> {
+    pub sample_index: usize,
+    pub sample: &'a MomentumSample<f64>,
+    pub orientations: OwnedOrientations<OrientationID>,
+}
+
+struct PreparedAmplitudeCountertermRequest {
+    request_position: usize,
+    sample_index: usize,
+    esurface_id: EsurfaceID,
+    orientations: OwnedOrientations<OrientationID>,
+    input: MaterializedInputParams<f64>,
+    prefactor: Complex<F<f64>>,
+    prefactor_queue: Option<(usize, Vec<Complex<F<f64>>>)>,
 }
 
 impl AmplitudeCountertermData {
@@ -198,6 +218,178 @@ impl AmplitudeCountertermData {
             }
         }
         result
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn evaluate_batch_f64(
+        &mut self,
+        requests: &[AmplitudeCountertermBatchRequest<'_>],
+        graph: &Graph,
+        model: &Model,
+        esurfaces: &EsurfaceCollection,
+        all_orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        orientation_filter: &linnet::half_edge::subgraph::subset::SubSet<OrientationID>,
+        rotation: &Rotation,
+        settings: &RuntimeSettings,
+        param_builder: &mut ParamBuilder<f64>,
+        timings: &mut [BatchedSampleTiming],
+    ) -> Vec<Complex<F<f64>>> {
+        if requests.is_empty() {
+            return Vec::new();
+        }
+
+        let existing_esurfaces = self
+            .overlap
+            .existing_esurfaces
+            .iter()
+            .map(|e| e.0)
+            .collect::<Vec<_>>();
+        debug!("subtracting esurfaces: {:?}", existing_esurfaces);
+        debug!("overlap structure\n: {}", self.overlap);
+
+        let mut prepared_requests = Vec::new();
+        for (request_position, request) in requests.iter().enumerate() {
+            let start = std::time::Instant::now();
+            let counter_term_builder = CounterTermBuilder::new(
+                graph,
+                model,
+                rotation,
+                settings,
+                esurfaces,
+                request.sample,
+                &self.overlap,
+                &self.evaluators,
+                self.own_group_position,
+                &self.esurface_map,
+            );
+
+            for (group_index, group) in self.overlap.overlap_groups.iter().enumerate() {
+                let overlap_builder = counter_term_builder.new_overlap_builder(group);
+
+                for existing_esurface_id in group.existing_esurfaces.iter() {
+                    let Some(esurface_builder) =
+                        overlap_builder.new_esurface_builder(*existing_esurface_id)
+                    else {
+                        continue;
+                    };
+
+                    let prepared_request = esurface_builder
+                        .solve_rstar()
+                        .rstar_samples()
+                        .prepare_batch_request(
+                            request_position,
+                            request.sample_index,
+                            param_builder,
+                            request.orientations,
+                            group_index,
+                        );
+                    prepared_requests.push(prepared_request);
+                }
+            }
+
+            timings[request.sample_index].add_direct_integrand_time(start.elapsed());
+        }
+
+        let mut results = vec![Complex::new_zero(); requests.len()];
+        if prepared_requests.is_empty() {
+            return results;
+        }
+
+        let mut prefactors = prepared_requests
+            .iter()
+            .map(|request| request.prefactor.clone())
+            .collect::<Vec<_>>();
+
+        let mut prefactor_groups = vec![Vec::<usize>::new(); self.overlap.overlap_groups.len()];
+        for (prepared_index, request) in prepared_requests.iter().enumerate() {
+            if let Some((group_index, _)) = request.prefactor_queue {
+                prefactor_groups[group_index].push(prepared_index);
+            }
+        }
+
+        for (group_index, prepared_indices) in prefactor_groups.into_iter().enumerate() {
+            if prepared_indices.is_empty() {
+                continue;
+            }
+
+            let params = prepared_indices
+                .iter()
+                .map(|&prepared_index| {
+                    prepared_requests[prepared_index]
+                        .prefactor_queue
+                        .as_ref()
+                        .expect("missing prefactor queue entry")
+                        .1
+                        .clone()
+                })
+                .collect::<Vec<_>>();
+            let owners = prepared_indices
+                .iter()
+                .map(|&prepared_index| prepared_requests[prepared_index].sample_index)
+                .collect::<Vec<_>>();
+
+            let evaluator = self.overlap.overlap_groups[group_index]
+                .prefactor_evaluator
+                .as_ref()
+                .expect("prefactor evaluator must exist when queued");
+            let start = std::time::Instant::now();
+            let values = evaluator.borrow_mut().evaluate_batch_single_f64(&params);
+            record_shared_evaluator_flush(timings, &owners, start.elapsed());
+
+            for (prepared_index, value) in prepared_indices.into_iter().zip(values) {
+                prefactors[prepared_index] = value;
+            }
+        }
+
+        let mut esurface_groups = vec![Vec::<usize>::new(); self.evaluators.len()];
+        for (prepared_index, request) in prepared_requests.iter().enumerate() {
+            esurface_groups[request.esurface_id.0].push(prepared_index);
+        }
+
+        for (esurface_index, prepared_indices) in esurface_groups.into_iter().enumerate() {
+            if prepared_indices.is_empty() {
+                continue;
+            }
+
+            let inputs = prepared_indices
+                .iter()
+                .map(|&prepared_index| prepared_requests[prepared_index].input.clone())
+                .collect::<Vec<_>>();
+            let orientations = prepared_indices
+                .iter()
+                .map(|&prepared_index| prepared_requests[prepared_index].orientations)
+                .collect::<Vec<_>>();
+            let owners = prepared_indices
+                .iter()
+                .map(|&prepared_index| prepared_requests[prepared_index].sample_index)
+                .collect::<Vec<_>>();
+
+            let start = std::time::Instant::now();
+            let values = self.evaluators[EsurfaceID::from(esurface_index)]
+                .evaluator_stack
+                .borrow_mut()
+                .evaluate_batch_f64(
+                    &inputs,
+                    &orientations,
+                    all_orientations,
+                    orientation_filter,
+                    settings,
+                )
+                .expect("Amplitude counterterm evaluator stack failed");
+            record_shared_evaluator_flush(timings, &owners, start.elapsed());
+
+            for (prepared_index, value) in prepared_indices.into_iter().zip(values) {
+                let request = &prepared_requests[prepared_index];
+                let combined: Complex<F<f64>> = value
+                    .into_iter()
+                    .map(DualOrNot::unwrap_real)
+                    .fold(Complex::<F<f64>>::new_zero(), |acc, entry| acc + entry)
+                    * prefactors[prepared_index].clone();
+                results[request.request_position] += combined;
+            }
+        }
+
+        results
     }
 }
 
@@ -417,6 +609,89 @@ struct RstarSample<'a, T: FloatLike> {
     rstar_sample: MomentumSample<T>,
 }
 
+impl<'a> RstarSample<'a, f64> {
+    fn prepare_batch_request(
+        &self,
+        request_position: usize,
+        sample_index: usize,
+        param_builder: &mut ParamBuilder<f64>,
+        orientations: OwnedOrientations<OrientationID>,
+        overlap_group_index: usize,
+    ) -> PreparedAmplitudeCountertermRequest {
+        let esurface_ct_builder = &self.rstar_solution.esurface_ct_builder;
+        let ct_builder = esurface_ct_builder.overlap_builder.counterterm_builder;
+        let esurface_id = esurface_ct_builder.esurface_id;
+
+        let model_params = param_builder
+            .model_values()
+            .iter()
+            .map(|c| Complex::new(F::from_ff64(c.re), F::from_ff64(c.im)))
+            .collect::<Vec<_>>();
+
+        let prefactor_queue = if ct_builder.overlap_structure.overlap_groups.len() < 2 {
+            None
+        } else {
+            Some((
+                overlap_group_index,
+                self.prefactor_params(&self.rstar_sample, model_params),
+            ))
+        };
+
+        let radius = self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .radius
+            .clone();
+        let radius_star = self.rstar_solution.solution.solution;
+        let e_cm = &ct_builder.e_cm;
+        let settings = &ct_builder
+            .settings
+            .subtraction
+            .local_ct_settings
+            .uv_localisation;
+        let integrated_settings = &ct_builder.settings.subtraction.integrated_ct_settings;
+
+        let uv_damp_plus = evaluate_uv_damper(&radius, &radius_star, e_cm, settings);
+        let uv_damp_minus = evaluate_uv_damper(&-&radius, &radius_star, e_cm, settings);
+        let h_function =
+            evaluate_integrated_ct_normalisation(&radius, &radius_star, e_cm, integrated_settings);
+
+        let threshold_params = ThresholdParams {
+            radius,
+            radius_star,
+            esurface_derivative: self.rstar_solution.solution.derivative_at_solution,
+            uv_damp_plus,
+            uv_damp_minus,
+            h_function,
+        };
+
+        let params = MaterializedInputParams::from_input(
+            <f64 as crate::integrands::process::GenericEvaluatorFloat>::get_parameters(
+                param_builder,
+                (false, false),
+                ct_builder.graph,
+                &self.rstar_sample,
+                ct_builder.settings.kinematics.externals.get_helicities(),
+                &ct_builder.settings.additional_params(),
+                Some(&threshold_params),
+                None,
+                None,
+            ),
+        );
+
+        PreparedAmplitudeCountertermRequest {
+            request_position,
+            sample_index,
+            esurface_id,
+            orientations,
+            input: params,
+            prefactor: Complex::new_re(self.rstar_sample.one()),
+            prefactor_queue,
+        }
+    }
+}
+
 impl<'a, T: FloatLike> RstarSample<'a, T> {
     fn evaluate<'b, 'c: 'b>(
         self,
@@ -569,5 +844,24 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             evaluation_metadata,
             record_primary_timing,
         )
+    }
+
+    fn prefactor_params(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        model_params: Vec<Complex<F<T>>>,
+    ) -> Vec<Complex<F<T>>> {
+        momentum_sample
+            .loop_moms()
+            .iter()
+            .flat_map(|x| x.into_iter().cloned().map(Complex::new_re))
+            .chain(
+                momentum_sample
+                    .external_moms()
+                    .iter()
+                    .flat_map(|x| x.into_iter().cloned().map(Complex::new_re)),
+            )
+            .chain(model_params)
+            .collect::<Vec<_>>()
     }
 }

@@ -197,6 +197,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
             total_timing: start_evaluate_sample.elapsed(),
             integrand_evaluation_time: evaluation_timing,
             evaluator_evaluation_time: Duration::ZERO,
+            average_evaluator_batch_size: None,
             parameterization_time: parameterization_timing,
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
@@ -210,6 +211,8 @@ impl HasIntegrand for HFunctionTestIntegrand {
                 accepted_as_stable: !is_nan,
                 total_time: start_evaluate_sample.elapsed(),
             }],
+            evaluator_batch_size_sum: 0,
+            evaluator_batch_size_count: 0,
         };
 
         Ok(EvaluationResult {
