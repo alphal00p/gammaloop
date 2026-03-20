@@ -4,6 +4,7 @@ use crate::{
     cff::{
         esurface::Esurface,
         expression::{GraphOrientation, OrientationID},
+        surface::HybridSurfaceID,
     },
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
@@ -72,8 +73,8 @@ use tracing::debug;
 use typed_index_collections::TiVec;
 
 use super::{
-    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache,
-    create_grid, evaluate_sample,
+    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
+    evaluate_sample,
 };
 
 const TOLERANCE: F<f64> = F(2.0);
@@ -321,6 +322,13 @@ impl CrossSectionGraphTerm {
             .unwrap()
             .orientations
             .iter()
+            .filter(|orientation| {
+                orientation.expression.iter_nodes().any(|tree_node| {
+                    graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
+                        tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
+                    })
+                })
+            })
             .map(|data| data.orientation().clone())
             .collect();
 
