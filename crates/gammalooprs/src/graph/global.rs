@@ -3,7 +3,10 @@ use linnet::parser::GlobalData;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
-use crate::{feyngen::diagram_generator::evaluate_overall_factor, graph::GroupId};
+use crate::{
+    feyngen::diagram_generator::evaluate_overall_factor, graph::GroupId,
+    momentum::sample::ExternalIndex, settings::runtime::LockedRuntimeSettings,
+};
 
 use super::{
     Graph,

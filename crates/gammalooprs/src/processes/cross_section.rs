@@ -32,20 +32,23 @@ use crate::{
         parse::complete_group_parsing,
     },
     integrands::process::{
-        GenericEvaluator, LmbMultiChannelingSetup,
+        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
         cross_section_integrand::CrossSectionIntegrandData,
     },
     model::ArcParticle,
-    momentum::sample::SubspaceData,
+    momentum::{
+        Helicity,
+        sample::{ExternalIndex, SubspaceData},
+    },
     numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, EvaluatorSettings},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{GS, hyperdual_utils::shape_for_t_derivatives},
+    utils::{GS, hyperdual_utils::shape_for_t_derivatives, symbolica_ext::LogPrint},
     uv::{approx::CutStructure, forest::ParametricIntegrands, uv_graph::UVE, wood::CutWoods},
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Orientation},
+    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
@@ -350,12 +353,13 @@ impl CrossSection {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
-        generation_settings: &GenerationSettings,
+        global_settings: &GenerationSettings,
+        runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<()> {
         generation_pool.install(|| {
             self.supergraphs.par_iter_mut().try_for_each(|supergraph| {
-                supergraph.preprocess(model, process_definition, generation_settings)
+                supergraph.preprocess(model, process_definition, global_settings, runtime_default)
             })
         })
     }
@@ -658,12 +662,55 @@ impl CrossSectionGraph {
         }
     }
 
+    pub(crate) fn apply_spin_sum(
+        &mut self,
+        model: &Model,
+        locked_runtime_settings: &LockedRuntimeSettings,
+    ) {
+        for (extid, hel) in locked_runtime_settings.helicities().iter().enumerate() {
+            println!("{extid},{hel:?}");
+            let eid = self.graph.loop_momentum_basis.ext_edges[ExternalIndex(extid)];
+
+            let Some(p) = self.graph.underlying[eid].particle() else {
+                continue;
+            };
+
+            match hel {
+                Helicity::Summed => {
+                    let Some(p) = p.spin_sum(eid) else {
+                        continue;
+                    };
+                    self.graph.global_prefactor.projector =
+                        self.graph.global_prefactor.projector.replace_multiple(&[p]);
+                }
+                Helicity::SummedAveraged => {
+                    let Some(p) = p.spin_sum(eid) else {
+                        continue;
+                    };
+                    self.graph.global_prefactor.projector =
+                        self.graph.global_prefactor.projector.replace_multiple(&[p]);
+                }
+                _ => {}
+            }
+        }
+
+        self.graph.polarizations = self.graph.global_prefactor.polarizations();
+        self.graph.param_builder = ParamBuilder::new(
+            &self.graph,
+            model,
+            &self.graph.loop_momentum_basis,
+            &self.graph.param_builder.pairs.additional_params.params,
+        );
+    }
+
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
+        runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
+        self.apply_spin_sum(model, &runtime_default);
         debug!("generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
         debug!("generating esurfaces corresponding to cuts");

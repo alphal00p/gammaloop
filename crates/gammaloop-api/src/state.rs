@@ -1214,6 +1214,7 @@ impl State {
                             &self.model,
                             &p.definition,
                             &global_settings.generation,
+                            runtime_default,
                             &generation_pool,
                         )?;
                         cs.build_integrand(
@@ -1630,9 +1631,11 @@ mod tests {
     use std::fs;
 
     use gammalooprs::{
-        momentum::{Dep, ExternalMomenta, SignOrZero},
-        settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings,
-        settings::{runtime::kinematic::Externals, KinematicsSettings, RuntimeSettings},
+        momentum::{Dep, ExternalMomenta, Helicity, SignOrZero},
+        settings::{
+            runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
+            KinematicsSettings, RuntimeSettings,
+        },
         utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
     use tempfile::tempdir;
@@ -1658,7 +1661,7 @@ mod tests {
                     ExternalMomenta::Dependent(Dep::Dep),
                 ],
                 improvement_settings: PhaseSpaceImprovementSettings::default(),
-                helicities: vec![SignOrZero::Plus, SignOrZero::Minus],
+                helicities: vec![Helicity::PLUS, Helicity::MINUS],
                 f_64_cache: None,
                 f_128_cache: None,
             },

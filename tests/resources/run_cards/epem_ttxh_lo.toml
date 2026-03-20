@@ -1,8 +1,8 @@
 commands = [
   "import model sm",
-  "save dot",
 
   "generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true -p epem_a_tth -i LO",
+  "save dot",
 ]
 
 [default_runtime_settings.kinematics.externals]
@@ -23,15 +23,13 @@ momenta = [
     -1000.0,
   ],
 ]
-helicities = [
-  1,
-  -1,
-]
+helicities = ["summed", "summed"]
 
 [default_runtime_settings.general]
 evaluator_method = "SummedFunctionMap"
 enable_cache = false
 debug_cache = false
+use_picobarns = true
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true

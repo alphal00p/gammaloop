@@ -1000,7 +1000,13 @@ impl ProcessCollection {
             }
             Self::CrossSections(cross_sections) => {
                 for cross_section in cross_sections.values_mut() {
-                    cross_section.preprocess(model, process_definition, settings, thread_pool)?;
+                    cross_section.preprocess(
+                        model,
+                        process_definition,
+                        settings,
+                        *locked_runtime_settings,
+                        thread_pool,
+                    )?;
                 }
             }
         }

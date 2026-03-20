@@ -2,7 +2,8 @@ use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
-use crate::utils::{self, F};
+use crate::utils::symbolica_ext::{CallSymbol, Replaces};
+use crate::utils::{self, F, W_};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
 use color_eyre::Report;
@@ -11,7 +12,7 @@ use colored::Colorize;
 use eyre::eyre;
 use itertools::Itertools;
 // use linnet::half_edge::drawing::Decoration;
-use linnet::half_edge::involution::Flow;
+use linnet::half_edge::involution::{EdgeIndex, Flow};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
@@ -829,6 +830,28 @@ pub struct Particle {
 }
 
 impl Particle {
+    pub(crate) fn spin_sum(&self, eid: EdgeIndex) -> Option<Replacement> {
+        match self.spin {
+            2 => {
+                if !self.is_antiparticle() {
+                    Some(
+                        (function!(GS.u, eid.0, W_.a_) * function!(GS.ubar, eid.0, W_.b_))
+                            .replace_with(function!(ETS.metric, W_.a_, W_.b_)),
+                    )
+                } else {
+                    Some(
+                        (function!(GS.v, eid.0, W_.a_) * function!(GS.vbar, eid.0, W_.b_))
+                            .replace_with(function!(ETS.metric, W_.a_, W_.b_)),
+                    )
+                }
+            }
+            3 => Some(
+                (function!(GS.epsilon, eid.0, W_.a_) * function!(GS.epsilonbar, eid.0, W_.b_))
+                    .replace_with(function!(ETS.metric, W_.a_, W_.b_)),
+            ),
+            _ => None,
+        }
+    }
     pub(crate) fn random_helicity(&self, seed: u64) -> Helicity {
         let mut rng = SmallRng::seed_from_u64(seed);
         if self.is_spinor() {

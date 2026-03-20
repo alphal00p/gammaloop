@@ -1,5 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
+use itertools::Either::Right;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
@@ -19,6 +20,7 @@ use symbolica::{
         integer::IntegerRing,
         rational::{FractionField, Q, Rational},
     },
+    id::{ReplaceWith, Replacement},
     parse,
     poly::polynomial::PolynomialRing,
     printer::{PrintMode, PrintOptions},
@@ -915,5 +917,14 @@ impl<A: AtomCore> LogPrint for A {
         settings.max_line_length = max;
         // settings.hide_all_namespaces = false;
         self.printer(settings).to_string()
+    }
+}
+
+pub trait Replaces {
+    fn replace_with<R: Into<ReplaceWith<'static>>>(&self, rhs: R) -> Replacement;
+}
+impl<A: AtomCore> Replaces for A {
+    fn replace_with<R: Into<ReplaceWith<'static>>>(&self, rhs: R) -> Replacement {
+        Replacement::new(self.to_pattern(), rhs)
     }
 }

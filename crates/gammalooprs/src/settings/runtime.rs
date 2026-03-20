@@ -14,12 +14,9 @@ use crate::{
     cff::esurface::Esurface,
     graph::LoopMomentumBasis,
     integrands::process::evaluators::EvaluatorMethod,
-    momentum::RotationMethod,
-    momentum::sample::ExternalIndex,
-    momentum::signature::SignatureLike,
+    momentum::{Helicity, RotationMethod, sample::ExternalIndex, signature::SignatureLike},
     observables::ObservableFileFormat,
-    settings::runtime::kinematic::Externals,
-    settings::runtime::kinematic::improvement::generate_default_momenta,
+    settings::runtime::kinematic::{Externals, improvement::generate_default_momenta},
     utils::{
         ApproxEq, F, format_uncertainty,
         serde_utils::{
@@ -75,6 +72,10 @@ impl<'a> From<LockedRuntimeSettings<'a>> for RuntimeSettings {
 }
 
 impl<'a> LockedRuntimeSettings<'a> {
+    pub(crate) fn helicities(&self) -> &[Helicity] {
+        self.0.kinematics.externals.get_helicities()
+    }
+
     /// If no external momenta are set in the settings, generate a default kinematic point that satisfies the phase-space constraints
     pub(crate) fn into_with_modified_kinematics(
         self,
