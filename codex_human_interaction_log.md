@@ -1194,3 +1194,33 @@ Created PR `#49` to `main`: https://github.com/alphal00p/gammaloop/pull/49
 
 I also updated `codex_human_interaction_log.md` on `vectorize` and pushed that to the PR.
 ````
+
+
+### Human
+
+````
+Pull github comments for this PR using gh and evaluate their relevance and address them if warranted.
+You can ignore the comment regarding `codex_human_interaction_log.md`, stating that this will be removed post merge, same as for `vectorize_gammaloop.md`.
+````
+
+### Codex
+
+````
+Pulled the PR comments with `gh` and reviewed them.
+
+- Ignored per your instruction: the `codex_human_interaction_log.md` comment.
+- Relevant and fixed:
+  - batched `Summed` / `SummedFunctionMap` evaluation now sets `override_if` for `OwnedOrientations::All`, matching the scalar path
+  - `evaluate_batch_single_f64(...)` now enforces single-output use, requires consistent input arity, and sizes compiled output buffers correctly
+  - compiled batch decoding now works from slices, so it no longer allocates one `Vec` per batch element
+  - batched timing now includes batch orchestration, rotation preparation, stability checks, and final result assembly
+  - integrand/evaluator timing and average batch-size accounting now stay on the primary stability rotation only; secondary rotations contribute only to `total_timing`
+
+- I updated `vectorized_gammaloop.md` with the review follow-up.
+- I pushed the fixes to `vectorize` at `686dfbab`, so PR `#49` is updated.
+- I also posted a PR comment summarizing the addressed review points: https://github.com/alphal00p/gammaloop/pull/49#issuecomment-4101384496
+
+Validation:
+- `cargo check`
+- `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T cargo test -p gammaloop-integration-tests --test test_runs test_batched_evaluation -- --nocapture`
+````
