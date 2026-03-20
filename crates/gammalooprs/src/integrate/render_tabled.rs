@@ -17,19 +17,30 @@ use crate::utils::normalize_tabled_separator_rows;
 use super::{
     display::{StyledText, TextColor},
     status_update::{
-        DiscreteMaxWeightDetailsSection, MainResultsSection, MaxWeightDetailsSection, StatusUpdate,
+        DiscreteMaxWeightDetailsSection, MainResultsRowGroupKind, MainResultsSection,
+        MaxWeightDetailsSection, StatusUpdate,
     },
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct TabledRenderOptions {
     pub max_table_width: usize,
+    pub show_statistics: bool,
+    pub show_max_weight_details: bool,
+    pub show_top_discrete_grid: bool,
+    pub show_discrete_contributions_sum: bool,
+    pub show_max_weight_info_for_discrete_bins: bool,
 }
 
 impl Default for TabledRenderOptions {
     fn default() -> Self {
         Self {
             max_table_width: 250,
+            show_statistics: true,
+            show_max_weight_details: true,
+            show_top_discrete_grid: false,
+            show_discrete_contributions_sum: false,
+            show_max_weight_info_for_discrete_bins: false,
         }
     }
 }
@@ -222,8 +233,22 @@ fn render_tables_with_shared_width(mut tables: Vec<StatusTable>, max_table_width
         .join("\n")
 }
 
-fn build_main_results_table(section: &MainResultsSection) -> StatusTable {
-    let slot_block_width = if section.show_discrete_columns { 5 } else { 2 };
+fn build_main_results_table(
+    section: &MainResultsSection,
+    options: &TabledRenderOptions,
+) -> StatusTable {
+    let visible_row_groups = section
+        .row_groups
+        .iter()
+        .filter(|group| match group.kind {
+            MainResultsRowGroupKind::All => true,
+            MainResultsRowGroupKind::Sum => options.show_discrete_contributions_sum,
+            MainResultsRowGroupKind::Bins => options.show_top_discrete_grid,
+        })
+        .collect_vec();
+    let show_discrete_columns = section.has_discrete_columns
+        && (options.show_top_discrete_grid || options.show_discrete_contributions_sum);
+    let slot_block_width = if show_discrete_columns { 5 } else { 2 };
     let metadata_columns = if section.has_target_columns { 4 } else { 2 };
     let n_columns = 2 + section.slot_headers.len() * slot_block_width + metadata_columns;
 
@@ -253,8 +278,8 @@ fn build_main_results_table(section: &MainResultsSection) -> StatusTable {
     }
     builder.push_record(header_row);
 
-    for group in &section.row_groups {
-        for row in group {
+    for group in &visible_row_groups {
+        for row in &group.rows {
             let mut record = vec![
                 render_styled_text(&row.contribution.display),
                 render_styled_text(&row.component.display),
@@ -262,7 +287,7 @@ fn build_main_results_table(section: &MainResultsSection) -> StatusTable {
             for slot_cells in &row.slot_cells {
                 record.push(maybe_render(&slot_cells.value));
                 record.push(maybe_render(&slot_cells.relative_error));
-                if section.show_discrete_columns {
+                if show_discrete_columns {
                     record.push(maybe_render(&slot_cells.sample_fraction));
                     record.push(maybe_render(&slot_cells.sample_count));
                     record.push(maybe_render(&slot_cells.target_pdf));
@@ -294,9 +319,9 @@ fn build_main_results_table(section: &MainResultsSection) -> StatusTable {
 
     let mut separator_rows = vec![1usize, 2usize];
     let mut row_offset = 2usize;
-    for (group_index, group) in section.row_groups.iter().enumerate() {
-        row_offset += group.len();
-        if group_index + 1 < section.row_groups.len() {
+    for (group_index, group) in visible_row_groups.iter().enumerate() {
+        row_offset += group.rows.len();
+        if group_index + 1 < visible_row_groups.len() {
             separator_rows.push(row_offset);
         }
     }
@@ -461,14 +486,21 @@ fn build_discrete_max_weight_details_table(
 }
 
 pub(crate) fn render_status_update(update: &StatusUpdate, options: &TabledRenderOptions) -> String {
-    let mut tables = vec![build_main_results_table(&update.main_results)];
-    if let Some(section) = update.max_weight_details.as_ref() {
+    let mut tables = vec![build_main_results_table(&update.main_results, options)];
+    if options.show_max_weight_details
+        && let Some(section) = update.max_weight_details.as_ref()
+    {
         tables.push(build_max_weight_details_table(section));
     }
-    if let Some(section) = update.discrete_max_weight_details.as_ref() {
+    if options.show_max_weight_details
+        && options.show_max_weight_info_for_discrete_bins
+        && let Some(section) = update.discrete_max_weight_details.as_ref()
+    {
         tables.push(build_discrete_max_weight_details_table(section));
     }
-    if let Some(section) = update.statistics.as_ref() {
+    if options.show_statistics
+        && let Some(section) = update.statistics.as_ref()
+    {
         tables.push(StatusTable {
             table: section.raw.build_status_table(),
             separator_after_rows: Vec::new(),

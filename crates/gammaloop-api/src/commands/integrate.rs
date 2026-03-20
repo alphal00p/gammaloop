@@ -4,13 +4,20 @@ use std::{
     io::{self, IsTerminal, Write},
     ops::Deref,
     path::PathBuf,
+    sync::mpsc,
+    thread,
+    time::Duration,
 };
 
 use clap::{ArgAction, Args, ValueEnum};
 use crossterm::{
-    cursor::{MoveDown, MoveToColumn, MoveUp},
-    queue,
-    terminal::{self, Clear, ClearType},
+    cursor::{Hide, MoveDown, MoveToColumn, MoveUp, Show},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+    execute, queue,
+    terminal::{
+        self, disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+        LeaveAlternateScreen,
+    },
 };
 use gammalooprs::utils::serde_utils::SmartSerde;
 use schemars::JsonSchema;
@@ -28,11 +35,13 @@ use gammalooprs::{
         render_saved_integration_summary, render_status_update_tabled, slot_workspace_path,
         workspace_manifest_path, workspace_state_path, ContributionSortMode, IntegrationState,
         IntegrationStatusKind, IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions,
-        IntegrationWorkspaceManifest, IterationBatchingSettings, SamplingCorrelationMode, SlotMeta,
-        StatusUpdate, TabledRenderOptions, WorkspaceSnapshotControl,
+        IntegrationWorkspaceManifest, IterationBatchingSettings, RatatuiDashboardState,
+        SamplingCorrelationMode, SlotMeta, StatusUpdate, TabledRenderOptions,
+        WorkspaceSnapshotControl,
     },
     model::{Model, SerializableInputParamCard},
     observables::ObservableSnapshotBundle,
+    request_interrupt, request_iteration_abort,
     settings::{
         runtime::{IntegratedPhase, IntegrationResult},
         RuntimeSettings,
@@ -40,6 +49,7 @@ use gammalooprs::{
     utils::F,
 };
 use itertools::Itertools;
+use ratatui::{backend::CrosstermBackend, Terminal};
 use symbolica::numerical_integration::Grid;
 use tracing::{info, warn};
 
@@ -144,6 +154,10 @@ pub struct Integrate {
     #[arg(long = "no-stream-updates")]
     pub no_stream_updates: bool,
 
+    /// Renderer used for interactive streaming integration updates
+    #[arg(long = "renderer", default_value = "ratatui")]
+    pub renderer: RendererOption,
+
     /// Evaluate each iteration in per-core batches of this size
     #[arg(long = "batch-size")]
     pub batch_size: Option<usize>,
@@ -219,6 +233,7 @@ impl Default for Integrate {
             show_summary_only: false,
             no_stream_iterations: false,
             no_stream_updates: false,
+            renderer: RendererOption::Ratatui,
             batch_size: None,
             batch_timing: 5.0,
             min_time_between_status_updates: 0.0,
@@ -264,6 +279,15 @@ pub enum ContributionSortOption {
     Error,
 }
 
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ValueEnum, Default,
+)]
+pub enum RendererOption {
+    Tabled,
+    #[default]
+    Ratatui,
+}
+
 impl From<ContributionSortOption> for ContributionSortMode {
     fn from(value: ContributionSortOption) -> Self {
         match value {
@@ -274,20 +298,23 @@ impl From<ContributionSortOption> for ContributionSortMode {
     }
 }
 
-struct StreamRenderer {
+struct TabledStreamRenderer {
     stderr: io::Stderr,
     rendered_line_count: usize,
+    control_listener: Option<TabledControlListener>,
 }
 
-impl StreamRenderer {
+impl TabledStreamRenderer {
     fn new() -> Self {
         Self {
             stderr: io::stderr(),
             rendered_line_count: 0,
+            control_listener: None,
         }
     }
 
     fn render(&mut self, block: &str) -> Result<()> {
+        self.ensure_control_listener();
         let prepared = prepare_stream_block(block, stream_terminal_width());
         if self.rendered_line_count > 0 {
             self.clear_rendered_block()?;
@@ -301,13 +328,31 @@ impl StreamRenderer {
     }
 
     fn clear(&mut self) -> Result<()> {
-        if self.rendered_line_count == 0 {
-            return Ok(());
+        if self.rendered_line_count > 0 {
+            self.clear_rendered_block()?;
+            self.rendered_line_count = 0;
+            self.stderr.flush()?;
         }
 
-        self.clear_rendered_block()?;
-        self.rendered_line_count = 0;
-        self.stderr.flush()?;
+        self.shutdown_control_listener()?;
+        Ok(())
+    }
+
+    fn ensure_control_listener(&mut self) {
+        if self.control_listener.is_none() {
+            self.control_listener = TabledControlListener::new()
+                .map_err(|err| {
+                    warn!("Failed to start tabled streaming control listener: {err}");
+                    err
+                })
+                .ok();
+        }
+    }
+
+    fn shutdown_control_listener(&mut self) -> Result<()> {
+        if let Some(mut control_listener) = self.control_listener.take() {
+            control_listener.shutdown()?;
+        }
         Ok(())
     }
 
@@ -337,9 +382,273 @@ impl StreamRenderer {
     }
 }
 
-impl Drop for StreamRenderer {
+impl Drop for TabledStreamRenderer {
     fn drop(&mut self) {
         let _ = self.clear();
+    }
+}
+
+enum TabledControlCommand {
+    Shutdown(mpsc::SyncSender<Result<()>>),
+}
+
+struct TabledControlListener {
+    sender: mpsc::Sender<TabledControlCommand>,
+    handle: Option<thread::JoinHandle<Result<()>>>,
+}
+
+impl TabledControlListener {
+    fn new() -> Result<Self> {
+        let (sender, receiver) = mpsc::channel();
+        let (startup_sender, startup_receiver) = mpsc::sync_channel(0);
+        let handle = thread::spawn(move || tabled_control_event_loop(receiver, startup_sender));
+        startup_receiver
+            .recv()
+            .map_err(|err| eyre!("Failed to start tabled control listener: {err}"))?
+            .map_err(|err| eyre!("Failed to start tabled control listener: {err}"))?;
+        Ok(Self {
+            sender,
+            handle: Some(handle),
+        })
+    }
+
+    fn shutdown(&mut self) -> Result<()> {
+        let (ack_sender, ack_receiver) = mpsc::sync_channel(0);
+        self.sender
+            .send(TabledControlCommand::Shutdown(ack_sender))
+            .map_err(|err| eyre!("Failed to stop tabled control listener: {err}"))?;
+        ack_receiver.recv().map_err(|err| {
+            eyre!("Failed to receive tabled control listener acknowledgement: {err}")
+        })??;
+        if let Some(handle) = self.handle.take() {
+            handle
+                .join()
+                .map_err(|_| eyre!("Tabled control listener thread panicked"))??;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for TabledControlListener {
+    fn drop(&mut self) {
+        let _ = self.shutdown();
+    }
+}
+
+enum DashboardCommand {
+    Update(StatusUpdate),
+    Suspend(mpsc::SyncSender<Result<()>>),
+    Shutdown(mpsc::SyncSender<Result<()>>),
+}
+
+struct RatatuiTerminal {
+    terminal: Terminal<CrosstermBackend<io::Stderr>>,
+}
+
+impl RatatuiTerminal {
+    fn enter() -> Result<Self> {
+        enable_raw_mode()?;
+        let mut stderr = io::stderr();
+        execute!(stderr, EnterAlternateScreen, Hide)?;
+        let backend = CrosstermBackend::new(io::stderr());
+        let mut terminal = Terminal::new(backend)?;
+        terminal.clear()?;
+        Ok(Self { terminal })
+    }
+
+    fn draw(&mut self, dashboard: &RatatuiDashboardState) -> Result<()> {
+        self.terminal.draw(|frame| dashboard.draw(frame))?;
+        Ok(())
+    }
+
+    fn leave(mut self) -> Result<()> {
+        self.terminal.clear()?;
+        execute!(self.terminal.backend_mut(), Show, LeaveAlternateScreen)?;
+        disable_raw_mode()?;
+        Ok(())
+    }
+}
+
+struct RatatuiStreamRenderer {
+    sender: mpsc::Sender<DashboardCommand>,
+    handle: Option<thread::JoinHandle<Result<()>>>,
+}
+
+impl RatatuiStreamRenderer {
+    fn new() -> Self {
+        let (sender, receiver) = mpsc::channel();
+        let handle = thread::spawn(move || dashboard_event_loop(receiver));
+        Self {
+            sender,
+            handle: Some(handle),
+        }
+    }
+
+    fn render(&mut self, update: StatusUpdate) -> Result<()> {
+        self.sender
+            .send(DashboardCommand::Update(update))
+            .map_err(|err| eyre!("Failed to send dashboard update: {err}"))?;
+        Ok(())
+    }
+
+    fn suspend(&mut self) -> Result<()> {
+        self.send_ack_command(DashboardCommand::Suspend)
+    }
+
+    fn shutdown(&mut self) -> Result<()> {
+        self.send_ack_command(DashboardCommand::Shutdown)?;
+        if let Some(handle) = self.handle.take() {
+            handle
+                .join()
+                .map_err(|_| eyre!("Ratatui dashboard thread panicked"))??;
+        }
+        Ok(())
+    }
+
+    fn send_ack_command(
+        &mut self,
+        build: impl FnOnce(mpsc::SyncSender<Result<()>>) -> DashboardCommand,
+    ) -> Result<()> {
+        let (ack_sender, ack_receiver) = mpsc::sync_channel(0);
+        self.sender
+            .send(build(ack_sender))
+            .map_err(|err| eyre!("Failed to send dashboard command: {err}"))?;
+        ack_receiver
+            .recv()
+            .map_err(|err| eyre!("Failed to receive dashboard acknowledgement: {err}"))??;
+        Ok(())
+    }
+}
+
+impl Drop for RatatuiStreamRenderer {
+    fn drop(&mut self) {
+        let _ = self.shutdown();
+    }
+}
+
+enum StreamRenderer {
+    Tabled(TabledStreamRenderer),
+    Ratatui(RatatuiStreamRenderer),
+}
+
+impl StreamRenderer {
+    fn new(renderer: RendererOption) -> Self {
+        match renderer {
+            RendererOption::Tabled => Self::Tabled(TabledStreamRenderer::new()),
+            RendererOption::Ratatui => Self::Ratatui(RatatuiStreamRenderer::new()),
+        }
+    }
+
+    fn render(&mut self, update: StatusUpdate, tabled_block: &str) -> Result<()> {
+        match self {
+            Self::Tabled(renderer) => renderer.render(tabled_block),
+            Self::Ratatui(renderer) => renderer.render(update),
+        }
+    }
+
+    fn clear(&mut self) -> Result<()> {
+        match self {
+            Self::Tabled(renderer) => renderer.clear(),
+            Self::Ratatui(renderer) => renderer.suspend(),
+        }
+    }
+
+    fn shutdown(&mut self) -> Result<()> {
+        match self {
+            Self::Tabled(renderer) => renderer.clear(),
+            Self::Ratatui(renderer) => renderer.shutdown(),
+        }
+    }
+}
+
+struct StreamingDisplayController {
+    renderer_kind: RendererOption,
+    stream_updates: bool,
+    stream_iterations: bool,
+    tabled_options: TabledRenderOptions,
+    renderer: Option<StreamRenderer>,
+}
+
+impl StreamingDisplayController {
+    fn new(
+        renderer_kind: RendererOption,
+        stream_updates: bool,
+        stream_iterations: bool,
+        tabled_options: TabledRenderOptions,
+    ) -> Self {
+        Self {
+            renderer_kind,
+            stream_updates,
+            stream_iterations,
+            tabled_options,
+            renderer: (stream_updates || stream_iterations)
+                .then(|| StreamRenderer::new(renderer_kind)),
+        }
+    }
+
+    fn handle_status_update(&mut self, status_update: StatusUpdate) -> Result<()> {
+        let kind = status_update.kind();
+        let renderer_kind = self.renderer_kind;
+        let tabled_options = self.tabled_options;
+
+        if let Some(renderer) = self.renderer.as_mut() {
+            match kind {
+                IntegrationStatusKind::Live => {
+                    if self.stream_updates || status_update.is_initial_live_status() {
+                        let status_block = Self::render_stream_block(
+                            renderer_kind,
+                            tabled_options,
+                            &status_update,
+                        );
+                        renderer.render(status_update, &status_block)?;
+                    }
+                }
+                IntegrationStatusKind::Iteration => {
+                    if self.stream_iterations {
+                        let status_block = Self::render_stream_block(
+                            renderer_kind,
+                            tabled_options,
+                            &status_update,
+                        );
+                        renderer.render(status_update, &status_block)?;
+                    } else {
+                        renderer.clear()?;
+                        self.emit_tabled_status(kind, &status_update)?;
+                    }
+                }
+                IntegrationStatusKind::Final => {
+                    if let Some(mut renderer) = self.renderer.take() {
+                        renderer.shutdown()?;
+                    }
+                    self.emit_tabled_status(kind, &status_update)?;
+                }
+            }
+        } else if kind != IntegrationStatusKind::Live {
+            self.emit_tabled_status(kind, &status_update)?;
+        }
+
+        Ok(())
+    }
+
+    fn emit_tabled_status(
+        &self,
+        kind: IntegrationStatusKind,
+        status_update: &StatusUpdate,
+    ) -> Result<()> {
+        let status_block = render_status_update_tabled(status_update, &self.tabled_options);
+        emit_integration_status_via_tracing(kind, &status_block)
+    }
+
+    fn render_stream_block(
+        renderer_kind: RendererOption,
+        tabled_options: TabledRenderOptions,
+        status_update: &StatusUpdate,
+    ) -> String {
+        if matches!(renderer_kind, RendererOption::Tabled) {
+            render_status_update_tabled(status_update, &tabled_options)
+        } else {
+            String::new()
+        }
     }
 }
 
@@ -354,7 +663,9 @@ fn prepare_stream_block(block: &str, max_width: usize) -> String {
         .lines()
         .map(|line| truncate_ansi_line(line, max_width))
         .collect::<Vec<_>>()
-        .join("\n")
+        // Tabled streaming can run while the terminal is in raw mode, where a
+        // bare `\n` no longer returns the cursor to column zero.
+        .join("\r\n")
 }
 
 fn truncate_ansi_line(line: &str, max_width: usize) -> String {
@@ -397,6 +708,182 @@ fn truncate_ansi_line(line: &str, max_width: usize) -> String {
     }
 
     truncated
+}
+
+fn tabled_control_event_loop(
+    receiver: mpsc::Receiver<TabledControlCommand>,
+    startup_sender: mpsc::SyncSender<std::result::Result<(), String>>,
+) -> Result<()> {
+    if let Err(err) = enable_raw_mode() {
+        let _ = startup_sender.send(Err(err.to_string()));
+        return Err(err.into());
+    }
+    let _ = startup_sender.send(Ok(()));
+
+    let result = (|| -> Result<()> {
+        loop {
+            match receiver.recv_timeout(Duration::from_millis(50)) {
+                Ok(TabledControlCommand::Shutdown(ack_sender)) => {
+                    let _ = ack_sender.send(Ok(()));
+                    break;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+
+            while event::poll(Duration::from_millis(0))? {
+                if let Event::Key(key) = event::read()? {
+                    if key.kind != KeyEventKind::Press {
+                        continue;
+                    }
+
+                    match handle_tabled_key_event(key) {
+                        TabledKeyAction::Ignored => {}
+                        TabledKeyAction::InterruptIntegration => request_interrupt(),
+                        TabledKeyAction::AbortCurrentIteration => request_iteration_abort(),
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    })();
+
+    disable_raw_mode()?;
+    result
+}
+
+fn dashboard_event_loop(receiver: mpsc::Receiver<DashboardCommand>) -> Result<()> {
+    let mut dashboard = RatatuiDashboardState::new();
+    let mut terminal = None;
+    let mut dirty = false;
+
+    loop {
+        match receiver.recv_timeout(Duration::from_millis(50)) {
+            Ok(DashboardCommand::Update(update)) => {
+                dashboard.update(update);
+                if terminal.is_none() {
+                    terminal = Some(RatatuiTerminal::enter()?);
+                }
+                dirty = true;
+            }
+            Ok(DashboardCommand::Suspend(ack_sender)) => {
+                let result = match terminal.take() {
+                    Some(terminal) => terminal.leave(),
+                    None => Ok(()),
+                };
+                let _ = ack_sender.send(result);
+                dirty = false;
+            }
+            Ok(DashboardCommand::Shutdown(ack_sender)) => {
+                let result = match terminal.take() {
+                    Some(terminal) => terminal.leave(),
+                    None => Ok(()),
+                };
+                let _ = ack_sender.send(result);
+                break;
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+
+        while terminal.is_some() && event::poll(Duration::from_millis(0))? {
+            let mut handled = false;
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => {
+                    handled = match handle_dashboard_key_event(&mut dashboard, key) {
+                        DashboardKeyAction::Redraw => true,
+                        DashboardKeyAction::InterruptIntegration => {
+                            request_interrupt();
+                            true
+                        }
+                        DashboardKeyAction::AbortCurrentIteration => {
+                            request_iteration_abort();
+                            true
+                        }
+                        DashboardKeyAction::Ignored => false,
+                    };
+                }
+                Event::Resize(_, _) => handled = true,
+                _ => {}
+            }
+            dirty |= handled;
+        }
+
+        if dirty {
+            if let Some(terminal) = terminal.as_mut() {
+                terminal.draw(&dashboard)?;
+                dirty = false;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DashboardKeyAction {
+    Ignored,
+    Redraw,
+    InterruptIntegration,
+    AbortCurrentIteration,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TabledKeyAction {
+    Ignored,
+    InterruptIntegration,
+    AbortCurrentIteration,
+}
+
+fn handle_tabled_key_event(key: KeyEvent) -> TabledKeyAction {
+    if key.modifiers.contains(KeyModifiers::CONTROL)
+        && matches!(key.code, KeyCode::Char('c') | KeyCode::Char('C'))
+    {
+        return TabledKeyAction::InterruptIntegration;
+    }
+
+    if matches!(key.code, KeyCode::Char('x') | KeyCode::Char('X')) {
+        return TabledKeyAction::AbortCurrentIteration;
+    }
+
+    TabledKeyAction::Ignored
+}
+
+fn handle_dashboard_key_event(
+    dashboard: &mut RatatuiDashboardState,
+    key: KeyEvent,
+) -> DashboardKeyAction {
+    if key.modifiers.contains(KeyModifiers::CONTROL)
+        && matches!(key.code, KeyCode::Char('c') | KeyCode::Char('C'))
+    {
+        return DashboardKeyAction::InterruptIntegration;
+    }
+
+    if matches!(key.code, KeyCode::Char('x') | KeyCode::Char('X')) {
+        return DashboardKeyAction::AbortCurrentIteration;
+    }
+
+    match key.code {
+        KeyCode::Char('1') => dashboard.select_tab(0),
+        KeyCode::Char('2') => dashboard.select_tab(1),
+        KeyCode::Char('3') => dashboard.select_tab(2),
+        KeyCode::Left => dashboard.previous_tab(),
+        KeyCode::Right => dashboard.next_tab(),
+        KeyCode::Char('[') => dashboard.focus_previous_slot(),
+        KeyCode::Char(']') => dashboard.focus_next_slot(),
+        KeyCode::Down | KeyCode::Char('j') => dashboard.select_next_discrete_row(),
+        KeyCode::Up | KeyCode::Char('k') => dashboard.select_previous_discrete_row(),
+        KeyCode::Char('s') => dashboard.cycle_discrete_sort(),
+        KeyCode::Char('v') => dashboard.toggle_discrete_sort_direction(),
+        KeyCode::Char('r') => dashboard.toggle_relative_error(),
+        KeyCode::Char('c') => dashboard.toggle_chi_sq(),
+        KeyCode::Char('w') => dashboard.toggle_max_weight_impact(),
+        KeyCode::Char('m') => dashboard.cycle_density(),
+        KeyCode::Esc | KeyCode::Char('?') => dashboard.toggle_help(),
+        _ => return DashboardKeyAction::Ignored,
+    }
+    DashboardKeyAction::Redraw
 }
 
 #[derive(Debug, Clone)]
@@ -596,6 +1083,12 @@ impl Integrate {
             phase_display: self
                 .show_phase
                 .resolve(settings.integrator.integrated_phase),
+            training_phase_display: match settings.integrator.integrated_phase {
+                IntegratedPhase::Real => IntegrationStatusPhaseDisplay::Real,
+                IntegratedPhase::Imag => IntegrationStatusPhaseDisplay::Imag,
+                IntegratedPhase::Both => IntegrationStatusPhaseDisplay::Both,
+            },
+            training_slot: 0,
             show_statistics,
             show_max_weight_details: self.show_max_weight_info,
             show_top_discrete_grid: self.show_top_discrete_grid,
@@ -608,6 +1101,11 @@ impl Integrate {
     fn build_tabled_render_options(&self) -> TabledRenderOptions {
         TabledRenderOptions {
             max_table_width: self.max_table_width,
+            show_statistics: !self.no_show_integration_statistics,
+            show_max_weight_details: self.show_max_weight_info,
+            show_top_discrete_grid: self.show_top_discrete_grid,
+            show_discrete_contributions_sum: self.show_discrete_contributions_sum,
+            show_max_weight_info_for_discrete_bins: self.show_max_weight_info_for_discrete_bins,
         }
     }
 
@@ -625,12 +1123,17 @@ impl Integrate {
         }
     }
 
-    fn build_batching_settings(&self, emit_live_status_updates: bool) -> IterationBatchingSettings {
+    fn build_batching_settings(
+        &self,
+        emit_live_status_updates: bool,
+        emit_initial_status_update: bool,
+    ) -> IterationBatchingSettings {
         IterationBatchingSettings {
             batch_size: self.batch_size,
             batch_timing_seconds: self.batch_timing,
             min_time_between_status_updates_seconds: self.min_time_between_status_updates,
             emit_live_status_updates,
+            emit_initial_status_update,
         }
     }
 
@@ -1214,7 +1717,13 @@ impl Integrate {
                 "Streaming integration updates disabled because stderr is not a TTY; live updates will be skipped and iteration summaries will be logged."
             );
         }
-        let mut stream_renderer = (stream_updates || stream_iterations).then(StreamRenderer::new);
+        let stream_renderer_kind = self.renderer;
+        let mut stream_controller = StreamingDisplayController::new(
+            stream_renderer_kind,
+            stream_updates,
+            stream_iterations,
+            tabled_options.clone(),
+        );
 
         let result = havana_integrate(
             slot_settings,
@@ -1233,36 +1742,10 @@ impl Integrate {
             integration_state,
             Some(workspace_path.clone()),
             self.workspace_snapshot_control(),
-            self.build_batching_settings(stream_updates),
+            self.build_batching_settings(stream_updates, stream_updates || stream_iterations),
             view_options,
             move |status_update: StatusUpdate| {
-                let status_block = render_status_update_tabled(&status_update, &tabled_options);
-                let kind = status_update.kind();
-                if let Some(renderer) = stream_renderer.as_mut() {
-                    match kind {
-                        IntegrationStatusKind::Live => {
-                            if stream_updates {
-                                renderer.render(&status_block)?;
-                            }
-                        }
-                        IntegrationStatusKind::Iteration => {
-                            if stream_iterations {
-                                renderer.render(&status_block)?;
-                            } else {
-                                renderer.clear()?;
-                                emit_integration_status_via_tracing(kind, &status_block)?;
-                            }
-                        }
-                        IntegrationStatusKind::Final => {
-                            renderer.clear()?;
-                            emit_integration_status_via_tracing(kind, &status_block)?;
-                        }
-                    }
-                } else if kind != IntegrationStatusKind::Live {
-                    emit_integration_status_via_tracing(kind, &status_block)?;
-                }
-
-                Ok(())
+                stream_controller.handle_status_update(status_update)
             },
         )?;
 
@@ -1282,8 +1765,9 @@ mod tests {
     use super::Integrate;
     use super::IntegrationOutput;
     use super::ResolvedIntegrandSlot;
-    use super::{ContributionSortOption, ShowPhaseOption};
+    use super::{ContributionSortOption, DashboardKeyAction, ShowPhaseOption, TabledKeyAction};
     use crate::{state::ProcessRef, CLISettings, SessionSettings, StateSettings};
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use gammalooprs::{
         integrate::{ContributionSortMode, IntegrationStatusPhaseDisplay, SlotMeta},
         observables::ObservableSnapshotBundle,
@@ -1353,7 +1837,7 @@ mod tests {
         let block = "123456789\nabcdefghi";
         let prepared = super::prepare_stream_block(block, 5);
 
-        assert_eq!(prepared, "12345\nabcde");
+        assert_eq!(prepared, "12345\r\nabcde");
     }
 
     #[test]
@@ -1504,5 +1988,51 @@ mod tests {
             ContributionSortMode::Integral
         );
         assert!(render_options.show_max_weight_info_for_discrete_bins);
+    }
+
+    #[test]
+    fn dashboard_ctrl_c_requests_integration_interrupt() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            ),
+            DashboardKeyAction::InterruptIntegration
+        );
+    }
+
+    #[test]
+    fn dashboard_x_requests_iteration_abort() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::AbortCurrentIteration
+        );
+    }
+
+    #[test]
+    fn tabled_ctrl_c_requests_integration_interrupt() {
+        assert_eq!(
+            super::handle_tabled_key_event(KeyEvent::new(
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL,
+            )),
+            TabledKeyAction::InterruptIntegration
+        );
+    }
+
+    #[test]
+    fn batching_settings_can_emit_initial_status_without_live_updates() {
+        let integrate = Integrate::default();
+        let batching = integrate.build_batching_settings(false, true);
+
+        assert!(!batching.emit_live_status_updates);
+        assert!(batching.emit_initial_status_update);
     }
 }

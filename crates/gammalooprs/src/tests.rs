@@ -31,6 +31,8 @@ const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 fn default_render_options() -> IntegrationStatusViewOptions {
     IntegrationStatusViewOptions {
         phase_display: IntegrationStatusPhaseDisplay::Both,
+        training_phase_display: IntegrationStatusPhaseDisplay::Real,
+        training_slot: 0,
         show_statistics: true,
         show_max_weight_details: true,
         show_top_discrete_grid: false,

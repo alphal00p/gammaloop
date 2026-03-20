@@ -80,6 +80,7 @@
 - Backward compatibility with old on-disk GammaLoop states is also currently a non-goal: it is acceptable to rename/remove legacy state files, layouts, and loaders when that simplifies the implementation.
 - Do not keep compatibility fallbacks for old state formats/names unless the task explicitly asks for migration support.
 - Never be afraid to modify existing functions to obtain the most elegant and concise code as opposed to trying to be backward compatible or leave existing code untouched.
+- When suitable, prefer implementing behavior as methods on existing structs/enums instead of free functions to improve discoverability.
 - In generic or arbitrary-precision code, do not introduce constants or intermediate values through `from_f64`, `std::f64::consts::*`, or other lossy `f64` routes unless that exact location is an explicit `f64` boundary by design (for example persisted settings that are already `f64`, or histogram/output accumulation that is intentionally `f64`).
 - `f64` values originating from user-supplied settings are an allowed boundary: converting those setting values into `F<T>` with `from_f64` is acceptable. Do not extend that exception to internally generated constants or intermediate values.
 - When working with `F<T>` or other precision-generic numeric code, build constants from an in-scope representative value of the correct type using helpers such as `.zero()`, `.one()`, `.epsilon()`, `.PI()`, `.TAU()`, `.from_usize()`, `.from_isize()`, etc., so the active precision is preserved exactly.
