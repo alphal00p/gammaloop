@@ -2038,18 +2038,7 @@ impl<'a, T> IntoIterator for &'a Polarization<T> {
 }
 
 #[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    Clone,
-    Copy,
-    PartialOrd,
-    Ord,
-    Hash,
-    serde::Serialize,
-    serde::Deserialize,
-    bincode::Encode,
-    bincode::Decode,
+    Debug, PartialEq, Eq, Clone, Copy, PartialOrd, Ord, Hash, bincode::Encode, bincode::Decode,
 )]
 pub enum Helicity {
     Signed(SignOrZero),
@@ -2061,9 +2050,80 @@ impl Display for Helicity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Helicity::Signed(s) => write!(f, "{}", s),
-            Helicity::Summed => write!(f, "Summed"),
-            Helicity::SummedAveraged => write!(f, "SummedAveraged"),
+            Helicity::Summed => write!(f, "summed"),
+            Helicity::SummedAveraged => write!(f, "summed_averaged"),
         }
+    }
+}
+
+impl Serialize for Helicity {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            Helicity::Signed(SignOrZero::Plus) => serializer.serialize_i8(1),
+            Helicity::Signed(SignOrZero::Minus) => serializer.serialize_i8(-1),
+            Helicity::Signed(SignOrZero::Zero) => serializer.serialize_i8(0),
+            Helicity::Summed => serializer.serialize_str("summed"),
+            Helicity::SummedAveraged => serializer.serialize_str("summed_averaged"),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum HelicitySerde {
+    Numeric(i8),
+    Text(String),
+}
+
+impl<'de> Deserialize<'de> for Helicity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = HelicitySerde::deserialize(deserializer)?;
+        match value {
+            HelicitySerde::Numeric(value) => {
+                Helicity::try_from(value).map_err(serde::de::Error::custom)
+            }
+            HelicitySerde::Text(value) => {
+                Helicity::from_str(&value).map_err(serde::de::Error::custom)
+            }
+        }
+    }
+}
+
+impl JsonSchema for Helicity {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Helicity".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "description": "Helicity input. Use -1, 0, or 1 for fixed helicities; or use a string for summed modes.",
+            "oneOf": [
+                {
+                    "type": "integer",
+                    "enum": [-1, 0, 1]
+                },
+                {
+                    "type": "string",
+                    "enum": [
+                        "+",
+                        "-",
+                        "0",
+                        "plus",
+                        "minus",
+                        "zero",
+                        "summed",
+                        "summed_averaged",
+                        "summed-averaged"
+                    ]
+                }
+            ]
+        })
     }
 }
 
@@ -2086,10 +2146,49 @@ impl From<SignOrZero> for Helicity {
     }
 }
 
+impl TryFrom<Helicity> for SignOrZero {
+    type Error = SignError;
+
+    fn try_from(value: Helicity) -> Result<Self, Self::Error> {
+        match value {
+            Helicity::Signed(sign) => Ok(sign),
+            Helicity::Summed | Helicity::SummedAveraged => Err(SignError::InvalidValue),
+        }
+    }
+}
+
+impl TryFrom<Helicity> for Sign {
+    type Error = SignError;
+
+    fn try_from(value: Helicity) -> Result<Self, Self::Error> {
+        match value {
+            Helicity::Signed(sign) => sign.try_into(),
+            Helicity::Summed | Helicity::SummedAveraged => Err(SignError::InvalidValue),
+        }
+    }
+}
+
+#[allow(non_upper_case_globals)]
 impl Helicity {
     pub const ZERO: Self = Self::Signed(SignOrZero::Zero);
     pub const PLUS: Self = Self::Signed(SignOrZero::Plus);
     pub const MINUS: Self = Self::Signed(SignOrZero::Minus);
+    pub const Zero: Self = Self::ZERO;
+    pub const Plus: Self = Self::PLUS;
+    pub const Minus: Self = Self::MINUS;
+
+    pub fn from_str(value: &str) -> Result<Self, String> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "+" | "plus" => Ok(Self::PLUS),
+            "-" | "minus" => Ok(Self::MINUS),
+            "0" | "zero" => Ok(Self::ZERO),
+            "summed" => Ok(Self::Summed),
+            "summed_averaged" | "summed-averaged" => Ok(Self::SummedAveraged),
+            _ => Err(format!(
+                "Invalid helicity '{value}'. Expected one of -1, 0, 1, plus, minus, zero, summed, summed_averaged"
+            )),
+        }
+    }
 }
 
 #[derive(
@@ -3164,6 +3263,7 @@ mod tests {
     use core::f64;
 
     use eyre::Context;
+    use schemars::schema_for;
 
     use crate::utils::F;
 
@@ -3194,14 +3294,48 @@ mod tests {
 
     #[test]
     fn serialization() {
-        let helicity = Helicity::PLUS;
-        let minus = Helicity::MINUS;
-        let hels = vec![helicity, minus, Helicity::ZERO, helicity, minus];
-        let serialized = serde_json::to_string(&hels).unwrap();
-        println!("{}", serialized);
-        let deserialized: Vec<Helicity> = serde_json::from_str("[1,-1,0,1]").unwrap();
+        #[derive(Debug, Serialize, Deserialize, PartialEq)]
+        struct HelicityToml {
+            helicities: Vec<Helicity>,
+        }
 
-        println!("{:?}", deserialized);
+        let hels = vec![
+            Helicity::PLUS,
+            Helicity::MINUS,
+            Helicity::ZERO,
+            Helicity::Summed,
+            Helicity::SummedAveraged,
+        ];
+        let serialized = serde_json::to_string(&hels).unwrap();
+        assert_eq!(serialized, r#"[1,-1,0,"summed","summed_averaged"]"#);
+
+        let deserialized: Vec<Helicity> =
+            serde_json::from_str(r#"[1,"minus","0","summed","summed-averaged"]"#).unwrap();
+        assert_eq!(deserialized, hels);
+
+        let toml_value = toml::from_str::<HelicityToml>(
+            r#"
+helicities = [1, "minus", "zero", "summed", "summed_averaged"]
+"#,
+        )
+        .unwrap();
+        assert_eq!(toml_value.helicities, hels);
+
+        let schema = serde_json::to_value(schema_for!(Helicity)).unwrap();
+        let allowed_strings = &schema["enum"];
+        assert!(allowed_strings.is_null());
+        assert!(
+            schema["oneOf"][0]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&(-1).into())
+        );
+        assert!(
+            schema["oneOf"][1]["enum"]
+                .as_array()
+                .unwrap()
+                .contains(&"summed_averaged".into())
+        );
     }
 
     #[test]
