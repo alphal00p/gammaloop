@@ -33,6 +33,8 @@ fn default_render_options() -> IntegrationStatusViewOptions {
         phase_display: IntegrationStatusPhaseDisplay::Both,
         training_phase_display: IntegrationStatusPhaseDisplay::Real,
         training_slot: 0,
+        slot_training_phase_displays: vec![IntegrationStatusPhaseDisplay::Real],
+        per_slot_training_phase: false,
         show_statistics: true,
         show_max_weight_details: true,
         show_top_discrete_grid: false,

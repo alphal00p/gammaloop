@@ -720,11 +720,12 @@ fn tabled_control_event_loop(
     }
     let _ = startup_sender.send(Ok(()));
 
+    let mut shutdown_ack = None;
     let result = (|| -> Result<()> {
         loop {
             match receiver.recv_timeout(Duration::from_millis(50)) {
                 Ok(TabledControlCommand::Shutdown(ack_sender)) => {
-                    let _ = ack_sender.send(Ok(()));
+                    shutdown_ack = Some(ack_sender);
                     break;
                 }
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
@@ -749,7 +750,15 @@ fn tabled_control_event_loop(
         Ok(())
     })();
 
-    disable_raw_mode()?;
+    let cleanup_result: Result<()> = disable_raw_mode().map_err(|err| eyre!(err));
+    if let Some(ack_sender) = shutdown_ack.take() {
+        let ack_result = match cleanup_result.as_ref() {
+            Ok(()) => Ok(()),
+            Err(err) => Err(eyre!(err.to_string())),
+        };
+        let _ = ack_sender.send(ack_result);
+    }
+    cleanup_result?;
     result
 }
 
@@ -879,7 +888,13 @@ fn handle_dashboard_key_event(
         KeyCode::Char('r') => dashboard.toggle_relative_error(),
         KeyCode::Char('c') => dashboard.toggle_chi_sq(),
         KeyCode::Char('w') => dashboard.toggle_max_weight_impact(),
-        KeyCode::Char('m') => dashboard.cycle_density(),
+        KeyCode::Char('p') | KeyCode::Char('P') => dashboard.toggle_chart_component(),
+        KeyCode::Char('g') | KeyCode::Char('G') => dashboard.toggle_chart_history_window(),
+        KeyCode::Char('+') | KeyCode::Char('=') => dashboard.widen_chart_history_window(),
+        KeyCode::Char('-') | KeyCode::Char('_') => dashboard.narrow_chart_history_window(),
+        KeyCode::Char(',') | KeyCode::Char('<') => dashboard.narrow_chart_y_sigma_span(),
+        KeyCode::Char('.') | KeyCode::Char('>') => dashboard.widen_chart_y_sigma_span(),
+        KeyCode::Char('0') => dashboard.reset_chart_y_sigma_span(),
         KeyCode::Esc | KeyCode::Char('?') => dashboard.toggle_help(),
         _ => return DashboardKeyAction::Ignored,
     }
@@ -1001,6 +1016,15 @@ impl Integrate {
         }
     }
 
+    fn selected_training_phase_display(
+        integrated_phase: IntegratedPhase,
+    ) -> IntegrationStatusPhaseDisplay {
+        match integrated_phase {
+            IntegratedPhase::Real | IntegratedPhase::Both => IntegrationStatusPhaseDisplay::Real,
+            IntegratedPhase::Imag => IntegrationStatusPhaseDisplay::Imag,
+        }
+    }
+
     fn resolve_selected_slots(&self, state: &State) -> Result<Vec<ResolvedIntegrandSlot>> {
         let selections = if self.process.is_empty() && self.integrand_name.is_empty() {
             vec![state.find_integrand_ref(None, None)?]
@@ -1076,19 +1100,25 @@ impl Integrate {
 
     fn build_render_options(
         &self,
-        settings: &RuntimeSettings,
+        slot_settings: &[RuntimeSettings],
         show_statistics: bool,
     ) -> IntegrationStatusViewOptions {
+        let settings = &slot_settings[0];
         IntegrationStatusViewOptions {
             phase_display: self
                 .show_phase
                 .resolve(settings.integrator.integrated_phase),
-            training_phase_display: match settings.integrator.integrated_phase {
-                IntegratedPhase::Real => IntegrationStatusPhaseDisplay::Real,
-                IntegratedPhase::Imag => IntegrationStatusPhaseDisplay::Imag,
-                IntegratedPhase::Both => IntegrationStatusPhaseDisplay::Both,
-            },
+            training_phase_display: Self::selected_training_phase_display(
+                settings.integrator.integrated_phase,
+            ),
             training_slot: 0,
+            slot_training_phase_displays: slot_settings
+                .iter()
+                .map(|slot_settings| {
+                    Self::selected_training_phase_display(slot_settings.integrator.integrated_phase)
+                })
+                .collect(),
+            per_slot_training_phase: self.uncorrelated,
             show_statistics,
             show_max_weight_details: self.show_max_weight_info,
             show_top_discrete_grid: self.show_top_discrete_grid,
@@ -1633,7 +1663,7 @@ impl Integrate {
                 slot_settings_path(&workspace_path, slot0_meta),
                 &format!("workspace settings for {}", slot0_meta.key()),
             )?;
-            let view_options = self.build_render_options(&slot0_settings, true);
+            let view_options = self.build_render_options(&[slot0_settings.clone()], true);
             let tabled_options = self.build_tabled_render_options();
             emit_integration_status_via_tracing(
                 IntegrationStatusKind::Final,
@@ -1695,7 +1725,7 @@ impl Integrate {
             .map(|integrand| integrand.get_settings().clone())
             .collect_vec();
         let view_options =
-            self.build_render_options(&slot_settings[0], !self.no_show_integration_statistics);
+            self.build_render_options(&slot_settings, !self.no_show_integration_statistics);
         let tabled_options = self.build_tabled_render_options();
         self.write_workspace_manifest_and_settings(
             &slot_integrands,
@@ -1973,7 +2003,7 @@ mod tests {
             ..RuntimeSettings::default()
         };
 
-        let render_options = integrate.build_render_options(&settings, false);
+        let render_options = integrate.build_render_options(&[settings.clone()], false);
 
         assert_eq!(
             render_options.phase_display,
@@ -1988,6 +2018,29 @@ mod tests {
             ContributionSortMode::Integral
         );
         assert!(render_options.show_max_weight_info_for_discrete_bins);
+    }
+
+    #[test]
+    fn build_render_options_defaults_training_phase_to_real_for_both() {
+        let integrate = Integrate::default();
+        let settings = RuntimeSettings {
+            integrator: IntegratorSettings {
+                integrated_phase: IntegratedPhase::Both,
+                ..Default::default()
+            },
+            ..RuntimeSettings::default()
+        };
+
+        let render_options = integrate.build_render_options(&[settings], false);
+
+        assert_eq!(
+            render_options.training_phase_display,
+            IntegrationStatusPhaseDisplay::Real
+        );
+        assert_eq!(
+            render_options.slot_training_phase_displays,
+            vec![IntegrationStatusPhaseDisplay::Real]
+        );
     }
 
     #[test]
@@ -2013,6 +2066,71 @@ mod tests {
                 KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE),
             ),
             DashboardKeyAction::AbortCurrentIteration
+        );
+    }
+
+    #[test]
+    fn dashboard_g_toggles_chart_history_window() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('g'), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::Redraw
+        );
+    }
+
+    #[test]
+    fn dashboard_plus_adjusts_chart_history_window() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('+'), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::Redraw
+        );
+    }
+
+    #[test]
+    fn dashboard_comma_adjusts_chart_y_range() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char(','), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::Redraw
+        );
+    }
+
+    #[test]
+    fn dashboard_zero_resets_chart_y_range() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::Redraw
+        );
+    }
+
+    #[test]
+    fn dashboard_p_toggles_chart_phase() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::Redraw
         );
     }
 

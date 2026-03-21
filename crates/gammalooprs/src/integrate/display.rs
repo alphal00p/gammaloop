@@ -49,6 +49,14 @@ impl TextStyle {
     pub(crate) const fn red() -> Self {
         Self::PLAIN.with_color(TextColor::Red)
     }
+
+    pub(crate) const fn yellow() -> Self {
+        Self::PLAIN.with_color(TextColor::Yellow)
+    }
+
+    pub(crate) const fn pink() -> Self {
+        Self::PLAIN.with_color(TextColor::Pink)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,6 +64,8 @@ pub(crate) enum TextColor {
     Green,
     Blue,
     Red,
+    Yellow,
+    Pink,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

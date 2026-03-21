@@ -2268,6 +2268,28 @@ where
             })
             .collect_vec();
 
+        let iteration_start = Instant::now();
+        let mut current_batch_size = initial_batch_size(batching);
+        let mut last_live_status = None;
+        if batching.emit_initial_status_update && !is_interrupted() {
+            status_emitter(build_status_update(
+                IntegrationStatusKind::Live,
+                &integration_state,
+                cores,
+                t_start.elapsed(),
+                iteration_start.elapsed(),
+                0,
+                integration_state.num_points,
+                n_samples_evaluated,
+                &targets,
+                &view_options,
+                Some(status_update::LiveIterationProgress {
+                    completed_points: 0,
+                    target_points: cur_points,
+                }),
+            ))?;
+        }
+
         let current_max_evals = integration_state
             .all_integrals
             .iter()
@@ -2292,28 +2314,6 @@ where
                 )
             })
             .collect_vec();
-
-        let iteration_start = Instant::now();
-        let mut current_batch_size = initial_batch_size(batching);
-        let mut last_live_status = None;
-        if batching.emit_initial_status_update && !is_interrupted() {
-            status_emitter(build_status_update(
-                IntegrationStatusKind::Live,
-                &integration_state,
-                cores,
-                t_start.elapsed(),
-                iteration_start.elapsed(),
-                0,
-                integration_state.num_points,
-                n_samples_evaluated,
-                &targets,
-                &view_options,
-                Some(status_update::LiveIterationProgress {
-                    completed_points: 0,
-                    target_points: cur_points,
-                }),
-            ))?;
-        }
         while total_remaining_points(&worker_states) > 0 {
             let round_started_at = Instant::now();
             let processed_per_core: Vec<Result<usize>> = pool.install(|| {
@@ -2421,6 +2421,7 @@ where
                 )
                 .yellow()
             );
+            continue;
         }
 
         n_samples_evaluated += completed_points;
@@ -3665,6 +3666,8 @@ mod tests {
             phase_display: IntegrationStatusPhaseDisplay::Both,
             training_phase_display: IntegrationStatusPhaseDisplay::Real,
             training_slot: 0,
+            slot_training_phase_displays: vec![IntegrationStatusPhaseDisplay::Real],
+            per_slot_training_phase: false,
             show_statistics: true,
             show_max_weight_details: true,
             show_top_discrete_grid: false,
@@ -3980,6 +3983,10 @@ mod tests {
 
         assert!(rendered.contains("Sum"), "{rendered}");
         assert!(rendered.contains("Contribution (idx=graph)"), "{rendered}");
+        assert!(
+            !rendered.contains("│             (idx=graph)             │"),
+            "{rendered}"
+        );
         assert!(rendered.contains("#0: GL0"), "{rendered}");
         assert!(rendered.contains("75.0%"), "{rendered}");
         assert!(rendered.contains("25.0%"), "{rendered}");
@@ -4267,16 +4274,229 @@ mod tests {
             |_| {},
         );
 
-        assert!(rendered.contains("iter ETA 30s"), "{rendered}");
         assert!(rendered.contains("Iteration progress"), "{rendered}");
-        assert!(rendered.contains("rate 2.50K/s"), "{rendered}");
+        assert!(rendered.contains("ETA 30s"), "{rendered}");
+        assert!(rendered.contains("25.00K / 100.00K (25.0%)"), "{rendered}");
+        assert!(rendered.contains("# samples total 125.00K"), "{rendered}");
+        assert!(rendered.contains("#samples/s"), "{rendered}");
+        assert!(rendered.contains("Integrands"), "{rendered}");
+        assert!(rendered.contains("Focused integrand"), "{rendered}");
+        assert!(rendered.contains("Results summary"), "{rendered}");
+        assert!(rendered.contains("% err"), "{rendered}");
+        assert!(rendered.contains("chi^2"), "{rendered}");
+        assert!(rendered.contains("m.w.i"), "{rendered}");
+        assert!(rendered.contains("Timing composition"), "{rendered}");
+        assert!(rendered.contains("Precision mix"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_overview_chart_phase_toggle_updates_convergence_label() {
+        let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            IntegrationStatusKind::Live,
+            &state,
+            Duration::from_secs(15),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+            &view_options,
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+            |dashboard| dashboard.toggle_chart_component(),
+        );
+
         assert!(
-            rendered.contains("All-slot metrics [metrics density]"),
+            rendered.contains("Convergence : imag (not selected for training)"),
             "{rendered}"
         );
-        assert!(rendered.contains("rel err"), "{rendered}");
-        assert!(rendered.contains("chi^2"), "{rendered}");
-        assert!(rendered.contains("mwi"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_integrand_targets_are_trimmed_for_display() {
+        let state = make_integration_state();
+        let rendered = render_ratatui_update(
+            IntegrationStatusKind::Live,
+            &state,
+            Duration::from_secs(15),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[
+                Some(Complex::new(
+                    F(7.600000000000001e-6),
+                    F(7.430000000000004e-5),
+                )),
+                Some(Complex::new(F(6.629999999999999e-5), F(0.0))),
+            ],
+            &IntegrationStatusViewOptions {
+                show_statistics: false,
+                show_max_weight_details: false,
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+            |_| {},
+        );
+
+        assert!(rendered.contains("trgt"), "{rendered}");
+        assert!(rendered.contains("+7.6e-6"), "{rendered}");
+        assert!(rendered.contains("+7.43e-5"), "{rendered}");
+        assert!(rendered.contains("+6.63e-5"), "{rendered}");
+        assert!(rendered.contains("+0e0"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_recent_history_window_tracks_current_iteration_points() {
+        let mut dashboard = RatatuiDashboardState::new();
+        let mut state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+
+        state.iter = 1;
+        dashboard.update(build_status_update(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(10),
+            Duration::from_secs(10),
+            500_000,
+            1_000_000,
+            1_000_000,
+            &[None, None],
+            &view_options,
+            Some(status_update::LiveIterationProgress {
+                completed_points: 500_000,
+                target_points: 1_000_000,
+            }),
+        ));
+
+        state.iter = 2;
+        dashboard.update(build_status_update(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(20),
+            Duration::from_secs(5),
+            0,
+            2_000_000,
+            2_000_000,
+            &[None, None],
+            &view_options,
+            Some(status_update::LiveIterationProgress {
+                completed_points: 0,
+                target_points: 1_000_000,
+            }),
+        ));
+        dashboard.update(build_status_update(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(25),
+            Duration::from_secs(10),
+            200_000,
+            2_200_000,
+            2_200_000,
+            &[None, None],
+            &view_options,
+            Some(status_update::LiveIterationProgress {
+                completed_points: 200_000,
+                target_points: 1_000_000,
+            }),
+        ));
+
+        dashboard.toggle_chart_history_window();
+        for _ in 0..5 {
+            dashboard.narrow_chart_history_window();
+        }
+
+        assert_eq!(
+            dashboard.visible_history_sample_bounds(),
+            Some((2_000_000, 2_200_000))
+        );
+    }
+
+    #[test]
+    fn ratatui_full_history_preserves_origin_after_compaction() {
+        let mut dashboard = RatatuiDashboardState::new();
+        let mut state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+
+        for index in 0..4_300 {
+            state.iter = 1 + index / 40;
+            let total_points = index * 1_000;
+            dashboard.update(build_status_update(
+                IntegrationStatusKind::Live,
+                &state,
+                4,
+                Duration::from_secs(index as u64),
+                Duration::from_secs(10),
+                total_points % 1_000_000,
+                total_points,
+                total_points,
+                &[None, None],
+                &view_options,
+                Some(status_update::LiveIterationProgress {
+                    completed_points: total_points % 1_000_000,
+                    target_points: 1_000_000,
+                }),
+            ));
+        }
+
+        dashboard.toggle_chart_history_window();
+        dashboard.toggle_chart_history_window();
+
+        assert_eq!(
+            dashboard
+                .visible_history_sample_bounds()
+                .map(|(start, end)| (start, end)),
+            Some((0, 4_299_000))
+        );
+    }
+
+    #[test]
+    fn ratatui_convergence_title_shows_active_y_span() {
+        let state = make_integration_state();
+        let rendered = render_ratatui_update(
+            IntegrationStatusKind::Live,
+            &state,
+            Duration::from_secs(15),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[None, None],
+            &IntegrationStatusViewOptions {
+                show_statistics: false,
+                show_max_weight_details: false,
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+            |dashboard| dashboard.widen_chart_y_sigma_span(),
+        );
+
+        assert!(rendered.contains("y ±5σ"), "{rendered}");
     }
 
     #[test]
@@ -4303,15 +4523,17 @@ mod tests {
             |dashboard| dashboard.select_tab(1),
         );
 
-        assert!(rendered.contains("Selected bin detail"), "{rendered}");
+        assert!(rendered.contains("Selected bin"), "{rendered}");
         assert!(
-            rendered.contains("Discrete bins (sort: Error desc)"),
+            rendered.contains("Discrete bins for focused integrand"),
             "{rendered}"
         );
+        assert!(rendered.contains("sample %"), "{rendered}");
         assert!(rendered.contains("GL0"), "{rendered}");
         assert!(rendered.contains("GL1"), "{rendered}");
         assert!(rendered.contains("pdf"), "{rendered}");
-        assert!(rendered.contains("Selected bin detail"), "{rendered}");
+        assert!(rendered.contains("Per integrand details"), "{rendered}");
+        assert!(rendered.contains("# samples"), "{rendered}");
     }
 }
 
