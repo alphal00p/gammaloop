@@ -1224,3 +1224,24 @@ Validation:
 - `cargo check`
 - `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T cargo test -p gammaloop-integration-tests --test test_runs test_batched_evaluation -- --nocapture`
 ````
+
+### Human
+
+````
+Send dedicated reply directly to each of the messges in the PR (and how you've already adressed them)
+````
+
+### Codex
+
+````
+Posted dedicated replies on each relevant review thread in PR `#49`.
+
+- `2968277894` total timing/finalization: replied at https://github.com/alphal00p/gammaloop/pull/49#discussion_r2968715392; pointed to `686dfbab` and the new total-only timing ledger.
+- `2968277909` batch orchestration timing: replied at https://github.com/alphal00p/gammaloop/pull/49#discussion_r2968715394; pointed to `record_shared_integrand_time(...)` and the new sample/setup + request/merge accounting.
+- `2968277927` single-output batch safety: replied at https://github.com/alphal00p/gammaloop/pull/49#discussion_r2968715393; pointed to the `compute_out_size() == 1` guard, consistent arity check, and correct compiled buffer sizing.
+- `2968277939` decode allocation: replied at https://github.com/alphal00p/gammaloop/pull/49#discussion_r2968715396; pointed to slice-based `decode_f64_output(...)`.
+- `2968286095` summed `override_if`: replied at https://github.com/alphal00p/gammaloop/pull/49#discussion_r2968715398; pointed to `set_override_if(true)` in `evaluate_summed_like_batch_f64(...)`.
+- `2968286097` primary rotation metrics: replied at https://github.com/alphal00p/gammaloop/pull/49#discussion_r2968715397; pointed to the scratch timing ledger for non-primary rotations.
+
+- Left `2968277947` untouched, per your instruction.
+````
