@@ -5,8 +5,8 @@ use tabled::{
     builder::Builder,
     settings::{
         Alignment, Modify, Panel, Span,
-        object::{Cell, Rows},
-        style::Style,
+        object::{Cell, Columns, Object, Rows},
+        style::{HorizontalLine, Style},
         themes::BorderCorrection,
         width::Width,
     },
@@ -18,7 +18,7 @@ use super::{
     display::{StyledText, TextColor},
     status_update::{
         DiscreteMaxWeightDetailsSection, MainResultsRowGroupKind, MainResultsSection,
-        MaxWeightDetailsSection, StatusUpdate,
+        MaxWeightDetailsSection, StatisticsSection, StatusUpdate,
     },
 };
 
@@ -62,6 +62,8 @@ fn render_styled_text(text: &StyledText) -> String {
                 Some(TextColor::Green) => span.text.green(),
                 Some(TextColor::Blue) => span.text.blue(),
                 Some(TextColor::Red) => span.text.red(),
+                Some(TextColor::Yellow) => span.text.yellow(),
+                Some(TextColor::Pink) => span.text.bright_magenta(),
                 None => span.text.normal(),
             };
             if span.style.dimmed {
@@ -75,11 +77,25 @@ fn render_styled_text(text: &StyledText) -> String {
         .collect()
 }
 
+fn render_styled_text_single_line(text: &StyledText) -> String {
+    render_styled_text(text).replace('\n', " ")
+}
+
 fn maybe_render<T>(value: &Option<super::display::DisplayField<T>>) -> String {
     value
         .as_ref()
         .map(|value| render_styled_text(&value.display))
         .unwrap_or_default()
+}
+
+fn status_group_separator() -> tabled::settings::style::VerticalLine<
+    tabled::settings::style::On,
+    tabled::settings::style::On,
+    (),
+> {
+    tabled::settings::style::VerticalLine::new('│')
+        .top('┬')
+        .bottom('┴')
 }
 
 fn suppress_iteration_header_separators(
@@ -263,19 +279,19 @@ fn build_main_results_table(
     builder.push_record(first_row);
 
     let mut header_row = vec![
-        render_styled_text(&section.contribution_header),
+        render_styled_text_single_line(&section.contribution_header),
         String::new(),
     ];
     for slot_header in &section.slot_headers {
         header_row.push(render_styled_text(slot_header));
         header_row.extend(std::iter::repeat_n(String::new(), slot_block_width - 1));
     }
-    header_row.push("χ²/dof".blue().bold().to_string());
-    header_row.push("mwi".blue().bold().to_string());
-    if section.has_target_columns {
-        header_row.push("Δ [σ]".blue().bold().to_string());
-        header_row.push("Δ [%]".blue().bold().to_string());
-    }
+    header_row.extend(
+        section
+            .metadata_headers()
+            .into_iter()
+            .map(|header| render_styled_text(&header)),
+    );
     builder.push_record(header_row);
 
     for group in &visible_row_groups {
@@ -360,11 +376,12 @@ fn build_main_results_table(
 
 fn build_max_weight_details_table(section: &MaxWeightDetailsSection) -> StatusTable {
     let mut builder = Builder::new();
+    let headers = section.headers();
     builder.push_record([
-        "Integrand".blue().bold().to_string(),
-        String::new(),
-        "Max eval".blue().bold().to_string(),
-        "Max eval coordinates".blue().bold().to_string(),
+        render_styled_text(&headers[0]),
+        render_styled_text(&headers[1]),
+        render_styled_text(&headers[2]),
+        render_styled_text(&headers[3]),
     ]);
 
     for group in &section.rows_by_slot {
@@ -380,9 +397,7 @@ fn build_max_weight_details_table(section: &MaxWeightDetailsSection) -> StatusTa
 
     let mut table = builder.build();
     table.modify((0, 0), Span::column(2));
-    table.with(Panel::header(
-        "Maximum weight details".bold().green().to_string(),
-    ));
+    table.with(Panel::header(render_styled_text(&section.title())));
     table.with(Style::rounded().remove_horizontals());
     table.with(BorderCorrection::span());
     table.with(Modify::new(Rows::new(0..2)).with(Alignment::center()));
@@ -411,14 +426,12 @@ fn build_discrete_max_weight_details_table(
     section: &DiscreteMaxWeightDetailsSection,
 ) -> StatusTable {
     let mut builder = Builder::new();
-    let mut header = vec![
-        render_styled_text(&section.contribution_header),
-        String::new(),
-    ];
-    for slot_header in &section.slot_headers {
-        header.push(render_styled_text(slot_header));
-    }
-    header.push("Max eval coordinates".blue().bold().to_string());
+    let mut header = section
+        .summary_headers()
+        .iter()
+        .map(render_styled_text_single_line)
+        .collect_vec();
+    header.push(render_styled_text(&section.coordinates_header()));
     builder.push_record(header);
 
     for group in &section.row_groups {
@@ -451,12 +464,7 @@ fn build_discrete_max_weight_details_table(
 
     let mut table = builder.build();
     table.modify((0, 0), Span::column(2));
-    table.with(Panel::header(
-        "Maximum weight details by discrete bin"
-            .bold()
-            .green()
-            .to_string(),
-    ));
+    table.with(Panel::header(render_styled_text(&section.title())));
 
     let mut separator_rows = vec![1usize, 2usize];
     let mut row_offset = 1usize;
@@ -485,6 +493,57 @@ fn build_discrete_max_weight_details_table(
     }
 }
 
+fn build_statistics_table(section: &StatisticsSection) -> StatusTable {
+    let rows = section.table_rows();
+    let mut builder = Builder::new();
+    for row in &rows {
+        let mut record = vec![render_styled_text(&row.row_label)];
+        for entry in &row.entries {
+            record.push(render_styled_text(&entry.label));
+            record.push(render_styled_text(&entry.value));
+        }
+        builder.push_record(record);
+    }
+
+    let mut table = builder.build();
+    table.with(Panel::header(render_styled_text(&section.title())));
+    table.with(
+        Style::rounded()
+            .remove_horizontals()
+            .verticals([
+                (1, status_group_separator()),
+                (3, status_group_separator()),
+                (5, status_group_separator()),
+                (7, status_group_separator()),
+            ])
+            .horizontals([(
+                1,
+                HorizontalLine::new('─')
+                    .intersection('┬')
+                    .left('├')
+                    .right('┤'),
+            )])
+            .remove_vertical(),
+    );
+    table.with(BorderCorrection::span());
+    table.with(Modify::new(Rows::new(0..1)).with(Alignment::center()));
+    table.with(Modify::new(Rows::new(1..)).with(Alignment::left()));
+    for column in [1usize, 3, 5, 7] {
+        table.with(
+            Modify::new(Rows::new(1..).intersect(Columns::one(column))).with(Alignment::right()),
+        );
+    }
+
+    StatusTable {
+        table,
+        separator_after_rows: Vec::new(),
+        hidden_vertical_boundaries: Vec::new(),
+        full_row_vertical_count: 0,
+        suppress_header_middle_separator: false,
+        suppress_header_tail_separator: false,
+    }
+}
+
 pub(crate) fn render_status_update(update: &StatusUpdate, options: &TabledRenderOptions) -> String {
     let mut tables = vec![build_main_results_table(&update.main_results, options)];
     if options.show_max_weight_details
@@ -501,14 +560,7 @@ pub(crate) fn render_status_update(update: &StatusUpdate, options: &TabledRender
     if options.show_statistics
         && let Some(section) = update.statistics.as_ref()
     {
-        tables.push(StatusTable {
-            table: section.raw.build_status_table(),
-            separator_after_rows: Vec::new(),
-            hidden_vertical_boundaries: Vec::new(),
-            full_row_vertical_count: 0,
-            suppress_header_middle_separator: false,
-            suppress_header_tail_separator: false,
-        });
+        tables.push(build_statistics_table(section));
     }
 
     render_tables_with_shared_width(tables, options.max_table_width)
