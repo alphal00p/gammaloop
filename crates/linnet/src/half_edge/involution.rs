@@ -1122,8 +1122,8 @@ impl From<Flow> for Orientation {
 impl From<Flow> for SignOrZero {
     fn from(value: Flow) -> Self {
         match value {
-            Flow::Source => SignOrZero::Minus,
-            Flow::Sink => SignOrZero::Plus,
+            Flow::Source => SignOrZero::Plus,
+            Flow::Sink => SignOrZero::Minus,
         }
     }
 }
