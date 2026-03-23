@@ -1129,6 +1129,7 @@ fn build_python_integrate_command(
     integrate.min_time_between_status_updates = min_time_between_status_updates;
     integrate.max_table_width = max_table_width;
     integrate.write_results_for_each_iteration = write_results_for_each_iteration;
+    integrate.renderer = crate::commands::integrate::RendererOption::Tabled;
 
     if let Some(target) = target {
         if let Ok(target_dict) = target.cast::<PyDict>() {

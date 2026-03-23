@@ -17,8 +17,8 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Complex as SymComplex;
 
 use crate::integrate::{
-    ContributionSortMode, IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions,
-    SamplingCorrelationMode, SlotMeta, havana_integrate,
+    ContributionSortMode, HavanaIntegrateRequest, IntegrationSlot, IntegrationStatusPhaseDisplay,
+    IntegrationStatusViewOptions, SamplingCorrelationMode, SlotMeta, havana_integrate,
 };
 
 const CENTRAL_VALUE_TOLERANCE: F<f64> = F(2.0e-2);
@@ -31,6 +31,12 @@ const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 fn default_render_options() -> IntegrationStatusViewOptions {
     IntegrationStatusViewOptions {
         phase_display: IntegrationStatusPhaseDisplay::Both,
+        training_phase_display: IntegrationStatusPhaseDisplay::Real,
+        training_slot: 0,
+        slot_training_phase_displays: vec![IntegrationStatusPhaseDisplay::Real],
+        per_slot_training_phase: false,
+        target_relative_accuracy: None,
+        target_absolute_accuracy: None,
         show_statistics: true,
         show_max_weight_details: true,
         show_top_discrete_grid: false,
@@ -77,18 +83,22 @@ fn compare_integration(
         IntegratedPhase::Both => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(
-                vec![settings.clone()],
-                SamplingCorrelationMode::Correlated,
-                vec![model.clone()],
-                vec![slot_meta.clone()],
-                vec![crate::integrand_factory(settings)],
-                N_CORES_FOR_INTEGRATION_IN_TESTS,
-                vec![Some(target)],
-                None,
-                None,
-                crate::integrate::WorkspaceSnapshotControl::default(),
-                crate::integrate::IterationBatchingSettings::default(),
-                default_render_options(),
+                HavanaIntegrateRequest {
+                    slots: vec![IntegrationSlot::new(
+                        slot_meta.clone(),
+                        settings.clone(),
+                        model.clone(),
+                        crate::integrand_factory(settings),
+                        Some(target),
+                    )],
+                    sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                    n_cores: N_CORES_FOR_INTEGRATION_IN_TESTS,
+                    state: None,
+                    workspace: None,
+                    output_control: crate::integrate::WorkspaceSnapshotControl::default(),
+                    batching: crate::integrate::IterationBatchingSettings::default(),
+                    view_options: default_render_options(),
+                },
                 |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;
@@ -109,18 +119,22 @@ fn compare_integration(
             }
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(
-                vec![settings.clone()],
-                SamplingCorrelationMode::Correlated,
-                vec![model.clone()],
-                vec![slot_meta.clone()],
-                vec![crate::integrand_factory(settings)],
-                N_CORES_FOR_INTEGRATION_IN_TESTS,
-                vec![Some(target)],
-                None,
-                None,
-                crate::integrate::WorkspaceSnapshotControl::default(),
-                crate::integrate::IterationBatchingSettings::default(),
-                default_render_options(),
+                HavanaIntegrateRequest {
+                    slots: vec![IntegrationSlot::new(
+                        slot_meta.clone(),
+                        settings.clone(),
+                        model.clone(),
+                        crate::integrand_factory(settings),
+                        Some(target),
+                    )],
+                    sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                    n_cores: N_CORES_FOR_INTEGRATION_IN_TESTS,
+                    state: None,
+                    workspace: None,
+                    output_control: crate::integrate::WorkspaceSnapshotControl::default(),
+                    batching: crate::integrate::IterationBatchingSettings::default(),
+                    view_options: default_render_options(),
+                },
                 |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;
@@ -143,18 +157,22 @@ fn compare_integration(
         IntegratedPhase::Real => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(
-                vec![settings.clone()],
-                SamplingCorrelationMode::Correlated,
-                vec![model.clone()],
-                vec![slot_meta.clone()],
-                vec![crate::integrand_factory(settings)],
-                N_CORES_FOR_INTEGRATION_IN_TESTS,
-                vec![Some(target)],
-                None,
-                None,
-                crate::integrate::WorkspaceSnapshotControl::default(),
-                crate::integrate::IterationBatchingSettings::default(),
-                default_render_options(),
+                HavanaIntegrateRequest {
+                    slots: vec![IntegrationSlot::new(
+                        slot_meta.clone(),
+                        settings.clone(),
+                        model.clone(),
+                        crate::integrand_factory(settings),
+                        Some(target),
+                    )],
+                    sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                    n_cores: N_CORES_FOR_INTEGRATION_IN_TESTS,
+                    state: None,
+                    workspace: None,
+                    output_control: crate::integrate::WorkspaceSnapshotControl::default(),
+                    batching: crate::integrate::IterationBatchingSettings::default(),
+                    view_options: default_render_options(),
+                },
                 |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;
@@ -177,18 +195,22 @@ fn compare_integration(
         IntegratedPhase::Imag => {
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(
-                vec![settings.clone()],
-                SamplingCorrelationMode::Correlated,
-                vec![model.clone()],
-                vec![slot_meta],
-                vec![crate::integrand_factory(settings)],
-                N_CORES_FOR_INTEGRATION_IN_TESTS,
-                vec![Some(target)],
-                None,
-                None,
-                crate::integrate::WorkspaceSnapshotControl::default(),
-                crate::integrate::IterationBatchingSettings::default(),
-                default_render_options(),
+                HavanaIntegrateRequest {
+                    slots: vec![IntegrationSlot::new(
+                        slot_meta,
+                        settings.clone(),
+                        model.clone(),
+                        crate::integrand_factory(settings),
+                        Some(target),
+                    )],
+                    sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                    n_cores: N_CORES_FOR_INTEGRATION_IN_TESTS,
+                    state: None,
+                    workspace: None,
+                    output_control: crate::integrate::WorkspaceSnapshotControl::default(),
+                    batching: crate::integrate::IterationBatchingSettings::default(),
+                    view_options: default_render_options(),
+                },
                 |_| Ok(()),
             )?;
             let integral = &res.single_slot().expect("single slot expected").integral;

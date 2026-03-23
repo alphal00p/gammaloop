@@ -4,6 +4,8 @@ use vergen_gitcl::{Emitter, GitclBuilder};
 use walkdir::WalkDir;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rerun-if-env-changed=EXTRA_MACOS_LIBS_FOR_GNU_GCC");
+
     #[cfg(feature = "vergen_gitcl")]
     {
         let git = GitclBuilder::default().branch(true).build()?;

@@ -58,6 +58,7 @@ rand = { workspace = true, features = ["small_rng"] }
 rayon = { workspace = true }
 reedline = "0.42.0"
 regex = "1.11.2"
+ratatui = { workspace = true, features = ["crossterm_0_28"] }
 rust-embed = { version = "8.4", features = ["interpolate-folder-path"] }
 schemars = { workspace = true }
 serde = { workspace = true }
