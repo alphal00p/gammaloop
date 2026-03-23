@@ -2,17 +2,20 @@
 name = "linnet-py"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
 description = "Python bindings for linnet"
+license = "MIT"
+
+[package.metadata.maturin]
+name = "linnet_py"
 
 [lib]
-name = "linnet_py"
 crate-type = ["cdylib", "rlib"]
+name = "linnet_py"
 
 [dependencies]
-pyo3 = { workspace = true }
+dot-parser = { workspace = true }
 linnet = { workspace = true }
-dot-parser ={ workspace = true }
+pyo3 = { workspace = true }
 pyo3-stub-gen = { workspace = true, default-features = false }
 
 [build-dependencies]
@@ -20,8 +23,5 @@ pyo3-build-config = { version = "0.25" }
 
 [features]
 default = ["extension-module"]
-extension-module = ["pyo3/extension-module"]
 abi3-py310 = ["pyo3/abi3-py310"]
-
-[package.metadata.maturin]
-name = "linnet_py"
+extension-module = ["pyo3/extension-module"]

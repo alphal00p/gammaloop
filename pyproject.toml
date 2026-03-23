@@ -42,9 +42,6 @@ dev = [
   "ufo-model-loader>=0.1.1",
 ]
 
-[tool.uv]
-package = false
-
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
@@ -53,9 +50,6 @@ build-backend = "maturin"
 features = ["python_abi"]
 module-name = "gammaloop._gammaloop"
 python-source = "crates/gammaloop-api/python"
-sdist-include = ["LICENSE.md", "README.md"]
-
-[tool.pytest.ini_options]
 
 [tool.mypy]
 disable_error_code = "no-redef"
@@ -76,3 +70,6 @@ ignore_missing_imports = true
 [tool.pyright]
 # reportPrivateImportUsage = "none"
 # include = ["gamm/gammaloop"]
+
+[tool.uv]
+package = false

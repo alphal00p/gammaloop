@@ -48,6 +48,7 @@ jobs:
             libssl-dev \
             libgmp-dev \
             libmpfr-dev \
+            just \
             libmpc-dev \
             python3 \
             python3-dev
@@ -75,7 +76,7 @@ jobs:
           fi
 
       - name: Run tests
-        run: cargo nextest run --workspace --profile ci --locked --no-fail-fast
+        run: just test-ci
 
       - name: Upload nextest JUnit
         if: always()
@@ -107,6 +108,7 @@ jobs:
             libmpfr-dev \
             libmpc-dev \
             python3 \
+            just \
             python3-dev
 
       - uses: dtolnay/rust-toolchain@stable
@@ -119,15 +121,15 @@ jobs:
 
       - name: Run clippy
         if: matrix.check == 'clippy'
-        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+        run: just clippy -- -D warnings
 
       - name: Run fmt
         if: matrix.check == 'fmt'
-        run: cargo fmt --all -- --check
+        run: just fmt -- --check
 
       - name: Run doc
         if: matrix.check == 'doc'
-        run: cargo doc --workspace --no-deps --locked
+        run: just doc
 
   checks:
     name: Checks

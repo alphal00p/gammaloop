@@ -123,8 +123,6 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
         true,
     )?;
 
-    
-
     (|| -> Result<()> {
         cli.run_command("set model mass_scalar_2=0.1")?;
         cli.run_command("generate xs scalar_1 > scalar_2 scalar_2 --only-diagrams")?;

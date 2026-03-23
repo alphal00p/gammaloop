@@ -251,7 +251,8 @@ pub(crate) fn generate_supergraph_cff(graph: &Graph) -> Result<CFFExpression<Ori
             if result
                 .surfaces
                 .esurface_cache
-                .position(|val| *val == esurface).is_some()
+                .position(|val| *val == esurface)
+                .is_some()
             {
                 // already present
             } else {
@@ -455,8 +456,6 @@ impl Graph {
             }
         }
 
-        
-
         generate_cff_from_orientations(
             oriented_acyclic_graphs,
             &mut self.surface_cache,
@@ -569,10 +568,7 @@ fn post_process<S: SubGraphLike>(
                     constraint_data
                         .illegal_esurfaces
                         .iter()
-                        .all(|illegal_esurface| {
-                            
-                            esurface_to_compare != *illegal_esurface
-                        })
+                        .all(|illegal_esurface| esurface_to_compare != *illegal_esurface)
                 }
                 HybridSurfaceID::Hsurface(hsurface_id) => {
                     let hsurface_to_compare = &surface_cache.hsurface_cache[*hsurface_id];
@@ -1540,8 +1536,7 @@ mod tests_cff {
         let cff_hedge =
             generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
-        let cff_res =
-            energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
+        let cff_res = energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;

@@ -38,19 +38,28 @@ clean:
 
 # Check code without building
 check:
-    cargo check
+    cargo check --workspace --all-targets --locked
+
+doc:
+    cargo doc --workspace --no-deps --locked
 
 # Format code
-fmt:
-    cargo fmt
+fmt *lint_args:
+    #!/usr/bin/env bash
+    if [ -n "{{ lint_args }}" ]; then
+        cargo fmt --all {{ lint_args }}
+    else
+        cargo fmt --all
+    fi
 
 # Run clippy linter
-clippy:
-    cargo clippy
-
-# Run clippy linter in release mode
-clippy-release:
-    cargo clippy --release
+clippy *lint_args:
+    #!/usr/bin/env bash
+    if [ -n "{{ lint_args }}" ]; then
+        cargo clippy --workspace --all-targets --locked -- {{ lint_args }}
+    else
+        cargo clippy --workspace --all-targets --locked
+    fi
 
 # Run clippy via Nix (same as CI)
 clippy-nix:
@@ -103,6 +112,15 @@ test-release TEST_NAME="":
         cargo nextest run {{ TEST_NAME }} --release --profile ci
     else
         cargo nextest run --release --profile ci
+    fi
+
+# Run tests in release mode (faster execution)
+test-ci TEST_NAME="":
+    #!/usr/bin/env bash
+    if [ -n "{{ TEST_NAME }}" ]; then
+       cargo nextest run {{ TEST_NAME }} --workspace --profile ci --locked --no-fail-fast {{ TEST_NAME }}
+    else
+        cargo nextest run --workspace --profile ci --locked --no-fail-fast
     fi
 
 # Run tests in release mode with full parallelism

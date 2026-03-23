@@ -12,10 +12,6 @@
   - `docs/architecture/architecture-ideas.md` for roadmap/proposals.
 
 ## Build, Test, and Development Commands
-- Build from source (full deps + binaries):
-  ```bash
-  ./bin/compile.sh
-  ```
 - Build Rust CLI in dev-optim:
   ```bash
   just build-cli
@@ -41,19 +37,23 @@
   building with the following environment variable change `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` (see impact of this in file `build.rs`.
 
 ## Coding Style & Naming Conventions
-- Rust: use `rustfmt` formatting and address `clippy` warnings before merging.
+### Rust
+- Always format and run cargo clippy warnings before finishing
 - Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
-- Python (bindings and helpers): 4-space indentation; `black` is listed in `pyproject.toml` dev deps.
+- Prefer methods on types to bare functions
+- Follow the clippy suggestions religiously
 - Aggressively use pub(crate) except when absolutely necessary to have fully public exposure (helps monitor unused components with clippy)
-- When exposing a function to within the crate only, prefer `pub(crate)` to more permissive `pub`.
+
+### Python
+- use the ruff formatter.
 
 ## Testing Guidelines
 - Rust integration tests live in `tests/` (files like `test_runs.rs`).
-- Use `cargo nextest` via `just test TEST_NAME` for targeted runs, or `./bin/run_tests.sh rust` for a full pass.
-- Python tests use `pytest` (see `./bin/run_tests.sh python` or `python -m pytest` inside the module).
+- Use `cargo nextest` via `just test TEST_NAME` for targeted runs.
 
 ## Commit & Pull Request Guidelines
-- Commit messages are short and descriptive, typically lowercase without scopes (e.g., "remove edge quotes").
+- Commit messages are short and descriptive, typically lowercase without scopes (e.g., "remove edge quotes"), but contain the full user prompt in the description
+- If there is already a commit, prefer making a new one
 - PRs should include: a clear summary, test command(s) run, and any example command card used to validate behavior.
 - If changes touch CLI state, mention `gammaloop_state/` impacts or migration steps.
 
@@ -119,4 +119,4 @@
 
 ## Configuration & State Tips
 - CLI runs create a `gammaloop_state/` directory by default; keep it out of commits unless intentionally sharing a reproducible state.
-- Use `./bin/gammaloop -s <state_dir>` for isolated experiments.
+- Use `./gammaloop -s <state_dir>` for isolated experiments.

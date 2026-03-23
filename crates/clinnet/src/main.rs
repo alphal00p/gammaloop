@@ -1089,10 +1089,11 @@ fn format_typst_array(items: &[String]) -> String {
 
 fn ensure_parent_dir(path: &Path) -> Result<()> {
     if let Some(parent) = path.parent()
-        && !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("failed to create directory {}", parent.display()))?;
-        }
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create directory {}", parent.display()))?;
+    }
     Ok(())
 }
 
