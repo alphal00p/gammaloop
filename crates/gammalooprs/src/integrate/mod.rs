@@ -54,7 +54,10 @@ pub use status_update::{
     ContributionSortMode, IntegrationStatusKind, IntegrationStatusPhaseDisplay,
     IntegrationStatusViewOptions, StatusUpdate,
 };
-use status_update::{build_saved_status_update, build_status_update, evaluate_target_accuracy};
+use status_update::{
+    StatusUpdateBuildRequest, build_saved_status_update, build_status_update,
+    evaluate_target_accuracy,
+};
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -88,6 +91,43 @@ impl Default for IterationBatchingSettings {
             emit_initial_status_update: true,
         }
     }
+}
+
+pub struct IntegrationSlot {
+    pub meta: SlotMeta,
+    pub settings: RuntimeSettings,
+    pub model: Model,
+    pub integrand: Integrand,
+    pub target: Option<Complex<F<f64>>>,
+}
+
+impl IntegrationSlot {
+    pub fn new(
+        meta: SlotMeta,
+        settings: RuntimeSettings,
+        model: Model,
+        integrand: Integrand,
+        target: Option<Complex<F<f64>>>,
+    ) -> Self {
+        Self {
+            meta,
+            settings,
+            model,
+            integrand,
+            target,
+        }
+    }
+}
+
+pub struct HavanaIntegrateRequest {
+    pub slots: Vec<IntegrationSlot>,
+    pub sampling_correlation_mode: SamplingCorrelationMode,
+    pub n_cores: usize,
+    pub state: Option<IntegrationState>,
+    pub workspace: Option<PathBuf>,
+    pub output_control: WorkspaceSnapshotControl,
+    pub batching: IterationBatchingSettings,
+    pub view_options: IntegrationStatusViewOptions,
 }
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
@@ -189,6 +229,14 @@ impl SamplingSlotState {
         };
         Self::new(grid, discrete_axis_labels)
     }
+}
+
+#[derive(Default)]
+struct MonitoredDiscreteSetup {
+    path: Option<Vec<usize>>,
+    axis_label: Option<String>,
+    bin_descriptions: Option<Vec<String>>,
+    warning: Option<String>,
 }
 
 #[derive(Tabled)]
@@ -874,21 +922,19 @@ fn coalesce_first_non_trivial_discrete_bin_descriptions(
 }
 
 fn resolve_first_non_trivial_discrete_bin_descriptions(
-    slot_metas: &[SlotMeta],
-    slot_integrands: &[Integrand],
+    slots: &[IntegrationSlot],
     monitored_path: &[usize],
     axis_label: &str,
 ) -> (Option<Vec<String>>, Option<String>) {
-    let Some(slot_descriptions) = slot_metas
+    let Some(slot_descriptions) = slots
         .iter()
-        .zip(slot_integrands.iter())
-        .map(|(slot_meta, integrand)| {
+        .map(|slot| {
             first_non_trivial_discrete_bin_descriptions_for_integrand(
-                integrand,
+                &slot.integrand,
                 monitored_path,
                 axis_label,
             )
-            .map(|descriptions| (slot_meta.key(), descriptions))
+            .map(|descriptions| (slot.meta.key(), descriptions))
         })
         .collect::<Option<Vec<_>>>()
     else {
@@ -900,23 +946,17 @@ fn resolve_first_non_trivial_discrete_bin_descriptions(
 
 fn resolve_monitored_discrete_setup(
     sampling_correlation_mode: SamplingCorrelationMode,
-    slot_metas: &[SlotMeta],
-    slot_integrands: &[Integrand],
+    slots: &[IntegrationSlot],
     sampling_states: &[SamplingSlotState],
-) -> (
-    Option<Vec<usize>>,
-    Option<String>,
-    Option<Vec<String>>,
-    Option<String>,
-) {
+) -> MonitoredDiscreteSetup {
     let Some(reference_state) = sampling_states.first() else {
-        return (None, None, None, None);
+        return MonitoredDiscreteSetup::default();
     };
 
     let Some((reference_path, reference_axis_label, reference_bin_count)) =
         monitored_discrete_layout(&reference_state.grid, &reference_state.discrete_axis_labels)
     else {
-        return (None, None, None, None);
+        return MonitoredDiscreteSetup::default();
     };
 
     if sampling_correlation_mode == SamplingCorrelationMode::Uncorrelated {
@@ -925,47 +965,42 @@ fn resolve_monitored_discrete_setup(
                 &sampling_state.grid,
                 &sampling_state.discrete_axis_labels,
             ) else {
-                return (
-                    None,
-                    None,
-                    None,
-                    Some(
+                return MonitoredDiscreteSetup {
+                    warning: Some(
                         "Selected integrands do not all expose a compatible first non-trivial monitored discrete dimension. Shared discrete-bin monitoring tables will be disabled."
                             .to_string(),
                     ),
-                );
+                    ..MonitoredDiscreteSetup::default()
+                };
             };
 
             if path != reference_path
                 || axis_label != reference_axis_label
                 || bin_count != reference_bin_count
             {
-                return (
-                    None,
-                    None,
-                    None,
-                    Some(format!(
+                return MonitoredDiscreteSetup {
+                    warning: Some(format!(
                         "Selected integrands do not share a compatible first non-trivial monitored discrete layout (mismatch at {}). Shared discrete-bin monitoring tables will be disabled.",
-                        slot_metas[slot_index].key().blue()
+                        slots[slot_index].meta.key().blue()
                     )),
-                );
+                    ..MonitoredDiscreteSetup::default()
+                };
             }
         }
     }
 
     let (descriptions, label_warning) = resolve_first_non_trivial_discrete_bin_descriptions(
-        slot_metas,
-        slot_integrands,
+        slots,
         &reference_path,
         &reference_axis_label,
     );
 
-    (
-        Some(reference_path),
-        Some(reference_axis_label),
-        descriptions,
-        label_warning,
-    )
+    MonitoredDiscreteSetup {
+        path: Some(reference_path),
+        axis_label: Some(reference_axis_label),
+        bin_descriptions: descriptions,
+        warning: label_warning,
+    }
 }
 
 fn render_orientation_description(description: &str) -> String {
@@ -1493,10 +1528,9 @@ fn max_weight_row_descriptors(
     rows
 }
 
-fn max_eval_entry(
-    accumulator: &StatisticsAccumulator<F<f64>>,
-    positive: bool,
-) -> Option<(F<f64>, Option<&Sample<F<f64>>>)> {
+type MaxEvalEntry<'a> = Option<(F<f64>, Option<&'a Sample<F<f64>>>)>;
+
+fn max_eval_entry(accumulator: &StatisticsAccumulator<F<f64>>, positive: bool) -> MaxEvalEntry<'_> {
     let (value, sample) = if positive {
         (
             accumulator.max_eval_positive,
@@ -1695,8 +1729,8 @@ impl CoreIterationState {
 
     fn evaluate_chunk(
         &mut self,
-        slot_settings: &[RuntimeSettings],
-        slot_models: &[Model],
+        slot_settings: &[&RuntimeSettings],
+        slot_models: &[&Model],
         iter: usize,
         current_max_evals: &[Complex<F<f64>>],
         chunk_size: usize,
@@ -1739,7 +1773,7 @@ impl CoreIterationState {
                     let evaluation_start = Instant::now();
                     let raw_batch = integrand.evaluate_samples_raw(
                         &samples,
-                        &slot_models[slot_index],
+                        slot_models[slot_index],
                         iter,
                         false,
                         true,
@@ -1826,7 +1860,7 @@ impl CoreIterationState {
                     let evaluation_start = Instant::now();
                     let raw_batch = self.slot_integrands[slot_index].evaluate_samples_raw(
                         &samples,
-                        &slot_models[slot_index],
+                        slot_models[slot_index],
                         iter,
                         false,
                         true,
@@ -1930,7 +1964,7 @@ fn slot_seed(global_seed: u64, slot_index: usize) -> u64 {
 
 fn apply_iteration_core_states(
     integration_state: &mut IntegrationState,
-    slot_settings: &[RuntimeSettings],
+    slots: &[IntegrationSlot],
     cores: usize,
     cur_points: usize,
     elapsed_seconds: f64,
@@ -2027,10 +2061,12 @@ fn apply_iteration_core_states(
             discrete_axis_labels,
         };
         sampling_state.grid.update(
-            F(slot_settings[actual_slot_index]
+            F(slots[actual_slot_index]
+                .settings
                 .integrator
                 .discrete_dim_learning_rate),
-            F(slot_settings[actual_slot_index]
+            F(slots[actual_slot_index]
+                .settings
                 .integrator
                 .continuous_dim_learning_rate),
         );
@@ -2045,7 +2081,7 @@ fn apply_iteration_core_states(
 
 fn build_preview_integration_state(
     integration_state: &IntegrationState,
-    slot_settings: &[RuntimeSettings],
+    slots: &[IntegrationSlot],
     cores: usize,
     completed_points: usize,
     elapsed_seconds: f64,
@@ -2054,7 +2090,7 @@ fn build_preview_integration_state(
     let mut preview = integration_state.clone();
     apply_iteration_core_states(
         &mut preview,
-        slot_settings,
+        slots,
         cores,
         completed_points,
         elapsed_seconds,
@@ -2065,68 +2101,50 @@ fn build_preview_integration_state(
 
 /// Integrate function used for local runs
 pub fn havana_integrate<S>(
-    slot_settings: Vec<RuntimeSettings>,
-    sampling_correlation_mode: SamplingCorrelationMode,
-    slot_models: Vec<Model>,
-    slot_metas: Vec<SlotMeta>,
-    slot_integrands: Vec<Integrand>,
-    n_cores: usize,
-    targets: Vec<Option<Complex<F<f64>>>>,
-    state: Option<IntegrationState>,
-    workspace: Option<PathBuf>,
-    output_control: WorkspaceSnapshotControl,
-    batching: IterationBatchingSettings,
-    view_options: IntegrationStatusViewOptions,
+    request: HavanaIntegrateRequest,
     mut status_emitter: S,
 ) -> Result<IntegrationResult>
 where
     S: FnMut(StatusUpdate) -> Result<()>,
 {
-    if slot_metas.is_empty() {
+    let HavanaIntegrateRequest {
+        mut slots,
+        sampling_correlation_mode,
+        n_cores,
+        state,
+        workspace,
+        output_control,
+        batching,
+        view_options,
+    } = request;
+
+    if slots.is_empty() {
         return Err(Report::msg(
             "At least one integrand must be selected for integration",
         ));
     }
-    if slot_metas.len() != slot_integrands.len()
-        || slot_metas.len() != slot_settings.len()
-        || slot_metas.len() != slot_models.len()
-        || slot_metas.len() != targets.len()
-    {
-        return Err(Report::msg(
-            "Multi-integrand integration received inconsistent slot metadata, settings, models, integrands, or targets",
-        ));
-    }
 
-    let mut slot_integrands = slot_integrands;
-    let slot0_settings = &slot_settings[0];
+    let slot_metas = slots.iter().map(|slot| slot.meta.clone()).collect_vec();
+    let targets = slots.iter().map(|slot| slot.target).collect_vec();
     let sampling_states = match sampling_correlation_mode {
         SamplingCorrelationMode::Correlated => {
-            vec![SamplingSlotState::from_integrand(&slot_integrands[0])]
+            vec![SamplingSlotState::from_integrand(&slots[0].integrand)]
         }
-        SamplingCorrelationMode::Uncorrelated => slot_integrands
+        SamplingCorrelationMode::Uncorrelated => slots
             .iter()
-            .map(SamplingSlotState::from_integrand)
+            .map(|slot| SamplingSlotState::from_integrand(&slot.integrand))
             .collect_vec(),
     };
-    let (
-        monitored_discrete_path,
-        first_non_trivial_discrete_label,
-        first_non_trivial_discrete_bin_descriptions,
-        label_warning,
-    ) = resolve_monitored_discrete_setup(
-        sampling_correlation_mode,
-        &slot_metas,
-        &slot_integrands,
-        &sampling_states,
-    );
+    let monitored_discrete_setup =
+        resolve_monitored_discrete_setup(sampling_correlation_mode, &slots, &sampling_states);
     let slot_first_non_trivial_discrete_breakdown_metadata =
-        if let Some(path) = monitored_discrete_path.as_deref() {
-            slot_integrands
+        if let Some(path) = monitored_discrete_setup.path.as_deref() {
+            slots
                 .iter()
                 .enumerate()
-                .map(|(slot_index, integrand)| {
+                .map(|(slot_index, slot)| {
                     build_persisted_discrete_breakdown_metadata(
-                        integrand,
+                        &slot.integrand,
                         path,
                         &sampling_states[sampling_correlation_mode.state_index(slot_index)]
                             .discrete_axis_labels,
@@ -2136,7 +2154,7 @@ where
         } else {
             vec![None; slot_metas.len()]
         };
-    if let Some(label_warning) = label_warning.as_ref() {
+    if let Some(label_warning) = monitored_discrete_setup.warning.as_ref() {
         warn!("{label_warning}");
     }
 
@@ -2147,16 +2165,16 @@ where
             sampling_correlation_mode,
             sampling_states.clone(),
             slot_metas.clone(),
-            monitored_discrete_path.clone(),
-            first_non_trivial_discrete_label.clone(),
-            first_non_trivial_discrete_bin_descriptions.clone(),
+            monitored_discrete_setup.path.clone(),
+            monitored_discrete_setup.axis_label.clone(),
+            monitored_discrete_setup.bin_descriptions.clone(),
             slot_first_non_trivial_discrete_breakdown_metadata,
         )
     };
-    integration_state.monitored_discrete_path = monitored_discrete_path;
-    integration_state.first_non_trivial_discrete_label = first_non_trivial_discrete_label;
+    integration_state.monitored_discrete_path = monitored_discrete_setup.path;
+    integration_state.first_non_trivial_discrete_label = monitored_discrete_setup.axis_label;
     integration_state.first_non_trivial_discrete_bin_descriptions =
-        first_non_trivial_discrete_bin_descriptions;
+        monitored_discrete_setup.bin_descriptions;
     if integration_state.slot_metas != slot_metas {
         return Err(Report::msg(
             "Saved integration state slots do not match the currently selected integrands",
@@ -2184,10 +2202,11 @@ where
         ));
     }
 
-    let sampling_str = slot0_settings.sampling.describe_settings();
-    let dimension = slot_integrands[0].get_n_dim();
-    let discrete_depth = slot0_settings.sampling.discrete_depth();
-    let is_tropical_sampling = slot0_settings
+    let sampling_str = slots[0].settings.sampling.describe_settings();
+    let dimension = slots[0].integrand.get_n_dim();
+    let discrete_depth = slots[0].settings.sampling.discrete_depth();
+    let is_tropical_sampling = slots[0]
+        .settings
         .sampling
         .get_parameterization_settings()
         .is_none();
@@ -2226,7 +2245,7 @@ where
 
     info!(
         "Integrating using {} ltd with {} {} over {} ...",
-        if slot0_settings.general.use_ltd {
+        if slots[0].settings.general.use_ltd {
             "naive"
         } else {
             "cff"
@@ -2242,15 +2261,15 @@ where
     let mut n_samples_evaluated = 0;
     let mut emitted_latest_observable_paths = vec![None; n_slots];
     clear_iteration_abort_request();
-    'integrateLoop: while integration_state.num_points < slot0_settings.integrator.n_max {
+    'integrateLoop: while integration_state.num_points < slots[0].settings.integrator.n_max {
         // ensure we do not overshoot
         let cur_points = {
-            let cur_points_not_final_iter = slot0_settings.integrator.n_start
-                + slot0_settings.integrator.n_increase * integration_state.iter;
+            let cur_points_not_final_iter = slots[0].settings.integrator.n_start
+                + slots[0].settings.integrator.n_increase * integration_state.iter;
             if cur_points_not_final_iter + integration_state.num_points
-                > slot0_settings.integrator.n_max
+                > slots[0].settings.integrator.n_max
             {
-                slot0_settings.integrator.n_max - integration_state.num_points
+                slots[0].settings.integrator.n_max - integration_state.num_points
             } else {
                 cur_points_not_final_iter
             }
@@ -2272,22 +2291,22 @@ where
         let mut current_batch_size = initial_batch_size(batching);
         let mut last_live_status = None;
         if batching.emit_initial_status_update && !is_interrupted() {
-            status_emitter(build_status_update(
-                IntegrationStatusKind::Live,
-                &integration_state,
+            status_emitter(build_status_update(StatusUpdateBuildRequest {
+                kind: IntegrationStatusKind::Live,
+                integration_state: &integration_state,
                 cores,
-                t_start.elapsed(),
-                iteration_start.elapsed(),
-                0,
-                integration_state.num_points,
+                elapsed_time: t_start.elapsed(),
+                iteration_elapsed_time: iteration_start.elapsed(),
+                cur_points: 0,
+                total_points_display: integration_state.num_points,
                 n_samples_evaluated,
-                &targets,
-                &view_options,
-                Some(status_update::LiveIterationProgress {
+                targets: &targets,
+                render_options: &view_options,
+                live_progress: Some(status_update::LiveIterationProgress {
                     completed_points: 0,
                     target_points: cur_points,
                 }),
-            ))?;
+            }))?;
         }
 
         let current_max_evals = integration_state
@@ -2301,14 +2320,14 @@ where
             .enumerate()
             .map(|(core_id, &n_points)| {
                 CoreIterationState::new(
-                    slot_integrands.clone(),
+                    slots.iter().map(|slot| slot.integrand.clone()).collect(),
                     integration_state.sampling_correlation_mode,
                     &integration_state
                         .sampling_states
                         .iter()
                         .map(|sampling_state| sampling_state.grid.clone())
                         .collect_vec(),
-                    slot0_settings.integrator.seed + integration_state.iter as u64,
+                    slots[0].settings.integrator.seed + integration_state.iter as u64,
                     target_points_per_core * core_id,
                     n_points,
                 )
@@ -2316,20 +2335,24 @@ where
             .collect_vec();
         while total_remaining_points(&worker_states) > 0 {
             let round_started_at = Instant::now();
-            let processed_per_core: Vec<Result<usize>> = pool.install(|| {
-                worker_states
-                    .par_iter_mut()
-                    .map(|worker_state| {
-                        worker_state.evaluate_chunk(
-                            &slot_settings,
-                            &slot_models,
-                            integration_state.iter,
-                            &current_max_evals,
-                            current_batch_size,
-                        )
-                    })
-                    .collect()
-            });
+            let processed_per_core: Vec<Result<usize>> = {
+                let slot_settings = slots.iter().map(|slot| &slot.settings).collect_vec();
+                let slot_models = slots.iter().map(|slot| &slot.model).collect_vec();
+                pool.install(|| {
+                    worker_states
+                        .par_iter_mut()
+                        .map(|worker_state| {
+                            worker_state.evaluate_chunk(
+                                &slot_settings,
+                                &slot_models,
+                                integration_state.iter,
+                                &current_max_evals,
+                                current_batch_size,
+                            )
+                        })
+                        .collect()
+                })
+            };
             let processed_this_round = processed_per_core
                 .into_iter()
                 .collect::<Result<Vec<_>>>()?
@@ -2354,28 +2377,28 @@ where
                 if should_emit_live_status {
                     let preview_state = build_preview_integration_state(
                         &integration_state,
-                        &slot_settings,
+                        &slots,
                         cores,
                         completed_points,
                         elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
                         &worker_states,
                     );
-                    status_emitter(build_status_update(
-                        IntegrationStatusKind::Live,
-                        &preview_state,
+                    status_emitter(build_status_update(StatusUpdateBuildRequest {
+                        kind: IntegrationStatusKind::Live,
+                        integration_state: &preview_state,
                         cores,
-                        t_start.elapsed(),
-                        iteration_start.elapsed(),
-                        completed_points,
-                        integration_state.num_points + completed_points,
-                        n_samples_evaluated + completed_points,
-                        &targets,
-                        &view_options,
-                        Some(status_update::LiveIterationProgress {
+                        elapsed_time: t_start.elapsed(),
+                        iteration_elapsed_time: iteration_start.elapsed(),
+                        cur_points: completed_points,
+                        total_points_display: integration_state.num_points + completed_points,
+                        n_samples_evaluated: n_samples_evaluated + completed_points,
+                        targets: &targets,
+                        render_options: &view_options,
+                        live_progress: Some(status_update::LiveIterationProgress {
                             completed_points,
                             target_points: cur_points,
                         }),
-                    ))?;
+                    }))?;
                     last_live_status = Some(now);
                 }
             }
@@ -2427,7 +2450,7 @@ where
         n_samples_evaluated += completed_points;
         apply_iteration_core_states(
             &mut integration_state,
-            &slot_settings,
+            &slots,
             cores,
             completed_points,
             elapsed_seconds_offset + t_start.elapsed().as_secs_f64(),
@@ -2445,18 +2468,21 @@ where
                 owner_slot.merge_runtime_results(other_slot)?;
             }
         }
-        slot_integrands = owner_core.clone();
+        for (slot, integrand) in slots.iter_mut().zip(owner_core.iter()) {
+            slot.integrand = integrand.clone();
+        }
 
         // Update observable accumulators, persist authoritative resume state, then refresh
         // the latest user-facing snapshots.
-        for integrand in slot_integrands.iter_mut() {
-            integrand.update_runtime_results(integration_state.iter);
+        for slot in &mut slots {
+            slot.integrand
+                .update_runtime_results(integration_state.iter);
         }
 
         if let Some(ref workspace_path) = workspace {
-            for (slot_index, integrand) in slot_integrands.iter().enumerate() {
+            for (slot_index, slot) in slots.iter().enumerate() {
                 write_observable_resume_state(
-                    integrand,
+                    &slot.integrand,
                     Some(workspace_path.as_path()),
                     &integration_state.slot_metas[slot_index],
                     integration_state.iter,
@@ -2472,47 +2498,47 @@ where
             )?;
         }
 
-        for (slot_index, integrand) in slot_integrands.iter().enumerate() {
+        for (slot_index, slot) in slots.iter().enumerate() {
             let workspace_path = workspace
                 .as_deref()
                 .map(|root| slot_workspace_path(root, &integration_state.slot_metas[slot_index]));
             emitted_latest_observable_paths[slot_index] =
-                write_latest_observables_output(integrand, workspace_path.as_deref())?;
+                write_latest_observables_output(&slot.integrand, workspace_path.as_deref())?;
             write_observable_snapshot_archive(
-                integrand,
+                &slot.integrand,
                 workspace_path.as_deref(),
                 integration_state.iter,
                 output_control,
             )?;
         }
 
-        status_emitter(build_status_update(
-            IntegrationStatusKind::Iteration,
-            &integration_state,
+        status_emitter(build_status_update(StatusUpdateBuildRequest {
+            kind: IntegrationStatusKind::Iteration,
+            integration_state: &integration_state,
             cores,
-            t_start.elapsed(),
-            iteration_start.elapsed(),
-            completed_points,
-            integration_state.num_points,
+            elapsed_time: t_start.elapsed(),
+            iteration_elapsed_time: iteration_start.elapsed(),
+            cur_points: completed_points,
+            total_points_display: integration_state.num_points,
             n_samples_evaluated,
-            &targets,
-            &view_options,
-            None,
-        ))?;
+            targets: &targets,
+            render_options: &view_options,
+            live_progress: None,
+        }))?;
 
         let target_accuracy_status = evaluate_target_accuracy(
             &integration_state,
             integration_state.num_points,
             t_start.elapsed(),
             &targets,
-            match slot0_settings.integrator.integrated_phase {
+            match slots[0].settings.integrator.integrated_phase {
                 IntegratedPhase::Real | IntegratedPhase::Both => {
                     IntegrationStatusPhaseDisplay::Real
                 }
                 IntegratedPhase::Imag => IntegrationStatusPhaseDisplay::Imag,
             },
-            slot0_settings.integrator.target_relative_accuracy,
-            slot0_settings.integrator.target_absolute_accuracy,
+            slots[0].settings.integrator.target_relative_accuracy,
+            slots[0].settings.integrator.target_absolute_accuracy,
         );
         if target_accuracy_status.is_reached() {
             let reached_target = match (
@@ -2535,19 +2561,20 @@ where
     clear_iteration_abort_request();
 
     if integration_state.num_points > 0 {
-        status_emitter(build_status_update(
-            IntegrationStatusKind::Final,
-            &integration_state,
+        let final_view_options = view_options.for_final();
+        status_emitter(build_status_update(StatusUpdateBuildRequest {
+            kind: IntegrationStatusKind::Final,
+            integration_state: &integration_state,
             cores,
-            t_start.elapsed(),
-            Duration::ZERO,
-            0,
-            integration_state.num_points,
+            elapsed_time: t_start.elapsed(),
+            iteration_elapsed_time: Duration::ZERO,
+            cur_points: 0,
+            total_points_display: integration_state.num_points,
             n_samples_evaluated,
-            &targets,
-            &view_options.for_final(),
-            None,
-        ))?;
+            targets: &targets,
+            render_options: &final_view_options,
+            live_progress: None,
+        }))?;
     } else {
         info!("");
         warn!(
@@ -2557,11 +2584,14 @@ where
         info!("");
     }
 
-    if !slot_integrands.is_empty() {
+    if !slots.is_empty() {
         emit_results_output_summary(
             workspace.as_deref(),
             &integration_state.slot_metas,
-            &slot_integrands,
+            &slots
+                .iter()
+                .map(|slot| slot.integrand.clone())
+                .collect_vec(),
             &emitted_latest_observable_paths,
             output_control,
         );
@@ -3732,63 +3762,19 @@ mod tests {
         }
     }
 
-    fn render_update(
-        kind: IntegrationStatusKind,
-        state: &IntegrationState,
-        cores: usize,
-        elapsed_time: Duration,
-        cur_points: usize,
-        total_points_display: usize,
-        n_samples_evaluated: usize,
-        targets: &[Option<Complex<F<f64>>>],
-        view_options: &IntegrationStatusViewOptions,
-        live_progress: Option<status_update::LiveIterationProgress>,
-    ) -> String {
+    fn render_update(request: StatusUpdateBuildRequest<'_>) -> String {
         render_status_update_tabled(
-            &build_status_update(
-                kind,
-                state,
-                cores,
-                elapsed_time,
-                elapsed_time,
-                cur_points,
-                total_points_display,
-                n_samples_evaluated,
-                targets,
-                view_options,
-                live_progress,
-            ),
-            &tabled_options_for_view(view_options),
+            &build_status_update(request),
+            &tabled_options_for_view(request.render_options),
         )
     }
 
     fn render_ratatui_update(
-        kind: IntegrationStatusKind,
-        state: &IntegrationState,
-        elapsed_time: Duration,
-        iteration_elapsed_time: Duration,
-        cur_points: usize,
-        total_points_display: usize,
-        n_samples_evaluated: usize,
-        targets: &[Option<Complex<F<f64>>>],
-        view_options: &IntegrationStatusViewOptions,
-        live_progress: Option<status_update::LiveIterationProgress>,
+        request: StatusUpdateBuildRequest<'_>,
         configure: impl FnOnce(&mut RatatuiDashboardState),
     ) -> String {
         let mut dashboard = RatatuiDashboardState::new();
-        dashboard.update(build_status_update(
-            kind,
-            state,
-            4,
-            elapsed_time,
-            iteration_elapsed_time,
-            cur_points,
-            total_points_display,
-            n_samples_evaluated,
-            targets,
-            view_options,
-            live_progress,
-        ));
+        dashboard.update(build_status_update(request));
         configure(&mut dashboard);
 
         let backend = TestBackend::new(180, 48);
@@ -3847,24 +3833,28 @@ mod tests {
             vec![None],
         );
         state.all_integrals = vec![accumulator];
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_top_discrete_grid: false,
+            show_discrete_contributions_sum: false,
+            ..default_view_options()
+        };
         let rendered = render_status_update_tabled(
             &build_status_update(
-                IntegrationStatusKind::Iteration,
-                &state,
-                1,
-                Duration::from_secs(0),
-                Duration::from_secs(0),
-                0,
-                0,
-                0,
-                &[None],
-                &IntegrationStatusViewOptions {
-                    show_statistics: false,
-                    show_top_discrete_grid: false,
-                    show_discrete_contributions_sum: false,
-                    ..default_view_options()
-                },
-                None,
+                StatusUpdateBuildRequest::new(
+                    IntegrationStatusKind::Iteration,
+                    &state,
+                    &[None],
+                    &view_options,
+                )
+                .with_timing(
+                    1,
+                    Duration::from_secs(0),
+                    Duration::from_secs(0),
+                    0,
+                    0,
+                    0,
+                ),
             ),
             &default_tabled_options(),
         );
@@ -3885,21 +3875,26 @@ mod tests {
     #[test]
     fn iteration_status_block_uses_compact_header_and_optional_statistics() {
         let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
         let rendered = render_update(
-            IntegrationStatusKind::Iteration,
-            &state,
-            4,
-            Duration::from_secs(1),
-            100_000,
-            100_000,
-            100_000,
-            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: false,
-                ..default_view_options()
-            },
-            None,
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                100_000,
+                100_000,
+                100_000,
+            ),
         );
 
         assert!(
@@ -3929,21 +3924,26 @@ mod tests {
     #[test]
     fn iteration_status_block_omits_delta_columns_when_no_target_is_provided() {
         let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: true,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
         let rendered = render_update(
-            IntegrationStatusKind::Iteration,
-            &state,
-            4,
-            Duration::from_secs(1),
-            100_000,
-            100_000,
-            100_000,
-            &[None, None],
-            &IntegrationStatusViewOptions {
-                show_statistics: true,
-                show_max_weight_details: false,
-                ..default_view_options()
-            },
-            None,
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                100_000,
+                100_000,
+                100_000,
+            ),
         );
 
         assert!(!rendered.contains("Δ [σ]"), "{rendered}");
@@ -3957,24 +3957,30 @@ mod tests {
         let mut state = make_integration_state();
         state.iter = 2;
         state.num_points = 125_000;
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
         let rendered = render_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(1),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: false,
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
         );
 
         assert!(
@@ -3992,25 +3998,30 @@ mod tests {
     #[test]
     fn iteration_status_block_shows_discrete_contributions_and_discrete_max_weights() {
         let state = make_discrete_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: true,
+            show_top_discrete_grid: true,
+            show_discrete_contributions_sum: true,
+            contribution_sort: ContributionSortMode::Index,
+            show_max_weight_info_for_discrete_bins: true,
+            ..default_view_options()
+        };
         let rendered = render_update(
-            IntegrationStatusKind::Iteration,
-            &state,
-            4,
-            Duration::from_secs(2),
-            110_000,
-            210_000,
-            210_000,
-            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: true,
-                show_top_discrete_grid: true,
-                show_discrete_contributions_sum: true,
-                contribution_sort: ContributionSortMode::Index,
-                show_max_weight_info_for_discrete_bins: true,
-                ..default_view_options()
-            },
-            None,
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(2),
+                Duration::from_secs(2),
+                110_000,
+                210_000,
+                210_000,
+            ),
         );
 
         assert!(rendered.contains("Sum"), "{rendered}");
@@ -4043,25 +4054,30 @@ mod tests {
     #[test]
     fn iteration_status_block_hides_spanned_metadata_header_separators() {
         let state = make_discrete_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            show_top_discrete_grid: true,
+            show_discrete_contributions_sum: true,
+            contribution_sort: ContributionSortMode::Index,
+            show_max_weight_info_for_discrete_bins: false,
+            ..default_view_options()
+        };
         let rendered = render_update(
-            IntegrationStatusKind::Iteration,
-            &state,
-            4,
-            Duration::from_secs(2),
-            110_000,
-            210_000,
-            210_000,
-            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: false,
-                show_top_discrete_grid: true,
-                show_discrete_contributions_sum: true,
-                contribution_sort: ContributionSortMode::Index,
-                show_max_weight_info_for_discrete_bins: false,
-                ..default_view_options()
-            },
-            None,
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(2),
+                Duration::from_secs(2),
+                110_000,
+                210_000,
+                210_000,
+            ),
         );
 
         let header_line = rendered
@@ -4134,17 +4150,20 @@ mod tests {
         };
         let ansi = render_tabled::render_status_update(
             &build_status_update(
-                IntegrationStatusKind::Iteration,
-                &state,
-                1,
-                Duration::from_secs(0),
-                Duration::from_secs(0),
-                0,
-                0,
-                0,
-                &[None, None],
-                &view_options,
-                None,
+                StatusUpdateBuildRequest::new(
+                    IntegrationStatusKind::Iteration,
+                    &state,
+                    &[None, None],
+                    &view_options,
+                )
+                .with_timing(
+                    1,
+                    Duration::from_secs(0),
+                    Duration::from_secs(0),
+                    0,
+                    0,
+                    0,
+                ),
             ),
             &tabled_options_for_view(&view_options),
         );
@@ -4285,24 +4304,30 @@ mod tests {
     #[test]
     fn ratatui_overview_shows_eta_and_all_slot_metrics() {
         let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
         let rendered = render_ratatui_update(
-            IntegrationStatusKind::Live,
-            &state,
-            Duration::from_secs(15),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: false,
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(15),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
             |_| {},
         );
 
@@ -4330,19 +4355,24 @@ mod tests {
             ..default_view_options()
         };
         let rendered = render_ratatui_update(
-            IntegrationStatusKind::Live,
-            &state,
-            Duration::from_secs(15),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &view_options,
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(15),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
             |dashboard| dashboard.toggle_chart_component(),
         );
 
@@ -4355,30 +4385,36 @@ mod tests {
     #[test]
     fn ratatui_integrand_targets_are_trimmed_for_display() {
         let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
         let rendered = render_ratatui_update(
-            IntegrationStatusKind::Live,
-            &state,
-            Duration::from_secs(15),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[
-                Some(Complex::new(
-                    F(7.600000000000001e-6),
-                    F(7.430000000000004e-5),
-                )),
-                Some(Complex::new(F(6.629999999999999e-5), F(0.0))),
-            ],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: false,
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[
+                    Some(Complex::new(
+                        F(7.600000000000001e-6),
+                        F(7.430000000000004e-5),
+                    )),
+                    Some(Complex::new(F(6.629999999999999e-5), F(0.0))),
+                ],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(15),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
             |_| {},
         );
 
@@ -4392,25 +4428,31 @@ mod tests {
     #[test]
     fn ratatui_overview_shows_eta_to_target_when_configured() {
         let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            target_relative_accuracy: Some(0.05),
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
         let rendered = render_ratatui_update(
-            IntegrationStatusKind::Live,
-            &state,
-            Duration::from_secs(25),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
-            &IntegrationStatusViewOptions {
-                target_relative_accuracy: Some(0.05),
-                show_statistics: false,
-                show_max_weight_details: false,
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
             |_| {},
         );
 
@@ -4421,97 +4463,117 @@ mod tests {
     #[test]
     fn eta_to_target_specification_formats_relative_and_absolute_targets() {
         let state = make_integration_state();
+        let relative_view_options = IntegrationStatusViewOptions {
+            target_relative_accuracy: Some(0.05),
+            ..default_view_options()
+        };
         let update = build_status_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(25),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
-            &IntegrationStatusViewOptions {
-                target_relative_accuracy: Some(0.05),
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+                &relative_view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
         );
         assert_eq!(
             update.meta.eta_to_target_specification(),
             Some("% err <= 5%")
         );
 
+        let relative_scientific_view_options = IntegrationStatusViewOptions {
+            target_relative_accuracy: Some(1.0e-6),
+            ..default_view_options()
+        };
         let update = build_status_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(25),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
-            &IntegrationStatusViewOptions {
-                target_relative_accuracy: Some(1.0e-6),
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+                &relative_scientific_view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
         );
         assert_eq!(
             update.meta.eta_to_target_specification(),
             Some("% err <= 1e-4%")
         );
 
+        let absolute_view_options = IntegrationStatusViewOptions {
+            target_absolute_accuracy: Some(1.0e-6),
+            ..default_view_options()
+        };
         let update = build_status_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(25),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
-            &IntegrationStatusViewOptions {
-                target_absolute_accuracy: Some(1.0e-6),
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+                &absolute_view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
         );
         assert_eq!(
             update.meta.eta_to_target_specification(),
             Some("err <= 1e-6")
         );
 
+        let combined_view_options = IntegrationStatusViewOptions {
+            target_relative_accuracy: Some(0.05),
+            target_absolute_accuracy: Some(1.0e-6),
+            ..default_view_options()
+        };
         let update = build_status_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(25),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
-            &IntegrationStatusViewOptions {
-                target_relative_accuracy: Some(0.05),
-                target_absolute_accuracy: Some(1.0e-6),
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+                &combined_view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
         );
         assert_eq!(
             update.meta.eta_to_target_specification(),
@@ -4576,54 +4638,66 @@ mod tests {
 
         state.iter = 1;
         dashboard.update(build_status_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(10),
-            Duration::from_secs(10),
-            500_000,
-            1_000_000,
-            1_000_000,
-            &[None, None],
-            &view_options,
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(10),
+                Duration::from_secs(10),
+                500_000,
+                1_000_000,
+                1_000_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 500_000,
                 target_points: 1_000_000,
-            }),
+            })),
         ));
 
         state.iter = 2;
         dashboard.update(build_status_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(20),
-            Duration::from_secs(5),
-            0,
-            2_000_000,
-            2_000_000,
-            &[None, None],
-            &view_options,
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(20),
+                Duration::from_secs(5),
+                0,
+                2_000_000,
+                2_000_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 0,
                 target_points: 1_000_000,
-            }),
+            })),
         ));
         dashboard.update(build_status_update(
-            IntegrationStatusKind::Live,
-            &state,
-            4,
-            Duration::from_secs(25),
-            Duration::from_secs(10),
-            200_000,
-            2_200_000,
-            2_200_000,
-            &[None, None],
-            &view_options,
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                200_000,
+                2_200_000,
+                2_200_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 200_000,
                 target_points: 1_000_000,
-            }),
+            })),
         ));
 
         dashboard.toggle_chart_history_window();
@@ -4651,20 +4725,24 @@ mod tests {
             state.iter = 1 + index / 40;
             let total_points = index * 1_000;
             dashboard.update(build_status_update(
-                IntegrationStatusKind::Live,
-                &state,
-                4,
-                Duration::from_secs(index as u64),
-                Duration::from_secs(10),
-                total_points % 1_000_000,
-                total_points,
-                total_points,
-                &[None, None],
-                &view_options,
-                Some(status_update::LiveIterationProgress {
+                StatusUpdateBuildRequest::new(
+                    IntegrationStatusKind::Live,
+                    &state,
+                    &[None, None],
+                    &view_options,
+                )
+                .with_timing(
+                    4,
+                    Duration::from_secs(index as u64),
+                    Duration::from_secs(10),
+                    total_points % 1_000_000,
+                    total_points,
+                    total_points,
+                )
+                .with_live_progress(Some(status_update::LiveIterationProgress {
                     completed_points: total_points % 1_000_000,
                     target_points: 1_000_000,
-                }),
+                })),
             ));
         }
 
@@ -4672,9 +4750,7 @@ mod tests {
         dashboard.toggle_chart_history_window();
 
         assert_eq!(
-            dashboard
-                .visible_history_sample_bounds()
-                .map(|(start, end)| (start, end)),
+            dashboard.visible_history_sample_bounds(),
             Some((0, 4_299_000))
         );
     }
@@ -4682,24 +4758,30 @@ mod tests {
     #[test]
     fn ratatui_convergence_title_shows_active_y_span() {
         let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
         let rendered = render_ratatui_update(
-            IntegrationStatusKind::Live,
-            &state,
-            Duration::from_secs(15),
-            Duration::from_secs(10),
-            25_000,
-            125_000,
-            125_000,
-            &[None, None],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: false,
-                ..default_view_options()
-            },
-            Some(status_update::LiveIterationProgress {
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(15),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
                 completed_points: 25_000,
                 target_points: 100_000,
-            }),
+            })),
             |dashboard| dashboard.widen_chart_y_sigma_span(),
         );
 
@@ -4709,24 +4791,29 @@ mod tests {
     #[test]
     fn ratatui_discrete_tab_renders_selected_bin_detail() {
         let state = make_discrete_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            show_top_discrete_grid: false,
+            show_discrete_contributions_sum: false,
+            show_max_weight_info_for_discrete_bins: false,
+            ..default_view_options()
+        };
         let rendered = render_ratatui_update(
-            IntegrationStatusKind::Iteration,
-            &state,
-            Duration::from_secs(12),
-            Duration::from_secs(12),
-            110_000,
-            210_000,
-            210_000,
-            &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
-            &IntegrationStatusViewOptions {
-                show_statistics: false,
-                show_max_weight_details: false,
-                show_top_discrete_grid: false,
-                show_discrete_contributions_sum: false,
-                show_max_weight_info_for_discrete_bins: false,
-                ..default_view_options()
-            },
-            None,
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(12),
+                Duration::from_secs(12),
+                110_000,
+                210_000,
+                210_000,
+            ),
             |dashboard| dashboard.select_tab(1),
         );
 

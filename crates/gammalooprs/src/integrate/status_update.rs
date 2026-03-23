@@ -83,6 +83,69 @@ pub(crate) struct LiveIterationProgress {
     pub(crate) target_points: usize,
 }
 
+pub(crate) struct StatusUpdateBuildRequest<'a> {
+    pub(crate) kind: IntegrationStatusKind,
+    pub(crate) integration_state: &'a IntegrationState,
+    pub(crate) cores: usize,
+    pub(crate) elapsed_time: Duration,
+    pub(crate) iteration_elapsed_time: Duration,
+    pub(crate) cur_points: usize,
+    pub(crate) total_points_display: usize,
+    pub(crate) n_samples_evaluated: usize,
+    pub(crate) targets: &'a [Option<Complex<F<f64>>>],
+    pub(crate) render_options: &'a IntegrationStatusViewOptions,
+    pub(crate) live_progress: Option<LiveIterationProgress>,
+}
+
+impl<'a> StatusUpdateBuildRequest<'a> {
+    pub(crate) fn new(
+        kind: IntegrationStatusKind,
+        integration_state: &'a IntegrationState,
+        targets: &'a [Option<Complex<F<f64>>>],
+        render_options: &'a IntegrationStatusViewOptions,
+    ) -> Self {
+        Self {
+            kind,
+            integration_state,
+            cores: 0,
+            elapsed_time: Duration::ZERO,
+            iteration_elapsed_time: Duration::ZERO,
+            cur_points: 0,
+            total_points_display: 0,
+            n_samples_evaluated: 0,
+            targets,
+            render_options,
+            live_progress: None,
+        }
+    }
+
+    pub(crate) fn with_timing(
+        mut self,
+        cores: usize,
+        elapsed_time: Duration,
+        iteration_elapsed_time: Duration,
+        cur_points: usize,
+        total_points_display: usize,
+        n_samples_evaluated: usize,
+    ) -> Self {
+        self.cores = cores;
+        self.elapsed_time = elapsed_time;
+        self.iteration_elapsed_time = iteration_elapsed_time;
+        self.cur_points = cur_points;
+        self.total_points_display = total_points_display;
+        self.n_samples_evaluated = n_samples_evaluated;
+        self
+    }
+
+    pub(crate) fn with_live_progress(
+        mut self,
+        live_progress: Option<LiveIterationProgress>,
+    ) -> Self {
+        self.live_progress = live_progress;
+        self
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct StatusMeta {
     pub(crate) elapsed_time: Duration,
@@ -1490,23 +1553,12 @@ fn discrete_sort_key(
     }
 }
 
-fn build_main_results_section(
-    kind: IntegrationStatusKind,
-    integration_state: &IntegrationState,
-    cores: usize,
-    elapsed_time: Duration,
-    cur_points: usize,
-    total_points_display: usize,
-    n_samples_evaluated: usize,
-    targets: &[Option<Complex<F<f64>>>],
-    render_options: &IntegrationStatusViewOptions,
-    live_progress: Option<LiveIterationProgress>,
-) -> MainResultsSection {
-    let components = ComponentKind::all_for_display(render_options.phase_display);
-    let discrete_context = integration_state.monitored_discrete_context();
-    let monitored_path = integration_state.monitored_discrete_path.as_deref();
+fn build_main_results_section(request: &StatusUpdateBuildRequest<'_>) -> MainResultsSection {
+    let components = ComponentKind::all_for_display(request.render_options.phase_display);
+    let discrete_context = request.integration_state.monitored_discrete_context();
+    let monitored_path = request.integration_state.monitored_discrete_path.as_deref();
     let has_discrete_columns = monitored_path.is_some();
-    let has_target_columns = targets.first().is_some_and(Option::is_some);
+    let has_target_columns = request.targets.first().is_some_and(Option::is_some);
 
     let mut row_groups = vec![MainResultsRowGroup {
         kind: MainResultsRowGroupKind::All,
@@ -1514,8 +1566,8 @@ fn build_main_results_section(
             .iter()
             .filter_map(|component| {
                 main_results_row(
-                    integration_state,
-                    targets,
+                    request.integration_state,
+                    request.targets,
                     monitored_path,
                     ContributionKind::All,
                     *component,
@@ -1530,8 +1582,8 @@ fn build_main_results_section(
             .iter()
             .filter_map(|component| {
                 main_results_row(
-                    integration_state,
-                    targets,
+                    request.integration_state,
+                    request.targets,
                     monitored_path,
                     ContributionKind::Sum,
                     *component,
@@ -1547,14 +1599,14 @@ fn build_main_results_section(
         }
 
         let bin_count = discrete_context.pdfs.len();
-        match render_options.contribution_sort {
+        match request.render_options.contribution_sort {
             ContributionSortMode::Index => {
                 let mut rows = Vec::new();
                 for bin_index in 0..bin_count {
                     for component in &components {
                         if let Some(row) = main_results_row(
-                            integration_state,
-                            targets,
+                            request.integration_state,
+                            request.targets,
                             monitored_path,
                             ContributionKind::Bin(bin_index),
                             *component,
@@ -1576,18 +1628,18 @@ fn build_main_results_section(
                     let mut bin_indices = (0..bin_count).collect_vec();
                     bin_indices.sort_by(|lhs, rhs| {
                         discrete_sort_key(
-                            integration_state,
+                            request.integration_state,
                             &discrete_context.path,
                             *component,
                             *rhs,
-                            render_options.contribution_sort,
+                            request.render_options.contribution_sort,
                         )
                         .partial_cmp(&discrete_sort_key(
-                            integration_state,
+                            request.integration_state,
                             &discrete_context.path,
                             *component,
                             *lhs,
-                            render_options.contribution_sort,
+                            request.render_options.contribution_sort,
                         ))
                         .unwrap_or(std::cmp::Ordering::Equal)
                     });
@@ -1595,8 +1647,8 @@ fn build_main_results_section(
                         .into_iter()
                         .filter_map(|bin_index| {
                             main_results_row(
-                                integration_state,
-                                targets,
+                                request.integration_state,
+                                request.targets,
                                 monitored_path,
                                 ContributionKind::Bin(bin_index),
                                 *component,
@@ -1615,13 +1667,25 @@ fn build_main_results_section(
         }
     }
 
-    let _ = kind;
     MainResultsSection {
-        header_left: header_left(elapsed_time, integration_state.iter, live_progress),
-        header_middle: header_middle(cur_points, total_points_display, live_progress),
-        header_tail: header_tail(cores, elapsed_time, n_samples_evaluated),
-        contribution_header: contribution_header(integration_state, has_discrete_columns),
-        slot_headers: integration_state
+        header_left: header_left(
+            request.elapsed_time,
+            request.integration_state.iter,
+            request.live_progress,
+        ),
+        header_middle: header_middle(
+            request.cur_points,
+            request.total_points_display,
+            request.live_progress,
+        ),
+        header_tail: header_tail(
+            request.cores,
+            request.elapsed_time,
+            request.n_samples_evaluated,
+        ),
+        contribution_header: contribution_header(request.integration_state, has_discrete_columns),
+        slot_headers: request
+            .integration_state
             .slot_metas
             .iter()
             .map(|slot_meta| styled_colored(slot_meta.key(), TextStyle::blue().bold()))
@@ -1865,71 +1929,51 @@ fn build_discrete_max_weight_details_section(
     })
 }
 
-pub(crate) fn build_status_update(
-    kind: IntegrationStatusKind,
-    integration_state: &IntegrationState,
-    cores: usize,
-    elapsed_time: Duration,
-    iteration_elapsed_time: Duration,
-    cur_points: usize,
-    total_points_display: usize,
-    n_samples_evaluated: usize,
-    targets: &[Option<Complex<F<f64>>>],
-    render_options: &IntegrationStatusViewOptions,
-    live_progress: Option<LiveIterationProgress>,
-) -> StatusUpdate {
+pub(crate) fn build_status_update(request: StatusUpdateBuildRequest<'_>) -> StatusUpdate {
     let target_accuracy_status = evaluate_target_accuracy(
-        integration_state,
-        total_points_display,
-        elapsed_time,
-        targets,
-        render_options.training_phase_display,
-        render_options.target_relative_accuracy,
-        render_options.target_absolute_accuracy,
+        request.integration_state,
+        request.total_points_display,
+        request.elapsed_time,
+        request.targets,
+        request.render_options.training_phase_display,
+        request.render_options.target_relative_accuracy,
+        request.render_options.target_absolute_accuracy,
     );
     StatusUpdate {
-        kind,
+        kind: request.kind,
         meta: StatusMeta {
-            elapsed_time,
-            iteration_elapsed_time,
-            iteration: integration_state.iter,
-            current_iteration_points: cur_points,
-            total_points: total_points_display,
-            n_samples_evaluated,
-            cores,
-            training_slot: render_options.training_slot,
-            training_phase_display: render_options.training_phase_display,
-            live_progress,
-            show_eta_to_target: render_options.target_relative_accuracy.is_some()
-                || render_options.target_absolute_accuracy.is_some(),
+            elapsed_time: request.elapsed_time,
+            iteration_elapsed_time: request.iteration_elapsed_time,
+            iteration: request.integration_state.iter,
+            current_iteration_points: request.cur_points,
+            total_points: request.total_points_display,
+            n_samples_evaluated: request.n_samples_evaluated,
+            cores: request.cores,
+            training_slot: request.render_options.training_slot,
+            training_phase_display: request.render_options.training_phase_display,
+            live_progress: request.live_progress,
+            show_eta_to_target: request.render_options.target_relative_accuracy.is_some()
+                || request.render_options.target_absolute_accuracy.is_some(),
             eta_to_target_specification: format_eta_to_target_specification(
-                render_options.target_relative_accuracy,
-                render_options.target_absolute_accuracy,
+                request.render_options.target_relative_accuracy,
+                request.render_options.target_absolute_accuracy,
             ),
             eta_to_target: target_accuracy_status.eta_to_target,
         },
-        targets: targets.to_vec(),
-        slot_training_phase_displays: render_options.slot_training_phase_displays.clone(),
-        per_slot_training_phase: render_options.per_slot_training_phase,
-        main_results: build_main_results_section(
-            kind,
-            integration_state,
-            cores,
-            elapsed_time,
-            cur_points,
-            total_points_display,
-            n_samples_evaluated,
-            targets,
-            render_options,
-            live_progress,
+        targets: request.targets.to_vec(),
+        slot_training_phase_displays: request.render_options.slot_training_phase_displays.clone(),
+        per_slot_training_phase: request.render_options.per_slot_training_phase,
+        main_results: build_main_results_section(&request),
+        max_weight_details: build_max_weight_details_section(
+            request.integration_state,
+            request.render_options,
         ),
-        max_weight_details: build_max_weight_details_section(integration_state, render_options),
         discrete_max_weight_details: build_discrete_max_weight_details_section(
-            integration_state,
-            render_options,
+            request.integration_state,
+            request.render_options,
         ),
         statistics: Some(StatisticsSection {
-            raw: integration_state.stats,
+            raw: request.integration_state.stats,
         }),
     }
 }
@@ -1939,17 +1983,18 @@ pub(crate) fn build_saved_status_update(
     targets: &[Option<Complex<F<f64>>>],
     render_options: &IntegrationStatusViewOptions,
 ) -> StatusUpdate {
-    build_status_update(
-        IntegrationStatusKind::Final,
+    let final_render_options = render_options.clone().for_final();
+    build_status_update(StatusUpdateBuildRequest {
+        kind: IntegrationStatusKind::Final,
         integration_state,
-        integration_state.n_cores.max(1),
-        utils::duration_from_secs_f64_saturating(integration_state.elapsed_seconds),
-        Duration::ZERO,
-        0,
-        integration_state.num_points,
-        integration_state.num_points,
+        cores: integration_state.n_cores.max(1),
+        elapsed_time: utils::duration_from_secs_f64_saturating(integration_state.elapsed_seconds),
+        iteration_elapsed_time: Duration::ZERO,
+        cur_points: 0,
+        total_points_display: integration_state.num_points,
+        n_samples_evaluated: integration_state.num_points,
         targets,
-        &render_options.clone().for_final(),
-        None,
-    )
+        render_options: &final_render_options,
+        live_progress: None,
+    })
 }

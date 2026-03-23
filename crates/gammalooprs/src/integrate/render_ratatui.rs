@@ -71,19 +71,14 @@ enum DensityMode {
     Full,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 enum ChartHistoryWindow {
+    #[default]
     Full,
     RecentIterations(usize),
 }
 
 const MAX_HISTORY_POINTS: usize = 4096;
-
-impl Default for ChartHistoryWindow {
-    fn default() -> Self {
-        Self::Full
-    }
-}
 
 impl ChartHistoryWindow {
     fn description(self) -> String {

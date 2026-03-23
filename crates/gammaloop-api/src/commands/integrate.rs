@@ -33,11 +33,11 @@ use gammalooprs::{
         build_integration_result, emit_integration_status_via_tracing, havana_integrate,
         latest_observable_resume_state_path, print_integral_result,
         render_saved_integration_summary, render_status_update_tabled, slot_workspace_path,
-        workspace_manifest_path, workspace_state_path, ContributionSortMode, IntegrationState,
-        IntegrationStatusKind, IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions,
-        IntegrationWorkspaceManifest, IterationBatchingSettings, RatatuiDashboardState,
-        SamplingCorrelationMode, SlotMeta, StatusUpdate, TabledRenderOptions,
-        WorkspaceSnapshotControl,
+        workspace_manifest_path, workspace_state_path, ContributionSortMode,
+        HavanaIntegrateRequest, IntegrationSlot, IntegrationState, IntegrationStatusKind,
+        IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions, IntegrationWorkspaceManifest,
+        IterationBatchingSettings, RatatuiDashboardState, SamplingCorrelationMode, SlotMeta,
+        StatusUpdate, TabledRenderOptions, WorkspaceSnapshotControl,
     },
     model::{Model, SerializableInputParamCard},
     observables::ObservableSnapshotBundle,
@@ -48,7 +48,7 @@ use gammalooprs::{
     },
     utils::F,
 };
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use symbolica::numerical_integration::Grid;
 use tracing::{info, warn};
@@ -1756,26 +1756,36 @@ impl Integrate {
             stream_iterations,
             tabled_options.clone(),
         );
+        let slots = izip!(
+            selected_slots.iter().map(|slot| slot.slot_meta.clone()),
+            slot_settings,
+            slot_models,
+            slot_integrands,
+            targets
+        )
+        .map(|(meta, settings, model, integrand, target)| {
+            IntegrationSlot::new(
+                meta,
+                settings,
+                model,
+                Integrand::ProcessIntegrand(integrand),
+                target,
+            )
+        })
+        .collect();
 
         let result = havana_integrate(
-            slot_settings,
-            self.sampling_correlation_mode(),
-            slot_models,
-            selected_slots
-                .iter()
-                .map(|slot| slot.slot_meta.clone())
-                .collect(),
-            slot_integrands
-                .into_iter()
-                .map(Integrand::ProcessIntegrand)
-                .collect(),
-            n_cores,
-            targets,
-            integration_state,
-            Some(workspace_path.clone()),
-            self.workspace_snapshot_control(),
-            self.build_batching_settings(stream_updates, stream_updates || stream_iterations),
-            view_options,
+            HavanaIntegrateRequest {
+                slots,
+                sampling_correlation_mode: self.sampling_correlation_mode(),
+                n_cores,
+                state: integration_state,
+                workspace: Some(workspace_path.clone()),
+                output_control: self.workspace_snapshot_control(),
+                batching: self
+                    .build_batching_settings(stream_updates, stream_updates || stream_iterations),
+                view_options,
+            },
             move |status_update: StatusUpdate| {
                 stream_controller.handle_status_update(status_update)
             },
