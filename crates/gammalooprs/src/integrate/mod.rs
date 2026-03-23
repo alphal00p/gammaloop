@@ -54,7 +54,7 @@ pub use status_update::{
     ContributionSortMode, IntegrationStatusKind, IntegrationStatusPhaseDisplay,
     IntegrationStatusViewOptions, StatusUpdate,
 };
-use status_update::{build_saved_status_update, build_status_update};
+use status_update::{build_saved_status_update, build_status_update, evaluate_target_accuracy};
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -2499,6 +2499,36 @@ where
             &view_options,
             None,
         ))?;
+
+        let target_accuracy_status = evaluate_target_accuracy(
+            &integration_state,
+            integration_state.num_points,
+            t_start.elapsed(),
+            &targets,
+            match slot0_settings.integrator.integrated_phase {
+                IntegratedPhase::Real | IntegratedPhase::Both => {
+                    IntegrationStatusPhaseDisplay::Real
+                }
+                IntegratedPhase::Imag => IntegrationStatusPhaseDisplay::Imag,
+            },
+            slot0_settings.integrator.target_relative_accuracy,
+            slot0_settings.integrator.target_absolute_accuracy,
+        );
+        if target_accuracy_status.is_reached() {
+            let reached_target = match (
+                target_accuracy_status.relative_reached,
+                target_accuracy_status.absolute_reached,
+            ) {
+                (true, true) => "relative and absolute",
+                (true, false) => "relative",
+                (false, true) => "absolute",
+                (false, false) => unreachable!(),
+            };
+            info!(
+                "Stopping integration after reaching the configured {reached_target} accuracy target."
+            );
+            break;
+        }
     }
     // Reset the interrupted flag
     set_interrupted(false);
@@ -3668,6 +3698,8 @@ mod tests {
             training_slot: 0,
             slot_training_phase_displays: vec![IntegrationStatusPhaseDisplay::Real],
             per_slot_training_phase: false,
+            target_relative_accuracy: None,
+            target_absolute_accuracy: None,
             show_statistics: true,
             show_max_weight_details: true,
             show_top_discrete_grid: false,
@@ -4355,6 +4387,181 @@ mod tests {
         assert!(rendered.contains("+7.43e-5"), "{rendered}");
         assert!(rendered.contains("+6.63e-5"), "{rendered}");
         assert!(rendered.contains("+0e0"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_overview_shows_eta_to_target_when_configured() {
+        let state = make_integration_state();
+        let rendered = render_ratatui_update(
+            IntegrationStatusKind::Live,
+            &state,
+            Duration::from_secs(25),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+            &IntegrationStatusViewOptions {
+                target_relative_accuracy: Some(0.05),
+                show_statistics: false,
+                show_max_weight_details: false,
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+            |_| {},
+        );
+
+        assert!(rendered.contains("ETA to target"), "{rendered}");
+        assert!(rendered.contains("(% err <= 5%)"), "{rendered}");
+    }
+
+    #[test]
+    fn eta_to_target_specification_formats_relative_and_absolute_targets() {
+        let state = make_integration_state();
+        let update = build_status_update(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(25),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+            &IntegrationStatusViewOptions {
+                target_relative_accuracy: Some(0.05),
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+        );
+        assert_eq!(
+            update.meta.eta_to_target_specification(),
+            Some("% err <= 5%")
+        );
+
+        let update = build_status_update(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(25),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+            &IntegrationStatusViewOptions {
+                target_relative_accuracy: Some(1.0e-6),
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+        );
+        assert_eq!(
+            update.meta.eta_to_target_specification(),
+            Some("% err <= 1e-4%")
+        );
+
+        let update = build_status_update(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(25),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+            &IntegrationStatusViewOptions {
+                target_absolute_accuracy: Some(1.0e-6),
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+        );
+        assert_eq!(
+            update.meta.eta_to_target_specification(),
+            Some("err <= 1e-6")
+        );
+
+        let update = build_status_update(
+            IntegrationStatusKind::Live,
+            &state,
+            4,
+            Duration::from_secs(25),
+            Duration::from_secs(10),
+            25_000,
+            125_000,
+            125_000,
+            &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+            &IntegrationStatusViewOptions {
+                target_relative_accuracy: Some(0.05),
+                target_absolute_accuracy: Some(1.0e-6),
+                ..default_view_options()
+            },
+            Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            }),
+        );
+        assert_eq!(
+            update.meta.eta_to_target_specification(),
+            Some("% err <= 5% or err <= 1e-6")
+        );
+    }
+
+    #[test]
+    fn target_accuracy_status_uses_either_absolute_or_relative_condition() {
+        let state = make_integration_state();
+
+        let reached_by_absolute = status_update::evaluate_target_accuracy(
+            &state,
+            100_000,
+            Duration::from_secs(10),
+            &[None, None],
+            IntegrationStatusPhaseDisplay::Real,
+            None,
+            Some(1.0e-4),
+        );
+        assert!(reached_by_absolute.is_reached());
+
+        let reached_by_relative = status_update::evaluate_target_accuracy(
+            &state,
+            100_000,
+            Duration::from_secs(10),
+            &[Some(Complex::new(F(1.0e-3), F(0.0))), None],
+            IntegrationStatusPhaseDisplay::Real,
+            Some(0.1),
+            None,
+        );
+        assert!(reached_by_relative.is_reached());
+    }
+
+    #[test]
+    fn target_accuracy_status_treats_zero_relative_reference_as_inactive() {
+        let state = make_integration_state();
+        let status = status_update::evaluate_target_accuracy(
+            &state,
+            100_000,
+            Duration::from_secs(10),
+            &[Some(Complex::new(F(0.0), F(0.0))), None],
+            IntegrationStatusPhaseDisplay::Real,
+            Some(0.05),
+            None,
+        );
+
+        assert!(!status.relative_reached);
+        assert!(!status.absolute_reached);
+        assert_eq!(status.eta_to_target, None);
     }
 
     #[test]

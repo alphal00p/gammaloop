@@ -51,13 +51,15 @@ pub enum ContributionSortMode {
     Error,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct IntegrationStatusViewOptions {
     pub phase_display: IntegrationStatusPhaseDisplay,
     pub training_phase_display: IntegrationStatusPhaseDisplay,
     pub training_slot: usize,
     pub slot_training_phase_displays: Vec<IntegrationStatusPhaseDisplay>,
     pub per_slot_training_phase: bool,
+    pub target_relative_accuracy: Option<f64>,
+    pub target_absolute_accuracy: Option<f64>,
     pub show_statistics: bool,
     pub show_max_weight_details: bool,
     pub show_top_discrete_grid: bool,
@@ -81,7 +83,7 @@ pub(crate) struct LiveIterationProgress {
     pub(crate) target_points: usize,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct StatusMeta {
     pub(crate) elapsed_time: Duration,
     pub(crate) iteration_elapsed_time: Duration,
@@ -93,6 +95,22 @@ pub(crate) struct StatusMeta {
     pub(crate) training_slot: usize,
     pub(crate) training_phase_display: IntegrationStatusPhaseDisplay,
     pub(crate) live_progress: Option<LiveIterationProgress>,
+    pub(crate) show_eta_to_target: bool,
+    pub(crate) eta_to_target_specification: Option<String>,
+    pub(crate) eta_to_target: Option<Duration>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct TargetAccuracyStatus {
+    pub(crate) relative_reached: bool,
+    pub(crate) absolute_reached: bool,
+    pub(crate) eta_to_target: Option<Duration>,
+}
+
+impl TargetAccuracyStatus {
+    pub(crate) fn is_reached(self) -> bool {
+        self.relative_reached || self.absolute_reached
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -102,6 +120,16 @@ pub(crate) enum ComponentKind {
 }
 
 impl ComponentKind {
+    pub(crate) fn from_training_phase_display(
+        display: IntegrationStatusPhaseDisplay,
+    ) -> Option<Self> {
+        match display {
+            IntegrationStatusPhaseDisplay::Real => Some(Self::Real),
+            IntegrationStatusPhaseDisplay::Imag => Some(Self::Imag),
+            IntegrationStatusPhaseDisplay::Both => None,
+        }
+    }
+
     pub(crate) fn all_for_display(display: IntegrationStatusPhaseDisplay) -> Vec<Self> {
         let mut components = Vec::new();
         if display.shows_real() {
@@ -177,11 +205,7 @@ impl StatusUpdate {
     }
 
     pub(crate) fn training_component(&self) -> Option<ComponentKind> {
-        match self.meta.training_phase_display {
-            IntegrationStatusPhaseDisplay::Real => Some(ComponentKind::Real),
-            IntegrationStatusPhaseDisplay::Imag => Some(ComponentKind::Imag),
-            IntegrationStatusPhaseDisplay::Both => None,
-        }
+        ComponentKind::from_training_phase_display(self.meta.training_phase_display)
     }
 
     pub(crate) fn statistics_snapshot(&self) -> Option<IntegrationStatisticsSnapshot> {
@@ -266,7 +290,7 @@ impl StatusUpdate {
 }
 
 impl StatusMeta {
-    pub(crate) fn iteration_progress_ratio(self) -> Option<f64> {
+    pub(crate) fn iteration_progress_ratio(&self) -> Option<f64> {
         self.live_progress.map(|progress| {
             if progress.target_points == 0 {
                 0.0
@@ -276,7 +300,7 @@ impl StatusMeta {
         })
     }
 
-    pub(crate) fn iteration_eta(self) -> Option<Duration> {
+    pub(crate) fn iteration_eta(&self) -> Option<Duration> {
         let progress = self.live_progress?;
         if progress.completed_points == 0 || self.iteration_elapsed_time.is_zero() {
             return None;
@@ -296,14 +320,14 @@ impl StatusMeta {
         ))
     }
 
-    pub(crate) fn total_sample_rate_per_second(self) -> Option<f64> {
+    pub(crate) fn total_sample_rate_per_second(&self) -> Option<f64> {
         if self.total_points == 0 || self.elapsed_time.is_zero() {
             return None;
         }
         Some(self.total_points as f64 / self.elapsed_time.as_secs_f64())
     }
 
-    pub(crate) fn sample_core_time(self) -> Option<String> {
+    pub(crate) fn sample_core_time(&self) -> Option<String> {
         if self.n_samples_evaluated == 0 {
             return None;
         }
@@ -312,6 +336,78 @@ impl StatusMeta {
             self.elapsed_time.as_secs_f64() / (self.n_samples_evaluated as f64)
                 * (self.cores as f64),
         ))
+    }
+
+    pub(crate) fn eta_to_target(&self) -> Option<Duration> {
+        self.eta_to_target
+    }
+
+    pub(crate) fn eta_to_target_specification(&self) -> Option<&str> {
+        self.eta_to_target_specification.as_deref()
+    }
+}
+
+pub(crate) fn evaluate_target_accuracy(
+    integration_state: &IntegrationState,
+    total_points: usize,
+    elapsed_time: Duration,
+    targets: &[Option<Complex<F<f64>>>],
+    training_phase_display: IntegrationStatusPhaseDisplay,
+    target_relative_accuracy: Option<f64>,
+    target_absolute_accuracy: Option<f64>,
+) -> TargetAccuracyStatus {
+    if target_relative_accuracy.is_none() && target_absolute_accuracy.is_none() {
+        return TargetAccuracyStatus::default();
+    }
+    if total_points == 0 {
+        return TargetAccuracyStatus::default();
+    }
+
+    let Some(component) = ComponentKind::from_training_phase_display(training_phase_display) else {
+        return TargetAccuracyStatus::default();
+    };
+    let Some(accumulator) = integration_state.all_integrals.first() else {
+        return TargetAccuracyStatus::default();
+    };
+    let (avg, err) = match component {
+        ComponentKind::Real => (accumulator.re.avg.0, accumulator.re.err.0),
+        ComponentKind::Imag => (accumulator.im.avg.0, accumulator.im.err.0),
+    };
+
+    let absolute_target_error = target_absolute_accuracy.filter(|target| *target >= 0.0);
+    let relative_target_error = target_relative_accuracy
+        .filter(|target| *target >= 0.0)
+        .and_then(|target_accuracy| {
+            let reference = targets
+                .first()
+                .and_then(|target| target.as_ref())
+                .map(|target| match component {
+                    ComponentKind::Real => target.re.0,
+                    ComponentKind::Imag => target.im.0,
+                })
+                .unwrap_or(avg)
+                .abs();
+            if reference == 0.0 {
+                None
+            } else {
+                Some(target_accuracy * reference)
+            }
+        });
+
+    let absolute_reached = absolute_target_error.is_some_and(|target_error| err <= target_error);
+    let relative_reached = relative_target_error.is_some_and(|target_error| err <= target_error);
+    let eta_to_target = [
+        estimate_eta_to_target(total_points, elapsed_time, err, absolute_target_error),
+        estimate_eta_to_target(total_points, elapsed_time, err, relative_target_error),
+    ]
+    .into_iter()
+    .flatten()
+    .min();
+
+    TargetAccuracyStatus {
+        relative_reached,
+        absolute_reached,
+        eta_to_target,
     }
 }
 
@@ -796,12 +892,70 @@ fn normalize_mix_segments(segments: Vec<(StyledText, f64)>) -> Vec<StatisticsMix
         .collect()
 }
 
+fn estimate_eta_to_target(
+    total_points: usize,
+    elapsed_time: Duration,
+    current_error: f64,
+    target_error: Option<f64>,
+) -> Option<Duration> {
+    let target_error = target_error?;
+    if target_error < 0.0 {
+        return None;
+    }
+    if current_error <= target_error {
+        return Some(Duration::ZERO);
+    }
+    if total_points == 0 || elapsed_time.is_zero() || current_error <= 0.0 || target_error == 0.0 {
+        return None;
+    }
+
+    let rate_per_second = total_points as f64 / elapsed_time.as_secs_f64();
+    if rate_per_second <= 0.0 {
+        return None;
+    }
+
+    let target_points = total_points as f64 * (current_error / target_error).powi(2);
+    let remaining_points = (target_points - total_points as f64).max(0.0);
+    Some(utils::duration_from_secs_f64_saturating(
+        remaining_points / rate_per_second,
+    ))
+}
+
 fn styled_plain(text: impl Into<String>) -> StyledText {
     StyledText::plain(text)
 }
 
 fn styled_colored(text: impl Into<String>, style: TextStyle) -> StyledText {
     StyledText::styled(text, style)
+}
+
+fn format_eta_to_target_specification(
+    target_relative_accuracy: Option<f64>,
+    target_absolute_accuracy: Option<f64>,
+) -> Option<String> {
+    let relative_spec = target_relative_accuracy
+        .filter(|target| *target >= 0.0)
+        .map(|target| {
+            format!(
+                "% err <= {}",
+                format_percentage_target_value_for_display(target * 100.0)
+            )
+        });
+    let absolute_spec = target_absolute_accuracy
+        .filter(|target| *target >= 0.0)
+        .map(|target| {
+            format!(
+                "err <= {}",
+                format_positive_target_value_for_display(target)
+            )
+        });
+
+    match (relative_spec, absolute_spec) {
+        (Some(relative), Some(absolute)) => Some(format!("{relative} or {absolute}")),
+        (Some(relative), None) => Some(relative),
+        (None, Some(absolute)) => Some(absolute),
+        (None, None) => None,
+    }
 }
 
 fn format_target_value_for_display(value: f64) -> String {
@@ -843,6 +997,48 @@ fn ordered_f64_bits(value: f64) -> u64 {
         !bits
     } else {
         bits | (1_u64 << 63)
+    }
+}
+
+fn format_positive_target_value_for_display(value: f64) -> String {
+    format_target_value_for_display(value)
+        .trim_start_matches('+')
+        .to_string()
+}
+
+fn format_percentage_target_value_for_display(value: f64) -> String {
+    let formatted = if value.abs() <= 1.0e-4 {
+        format_positive_target_value_for_display(value)
+    } else {
+        format_fixed_target_value_for_display(value)
+    };
+    format!("{formatted}%")
+}
+
+fn format_fixed_target_value_for_display(value: f64) -> String {
+    if value == 0.0 {
+        return String::from("0");
+    }
+
+    for precision in 0..=16 {
+        let candidate = normalize_fixed_decimal(&format!("{value:.precision$}"));
+        let Ok(parsed) = candidate.parse::<f64>() else {
+            continue;
+        };
+        if ulp_distance(parsed, value) <= 8 {
+            return candidate;
+        }
+    }
+
+    format_positive_target_value_for_display(value)
+}
+
+fn normalize_fixed_decimal(formatted: &str) -> String {
+    let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+    if trimmed.is_empty() || trimmed == "-0" {
+        String::from("0")
+    } else {
+        trimmed.to_string()
     }
 }
 
@@ -1682,6 +1878,15 @@ pub(crate) fn build_status_update(
     render_options: &IntegrationStatusViewOptions,
     live_progress: Option<LiveIterationProgress>,
 ) -> StatusUpdate {
+    let target_accuracy_status = evaluate_target_accuracy(
+        integration_state,
+        total_points_display,
+        elapsed_time,
+        targets,
+        render_options.training_phase_display,
+        render_options.target_relative_accuracy,
+        render_options.target_absolute_accuracy,
+    );
     StatusUpdate {
         kind,
         meta: StatusMeta {
@@ -1695,6 +1900,13 @@ pub(crate) fn build_status_update(
             training_slot: render_options.training_slot,
             training_phase_display: render_options.training_phase_display,
             live_progress,
+            show_eta_to_target: render_options.target_relative_accuracy.is_some()
+                || render_options.target_absolute_accuracy.is_some(),
+            eta_to_target_specification: format_eta_to_target_specification(
+                render_options.target_relative_accuracy,
+                render_options.target_absolute_accuracy,
+            ),
+            eta_to_target: target_accuracy_status.eta_to_target,
         },
         targets: targets.to_vec(),
         slot_training_phase_displays: render_options.slot_training_phase_displays.clone(),

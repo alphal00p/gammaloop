@@ -1119,6 +1119,8 @@ impl Integrate {
                 })
                 .collect(),
             per_slot_training_phase: self.uncorrelated,
+            target_relative_accuracy: settings.integrator.target_relative_accuracy,
+            target_absolute_accuracy: settings.integrator.target_absolute_accuracy,
             show_statistics,
             show_max_weight_details: self.show_max_weight_info,
             show_top_discrete_grid: self.show_top_discrete_grid,

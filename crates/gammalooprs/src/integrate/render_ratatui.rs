@@ -697,6 +697,23 @@ impl RatatuiDashboardState {
                     .unwrap_or_else(|| "warming up".to_string()),
                 TextStyle::PLAIN,
             );
+            if update.meta.show_eta_to_target {
+                left.push_text(" | ", TextStyle::PLAIN);
+                left.push_text("ETA to target ", TextStyle::green().bold());
+                if let Some(specification) = update.meta.eta_to_target_specification() {
+                    left.push_text("(", TextStyle::green().bold());
+                    left.push_text(specification, TextStyle::green().bold());
+                    left.push_text(") ", TextStyle::green().bold());
+                }
+                left.push_text(
+                    update
+                        .meta
+                        .eta_to_target()
+                        .map(|duration| utils::format_wdhms(duration.as_secs() as usize))
+                        .unwrap_or_else(|| "N/A".to_string()),
+                    TextStyle::PLAIN,
+                );
+            }
         }
 
         let mut right = StyledText::new();

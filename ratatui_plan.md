@@ -514,6 +514,26 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - discrete monitoring
   - long max-weight coordinate payloads
 
+### Phase 7: Accuracy-target termination and ETA-to-target
+
+- Status: in progress.
+- Add optional `integrator.target_relative_accuracy` and
+  `integrator.target_absolute_accuracy` settings with `None` defaults and
+  correct `SHOWDEFAULTS` serialization.
+- Keep `integrator.n_max` as the hard stop, but also terminate after a
+  completed iteration when either configured accuracy target is reached.
+- Use only slot 0 and only slot 0's trained phase when evaluating accuracy
+  targets, even in multi-slot runs.
+- Add `ETA to target` to the ratatui overview header, based on the current
+  slot-0 trained-phase error, current throughput, and `1/sqrt(N)` error
+  scaling, and include the active target condition in the header as
+  `ETA to target (<spec>) <eta>`, with relative targets shown as percentages
+  in fixed notation above `1e-4%` and scientific notation at or below that
+  threshold.
+- If both accuracy targets are configured, compute the ETA using whichever
+  target would be reached first; if the relative reference is zero, treat the
+  relative target as inactive.
+
 ## Risks to watch
 
 - Overfitting the semantic snapshot to the current tabled structure instead of

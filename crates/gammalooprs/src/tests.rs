@@ -35,6 +35,8 @@ fn default_render_options() -> IntegrationStatusViewOptions {
         training_slot: 0,
         slot_training_phase_displays: vec![IntegrationStatusPhaseDisplay::Real],
         per_slot_training_phase: false,
+        target_relative_accuracy: None,
+        target_absolute_accuracy: None,
         show_statistics: true,
         show_max_weight_details: true,
         show_top_discrete_grid: false,

@@ -238,6 +238,10 @@ pub struct IntegratorSettings {
     #[serde(skip_serializing_if = "is_usize::<10000000000>")]
     pub n_max: usize,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub target_relative_accuracy: Option<f64>,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub target_absolute_accuracy: Option<f64>,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integrated_phase: IntegratedPhase,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub discrete_dim_learning_rate: f64,
@@ -264,6 +268,8 @@ impl Default for IntegratorSettings {
             n_start: 100000,
             n_increase: 10000,
             n_max: 10000000000,
+            target_relative_accuracy: None,
+            target_absolute_accuracy: None,
             integrated_phase: IntegratedPhase::default(),
             discrete_dim_learning_rate: 1.0,
             continuous_dim_learning_rate: 1.0,
@@ -531,6 +537,7 @@ impl Display for IntegrationResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::serde_utils::ShowDefaultsGuard;
     use spenso::algebra::complex::Complex;
 
     #[test]
@@ -565,6 +572,33 @@ mod tests {
         // Test with custom precision
         let precision_str = format!("{:.2}", result);
         println!("With precision 2: {}", precision_str);
+    }
+
+    #[test]
+    fn integrator_settings_target_accuracy_defaults_serialize_via_showdefaults() {
+        let settings = IntegratorSettings::default();
+
+        let hidden_defaults = toml::to_string(&settings).expect("serialize integrator defaults");
+        assert!(!hidden_defaults.contains("target_relative_accuracy"));
+        assert!(!hidden_defaults.contains("target_absolute_accuracy"));
+
+        let _guard = ShowDefaultsGuard::new(true);
+        let shown_defaults = toml::to_string(&settings).expect("serialize integrator defaults");
+        assert!(shown_defaults.contains("target_relative_accuracy"));
+        assert!(shown_defaults.contains("target_absolute_accuracy"));
+    }
+
+    #[test]
+    fn integrator_settings_target_accuracy_serializes_when_configured() {
+        let settings = IntegratorSettings {
+            target_relative_accuracy: Some(0.05),
+            target_absolute_accuracy: Some(1.0e-6),
+            ..IntegratorSettings::default()
+        };
+
+        let serialized = toml::to_string(&settings).expect("serialize configured integrator");
+        assert!(serialized.contains("target_relative_accuracy = 0.05"));
+        assert!(serialized.contains("target_absolute_accuracy = 1e-6"));
     }
 }
 

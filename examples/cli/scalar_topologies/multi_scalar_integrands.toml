@@ -182,6 +182,7 @@ helicities = [
     subtype = "multi_channeling"
     '""",
 
+    "set process -p box -i scalar_box kv integrator.target_relative_accuracy=0.001 integrator.target_absolute_accuracy=1.0e-9",
     "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=500000 integrator.n_max=50000000 integrator.seed=1337",
     # --show-max-weight-info-for-discrete-bins
 	# --batch-size 100000
