@@ -29,6 +29,7 @@ Post-review fixes:
 - Batched `total_timing` now includes stability checks, final result assembly, rotation preparation, and batch orchestration overhead that the scalar path already counted.
 - Batch-output decoding no longer allocates one `Vec` per result chunk on the compiled f64 path.
 - `evaluate_batch_single_f64(...)` now guards its single-output assumption and allocates compiled output buffers with the correct size.
+- Added `vectorization_explained.md`, a standalone pedagogical walkthrough of the batching design, simplified mock-up, and execution-flow details with quoted code.
 
 Regression coverage added:
 - `tests/tests/test_runs.rs:test_batched_evaluation`

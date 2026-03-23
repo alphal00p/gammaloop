@@ -1245,3 +1245,51 @@ Posted dedicated replies on each relevant review thread in PR `#49`.
 
 - Left `2968277947` untouched, per your instruction.
 ````
+
+### Human
+
+````
+Create a very detailed markdown file `vectorization_explained.md` that explains how the vectorization was achieved.
+
+* In a first section, Start with an overview (about two pages), which highlights the design philosophy, i.e. how the buffering is done, the two-passes system, and how the batched call of the evaluators is eventually realised.
+
+* In a second section, create a mock up code that is a bare bone *very simplied* version of the the gammaLoop code, but which structurally shares the same behaviour. In that very simplified mock-up code, illustrate what you did to implement vectorization.
+
+* Finally, go in more details in the last big section, and highlight the new structures introduced, the key modification of the function signatures and of the workflow, try to follow the "logical" order, i.e. the order in which the information and the execution proceeds when `evaluate_sampleS` is called.
+
+* You should always quote the code to showcase what are the modifications and the new structures introduced. However, when quoting the code, do not only specify the exact location you're quoting, but in the markdown report also copy the actual code within a rust snippet, do that the markdown file is easy to read as a standalone.
+Again, do now spare details and make sure that the resulting code is not just a shopping list but also easy for the reviewer to understand by having your explanation follow the natural order in which the various structures are being called during the execution flow.
+Whenever appropriate, also show small examples to really make your point. 
+The idea is not to have condensed PR shopping list of the changes, but really a pedagogical document that helps understanding.
+````
+
+### Codex
+
+````
+Created `vectorization_explained.md` with the structure you asked for.
+
+- Section 1 is a long overview of the design philosophy: entry-point rechunking, owned buffering, local queue-and-flush behavior, the two-pass cross-section flow, and how the batched evaluator call eventually reaches Symbolica.
+- Section 2 is a deliberately simplified Rust mock-up that mirrors the same structural idea: sample-local preparation, owned pass-one/pass-two queues, batched evaluator flushes, and scattering results back into per-sample state.
+- Section 3 walks through the real implementation in execution order, quoting actual code snippets from the repository and naming the exact source locations, from `IntegratorSettings` and `evaluate_samples_raw(...)` down to `EvaluatorStack`, `GenericEvaluator`, amplitude batching, cross-section batching, timing/metadata, and the regression test.
+- I also updated `vectorized_gammaloop.md` so it records that the explanatory document was added.
+
+I did not run tests because this change is documentation-only.
+````
+
+### Human
+
+````
+In step 3.12 and 3.13, highlight a bit better how event construction is retained as before through the batching system, including early termination when they do not pass the selector cuts.
+````
+
+### Codex
+
+````
+Updated `vectorization_explained.md` in sections 3.12 and 3.13 to make the event path explicit.
+
+- In 3.12, I added the real cross-section snippet showing `accepted_event`, `selectors_pass`, the immediate selector rejection path, and the fact that only surviving events are stored in `CutBatchState` before any batched evaluator flush.
+- In 3.13, I added the real snippets showing how the stored accepted event is resumed after pass two, gets its final weight and optional additional weights, is pushed into `accepted_event_group`, and only then receives the full multiplicative factor during final `EvaluationResult` assembly.
+- I also added a short numbered lifecycle summary explaining that batching delays only the availability of the final numerical weight, not selector rejection or event retention semantics.
+
+I did not run tests because this is still a documentation-only update.
+````
