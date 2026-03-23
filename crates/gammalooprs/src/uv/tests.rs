@@ -1663,7 +1663,7 @@ impl Ord for TestNode {
     }
 }
 
-const LU_TEST_SETTINGS: &'static str = "
+const LU_TEST_SETTINGS: &str = "
 General:
   amplitude_prefactor:
     im: 1.0

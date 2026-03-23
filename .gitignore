@@ -267,3 +267,4 @@ process_outputs
 # the default log file
 log.glog/
 !.jj/repo/config.toml
+output.svg

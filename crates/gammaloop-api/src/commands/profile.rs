@@ -154,6 +154,7 @@ impl ProfileResult {
 
 impl Profile {
     #[instrument(skip_all)]
+    #[allow(clippy::needless_update)]
     pub fn run(
         &self,
         state: &mut State,

@@ -145,15 +145,14 @@ fn resolve_generated_model_targets(
                 .get_integrand(process_id, &canonical_name)
                 .and_then(|resolved| resolved.require_generated().map(|_| resolved))
                 .with_context(|| {
-                    format!(
-                        "Per-integrand model parameters are only supported for generated integrands"
-                    )
+                    "Per-integrand model parameters are only supported for generated integrands"
                 })?;
             Ok(Some(vec![(process_id, canonical_name)]))
         }
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn parse_model_assignments(
     state: &State,
     values: &[ModelSetValue],
@@ -836,6 +835,7 @@ fn parse_runtime_model_setting_value(value: &J) -> Result<(F<f64>, F<f64>)> {
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn extract_runtime_model_updates_from_json(
     value: &mut J,
 ) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
@@ -863,6 +863,7 @@ fn extract_runtime_model_updates_from_json(
         .collect()
 }
 
+#[allow(clippy::type_complexity)]
 fn extract_runtime_model_updates_from_toml(
     value: &mut toml::Value,
 ) -> Result<BTreeMap<String, (F<f64>, F<f64>)>> {
@@ -1901,7 +1902,15 @@ integrate = 10
         let parameter = state
             .model_parameters
             .keys()
-            .next()
+            .find(|a| {
+                matches!(
+                    state
+                        .model
+                        .get_parameter(a.0.get_stripped_name())
+                        .parameter_type,
+                    ParameterType::Imaginary
+                )
+            })
             .expect("expected at least one external model parameter")
             .to_string();
 

@@ -756,7 +756,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             sample
                 .loop_moms()
                 .iter()
-                .flat_map(|mom| vec![mom.px.clone(), mom.py.clone(), mom.pz.clone()].into_iter())
+                .flat_map(|mom| vec![mom.px, mom.py, mom.pz].into_iter())
                 .collect_vec()
         };
 
@@ -1036,7 +1036,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                 .finish(),
             rhs: body.clone(),
             tags: tags.clone(),
-            args: args.clone().into_iter().map(|a| a.into()).collect(),
+            args: args.clone(),
         });
 
         self.fn_map
@@ -1058,7 +1058,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             lhs: FunctionBuilder::new(name).add_args(&atom_args).finish(),
             rhs: body.clone(),
             tags: vec![],
-            args: args.clone().into_iter().map(|a| a.into()).collect(),
+            args: args.clone(),
         });
 
         self.fn_map.add_function(name, rename, args, body)
@@ -1072,14 +1072,13 @@ impl<T: FloatLike> ParamBuilder<T> {
                     .unwrap()
                     .clone()
                     .into_iter()
-                    .map(move |value| {
+                    .flat_map(move |value| {
                         let mut constant_dual_values = vec![value.clone()];
                         for _ in 0..derivative_order {
                             constant_dual_values.push(value.ref_zero());
                         }
                         constant_dual_values
                     })
-                    .flatten()
                     .collect()
             })
             .collect();

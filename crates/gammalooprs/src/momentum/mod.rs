@@ -7,6 +7,7 @@ use std::{
     borrow::Borrow,
     fmt::{Display, LowerExp},
     ops::{Add, AddAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign},
+    str::FromStr,
 };
 
 use bincode_trait_derive::{Decode, Encode};
@@ -2176,8 +2177,12 @@ impl Helicity {
     pub const Zero: Self = Self::ZERO;
     pub const Plus: Self = Self::PLUS;
     pub const Minus: Self = Self::MINUS;
+}
 
-    pub fn from_str(value: &str) -> Result<Self, String> {
+impl FromStr for Helicity {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim().to_ascii_lowercase().as_str() {
             "+" | "plus" => Ok(Self::PLUS),
             "-" | "minus" => Ok(Self::MINUS),

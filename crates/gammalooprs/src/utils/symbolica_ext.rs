@@ -1,6 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use itertools::Either::Right;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;

@@ -148,7 +148,7 @@ fn from_symbolica() -> Result<()> {
     };
     let xs = x.values().next().unwrap();
 
-    let a = xs.supergraphs.iter().next().unwrap();
+    let a = &xs.supergraphs[0];
 
     insta::assert_snapshot!(a.graph.debug_dot(),@r#"
     digraph GL0{

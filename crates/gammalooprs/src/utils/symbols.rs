@@ -755,7 +755,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     num: symbol!("num"),
     den: symbol!(
         "denom",
-        der = |view, arg, out| {
+        der = |_, arg, out| {
             if arg != 3 {
                 **out = Atom::Zero;
             } else {

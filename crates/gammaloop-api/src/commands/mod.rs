@@ -46,17 +46,12 @@ pub mod profile;
 pub use profile::Profile;
 pub(crate) mod process_settings;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum CommandOutput {
+    #[default]
     None,
     Evaluate(Atom),
     Integrate(IntegrationOutput),
-}
-
-impl Default for CommandOutput {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -85,6 +80,7 @@ impl CommandExecution {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Commands {
     #[clap(subcommand)]

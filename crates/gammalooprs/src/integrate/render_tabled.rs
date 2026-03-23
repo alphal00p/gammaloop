@@ -143,11 +143,9 @@ fn insert_separator_rows(rendered: &str, separator_after_rows: &[usize]) -> Stri
     }
     let separator = format!("├{}┤", "─".repeat(width - 2));
 
-    let mut inserted = 0usize;
-    for row in separator_after_rows {
-        let insert_at = row + 2 + inserted;
+    for (inserted, row) in separator_after_rows.iter().enumerate() {
+        let insert_at = *row + 2 + inserted;
         lines.insert(insert_at, separator.clone());
-        inserted += 1;
     }
 
     lines.join("\n")

@@ -216,6 +216,7 @@ impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
 }
 
 impl AmplitudeIntegrand {
+    #[allow(clippy::type_complexity)]
     pub(crate) fn representative_input(
         &self,
     ) -> Result<

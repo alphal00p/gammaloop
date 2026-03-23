@@ -116,14 +116,8 @@ impl LUCounterTermEvaluators {
                     .left_atoms
                     .iter()
                     .map(|atom| {
-                        let evaluator_atoms = orientations.iter().map(|or| {
-                            let evaluator_atom = or.select(atom);
-
-                            evaluator_atom
-                        });
-
                         GenericEvaluator::new_from_builder(
-                            evaluator_atoms,
+                            orientations.iter().map(|or| or.select(atom)),
                             param_builder,
                             None,
                             OptimizationSettings::default(),
@@ -147,11 +141,7 @@ impl LUCounterTermEvaluators {
                     .right_atoms
                     .iter()
                     .map(|atom| {
-                        let evaluator_atoms = orientations.iter().map(|or| {
-                            let evaluator_atom = or.select(atom);
-
-                            evaluator_atom
-                        });
+                        let evaluator_atoms = orientations.iter().map(|or| or.select(atom));
 
                         GenericEvaluator::new_from_builder(
                             evaluator_atoms,

@@ -1362,10 +1362,12 @@ impl<T: FloatLike> F<T> {
         F(self.0.one())
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn from_usize(&self, x: usize) -> Self {
         F(self.0.from_usize(x))
     }
 
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn from_i64(&self, x: i64) -> Self {
         F(self.0.from_i64(x))
     }
@@ -3635,7 +3637,7 @@ fn strip_ansi_escape_codes(line: &str) -> String {
     while let Some(ch) = chars.next() {
         if ch == '\u{1b}' && chars.peek() == Some(&'[') {
             chars.next();
-            while let Some(code) = chars.next() {
+            for code in chars.by_ref() {
                 if ('@'..='~').contains(&code) {
                     break;
                 }

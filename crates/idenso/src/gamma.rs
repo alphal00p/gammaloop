@@ -1192,7 +1192,6 @@ mod test {
     use super::*;
 
     use crate::color::ColorSimplifier;
-    use crate::id;
     use crate::test::test_initialize;
     use spenso::{
         structure::{abstract_index::AbstractIndex, permuted::Perm},
@@ -1533,12 +1532,12 @@ mod test {
         .with(mink.pattern(1));
         assert_eq!(
             expr,
-            mink.g(2, 4) * p(1).npow(2) * -4 + p(2) * p(4) * 8 + p(2) * q(4) * 4 + p(4) * q(2) * 4
+            mink.g(2, 4) * p(1).pow(2) * -4 + p(2) * p(4) * 8 + p(2) * q(4) * 4 + p(4) * q(2) * 4
                 - mink.g(2, 4) * p(1) * q(1) * 4,
             "got \n{:>+} diff:{}",
             expr,
             (&expr
-                - (mink.g(2, 4) * p(1).npow(2) * -4
+                - (mink.g(2, 4) * p(1).pow(2) * -4
                     + p(2) * p(4) * 8
                     + p(2) * q(4) * 4
                     + p(4) * q(2) * 4
@@ -1565,7 +1564,7 @@ mod test {
         .with(mink.pattern(1));
         assert_eq!(
             expr,
-            mink.g(2, 4) * p(1).npow(2) * 4 + p(2) * q(4) * 4 - q(2) * p(4) * 4
+            mink.g(2, 4) * p(1).pow(2) * 4 + p(2) * q(4) * 4 - q(2) * p(4) * 4
                 + mink.g(2, 4) * p(1) * q(1) * 4,
             "got {}",
             expr
@@ -1585,7 +1584,7 @@ mod test {
 
         assert_eq!(
             expr,
-            p(1).npow(2) * dim * 4 + p(1) * q(1) * dim * 4,
+            p(1).pow(2) * dim * 4 + p(1) * q(1) * dim * 4,
             "got {:#}",
             expr
         );

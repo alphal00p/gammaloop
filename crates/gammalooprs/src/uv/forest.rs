@@ -59,7 +59,7 @@ impl CutForests {
             .zip(self.cuts.cuts.iter())
             .zip(self.settings.iter())
         {
-            forest.compute(graph, (vakint, vakint_settings), &cuts, settings)?;
+            forest.compute(graph, (vakint, vakint_settings), cuts, settings)?;
         }
         Ok(())
     }

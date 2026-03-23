@@ -1,22 +1,16 @@
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    function,
-    id::{Match, MatchSettings, MatchStack, Pattern, Replacement},
-    parse, symbol,
-    transformer::Transformer,
-};
+use symbolica::{atom::AtomCore, id::Pattern, parse, symbol, transformer::Transformer};
 
 fn run_network_informed() {
-    let d = symbol!("d"; Symmetric, Linear); // metric
+    let _d = symbol!("d"; Symmetric, Linear); // metric
 
     symbol!("mu1", "mu2", "mu3", "mu4", "mu5", "mu6", "mu7", "mu8", "mu9", "mu10", "mu11";
         tags=["spenso::index"]);
 
-    let k1_ = symbol!("k1_");
-    let muw1_ = symbol!("muw1_", tags = ["spenso::index"]);
-    let x___ = symbol!("x___");
+    let _k1_ = symbol!("k1_");
+    let _muw1_ = symbol!("muw1_", tags = ["spenso::index"]);
+    let _x___ = symbol!("x___");
 
-    let mut r = parse!(
+    let _r = parse!(
         "vx(1,-k(0), k(0)-k(1), k(1), k(10), mu1, mu8)
     vx(2,-k(1), k(2), k(1)-k(2), mu1, mu2, mu9)
     vx(3,-k(2), k(3), k(2)-k(3), mu2, mu3, mu10)

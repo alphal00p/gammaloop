@@ -337,7 +337,7 @@ impl GraphTerm for AmplitudeGraphTerm {
                 * multiplicative_offset;
 
             for pol_value in pols.iter() {
-                values[polarization_start] = pol_value.clone();
+                values[polarization_start] = *pol_value;
                 polarization_start += multiplicative_offset;
             }
         }

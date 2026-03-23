@@ -3,10 +3,7 @@ use linnet::parser::GlobalData;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
-use crate::{
-    feyngen::diagram_generator::evaluate_overall_factor, graph::GroupId,
-    momentum::sample::ExternalIndex, settings::runtime::LockedRuntimeSettings,
-};
+use crate::{feyngen::diagram_generator::evaluate_overall_factor, graph::GroupId};
 
 use super::{
     Graph,
@@ -166,8 +163,7 @@ impl Graph {
                 .map(ToQuoted::to_quoted)
                 .collect::<Vec<_>>()
                 .join(";");
-            g.statements
-                .insert("params".to_string(), format!("{}", params));
+            g.statements.insert("params".to_string(), params);
         }
 
         g
@@ -205,8 +201,7 @@ impl ParseGraph {
                 .map(ToQuoted::to_quoted)
                 .collect::<Vec<_>>()
                 .join(";");
-            g.statements
-                .insert("params".to_string(), format!("{}", params));
+            g.statements.insert("params".to_string(), params);
         }
 
         g

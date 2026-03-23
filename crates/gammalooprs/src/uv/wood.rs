@@ -83,10 +83,10 @@ impl Wood {
         for (i, sg) in poset.nodes.iter() {
             let cs = ref_graph.connected_components(&sg.data);
             let nloop = cs.iter().map(|c| ref_graph.cyclotomatic_number(c)).max();
-            if let Some(nloop) = nloop {
-                if nloop > max_loops {
-                    max_loops = nloop;
-                }
+            if let Some(nloop) = nloop
+                && nloop > max_loops
+            {
+                max_loops = nloop;
             }
 
             if cs.len() > 1 {

@@ -99,7 +99,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
         debug!(atomarg = %atomarg.log_print(None),"t_arg * inner_t for 4d CT");
 
         // only apply replacements for edges in the reduced graph
-        let mom_reps = graph.uv_wrapped_replacement(&reduced, &current.lmb(), &[W_.x___]);
+        let mom_reps = graph.uv_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
 
         // println!("Reps:");
         // for r in &mom_reps {
@@ -214,15 +214,15 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
         //     .evaluate(&vakint.1, integrand_vakint.as_view())
         //     .unwrap();
 
-        integrand_vakint.canonicalize(&self.vakint_settings, &self.vakint.topologies, false)?;
+        integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
         for t in &integrand_vakint.0 {
             debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
         }
-        integrand_vakint.tensor_reduce(&self.vakint, &self.vakint_settings)?;
+        integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
         for t in &integrand_vakint.0 {
             debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after tensor reduction");
         }
-        integrand_vakint.evaluate_integral(&self.vakint, &self.vakint_settings)?;
+        integrand_vakint.evaluate_integral(self.vakint, self.vakint_settings)?;
         for t in &integrand_vakint.0 {
             debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after evaluation");
         }
@@ -328,10 +328,8 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 if power < 0 {
                     pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
                 }
-            } else {
-                if power >= 0 {
-                    pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
-                }
+            } else if power >= 0 {
+                pole_stripped += p * Atom::var(GS.dim_epsilon).pow(power);
             }
         }
 
@@ -582,7 +580,7 @@ pub(crate) fn to_vakint_integrand<
     )
     .unwrap();
 
-    for (_i, t) in a.0.iter_mut().enumerate() {
+    for t in a.0.iter_mut() {
         debug!(integral=%t.integral,"Starting integral");
 
         let mut graph = HedgeGraphBuilder::new();
@@ -632,10 +630,13 @@ pub(crate) fn to_vakint_integrand<
             let mut mass = None;
             for (_, _, d) in graph.iter_edges_of(c) {
                 count += 1;
-                if mass.is_none() {
-                    mass = Some(d.data.mass.clone());
-                } else if mass.as_ref().unwrap() != &d.data.mass {
+
+                if let Some(m) = &mass
+                    && m != &d.data.mass
+                {
                     return false;
+                } else {
+                    mass = Some(d.data.mass.clone());
                 }
                 if count > 2 {
                     return false;
@@ -660,7 +661,7 @@ pub(crate) fn to_vakint_integrand<
             nodes_to_merge.push(nid);
         }
 
-        if nodes_to_merge.len() > 0 {
+        if !nodes_to_merge.is_empty() {
             graph.identify_nodes(&nodes_to_merge, ());
         }
 

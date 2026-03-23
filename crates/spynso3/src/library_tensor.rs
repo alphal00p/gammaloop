@@ -69,7 +69,11 @@ use super::{
 /// >>> tensor = LibraryTensor.dense(structure, data)
 /// >>> sparse_tensor = LibraryTensor.sparse(structure, float)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "LibraryTensor", module = "symbolica.community.spenso")]
+#[pyclass(
+    from_py_object,
+    name = "LibraryTensor",
+    module = "symbolica.community.spenso"
+)]
 #[derive(Clone)]
 pub struct LibrarySpensor {
     pub tensor: PermutedStructure<MixedTensor<f64, ExplicitKey<AbstractIndex>>>,

@@ -111,7 +111,7 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// >>> tensor = Tensor.dense(structure, data)
 /// >>> sparse_tensor = Tensor.sparse(structure, float)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "Tensor", module = "symbolica.community.spenso")]
+#[pyclass(from_py_object, name = "Tensor", module = "symbolica.community.spenso")]
 #[derive(Clone)]
 pub struct Spensor {
     tensor: PermutedStructure<MixedTensor<f64, ShadowedStructure<AbstractIndex>>>,
@@ -664,7 +664,11 @@ impl From<MixedTensor<f64, ShadowedStructure<AbstractIndex>>> for Spensor {
 /// >>> evaluator = my_tensor.evaluator(constants={}, funs={}, params=[x, y])
 /// >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "TensorEvaluator", module = "symbolica.community.spenso")]
+#[pyclass(
+    from_py_object,
+    name = "TensorEvaluator",
+    module = "symbolica.community.spenso"
+)]
 #[derive(Clone)]
 pub struct SpensoExpressionEvaluator {
     pub eval_rat: LinearizedEvalTensor<SymComplex<Rational>, ShadowedStructure<AbstractIndex>>,
@@ -845,6 +849,7 @@ impl SpensoExpressionEvaluator {
 /// >>> results = compiled.evaluate_complex(large_input_batch)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
+    from_py_object,
     name = "CompiledTensorEvaluator",
     module = "symbolica.community.spenso"
 )]

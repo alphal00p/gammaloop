@@ -692,15 +692,15 @@ impl Esurface {
         let mut exernal_shift = Vec::new();
 
         for (pair, edge_index, _) in graph.iter_edges_of(&is_cut_part_of_subgraph) {
-            match pair {
-                HedgePair::Split {
-                    split: edge_flow, ..
-                } => {
-                    let sign = if flow == edge_flow { 1 } else { -1 };
-                    exernal_shift.push((edge_index, sign));
-                }
-                _ => {}
-            }
+            let HedgePair::Split {
+                split: edge_flow, ..
+            } = pair
+            else {
+                continue;
+            };
+
+            let sign = if flow == edge_flow { 1 } else { -1 };
+            exernal_shift.push((edge_index, sign));
         }
 
         Self {
@@ -1009,11 +1009,9 @@ impl Graph {
                 .orientations
                 .iter()
                 .map(|orientation_expression| {
-                    let res = orientation_expression.expression.max_value_count_on_branch(
+                    orientation_expression.expression.max_value_count_on_branch(
                         &crate::cff::surface::HybridSurfaceID::Esurface(representative_esurface_id),
-                    );
-
-                    res
+                    )
                 })
                 .max()
                 .unwrap_or(0);

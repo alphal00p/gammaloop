@@ -369,7 +369,7 @@ impl Generate {
         };
         match &self.mode {
             Some(GenerateCmd::Amp(args)) | Some(GenerateCmd::Xs(args)) => {
-                let generation_type = (*generation_mode.as_ref().unwrap()).0;
+                let generation_type = generation_mode.as_ref().unwrap().0;
                 let model: &Model = &state.model;
                 let (spec, existing_process) = generation_info.unwrap();
                 let this_process_id = spec.process_definition.process_id;

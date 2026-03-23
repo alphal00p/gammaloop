@@ -595,7 +595,7 @@ impl AmplitudeGraph {
         Ok(NumericalEvaluationResult::from_atom(
             numerical_result,
             vakint_symbol!(&true_settings.epsilon_symbol),
-            &true_settings,
+            true_settings,
         )?)
     }
 
@@ -733,7 +733,7 @@ impl AmplitudeGraph {
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
-            &settings,
+            settings,
             false,
         );
 

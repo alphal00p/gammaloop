@@ -474,23 +474,31 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 let root_node = self.node_id(root);
                 let subgraph_tree =
                     SimpleTraversalTree::depth_first_traverse(self, subgraph, &root_node, None)
-                        .expect(&format!(
-                            "Externals \n{}\n contains non subgraph nodes:\n{}\n ",
-                            self.dot(&externals),
-                            self.dot(subgraph)
-                        ));
+                        .unwrap_or_else(|_| {
+                            panic!(
+                                "Externals \n{}\n contains non subgraph nodes:\n{}\n ",
+                                self.dot(&externals),
+                                self.dot(subgraph)
+                            )
+                        });
 
                 let external_cover = subgraph_tree.covers(&externals);
 
-                root = external_cover.included_iter().rev().next().unwrap();
+                root = external_cover.included_iter().next_back().unwrap();
                 let root_node = self.node_id(root);
-                let tree =
-                    SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
-                        .expect(&format!(
-                            "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
-                            self.dot(forest_guide),
-                            self.dot(subgraph)
-                        )); //select the last half edge in the external cover of this tree as the dependent one
+                let tree = SimpleTraversalTree::depth_first_traverse(
+                    self,
+                    forest_guide,
+                    &root_node,
+                    None,
+                )
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
+                        self.dot(forest_guide),
+                        self.dot(subgraph)
+                    )
+                }); //select the last half edge in the external cover of this tree as the dependent one
 
                 debug_assert_eq!(
                     subgraph_tree.covers(subgraph),
@@ -574,17 +582,16 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 tree
             } else {
                 let root_node = self.node_id(root);
-                let tree = if forest_guide.is_empty() {
+                if forest_guide.is_empty() {
                     SimpleTraversalTree::empty(self)
                 } else {
                     SimpleTraversalTree::depth_first_traverse(self, forest_guide, &root_node, None)
-                        .expect(&format!(
+                        .unwrap_or_else(|_| panic!(
                             "Forest guide \n{}\n,does not cover the same nodes as subgraph \n{}\n",
                             self.dot(forest_guide),
                             self.dot(subgraph)
                         ))
-                };
-                tree
+                }
             };
 
             forest_edge.union_with(&tree.tree_subgraph);
@@ -616,12 +623,14 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                     source,
                                     self,
                                 )
-                                .expect(&format!(
-                                    "Failed to get cycle from tree:{}\n{}\n{}",
-                                    tree.get_cycle(source, self).unwrap().is_circuit(self),
-                                    self.dot(&tree.get_cycle(source, self).unwrap().filter),
-                                    self.dot(&cover),
-                                )),
+                                .unwrap_or_else(|| {
+                                    panic!(
+                                        "Failed to get cycle from tree:{}\n{}\n{}",
+                                        tree.get_cycle(source, self).unwrap().is_circuit(self),
+                                        self.dot(&tree.get_cycle(source, self).unwrap().filter),
+                                        self.dot(&cover),
+                                    )
+                                }),
                             );
                             loop_edges.push(e);
                         }

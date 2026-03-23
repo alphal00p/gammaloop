@@ -339,13 +339,13 @@ impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C>
 
 /// Determine if an argument expects a path based on its type and hints
 fn is_path_argument(arg: &clap::Arg) -> bool {
-    match arg.get_value_hint() {
+    matches!(
+        arg.get_value_hint(),
         clap::ValueHint::FilePath
-        | clap::ValueHint::DirPath
-        | clap::ValueHint::AnyPath
-        | clap::ValueHint::ExecutablePath => true,
-        _ => false,
-    }
+            | clap::ValueHint::DirPath
+            | clap::ValueHint::AnyPath
+            | clap::ValueHint::ExecutablePath
+    )
 }
 
 fn global_settings_root() -> &'static JsonValue {
@@ -453,13 +453,13 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
         let value_request = &flag_value_context.request;
         let arg = flag_value_context.arg;
         if is_path_argument(arg) {
-            add_path_suggestions(&mut suggestions, &mut seen, &value_request, pos);
+            add_path_suggestions(&mut suggestions, &mut seen, value_request, pos);
         } else if let Some(completion) = arg_value_completion(arg) {
             match completion {
                 ArgValueCompletion::ProcessSelector(kind) => {
                     add_process_suggestions(
                         completion_state,
-                        &value_request,
+                        value_request,
                         kind,
                         pos,
                         &mut suggestions,
@@ -471,7 +471,7 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                         completion_state,
                         context.all_completed_tokens,
                         context.root_cmd,
-                        &value_request,
+                        value_request,
                         kind,
                         pos,
                         &mut suggestions,
@@ -483,7 +483,7 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                         completion_state,
                         context.all_completed_tokens,
                         context.root_cmd,
-                        &value_request,
+                        value_request,
                         pos,
                         &mut suggestions,
                         &mut seen,
@@ -1130,9 +1130,7 @@ fn add_builtin_model_restriction_suggestions(
 
     let mut candidates = builtin_json_model_restriction_names(model_name)
         .unwrap_or(&[])
-        .iter()
-        .cloned()
-        .collect::<Vec<_>>();
+        .to_vec();
     candidates.push("full".to_string());
     candidates.sort();
     candidates.dedup();
@@ -2124,10 +2122,10 @@ fn selected_process_settings_entries<'a>(
         .collect()
 }
 
-fn named_settings_map<'a>(
-    entry: &'a ProcessSettingsCompletionEntry,
+fn named_settings_map(
+    entry: &ProcessSettingsCompletionEntry,
     setting_kind: NamedProcessSettingKind,
-) -> &'a BTreeMap<String, JsonValue> {
+) -> &BTreeMap<String, JsonValue> {
     match setting_kind {
         NamedProcessSettingKind::Quantity => &entry.quantities,
         NamedProcessSettingKind::Observable => &entry.observables,
@@ -2167,9 +2165,11 @@ fn common_named_setting_roots<'a>(
         .iter()
         .filter_map(|scope| named_settings_map(scope, setting_kind).get(name))
         .collect::<Vec<_>>();
-    (roots.len() == scopes.len())
-        .then_some(roots)
-        .unwrap_or_default()
+    if roots.len() == scopes.len() {
+        roots
+    } else {
+        Default::default()
+    }
 }
 
 fn intersect_settings_roots(roots: &[&JsonValue]) -> Option<JsonValue> {
@@ -4318,7 +4318,6 @@ mod tests {
             values.contains(&"--symmetrize-final-states".to_string()),
             "{values:?}"
         );
-        assert!(!values.contains(&"--allowed-vertex-interactions".to_string()));
     }
 
     #[test]

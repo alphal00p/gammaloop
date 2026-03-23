@@ -1,9 +1,5 @@
-use ahash::HashMap;
-use std::fs;
 use test_log::env_logger;
-use vakint::{
-    InputFloatRationalizationPrecision, MATADOptions, Vakint, VakintExpression, VakintSettings,
-};
+use vakint::{InputFloatRationalizationPrecision, Vakint, VakintExpression, VakintSettings};
 
 fn main() {
     env_logger::init();

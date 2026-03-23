@@ -265,7 +265,7 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 i.to_symbolic([dim, RS.a_]).to_pattern(),
                 i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
-            .with_conditions(RS.a_.filter(not_wraped_aind(header)))
+            .with_conditions(RS.a_.filter_match(not_wraped_aind(header)))
             .with_settings(settings.clone()),
         );
     }
@@ -277,7 +277,7 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 i.to_symbolic([dim, RS.a_]).to_pattern(),
                 i.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
-            .with_conditions(RS.a_.filter(not_wraped_aind(header)))
+            .with_conditions(RS.a_.filter_match(not_wraped_aind(header)))
             .with_settings(settings.clone()),
         );
         reps.push(
@@ -285,7 +285,7 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
                 di.to_symbolic([dim, RS.a_]).to_pattern(),
                 di.to_symbolic([dima.clone(), function!(header, Atom::var(RS.a_))]),
             )
-            .with_conditions(RS.a_.filter(not_wraped_aind(header)))
+            .with_conditions(RS.a_.filter_match(not_wraped_aind(header)))
             .with_settings(settings.clone()),
         );
     }
@@ -639,9 +639,9 @@ impl MetricSimplifier for AtomView<'_> {
         });
 
         if has_errored.load(std::sync::atomic::Ordering::Relaxed) {
-            return Err(eyre!("Failed to parse network"));
+            Err(eyre!("Failed to parse network"))
         } else {
-            return Ok(out);
+            Ok(out)
         }
     }
     fn simplify_metrics(&self) -> Atom {

@@ -43,12 +43,12 @@ use crate::{
     numerator::symbolica_ext::AtomCoreExt,
     processes::{DotExportSettings, EvaluatorSettings},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
-    utils::{GS, hyperdual_utils::shape_for_t_derivatives, symbolica_ext::LogPrint},
+    utils::{GS, hyperdual_utils::shape_for_t_derivatives},
     uv::{approx::CutStructure, forest::ParametricIntegrands, uv_graph::UVE, wood::CutWoods},
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
+    involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },

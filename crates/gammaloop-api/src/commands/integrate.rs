@@ -746,9 +746,8 @@ impl Integrate {
                     .iter()
                     .zip(manifest.integrand_fingerprints.iter())
                     .zip(current_integrand_fingerprints.iter())
-                    .filter_map(|((slot, saved), current)| {
-                        (saved != current).then(|| slot.slot_meta.key())
-                    })
+                    .filter(|&((_, saved), current)| saved != current)
+                    .map(|((slot, _), _)| slot.slot_meta.key())
                     .collect_vec();
                 if !mismatched_fingerprint_slots.is_empty() {
                     return Err(eyre!(
@@ -760,9 +759,8 @@ impl Integrate {
                     .iter()
                     .zip(manifest.effective_model_parameters.iter())
                     .zip(current_effective_model_parameters.iter())
-                    .filter_map(|((slot, saved_card), current_card)| {
-                        (saved_card != current_card).then(|| slot.slot_meta.key())
-                    })
+                    .filter(|((_, saved_card), current_card)| saved_card != current_card)
+                    .map(|((slot, _), _)| slot.slot_meta.key())
                     .collect_vec();
                 if !mismatched_slots.is_empty() {
                     return Err(eyre!(
@@ -1260,10 +1258,8 @@ impl Integrate {
                             emit_integration_status_via_tracing(kind, &status_block)?;
                         }
                     }
-                } else {
-                    if kind != IntegrationStatusKind::Live {
-                        emit_integration_status_via_tracing(kind, &status_block)?;
-                    }
+                } else if kind != IntegrationStatusKind::Live {
+                    emit_integration_status_via_tracing(kind, &status_block)?;
                 }
 
                 Ok(())

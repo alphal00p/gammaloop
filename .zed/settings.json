@@ -123,7 +123,7 @@
           "onSave": true,
           "features": ["python_api"],
           // "features": ["no_pyo3"],
-          "command": "check",
+          "command": "clippy",
         },
         "runnables": {
           "extraArgs": ["--profile", "dev-optim"],

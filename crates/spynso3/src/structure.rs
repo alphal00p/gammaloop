@@ -145,7 +145,11 @@ impl PyStubType for SpensoSlotOrArgOrRep {
 /// >>> nu = rep('nu')
 /// >>> tensor_structure = T(mu, nu)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "TensorName", module = "symbolica.community.spenso")]
+#[pyclass(
+    from_py_object,
+    name = "TensorName",
+    module = "symbolica.community.spenso"
+)]
 #[derive(Clone)]
 pub struct SpensoName {
     pub name: Symbol,
@@ -463,7 +467,11 @@ impl SpensoName {
 /// >>> named_indices = T(mu, nu)
 /// >>> expr = named_indices.to_expression()
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "TensorIndices", module = "symbolica.community.spenso")]
+#[pyclass(
+    from_py_object,
+    name = "TensorIndices",
+    module = "symbolica.community.spenso"
+)]
 #[derive(Clone)]
 pub struct SpensoIndices {
     pub structure: PermutedStructure<ShadowedStructure<AbstractIndex>>,
@@ -859,7 +867,11 @@ impl SpensoIndices {
 /// expr = structure.symbolic('a', 'b')  # T(a, b)
 /// ```
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "TensorStructure", module = "symbolica.community.spenso")]
+#[pyclass(
+    from_py_object,
+    name = "TensorStructure",
+    module = "symbolica.community.spenso"
+)]
 #[derive(Clone)]
 pub struct SpensoStructure {
     pub structure: PermutedStructure<ExplicitKey<AbstractIndex>>,
@@ -1351,7 +1363,11 @@ impl PyStubType for PossiblyIndexed {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "Representation", module = "symbolica.community.spenso")]
+#[pyclass(
+    from_py_object,
+    name = "Representation",
+    module = "symbolica.community.spenso"
+)]
 #[derive(Clone)]
 /// A representation in the sense of group representation theory for tensor indices.
 ///
@@ -1783,7 +1799,7 @@ impl SpensoRepresentation {
 /// tensor_structure = TensorIndices(slot1, slot2)
 /// ```
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
-#[pyclass(name = "Slot", module = "symbolica.community.spenso")]
+#[pyclass(from_py_object, name = "Slot", module = "symbolica.community.spenso")]
 #[derive(Clone)]
 pub struct SpensoSlot {
     pub slot: Slot<LibraryRep>,

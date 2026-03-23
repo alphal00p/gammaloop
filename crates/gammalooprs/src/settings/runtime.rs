@@ -211,19 +211,11 @@ pub mod kinematic;
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct ObservablesOutputSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub format: ObservableFileFormat,
-}
-
-impl Default for ObservablesOutputSettings {
-    fn default() -> Self {
-        Self {
-            format: ObservableFileFormat::default(),
-        }
-    }
 }
 
 #[cfg_attr(
@@ -355,16 +347,14 @@ impl Display for IntegralEstimate {
             } else {
                 write!(f, "{} + {}i", real_formatted, im_formatted,)
             }
+        } else if f.alternate() {
+            write!(
+                f,
+                "{} (neval: {}, real_chisq: {:.3})",
+                real_formatted, self.neval, self.real_chisq.0
+            )
         } else {
-            if f.alternate() {
-                write!(
-                    f,
-                    "{} (neval: {}, real_chisq: {:.3})",
-                    real_formatted, self.neval, self.real_chisq.0
-                )
-            } else {
-                write!(f, "{}", real_formatted)
-            }
+            write!(f, "{}", real_formatted)
         }
     }
 }
@@ -627,6 +617,7 @@ pub struct StabilityRecordingSettings {
     pub record_loop_momenta_escalation: bool,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for StabilityRecordingSettings {
     fn default() -> Self {
         Self {

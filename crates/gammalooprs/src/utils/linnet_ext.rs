@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_from_mappings_complex() {
         // Test more complex displacement
-        let mappings = vec![(0, 3), (1, 0)];
+        let mappings = [(0, 3), (1, 0)];
         let p = Permutation::from_mappings(mappings.iter().copied(), 4).unwrap();
         assert_eq!(p[0], 3);
         assert_eq!(p[1], 0);

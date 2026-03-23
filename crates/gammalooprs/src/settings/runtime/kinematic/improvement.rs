@@ -725,7 +725,7 @@ mod tests {
             &dependent_momenta_f128,
             &masses_f128,
             &external_signature,
-            &F::from_ff64(e_cm.clone()),
+            &F::from_ff64(*e_cm),
             &improve_ps_settings,
         )?;
         tracing::debug!("Improved momenta f128: {:#?}", improved_point);
@@ -734,7 +734,7 @@ mod tests {
             &improved_point,
             &external_signature,
             &masses_f128,
-            &F::from_ff64(e_cm.clone()),
+            &F::from_ff64(*e_cm),
         )?;
 
         Ok(())

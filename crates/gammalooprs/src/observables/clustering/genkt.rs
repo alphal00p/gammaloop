@@ -31,7 +31,7 @@ pub(crate) fn cluster_candidates<T: FloatLike>(
             active
                 .drain(..)
                 .filter(|jet| jet.pt() >= min_pt)
-                .map(PseudoJet::to_jet),
+                .map(PseudoJet::jet),
         );
         sort_jets(&mut jets);
         return ClusteringResult { jets };
@@ -66,7 +66,7 @@ pub(crate) fn cluster_candidates<T: FloatLike>(
             BestAction::Beam(index) => {
                 let jet = active.remove(index);
                 if jet.pt() >= min_pt {
-                    jets.push(jet.to_jet());
+                    jets.push(jet.jet());
                 }
             }
             BestAction::Pair(i, j) => {

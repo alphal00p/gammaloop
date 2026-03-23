@@ -247,7 +247,7 @@ fn gl_11_vs_gl_12() {
     let pol_out = vec![(22, vec![61, 67, 71, 73])];
     let model = load_generic_model("sm");
 
-    let _reps = vec![
+    let _reps = [
         Replacement::new(parse_lit!(UFO::MZ).to_pattern(), Atom::num(13)),
         Replacement::new(parse_lit!(UFO::ee).to_pattern(), Atom::num(17)),
         Replacement::new(parse_lit!(UFO::cw).to_pattern(), Atom::num(19)),

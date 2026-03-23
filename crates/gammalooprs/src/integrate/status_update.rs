@@ -210,11 +210,11 @@ fn component_accumulator(
     }
 }
 
-fn slot_component_summary<'a>(
-    integration_state: &'a IntegrationState,
+fn slot_component_summary(
+    integration_state: &IntegrationState,
     slot_index: usize,
     component: ComponentKind,
-) -> Option<&'a DiscreteGridAccumulatorSummary> {
+) -> Option<&DiscreteGridAccumulatorSummary> {
     match component {
         ComponentKind::Real => integration_state.slot_re_summaries[slot_index].as_ref(),
         ComponentKind::Imag => integration_state.slot_im_summaries[slot_index].as_ref(),
@@ -394,8 +394,6 @@ pub(crate) fn format_discrete_bin_prefix(bin_index: usize, bin_count: usize) -> 
         4
     } else if bin_count < 1_000 {
         5
-    } else if bin_count < 10_000 {
-        6
     } else {
         6
     };

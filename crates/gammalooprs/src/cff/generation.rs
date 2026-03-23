@@ -1032,14 +1032,14 @@ fn advance_tree(
                             HybridSurface::Esurface(Esurface {
                                 energies: hsurface.positive_energies.clone(),
                                 external_shift: new_shift,
-                                vertex_set: hsurface.vertex_set.clone(),
+                                vertex_set: hsurface.vertex_set,
                             })
                         } else {
                             HybridSurface::Hsurface(Hsurface {
                                 positive_energies: hsurface.positive_energies.clone(),
                                 negative_energies: new_negative_energies,
                                 external_shift: new_shift,
-                                vertex_set: hsurface.vertex_set.clone(),
+                                vertex_set: hsurface.vertex_set,
                             })
                         }
                     } else {

@@ -590,7 +590,7 @@ mod test {
 
     #[test]
     fn qqx_aaa_tree() {
-        test_initialise();
+        test_initialise().unwrap();
 
         let mut graph:AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
                     num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"

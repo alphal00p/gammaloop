@@ -465,7 +465,7 @@ pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>)
             .with_writer(file_writer);
 
         let indicatif_layer = IndicatifLayer::new()
-            .with_span_field_formatter(IndicatifPbMsgFields::default())
+            .with_span_field_formatter(IndicatifPbMsgFields{})
             .with_max_progress_bars(1024, None) .with_progress_style( ProgressStyle::with_template(
                       "{color_start}{span_child_prefix}{span_fields} -- {wide_msg} {elapsed_subsec}{color_end}",
                   )

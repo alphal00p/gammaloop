@@ -2,7 +2,7 @@ use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
-use crate::utils::symbolica_ext::{CallSymbol, Replaces};
+use crate::utils::symbolica_ext::Replaces;
 use crate::utils::{self, F, W_};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
@@ -1558,10 +1558,7 @@ impl Model {
             }
             let mut particle_table_built = particle_table.build();
 
-            format!(
-                "\n{}\n",
-                particle_table_built.with(Style::rounded()).to_string()
-            )
+            format!("\n{}\n", particle_table_built.with(Style::rounded()))
         };
 
         let parameter_list = if !show_parameters {
@@ -1603,10 +1600,7 @@ impl Model {
                     },
                 ]);
             }
-            format!(
-                "\n{}\n",
-                parameter_table.build().with(Style::rounded()).to_string()
-            )
+            format!("\n{}\n", parameter_table.build().with(Style::rounded()))
         };
 
         let vertex_list = if !show_vertices {
@@ -1656,7 +1650,7 @@ impl Model {
                         .verticals([(1, VerticalLine::inherit(Style::rounded()))]),
                 )
                 .with(Modify::new(Cell::new(0, 1)).with(Span::column(max_n_particles as isize)));
-            format!("\n{}\n", vertex_table_built.to_string())
+            format!("\n{}\n", vertex_table_built)
         };
 
         let coupling_list = if !show_couplings {
@@ -1679,10 +1673,7 @@ impl Model {
                     c.expression.to_string(),
                 ]);
             }
-            format!(
-                "\n{}\n",
-                coupling_table.build().with(Style::rounded()).to_string(),
-            )
+            format!("\n{}\n", coupling_table.build().with(Style::rounded()),)
         };
 
         #[rustfmt::skip]
@@ -2697,10 +2688,10 @@ mod tests {
         };
         model
             .parameters
-            .insert(ParameterName(external.name.clone()), external.clone());
+            .insert(ParameterName(external.name), external.clone());
         model
             .parameters
-            .insert(ParameterName(internal.name.clone()), internal.clone());
+            .insert(ParameterName(internal.name), internal.clone());
 
         assert!(parameter_display_sort_key(&external) < parameter_display_sort_key(&internal));
 

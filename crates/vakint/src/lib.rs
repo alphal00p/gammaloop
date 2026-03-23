@@ -4519,8 +4519,8 @@ Evaluated (n_loops=1, mu_r=1) :
             .replace(S.dot(S.a_, S.b_))
             .with(S.dot_pow(S.a_, S.b_, 1))
             .replace(S.dot_pow(S.a_, S.b_, S.c_))
-            .when(S.c_.filter(|a| a.to_atom() < 0))
-            .with(S.dot_pow(S.a_, S.b_, -Atom::var(S.c_)).npow(-1))
+            .when(S.c_.filter_single(|a| a < 0))
+            .with(S.dot_pow(S.a_, S.b_, -Atom::var(S.c_)).pow(-1))
             .map_terms_single_core(|a| {
                 let mut dummy = 1;
                 for m in a.replace(&dummy_pat).match_iter() {
@@ -4730,29 +4730,27 @@ Evaluated (n_loops=1, mu_r=1) :
         // FORM has processed them
 
         let binary_prec = settings.get_binary_precision();
-        expression = expression.replace_map(|term, _ctx, out| match term {
-            AtomView::Num(c) => match c.get_coeff_view() {
-                CoefficientView::Float(re, im) => {
-                    let mut re = re.to_float();
-                    let mut im = im.to_float();
-                    match settings.precision_for_input_float_rationalization {
-                        InputFloatRationalizationPrecision::FullPrecision => {}
-                        InputFloatRationalizationPrecision::TargetPrecision => {
-                            re.set_prec(binary_prec);
-                            im.set_prec(binary_prec);
-                        }
-                    };
-                    **out = function!(
-                        S.float_marker,
-                        re.to_rational(),
-                        im.to_rational(),
-                        re.get_precision(),
-                        im.get_precision()
-                    );
-                }
-                _ => {}
-            },
-            _ => {}
+        expression = expression.replace_map(|term, _ctx, out| {
+            if let AtomView::Num(c) = term
+                && let CoefficientView::Float(re, im) = c.get_coeff_view()
+            {
+                let mut re = re.to_float();
+                let mut im = im.to_float();
+                match settings.precision_for_input_float_rationalization {
+                    InputFloatRationalizationPrecision::FullPrecision => {}
+                    InputFloatRationalizationPrecision::TargetPrecision => {
+                        re.set_prec(binary_prec);
+                        im.set_prec(binary_prec);
+                    }
+                };
+                **out = function!(
+                    S.float_marker,
+                    re.to_rational(),
+                    im.to_rational(),
+                    re.get_precision(),
+                    im.get_precision()
+                );
+            }
         });
 
         // let mut processed_str =
@@ -5073,26 +5071,26 @@ Evaluated (n_loops=1, mu_r=1) :
 
                 // Undo the temporary float marker wrapping the rationalized coefficients and map them back to floats
                 // TODO VHBEN
-                processed = processed.replace_map(|term, _ctx, out| match term {
-                    AtomView::Fun(c) => {
-                        if c.get_symbol() == S.float_marker && c.get_nargs() == 4 {
-                            let mut args_iter = c.iter();
-                            let re = args_iter.next().unwrap();
-                            let im = args_iter.next().unwrap();
-                            let re_prec = args_iter.next().unwrap();
-                            let im_prec = args_iter.next().unwrap();
+                processed = processed.replace_map(|term, _ctx, out| {
+                    if let AtomView::Fun(c) = term
+                        && c.get_symbol() == S.float_marker
+                        && c.get_nargs() == 4
+                    {
+                        let mut args_iter = c.iter();
+                        let re = args_iter.next().unwrap();
+                        let im = args_iter.next().unwrap();
+                        let re_prec = args_iter.next().unwrap();
+                        let im_prec = args_iter.next().unwrap();
 
-                            **out = Atom::num(Complex::new(
-                                Rational::try_from(re)
-                                    .unwrap()
-                                    .to_multi_prec_float(u32::try_from(re_prec).unwrap()),
-                                Rational::try_from(im)
-                                    .unwrap()
-                                    .to_multi_prec_float(u32::try_from(im_prec).unwrap()),
-                            ));
-                        }
+                        **out = Atom::num(Complex::new(
+                            Rational::try_from(re)
+                                .unwrap()
+                                .to_multi_prec_float(u32::try_from(re_prec).unwrap()),
+                            Rational::try_from(im)
+                                .unwrap()
+                                .to_multi_prec_float(u32::try_from(im_prec).unwrap()),
+                        ));
                     }
-                    _ => {}
                 });
 
                 // Convert vectors back from pi(j) notation to p(i,j) notation

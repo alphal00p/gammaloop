@@ -325,7 +325,7 @@ impl CLISettings {
 
 impl SmartSerde for CLISettings {}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct StateLoadOption {
     pub fresh_state: bool,
     pub boot_commands_path: Option<PathBuf>,
@@ -338,24 +338,6 @@ pub struct StateLoadOption {
     pub read_only_state: bool,
     pub settings_global_path: Option<PathBuf>,
     pub settings_runtime_defaults_path: Option<PathBuf>,
-}
-
-impl Default for StateLoadOption {
-    fn default() -> Self {
-        Self {
-            fresh_state: false,
-            boot_commands_path: None,
-            state_folder: None,
-            model_file: None,
-            trace_logs_filename: None,
-            level: None,
-            logfile_level: None,
-            logging_prefix: None,
-            read_only_state: false,
-            settings_global_path: None,
-            settings_runtime_defaults_path: None,
-        }
-    }
 }
 
 pub struct LoadedState {
@@ -1006,8 +988,6 @@ impl OneShot {
             }
         }
 
-        drop(session);
-
         Ok((
             LoadedState {
                 state,
@@ -1080,8 +1060,6 @@ impl OneShot {
                 run_repl_session(&mut session, &mut save_state);
             }
         }
-
-        drop(session);
 
         let implicit_read_only_exit =
             cli_settings.session.read_only_state && save_state == SaveState::default();

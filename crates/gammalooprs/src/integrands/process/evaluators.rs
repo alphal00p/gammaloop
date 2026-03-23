@@ -198,6 +198,7 @@ pub enum EvaluatorMethod {
     Summed,
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for EvaluatorMethod {
     fn default() -> Self {
         EvaluatorMethod::SingleParametric
@@ -233,7 +234,7 @@ impl EvaluatorStack {
             parametric_atom
                 .iter()
                 .map(|atom| GS.collect_orientation_if(atom.as_atom_view(), false)),
-            &param_builder,
+            param_builder,
             dual_shape.clone(),
             opt_settings.clone(),
             settings,
@@ -256,17 +257,14 @@ impl EvaluatorStack {
 
         Ok((
             GenericEvaluator::new_from_builder(
-                parametric_atom
-                    .iter()
-                    .map(|atom| {
-                        orientations.iter().map(|a| {
-                            let selected = a.select(atom.as_atom_view());
-                            debug!(selected_expr = %selected.log_print(None), "Iterative");
-                            selected
-                        })
+                parametric_atom.iter().flat_map(|atom| {
+                    orientations.iter().map(|a| {
+                        let selected = a.select(atom.as_atom_view());
+                        debug!(selected_expr = %selected.log_print(None), "Iterative");
+                        selected
                     })
-                    .flatten(),
-                &param_builder,
+                }),
+                param_builder,
                 dual_shape.clone(),
                 settings.optimization_settings(),
                 settings,
@@ -321,7 +319,7 @@ impl EvaluatorStack {
                     lhs: lhs.finish(),
                     rhs: param_integrand.clone(),
                     tags: vec![Atom::num(i)],
-                    args: args.into_iter().map(|a| a.into()).collect(),
+                    args,
                 })
             })
             .collect::<Result<_>>()?;
@@ -398,7 +396,7 @@ impl EvaluatorStack {
 
         GenericEvaluator::new_from_builder(
             sum,
-            &param_builder,
+            param_builder,
             dual_shape.clone(),
             settings.optimization_settings(),
             settings,
@@ -428,8 +426,7 @@ impl EvaluatorStack {
                     FUN_LIB.deref(),
                 )?;
 
-                Ok(net
-                    .result_scalar()
+                net.result_scalar()
                     .map(|a| match a {
                         ExecutionResult::One => Atom::num(1),
                         ExecutionResult::Zero => Atom::Zero,
@@ -438,7 +435,7 @@ impl EvaluatorStack {
                     .map_err(|a| {
                         Report::from(a)
                             .with_note(|| format!("Network looks like: {}", net.dot_pretty()))
-                    })?)
+                    })
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -786,7 +783,7 @@ impl EvaluatorStack {
                 path.as_ref()
                     .join(format!("{}_iterative", name))
                     .with_extension("cpp"),
-                &format!("{}_iterative", name),
+                format!("{}_iterative", name),
                 path.as_ref()
                     .join(format!("{}_iterative", name))
                     .with_extension("so"),
@@ -799,7 +796,7 @@ impl EvaluatorStack {
                 path.as_ref()
                     .join(format!("{}_summed_function_map", name))
                     .with_extension("cpp"),
-                &format!("{}_summed_function_map", name),
+                format!("{}_summed_function_map", name),
                 path.as_ref()
                     .join(format!("{}_summed_function_map", name))
                     .with_extension("so"),
@@ -812,7 +809,7 @@ impl EvaluatorStack {
                 path.as_ref()
                     .join(format!("{}_summed", name))
                     .with_extension("cpp"),
-                &format!("{}_summed", name),
+                format!("{}_summed", name),
                 path.as_ref()
                     .join(format!("{}_summed", name))
                     .with_extension("so"),
@@ -1148,7 +1145,6 @@ impl GenericEvaluatorFloat for f64 {
                     let dual_size = dual_builder.values.len();
 
                     out.chunks(dual_size)
-                        .into_iter()
                         .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
                         .collect()
                 } else {
@@ -1163,7 +1159,6 @@ impl GenericEvaluatorFloat for f64 {
                     let dual_size = dual_builder.values.len();
 
                     out.chunks(dual_size)
-                        .into_iter()
                         .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
                         .collect()
                 } else {
@@ -1260,7 +1255,6 @@ impl GenericEvaluatorFloat for f128 {
                 let dual_size = dual_builder.values.len();
 
                 out.chunks(dual_size)
-                    .into_iter()
                     .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
                     .collect()
             } else {
@@ -1314,7 +1308,6 @@ impl GenericEvaluatorFloat for ArbPrec {
                 let dual_size = dual_builder.values.len();
 
                 out.chunks(dual_size)
-                    .into_iter()
                     .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
                     .collect()
             } else {

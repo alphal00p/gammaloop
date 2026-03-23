@@ -17,8 +17,6 @@ use crate::{
     utils::{F, GS, global_inv_parameterize, global_parameterize, symbolica_ext::CallSymbol},
 };
 
-use include_dir::{Dir, include_dir};
-
 pub fn output_dir() -> PathBuf {
     if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
         pytest_output_path.into()
@@ -70,7 +68,7 @@ fn test_inv_param() {
     let e_cm = F(42.2);
     let param_settings = ParameterizationSettings::default();
 
-    let (momenta, jac_1) = global_parameterize(&x, e_cm.clone(), &param_settings);
+    let (momenta, jac_1) = global_parameterize(&x, e_cm, &param_settings);
     let actual_momenta = momenta
         .iter()
         .map(|p| ThreeMomentum {

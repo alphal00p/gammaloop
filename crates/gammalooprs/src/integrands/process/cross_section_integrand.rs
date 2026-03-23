@@ -44,7 +44,10 @@ use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
-use std::time::{Duration, Instant};
+use std::{
+    slice,
+    time::{Duration, Instant},
+};
 
 use itertools::Itertools;
 use linnet::half_edge::{
@@ -76,6 +79,7 @@ use super::{
     evaluate_sample,
 };
 
+#[allow(clippy::excessive_precision)]
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
 
 #[derive(Clone, Encode, Decode)]
@@ -348,7 +352,7 @@ impl CrossSectionGraphTerm {
                         };
 
                         EvaluatorStack::new(
-                            &[integrand_for_subset.clone()],
+                            slice::from_ref(integrand_for_subset),
                             &graph.graph.param_builder,
                             &orientations.raw,
                             dual_shape,
@@ -646,7 +650,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 * multiplicative_offset;
 
             for pol in &pols {
-                values[pol_start] = pol.clone();
+                values[pol_start] = *pol;
                 pol_start += multiplicative_offset;
             }
         }
@@ -751,7 +755,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             let event = if settings.should_generate_events() {
                 let start = Instant::now();
                 let generated = self.generate_event_for_cut::<T>(
-                    &model,
+                    model,
                     &solution,
                     &momentum_sample,
                     self.raised_data.raised_cut_groups[raised_cut].cuts[0],
@@ -768,10 +772,10 @@ impl GraphTerm for CrossSectionGraphTerm {
             if let Some(evt) = accepted_event.as_mut() {
                 differential_result.generated_event_count += 1;
                 let start = Instant::now();
-                if let Some(runtime) = event_processing_runtime.as_deref_mut() {
-                    if runtime.has_selectors() || runtime.has_observables() {
-                        selectors_pass = runtime.process_event(evt);
-                    }
+                if let Some(runtime) = event_processing_runtime.as_deref_mut()
+                    && (runtime.has_selectors() || runtime.has_observables())
+                {
+                    selectors_pass = runtime.process_event(evt);
                 }
                 event_timing += start.elapsed();
                 if !selectors_pass {

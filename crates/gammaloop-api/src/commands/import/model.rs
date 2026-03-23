@@ -216,7 +216,7 @@ impl ImportModel {
                 state.model = Model::from_str(json_model, "json")?;
                 state.model.restriction = restriction_name
                     .as_ref()
-                    .map(|s| SmartString::<LazyCompact>::from(s));
+                    .map(SmartString::<LazyCompact>::from);
                 state.model_parameters = if let Some(json_restriction) = json_restriction {
                     let mut param_card = InputParamCard::from_str(json_restriction, "json")?;
                     if self.simplify_model {
@@ -255,7 +255,7 @@ impl ImportModel {
                     load_ufo_model(&ufo_path, restriction_name.clone(), self.simplify_model)?;
                 state.model.restriction = restriction_name
                     .as_ref()
-                    .map(|s| SmartString::<LazyCompact>::from(s));
+                    .map(SmartString::<LazyCompact>::from);
             }
         }
 

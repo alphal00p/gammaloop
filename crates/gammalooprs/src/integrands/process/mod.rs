@@ -833,10 +833,10 @@ fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     result: &EvaluationResult,
 ) {
-    if let Some(runtime) = integrand.event_processing_runtime_mut() {
-        if runtime.has_observables() {
-            runtime.process_event_groups(&result.event_groups);
-        }
+    if let Some(runtime) = integrand.event_processing_runtime_mut()
+        && runtime.has_observables()
+    {
+        runtime.process_event_groups(&result.event_groups);
     }
 }
 
@@ -936,14 +936,14 @@ fn apply_full_event_multiplicative_factor(
 ) {
     for event_group in event_groups.iter_mut() {
         for event in event_group.iter_mut() {
-            event.weight *= full_factor.clone();
+            event.weight *= full_factor;
             if !event.additional_weights.weights.is_empty() {
                 event
                     .additional_weights
                     .weights
                     .entry(AdditionalWeightKey::FullMultiplicativeFactor)
-                    .and_modify(|value| *value *= full_factor.clone())
-                    .or_insert_with(|| full_factor.clone());
+                    .and_modify(|value| *value *= full_factor)
+                    .or_insert_with(|| *full_factor);
             }
         }
     }
@@ -2731,21 +2731,22 @@ fn stability_iterator_for_source<I: ProcessIntegrandImpl>(
         .map(|recording| recording.record_loop_momenta_escalation)
         .unwrap_or(false);
     let mut loop_momenta_escalation = None;
-    if escalation_factor > 0.0 && stability_iterator.len() > 1 {
-        if let Ok(sum_norm) = source.loop_norm_sum(integrand) {
-            let threshold =
-                F::<f64>::from_f64(escalation_factor * integrand.get_settings().kinematics.e_cm);
-            if record_loop_momenta_escalation {
-                loop_momenta_escalation = Some(LoopMomentaEscalationMetrics {
-                    sum_norm: sum_norm.0,
-                    threshold: threshold.0,
-                });
-            }
-            if sum_norm > threshold {
-                if let Some(last) = stability_iterator.last().copied() {
-                    stability_iterator = vec![last];
-                }
-            }
+    if escalation_factor > 0.0
+        && stability_iterator.len() > 1
+        && let Ok(sum_norm) = source.loop_norm_sum(integrand)
+    {
+        let threshold =
+            F::<f64>::from_f64(escalation_factor * integrand.get_settings().kinematics.e_cm);
+        if record_loop_momenta_escalation {
+            loop_momenta_escalation = Some(LoopMomentaEscalationMetrics {
+                sum_norm: sum_norm.0,
+                threshold: threshold.0,
+            });
+        }
+        if sum_norm > threshold
+            && let Some(last) = stability_iterator.last().copied()
+        {
+            stability_iterator = vec![last];
         }
     }
 
@@ -2795,14 +2796,7 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
     use_arb_prec: bool,
     max_eval: Complex<F<f64>>,
 ) -> Result<crate::integrands::evaluation::PreciseEvaluationResult> {
-    let base_result = evaluate_from_source(
-        integrand,
-        model,
-        source,
-        wgt,
-        use_arb_prec,
-        max_eval.clone(),
-    )?;
+    let base_result = evaluate_from_source(integrand, model, source, wgt, use_arb_prec, max_eval)?;
     let final_precision = base_result
         .evaluation_metadata
         .final_precision()
@@ -2903,27 +2897,6 @@ fn warn_selectors_disable_zero_once() {
     });
 }
 
-#[cfg(test)]
-mod tests {
-    use super::RuntimeCache;
-
-    #[test]
-    fn runtime_cache_serializes_as_empty() {
-        let encoded = bincode::encode_to_vec(
-            RuntimeCache::<usize>::default(),
-            bincode::config::standard(),
-        )
-        .expect("runtime cache should encode");
-        assert!(encoded.is_empty());
-
-        let (decoded, consumed): (RuntimeCache<usize>, usize) =
-            bincode::decode_from_slice(&encoded, bincode::config::standard())
-                .expect("runtime cache should decode");
-        assert_eq!(consumed, 0);
-        assert!(decoded.0.is_none());
-    }
-}
-
 fn evaluate_sample<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
@@ -2995,4 +2968,25 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
         use_arb_prec,
         max_eval,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RuntimeCache;
+
+    #[test]
+    fn runtime_cache_serializes_as_empty() {
+        let encoded = bincode::encode_to_vec(
+            RuntimeCache::<usize>::default(),
+            bincode::config::standard(),
+        )
+        .expect("runtime cache should encode");
+        assert!(encoded.is_empty());
+
+        let (decoded, consumed): (RuntimeCache<usize>, usize) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard())
+                .expect("runtime cache should decode");
+        assert_eq!(consumed, 0);
+        assert!(decoded.0.is_none());
+    }
 }

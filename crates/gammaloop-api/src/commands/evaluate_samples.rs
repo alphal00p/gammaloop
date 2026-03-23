@@ -286,10 +286,10 @@ fn build_havana_samples(
 ) -> Result<Vec<Sample<F<f64>>>> {
     (0..points.nrows())
         .map(|sample_index| {
-            let discrete_dim = discrete_dims
+            let discrete_dim: Vec<usize> = discrete_dims
                 .as_ref()
                 .map(|dims| dims.row(sample_index).iter().copied().collect())
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
             build_havana_sample(
                 integrand,
                 points
@@ -309,7 +309,7 @@ fn build_momentum_input(
     graph_name: Option<&str>,
     orientation: Option<usize>,
 ) -> Result<MomentumSpaceEvaluationInput> {
-    if point.len() % 3 != 0 {
+    if !point.len().is_multiple_of(3) {
         return Err(eyre!(
             "Momentum-space evaluation expects a multiple of 3 coordinates, got {}.",
             point.len()
@@ -441,10 +441,10 @@ fn build_momentum_inputs(
 ) -> Result<Vec<MomentumSpaceEvaluationInput>> {
     (0..points.nrows())
         .map(|sample_index| {
-            let discrete_dim = discrete_dims
+            let discrete_dim: Vec<usize> = discrete_dims
                 .as_ref()
                 .map(|dims| dims.row(sample_index).iter().copied().collect())
-                .unwrap_or_else(Vec::new);
+                .unwrap_or_default();
             build_momentum_input(
                 integrand,
                 points
@@ -485,7 +485,7 @@ fn merge_precise_observables(
     for evaluation in results.iter_mut() {
         let sample_observables = integrand
             .build_observable_snapshots_for_precise_result(evaluation)
-            .unwrap_or_else(ObservableSnapshotBundle::default);
+            .unwrap_or_default();
         if !sample_observables.histograms.is_empty() {
             if have_observables {
                 observables.merge_in_place(&sample_observables)?;

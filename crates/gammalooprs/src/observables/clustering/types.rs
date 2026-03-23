@@ -139,7 +139,7 @@ impl<T: FloatLike> PseudoJet<T> {
         Self::new(lhs.momentum.clone() + rhs.momentum.clone(), constituents)
     }
 
-    pub(crate) fn to_jet(self) -> Jet<T> {
+    pub(crate) fn jet(self) -> Jet<T> {
         Jet::from_parts(
             self.momentum,
             self.constituents,

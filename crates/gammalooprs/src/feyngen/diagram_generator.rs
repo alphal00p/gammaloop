@@ -2851,15 +2851,15 @@ impl ProcessDefinition {
         > = HashMap::default();
         'add_vertex_rules: for vertex_rule in model.vertex_rules.iter() {
             let vertex_name = vertex_rule.0.name.as_str();
-            if let Some(ref allowed) = vertex_allowed_filter {
-                if !allowed.contains(vertex_name) {
-                    continue 'add_vertex_rules;
-                }
+            if let Some(ref allowed) = vertex_allowed_filter
+                && !allowed.contains(vertex_name)
+            {
+                continue 'add_vertex_rules;
             }
-            if let Some(ref veto) = vertex_vetoes_filter {
-                if veto.contains(vertex_name) {
-                    continue 'add_vertex_rules;
-                }
+            if let Some(ref veto) = vertex_vetoes_filter
+                && veto.contains(vertex_name)
+            {
+                continue 'add_vertex_rules;
             }
             let mut oriented_particles = vec![];
             for p in vertex_rule.0.particles.iter() {

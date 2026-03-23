@@ -73,6 +73,7 @@ impl StandaloneEvaluatorArchive<(), String> {
 }
 
 impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
+    #[allow(clippy::type_complexity)]
     pub fn load_impl(self, state_map: &StateMap) -> Result<LoadedStandaloneEvaluators> {
         let mut graph_terms = Vec::new();
 
@@ -81,13 +82,13 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
             let params = graph
                 .param_builder_params
                 .iter()
-                .map(|b| b.import_with_map(&state_map))
+                .map(|b| b.import_with_map(state_map))
                 .collect::<Result<Vec<_>>>()?;
 
             for p in params.iter() {
                 println!("Loaded param builder param: {}", p);
             }
-            let replacements = parse_fn_map_entries(&graph.fn_map_entries, &state_map)?;
+            let replacements = parse_fn_map_entries(&graph.fn_map_entries, state_map)?;
             let timed_build = |label: &str,
                                payload: StandaloneGenericEvaluatorArchive<A>,
                                iterate: bool|
@@ -99,7 +100,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
             )> {
                 let started = Instant::now();
                 let evaluator =
-                    build_evaluator(payload, &params, replacements.clone(), &state_map, iterate)?;
+                    build_evaluator(payload, &params, replacements.clone(), state_map, iterate)?;
                 println!(
                     "[timing] build_evaluator {}::{} took {:?}",
                     graph_name,
@@ -134,7 +135,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 .summed_function_map
                 .map(|payload| {
                     let (_, rhs, _, _) =
-                        &parse_fn_map_entries(&payload.additional_fn_map_entries, &state_map)?[0];
+                        &parse_fn_map_entries(&payload.additional_fn_map_entries, state_map)?[0];
                     fnmap_integrand = Some(rhs.clone());
                     // parse_lit!(gammaloop::integrand(1,1,1,1,1,-1,1,-1,-1,-1,1,-1,-1))
                     timed_build("original.summed_fnmap", payload, false)
@@ -144,7 +145,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
             if let Some(a) = fnmap_integrand {
                 println!("Comparing fnmap summed fn and parametric epression");
 
-                if &a != &exprs[0] {
+                if a != exprs[0] {
                     println!("They are the different:\n {}!", (&a - &exprs[0]).expand());
                 } else {
                     println!("They are the same!")
@@ -366,6 +367,7 @@ fn apply_fn_map_entries(
     Ok((replacements, all_replacements, fn_map))
 }
 
+#[allow(clippy::type_complexity)]
 fn build_evaluator<A: ImportWithMap>(
     payload: StandaloneGenericEvaluatorArchive<A>,
     params: &[Atom],
@@ -474,6 +476,7 @@ pub struct LoadedStandaloneGraphTerm {
     pub threshold_counterterms: Vec<LoadedStandaloneEvaluatorStack>,
 }
 
+#[allow(clippy::type_complexity)]
 pub struct LoadedStandaloneEvaluatorStack {
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) orientation_start: usize,
@@ -563,10 +566,7 @@ impl LoadedStandaloneEvaluatorStack {
         n_samples: usize,
         compile: bool,
     ) -> Option<(Duration, Duration)> {
-        let samples: Vec<_> = (0..n_samples)
-            .into_iter()
-            .map(|_| self.scramble_input(rng))
-            .collect();
+        let samples: Vec<_> = (0..n_samples).map(|_| self.scramble_input(rng)).collect();
         let Some((_e, _r, eval, result)) = &mut self.summed else {
             return None;
         };
@@ -629,10 +629,7 @@ impl LoadedStandaloneEvaluatorStack {
         n_samples: usize,
         compile: bool,
     ) -> Option<(Duration, Duration, Complex<f64>)> {
-        let samples: Vec<_> = (0..n_samples)
-            .into_iter()
-            .map(|_| self.scramble_input(rng))
-            .collect();
+        let samples: Vec<_> = (0..n_samples).map(|_| self.scramble_input(rng)).collect();
         let Some((_e, _r, eval, result)) = &mut self.iterative else {
             return None;
         };
@@ -699,6 +696,7 @@ impl LoadedStandaloneEvaluatorStack {
         Some((sum / (n_samples as u32), max, orientation_sum))
     }
 
+    #[allow(clippy::type_complexity)]
     fn benchmark_parametric<R: Rng + ?Sized>(
         &mut self,
         orientations: &[Vec<i8>],
@@ -711,7 +709,6 @@ impl LoadedStandaloneEvaluatorStack {
         Duration,
     ) {
         let samples: Vec<_> = (0..n_samples)
-            .into_iter()
             .map(|_| {
                 let mut samples = vec![];
                 for o in orientations {
@@ -759,10 +756,7 @@ impl LoadedStandaloneEvaluatorStack {
         rng: &mut R,
         n_samples: usize,
     ) -> Option<(Vec<Complex<f64>>, Duration, Duration)> {
-        let samples: Vec<_> = (0..n_samples)
-            .into_iter()
-            .map(|_| self.scramble_input(rng))
-            .collect();
+        let samples: Vec<_> = (0..n_samples).map(|_| self.scramble_input(rng)).collect();
         let Some((_e, _r, eval, result)) = &mut self.summed_fnmap else {
             return None;
         };

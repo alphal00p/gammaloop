@@ -663,7 +663,7 @@ impl Process {
                 let p = path.as_ref().join("amplitudes");
                 let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
                 fs::create_dir_all(&path)?;
-                for (_amp_name, amp) in a {
+                for amp in a.values() {
                     // Create a folder for each amplitude
                     let amp_path = path.join(&amp.name);
                     fs::create_dir_all(&amp_path).with_context(|| {
@@ -1075,8 +1075,7 @@ mod tests {
         let model_sm = load_generic_model("sm");
 
         let mut state_file = std::fs::File::create("state_map.bin").unwrap();
-
-        let _exported = symbolica::state::State::export(&mut state_file).unwrap();
+        symbolica::state::State::export(&mut state_file).unwrap();
         let state_map = symbolica::state::State::import(&mut state_file, None).unwrap();
 
         let context = GammaLoopContextContainer {

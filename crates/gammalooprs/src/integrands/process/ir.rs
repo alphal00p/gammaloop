@@ -492,11 +492,10 @@ impl CrossSectionIntegrand {
         let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection;
 
         let loop_number = lmb.loop_edges.len();
-        let mut loop_mom_id = 0;
 
         let mut limit_data = LimitData { data: Vec::new() };
 
-        for lambda_point in momenta.into_iter() {
+        for (loop_mom_id, lambda_point) in momenta.into_iter().enumerate() {
             let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
                 .map(|_| ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0)))
                 .collect();
@@ -548,8 +547,6 @@ impl CrossSectionIntegrand {
                 graph_id,
                 Some(Box::new(Sample::Continuous(F(1.0), sample_flattened))),
             );
-
-            loop_mom_id += 1;
 
             limit_data.data.push(LambdaPointEval {
                 lambda_point,
@@ -924,8 +921,7 @@ impl IrLimit {
                 let edge_id = edge.index();
                 let direction: ThreeMomentum<F<f64>> = sample_random_unit_vector(rng);
 
-                let perpendicular = direction.clone()
-                    - direction.clone() * (direction.clone() * direction_for_set.clone());
+                let perpendicular = direction - direction * (direction * direction_for_set);
 
                 let perpendicular_norm = perpendicular.norm();
                 let perpendicular = perpendicular * perpendicular_norm.inv();
@@ -935,7 +931,7 @@ impl IrLimit {
                 momentum_builder.push(MomentumBuilder::Colinear {
                     edge_id,
                     x,
-                    colinear_direction: direction_for_set.clone(),
+                    colinear_direction: direction_for_set,
                     perpendicular_direction: perpendicular,
                     is_soft,
                 });
@@ -985,11 +981,11 @@ impl IrLimit {
                             is_soft,
                         } => {
                             let momentum = if *is_soft {
-                                (colinear_direction * x + perpendicular_direction * &lambda)
+                                (colinear_direction * x + perpendicular_direction * lambda)
                                     * F::from_f64(settings.kinematics.e_cm)
-                                    * &lambda
+                                    * lambda
                             } else {
-                                (colinear_direction * x + perpendicular_direction * &lambda)
+                                (colinear_direction * x + perpendicular_direction * lambda)
                                     * F::from_f64(settings.kinematics.e_cm)
                             };
                             TaggedMomenta {
@@ -999,7 +995,7 @@ impl IrLimit {
                         }
                         MomentumBuilder::Soft { edge_id, direction } => {
                             let momentum =
-                                direction * &lambda * F::from_f64(settings.kinematics.e_cm);
+                                direction * lambda * F::from_f64(settings.kinematics.e_cm);
                             TaggedMomenta {
                                 momentum,
                                 tag: *edge_id,

@@ -430,7 +430,7 @@ fn format_max_eval_coordinates(xs: &[F<f64>]) -> String {
     format!("[\n{rows} ]")
 }
 
-fn discrete_axis_label<'a>(axis_labels: &'a [String], depth: usize) -> &'a str {
+pub(crate) fn discrete_axis_label(axis_labels: &[String], depth: usize) -> &str {
     axis_labels.get(depth).map(String::as_str).unwrap_or("idx")
 }
 
@@ -1021,13 +1021,12 @@ fn contribution_bin_label(integration_state: &IntegrationState, bin_index: usize
         integration_state
             .first_non_trivial_discrete_bin_descriptions
             .as_ref(),
-    ) {
-        if let Some(description) = descriptions.get(bin_index) {
-            return format!(
-                "#{bin_index}: {}",
-                render_bin_description(axis_label, description)
-            );
-        }
+    ) && let Some(description) = descriptions.get(bin_index)
+    {
+        return format!(
+            "#{bin_index}: {}",
+            render_bin_description(axis_label, description)
+        );
     }
 
     format!("#{bin_index}")
@@ -1037,16 +1036,15 @@ fn contribution_header_label(
     integration_state: &IntegrationState,
     discrete_monitoring_enabled: bool,
 ) -> String {
-    if discrete_monitoring_enabled {
-        if let Some(label) = integration_state
+    if discrete_monitoring_enabled
+        && let Some(label) = integration_state
             .first_non_trivial_discrete_label
             .as_deref()
-        {
-            return format!("Contribution (idx={label})")
-                .bold()
-                .blue()
-                .to_string();
-        }
+    {
+        return format!("Contribution (idx={label})")
+            .bold()
+            .blue()
+            .to_string();
     }
 
     "Contribution".bold().blue().to_string()
@@ -1311,11 +1309,12 @@ fn build_table_result_summary(
                 0.0
             },
             target_delta_sigma: cells.delta_sigma.as_ref().map(|_| {
-                if accumulator.err.is_zero() || target_component.is_none() {
+                if accumulator.err.is_zero() {
                     0.0
-                } else {
-                    let target_value = target_component.expect("checked is_some");
+                } else if let Some(target_value) = target_component {
                     (target_value - accumulator.avg).abs().0 / accumulator.err.0
+                } else {
+                    0.0
                 }
             }),
             target_delta_percent: target_component.map(|target_value| {
@@ -1489,10 +1488,10 @@ fn max_weight_row_descriptors(
     rows
 }
 
-fn max_eval_entry<'a>(
-    accumulator: &'a StatisticsAccumulator<F<f64>>,
+fn max_eval_entry(
+    accumulator: &StatisticsAccumulator<F<f64>>,
     positive: bool,
-) -> Option<(F<f64>, Option<&'a Sample<F<f64>>>)> {
+) -> Option<(F<f64>, Option<&Sample<F<f64>>>)> {
     let (value, sample) = if positive {
         (
             accumulator.max_eval_positive,
@@ -2876,10 +2875,8 @@ fn emit_results_output_summary(
         summary_rows.push((slot_meta, final_path, iteration_pattern));
     }
 
-    if summary_rows.is_empty() {
-        if workspace.is_none() {
-            return;
-        }
+    if summary_rows.is_empty() && workspace.is_none() {
+        return;
     }
 
     info!("");
@@ -3356,7 +3353,7 @@ pub fn build_integration_result(
                 key: slot_meta.key(),
                 process: slot_meta.process_name.clone(),
                 integrand: slot_meta.integrand_name.clone(),
-                target: targets[slot_index].clone(),
+                target: targets[slot_index],
                 integral: IntegralEstimate {
                     neval: accumulator.re.processed_samples,
                     real_zero: accumulator.re.num_zero_evaluations,
@@ -3370,7 +3367,7 @@ pub fn build_integration_result(
                     slot_meta,
                     accumulator,
                     integration_state.iter,
-                    targets[slot_index].clone(),
+                    targets[slot_index],
                 ),
                 integration_statistics: integration_statistics.clone(),
                 max_weight_info: build_max_weight_info_summary(

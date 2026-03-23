@@ -498,7 +498,7 @@ impl Forests {
 
             self.compute_store
                 .entry(self.graph[*nidx].clone())
-                .or_insert(ComputeNode::default())
+                .or_default()
                 .integrated_4d = Integrand::Single(integrand);
         }
 

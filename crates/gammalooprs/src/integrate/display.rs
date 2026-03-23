@@ -4,7 +4,10 @@ use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
 
-use crate::{utils, utils::F};
+use crate::{
+    integrate::discrete_axis_label,
+    utils::{self, F},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub(crate) struct TextStyle {
@@ -170,10 +173,6 @@ fn format_max_eval_coordinates(xs: &[F<f64>]) -> String {
         })
         .join("\n");
     format!("[\n{rows} ]")
-}
-
-fn discrete_axis_label<'a>(axis_labels: &'a [String], depth: usize) -> &'a str {
-    axis_labels.get(depth).map(String::as_str).unwrap_or("idx")
 }
 
 fn append_max_eval_sample_parts(

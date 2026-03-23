@@ -271,10 +271,7 @@ impl Approximation {
         dependent: &Self,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let ctx = UVCtx {
-            graph: &*graph,
-            settings,
-        };
+        let ctx = UVCtx { graph, settings };
 
         let Some((current, sign)) = &dependent.integrated_4d.expr() else {
             return Err(eyre!("integrated_4d not computed"));
@@ -435,7 +432,7 @@ impl Approximation {
             cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
 
             let mut resnum = graph
-                .numerator(&reduced, &self.subgraph.included())
+                .numerator(&reduced, self.subgraph.included())
                 .get_single_atom()
                 .unwrap();
 

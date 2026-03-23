@@ -321,7 +321,7 @@ impl SyncSettings for CLISettings {
 // Static flag to control serialization behavior
 static SERIALIZE_COMMANDS_AS_STRINGS: AtomicBool = AtomicBool::new(false);
 
-fn is_command_blocks_empty(command_blocks: &Vec<CommandsBlock>) -> bool {
+fn is_command_blocks_empty(command_blocks: &[CommandsBlock]) -> bool {
     command_blocks.is_empty()
 }
 
@@ -1631,7 +1631,7 @@ mod tests {
     use std::fs;
 
     use gammalooprs::{
-        momentum::{Dep, ExternalMomenta, Helicity, SignOrZero},
+        momentum::{Dep, ExternalMomenta, Helicity},
         settings::{
             runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
             KinematicsSettings, RuntimeSettings,
@@ -1686,16 +1686,18 @@ mod tests {
 
     #[test]
     fn run_history_applies_default_runtime_before_commands() {
-        let mut run_history = RunHistory::default();
-        run_history.default_runtime_settings = toml::from_str(
-            r#"
+        let mut run_history = RunHistory {
+            default_runtime_settings: toml::from_str(
+                r#"
 [sampling]
 type = "discrete_graph_sampling"
 [sampling.sampling_type]
 subtype = "tropical"
 "#,
-        )
-        .unwrap();
+            )
+            .unwrap(),
+            ..Default::default()
+        };
 
         let mut state = State::new_test();
         let mut cli_settings = CLISettings::default();
@@ -1849,23 +1851,25 @@ subtype = "tropical"
 
     #[test]
     fn run_history_filtered_for_save_preserves_command_blocks() {
-        let mut run_history = RunHistory::default();
-        run_history.command_blocks = vec![
-            CommandsBlock {
-                name: "generate".to_string(),
-                commands: vec![CommandHistory::new_with_raw(
-                    Commands::Display(Display::Processes),
-                    "display processes".to_string(),
-                )],
-            },
-            CommandsBlock {
-                name: "integrate".to_string(),
-                commands: vec![CommandHistory::new_with_raw(
-                    CommandHistory::from_raw_string("quit -o").unwrap().command,
-                    "quit -o".to_string(),
-                )],
-            },
-        ];
+        let mut run_history = RunHistory {
+            command_blocks: vec![
+                CommandsBlock {
+                    name: "generate".to_string(),
+                    commands: vec![CommandHistory::new_with_raw(
+                        Commands::Display(Display::Processes),
+                        "display processes".to_string(),
+                    )],
+                },
+                CommandsBlock {
+                    name: "integrate".to_string(),
+                    commands: vec![CommandHistory::new_with_raw(
+                        CommandHistory::from_raw_string("quit -o").unwrap().command,
+                        "quit -o".to_string(),
+                    )],
+                },
+            ],
+            ..Default::default()
+        };
         run_history.push_with_raw(
             CommandHistory::from_raw_string("display processes")
                 .unwrap()

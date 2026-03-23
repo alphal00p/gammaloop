@@ -45,8 +45,7 @@ impl Reset {
                     return Err(eyre!(
                         "{}",
                         "--integrand-name requires --process for `reset processes`"
-                    )
-                    .into());
+                    ));
                 }
 
                 if let Some(process) = process {

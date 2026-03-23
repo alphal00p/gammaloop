@@ -1055,15 +1055,7 @@ impl Graph {
     ) -> Result<LoopMomentumBasis> {
         debug!("{}", underlying.dot(full_cut));
 
-        let mut loop_momentum_basis = if let Some(_) = full_cut.included_iter().next() {
-            // let tree = SimpleTraversalTree::depth_first_traverse(
-            //     underlying,
-            //     full_cut,
-            //     &underlying.node_id(i),
-            //     None,
-            // )
-            // .unwrap();
-
+        let mut loop_momentum_basis = if full_cut.included_iter().next().is_some() {
             let mut full = underlying.full_filter();
 
             for (p, _, i) in underlying.iter_edges() {
@@ -1071,16 +1063,8 @@ impl Graph {
                     full.sub(p);
                 }
             }
-
-            // let covers = tree.covers(&full);
-            // assert_eq!(
-            //     full,
-            //     covers,
-            //     "Tree does not cover all: {}, lmb specification must be wrong",
-            //     underlying.dot(&covers)
-            // );
             let external = underlying.internal_crown(&full);
-            underlying.lmb_impl(&full, &full_cut, external)
+            underlying.lmb_impl(&full, full_cut, external)
         } else {
             return Err(eyre!(
                 "No included edges found in full_cut for loop momentum basis setup"
