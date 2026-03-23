@@ -2202,14 +2202,23 @@ where
         ));
     }
 
-    let sampling_str = slots[0].settings.sampling.describe_settings();
-    let dimension = slots[0].integrand.get_n_dim();
-    let discrete_depth = slots[0].settings.sampling.discrete_depth();
-    let is_tropical_sampling = slots[0]
+    let primary = &slots[0];
+    let sampling_str = primary.settings.sampling.describe_settings();
+    let dimension = primary.integrand.get_n_dim();
+    let discrete_depth = primary.settings.sampling.discrete_depth();
+    let is_tropical_sampling = primary
         .settings
         .sampling
         .get_parameterization_settings()
         .is_none();
+    let use_ltd = primary.settings.general.use_ltd;
+    let integration_seed = primary.settings.integrator.seed;
+    let integrated_phase = primary.settings.integrator.integrated_phase;
+    let target_relative_accuracy = primary.settings.integrator.target_relative_accuracy;
+    let target_absolute_accuracy = primary.settings.integrator.target_absolute_accuracy;
+    let n_start = primary.settings.integrator.n_start;
+    let n_increase = primary.settings.integrator.n_increase;
+    let n_max = primary.settings.integrator.n_max;
 
     let cont_dim_str = if is_tropical_sampling {
         format!("a median continious dimension of {}", dimension)
@@ -2245,11 +2254,7 @@ where
 
     info!(
         "Integrating using {} ltd with {} {} over {} ...",
-        if slots[0].settings.general.use_ltd {
-            "naive"
-        } else {
-            "cff"
-        },
+        if use_ltd { "naive" } else { "cff" },
         cores,
         if cores > 1 { "cores" } else { "core" },
         grid_str
@@ -2261,15 +2266,12 @@ where
     let mut n_samples_evaluated = 0;
     let mut emitted_latest_observable_paths = vec![None; n_slots];
     clear_iteration_abort_request();
-    'integrateLoop: while integration_state.num_points < slots[0].settings.integrator.n_max {
+    'integrateLoop: while integration_state.num_points < n_max {
         // ensure we do not overshoot
         let cur_points = {
-            let cur_points_not_final_iter = slots[0].settings.integrator.n_start
-                + slots[0].settings.integrator.n_increase * integration_state.iter;
-            if cur_points_not_final_iter + integration_state.num_points
-                > slots[0].settings.integrator.n_max
-            {
-                slots[0].settings.integrator.n_max - integration_state.num_points
+            let cur_points_not_final_iter = n_start + n_increase * integration_state.iter;
+            if cur_points_not_final_iter + integration_state.num_points > n_max {
+                n_max - integration_state.num_points
             } else {
                 cur_points_not_final_iter
             }
@@ -2327,7 +2329,7 @@ where
                         .iter()
                         .map(|sampling_state| sampling_state.grid.clone())
                         .collect_vec(),
-                    slots[0].settings.integrator.seed + integration_state.iter as u64,
+                    integration_seed + integration_state.iter as u64,
                     target_points_per_core * core_id,
                     n_points,
                 )
@@ -2531,14 +2533,14 @@ where
             integration_state.num_points,
             t_start.elapsed(),
             &targets,
-            match slots[0].settings.integrator.integrated_phase {
+            match integrated_phase {
                 IntegratedPhase::Real | IntegratedPhase::Both => {
                     IntegrationStatusPhaseDisplay::Real
                 }
                 IntegratedPhase::Imag => IntegrationStatusPhaseDisplay::Imag,
             },
-            slots[0].settings.integrator.target_relative_accuracy,
-            slots[0].settings.integrator.target_absolute_accuracy,
+            target_relative_accuracy,
+            target_absolute_accuracy,
         );
         if target_accuracy_status.is_reached() {
             let reached_target = match (
@@ -2587,11 +2589,7 @@ where
     if !slots.is_empty() {
         emit_results_output_summary(
             workspace.as_deref(),
-            &integration_state.slot_metas,
-            &slots
-                .iter()
-                .map(|slot| slot.integrand.clone())
-                .collect_vec(),
+            &slots,
             &emitted_latest_observable_paths,
             output_control,
         );
@@ -2967,21 +2965,16 @@ fn workspace_relative_display_path(root: &Path, path: &Path) -> String {
 
 fn emit_results_output_summary(
     workspace: Option<&Path>,
-    slot_metas: &[SlotMeta],
-    slot_integrands: &[Integrand],
+    slots: &[IntegrationSlot],
     emitted_paths: &[Option<PathBuf>],
     output_control: WorkspaceSnapshotControl,
 ) {
     let mut summary_rows = Vec::new();
-    for ((slot_meta, integrand), emitted_path) in slot_metas
-        .iter()
-        .zip(slot_integrands.iter())
-        .zip(emitted_paths.iter())
-    {
+    for (slot, emitted_path) in slots.iter().zip(emitted_paths.iter()) {
         let Some(final_path) = emitted_path else {
             continue;
         };
-        let Integrand::ProcessIntegrand(process_integrand) = integrand else {
+        let Integrand::ProcessIntegrand(process_integrand) = &slot.integrand else {
             continue;
         };
         let format = process_integrand
@@ -2998,7 +2991,7 @@ fn emit_results_output_summary(
                 )
             })
             .flatten();
-        summary_rows.push((slot_meta, final_path, iteration_pattern));
+        summary_rows.push((&slot.meta, final_path, iteration_pattern));
     }
 
     if summary_rows.is_empty() && workspace.is_none() {
