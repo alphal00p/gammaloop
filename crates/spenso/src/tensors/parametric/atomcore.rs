@@ -3,7 +3,7 @@ use std::{marker::PhantomData, sync::Arc};
 use ahash::{HashMap, HashSet, HashSetExt};
 use dyn_clone::DynClone;
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate, KeyLookup, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol},
     coefficient::{Coefficient, CoefficientView, ConvertToRing},
     domains::{
         EuclideanDomain, InternalOrdering,
@@ -336,10 +336,7 @@ pub trait TensorAtomMaps {
     fn expand_via_poly<E: Exponent, T: AtomCore>(&self, var: Option<T>) -> Self::AtomContainer;
 
     /// Expand an expression in the variable `var`. The function [AtomCore::expand_via_poly] may be faster.
-    fn expand_in<T: AtomCore>(&self, var: T) -> Self::AtomContainer;
-
-    /// Expand an expression in the variable `var`.
-    fn expand_in_symbol(&self, var: Symbol) -> Self::AtomContainer;
+    fn expand_in<'a, T: Into<AtomOrView<'a>>>(&self, var: T) -> Self::AtomContainer;
 
     // /// Expand an expression, returning `true` iff the expression changed.
     // fn expand_into(&self, var: Option<AtomView>, out: &mut Atom) -> bool {
@@ -1090,14 +1087,11 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
     }
 
     /// Expand an expression in the variable `var`. The function [AtomCore::expand_via_poly] may be faster.
-    fn expand_in<T: AtomCore>(&self, var: T) -> Self {
-        let var = var.as_atom_view();
-        self.map_data_ref_self(|a| a.expand_in(var))
-    }
+    fn expand_in<'a, T: Into<AtomOrView<'a>>>(&self, var: T) -> Self {
+        let var = var.into();
 
-    /// Expand an expression in the variable `var`.
-    fn expand_in_symbol(&self, var: Symbol) -> Self {
-        self.map_data_ref_self(|a| a.expand_in_symbol(var))
+        let var = var.as_view();
+        self.map_data_ref_self(|a| a.expand_in(var))
     }
 
     // /// Expand an expression, returning `true` iff the expression changed.

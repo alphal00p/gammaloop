@@ -39,6 +39,7 @@ where
 
     fn key(&self, e: EdgeIndex) -> Key;
 
+    #[allow(clippy::type_complexity)]
     fn trace_unfold_of<M: NodeStorageOps<NodeData = usize>, S: SubSetLike>(
         &self,
         subgraph: &S,
@@ -97,6 +98,7 @@ where
         )
     }
 
+    #[allow(clippy::type_complexity)]
     fn trace_unfold<M: NodeStorageOps<NodeData = usize>>(
         &self,
         start: NodeIndex,

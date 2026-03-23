@@ -189,6 +189,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
         let mut reachable = vec![vec![false; n]; n];
 
         // Set diagonal to true (each node reaches itself)
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             reachable[i][i] = true;
         }

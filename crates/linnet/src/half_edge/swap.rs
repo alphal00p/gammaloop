@@ -9,6 +9,7 @@ use super::{
     HedgeGraph, NodeIndex,
 };
 
+#[allow(clippy::len_without_is_empty)]
 pub trait Swap<Id> {
     // type Item;
 

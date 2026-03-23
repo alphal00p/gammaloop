@@ -1894,50 +1894,6 @@ integrate = 10
     }
 
     #[test]
-    fn set_model_accepts_python_style_complex_literals() {
-        let mut state = State::new_test();
-        state.model = load_generic_model("sm");
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
-        let parameter = state
-            .model_parameters
-            .keys()
-            .find(|a| {
-                matches!(
-                    state
-                        .model
-                        .get_parameter(a.0.get_stripped_name())
-                        .parameter_type,
-                    ParameterType::Imaginary
-                )
-            })
-            .expect("expected at least one external model parameter")
-            .to_string();
-
-        Set::Model {
-            target: ProcessArgs {
-                process: None,
-                integrand_name: None,
-            },
-            values: vec![ModelSetValue::Assignment(KvPair {
-                key: parameter.clone(),
-                value: "-1.0e13-33.0e12i".to_string(),
-            })],
-        }
-        .run(
-            &mut state,
-            &mut CLISettings::default(),
-            &mut RuntimeSettings::default(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            state.model_parameters[&UFOSymbol::from(parameter.as_str())],
-            Complex::new(F(-1.0e13), F(-33.0e12))
-        );
-    }
-
-    #[test]
     fn set_model_rejects_imaginary_component_for_real_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("sm");

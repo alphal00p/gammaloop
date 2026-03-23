@@ -5,7 +5,6 @@ use std::{
         BitAndAssign, BitOrAssign, BitXorAssign, Index, Not, Range, RangeFrom, RangeInclusive,
         RangeTo, RangeToInclusive,
     },
-    usize,
 };
 
 use bitvec::{bitvec, order::Lsb0, vec::BitVec};

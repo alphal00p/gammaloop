@@ -939,9 +939,9 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// Add all half-edges that are incident to any node
     /// touched by the `subgraph`, provided that these half-edges are either
     /// unpaired (identity) or their opposite half-edge is not included in the `subgraph`.
-    pub fn add_crown<S: SubSetLike>(&self, subgraph: &mut S)
+    pub fn add_crown<S>(&self, subgraph: &mut S)
     where
-        S: ModifySubSet<Hedge>,
+        S: ModifySubSet<Hedge> + SubSetLike,
     {
         let nodes: Vec<_> = self.iter_nodes_of(subgraph).map(|(n, _, _)| n).collect();
         for n in nodes {
@@ -1861,7 +1861,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         subgraph: &SuBitGraph,
         cond: &impl Fn(&SuBitGraph) -> bool,
     ) -> Option<SuBitGraph> {
-        let Some((growth, cut)) = self
+        let (growth, cut) = self
             .iter_nodes_of(subgraph)
             .map(|(_, crown, _)| {
                 let mut subcrown: SuBitGraph = self.empty_subgraph();
@@ -1871,10 +1871,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
                 let cut: SuBitGraph = self.internal_crown(&subcrown);
                 (subcrown, cut)
             })
-            .next()
-        else {
-            return None;
-        };
+            .next()?;
 
         let mut regions = BTreeSet::new();
 
@@ -1895,10 +1892,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             regions.insert(growth.clone());
         }
 
-        if cond(&cut) {
-            if self.is_connected(&subgraph.subtract(&growth)) {
-                return Some(cut);
-            }
+        if cond(&cut) && self.is_connected(&subgraph.subtract(&growth)) {
+            return Some(cut);
         }
 
         // println!(
@@ -1975,10 +1970,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         }
 
         // println!("Hi");
-        if size.contains(&cut.n_included()) {
-            if self.is_connected(&subgraph.subtract(&growth)) {
-                cuts.push(cut);
-            }
+        if size.contains(&cut.n_included()) && self.is_connected(&subgraph.subtract(&growth)) {
+            cuts.push(cut);
         }
         cuts
     }
@@ -1990,7 +1983,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     ) -> Vec<SuBitGraph> {
         let mut cuts = vec![];
         for c in self.connected_components(subgraph) {
-            cuts.extend(self.all_bonds_of_impl(&c.included(), size))
+            cuts.extend(self.all_bonds_of_impl(c.included(), size))
         }
         cuts
     }
@@ -2000,7 +1993,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         cond: &impl Fn(&SuBitGraph) -> bool,
     ) -> Option<SuBitGraph> {
         for c in self.connected_components(subgraph) {
-            let Some(cut) = self.a_bond_of_impl(&c.included(), cond) else {
+            let Some(cut) = self.a_bond_of_impl(c.included(), cond) else {
                 continue;
             };
             return Some(cut);

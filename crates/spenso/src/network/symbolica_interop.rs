@@ -3,7 +3,7 @@ use std::{borrow::Cow, fmt::Display, path::Path, sync::Arc};
 use ahash::{AHashMap, AHashSet, HashMap};
 use eyre::eyre;
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate, KeyLookup, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol},
     coefficient::ConvertToRing,
     domains::{
         EuclideanDomain, InternalOrdering,
@@ -342,8 +342,9 @@ where
         self.map_ref(AtomCore::together, TensorAtomMaps::together)
     }
 
-    fn expand_in<T: AtomCore>(&self, var: T) -> Self::AtomContainer {
-        let var = var.as_atom_view();
+    fn expand_in<'a, T: Into<AtomOrView<'a>>>(&self, var: T) -> Self::AtomContainer {
+        let var = var.into();
+        let var = var.as_view();
         self.map_ref(|a| a.expand_in(var), |a| a.expand_in(var))
     }
 
@@ -418,10 +419,6 @@ where
             |a| a.expand_via_poly::<E, AtomView>(var),
             |a| a.expand_via_poly::<E, AtomView>(var),
         )
-    }
-
-    fn expand_in_symbol(&self, var: Symbol) -> Self::AtomContainer {
-        self.map_ref(|a| a.expand_in_symbol(var), |a| a.expand_in_symbol(var))
     }
 
     fn map_coefficient<

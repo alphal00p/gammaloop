@@ -286,7 +286,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         s: Str,
     ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
         let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::try_from(s.as_ref())?
-            .filter_map(&|(k, v)| Some((k.into(), strip_quotes(&v).to_string())))
+            .filter_map(&|(k, v)| Some((k.into(), strip_quotes(v).to_string())))
             .into();
 
         Ok(Self::from((ast_graph, Figment::new())))
@@ -298,7 +298,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         figment: figment::Figment,
     ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
         let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::try_from(s.as_ref())?
-            .filter_map(&|(k, v)| Some((k.into(), strip_quotes(&v).to_string())))
+            .filter_map(&|(k, v)| Some((k.into(), strip_quotes(v).to_string())))
             .into();
 
         let graph = Self::from((ast_graph, figment));
@@ -306,10 +306,12 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
     }
 
     pub fn back_and_forth_dot(self) -> Self {
-        Self::from_string(self.debug_dot()).expect(&format!(
-            "Failed to parse back the DOT serialization of the graph: {}",
-            self.debug_dot()
-        ))
+        Self::from_string(self.debug_dot()).unwrap_or_else(|_| {
+            panic!(
+                "Failed to parse back the DOT serialization of the graph: {}",
+                self.debug_dot()
+            )
+        })
     }
 
     pub fn debug_dot(&self) -> String {

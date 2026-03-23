@@ -1643,7 +1643,7 @@ impl<E> Involution<E> {
                     }
                 }
             } else {
-                Err(InvolutionError::Other(format!("Data is None")))
+                Err(InvolutionError::Other("Data is None".into()))
             }
         } else {
             Err(InvolutionError::NotIdentity)
