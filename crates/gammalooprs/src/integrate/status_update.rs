@@ -5,7 +5,10 @@ use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::StatisticsAccumulator;
 
-use crate::{integrands::evaluation::StatisticsCounter, utils, utils::F};
+use crate::{
+    integrands::evaluation::StatisticsCounter, settings::runtime::IntegrationStatisticsSnapshot,
+    utils, utils::F,
+};
 
 use super::{
     ComplexAccumulator, DiscreteGridAccumulatorSummary, IntegrationState,
@@ -48,9 +51,13 @@ pub enum ContributionSortMode {
     Error,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IntegrationStatusViewOptions {
     pub phase_display: IntegrationStatusPhaseDisplay,
+    pub training_phase_display: IntegrationStatusPhaseDisplay,
+    pub training_slot: usize,
+    pub slot_training_phase_displays: Vec<IntegrationStatusPhaseDisplay>,
+    pub per_slot_training_phase: bool,
     pub show_statistics: bool,
     pub show_max_weight_details: bool,
     pub show_top_discrete_grid: bool,
@@ -72,6 +79,20 @@ impl IntegrationStatusViewOptions {
 pub(crate) struct LiveIterationProgress {
     pub(crate) completed_points: usize,
     pub(crate) target_points: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct StatusMeta {
+    pub(crate) elapsed_time: Duration,
+    pub(crate) iteration_elapsed_time: Duration,
+    pub(crate) iteration: usize,
+    pub(crate) current_iteration_points: usize,
+    pub(crate) total_points: usize,
+    pub(crate) n_samples_evaluated: usize,
+    pub(crate) cores: usize,
+    pub(crate) training_slot: usize,
+    pub(crate) training_phase_display: IntegrationStatusPhaseDisplay,
+    pub(crate) live_progress: Option<LiveIterationProgress>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -99,11 +120,26 @@ impl ComponentKind {
         }
     }
 
+    pub(crate) fn phase_name(self) -> &'static str {
+        match self {
+            Self::Real => "real",
+            Self::Imag => "imag",
+        }
+    }
+
+    pub(crate) fn text_style(self) -> TextStyle {
+        match self {
+            Self::Real => TextStyle::pink().bold(),
+            Self::Imag => TextStyle::yellow().bold(),
+        }
+    }
+
+    pub(crate) fn label_display(self) -> StyledText {
+        StyledText::styled(self.tag(), self.text_style())
+    }
+
     fn display_field(self) -> DisplayField<Self> {
-        DisplayField::new(
-            self,
-            StyledText::styled(self.tag(), TextStyle::blue().bold()),
-        )
+        DisplayField::new(self, self.label_display())
     }
 }
 
@@ -117,6 +153,10 @@ pub(crate) enum ContributionKind {
 #[derive(Clone, Debug)]
 pub struct StatusUpdate {
     pub(crate) kind: IntegrationStatusKind,
+    pub(crate) meta: StatusMeta,
+    pub(crate) targets: Vec<Option<Complex<F<f64>>>>,
+    pub(crate) slot_training_phase_displays: Vec<IntegrationStatusPhaseDisplay>,
+    pub(crate) per_slot_training_phase: bool,
     pub(crate) main_results: MainResultsSection,
     pub(crate) max_weight_details: Option<MaxWeightDetailsSection>,
     pub(crate) discrete_max_weight_details: Option<DiscreteMaxWeightDetailsSection>,
@@ -127,6 +167,466 @@ impl StatusUpdate {
     pub fn kind(&self) -> IntegrationStatusKind {
         self.kind
     }
+
+    pub fn is_initial_live_status(&self) -> bool {
+        self.kind == IntegrationStatusKind::Live
+            && self
+                .meta
+                .live_progress
+                .is_some_and(|progress| progress.completed_points == 0)
+    }
+
+    pub(crate) fn training_component(&self) -> Option<ComponentKind> {
+        match self.meta.training_phase_display {
+            IntegrationStatusPhaseDisplay::Real => Some(ComponentKind::Real),
+            IntegrationStatusPhaseDisplay::Imag => Some(ComponentKind::Imag),
+            IntegrationStatusPhaseDisplay::Both => None,
+        }
+    }
+
+    pub(crate) fn statistics_snapshot(&self) -> Option<IntegrationStatisticsSnapshot> {
+        self.statistics.map(|section| section.raw.snapshot())
+    }
+
+    pub(crate) fn training_target(&self) -> Option<F<f64>> {
+        self.target_for_slot(self.meta.training_slot)
+    }
+
+    pub(crate) fn target_for_slot(&self, slot_index: usize) -> Option<F<f64>> {
+        let component = self.training_component()?;
+        self.target_for_slot_component(slot_index, component)
+    }
+
+    pub(crate) fn target_for_slot_component(
+        &self,
+        slot_index: usize,
+        component: ComponentKind,
+    ) -> Option<F<f64>> {
+        let target = self.targets.get(slot_index)?.as_ref()?;
+        Some(match component {
+            ComponentKind::Real => target.re,
+            ComponentKind::Imag => target.im,
+        })
+    }
+
+    pub(crate) fn target_display_for_slot_component(
+        &self,
+        slot_index: usize,
+        component: ComponentKind,
+    ) -> Option<StyledText> {
+        self.target_for_slot_component(slot_index, component)
+            .map(|value| {
+                StyledText::styled(
+                    format_target_value_for_display(value.0),
+                    TextStyle::blue().bold(),
+                )
+            })
+    }
+
+    pub(crate) fn training_component_for_slot(&self, slot_index: usize) -> Option<ComponentKind> {
+        let phase = if self.per_slot_training_phase {
+            self.slot_training_phase_displays
+                .get(slot_index)
+                .copied()
+                .unwrap_or(self.meta.training_phase_display)
+        } else if slot_index == self.meta.training_slot {
+            self.meta.training_phase_display
+        } else {
+            return None;
+        };
+        match phase {
+            IntegrationStatusPhaseDisplay::Real => Some(ComponentKind::Real),
+            IntegrationStatusPhaseDisplay::Imag => Some(ComponentKind::Imag),
+            IntegrationStatusPhaseDisplay::Both => None,
+        }
+    }
+
+    pub(crate) fn slot_component_selected_for_training(
+        &self,
+        slot_index: usize,
+        component: ComponentKind,
+    ) -> bool {
+        self.training_component_for_slot(slot_index) == Some(component)
+    }
+
+    pub(crate) fn target_deltas_for_row_slot(
+        &self,
+        row: &MainResultsRow,
+        slot_index: usize,
+    ) -> (Option<DisplayField<f64>>, Option<DisplayField<f64>>) {
+        let Some(cell) = row.slot_cell(slot_index) else {
+            return (None, None);
+        };
+        let Some(value) = cell.value.as_ref() else {
+            return (None, None);
+        };
+        let target = self.target_for_slot_component(slot_index, row.component.raw);
+        format_delta_fields_from_estimate(value.raw.0, value.raw.1, target)
+    }
+}
+
+impl StatusMeta {
+    pub(crate) fn iteration_progress_ratio(self) -> Option<f64> {
+        self.live_progress.map(|progress| {
+            if progress.target_points == 0 {
+                0.0
+            } else {
+                progress.completed_points as f64 / progress.target_points as f64
+            }
+        })
+    }
+
+    pub(crate) fn iteration_eta(self) -> Option<Duration> {
+        let progress = self.live_progress?;
+        if progress.completed_points == 0 || self.iteration_elapsed_time.is_zero() {
+            return None;
+        }
+
+        let processed_per_second =
+            progress.completed_points as f64 / self.iteration_elapsed_time.as_secs_f64();
+        if processed_per_second <= 0.0 {
+            return None;
+        }
+
+        let remaining_points = progress
+            .target_points
+            .saturating_sub(progress.completed_points);
+        Some(utils::duration_from_secs_f64_saturating(
+            remaining_points as f64 / processed_per_second,
+        ))
+    }
+
+    pub(crate) fn total_sample_rate_per_second(self) -> Option<f64> {
+        if self.total_points == 0 || self.elapsed_time.is_zero() {
+            return None;
+        }
+        Some(self.total_points as f64 / self.elapsed_time.as_secs_f64())
+    }
+
+    pub(crate) fn sample_core_time(self) -> Option<String> {
+        if self.n_samples_evaluated == 0 {
+            return None;
+        }
+
+        Some(utils::format_evaluation_time_from_f64(
+            self.elapsed_time.as_secs_f64() / (self.n_samples_evaluated as f64)
+                * (self.cores as f64),
+        ))
+    }
+}
+
+impl MainResultsSection {
+    pub(crate) fn all_rows(&self) -> impl Iterator<Item = &MainResultsRow> {
+        self.row_groups.iter().flat_map(|group| group.rows.iter())
+    }
+
+    pub(crate) fn row_groups_of_kind(
+        &self,
+        kind: MainResultsRowGroupKind,
+    ) -> impl Iterator<Item = &MainResultsRowGroup> {
+        self.row_groups
+            .iter()
+            .filter(move |group| group.kind == kind)
+    }
+
+    pub(crate) fn find_row(
+        &self,
+        contribution: ContributionKind,
+        component: ComponentKind,
+    ) -> Option<&MainResultsRow> {
+        self.all_rows()
+            .find(|row| row.contribution.raw == contribution && row.component.raw == component)
+    }
+
+    pub(crate) fn metadata_headers(&self) -> Vec<StyledText> {
+        let mut headers = vec![
+            styled_colored("χ²/dof", TextStyle::blue().bold()),
+            styled_colored("mwi", TextStyle::blue().bold()),
+        ];
+        if self.has_target_columns {
+            headers.push(styled_colored("Δ [σ]", TextStyle::blue().bold()));
+            headers.push(styled_colored("Δ [%]", TextStyle::blue().bold()));
+        }
+        headers
+    }
+
+    pub(crate) fn component_header(&self) -> StyledText {
+        styled_plain("")
+    }
+
+    pub(crate) fn summary_headers(&self) -> Vec<StyledText> {
+        let mut headers = vec![self.contribution_header.clone(), self.component_header()];
+        headers.extend(self.slot_headers.iter().cloned());
+        headers
+    }
+
+    pub(crate) fn discrete_headers(&self) -> Vec<StyledText> {
+        vec![
+            self.contribution_header.clone(),
+            self.component_header(),
+            styled_plain("integral"),
+            styled_plain("% err"),
+            styled_plain("χ^2"),
+            styled_plain("m.w.i"),
+            styled_plain("sample %"),
+            styled_plain("# samples"),
+            styled_plain("pdf"),
+        ]
+    }
+
+    pub(crate) fn selected_bin_detail_headers(&self) -> Vec<StyledText> {
+        vec![
+            styled_plain("Integrand"),
+            styled_plain("integral"),
+            styled_plain("% err"),
+            styled_plain("χ^2"),
+            styled_plain("m.w.i"),
+            styled_plain("sample %"),
+            styled_plain("# samples"),
+            styled_plain("pdf"),
+        ]
+    }
+}
+
+impl MainResultsRow {
+    pub(crate) fn slot_cell(&self, slot_index: usize) -> Option<&MainTableSlotCells> {
+        self.slot_cells.get(slot_index)
+    }
+}
+
+impl MaxWeightDetailsSection {
+    pub(crate) fn title(&self) -> StyledText {
+        styled_colored("Maximum weight details", TextStyle::green().bold())
+    }
+
+    pub(crate) fn headers(&self) -> Vec<StyledText> {
+        vec![
+            styled_colored("Integrand", TextStyle::blue().bold()),
+            styled_plain(""),
+            styled_colored("Max eval", TextStyle::blue().bold()),
+            styled_colored("Max eval coordinates", TextStyle::blue().bold()),
+        ]
+    }
+}
+
+impl DiscreteMaxWeightDetailsSection {
+    pub(crate) fn title(&self) -> StyledText {
+        styled_colored(
+            "Maximum weight details by discrete bin",
+            TextStyle::green().bold(),
+        )
+    }
+
+    pub(crate) fn summary_headers(&self) -> Vec<StyledText> {
+        let mut headers = vec![self.contribution_header.clone(), styled_plain("")];
+        headers.extend(self.slot_headers.iter().cloned());
+        headers
+    }
+
+    pub(crate) fn coordinates_header(&self) -> StyledText {
+        styled_colored("Max eval coordinates", TextStyle::blue().bold())
+    }
+
+    pub(crate) fn coordinate_headers(&self) -> Vec<StyledText> {
+        vec![
+            self.contribution_header.clone(),
+            styled_plain(""),
+            styled_plain("Integrand"),
+            self.coordinates_header(),
+        ]
+    }
+}
+
+impl StatisticsSection {
+    pub(crate) fn title(&self) -> StyledText {
+        styled_colored("Integration statistics", TextStyle::green().bold())
+    }
+
+    pub(crate) fn table_rows(&self) -> Vec<StatisticsTableRow> {
+        let snapshot = self.raw.snapshot();
+        vec![
+            StatisticsTableRow {
+                row_label: styled_colored("  timing", TextStyle::blue().bold()),
+                entries: vec![
+                    StatisticsTableEntry {
+                        label: styled_plain("total"),
+                        value: styled_colored(
+                            utils::format_evaluation_time_from_f64(
+                                snapshot.average_total_time_seconds,
+                            ),
+                            TextStyle::green(),
+                        ),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("param"),
+                        value: styled_colored(
+                            utils::format_evaluation_time_from_f64(
+                                snapshot.average_parameterization_time_seconds,
+                            ),
+                            TextStyle::green(),
+                        ),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("itg"),
+                        value: styled_colored(
+                            utils::format_evaluation_time_from_f64(
+                                snapshot.average_integrand_time_seconds,
+                            ),
+                            TextStyle::green(),
+                        ),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("evaluators"),
+                        value: styled_colored(
+                            utils::format_evaluation_time_from_f64(
+                                snapshot.average_evaluator_time_seconds,
+                            ),
+                            TextStyle::green(),
+                        ),
+                    },
+                ],
+            },
+            StatisticsTableRow {
+                row_label: styled_colored("  evals", TextStyle::blue().bold()),
+                entries: vec![
+                    StatisticsTableEntry {
+                        label: styled_plain("f64"),
+                        value: styled_colored(
+                            format!("{:.2}%", snapshot.f64_percentage),
+                            TextStyle::green(),
+                        ),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("f128"),
+                        value: styled_colored(
+                            format!("{:.2}%", snapshot.f128_percentage),
+                            TextStyle::blue(),
+                        ),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("arb"),
+                        value: styled_plain(format!("{:.2}%", snapshot.arb_percentage)),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("nans+unstable"),
+                        value: styled_colored(
+                            format!("{:.2}%", snapshot.nan_or_unstable_percentage),
+                            if snapshot.nan_or_unstable_percentage > 0.0 {
+                                TextStyle::red()
+                            } else {
+                                TextStyle::green()
+                            },
+                        ),
+                    },
+                ],
+            },
+            StatisticsTableRow {
+                row_label: styled_colored("  events", TextStyle::blue().bold()),
+                entries: vec![
+                    StatisticsTableEntry {
+                        label: styled_plain("evts #"),
+                        value: styled_colored(
+                            format_abbreviated_count(snapshot.generated_event_count),
+                            TextStyle::green(),
+                        ),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("sel. %"),
+                        value: snapshot
+                            .selection_efficiency_percentage
+                            .map(|value| styled_colored(format!("{value:.2}%"), TextStyle::green()))
+                            .unwrap_or_else(|| styled_plain("N/A")),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("obs"),
+                        value: styled_colored(
+                            utils::format_evaluation_time_from_f64(
+                                snapshot.average_observable_time_seconds,
+                            ),
+                            TextStyle::green(),
+                        ),
+                    },
+                    StatisticsTableEntry {
+                        label: styled_plain("integrator"),
+                        value: styled_colored(
+                            utils::format_evaluation_time_from_f64(
+                                snapshot.average_integrator_time_seconds,
+                            ),
+                            TextStyle::green(),
+                        ),
+                    },
+                ],
+            },
+        ]
+    }
+
+    pub(crate) fn timing_mix_segments(&self) -> Vec<StatisticsMixSegment> {
+        let snapshot = self.raw.snapshot();
+        let parameterization = snapshot.average_parameterization_time_seconds.max(0.0);
+        let evaluator = snapshot.average_evaluator_time_seconds.max(0.0);
+        let observable = snapshot.average_observable_time_seconds.max(0.0);
+        let integrand_core =
+            (snapshot.average_integrand_time_seconds.max(0.0) - observable - evaluator).max(0.0);
+        let integrator = snapshot.average_integrator_time_seconds.max(0.0);
+        let mut segments = normalize_mix_segments(vec![
+            (
+                styled_colored("evaluators", TextStyle::green().bold()),
+                evaluator,
+            ),
+            (
+                styled_colored("itg_core", TextStyle::blue().bold()),
+                integrand_core,
+            ),
+            (
+                styled_colored("obs", TextStyle::yellow().bold()),
+                observable,
+            ),
+            (
+                styled_colored("param", TextStyle::red().bold()),
+                parameterization,
+            ),
+            (styled_plain("integrator"), integrator),
+        ]);
+        segments.sort_by(|lhs, rhs| {
+            rhs.percentage
+                .partial_cmp(&lhs.percentage)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        segments
+    }
+
+    pub(crate) fn precision_mix_segments(&self) -> Vec<StatisticsMixSegment> {
+        let snapshot = self.raw.snapshot();
+        normalize_mix_segments(vec![
+            (
+                styled_colored("f64", TextStyle::green()),
+                snapshot.f64_percentage,
+            ),
+            (
+                styled_colored("f128", TextStyle::blue()),
+                snapshot.f128_percentage,
+            ),
+            (styled_plain("arb"), snapshot.arb_percentage),
+            (
+                styled_colored("unstbl.+nan.", TextStyle::red()),
+                snapshot.nan_or_unstable_percentage,
+            ),
+        ])
+    }
+
+    pub(crate) fn stability_mix_segments(&self) -> Vec<StatisticsMixSegment> {
+        let snapshot = self.raw.snapshot();
+        let unstable = (snapshot.nan_or_unstable_percentage - snapshot.nan_percentage).max(0.0);
+        let stable = (100.0 - snapshot.nan_or_unstable_percentage).max(0.0);
+        normalize_mix_segments(vec![
+            (styled_colored("stable", TextStyle::green()), stable),
+            (styled_colored("unstable", TextStyle::red()), unstable),
+            (
+                styled_colored("nan", TextStyle::red()),
+                snapshot.nan_percentage,
+            ),
+        ])
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -136,9 +636,22 @@ pub(crate) struct MainResultsSection {
     pub(crate) header_tail: StyledText,
     pub(crate) contribution_header: StyledText,
     pub(crate) slot_headers: Vec<StyledText>,
-    pub(crate) show_discrete_columns: bool,
+    pub(crate) has_discrete_columns: bool,
     pub(crate) has_target_columns: bool,
-    pub(crate) row_groups: Vec<Vec<MainResultsRow>>,
+    pub(crate) row_groups: Vec<MainResultsRowGroup>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum MainResultsRowGroupKind {
+    All,
+    Sum,
+    Bins,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct MainResultsRowGroup {
+    pub(crate) kind: MainResultsRowGroupKind,
+    pub(crate) rows: Vec<MainResultsRow>,
 }
 
 #[derive(Clone, Debug)]
@@ -156,6 +669,8 @@ pub(crate) struct MainResultsRow {
 pub(crate) struct MainTableSlotCells {
     pub(crate) value: Option<DisplayField<(F<f64>, F<f64>)>>,
     pub(crate) relative_error: Option<DisplayField<f64>>,
+    pub(crate) chi_sq: Option<DisplayField<f64>>,
+    pub(crate) max_weight_impact: Option<DisplayField<f64>>,
     pub(crate) sample_fraction: Option<DisplayField<f64>>,
     pub(crate) sample_count: Option<DisplayField<usize>>,
     pub(crate) target_pdf: Option<DisplayField<f64>>,
@@ -200,6 +715,24 @@ pub(crate) struct StatisticsSection {
     pub(crate) raw: StatisticsCounter,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct StatisticsTableRow {
+    pub(crate) row_label: StyledText,
+    pub(crate) entries: Vec<StatisticsTableEntry>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct StatisticsTableEntry {
+    pub(crate) label: StyledText,
+    pub(crate) value: StyledText,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct StatisticsMixSegment {
+    pub(crate) label: StyledText,
+    pub(crate) percentage: f64,
+}
+
 fn component_accumulator(
     accumulator: &ComplexAccumulator,
     component: ComponentKind,
@@ -242,6 +775,27 @@ fn total_processed_samples(summary: &DiscreteGridAccumulatorSummary) -> usize {
         .sum()
 }
 
+fn normalize_mix_segments(segments: Vec<(StyledText, f64)>) -> Vec<StatisticsMixSegment> {
+    let total: f64 = segments.iter().map(|(_, value)| value.max(0.0)).sum();
+    if total <= f64::EPSILON {
+        return segments
+            .into_iter()
+            .map(|(label, _)| StatisticsMixSegment {
+                label,
+                percentage: 0.0,
+            })
+            .collect();
+    }
+
+    segments
+        .into_iter()
+        .map(|(label, value)| StatisticsMixSegment {
+            label,
+            percentage: value.max(0.0) / total * 100.0,
+        })
+        .collect()
+}
+
 fn styled_plain(text: impl Into<String>) -> StyledText {
     StyledText::plain(text)
 }
@@ -250,14 +804,78 @@ fn styled_colored(text: impl Into<String>, style: TextStyle) -> StyledText {
     StyledText::styled(text, style)
 }
 
+fn format_target_value_for_display(value: f64) -> String {
+    if value == 0.0 {
+        return String::from("+0e0");
+    }
+
+    for precision in 0..=16 {
+        let candidate = normalize_scientific_exponent(&format!("{:+.*e}", precision, value));
+        let Ok(parsed) = candidate.parse::<f64>() else {
+            continue;
+        };
+        if ulp_distance(parsed, value) <= 8 {
+            return candidate;
+        }
+    }
+
+    normalize_scientific_exponent(&format!("{:+.16e}", value))
+}
+
+fn normalize_scientific_exponent(formatted: &str) -> String {
+    let Some((mantissa, exponent)) = formatted.rsplit_once('e') else {
+        return formatted.to_string();
+    };
+    let exponent = exponent.parse::<i32>().unwrap_or_default();
+    format!("{mantissa}e{exponent:+}")
+}
+
+fn ulp_distance(lhs: f64, rhs: f64) -> u64 {
+    if lhs.is_nan() || rhs.is_nan() {
+        return u64::MAX;
+    }
+    ordered_f64_bits(lhs).abs_diff(ordered_f64_bits(rhs))
+}
+
+fn ordered_f64_bits(value: f64) -> u64 {
+    let bits = value.to_bits();
+    if (bits >> 63) != 0 {
+        !bits
+    } else {
+        bits | (1_u64 << 63)
+    }
+}
+
 fn format_value_field(avg: F<f64>, err: F<f64>) -> DisplayField<(F<f64>, F<f64>)> {
-    DisplayField::new(
-        (avg, err),
-        styled_colored(
-            format_signed_uncertainty(avg, err, UncertaintyNotation::Scientific),
-            TextStyle::blue().bold(),
-        ),
-    )
+    let formatted = format_signed_uncertainty(avg, err, UncertaintyNotation::Scientific);
+    let uncertainty_style = format_relative_error_field_from_estimate(avg, err)
+        .map(|field| {
+            field
+                .display
+                .spans
+                .first()
+                .map(|span| span.style)
+                .unwrap_or(TextStyle::PLAIN)
+                .bold()
+        })
+        .unwrap_or(TextStyle::PLAIN.bold());
+
+    let display = if let Some(start) = formatted.find('(') {
+        if let Some(end_offset) = formatted[start..].find(')') {
+            let end = start + end_offset + 1;
+            let mut styled = StyledText::new();
+            styled.push_text(&formatted[..start], TextStyle::blue().bold());
+            styled.push_text(&formatted[start..end], uncertainty_style);
+            styled.push_text(&formatted[end..], TextStyle::blue().bold());
+            styled
+        } else {
+            styled_colored(formatted, TextStyle::blue().bold())
+        }
+    } else {
+        styled_colored(formatted, TextStyle::blue().bold())
+    };
+
+    DisplayField::new((avg, err), display)
 }
 
 fn format_relative_error_field_from_estimate(
@@ -409,10 +1027,11 @@ fn contribution_header(
             .first_non_trivial_discrete_label
             .as_deref()
     {
-        return styled_colored(
-            format!("Contribution (idx={label})"),
-            TextStyle::blue().bold(),
-        );
+        let mut header = StyledText::styled("Contribution", TextStyle::blue().bold());
+        header.push_text("\n(idx=", TextStyle::PLAIN);
+        header.push_text(label, TextStyle::blue().bold());
+        header.push_text(")", TextStyle::PLAIN);
+        return header;
     }
 
     styled_colored("Contribution", TextStyle::blue().bold())
@@ -504,7 +1123,7 @@ fn main_results_row(
     monitored_path: Option<&[usize]>,
     contribution: ContributionKind,
     component: ComponentKind,
-    show_discrete_columns: bool,
+    has_discrete_columns: bool,
 ) -> Option<MainResultsRow> {
     let slot_cells = integration_state
         .slot_metas
@@ -517,6 +1136,8 @@ fn main_results_row(
                 Some(MainTableSlotCells {
                     value: Some(format_value_field(accumulator.avg, accumulator.err)),
                     relative_error: format_relative_error_field(accumulator),
+                    chi_sq: format_chi_sq_field(accumulator, integration_state.iter),
+                    max_weight_impact: format_mwi_field(accumulator),
                     sample_fraction: None,
                     sample_count: None,
                     target_pdf: None,
@@ -531,6 +1152,8 @@ fn main_results_row(
                 Some(MainTableSlotCells {
                     value: Some(format_value_field(avg, err)),
                     relative_error: format_relative_error_field_from_estimate(avg, err),
+                    chi_sq: None,
+                    max_weight_impact: None,
                     sample_fraction: None,
                     sample_count: None,
                     target_pdf: None,
@@ -545,7 +1168,7 @@ fn main_results_row(
                     })?;
                 let bin = summary.bins.get(bin_index)?;
                 let total_samples = total_processed_samples(summary);
-                let sample_fraction = if show_discrete_columns && total_samples > 0 {
+                let sample_fraction = if has_discrete_columns && total_samples > 0 {
                     let raw =
                         bin.accumulator.processed_samples as f64 / total_samples as f64 * 100.0;
                     Some(DisplayField::new(
@@ -558,7 +1181,7 @@ fn main_results_row(
                 } else {
                     None
                 };
-                let sample_count = if show_discrete_columns {
+                let sample_count = if has_discrete_columns {
                     Some(DisplayField::new(
                         bin.accumulator.processed_samples,
                         styled_colored(
@@ -569,7 +1192,7 @@ fn main_results_row(
                 } else {
                     None
                 };
-                let target_pdf = if show_discrete_columns {
+                let target_pdf = if has_discrete_columns {
                     slot_context
                         .as_ref()
                         .and_then(|ctx| ctx.pdfs.get(bin_index).copied())
@@ -585,6 +1208,8 @@ fn main_results_row(
                 Some(MainTableSlotCells {
                     value: Some(format_value_field(bin.accumulator.avg, bin.accumulator.err)),
                     relative_error: format_relative_error_field(&bin.accumulator),
+                    chi_sq: format_chi_sq_field(&bin.accumulator, integration_state.iter),
+                    max_weight_impact: format_mwi_field(&bin.accumulator),
                     sample_fraction,
                     sample_count,
                     target_pdf,
@@ -684,13 +1309,12 @@ fn build_main_results_section(
     let components = ComponentKind::all_for_display(render_options.phase_display);
     let discrete_context = integration_state.monitored_discrete_context();
     let monitored_path = integration_state.monitored_discrete_path.as_deref();
-    let show_discrete_columns = monitored_path.is_some()
-        && (render_options.show_top_discrete_grid
-            || render_options.show_discrete_contributions_sum);
+    let has_discrete_columns = monitored_path.is_some();
     let has_target_columns = targets.first().is_some_and(Option::is_some);
 
-    let mut row_groups = vec![
-        components
+    let mut row_groups = vec![MainResultsRowGroup {
+        kind: MainResultsRowGroupKind::All,
+        rows: components
             .iter()
             .filter_map(|component| {
                 main_results_row(
@@ -699,91 +1323,96 @@ fn build_main_results_section(
                     monitored_path,
                     ContributionKind::All,
                     *component,
-                    show_discrete_columns,
+                    has_discrete_columns,
                 )
             })
             .collect_vec(),
-    ];
+    }];
 
     if let Some(discrete_context) = discrete_context.as_ref() {
-        if render_options.show_discrete_contributions_sum {
-            let sum_rows = components
-                .iter()
-                .filter_map(|component| {
-                    main_results_row(
-                        integration_state,
-                        targets,
-                        monitored_path,
-                        ContributionKind::Sum,
-                        *component,
-                        show_discrete_columns,
-                    )
-                })
-                .collect_vec();
-            if !sum_rows.is_empty() {
-                row_groups.push(sum_rows);
-            }
+        let sum_rows = components
+            .iter()
+            .filter_map(|component| {
+                main_results_row(
+                    integration_state,
+                    targets,
+                    monitored_path,
+                    ContributionKind::Sum,
+                    *component,
+                    has_discrete_columns,
+                )
+            })
+            .collect_vec();
+        if !sum_rows.is_empty() {
+            row_groups.push(MainResultsRowGroup {
+                kind: MainResultsRowGroupKind::Sum,
+                rows: sum_rows,
+            });
         }
 
-        if render_options.show_top_discrete_grid {
-            let bin_count = discrete_context.pdfs.len();
-            match render_options.contribution_sort {
-                ContributionSortMode::Index => {
-                    let mut rows = Vec::new();
-                    for bin_index in 0..bin_count {
-                        for component in &components {
-                            if let Some(row) = main_results_row(
+        let bin_count = discrete_context.pdfs.len();
+        match render_options.contribution_sort {
+            ContributionSortMode::Index => {
+                let mut rows = Vec::new();
+                for bin_index in 0..bin_count {
+                    for component in &components {
+                        if let Some(row) = main_results_row(
+                            integration_state,
+                            targets,
+                            monitored_path,
+                            ContributionKind::Bin(bin_index),
+                            *component,
+                            has_discrete_columns,
+                        ) {
+                            rows.push(row);
+                        }
+                    }
+                }
+                if !rows.is_empty() {
+                    row_groups.push(MainResultsRowGroup {
+                        kind: MainResultsRowGroupKind::Bins,
+                        rows,
+                    });
+                }
+            }
+            ContributionSortMode::Integral | ContributionSortMode::Error => {
+                for component in &components {
+                    let mut bin_indices = (0..bin_count).collect_vec();
+                    bin_indices.sort_by(|lhs, rhs| {
+                        discrete_sort_key(
+                            integration_state,
+                            &discrete_context.path,
+                            *component,
+                            *rhs,
+                            render_options.contribution_sort,
+                        )
+                        .partial_cmp(&discrete_sort_key(
+                            integration_state,
+                            &discrete_context.path,
+                            *component,
+                            *lhs,
+                            render_options.contribution_sort,
+                        ))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    let rows = bin_indices
+                        .into_iter()
+                        .filter_map(|bin_index| {
+                            main_results_row(
                                 integration_state,
                                 targets,
                                 monitored_path,
                                 ContributionKind::Bin(bin_index),
                                 *component,
-                                show_discrete_columns,
-                            ) {
-                                rows.push(row);
-                            }
-                        }
-                    }
-                    if !rows.is_empty() {
-                        row_groups.push(rows);
-                    }
-                }
-                ContributionSortMode::Integral | ContributionSortMode::Error => {
-                    for component in &components {
-                        let mut bin_indices = (0..bin_count).collect_vec();
-                        bin_indices.sort_by(|lhs, rhs| {
-                            discrete_sort_key(
-                                integration_state,
-                                &discrete_context.path,
-                                *component,
-                                *rhs,
-                                render_options.contribution_sort,
+                                has_discrete_columns,
                             )
-                            .partial_cmp(&discrete_sort_key(
-                                integration_state,
-                                &discrete_context.path,
-                                *component,
-                                *lhs,
-                                render_options.contribution_sort,
-                            ))
-                            .unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                        .collect_vec();
+                    if !rows.is_empty() {
+                        row_groups.push(MainResultsRowGroup {
+                            kind: MainResultsRowGroupKind::Bins,
+                            rows,
                         });
-                        let rows = bin_indices
-                            .into_iter()
-                            .filter_map(|bin_index| {
-                                main_results_row(
-                                    integration_state,
-                                    targets,
-                                    monitored_path,
-                                    ContributionKind::Bin(bin_index),
-                                    *component,
-                                    show_discrete_columns,
-                                )
-                            })
-                            .collect_vec();
-                        if !rows.is_empty() {
-                            row_groups.push(rows);
-                        }
                     }
                 }
             }
@@ -795,13 +1424,13 @@ fn build_main_results_section(
         header_left: header_left(elapsed_time, integration_state.iter, live_progress),
         header_middle: header_middle(cur_points, total_points_display, live_progress),
         header_tail: header_tail(cores, elapsed_time, n_samples_evaluated),
-        contribution_header: contribution_header(integration_state, show_discrete_columns),
+        contribution_header: contribution_header(integration_state, has_discrete_columns),
         slot_headers: integration_state
             .slot_metas
             .iter()
             .map(|slot_meta| styled_colored(slot_meta.key(), TextStyle::blue().bold()))
             .collect(),
-        show_discrete_columns,
+        has_discrete_columns,
         has_target_columns,
         row_groups,
     }
@@ -828,7 +1457,7 @@ fn styled_component_sign(
     positive: bool,
 ) -> DisplayField<(ComponentKind, bool)> {
     let mut display = StyledText::new();
-    display.push_text(component.tag(), TextStyle::blue().bold());
+    display.append(component.label_display());
     display.push_text(" [", TextStyle::PLAIN);
     display.push_text(sign, TextStyle::blue());
     display.push_text("]", TextStyle::PLAIN);
@@ -1045,6 +1674,7 @@ pub(crate) fn build_status_update(
     integration_state: &IntegrationState,
     cores: usize,
     elapsed_time: Duration,
+    iteration_elapsed_time: Duration,
     cur_points: usize,
     total_points_display: usize,
     n_samples_evaluated: usize,
@@ -1054,6 +1684,21 @@ pub(crate) fn build_status_update(
 ) -> StatusUpdate {
     StatusUpdate {
         kind,
+        meta: StatusMeta {
+            elapsed_time,
+            iteration_elapsed_time,
+            iteration: integration_state.iter,
+            current_iteration_points: cur_points,
+            total_points: total_points_display,
+            n_samples_evaluated,
+            cores,
+            training_slot: render_options.training_slot,
+            training_phase_display: render_options.training_phase_display,
+            live_progress,
+        },
+        targets: targets.to_vec(),
+        slot_training_phase_displays: render_options.slot_training_phase_displays.clone(),
+        per_slot_training_phase: render_options.per_slot_training_phase,
         main_results: build_main_results_section(
             kind,
             integration_state,
@@ -1066,15 +1711,12 @@ pub(crate) fn build_status_update(
             render_options,
             live_progress,
         ),
-        max_weight_details: render_options
-            .show_max_weight_details
-            .then(|| build_max_weight_details_section(integration_state, render_options))
-            .flatten(),
-        discrete_max_weight_details: (render_options.show_max_weight_details
-            && render_options.show_max_weight_info_for_discrete_bins)
-            .then(|| build_discrete_max_weight_details_section(integration_state, render_options))
-            .flatten(),
-        statistics: render_options.show_statistics.then_some(StatisticsSection {
+        max_weight_details: build_max_weight_details_section(integration_state, render_options),
+        discrete_max_weight_details: build_discrete_max_weight_details_section(
+            integration_state,
+            render_options,
+        ),
+        statistics: Some(StatisticsSection {
             raw: integration_state.stats,
         }),
     }
@@ -1090,11 +1732,12 @@ pub(crate) fn build_saved_status_update(
         integration_state,
         integration_state.n_cores.max(1),
         utils::duration_from_secs_f64_saturating(integration_state.elapsed_seconds),
+        Duration::ZERO,
         0,
         integration_state.num_points,
         integration_state.num_points,
         targets,
-        &render_options.for_final(),
+        &render_options.clone().for_final(),
         None,
     )
 }

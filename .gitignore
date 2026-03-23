@@ -36,7 +36,7 @@ MANIFEST
 IGNORE/
 crates/gammaloop-api/python/gammaloop/libgammaloop_api*
 # Temporary cache files
-*.swo
+*.sw*
 
 gammaloop_state_integration_workspace/
 result/

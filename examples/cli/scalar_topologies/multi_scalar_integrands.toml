@@ -182,18 +182,27 @@ helicities = [
     subtype = "multi_channeling"
     '""",
 
-    "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000000 integrator.seed=1337",
+    "set process -p box -i scalar_box kv integrator.n_increase=0 integrator.n_start=500000 integrator.n_max=50000000 integrator.seed=1337",
     # --show-max-weight-info-for-discrete-bins
 	# --batch-size 100000
 	# --no-stream-iterations
-	# --show-max-weight-info-for-discrete-bins	
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations	
+
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer ratatui
 	"""integrate -p box -i scalar_box -p box_copy -i scalar_box_copy --n-cores 10
                  --target box@scalar_box=7.6e-6,7.43e-5 box_copy@scalar_box_copy=6.63e-5,0.0
+				 --renderer ratatui
+				 --batch-size 10000
 				 --show-phase both
+				 --show-max-weight-info
 				 --show-top-discrete-grid
 				 --show-discrete-contributions-sum
-				 --sort-contributions integral
-				 --show-max-weight-info
                  --restart
     """,
 ]

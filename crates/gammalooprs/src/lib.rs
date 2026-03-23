@@ -36,6 +36,7 @@ use utils::F;
 use utils::FloatLike;
 
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+pub static ITERATION_ABORT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
@@ -83,9 +84,20 @@ pub const MAX_LOOP: usize = 6;
 
 pub fn set_interrupt_handler() {
     INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
+    ITERATION_ABORT_REQUESTED.store(false, std::sync::atomic::Ordering::Relaxed);
     let _ = ctrlc::set_handler(|| {
         INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
     });
+}
+
+#[inline]
+pub fn request_interrupt() {
+    INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[inline]
+pub fn request_iteration_abort() {
+    ITERATION_ABORT_REQUESTED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[inline]
@@ -94,8 +106,18 @@ pub(crate) fn is_interrupted() -> bool {
 }
 
 #[inline]
+pub(crate) fn is_iteration_abort_requested() -> bool {
+    ITERATION_ABORT_REQUESTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[inline]
 pub(crate) fn set_interrupted(flag: bool) {
     INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[inline]
+pub(crate) fn clear_iteration_abort_request() {
+    ITERATION_ABORT_REQUESTED.store(false, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[derive(Clone, Copy, Debug)]

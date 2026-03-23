@@ -71,6 +71,7 @@ pathfinding = "4.11.0"
 pyo3-stub-gen = { workspace = true, optional = true }
 rand = { workspace = true, features = ["small_rng"] }
 rayon = { workspace = true }
+ratatui = { workspace = true, features = ["crossterm_0_28"] }
 # constcat = "0.5.0"
 ref-ops = "0.2.5"
 ringbuffer = "0.16.0"
