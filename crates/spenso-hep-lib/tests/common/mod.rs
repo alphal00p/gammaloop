@@ -28,7 +28,8 @@ pub fn test_initialize() {
 
     initialize();
 }
-
+#[allow(unused)]
+#[allow(clippy::result_large_err)]
 pub trait NetExt {
     fn execute_and_res(
         self,
@@ -136,6 +137,7 @@ pub fn B(
         .simplify_metrics()
 }
 
+#[allow(unused)]
 pub fn gamma(
     i: impl Into<AbstractIndex>,
     j: impl Into<AbstractIndex>,
@@ -155,7 +157,7 @@ pub fn gamma(
         .unwrap()
         .permute_with_metric()
 }
-
+#[allow(unused)]
 pub fn gammaadj(
     i: impl Into<AbstractIndex>,
     j: impl Into<AbstractIndex>,
@@ -176,6 +178,7 @@ pub fn gammaadj(
         .permute_with_metric()
 }
 
+#[allow(unused)]
 pub fn gamma0(i: impl Into<AbstractIndex>, j: impl Into<AbstractIndex>) -> Atom {
     let gamma_strct = IndexlessNamedStructure::<Symbol, ()>::from_iter(
         [
@@ -190,7 +193,7 @@ pub fn gamma0(i: impl Into<AbstractIndex>, j: impl Into<AbstractIndex>) -> Atom 
         .unwrap()
         .permute_with_metric()
 }
-
+#[allow(unused)]
 pub fn gammaconj(
     i: impl Into<AbstractIndex>,
     j: impl Into<AbstractIndex>,
@@ -210,27 +213,28 @@ pub fn gammaconj(
         .unwrap()
         .permute_with_metric()
 }
-
+#[allow(unused)]
 pub fn p(m: impl Into<AbstractIndex>) -> Atom {
     let m_atom: AbstractIndex = m.into();
     let m_atom: Atom = m_atom.into();
     let mink = Minkowski {}.new_rep(4);
     function!(symbol!("spenso::p"), mink.to_symbolic([m_atom]))
 }
+#[allow(unused)]
 pub fn q(m: impl Into<AbstractIndex>) -> Atom {
     let m_atom: AbstractIndex = m.into();
     let m_atom: Atom = m_atom.into();
     let mink = Minkowski {}.new_rep(4);
     function!(symbol!("spenso::q"), mink.to_symbolic([m_atom]))
 }
-
+#[allow(unused)]
 pub fn u(i: usize, m: impl Into<AbstractIndex>) -> Atom {
     let m_atom: AbstractIndex = m.into();
     let m_atom: Atom = m_atom.into();
     let mink = Bispinor {}.new_rep(4);
     function!(symbol!("spenso::u"), i, mink.to_symbolic([m_atom]))
 }
-
+#[allow(unused)]
 pub fn ub(i: usize, m: impl Into<AbstractIndex>) -> Atom {
     let m_atom: AbstractIndex = m.into();
     let m_atom: Atom = m_atom.into();

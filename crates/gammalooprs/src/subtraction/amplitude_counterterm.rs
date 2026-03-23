@@ -201,32 +201,6 @@ impl AmplitudeCountertermData {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::AmplitudeCountertermAtom;
-    use symbolica::{atom::Atom, symbol};
-
-    #[test]
-    fn empty_amplitude_counterterm_atom_is_not_generated() {
-        let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::new(),
-            parametric_integrated: Atom::new(),
-        };
-
-        assert!(!atom.is_generated());
-    }
-
-    #[test]
-    fn non_empty_amplitude_counterterm_atom_is_generated() {
-        let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::var(symbol!("x")),
-            parametric_integrated: Atom::new(),
-        };
-
-        assert!(atom.is_generated());
-    }
-}
-
 struct CounterTermBuilder<'a, T: FloatLike> {
     overlap_structure: &'a OverlapStructure,
     evaluators: &'a TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
@@ -569,5 +543,31 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             evaluation_metadata,
             record_primary_timing,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AmplitudeCountertermAtom;
+    use symbolica::{atom::Atom, symbol};
+
+    #[test]
+    fn empty_amplitude_counterterm_atom_is_not_generated() {
+        let atom = AmplitudeCountertermAtom {
+            parametric_local: Atom::new(),
+            parametric_integrated: Atom::new(),
+        };
+
+        assert!(!atom.is_generated());
+    }
+
+    #[test]
+    fn non_empty_amplitude_counterterm_atom_is_generated() {
+        let atom = AmplitudeCountertermAtom {
+            parametric_local: Atom::var(symbol!("x")),
+            parametric_integrated: Atom::new(),
+        };
+
+        assert!(atom.is_generated());
     }
 }

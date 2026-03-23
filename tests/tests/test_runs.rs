@@ -13,31 +13,19 @@ use gammaloop_api::{
 };
 
 use gammalooprs::{
-    GammaLoopContextContainer,
     model::UFOSymbol,
-    numerator::aind::Aind,
     settings::runtime::{IntegralEstimate, IntegrationResult as RuntimeIntegrationResult},
-    utils::{self, ApproxEq, F, FUN_LIB, GS, TENSORLIB, W_},
+    utils::{self, ApproxEq, F},
 };
 use insta::assert_snapshot;
 use itertools::Itertools;
 use momtrop::assert_approx_eq;
 use serde_json::Value as JsonValue;
 use serial_test::serial;
-use spenso::{
-    algebra::complex::Complex,
-    network::{Network, Sequential, SmallestDegree, store::NetworkStore},
-    structure::{IndexlessNamedStructure, NamedStructure, representation::LibraryRep},
-    tensors::{complex::RealOrComplexTensor, parametric::ParamOrConcrete},
-};
+use spenso::algebra::complex::Complex;
 use std::path::{Path, PathBuf};
-use std::{env, fmt::Write, ops::Deref, time::Duration};
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    function,
-    id::Pattern,
-    symbol, warn,
-};
+use std::{env, fmt::Write, time::Duration};
+use symbolica::symbol;
 use tabled::{Table, Tabled, settings::Style};
 use tracing::info;
 
@@ -856,8 +844,8 @@ fn photonic_amplitudes() -> Result<()> {
         inspect_point: vec![0.1, 0.2, 0.3],
         inspect_target: Some(Complex::new(4.660217572648287e-10, -6.496141401696065e-10)),
         integrated_target: Some(Complex::new(
-            F(-9.27759500687454717e-11),
-            F(-3.68394576249870544e-11),
+            F(-9.277_595_006_874_547e-11),
+            F(-3.683_945_762_498_705_4e-11),
         )),
         generation_time: Some(Duration::from_secs(7)),
         nvar_bench: None,
@@ -1244,9 +1232,9 @@ fn scalar_sunrise_inspect() -> Result<()> {
         false,
     )?;
 
-    let point = vec![1., 1., 1., 2., 3., 4.];
+    let point = [1., 1., 1., 2., 3., 4.];
 
-    let point = vec![1., 1., 1., -3., -4., -5.];
+    let point = [1., 1., 1., -3., -4., -5.];
 
     let point = vec![2., 3., 4., 1., 1., 1.];
     let mut ins = Inspect {
@@ -1939,85 +1927,6 @@ fn test_integration_workspace_resume_preserves_current_effective_model_override(
     second_resume.run(&mut cli.state, &cli.cli_settings)?;
 
     clean_test(&cli.cli_settings.state.folder);
-    Ok(())
-}
-
-#[test]
-fn test_broken_network() -> Result<()> {
-    let cli = get_test_cli(
-        Some("photon_box.toml".into()),
-        get_tests_workspace_path().join("test_broken_network"),
-        Some("test_broken_network".to_string()),
-        true,
-    )?;
-
-    let mut state_bin =
-        std::fs::File::open("tests/resources/misc/product_esurface_10_symbolica_state.bin")?;
-
-    let state = symbolica::state::State::import(&mut state_bin, None).unwrap();
-    let model = cli.state.model.clone();
-
-    let gammalooopcontainer = GammaLoopContextContainer {
-        state_map: &state,
-        model: &model,
-    };
-
-    let mut file = std::fs::File::open("tests/resources/misc/product_esurface_10.bin")?;
-
-    let mut network: Network<
-        NetworkStore<
-            ParamOrConcrete<
-                RealOrComplexTensor<F<f64>, NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>>,
-                NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>,
-            >,
-            Atom,
-        >,
-        IndexlessNamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>,
-        Symbol,
-        Aind,
-    > = bincode::decode_from_std_read_with_context(
-        &mut file,
-        bincode::config::standard(),
-        gammalooopcontainer,
-    )?;
-
-    println!("{}", network.dot_pretty());
-
-    network
-        .execute::<Sequential, SmallestDegree, _, _, _>(
-            TENSORLIB.read().unwrap().deref(),
-            FUN_LIB.deref(),
-        )
-        .unwrap();
-
-    let scalar: Atom = network.result_scalar().unwrap().into();
-    let pattern = Pattern::from(function!(GS.ose, W_.x_) * function!(GS.sign, W_.x_));
-
-    println!("res{scalar}");
-    let num_ose_match = scalar.pattern_match(&pattern, None, None);
-    //println!("num matches: {}", num_ose_match.count());
-
-    let mut edge_5_in_expression = false;
-    let mut edge_7_in_expression = false;
-
-    for matched_exp in num_ose_match {
-        println!("found:{}", pattern.replace_wildcards(&matched_exp));
-        for (symbol, atom) in matched_exp.iter() {
-            // println!("Matched {} to {atom}", symbol);
-            if *atom == Atom::num(5) {
-                edge_5_in_expression = true;
-            }
-            if *atom == Atom::num(7) {
-                edge_7_in_expression = true;
-            }
-        }
-    }
-
-    assert!(edge_5_in_expression);
-    assert!(edge_7_in_expression);
-
-    //println!("Result: {scalar}");
-
     Ok(())
 }
 

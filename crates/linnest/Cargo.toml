@@ -3,9 +3,8 @@ name = "linnest"
 version = "0.1.0"
 edition = "2021"
 description = "A library for working with linnet data structures in WebAssembly environments"
-license = "MIT"
-authors = ["Lucien Huber"]
 repository = "https://github.com/lcnbr/linnet"
+license = "MIT"
 publish = false
 
 [lib]

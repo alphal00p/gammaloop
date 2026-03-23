@@ -83,12 +83,12 @@ impl CrossSectionGraphTerm {
                 }
             }
 
-            if massless_edges_in_cut.len() >= 1 {
+            if !massless_edges_in_cut.is_empty() {
                 let subsets = massless_edges_in_cut
                     .iter()
                     .powerset()
                     .filter(|subset| {
-                        subset.len() >= 1
+                        !subset.is_empty()
                             && subset.len() <= loop_count
                             && subset.len() < representative_cut_esurface.energies.len()
                     })

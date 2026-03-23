@@ -39,17 +39,12 @@ pub enum ShiftDirection {
     NegativeOnly,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 pub enum Constraint {
     Fixed,
+    #[default]
     Free,
     Grouped(usize, ShiftDirection),
-}
-
-impl Default for Constraint {
-    fn default() -> Self {
-        Constraint::Free
-    }
 }
 
 pub trait Shiftable {
@@ -224,7 +219,7 @@ pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub incremental: bool,
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     pub fn new_layout_state(
         &self,
         vertex_points: NodeVec<Point2<f64>>,
@@ -296,7 +291,7 @@ impl<'a, E: Shiftable, V: Shiftable, H, N: NodeStorageOps<NodeData = V> + Clone>
         let mut st = s.clone();
         let n_v: NodeIndex = st.vertex_points.len();
         let n_e: EdgeIndex = st.edge_points.len();
-        let step_range: Uniform<f64> = Uniform::try_from(-step..step).unwrap();
+        let step_range: Uniform<f64> = Uniform::from(-step..step);
 
         let mut didnothing = true;
         while didnothing {
@@ -378,7 +373,7 @@ where
         let mut st = s.clone();
         let n_v: NodeIndex = st.vertex_points.len();
         let n_e: EdgeIndex = st.edge_points.len();
-        let step_range: Uniform<f64> = Uniform::try_from(-step..step).unwrap();
+        let step_range: Uniform<f64> = Uniform::from(-step..step);
 
         let mut didnothing = true;
         while didnothing {
@@ -518,17 +513,17 @@ where
         let constraints = graph[idx].point_constraint();
         let mut changed = false;
 
-        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id) {
-            if state.vertex_points[idx].x != reference_point.x {
-                state.vertex_points[idx].x = reference_point.x;
-                changed = true;
-            }
+        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id)
+            && state.vertex_points[idx].x != reference_point.x
+        {
+            state.vertex_points[idx].x = reference_point.x;
+            changed = true;
         }
-        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id) {
-            if state.vertex_points[idx].y != reference_point.y {
-                state.vertex_points[idx].y = reference_point.y;
-                changed = true;
-            }
+        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id)
+            && state.vertex_points[idx].y != reference_point.y
+        {
+            state.vertex_points[idx].y = reference_point.y;
+            changed = true;
         }
 
         if changed {
@@ -562,17 +557,17 @@ where
         let constraints = graph[idx].point_constraint();
         let mut changed = false;
 
-        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id) {
-            if state.edge_points[idx].x != reference_point.x {
-                state.edge_points[idx].x = reference_point.x;
-                changed = true;
-            }
+        if matches!(constraints.x, Constraint::Grouped(r, _) if r == reference_id)
+            && state.edge_points[idx].x != reference_point.x
+        {
+            state.edge_points[idx].x = reference_point.x;
+            changed = true;
         }
-        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id) {
-            if state.edge_points[idx].y != reference_point.y {
-                state.edge_points[idx].y = reference_point.y;
-                changed = true;
-            }
+        if matches!(constraints.y, Constraint::Grouped(r, _) if r == reference_id)
+            && state.edge_points[idx].y != reference_point.y
+        {
+            state.edge_points[idx].y = reference_point.y;
+            changed = true;
         }
 
         if changed {

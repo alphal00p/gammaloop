@@ -90,7 +90,7 @@ fn evaluate_1l_scalar_vacuum() -> Result<()> {
         ],
     )?;
 
-    let cmd = Commands::from_str(&"evaluate --n-epsilon-terms 4")?;
+    let cmd = Commands::from_str("evaluate --n-epsilon-terms 4")?;
     let eval = if let Commands::Evaluate(eval_cmd) = cmd {
         eval_cmd.run(
             &mut cli.state,
@@ -117,7 +117,7 @@ fn evaluate_1l_scalar_vacuum() -> Result<()> {
 
     cli.run_command("set global kv global.generation.uv.vakint.matad.substitute_hpls=false global.generation.uv.vakint.matad.direct_numerical_substition=false")?;
 
-    let cmd = Commands::from_str(&"evaluate --n-epsilon-terms 5")?;
+    let cmd = Commands::from_str("evaluate --n-epsilon-terms 5")?;
     let eval = if let Commands::Evaluate(eval_cmd) = cmd {
         eval_cmd.run(
             &mut cli.state,

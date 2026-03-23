@@ -1935,8 +1935,10 @@ mod tests {
         run_history.cli_settings.global.display_directive = "error".into();
         run_history.default_runtime_settings.general.mu_r_sq = 11.0;
 
-        let mut overridden_global = GlobalSettings::default();
-        overridden_global.display_directive = "warn".into();
+        let overridden_global = GlobalSettings {
+            display_directive: "warn".into(),
+            ..Default::default()
+        };
         let mut overridden_runtime = RuntimeSettings::default();
         overridden_runtime.general.mu_r_sq = 29.0;
 

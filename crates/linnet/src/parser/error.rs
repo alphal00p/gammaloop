@@ -7,9 +7,9 @@ use thiserror::Error;
 pub enum HedgeParseError<'a, E, V, H, G> {
     DotVertexDataError(V),
 
-    GraphFromFile(GraphFromFileError<'a>),
+    GraphFromFile(Box<GraphFromFileError<'a>>),
 
-    ParseError(PestError),
+    ParseError(Box<PestError>),
 
     DotEdgeDataError(E),
 
@@ -31,13 +31,13 @@ impl<'a> Display for HedgeParseError<'a, (), (), (), ()> {
 
 impl<'a, E, V, H, G> From<GraphFromFileError<'a>> for HedgeParseError<'a, E, V, H, G> {
     fn from(e: GraphFromFileError<'a>) -> Self {
-        HedgeParseError::GraphFromFile(e)
+        HedgeParseError::GraphFromFile(Box::new(e))
     }
 }
 
 impl<E, V, H, G> From<PestError> for HedgeParseError<'_, E, V, H, G> {
     fn from(e: PestError) -> Self {
-        HedgeParseError::ParseError(e)
+        HedgeParseError::ParseError(Box::new(e))
     }
 }
 

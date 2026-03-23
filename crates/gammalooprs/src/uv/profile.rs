@@ -47,6 +47,9 @@ use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use typed_index_collections::TiVec;
 
+type ExternalMomenta = TiVec<ExternalIndex, ThreeMomentum<F<f64>>>;
+type LoopMomentumSample = TiVec<LoopIndex, ThreeMomentum<F<f64>>>;
+
 pub struct ProfileSettings {
     pub n_points: usize,
     pub min_scale_exponent: f64,
@@ -88,6 +91,16 @@ fn lmb_seed(base_seed: u64, graph_id: usize, lmb_index: usize) -> u64 {
         .wrapping_add(lmb_index as u64)
 }
 
+struct UVProfileRunner<'a, I> {
+    integrand: &'a Arc<Mutex<I>>,
+    scales: &'a [f64],
+    externals: &'a ExternalMomenta,
+    model: &'a Model,
+    settings: &'a RuntimeSettings,
+    profile_settings: &'a ProfileSettings,
+    base_seed: u64,
+}
+
 pub trait UVProfileable {
     fn profile(
         &mut self,
@@ -118,7 +131,7 @@ impl UVProfileable for Amplitude {
             .ok_or(eyre!("Integrand Not built yet"))?
             .get_settings()
             .clone();
-        let externals: TiVec<ExternalIndex, _> = settings
+        let externals: ExternalMomenta = settings
             .kinematics
             .externals
             .get_dependent_externals(DependentMomentaConstructor::Amplitude(
@@ -141,22 +154,22 @@ impl UVProfileable for Amplitude {
         profile_span.pb_set_finish_message("all graphs profiled");
         let _profile_span_enter = profile_span.enter();
 
+        let runner = UVProfileRunner {
+            integrand: &integrand,
+            scales: &scales,
+            externals: &externals,
+            model,
+            settings: &settings,
+            profile_settings,
+            base_seed,
+        };
+
         let per_graph = self
             .graphs
             .par_iter()
             .enumerate()
             .map(|(i, g)| {
-                let res = UVSamplingResult::from_amplitude_graph(
-                    &integrand,
-                    i,
-                    g,
-                    &scales,
-                    &externals,
-                    model,
-                    &settings,
-                    profile_settings,
-                    base_seed,
-                )?;
+                let res = runner.sample_graph(i, g)?;
                 profile_span.pb_inc(1);
                 Ok(res)
             })
@@ -608,21 +621,11 @@ pub struct UVSamplingResult {
     pub per_lmb: Vec<LMBResult>,
 }
 
-impl UVSamplingResult {
-    pub fn from_amplitude_graph<I>(
-        integrand: &Arc<Mutex<I>>,
-        graph_id: usize,
-        g: &AmplitudeGraph,
-        scales: &[f64],
-        externals: &TiVec<ExternalIndex, ThreeMomentum<F<f64>>>,
-        model: &Model,
-        settings: &RuntimeSettings,
-        profile_settings: &ProfileSettings,
-        base_seed: u64,
-    ) -> Result<Self>
-    where
-        I: HasIntegrand + Clone + Send,
-    {
+impl<'a, I> UVProfileRunner<'a, I>
+where
+    I: HasIntegrand + Clone + Send,
+{
+    fn sample_graph(&self, graph_id: usize, g: &AmplitudeGraph) -> Result<UVSamplingResult> {
         let lmbs = g.derived_data.lmbs.as_ref().unwrap();
         let integrand_expr = &g.derived_data.all_mighty_integrand;
         let orientations: Vec<_> = g
@@ -652,22 +655,9 @@ impl UVSamplingResult {
         let per_lmb = lmb_refs
             .par_iter()
             .map(|(lmb_index, lmb)| {
-                // let tree = lmb.tree;
-                let mut res = LMBResult::from_lmb(
-                    (*lmb).clone(),
-                    integrand,
-                    graph_id,
-                    &g.graph,
-                    *lmb_index,
-                    scales,
-                    externals,
-                    model,
-                    settings,
-                    profile_settings,
-                    base_seed,
-                )?;
+                let mut res = self.sample_lmb(graph_id, &g.graph, *lmb_index, lmb)?;
 
-                if profile_settings.analyse_analytically {
+                if self.profile_settings.analyse_analytically {
                     let orientation_limits: Vec<(
                         SubSet<LoopIndex>,
                         OrientationData,
@@ -706,7 +696,7 @@ impl UVSamplingResult {
         drop(_lmb_span_enter);
         drop(lmb_span);
 
-        Ok(Self { per_lmb })
+        Ok(UVSamplingResult { per_lmb })
     }
 }
 
@@ -715,31 +705,31 @@ pub struct LMBResult {
     pub(crate) per_subsets: BTreeMap<SubSet<LoopIndex>, SubSetResult>,
 }
 
-impl LMBResult {
-    pub fn from_lmb<I>(
-        lmb: LoopMomentumBasis,
-        integrand: &Arc<Mutex<I>>,
+impl<'a, I> UVProfileRunner<'a, I>
+where
+    I: HasIntegrand + Clone + Send,
+{
+    fn sample_lmb(
+        &self,
         graph_id: usize,
         graph: &Graph,
         lmb_index: usize,
-        scales: &[f64],
-        externals: &TiVec<ExternalIndex, ThreeMomentum<F<f64>>>,
-        model: &Model,
-        settings: &RuntimeSettings,
-        profile_settings: &ProfileSettings,
-        base_seed: u64,
-    ) -> Result<Self>
-    where
-        I: HasIntegrand + Clone + Send,
-    {
-        let mut rng = MonteCarloRng::new(lmb_seed(base_seed, graph_id, lmb_index), 0);
-        let sample: TiVec<LoopIndex, _> = lmb
+        lmb: &LoopMomentumBasis,
+    ) -> Result<LMBResult> {
+        let mut rng = MonteCarloRng::new(lmb_seed(self.base_seed, graph_id, lmb_index), 0);
+        let sample: LoopMomentumSample = lmb
             .loop_edges
             .iter()
             .map(|_| ThreeMomentum {
-                px: F(rng.random_range(-settings.kinematics.e_cm..settings.kinematics.e_cm)),
-                py: F(rng.random_range(-settings.kinematics.e_cm..settings.kinematics.e_cm)),
-                pz: F(rng.random_range(-settings.kinematics.e_cm..settings.kinematics.e_cm)),
+                px: F(
+                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
+                ),
+                py: F(
+                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
+                ),
+                pz: F(
+                    rng.random_range(-self.settings.kinematics.e_cm..self.settings.kinematics.e_cm)
+                ),
             })
             .collect();
 
@@ -764,21 +754,14 @@ impl LMBResult {
         let per_subsets_vec: Vec<(SubSet<LoopIndex>, SubSetResult)> = subsets
             .into_par_iter()
             .map_init(
-                || integrand.lock().expect("integrand mutex poisoned").clone(),
+                || {
+                    self.integrand
+                        .lock()
+                        .expect("integrand mutex poisoned")
+                        .clone()
+                },
                 |integrand, ls| {
-                    let res = SubSetResult::from_subset(
-                        integrand,
-                        graph_id,
-                        graph,
-                        &ls,
-                        &lmb,
-                        scales,
-                        externals,
-                        &sample,
-                        model,
-                        settings,
-                        profile_settings,
-                    )?;
+                    let res = self.sample_subset(integrand, graph_id, graph, &ls, lmb, &sample)?;
                     subset_span.pb_inc(1);
                     Ok((ls, res))
                 },
@@ -789,7 +772,10 @@ impl LMBResult {
         drop(_subset_span_enter);
         drop(subset_span);
 
-        Ok(LMBResult { lmb, per_subsets })
+        Ok(LMBResult {
+            lmb: lmb.clone(),
+            per_subsets,
+        })
     }
 }
 
@@ -799,23 +785,19 @@ pub struct SubSetResult {
     pub(crate) analytic: Option<AnalyticResult>,
 }
 
-impl SubSetResult {
-    pub fn from_subset<I>(
+impl<'a, I> UVProfileRunner<'a, I>
+where
+    I: HasIntegrand + Clone + Send,
+{
+    fn sample_subset(
+        &self,
         integrand: &mut I,
         graph_id: usize,
         graph: &Graph,
         subset: &SubSet<LoopIndex>,
         lmb: &LoopMomentumBasis,
-        scales: &[f64],
-        externals: &TiVec<ExternalIndex, ThreeMomentum<F<f64>>>,
-        sample: &TiVec<LoopIndex, ThreeMomentum<F<f64>>>,
-        model: &Model,
-        settings: &RuntimeSettings,
-        profile_settings: &ProfileSettings,
-    ) -> Result<Self>
-    where
-        I: HasIntegrand + Clone + Send,
-    {
+        sample: &LoopMomentumSample,
+    ) -> Result<SubSetResult> {
         let mut subgraph: SuBitGraph = graph.empty_subgraph();
         for l in subset.included_iter() {
             let eid = lmb.loop_edges[l];
@@ -823,7 +805,7 @@ impl SubSetResult {
             let root_node = graph.node_id(cut);
 
             let tree =
-                SimpleTraversalTree::depth_first_traverse(&graph, &lmb.tree, &root_node, None)
+                SimpleTraversalTree::depth_first_traverse(graph, &lmb.tree, &root_node, None)
                     .unwrap();
             subgraph.union_with(
                 &tree
@@ -836,7 +818,8 @@ impl SubSetResult {
         let initial_dod = graph.dod(&subgraph);
 
         let n_included = subset.n_included() as i32;
-        let inspect_results: Vec<InspectResult> = scales
+        let inspect_results: Vec<InspectResult> = self
+            .scales
             .iter()
             .map(|s| {
                 let prefactor = s.powi(3 * n_included);
@@ -849,18 +832,18 @@ impl SubSetResult {
                     .iter()
                     .flat_map(|a| {
                         lmb.edge_signatures[*a]
-                            .compute_momentum(&scaled_sample, externals)
+                            .compute_momentum(&scaled_sample, self.externals)
                             .into_iter()
                     })
                     .collect();
 
                 let (inspect_res_jac, inspect_res_eval) = evaluate_momentum_space_point(
                     integrand,
-                    settings,
-                    model,
+                    self.settings,
+                    self.model,
                     pt,
                     &[graph_id],
-                    profile_settings.use_f128,
+                    self.profile_settings.use_f128,
                 )?;
 
                 Ok(InspectResult {
@@ -878,7 +861,9 @@ impl SubSetResult {
             analytic,
         })
     }
+}
 
+impl SubSetResult {
     pub fn analyse_inspect(&self, scales: &[f64]) -> Option<InspectAnalysis> {
         let result = self.log_log_slope(scales)?;
 

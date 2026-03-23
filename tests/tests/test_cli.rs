@@ -221,12 +221,14 @@ fn nested_run_records_only_the_top_level_run() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::needless_update)]
 fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     let mut cli = new_cli("boot_run_history_merges_blocks_and_persists_commands_once")?;
     let mut frozen_global = cli.cli_settings.global.clone();
     frozen_global.display_directive = "warn".into();
     let mut frozen_runtime = RuntimeSettings::default();
     frozen_runtime.general.mu_r_sq = 24.0;
+
     let boot_run_history = RunHistory {
         cli_settings: CLISettings {
             global: frozen_global.clone(),

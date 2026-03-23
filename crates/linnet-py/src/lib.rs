@@ -2012,17 +2012,17 @@ impl PyDotGraph {
     }
 
     /// Cycle basis of the full graph.
-    fn cycle_basis(&self) -> (Vec<PyCycle>, PyTraversalTree) {
-        let (cycles, tree) = self.graph.cycle_basis();
+    fn cycle_basis(&self) -> (Vec<PyCycle>, PySubgraph) {
+        let (cycles, subgraph) = self.graph.cycle_basis();
         let cycles = cycles.into_iter().map(|c| PyCycle { cycle: c }).collect();
-        (cycles, PyTraversalTree { tree })
+        (cycles, PySubgraph { subgraph })
     }
 
     /// Cycle basis of a subgraph.
-    fn cycle_basis_of(&self, subgraph: &PySubgraph) -> (Vec<PyCycle>, PyTraversalTree) {
-        let (cycles, tree) = self.graph.cycle_basis_of(&subgraph.subgraph);
+    fn cycle_basis_of(&self, subgraph: &PySubgraph) -> (Vec<PyCycle>, PySubgraph) {
+        let (cycles, subgraph) = self.graph.cycle_basis_of(&subgraph.subgraph);
         let cycles = cycles.into_iter().map(|c| PyCycle { cycle: c }).collect();
-        (cycles, PyTraversalTree { tree })
+        (cycles, PySubgraph { subgraph })
     }
 
     /// All spanning forests of the full graph.

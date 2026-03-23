@@ -1308,14 +1308,16 @@ mod tests {
     #[test]
     fn read_only_state_uses_cwd_workspace_default() {
         let integrate = Integrate::default();
-        let mut settings = CLISettings::default();
-        settings.state = StateSettings {
-            folder: PathBuf::from("/tmp/saved_state"),
-            name: Some("gg_hhh_1l".to_string()),
-        };
-        settings.session = SessionSettings {
-            read_only_state: true,
-            ..SessionSettings::default()
+        let mut settings = CLISettings {
+            state: StateSettings {
+                folder: PathBuf::from("/tmp/saved_state"),
+                name: Some("gg_hhh_1l".to_string()),
+            },
+            session: SessionSettings {
+                read_only_state: true,
+                ..SessionSettings::default()
+            },
+            ..Default::default()
         };
 
         assert_eq!(
@@ -1339,7 +1341,7 @@ mod tests {
     #[test]
     fn truncate_ansi_line_limits_visible_width() {
         let line = "\u{1b}[32mhello\u{1b}[0m world";
-        let truncated = super::truncate_ansi_line(&line, 7);
+        let truncated = super::truncate_ansi_line(line, 7);
 
         assert!(truncated.contains('\u{1b}'));
         assert!(truncated.ends_with("\u{1b}[0m"));

@@ -198,7 +198,7 @@ pub fn new_cli_for_test(state_path: impl AsRef<Path>, log_file_name: Option<Stri
         "Using gammaloop state path: {}",
         state_path.as_ref().display()
     );
-    let mut state = State::new(state_path.as_ref().to_path_buf(), log_file_name);
+    let mut state = State::new(state_path.as_ref(), log_file_name);
     state.model = load_generic_model("sm");
 
     state

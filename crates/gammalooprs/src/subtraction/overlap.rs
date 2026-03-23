@@ -956,7 +956,7 @@ mod tests {
             let edge_masses = match masses {
                 Some(masses) => {
                     let mut edge_masses = vec![F(0.0); 4];
-                    let mut real_masses = masses.iter().map(|&x| x).collect_vec();
+                    let mut real_masses = masses.iter().copied().collect_vec();
 
                     edge_masses.append(&mut real_masses);
                     edge_masses

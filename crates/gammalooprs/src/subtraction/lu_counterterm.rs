@@ -165,9 +165,9 @@ impl LUCounterTermEvaluators {
         {
             Some(counterterm_data.iterated.map_ref(|atom| {
                 let evaluator_atoms = orientations.iter().map(|or| {
-                    let evaluator_atom = or.select(atom);
+                    
 
-                    evaluator_atom
+                    or.select(atom)
                 });
 
                 GenericEvaluator::new_from_builder(

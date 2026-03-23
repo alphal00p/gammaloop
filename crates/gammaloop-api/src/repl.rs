@@ -3361,6 +3361,167 @@ fn shell_escape_unquoted(path: &str) -> String {
     escaped
 }
 
+/// Result of reading a command from the REPL.
+///
+pub enum ReadCommandOutput<C> {
+    /// Input parsed successfully. Contains the parsed command and the raw input string.
+    Command(C, String),
+
+    /// Input was empty.
+    EmptyLine,
+
+    /// Clap parse error happened. You should print the error manually.
+    ClapError(clap::error::Error),
+
+    /// Input was not lexically valid, for example it had odd number of `"`
+    ShlexError,
+
+    /// Reedline failed to work with stdio.
+    ReedlineError(std::io::Error),
+
+    /// User pressed ctrl+C
+    CtrlC,
+
+    /// User pressed ctrl+D
+    CtrlD,
+}
+
+impl<C> ReadCommandOutput<C> {
+    /// Extract just the parsed command, discarding the raw input.
+    /// Returns `None` if this is not a `Command` variant.
+    pub fn command(self) -> Option<C> {
+        match self {
+            ReadCommandOutput::Command(cmd, _) => Some(cmd),
+            _ => None,
+        }
+    }
+
+    /// Extract both the parsed command and raw input.
+    /// Returns `None` if this is not a `Command` variant.
+    pub fn command_with_raw(self) -> Option<(C, String)> {
+        match self {
+            ReadCommandOutput::Command(cmd, raw) => Some((cmd, raw)),
+            _ => None,
+        }
+    }
+
+    /// Get the raw input string if this is a `Command` variant.
+    /// Returns `None` if this is not a `Command` variant.
+    pub fn raw_input(&self) -> Option<&str> {
+        match self {
+            ReadCommandOutput::Command(_, raw) => Some(raw),
+            _ => None,
+        }
+    }
+}
+
+impl<C: Parser + Send + Sync + 'static> ClapEditor<C> {
+    pub fn builder() -> ClapEditorBuilder<C> {
+        ClapEditorBuilder::<C>::new()
+    }
+
+    pub fn get_editor(&mut self) -> &mut Reedline {
+        &mut self.rl
+    }
+
+    pub fn set_prompt(&mut self, prompt: Box<dyn Prompt>) {
+        self.prompt = prompt;
+    }
+
+    pub fn read_command(&mut self) -> ReadCommandOutput<C> {
+        let line = match self.rl.read_line(&*self.prompt) {
+            Ok(Signal::Success(buffer)) => buffer,
+            Ok(Signal::CtrlC) => return ReadCommandOutput::CtrlC,
+            Ok(Signal::CtrlD) => return ReadCommandOutput::CtrlD,
+            Err(e) => return ReadCommandOutput::ReedlineError(e),
+        };
+        if line.trim().is_empty() {
+            return ReadCommandOutput::EmptyLine;
+        }
+
+        // _ = self.rl.add_history_entry(line.as_str());
+
+        match split_command_line(&line) {
+            Ok(split) => {
+                match C::try_parse_from(std::iter::once("").chain(split.iter().map(String::as_str)))
+                {
+                    Ok(c) => ReadCommandOutput::Command(c, line),
+                    Err(e) => ReadCommandOutput::ClapError(e),
+                }
+            }
+            Err(_) => ReadCommandOutput::ShlexError,
+        }
+    }
+
+    pub fn repl(mut self, mut handler: impl FnMut(C, String)) {
+        loop {
+            match self.read_command() {
+                ReadCommandOutput::Command(c, raw) => handler(c, raw),
+                ReadCommandOutput::EmptyLine => (),
+                ReadCommandOutput::ClapError(e) => {
+                    e.print().unwrap();
+                }
+                ReadCommandOutput::ShlexError => {
+                    println!(
+                        "{} input was not valid and could not be processed",
+                        style("Error:").red().bold()
+                    );
+                }
+                ReadCommandOutput::ReedlineError(e) => {
+                    panic!("{e}");
+                }
+                ReadCommandOutput::CtrlC => continue,
+                ReadCommandOutput::CtrlD => break,
+            }
+        }
+    }
+
+    /// Convenience method for backward compatibility - runs REPL with handler that only receives parsed command
+    #[allow(unused_mut)]
+    pub fn repl_simple(mut self, handler: impl FnMut(C)) {
+        let mut handler = handler;
+        self.repl(|cmd, _raw| handler(cmd))
+    }
+
+    pub async fn repl_async<F, Fut>(mut self, mut handler: F)
+    where
+        F: FnMut(C, String) -> Fut,
+        Fut: std::future::Future<Output = ()>,
+    {
+        loop {
+            match self.read_command() {
+                ReadCommandOutput::Command(c, raw) => handler(c, raw).await,
+                ReadCommandOutput::EmptyLine => (),
+                ReadCommandOutput::ClapError(e) => {
+                    e.print().unwrap();
+                }
+                ReadCommandOutput::ShlexError => {
+                    println!(
+                        "{} input was not valid and could not be processed",
+                        style("Error:").red().bold()
+                    );
+                }
+                ReadCommandOutput::ReedlineError(e) => {
+                    panic!("{e}");
+                }
+                ReadCommandOutput::CtrlC => continue,
+                ReadCommandOutput::CtrlD => break,
+            }
+        }
+    }
+
+    /// Convenience method for backward compatibility - runs async REPL with handler that only receives parsed command
+    #[allow(unused_mut)]
+    pub async fn repl_simple_async<F, Fut>(mut self, handler: F)
+    where
+        F: FnMut(C) -> Fut,
+        Fut: std::future::Future<Output = ()>,
+    {
+        let mut handler = handler;
+        self.repl_async(|cmd, _raw| handler(cmd)).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, fs};
@@ -4414,166 +4575,5 @@ mod tests {
             invalid_process_metadata.is_empty(),
             "invalid process completion metadata: {invalid_process_metadata:?}"
         );
-    }
-}
-
-/// Result of reading a command from the REPL.
-///
-pub enum ReadCommandOutput<C> {
-    /// Input parsed successfully. Contains the parsed command and the raw input string.
-    Command(C, String),
-
-    /// Input was empty.
-    EmptyLine,
-
-    /// Clap parse error happened. You should print the error manually.
-    ClapError(clap::error::Error),
-
-    /// Input was not lexically valid, for example it had odd number of `"`
-    ShlexError,
-
-    /// Reedline failed to work with stdio.
-    ReedlineError(std::io::Error),
-
-    /// User pressed ctrl+C
-    CtrlC,
-
-    /// User pressed ctrl+D
-    CtrlD,
-}
-
-impl<C> ReadCommandOutput<C> {
-    /// Extract just the parsed command, discarding the raw input.
-    /// Returns `None` if this is not a `Command` variant.
-    pub fn command(self) -> Option<C> {
-        match self {
-            ReadCommandOutput::Command(cmd, _) => Some(cmd),
-            _ => None,
-        }
-    }
-
-    /// Extract both the parsed command and raw input.
-    /// Returns `None` if this is not a `Command` variant.
-    pub fn command_with_raw(self) -> Option<(C, String)> {
-        match self {
-            ReadCommandOutput::Command(cmd, raw) => Some((cmd, raw)),
-            _ => None,
-        }
-    }
-
-    /// Get the raw input string if this is a `Command` variant.
-    /// Returns `None` if this is not a `Command` variant.
-    pub fn raw_input(&self) -> Option<&str> {
-        match self {
-            ReadCommandOutput::Command(_, raw) => Some(raw),
-            _ => None,
-        }
-    }
-}
-
-impl<C: Parser + Send + Sync + 'static> ClapEditor<C> {
-    pub fn builder() -> ClapEditorBuilder<C> {
-        ClapEditorBuilder::<C>::new()
-    }
-
-    pub fn get_editor(&mut self) -> &mut Reedline {
-        &mut self.rl
-    }
-
-    pub fn set_prompt(&mut self, prompt: Box<dyn Prompt>) {
-        self.prompt = prompt;
-    }
-
-    pub fn read_command(&mut self) -> ReadCommandOutput<C> {
-        let line = match self.rl.read_line(&*self.prompt) {
-            Ok(Signal::Success(buffer)) => buffer,
-            Ok(Signal::CtrlC) => return ReadCommandOutput::CtrlC,
-            Ok(Signal::CtrlD) => return ReadCommandOutput::CtrlD,
-            Err(e) => return ReadCommandOutput::ReedlineError(e),
-        };
-        if line.trim().is_empty() {
-            return ReadCommandOutput::EmptyLine;
-        }
-
-        // _ = self.rl.add_history_entry(line.as_str());
-
-        match split_command_line(&line) {
-            Ok(split) => {
-                match C::try_parse_from(std::iter::once("").chain(split.iter().map(String::as_str)))
-                {
-                    Ok(c) => ReadCommandOutput::Command(c, line),
-                    Err(e) => ReadCommandOutput::ClapError(e),
-                }
-            }
-            Err(_) => ReadCommandOutput::ShlexError,
-        }
-    }
-
-    pub fn repl(mut self, mut handler: impl FnMut(C, String)) {
-        loop {
-            match self.read_command() {
-                ReadCommandOutput::Command(c, raw) => handler(c, raw),
-                ReadCommandOutput::EmptyLine => (),
-                ReadCommandOutput::ClapError(e) => {
-                    e.print().unwrap();
-                }
-                ReadCommandOutput::ShlexError => {
-                    println!(
-                        "{} input was not valid and could not be processed",
-                        style("Error:").red().bold()
-                    );
-                }
-                ReadCommandOutput::ReedlineError(e) => {
-                    panic!("{e}");
-                }
-                ReadCommandOutput::CtrlC => continue,
-                ReadCommandOutput::CtrlD => break,
-            }
-        }
-    }
-
-    /// Convenience method for backward compatibility - runs REPL with handler that only receives parsed command
-    #[allow(unused_mut)]
-    pub fn repl_simple(mut self, handler: impl FnMut(C)) {
-        let mut handler = handler;
-        self.repl(|cmd, _raw| handler(cmd))
-    }
-
-    pub async fn repl_async<F, Fut>(mut self, mut handler: F)
-    where
-        F: FnMut(C, String) -> Fut,
-        Fut: std::future::Future<Output = ()>,
-    {
-        loop {
-            match self.read_command() {
-                ReadCommandOutput::Command(c, raw) => handler(c, raw).await,
-                ReadCommandOutput::EmptyLine => (),
-                ReadCommandOutput::ClapError(e) => {
-                    e.print().unwrap();
-                }
-                ReadCommandOutput::ShlexError => {
-                    println!(
-                        "{} input was not valid and could not be processed",
-                        style("Error:").red().bold()
-                    );
-                }
-                ReadCommandOutput::ReedlineError(e) => {
-                    panic!("{e}");
-                }
-                ReadCommandOutput::CtrlC => continue,
-                ReadCommandOutput::CtrlD => break,
-            }
-        }
-    }
-
-    /// Convenience method for backward compatibility - runs async REPL with handler that only receives parsed command
-    #[allow(unused_mut)]
-    pub async fn repl_simple_async<F, Fut>(mut self, handler: F)
-    where
-        F: FnMut(C) -> Fut,
-        Fut: std::future::Future<Output = ()>,
-    {
-        let mut handler = handler;
-        self.repl_async(|cmd, _raw| handler(cmd)).await
     }
 }

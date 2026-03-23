@@ -1669,7 +1669,7 @@ impl RaisedCutData {
             });
 
         let dual_shapes = (1..global_max_occurence)
-            .map(|i| shape_for_t_derivatives(i))
+            .map(shape_for_t_derivatives)
             .collect();
 
         let pass_two_evaluators = (1..=global_max_occurence)

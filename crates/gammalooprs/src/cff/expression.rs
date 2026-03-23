@@ -411,14 +411,10 @@ where
         for orientation in self.orientations.iter_mut() {
             orientation
                 .expression
-                .map_mut(|hybrid_surface_id| match hybrid_surface_id {
-                    HybridSurfaceID::Esurface(esurface_id) => {
-                        if let Some(normalized_esurface_id) = esurface_mappings.get(esurface_id) {
-                            *esurface_id = *normalized_esurface_id;
-                        }
-                    }
-                    _ => (),
-                });
+                .map_mut(|hybrid_surface_id| if let HybridSurfaceID::Esurface(esurface_id) = hybrid_surface_id
+                    && let Some(normalized_esurface_id) = esurface_mappings.get(esurface_id) {
+                        *esurface_id = *normalized_esurface_id;
+                    });
         }
     }
 }

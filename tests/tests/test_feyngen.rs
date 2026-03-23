@@ -123,14 +123,14 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
         true,
     )?;
 
-    let result = (|| -> Result<()> {
+    
+
+    (|| -> Result<()> {
         cli.run_command("set model mass_scalar_2=0.1")?;
         cli.run_command("generate xs scalar_1 > scalar_2 scalar_2 --only-diagrams")?;
         cli.run_command("generate")?;
         Ok(())
-    })();
-
-    result
+    })()
 }
 
 #[test]
@@ -311,7 +311,7 @@ fn test_generate_sm_a_ddx() -> Result<()> {
 #[ignore = "slow"]
 fn test_slow_generate_sm_a_ddx() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // Full particle contents
     // Adding --symmetrize_left_right_states below would error in Python; keep as-is here.
@@ -327,7 +327,7 @@ fn test_slow_generate_sm_a_ddx() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_sm_full_a_ddx() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm-full.json"))?;
+    cli.run_command("import model sm-full.json")?;
 
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1 | -1 = -1");//good
@@ -343,7 +343,7 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
 #[ignore = "slow"]
 fn test_slow_generate_sm_full_a_ddx() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm-full.json"))?;
+    cli.run_command("import model sm-full.json")?;
 
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ QED^2==4 [{{3}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"291 | -274+Group(324,1,-1)+Group(325,1,-1)+Group(328,1,-1)+Group(329,1,-1)+Group(330,1,-1)+Group(331,1,-1)+Group(336,1,-1)+Group(337,1,-1)+Group(338,1,-1)+Group(339,1,-1)+Group(340,1,-1)+Group(341,1,-1)+Group(346,1,-1)+Group(351,1,-1)+Group(352,1,-1)+Group(353,1,-1)+Group(354,1,-1)+Group(355,1,-1)+Group(356,1,-1)+Group(357,1,-1)+Group(358,1,-1)+Group(359,1,-1)+Group(360,1,-1)+Group(365,1,-1)+Group(366,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(370,1,-1)+Group(371,1,-1)+Group(38,1,-1)+Group(39,1,-1)+Group(40,1,-1)+Group(41,1,-1)+Group(44,1,-1)+Group(45,1,-1)+Group(46,1,-1)+Group(47,1,-1)+Group(500,1,-1)+Group(501,1,-1)+Group(502,1,-1)+Group(503,1,-1)+Group(504,1,-1)+Group(505,1,-1)+Group(506,1,-1)+Group(507,1,-1) = -320");//a lot less TODO: check that main has lorentz zeros present and here removed 291 vs 339
@@ -357,7 +357,7 @@ fn test_slow_generate_sm_full_a_ddx() -> Result<()> {
 #[ignore = "slow"]
 fn test_generate_sm_h_n_j() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{1}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"2 | -4 = -4");//good
@@ -381,7 +381,7 @@ fn test_generate_sm_h_n_j() -> Result<()> {
 #[ignore = "slow"]
 fn test_slow_generate_sm_h_n_j_cross_section() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     assert_snapshot!(feyngen_str(&mut cli, "xs", "h > g g g | h g b t ghg [{{4}}] --symmetrize-left-right-states true --numerator-grouping only_detect_zeroes",false)?,@"72 | 88 = 88");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "h > g g g | h g b t ghg [{{4}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"26 | 4+Group(10,1,1)+Group(11,1,1)+Group(12,1,1/2)+Group(13,1,1/2)+Group(14,1,1/2)+Group(15,1,1/2)+Group(16,1,2)+Group(17,1,2)+Group(18,1,2)+Group(19,1,2)+Group(2,1,1)+Group(20,1,1)+Group(21,1,1)+Group(22,1,1)+Group(23,1,1)+Group(24,1,1)+Group(25,1,1)+Group(26,1,1)+Group(27,1,1)+Group(28,1,2)+Group(29,1,2)+Group(3,1,1)+Group(30,1,2)+Group(31,1,2)+Group(32,1,1)+Group(33,1,1)+Group(34,1,1)+Group(35,1,1)+Group(36,1,1)+Group(37,1,1)+Group(38,1,1)+Group(39,1,1)+Group(4,1,1)+Group(40,1,2)+Group(41,1,2)+Group(42,1,2)+Group(43,1,2)+Group(44,1,1)+Group(45,1,1)+Group(46,1,1)+Group(47,1,1)+Group(48,1,2)+Group(49,1,2)+Group(5,1,1)+Group(50,1,2)+Group(51,1,2)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(57,1,1)+Group(58,1,1)+Group(59,1,1)+Group(6,1,1)+Group(60,1,1/2)+Group(61,1,1/2)+Group(62,1,1/2)+Group(63,1,1/2)+Group(64,1,1)+Group(65,1,1)+Group(66,1,1)+Group(67,1,1)+Group(68,1,2)+Group(69,1,2)+Group(7,1,1)+Group(70,1,2)+Group(71,1,2)+Group(8,1,1)+Group(9,1,1) = 88");//good
@@ -393,7 +393,7 @@ fn test_slow_generate_sm_h_n_j_cross_section() -> Result<()> {
 #[rustfmt::skip]
 fn test_slow_generate_sm_h_n_j() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping only_detect_zeroes",false)?,@"1194 | -1260 = -1260");//good
     assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping only_detect_zeroes",false)?,@"7018 | -12747 = -12747");//sum is larger and there are more graphs.. this is questionable
@@ -405,7 +405,7 @@ fn test_slow_generate_sm_h_n_j() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_epem_a_qqh() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // Cross sections
     assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
@@ -439,7 +439,7 @@ fn test_generate_epem_a_qqh() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_a_qqh() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // Cross sections
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d a ghg g QED^2==2 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
@@ -462,7 +462,7 @@ fn test_generate_a_qqh() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_aa_ttx_amplitude() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{0} QCD=0] --numerator-grouping only_detect_zeroes",false)?,@"2 | 2 = 2");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{1} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"8 | 8 = 8");
@@ -481,7 +481,7 @@ fn test_generate_aa_ttx_amplitude() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_aa_ttx_cross_section() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --numerator-grouping only_detect_zeroes",false)?,@"4 | -4 = -4");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"40 | -40 = -40");
@@ -500,7 +500,7 @@ fn test_generate_aa_ttx_cross_section() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_aa_ttx_cross_section_slow_filter() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"4 | -4 = -4");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"40 | -40 = -40");
@@ -513,7 +513,7 @@ fn test_generate_aa_ttx_cross_section_slow_filter() -> Result<()> {
 #[rustfmt::skip]
 fn test_vacuum_amplitude_kaapo() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm-default.json"))?;
+    cli.run_command("import model sm-default.json")?;
 
     // 4-loop vaccuum contribution to the neutron start equation of state
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?,@"52 | -44/3 = -44/3");
@@ -525,8 +525,8 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
 #[rustfmt::skip]
 fn test_vacuum_amplitude_generation() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
-    cli.run_command(&format!("set global kv global.n_cores.feyngen=16"))?;
+    cli.run_command("import model sm.json")?;
+    cli.run_command("set global kv global.n_cores.feyngen=16")?;
 
     // DIFFERENT THAN OLD MAIN TARGETS
     // REVIEW BELOW
@@ -558,7 +558,7 @@ fn test_vacuum_amplitude_generation() -> Result<()> {
 #[ignore = "slow"]
 fn test_slow_vacuum_amplitude_generation() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // CURRENTLY BUGGED BECAUSE OF SYMBOLICA INCORRECT SYMMETRY FACTORS. POSSIBLY OTHER SCENARIOS BUGGED TOO.
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{5}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"2560 | -5785/384");
@@ -571,7 +571,7 @@ fn test_slow_vacuum_amplitude_generation() -> Result<()> {
 #[rustfmt::skip]
 fn test_dis_isr() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
     // cli.run_command(&format!("set global kv global.n_cores.feyngen=4"))?;
 
     // 2>N amplitude, no symmetrization
@@ -614,7 +614,7 @@ fn test_dis_isr() -> Result<()> {
 #[ignore = "slow"]
 fn test_slow_generate_a_qqh() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
     // cli.run_command(&format!("set global kv global.n_cores.feyngen=8"))?;
 
     assert_snapshot!(feyngen_str(&mut cli, "amp", "a > b b~ h | b h a ghg g QED==4 [{5} QCD=3] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2763 | -38712/7");
@@ -626,7 +626,7 @@ fn test_slow_generate_a_qqh() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_amplitude_1l_sm_jets() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
     //cli.run_command(&format!("set global kv global.n_cores.feyngen=16"))?;
 
     // Targets confirmed by MadGraph
@@ -649,7 +649,7 @@ fn test_generate_amplitude_1l_sm_jets() -> Result<()> {
 #[rustfmt::skip]
 fn test_generate_amplitude_1l_sm_jets_with_grouping() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
     // cli.run_command(&format!("set global kv global.n_cores.feyngen=16"))?;
 
     // Targets confirmed by MadGraph
@@ -673,7 +673,7 @@ fn test_generate_amplitude_1l_sm_jets_with_grouping() -> Result<()> {
 #[ignore = "slow"]
 fn test_slow_generate_amplitude_1l_sm_jets() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // Targets confirmed by MadGraph
     assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"5424 | 0");
@@ -686,7 +686,7 @@ fn test_slow_generate_amplitude_1l_sm_jets() -> Result<()> {
 #[ignore = "veryslow"]
 fn test_very_slow_generate_amplitude_1l_sm_jets() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // Targets confirmed by MadGraph
     assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"14875 | 1375");
@@ -702,7 +702,7 @@ fn test_very_slow_generate_amplitude_1l_sm_jets() -> Result<()> {
 #[ignore = "veryslow"]
 fn test_slow_generate_amplitude_1l_sm_jets_with_grouping() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
-    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command("import model sm.json")?;
 
     // Targets confirmed by MadGraph
     assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"2090 | 0");
@@ -724,9 +724,9 @@ fn test_vaccuum_amplitude_generation_full_sm() -> Result<()> {
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
 
     // Choose the model to consider
-    cli.run_command(&format!("import model sm-full.json"))?;
+    cli.run_command("import model sm-full.json")?;
 
-    cli.run_command(&format!("set global kv global.n_cores.feyngen=1"))?;
+    cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
     // Including all graphs
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 --filter-zero-flow-edges false --filter-selfenergies false --filter-tadpoles false --filter-snails false",false)?,@"477 | -61/12 = -61/12");

@@ -566,9 +566,9 @@ mod tests {
         assert!(empty_parsed.is_empty());
 
         let a = "rt12UAag4";
-        assert_eq!(SuBitGraph::from_base62(&a, 1000).unwrap().n_included(), 27);
+        assert_eq!(SuBitGraph::from_base62(a, 1000).unwrap().n_included(), 27);
         assert_eq!(
-            SuBitGraph::from_base62(&a, 1000)
+            SuBitGraph::from_base62(a, 1000)
                 .unwrap()
                 .string_label()
                 .as_str(),

@@ -2,8 +2,6 @@ pub mod geom;
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
 use figment::{providers::Serialized, Figment, Profile};
 use linnet::half_edge::swap::Swap;
-#[cfg(any(test, target_arch = "wasm32"))]
-use linnet::parser::set::DotGraphSet;
 use linnet::{
     half_edge::{
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Involution},
@@ -127,10 +125,10 @@ impl PinConstraint {
     }
 
     fn parse_direction(group: &str) -> (&str, ShiftDirection) {
-        if group.starts_with('+') {
-            (&group[1..], ShiftDirection::PositiveOnly)
-        } else if group.starts_with('-') {
-            (&group[1..], ShiftDirection::NegativeOnly)
+        if let Some(stripped) = group.strip_prefix('+') {
+            (stripped, ShiftDirection::PositiveOnly)
+        } else if let Some(stripped) = group.strip_prefix('-') {
+            (stripped, ShiftDirection::NegativeOnly)
         } else {
             (group, ShiftDirection::Any)
         }
@@ -143,8 +141,8 @@ impl PinConstraint {
             .trim_matches(|c| c == '(' || c == ')');
 
         // Handle @group syntax for linking both coordinates
-        if input.starts_with('@') {
-            return Some(PinConstraint::LinkBoth(input[1..].to_string()));
+        if let Some(stripped) = input.strip_prefix('@') {
+            return Some(PinConstraint::LinkBoth(stripped.to_string()));
         }
 
         // Handle x:value,y:value syntax or fixed coordinates (comma or space separated)
@@ -181,28 +179,26 @@ impl PinConstraint {
     fn parse_single_constraint(input: &str) -> Option<Self> {
         let input = input.trim();
 
-        if input.starts_with("x:") {
-            let value = &input[2..];
-            if value.starts_with('@') {
-                Some(PinConstraint::LinkX(value[1..].to_string()))
+        if let Some(value) = input.strip_prefix("x:") {
+            if let Some(stripped) = value.strip_prefix('@') {
+                Some(PinConstraint::LinkX(stripped.to_string()))
             } else if let Ok(x) = value.parse::<f64>() {
                 Some(PinConstraint::FixX(x))
             } else {
                 None
             }
-        } else if input.starts_with("y:") {
-            let value = &input[2..];
-            if value.starts_with('@') {
-                Some(PinConstraint::LinkY(value[1..].to_string()))
+        } else if let Some(value) = input.strip_prefix("y:") {
+            if let Some(stripped) = value.strip_prefix('@') {
+                Some(PinConstraint::LinkY(stripped.to_string()))
             } else if let Ok(y) = value.parse::<f64>() {
                 Some(PinConstraint::FixY(y))
             } else {
                 None
             }
-        } else if input.starts_with('@') {
-            Some(PinConstraint::LinkBoth(input[1..].to_string()))
         } else {
-            None
+            input
+                .strip_prefix('@')
+                .map(|a| PinConstraint::LinkBoth(a.to_string()))
         }
     }
 }
@@ -259,7 +255,7 @@ pub fn expand_template(
             let mut key = String::new();
             let mut found_closing = false;
 
-            while let Some(inner_ch) = chars.next() {
+            for inner_ch in chars.by_ref() {
                 current_pos += inner_ch.len_utf8();
                 if inner_ch == '}' {
                     found_closing = true;
@@ -413,7 +409,7 @@ impl TypstNode {
             // Parse formats like "1.0,2.0" or "1.0 2.0" or "(1.0,2.0)"
             let cleaned = unquoted.trim().trim_matches(|c| c == '(' || c == ')');
             let parts: Vec<&str> = cleaned
-                .split(|c| c == ',' || c == ' ')
+                .split([',', ' '])
                 .filter(|s| !s.is_empty())
                 .collect();
 
@@ -679,7 +675,7 @@ impl Deref for TypstGraph {
 }
 
 impl TypstGraph {
-    pub fn from_dot(dot: DotGraph, figment: &Figment) -> Self {
+    pub fn from_dot(dot: DotGraph, _figment: &Figment) -> Self {
         let mut group_map = HashMap::new();
         let edge_pin_constrains: EdgeVec<(Point2<f64>, PointConstraint)> =
             dot.graph.new_edgevec(|e, eid, _| {
@@ -687,8 +683,7 @@ impl TypstGraph {
                     .get::<_, String>("pin")
                     .transpose()
                     .unwrap()
-                    .map(|a| PinConstraint::parse(&a))
-                    .flatten();
+                    .and_then(|a| PinConstraint::parse(&a));
 
                 if let Some(a) = a {
                     a.point_constraint(eid.0, &mut group_map)
@@ -705,8 +700,7 @@ impl TypstGraph {
                     .get::<_, String>("pin")
                     .transpose()
                     .unwrap()
-                    .map(|a| PinConstraint::parse(&a))
-                    .flatten();
+                    .and_then(|a| PinConstraint::parse(&a));
 
                 if let Some(a) = a {
                     a.point_constraint(nid.0, &mut group_map)
@@ -735,9 +729,9 @@ impl TypstGraph {
         if let Some(g) = &mut global_eval {
             let clean_template = g
                 .strip_prefix('"')
-                .unwrap_or(&g)
+                .unwrap_or(g)
                 .strip_suffix('"')
-                .unwrap_or(&g);
+                .unwrap_or(g);
             *g = expand_template(clean_template, &dot.global_data.statements);
         }
 
@@ -925,12 +919,6 @@ impl LayoutConfig {
         let schedule = GeoSchedule::from(&self.schedule);
         schedule.add_to_global(global_data);
     }
-}
-
-fn merge_with_overrides(figment: &Figment, overrides: &BTreeMap<String, String>) -> Figment {
-    figment
-        .clone()
-        .merge(Serialized::from(overrides.clone(), Profile::Default))
 }
 
 fn default_figment() -> Figment {
@@ -1411,7 +1399,7 @@ impl TypstGraph {
             self.n_nodes(),
             self.layout_config.viewport_w,
             self.layout_config.viewport_h,
-            tune.clone(),
+            *tune,
         );
 
         let l = energycfg.spring_length;

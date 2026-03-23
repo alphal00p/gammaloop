@@ -8,9 +8,9 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow, bail};
 use blake3::Hasher;
 use clap::{ArgAction, Parser};
+use eyre::{Context, Result, bail, eyre};
 use indicatif::{ProgressBar, ProgressStyle};
 use parking_lot::Mutex as ParkingMutex;
 use pathdiff::diff_paths;
@@ -82,15 +82,15 @@ fn check_typst_version() -> Result<()> {
         let version = version_part.split(' ').next().unwrap_or("0.0.0");
         if version.starts_with("0.") {
             let parts: Vec<&str> = version.split('.').collect();
-            if parts.len() >= 2 {
-                if let (Ok(major), Ok(minor)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
-                    if major == 0 && minor < 11 {
-                        eprintln!(
-                            "Warning: Typst version {} may not be fully supported. Consider upgrading to 0.11.0 or later.",
-                            version
-                        );
-                    }
-                }
+            if parts.len() >= 2
+                && let (Ok(major), Ok(minor)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>())
+                && major == 0
+                && minor < 11
+            {
+                eprintln!(
+                    "Warning: Typst version {} may not be fully supported. Consider upgrading to 0.11.0 or later.",
+                    version
+                );
             }
         }
     }
@@ -276,7 +276,6 @@ fn run() -> Result<()> {
 
     let root = canonicalize_existing(&draw_args.root)
         .with_context(|| format!("failed to read root directory {}", draw_args.root.display()))?;
-    let cwd = cwd;
     let figs_dir = draw_args
         .figs_dir
         .as_ref()
@@ -566,7 +565,7 @@ fn rebuild_single_figure(
     }
 
     build_figure(
-        &plan,
+        plan,
         &metadata.figure_template,
         &metadata.root,
         current_inputs,
@@ -814,7 +813,7 @@ fn run_typst(
 
         // Add context-specific diagnostics
         if let Some((plan, template, root)) = context {
-            error_msg.push_str(&format!("\n\nDiagnostic information:"));
+            error_msg.push_str("\n\nDiagnostic information:");
             error_msg.push_str(&format!("\n  - Input file: {}", plan.data_path.display()));
             error_msg.push_str(&format!("\n  - Template: {}", template.display()));
             error_msg.push_str(&format!("\n  - Root directory: {}", root.display()));
@@ -825,45 +824,41 @@ fn run_typst(
 
             // Check if files exist
             if !plan.data_path.exists() {
-                error_msg.push_str(&format!("\n  - ERROR: Input file does not exist!"));
+                error_msg.push_str("\n  - ERROR: Input file does not exist!");
             }
             if !template.exists() {
-                error_msg.push_str(&format!("\n  - ERROR: Template file does not exist!"));
+                error_msg.push_str("\n  - ERROR: Template file does not exist!");
             }
             if !root.exists() {
-                error_msg.push_str(&format!("\n  - ERROR: Root directory does not exist!"));
+                error_msg.push_str("\n  - ERROR: Root directory does not exist!");
             }
 
             // Check if root contains the template
-            if let Ok(template_canonical) = template.canonicalize() {
-                if let Ok(root_canonical) = root.canonicalize() {
-                    if !template_canonical.starts_with(&root_canonical) {
-                        error_msg.push_str(&format!(
-                            "\n  - WARNING: Template is outside root directory"
-                        ));
-                        error_msg.push_str(&format!("\n    This may cause 'source file must be contained in project root' errors"));
-                        error_msg.push_str(&format!("\n    Consider using --root with a parent directory of both template and data files"));
-                    }
-                }
+            if let Ok(template_canonical) = template.canonicalize()
+                && let Ok(root_canonical) = root.canonicalize()
+                && !template_canonical.starts_with(&root_canonical)
+            {
+                error_msg.push_str("\n  - WARNING: Template is outside root directory");
+                error_msg.push_str(
+                    "\n    This may cause 'source file must be contained in project root' errors",
+                );
+                error_msg.push_str("\n    Consider using --root with a parent directory of both template and data files");
             }
         }
 
         // Add common solutions
         if stderr.contains("source file must be contained in project root") {
-            error_msg.push_str(&format!("\n\nCommon solutions for 'project root' errors:"));
-            error_msg.push_str(&format!("\n  1. Ensure --root points to a directory that contains both templates and data files"));
-            error_msg.push_str(&format!(
-                "\n  2. Use absolute paths or adjust the working directory"
-            ));
-            error_msg.push_str(&format!(
-                "\n  3. Check that template and input files are in the same directory tree"
-            ));
+            error_msg.push_str("\n\nCommon solutions for 'project root' errors:");
+            error_msg.push_str("\n  1. Ensure --root points to a directory that contains both templates and data files");
+            error_msg.push_str("\n  2. Use absolute paths or adjust the working directory");
+            error_msg.push_str(
+                "\n  3. Check that template and input files are in the same directory tree",
+            );
         }
 
         if stderr.contains("not found") || stderr.contains("No such file") {
-            error_msg.push_str(&format!(
-                "\n\nFile not found - check that all paths are correct and files exist"
-            ));
+            error_msg
+                .push_str("\n\nFile not found - check that all paths are correct and files exist");
         }
 
         // Add the actual typst output
@@ -1093,12 +1088,11 @@ fn format_typst_array(items: &[String]) -> String {
 }
 
 fn ensure_parent_dir(path: &Path) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory {}", parent.display()))?;
         }
-    }
     Ok(())
 }
 

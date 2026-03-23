@@ -1173,14 +1173,14 @@ impl Graph {
             linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
         > = GraphSet::from_file(p.as_ref()).map_err(|a| match a {
-            HedgeParseError::GraphFromFile(e) => match e {
-                dot_parser::ast::GraphFromFileError::FileError(e) => color_eyre::Report::from(e)
+            HedgeParseError::GraphFromFile(e) => match e.as_ref() {
+                dot_parser::ast::GraphFromFileError::FileError(e) => eyre!(e.to_string())
                     .with_note(|| format!("Tried to access the file at:{}", p.as_ref().display())),
                 dot_parser::ast::GraphFromFileError::ParseError(e) => {
                     eyre!("Dot parsing error: {}", e)
                 }
                 dot_parser::ast::GraphFromFileError::PestParseError(e) => {
-                    color_eyre::Report::from(e)
+                    eyre!(e.to_string())
                 }
             },
             HedgeParseError::ParseError(i) => color_eyre::Report::from(i),
@@ -1199,13 +1199,15 @@ impl Graph {
             linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
         > = GraphSet::from_string(s).map_err(|a| match a {
-            HedgeParseError::GraphFromFile(e) => match e {
-                dot_parser::ast::GraphFromFileError::FileError(e) => color_eyre::Report::from(e),
+            HedgeParseError::GraphFromFile(e) => match e.as_ref() {
+                dot_parser::ast::GraphFromFileError::FileError(e) => {
+                    eyre!(e.to_string())
+                }
                 dot_parser::ast::GraphFromFileError::ParseError(e) => {
                     eyre!("Dot parsing error: {}", e)
                 }
                 dot_parser::ast::GraphFromFileError::PestParseError(e) => {
-                    color_eyre::Report::from(e)
+                    eyre!(e.to_string())
                 }
             },
             HedgeParseError::ParseError(i) => color_eyre::Report::from(i),

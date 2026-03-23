@@ -36,7 +36,7 @@ fn main() {
     )"
     );
 
-    let full = vakint.evaluate(&settings, integral.as_view()).unwrap();
+    let _full = vakint.evaluate(&settings, integral.as_view()).unwrap();
 
     println!(
         "\nInput integral:\n{}\n",

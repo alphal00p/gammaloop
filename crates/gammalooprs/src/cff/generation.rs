@@ -248,10 +248,10 @@ pub(crate) fn generate_supergraph_cff(graph: &Graph) -> Result<CFFExpression<Ori
 
             remove_zeros_duplicates(&mut esurface.external_shift);
 
-            if let Some(_) = result
+            if result
                 .surfaces
                 .esurface_cache
-                .position(|val| *val == esurface)
+                .position(|val| *val == esurface).is_some()
             {
                 // already present
             } else {
@@ -455,14 +455,14 @@ impl Graph {
             }
         }
 
-        let result = generate_cff_from_orientations(
+        
+
+        generate_cff_from_orientations(
             oriented_acyclic_graphs,
             &mut self.surface_cache,
             &edges_in_initial_state_cut,
             canonize_esurface,
-        );
-
-        result
+        )
     }
 }
 
@@ -570,8 +570,8 @@ fn post_process<S: SubGraphLike>(
                         .illegal_esurfaces
                         .iter()
                         .all(|illegal_esurface| {
-                            let res = esurface_to_compare != *illegal_esurface;
-                            res
+                            
+                            esurface_to_compare != *illegal_esurface
                         })
                 }
                 HybridSurfaceID::Hsurface(hsurface_id) => {
@@ -582,11 +582,11 @@ fn post_process<S: SubGraphLike>(
                         .all(|illegal_esurface| {
                             !hsurface_to_compare
                                 .equality_under_energy_conservation(
-                                    *illegal_esurface,
+                                    illegal_esurface,
                                     constraint_data.constraints,
                                 )
                                 .unwrap_or(
-                                    hsurface_to_compare.equality_by_try_convert(*illegal_esurface),
+                                    hsurface_to_compare.equality_by_try_convert(illegal_esurface),
                                 )
                         })
                 }
@@ -961,7 +961,7 @@ fn advance_tree(
                         HybridSurface::Esurface(Esurface {
                             energies: new_energies,
                             external_shift: new_shift,
-                            vertex_set: esurface.vertex_set.clone(),
+                            vertex_set: esurface.vertex_set,
                         })
                     }
                 }
@@ -1008,7 +1008,7 @@ fn advance_tree(
                             positive_energies: new_positive_energies,
                             negative_energies: hsurface.negative_energies.clone(),
                             external_shift: new_shift,
-                            vertex_set: hsurface.vertex_set.clone(),
+                            vertex_set: hsurface.vertex_set,
                         })
                     } else if !negative_energies_to_be_moved.is_empty()
                         && positive_energies_to_be_moved.is_empty()
@@ -1339,7 +1339,7 @@ mod tests_cff {
         let cff = generate_cff_from_orientations(
             orientations,
             &mut surface_cache,
-            &vec![],
+            &[],
             &shift_rewrite.clone(),
         )
         .unwrap();
@@ -1426,7 +1426,7 @@ mod tests_cff {
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
-            * cff_hedge_evaluator.evaluate_single(&energy_cache.as_ref())
+            * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref())
             * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
@@ -1497,7 +1497,7 @@ mod tests_cff {
 
         let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..7);
 
-        let cff_res = energy_prefactor * evaluator.evaluate_single(&energy_cache.clone().as_ref());
+        let cff_res = energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -1541,7 +1541,7 @@ mod tests_cff {
             generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
         let cff_res =
-            energy_prefactor * cff_hedge_evaluator.evaluate_single(&energy_cache.as_ref());
+            energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -1642,7 +1642,7 @@ mod tests_cff {
 
         let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..10);
 
-        let res = evaluator.evaluate_single(&energies_cache.clone().as_ref()) * energy_prefactor;
+        let res = evaluator.evaluate_single(energies_cache.clone().as_ref()) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
@@ -1670,7 +1670,7 @@ mod tests_cff {
         let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[]).unwrap();
 
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
-        let res = cff_hedge_evaluator.evaluate_single(&energies_cache.as_ref()) * energy_prefactor;
+        let res = cff_hedge_evaluator.evaluate_single(energies_cache.as_ref()) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
@@ -1885,14 +1885,14 @@ mod tests_cff {
     }
 
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
-        let cff = generate_cff_expression(&graph, &None, &[], &[]).unwrap();
+        let cff = generate_cff_expression(graph, &None, &[], &[]).unwrap();
 
         let mut cff_atom = cff.to_atom(OrientationPattern::default());
         cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
         let inverse_energy_product =
-            get_cff_inverse_energy_product_impl(&graph, &graph.full_graph(), &[]);
+            get_cff_inverse_energy_product_impl(graph, &graph.full_graph(), &[]);
 
-        cff_atom = cff_atom * inverse_energy_product;
+        cff_atom *= inverse_energy_product;
         cff_atom
     }
 

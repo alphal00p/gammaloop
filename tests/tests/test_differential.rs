@@ -74,10 +74,12 @@ fn singleton_groups(event: Event) -> EventGroupList {
 }
 
 fn runtime_settings() -> RuntimeSettings {
-    let mut settings = RuntimeSettings::default();
-    settings.quantities = QuantitiesSettings::default();
-    settings.observables.clear();
-    settings.selectors.clear();
+    let mut settings = RuntimeSettings {
+        quantities: QuantitiesSettings::default(),
+        observables: BTreeMap::new(),
+        selectors: BTreeMap::new(),
+        ..Default::default()
+    };
 
     settings.quantities.insert(
         "pt".to_string(),
