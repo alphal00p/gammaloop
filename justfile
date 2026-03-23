@@ -56,7 +56,7 @@ fmt *lint_args:
 clippy *lint_args:
     #!/usr/bin/env bash
     if [ -n "{{ lint_args }}" ]; then
-        cargo clippy --workspace --all-targets --locked -- {{ lint_args }}
+        cargo clippy --workspace --all-targets --locked {{ lint_args }}
     else
         cargo clippy --workspace --all-targets --locked
     fi
