@@ -39,7 +39,11 @@ use crate::{
     },
     integrands::HasIntegrand,
     integrands::evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
-    integrands::process::{ChannelIndex, ParamBuilder, evaluators::EvaluatorStack},
+    integrands::process::{
+        BatchedSampleTiming, ChannelIndex, GraphTermBatchRequest, ParamBuilder,
+        evaluators::{EvaluatorStack, MaterializedInputParams, OwnedOrientations},
+        record_shared_evaluator_flush,
+    },
     model::Model,
     momentum::sample::{ExternalIndex, MomentumSample},
     momentum::signature::SignatureLike,
@@ -48,8 +52,9 @@ use crate::{
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
-        amplitude_counterterm::AmplitudeCountertermAtom,
-        amplitude_counterterm::AmplitudeCountertermData,
+        amplitude_counterterm::{
+            AmplitudeCountertermAtom, AmplitudeCountertermBatchRequest, AmplitudeCountertermData,
+        },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
     utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
@@ -79,6 +84,14 @@ pub struct AmplitudeGraphTerm {
 
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
 impl AmplitudeGraphTerm {
+    fn owned_orientations(&self, sample: &MomentumSample<f64>) -> OwnedOrientations<OrientationID> {
+        sample
+            .sample
+            .orientation
+            .map(|orientation| OwnedOrientations::Single(OrientationID::from(orientation)))
+            .unwrap_or(OwnedOrientations::All)
+    }
+
     pub fn from_amplitude_graph(
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
@@ -400,6 +413,134 @@ impl GraphTerm for AmplitudeGraphTerm {
             generated_event_count: 0,
             accepted_event_count: 0,
         })
+    }
+
+    fn evaluate_batch_f64(
+        &mut self,
+        requests: &[GraphTermBatchRequest<'_>],
+        model: &Model,
+        settings: &RuntimeSettings,
+        _event_processing_runtime: Option<&mut EventProcessingRuntime>,
+        rotation: &Rotation,
+        timings: &mut [BatchedSampleTiming],
+    ) -> Result<Vec<GraphEvaluationResult<f64>>> {
+        if requests.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        #[derive(Clone)]
+        struct PreparedAmplitudeRequest {
+            sample_index: usize,
+            prefactor: F<f64>,
+            orientations: OwnedOrientations<OrientationID>,
+            input: MaterializedInputParams<f64>,
+            sample: MomentumSample<f64>,
+        }
+
+        let hel = settings.kinematics.externals.get_helicities();
+        let mut prepared = Vec::with_capacity(requests.len());
+        for request in requests {
+            let start = std::time::Instant::now();
+            let (sample, prefactor) = if let Some((channel_id, alpha)) = request.channel_id {
+                self.multi_channeling_setup
+                    .reinterpret_loop_momenta_and_compute_prefactor(
+                        channel_id,
+                        request.sample,
+                        0,
+                        model,
+                        &alpha,
+                    )
+            } else {
+                (request.sample.clone(), request.sample.one())
+            };
+
+            let input = MaterializedInputParams::from_input(
+                <f64 as crate::integrands::process::GenericEvaluatorFloat>::get_parameters(
+                    &mut self.param_builder,
+                    (settings.general.enable_cache, settings.general.debug_cache),
+                    &self.graph,
+                    &sample,
+                    hel,
+                    &settings.additional_params(),
+                    None,
+                    None,
+                    None,
+                ),
+            );
+
+            prepared.push(PreparedAmplitudeRequest {
+                sample_index: request.sample_index,
+                prefactor,
+                orientations: self.owned_orientations(&sample),
+                input,
+                sample,
+            });
+            timings[request.sample_index].add_direct_integrand_time(start.elapsed());
+        }
+
+        let inputs = prepared
+            .iter()
+            .map(|request| request.input.clone())
+            .collect::<Vec<_>>();
+        let orientations = prepared
+            .iter()
+            .map(|request| request.orientations)
+            .collect::<Vec<_>>();
+        let owners = prepared
+            .iter()
+            .map(|request| request.sample_index)
+            .collect::<Vec<_>>();
+
+        let start = std::time::Instant::now();
+        let bare_results = self.original_integrand.evaluate_batch_f64(
+            &inputs,
+            &orientations,
+            &self.orientations,
+            &self.orientation_filter,
+            settings,
+        )?;
+        record_shared_evaluator_flush(timings, &owners, start.elapsed());
+
+        let ct_requests = prepared
+            .iter()
+            .map(|request| AmplitudeCountertermBatchRequest {
+                sample_index: request.sample_index,
+                sample: &request.sample,
+                orientations: request.orientations,
+            })
+            .collect::<Vec<_>>();
+        let ct_results = self.threshold_counterterm.evaluate_batch_f64(
+            &ct_requests,
+            &self.graph,
+            model,
+            &self.esurfaces,
+            &self.orientations,
+            &self.orientation_filter,
+            rotation,
+            settings,
+            &mut self.param_builder,
+            timings,
+        );
+
+        Ok(prepared
+            .into_iter()
+            .zip(bare_results)
+            .zip(ct_results)
+            .map(|((request, bare_result), ct_result)| {
+                let result = bare_result
+                    .into_iter()
+                    .next()
+                    .expect("Amplitude graph term should yield a single result")
+                    .unwrap_real();
+                GraphEvaluationResult {
+                    integrand_result: (result - ct_result) * request.prefactor,
+                    event_groups: Default::default(),
+                    event_processing_time: std::time::Duration::ZERO,
+                    generated_event_count: 0,
+                    accepted_event_count: 0,
+                }
+            })
+            .collect())
     }
 
     fn get_num_orientations(&self) -> usize {

@@ -1,9 +1,9 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
-use eyre::{Context, eyre};
+use eyre::{eyre, Context};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
-    subgraph::{SubSetIter, SubSetLike, subset::SubSet},
+    subgraph::{subset::SubSet, SubSetIter, SubSetLike},
     typed_vec::IndexLike,
 };
 
@@ -11,10 +11,7 @@ use color_eyre::Report;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::{
-    algebra::{
-        algebraic_traits::RefOne,
-        complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
-    },
+    algebra::{algebraic_traits::RefOne, complex::Complex},
     network::{ExecutionResult, Sequential, SmallestDegree},
     shadowing::symbolica_utils::SpensoPrintSettings,
 };
@@ -29,16 +26,15 @@ use symbolica::{
         rational::{Fraction, Rational},
     },
     evaluate::{
-        CompileOptions, CompiledComplexEvaluator, Dualizer, ExportSettings, ExpressionEvaluator,
-        FunctionMap, OptimizationSettings,
+        BatchEvaluator, CompileOptions, CompiledComplexEvaluator, Dualizer, ExportSettings,
+        ExpressionEvaluator, FunctionMap, OptimizationSettings,
     },
 };
 use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
 
 use crate::{
-    GammaLoopContext,
-    cff::expression::GraphOrientation,
+    cff::expression::{GraphOrientation, OrientationID},
     graph::Graph,
     integrands::{
         evaluation::EvaluationMetaData,
@@ -47,20 +43,22 @@ use crate::{
             param_builder::{FnMapEntry, LUParams},
         },
     },
-    momentum::{Helicity, sample::MomentumSample},
+    momentum::{sample::MomentumSample, Helicity},
     numerator::symbolica_ext::AtomCoreExt,
     processes::EvaluatorSettings,
     settings::{GlobalSettings, RuntimeSettings},
     utils::{
-        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
-        hyperdual_utils::{DualOrNot, new_from_values},
+        f128,
+        hyperdual_utils::{new_from_values, DualOrNot},
         symbolica_ext::{CallSymbol, LogPrint},
+        ArbPrec, FloatLike, Length, F, FUN_LIB, GS, TENSORLIB, W_,
     },
+    GammaLoopContext,
 };
 
 use super::{
-    ParamBuilder,
     param_builder::{ThresholdParams, UpdateAndGetParams},
+    ParamBuilder,
 };
 
 #[derive(Clone, Copy)]
@@ -121,6 +119,7 @@ pub(crate) fn evaluate_evaluator_single<T: FloatLike + GenericEvaluatorFloat>(
     evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
         .evaluator_evaluation_time
         .saturating_add(start.elapsed());
+    evaluation_metadata.record_evaluator_batch_size(1);
     result
 }
 
@@ -139,6 +138,7 @@ pub(crate) fn evaluate_evaluator<T: FloatLike + GenericEvaluatorFloat>(
     evaluation_metadata.evaluator_evaluation_time = evaluation_metadata
         .evaluator_evaluation_time
         .saturating_add(start.elapsed());
+    evaluation_metadata.record_evaluator_batch_size(1);
     result
 }
 
@@ -185,6 +185,21 @@ impl CompiledComplexEvaluatorGL {
             );
         }
     }
+
+    pub fn evaluate_batch(
+        &mut self,
+        batch_size: usize,
+        args: &[Complex<F<f64>>],
+        out: &mut [Complex<F<f64>>],
+    ) -> Result<(), String> {
+        unsafe {
+            self.0.evaluate_batch(
+                batch_size,
+                transmute::<&[Complex<F<f64>>], &[SymComplex<f64>]>(args),
+                transmute::<&mut [Complex<F<f64>>], &mut [SymComplex<f64>]>(out),
+            )
+        }
+    }
 }
 #[cfg_attr(
     feature = "python_api",
@@ -215,6 +230,171 @@ pub struct EvaluatorStack {
 }
 
 impl EvaluatorStack {
+    fn orientation_iter<'a>(
+        orientations: OwnedOrientations<OrientationID>,
+        all_orientations: &'a TiVec<OrientationID, EdgeVec<Orientation>>,
+        filter: &'a SubSet<OrientationID>,
+    ) -> Box<dyn Iterator<Item = (OrientationID, &'a EdgeVec<Orientation>)> + 'a> {
+        match orientations {
+            OwnedOrientations::All => {
+                Box::new(filter.included_iter().map(|id| (id, &all_orientations[id])))
+            }
+            OwnedOrientations::Single(id) => Box::new(std::iter::once((id, &all_orientations[id]))),
+        }
+    }
+
+    pub(crate) fn evaluate_batch_f64(
+        &mut self,
+        inputs: &[MaterializedInputParams<f64>],
+        orientations: &[OwnedOrientations<OrientationID>],
+        all_orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        filter: &SubSet<OrientationID>,
+        settings: &RuntimeSettings,
+    ) -> Result<Vec<Vec<DualOrNot<Complex<F<f64>>>>>> {
+        debug_assert_eq!(inputs.len(), orientations.len());
+        match settings.general.evaluator_method {
+            EvaluatorMethod::SingleParametric => {
+                let mut expanded_inputs = Vec::new();
+                let mut owners = Vec::new();
+                for (owner, (input, orientation_mode)) in
+                    inputs.iter().zip(orientations).enumerate()
+                {
+                    for (_, orientation) in
+                        Self::orientation_iter(*orientation_mode, all_orientations, filter)
+                    {
+                        let mut expanded = input.clone();
+                        expanded.apply_orientation(orientation);
+                        expanded_inputs.push(expanded);
+                        owners.push(owner);
+                    }
+                }
+
+                let expanded_results = self.single_parametric.evaluate_batch_f64(&expanded_inputs);
+                let mut results = vec![Vec::new(); inputs.len()];
+                for (owner, expanded_result) in owners.into_iter().zip(expanded_results) {
+                    if let Some(current) = results.get_mut(owner) {
+                        if current.is_empty() {
+                            *current = expanded_result;
+                        } else {
+                            for (slot, value) in current.iter_mut().zip(expanded_result) {
+                                *slot += value;
+                            }
+                        }
+                    }
+                }
+                Ok(results)
+            }
+            EvaluatorMethod::Iterative => inputs
+                .iter()
+                .zip(orientations)
+                .map(|(input, orientation_mode)| {
+                    let input = InputParams {
+                        values: SliceMut::Owned(input.values.clone()),
+                        orientations_start: input.orientations_start,
+                        override_pos: input.override_pos,
+                        multiplicative_offset: input.multiplicative_offset,
+                    };
+                    let orientations = match orientation_mode {
+                        OwnedOrientations::All => SingleOrAllOrientations::All {
+                            all: all_orientations,
+                            filter,
+                        },
+                        OwnedOrientations::Single(id) => SingleOrAllOrientations::Single {
+                            id: *id,
+                            orientation: &all_orientations[*id],
+                        },
+                    };
+                    self.evaluate_iterative(
+                        input,
+                        orientations,
+                        &mut EvaluationMetaData::new_empty(),
+                        false,
+                    )
+                })
+                .collect(),
+            EvaluatorMethod::SummedFunctionMap => {
+                let Some(summed) = &mut self.summed_function_map else {
+                    return Err(eyre!(
+                        "Summed function map evaluator not available. Regenerate with summed_function_map set to true."
+                    ));
+                };
+                Self::evaluate_summed_like_batch_f64(
+                    summed,
+                    inputs,
+                    orientations,
+                    all_orientations,
+                    filter,
+                )
+            }
+            EvaluatorMethod::Summed => {
+                let Some(summed) = &mut self.summed else {
+                    return Err(eyre!(
+                        "Summed evaluator not available. Regenerate with summed set to true."
+                    ));
+                };
+                Self::evaluate_summed_like_batch_f64(
+                    summed,
+                    inputs,
+                    orientations,
+                    all_orientations,
+                    filter,
+                )
+            }
+        }
+    }
+
+    fn evaluate_summed_like_batch_f64(
+        evaluator: &mut GenericEvaluator,
+        inputs: &[MaterializedInputParams<f64>],
+        orientations: &[OwnedOrientations<OrientationID>],
+        all_orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        filter: &SubSet<OrientationID>,
+    ) -> Result<Vec<Vec<DualOrNot<Complex<F<f64>>>>>> {
+        let mut direct_inputs = Vec::new();
+        let mut direct_owners = Vec::new();
+        let mut expanded_inputs = Vec::new();
+        let mut expanded_owners = Vec::new();
+
+        for (owner, (input, orientation_mode)) in inputs.iter().zip(orientations).enumerate() {
+            if matches!(orientation_mode, OwnedOrientations::All) {
+                direct_owners.push(owner);
+                let mut direct_input = input.clone();
+                direct_input.set_override_if(true);
+                direct_inputs.push(direct_input);
+            } else {
+                for (_, orientation) in
+                    Self::orientation_iter(*orientation_mode, all_orientations, filter)
+                {
+                    let mut expanded = input.clone();
+                    expanded.apply_orientation(orientation);
+                    expanded_inputs.push(expanded);
+                    expanded_owners.push(owner);
+                }
+            }
+        }
+
+        let mut results = vec![Vec::new(); inputs.len()];
+        for (owner, value) in direct_owners
+            .into_iter()
+            .zip(evaluator.evaluate_batch_f64(&direct_inputs))
+        {
+            results[owner] = value;
+        }
+        for (owner, value) in expanded_owners
+            .into_iter()
+            .zip(evaluator.evaluate_batch_f64(&expanded_inputs))
+        {
+            if results[owner].is_empty() {
+                results[owner] = value;
+            } else {
+                for (slot, contribution) in results[owner].iter_mut().zip(value) {
+                    *slot += contribution;
+                }
+            }
+        }
+        Ok(results)
+    }
+
     #[instrument(
         skip_all,
           fields(
@@ -830,7 +1010,7 @@ pub struct GenericEvaluator {
     pub fn_map_entries: Vec<FnMapEntry>,
     pub exprs_len: usize,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
-    pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
+    pub f64_compiled: Option<CompiledComplexEvaluatorGL>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
     pub dual_shape: Option<Vec<Vec<usize>>>,
@@ -857,14 +1037,14 @@ impl GenericEvaluator {
     ) {
         let compile = self
             .f64_eager
-            .export_cpp::<Complex<f64>>(cpp_path.as_ref(), function_name.as_ref(), settings)
+            .export_cpp::<SymComplex<f64>>(cpp_path.as_ref(), function_name.as_ref(), settings)
             .unwrap()
             .compile(lib_path.as_ref(), CompileOptions::default())
             .unwrap()
             .load()
             .unwrap();
 
-        self.f64_compiled = Some(compile);
+        self.f64_compiled = Some(CompiledComplexEvaluatorGL(compile));
     }
 
     pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
@@ -990,6 +1170,96 @@ impl GenericEvaluator {
 
         Ok(evaluator)
     }
+
+    pub(crate) fn evaluate_batch_f64(
+        &mut self,
+        inputs: &[MaterializedInputParams<f64>],
+    ) -> Vec<Vec<DualOrNot<Complex<F<f64>>>>> {
+        if inputs.is_empty() {
+            return Vec::new();
+        }
+
+        let out_size = self.compute_out_size();
+        if let Some(compiled) = &mut self.f64_compiled {
+            let mut flat_inputs =
+                Vec::with_capacity(inputs.iter().map(|input| input.values.len()).sum());
+            for input in inputs {
+                flat_inputs.extend_from_slice(input.as_slice());
+            }
+
+            let mut flat_out = vec![Complex::default(); inputs.len() * out_size];
+            compiled
+                .evaluate_batch(inputs.len(), &flat_inputs, &mut flat_out)
+                .expect("compiled evaluator batch evaluation failed");
+
+            flat_out
+                .chunks(out_size)
+                .map(|chunk| self.decode_f64_output(chunk))
+                .collect()
+        } else {
+            inputs
+                .iter()
+                .map(|input| {
+                    let mut out = vec![Complex::default(); out_size];
+                    self.f64_eager.evaluate(input.as_slice(), &mut out);
+                    self.decode_f64_output(&out)
+                })
+                .collect()
+        }
+    }
+
+    pub(crate) fn evaluate_batch_single_f64(
+        &mut self,
+        inputs: &[Vec<Complex<F<f64>>>],
+    ) -> Vec<Complex<F<f64>>> {
+        if inputs.is_empty() {
+            return Vec::new();
+        }
+
+        let out_size = self.compute_out_size();
+        assert_eq!(
+            out_size, 1,
+            "evaluate_batch_single_f64 requires evaluators with a single complex output"
+        );
+
+        let input_len = inputs[0].len();
+        assert!(
+            inputs.iter().all(|input| input.len() == input_len),
+            "evaluate_batch_single_f64 requires all inputs to have the same arity"
+        );
+
+        if let Some(compiled) = &mut self.f64_compiled {
+            let mut flat_inputs = Vec::with_capacity(inputs.len() * input_len);
+            for input in inputs {
+                flat_inputs.extend_from_slice(input);
+            }
+
+            let mut flat_out = vec![Complex::default(); inputs.len() * out_size];
+            compiled
+                .evaluate_batch(inputs.len(), &flat_inputs, &mut flat_out)
+                .expect("compiled evaluator batch evaluation failed");
+            flat_out.into_iter().step_by(out_size).collect()
+        } else {
+            inputs
+                .iter()
+                .map(|input| self.f64_eager.evaluate_single(input))
+                .collect()
+        }
+    }
+
+    fn decode_f64_output(&self, out: &[Complex<F<f64>>]) -> Vec<DualOrNot<Complex<F<f64>>>> {
+        if let Some(dual_shape) = &self.dual_shape {
+            let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
+            let dual_size = dual_builder.values.len();
+
+            out.chunks(dual_size)
+                .into_iter()
+                .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                .collect()
+        } else {
+            out.iter().cloned().map(DualOrNot::NonDual).collect()
+        }
+    }
 }
 
 pub enum SliceMut<'a, T: FloatLike> {
@@ -1002,6 +1272,61 @@ pub struct InputParams<'a, T: FloatLike> {
     pub orientations_start: usize,
     pub override_pos: usize,
     pub multiplicative_offset: usize,
+}
+
+#[derive(Clone)]
+pub struct MaterializedInputParams<T: FloatLike> {
+    pub values: Vec<Complex<F<T>>>,
+    pub orientations_start: usize,
+    pub override_pos: usize,
+    pub multiplicative_offset: usize,
+}
+
+impl<T: FloatLike> MaterializedInputParams<T> {
+    pub fn from_input(mut input: InputParams<'_, T>) -> Self {
+        Self {
+            values: input.as_mut().to_vec(),
+            orientations_start: input.orientations_start,
+            override_pos: input.override_pos,
+            multiplicative_offset: input.multiplicative_offset,
+        }
+    }
+
+    pub fn as_slice(&self) -> &[Complex<F<T>>] {
+        &self.values
+    }
+
+    pub fn apply_orientation<O: GraphOrientation>(&mut self, orientation: &O) {
+        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let one = zero.ref_one();
+        InputParams::<T>::set_orientation_values_impl(
+            &mut self.values,
+            one,
+            zero,
+            self.multiplicative_offset,
+            self.orientations_start,
+            orientation,
+        );
+    }
+
+    pub fn set_override_if(&mut self, over_ride: bool) {
+        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let one = zero.ref_one();
+        set_override_if(
+            &mut self.values,
+            one,
+            zero,
+            over_ride,
+            self.override_pos,
+            self.multiplicative_offset,
+        );
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum OwnedOrientations<OID> {
+    All,
+    Single(OID),
 }
 
 impl<'a, T: FloatLike> InputParams<'a, T> {
@@ -1113,13 +1438,7 @@ impl GenericEvaluatorFloat for f64 {
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // info!("USING COMPILED F64 SINGLE");
                 let mut out = [Complex::default()];
-
-                unsafe {
-                    compiled.evaluate(
-                        transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
-                        transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
-                    );
-                }
+                compiled.evaluate(params, &mut out);
                 out[0]
             } else {
                 // info!("USING EAGER F64 SINGLE");
@@ -1136,12 +1455,7 @@ impl GenericEvaluatorFloat for f64 {
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // info!("USING COMPILED COMPLEX SINGLE");
                 //
-                unsafe {
-                    compiled.evaluate(
-                        transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
-                        transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
-                    );
-                }
+                compiled.evaluate(params, &mut out);
 
                 if let Some(dual_shape) = &generic_evaluator.dual_shape {
                     let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
@@ -1351,7 +1665,7 @@ impl GenericEvaluatorFloat for ArbPrec {
 mod tests {
     use symbolica::atom::Symbol;
 
-    use crate::utils::{W_, symbolica_ext::CallSymbol};
+    use crate::utils::{symbolica_ext::CallSymbol, W_};
 
     use super::*;
 

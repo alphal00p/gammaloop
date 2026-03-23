@@ -18,7 +18,8 @@ use crate::observables::{
 use crate::processes::StandaloneExportSettings;
 use crate::settings::GlobalSettings;
 use crate::utils::{
-    ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
+    ArbPrec, F, FloatLike, duration_from_secs_f64_saturating, f128, format_for_compare_digits,
+    get_n_dim_for_n_loop_momenta,
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
@@ -66,6 +67,97 @@ pub struct MomentumSpaceEvaluationInput {
     pub group_id: Option<GroupId>,
     pub orientation: Option<usize>,
     pub channel_id: Option<ChannelIndex>,
+}
+
+#[derive(Debug, Default, Clone)]
+pub(crate) struct BatchedSampleTiming {
+    total_seconds: f64,
+    integrand_seconds: f64,
+    evaluator_seconds: f64,
+    evaluator_batch_size_sum: usize,
+    evaluator_batch_size_count: usize,
+}
+
+impl BatchedSampleTiming {
+    pub(crate) fn add_parameterization_time(&mut self, duration: Duration) {
+        self.total_seconds += duration.as_secs_f64();
+    }
+
+    pub(crate) fn add_total_only_time(&mut self, duration: Duration) {
+        self.total_seconds += duration.as_secs_f64();
+    }
+
+    pub(crate) fn add_total_only_seconds(&mut self, seconds: f64) {
+        self.total_seconds += seconds;
+    }
+
+    pub(crate) fn add_direct_integrand_time(&mut self, duration: Duration) {
+        let seconds = duration.as_secs_f64();
+        self.add_direct_integrand_seconds(seconds);
+    }
+
+    pub(crate) fn add_direct_integrand_seconds(&mut self, seconds: f64) {
+        self.integrand_seconds += seconds;
+        self.total_seconds += seconds;
+    }
+
+    pub(crate) fn record_shared_evaluator_flush(
+        &mut self,
+        batch_size: usize,
+        shared_duration: Duration,
+    ) {
+        let seconds = shared_duration.as_secs_f64() / batch_size as f64;
+        self.evaluator_seconds += seconds;
+        self.integrand_seconds += seconds;
+        self.total_seconds += seconds;
+        self.evaluator_batch_size_sum += batch_size;
+        self.evaluator_batch_size_count += 1;
+    }
+
+    pub(crate) fn apply_to_metadata(&self, metadata: &mut EvaluationMetaData) {
+        metadata.total_timing = duration_from_secs_f64_saturating(self.total_seconds);
+        metadata.integrand_evaluation_time =
+            duration_from_secs_f64_saturating(self.integrand_seconds);
+        metadata.evaluator_evaluation_time =
+            duration_from_secs_f64_saturating(self.evaluator_seconds);
+        metadata.evaluator_batch_size_sum = self.evaluator_batch_size_sum;
+        metadata.evaluator_batch_size_count = self.evaluator_batch_size_count;
+        metadata.average_evaluator_batch_size = if self.evaluator_batch_size_count == 0 {
+            None
+        } else {
+            Some(self.evaluator_batch_size_sum as f64 / self.evaluator_batch_size_count as f64)
+        };
+    }
+}
+
+pub(crate) fn record_shared_evaluator_flush(
+    timings: &mut [BatchedSampleTiming],
+    owner_indices: &[usize],
+    shared_duration: Duration,
+) {
+    if owner_indices.is_empty() {
+        return;
+    }
+
+    let batch_size = owner_indices.len();
+    for &owner_index in owner_indices {
+        timings[owner_index].record_shared_evaluator_flush(batch_size, shared_duration);
+    }
+}
+
+pub(crate) fn record_shared_integrand_time(
+    timings: &mut [BatchedSampleTiming],
+    owner_indices: &[usize],
+    shared_duration: Duration,
+) {
+    if owner_indices.is_empty() {
+        return;
+    }
+
+    let shared_seconds = shared_duration.as_secs_f64() / owner_indices.len() as f64;
+    for &owner_index in owner_indices {
+        timings[owner_index].add_direct_integrand_seconds(shared_seconds);
+    }
 }
 
 #[derive(Clone)]
@@ -598,31 +690,74 @@ impl ProcessIntegrand {
         max_eval: Complex<F<f64>>,
     ) -> Result<RawBatchEvaluationResult> {
         let mut results = Vec::with_capacity(samples.len());
-        for sample in samples {
-            let mut result = match self {
-                ProcessIntegrand::Amplitude(integrand) => evaluate_sample(
-                    integrand,
-                    model,
-                    sample,
-                    sample.get_weight(),
-                    iter,
-                    use_arb_prec,
-                    max_eval,
-                ),
-                ProcessIntegrand::CrossSection(integrand) => evaluate_sample(
-                    integrand,
-                    model,
-                    sample,
-                    sample.get_weight(),
-                    iter,
-                    use_arb_prec,
-                    max_eval,
-                ),
-            }?;
+        let batch_size = self.get_settings().integrator.gammaloop_batch_size.max(1);
+        let batching_enabled = batch_size > 1
+            && match self {
+                ProcessIntegrand::Amplitude(integrand) => {
+                    supports_batched_f64_evaluation(integrand)
+                }
+                ProcessIntegrand::CrossSection(integrand) => {
+                    supports_batched_f64_evaluation(integrand)
+                }
+            };
+        if !batching_enabled {
+            for sample in samples {
+                let mut result = match self {
+                    ProcessIntegrand::Amplitude(integrand) => evaluate_sample(
+                        integrand,
+                        model,
+                        sample,
+                        sample.get_weight(),
+                        iter,
+                        use_arb_prec,
+                        max_eval.clone(),
+                    ),
+                    ProcessIntegrand::CrossSection(integrand) => evaluate_sample(
+                        integrand,
+                        model,
+                        sample,
+                        sample.get_weight(),
+                        iter,
+                        use_arb_prec,
+                        max_eval.clone(),
+                    ),
+                }?;
 
-            self.process_evaluation_result(&result);
-            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
-            results.push(result);
+                self.process_evaluation_result(&result);
+                maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
+                results.push(result);
+            }
+        } else {
+            for batch in samples.chunks(batch_size) {
+                let batch_results = match self {
+                    ProcessIntegrand::Amplitude(integrand) => evaluate_sources_batched_f64(
+                        integrand,
+                        model,
+                        &batch
+                            .iter()
+                            .map(|sample| (EvaluationSource::XSpace(sample), sample.get_weight()))
+                            .collect::<Vec<_>>(),
+                        use_arb_prec,
+                        max_eval.clone(),
+                    ),
+                    ProcessIntegrand::CrossSection(integrand) => evaluate_sources_batched_f64(
+                        integrand,
+                        model,
+                        &batch
+                            .iter()
+                            .map(|sample| (EvaluationSource::XSpace(sample), sample.get_weight()))
+                            .collect::<Vec<_>>(),
+                        use_arb_prec,
+                        max_eval.clone(),
+                    ),
+                }?;
+
+                for mut result in batch_results {
+                    self.process_evaluation_result(&result);
+                    maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
+                    results.push(result);
+                }
+            }
         }
 
         Ok(RawBatchEvaluationResult {
@@ -638,29 +773,72 @@ impl ProcessIntegrand {
         use_arb_prec: bool,
     ) -> Result<RawBatchEvaluationResult> {
         let mut results = Vec::with_capacity(inputs.len());
-        for input in inputs {
-            let mut result = match self {
-                ProcessIntegrand::Amplitude(integrand) => evaluate_momentum_configuration(
-                    integrand,
-                    model,
-                    input,
-                    F(1.0),
-                    use_arb_prec,
-                    Complex::new_zero(),
-                ),
-                ProcessIntegrand::CrossSection(integrand) => evaluate_momentum_configuration(
-                    integrand,
-                    model,
-                    input,
-                    F(1.0),
-                    use_arb_prec,
-                    Complex::new_zero(),
-                ),
-            }?;
+        let batch_size = self.get_settings().integrator.gammaloop_batch_size.max(1);
+        let batching_enabled = batch_size > 1
+            && match self {
+                ProcessIntegrand::Amplitude(integrand) => {
+                    supports_batched_f64_evaluation(integrand)
+                }
+                ProcessIntegrand::CrossSection(integrand) => {
+                    supports_batched_f64_evaluation(integrand)
+                }
+            };
+        if !batching_enabled {
+            for input in inputs {
+                let mut result = match self {
+                    ProcessIntegrand::Amplitude(integrand) => evaluate_momentum_configuration(
+                        integrand,
+                        model,
+                        input,
+                        F(1.0),
+                        use_arb_prec,
+                        Complex::new_zero(),
+                    ),
+                    ProcessIntegrand::CrossSection(integrand) => evaluate_momentum_configuration(
+                        integrand,
+                        model,
+                        input,
+                        F(1.0),
+                        use_arb_prec,
+                        Complex::new_zero(),
+                    ),
+                }?;
 
-            self.process_evaluation_result(&result);
-            maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
-            results.push(result);
+                self.process_evaluation_result(&result);
+                maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
+                results.push(result);
+            }
+        } else {
+            for batch in inputs.chunks(batch_size) {
+                let batch_results = match self {
+                    ProcessIntegrand::Amplitude(integrand) => evaluate_sources_batched_f64(
+                        integrand,
+                        model,
+                        &batch
+                            .iter()
+                            .map(|input| (EvaluationSource::Momentum(input), F(1.0)))
+                            .collect::<Vec<_>>(),
+                        use_arb_prec,
+                        Complex::new_zero(),
+                    ),
+                    ProcessIntegrand::CrossSection(integrand) => evaluate_sources_batched_f64(
+                        integrand,
+                        model,
+                        &batch
+                            .iter()
+                            .map(|input| (EvaluationSource::Momentum(input), F(1.0)))
+                            .collect::<Vec<_>>(),
+                        use_arb_prec,
+                        Complex::new_zero(),
+                    ),
+                }?;
+
+                for mut result in batch_results {
+                    self.process_evaluation_result(&result);
+                    maybe_discard_generated_events_in_result(self.get_settings(), &mut result);
+                    results.push(result);
+                }
+            }
         }
 
         Ok(RawBatchEvaluationResult {
@@ -1294,6 +1472,13 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
 )]
 pub struct ChannelIndex(usize);
 
+#[derive(Clone, Copy)]
+pub(crate) struct GraphTermBatchRequest<'a> {
+    pub sample_index: usize,
+    pub sample: &'a MomentumSample<f64>,
+    pub channel_id: Option<(ChannelIndex, F<f64>)>,
+}
+
 /// Helper struct for the LMB multi-channeling setup
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -1435,7 +1620,7 @@ impl LmbMultiChannelingSetup {
     }
 }
 
-pub trait ProcessIntegrandImpl {
+pub(crate) trait ProcessIntegrandImpl {
     type G: GraphTerm;
 
     fn warm_up(&mut self, model: &Model) -> Result<()>;
@@ -1645,7 +1830,7 @@ fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Opt
     }
 }
 
-pub trait GraphTerm {
+pub(crate) trait GraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
@@ -1667,6 +1852,15 @@ pub trait GraphTerm {
     fn get_tropical_sampler(&self) -> &SampleGenerator<3>;
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64>;
     fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
+    fn evaluate_batch_f64(
+        &mut self,
+        requests: &[GraphTermBatchRequest<'_>],
+        model: &Model,
+        settings: &RuntimeSettings,
+        event_processing_runtime: Option<&mut EventProcessingRuntime>,
+        rotation: &Rotation,
+        timings: &mut [BatchedSampleTiming],
+    ) -> Result<Vec<GraphEvaluationResult<f64>>>;
 }
 
 fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
@@ -1699,6 +1893,310 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
         }
     }
     Ok(result)
+}
+
+fn supports_batched_f64_evaluation<I: ProcessIntegrandImpl>(integrand: &I) -> bool {
+    !integrand.get_settings().general.enable_cache
+        && !matches!(
+            integrand.get_settings().general.evaluator_method,
+            evaluators::EvaluatorMethod::Iterative
+        )
+}
+
+fn evaluate_graph_term_batch_f64<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    graph_id: usize,
+    requests: &[GraphTermBatchRequest<'_>],
+    settings: &RuntimeSettings,
+    rotation: &Rotation,
+    timings: &mut [BatchedSampleTiming],
+    model: &Model,
+    event_processing_runtime: Option<&mut EventProcessingRuntime>,
+) -> Result<Vec<GraphEvaluationResult<f64>>> {
+    let mut results = integrand.get_graph_mut(graph_id).evaluate_batch_f64(
+        requests,
+        model,
+        settings,
+        event_processing_runtime,
+        rotation,
+        timings,
+    )?;
+    for result in results.iter_mut() {
+        for event_group in result.event_groups.iter_mut() {
+            for event in event_group.iter_mut() {
+                event.cut_info.graph_id = graph_id;
+            }
+        }
+    }
+    Ok(results)
+}
+
+fn evaluate_single_batch_f64<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    gammaloop_samples: &[GammaLoopSample<f64>],
+    rotation: &Rotation,
+    timings: &mut [BatchedSampleTiming],
+) -> Result<Vec<GraphEvaluationResult<f64>>> {
+    #[derive(Clone, Copy)]
+    struct GraphTask<'a> {
+        batch_index: usize,
+        sample_index: usize,
+        sample: &'a MomentumSample<f64>,
+        channel_id: Option<(ChannelIndex, F<f64>)>,
+        merge_into_group: bool,
+        tropical_prefactor: Option<F<f64>>,
+    }
+
+    let settings = integrand.get_settings().clone();
+    let mut accumulators = gammaloop_samples
+        .iter()
+        .map(|sample| GraphEvaluationResult::zero(sample.get_default_sample().zero()))
+        .collect::<Vec<_>>();
+    let mut grouped_events = (0..gammaloop_samples.len())
+        .map(|_| crate::observables::GenericEventGroup::default())
+        .collect::<Vec<_>>();
+    let mut tasks_by_graph = vec![Vec::<GraphTask<'_>>::new(); integrand.graph_count()];
+
+    for (batch_index, gammaloop_sample) in gammaloop_samples.iter().enumerate() {
+        let sample_setup_start = Instant::now();
+        match gammaloop_sample {
+            GammaLoopSample::Default(sample) => {
+                for graph_id in 0..integrand.graph_count() {
+                    tasks_by_graph[graph_id].push(GraphTask {
+                        batch_index,
+                        sample_index: batch_index,
+                        sample,
+                        channel_id: None,
+                        merge_into_group: false,
+                        tropical_prefactor: None,
+                    });
+                }
+            }
+            GammaLoopSample::Graph { graph_id, sample } => {
+                tasks_by_graph[*graph_id].push(GraphTask {
+                    batch_index,
+                    sample_index: batch_index,
+                    sample,
+                    channel_id: None,
+                    merge_into_group: false,
+                    tropical_prefactor: None,
+                });
+            }
+            GammaLoopSample::MultiChanneling { .. } => {
+                unimplemented!(
+                    "deprecated due to annoying borrow issues, just set each graph to the same group"
+                );
+            }
+            GammaLoopSample::DiscreteGraph { group_id, sample } => {
+                let group = integrand.get_group(*group_id).into_iter().collect_vec();
+                for graph_id in group {
+                    match sample {
+                        DiscreteGraphSample::Default(sample) => {
+                            tasks_by_graph[graph_id].push(GraphTask {
+                                batch_index,
+                                sample_index: batch_index,
+                                sample,
+                                channel_id: None,
+                                merge_into_group: true,
+                                tropical_prefactor: None,
+                            });
+                        }
+                        DiscreteGraphSample::DiscreteMultiChanneling {
+                            alpha,
+                            channel_id,
+                            sample,
+                        } => {
+                            tasks_by_graph[graph_id].push(GraphTask {
+                                batch_index,
+                                sample_index: batch_index,
+                                sample,
+                                channel_id: Some((*channel_id, alpha.clone())),
+                                merge_into_group: true,
+                                tropical_prefactor: None,
+                            });
+                        }
+                        DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                            let num_channels =
+                                integrand.get_master_graph(*group_id).get_num_channels();
+                            for channel_index in (0..num_channels).map(ChannelIndex::from) {
+                                tasks_by_graph[graph_id].push(GraphTask {
+                                    batch_index,
+                                    sample_index: batch_index,
+                                    sample,
+                                    channel_id: Some((channel_index, alpha.clone())),
+                                    merge_into_group: true,
+                                    tropical_prefactor: None,
+                                });
+                            }
+                        }
+                        DiscreteGraphSample::Tropical(sample) => {
+                            let master_graph = integrand.get_master_graph(*group_id).get_graph();
+                            let energy_cache = master_graph.get_energy_cache(
+                                model,
+                                sample.loop_moms(),
+                                sample.external_moms(),
+                                &master_graph.loop_momentum_basis,
+                            );
+                            let prefactor = master_graph
+                                .iter_loop_edges()
+                                .map(|(_, edge_index, _)| edge_index)
+                                .zip(
+                                    integrand
+                                        .get_master_graph(*group_id)
+                                        .get_tropical_sampler()
+                                        .iter_edge_weights(),
+                                )
+                                .fold(sample.one(), |product, (edge_id, weight)| {
+                                    product * energy_cache[edge_id].powf(&F::from_f64(2.0 * weight))
+                                });
+                            tasks_by_graph[graph_id].push(GraphTask {
+                                batch_index,
+                                sample_index: batch_index,
+                                sample,
+                                channel_id: None,
+                                merge_into_group: true,
+                                tropical_prefactor: Some(prefactor),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        timings[batch_index].add_direct_integrand_time(sample_setup_start.elapsed());
+    }
+
+    let mut event_processing_runtime = integrand.take_event_processing_runtime();
+    for (graph_id, tasks) in tasks_by_graph.into_iter().enumerate() {
+        if tasks.is_empty() {
+            continue;
+        }
+
+        let owner_indices = tasks
+            .iter()
+            .map(|task| task.batch_index)
+            .collect::<Vec<_>>();
+        let request_build_start = Instant::now();
+        let requests = tasks
+            .iter()
+            .map(|task| GraphTermBatchRequest {
+                sample_index: task.sample_index,
+                sample: task.sample,
+                channel_id: task.channel_id,
+            })
+            .collect::<Vec<_>>();
+        record_shared_integrand_time(timings, &owner_indices, request_build_start.elapsed());
+        let results = evaluate_graph_term_batch_f64(
+            integrand,
+            graph_id,
+            &requests,
+            &settings,
+            rotation,
+            timings,
+            model,
+            event_processing_runtime.as_mut(),
+        )?;
+
+        let merge_start = Instant::now();
+        for (task, mut result) in tasks.into_iter().zip(results) {
+            if let Some(prefactor) = task.tropical_prefactor {
+                result.integrand_result *= Complex::new_re(prefactor);
+            }
+
+            if task.merge_into_group {
+                for mut event_group in result.event_groups.drain(..) {
+                    grouped_events[task.batch_index].append(&mut event_group);
+                }
+            }
+            accumulators[task.batch_index].merge_in_place(result);
+        }
+        record_shared_integrand_time(timings, &owner_indices, merge_start.elapsed());
+    }
+    integrand.restore_event_processing_runtime(event_processing_runtime);
+
+    for (accumulator, group) in accumulators.iter_mut().zip(grouped_events) {
+        if !group.is_empty() {
+            accumulator.event_groups.push(group);
+        }
+    }
+
+    Ok(accumulators)
+}
+
+fn evaluate_all_rotations_batch_f64<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    gammaloop_samples: &[GammaLoopSample<f64>],
+    timings: &mut [BatchedSampleTiming],
+    record_rotated_results: bool,
+) -> Result<(
+    Vec<Vec<GraphEvaluationResult<f64>>>,
+    usize,
+    Vec<Vec<RotatedEvaluation>>,
+)> {
+    let rotations = integrand.get_rotations().cloned().collect_vec();
+    let primary_rotation_index = rotations
+        .iter()
+        .position(Rotation::is_identity)
+        .unwrap_or(0);
+    let mut all_results = (0..gammaloop_samples.len())
+        .map(|_| Vec::with_capacity(rotations.len()))
+        .collect::<Vec<_>>();
+
+    for (rotation_index, rotation) in rotations.iter().enumerate() {
+        let use_primary_timing = rotation_index == primary_rotation_index;
+        let mut secondary_timings_storage = (!use_primary_timing)
+            .then(|| vec![BatchedSampleTiming::default(); gammaloop_samples.len()]);
+        let timing_target: &mut [BatchedSampleTiming] = match secondary_timings_storage.as_mut() {
+            Some(secondary_timings) => secondary_timings.as_mut_slice(),
+            None => timings,
+        };
+
+        let mut rotated_samples = Vec::with_capacity(gammaloop_samples.len());
+        for (sample_index, sample) in gammaloop_samples.iter().enumerate() {
+            let rotation_start = Instant::now();
+            let rotated_sample = if rotation.is_identity() {
+                sample.clone()
+            } else {
+                sample.rotate(rotation, rotation_index + 1, rotation_index + 1)
+            };
+            timing_target[sample_index].add_total_only_time(rotation_start.elapsed());
+            rotated_samples.push(rotated_sample);
+        }
+
+        let results =
+            evaluate_single_batch_f64(integrand, model, &rotated_samples, rotation, timing_target)?;
+
+        if let Some(secondary_timings) = secondary_timings_storage.as_ref() {
+            for (timing, secondary_timing) in timings.iter_mut().zip(secondary_timings.iter()) {
+                timing.add_total_only_seconds(secondary_timing.total_seconds);
+            }
+        }
+
+        for (sample_results, result) in all_results.iter_mut().zip(results) {
+            sample_results.push(result);
+        }
+    }
+
+    let rotated_results = if record_rotated_results {
+        all_results
+            .iter()
+            .map(|results| {
+                rotations
+                    .iter()
+                    .zip(results.iter())
+                    .map(|(rotation, result)| RotatedEvaluation {
+                        rotation: rotation.method.to_string(),
+                        result: result.integrand_result.clone(),
+                    })
+                    .collect()
+            })
+            .collect()
+    } else {
+        (0..gammaloop_samples.len()).map(|_| Vec::new()).collect()
+    };
+
+    Ok((all_results, primary_rotation_index, rotated_results))
 }
 
 fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
@@ -2533,6 +3031,216 @@ fn log_rotated_samples<I: ProcessIntegrandImpl>(
     }
 }
 
+fn evaluate_sources_batched_f64<'a, I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    sources: &[(EvaluationSource<'a>, F<f64>)],
+    use_arb_prec: bool,
+    max_eval: Complex<F<f64>>,
+) -> Result<Vec<EvaluationResult>> {
+    #[derive(Clone)]
+    struct BatchedSourceState<'a> {
+        source_index: usize,
+        source: EvaluationSource<'a>,
+        wgt: F<f64>,
+        gammaloop_sample: GammaLoopSample<f64>,
+        parameterization_time: Duration,
+        stability_level: StabilityLevelSetting,
+        total_levels: usize,
+        loop_momenta_escalation: Option<LoopMomentaEscalationMetrics>,
+    }
+
+    if sources.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut results = (0..sources.len()).map(|_| None).collect::<Vec<_>>();
+    let mut batched_states = Vec::new();
+
+    for (source_index, (source, wgt)) in sources.iter().copied().enumerate() {
+        let (stability_iterator, loop_momenta_escalation) =
+            stability_iterator_for_source(integrand, &source, use_arb_prec);
+        let total_levels = stability_iterator.len();
+        let Some(stability_level) = stability_iterator.first().copied() else {
+            results[source_index] = Some(evaluate_from_source(
+                integrand,
+                model,
+                source,
+                wgt,
+                use_arb_prec,
+                max_eval.clone(),
+            )?);
+            continue;
+        };
+
+        if stability_level.precision != Precision::Double {
+            results[source_index] = Some(evaluate_from_source(
+                integrand,
+                model,
+                source,
+                wgt,
+                use_arb_prec,
+                max_eval.clone(),
+            )?);
+            continue;
+        }
+
+        let (gammaloop_sample, parameterization_time) =
+            source.build_gamma_sample::<f64, I>(integrand)?;
+        batched_states.push(BatchedSourceState {
+            source_index,
+            source,
+            wgt,
+            gammaloop_sample,
+            parameterization_time,
+            stability_level,
+            total_levels,
+            loop_momenta_escalation,
+        });
+    }
+
+    if !batched_states.is_empty() {
+        let record_rotated_results = integrand
+            .get_settings()
+            .stability
+            .recording
+            .map(|recording| recording.record_rotated_results)
+            .unwrap_or(false);
+        let mut timings = (0..batched_states.len())
+            .map(|_| BatchedSampleTiming::default())
+            .collect::<Vec<_>>();
+        for (timing, state) in timings.iter_mut().zip(batched_states.iter()) {
+            timing.add_parameterization_time(state.parameterization_time);
+        }
+
+        let gammaloop_samples = batched_states
+            .iter()
+            .map(|state| state.gammaloop_sample.clone())
+            .collect::<Vec<_>>();
+        let (rotation_results, primary_rotation_index, _rotated_results) =
+            evaluate_all_rotations_batch_f64(
+                integrand,
+                model,
+                &gammaloop_samples,
+                &mut timings,
+                record_rotated_results,
+            )?;
+
+        let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
+        if escalate_if_exact_zero && !integrand.get_settings().selectors.is_empty() {
+            warn_selectors_disable_zero_once();
+            escalate_if_exact_zero = false;
+        }
+
+        for ((state, mut graph_results), mut timing) in batched_states
+            .into_iter()
+            .zip(rotation_results.into_iter())
+            .zip(timings.into_iter())
+        {
+            let stability_start = Instant::now();
+            let results_for_stability = graph_results
+                .iter()
+                .map(|result| result.integrand_result.clone())
+                .collect_vec();
+            let (average_result, estimated_relative_accuracy, is_stable, _reason) =
+                if integrand.get_settings().stability.check_on_norm {
+                    stability_check_on_norm(
+                        integrand.get_settings(),
+                        &results_for_stability,
+                        &state.stability_level,
+                        max_eval.clone(),
+                        state.wgt,
+                        state.total_levels == 1,
+                        escalate_if_exact_zero,
+                    )
+                } else {
+                    stability_check(
+                        integrand.get_settings(),
+                        &results_for_stability,
+                        &state.stability_level,
+                        max_eval.clone(),
+                        state.wgt,
+                        state.total_levels == 1,
+                        escalate_if_exact_zero,
+                    )
+                };
+            timing.add_total_only_time(stability_start.elapsed());
+
+            if !is_stable {
+                results[state.source_index] = Some(evaluate_from_source(
+                    integrand,
+                    model,
+                    state.source,
+                    state.wgt,
+                    use_arb_prec,
+                    max_eval.clone(),
+                )?);
+                continue;
+            }
+
+            let finalization_start = Instant::now();
+            let event_processing_time = graph_results.iter().fold(Duration::ZERO, |acc, result| {
+                acc + result.event_processing_time
+            });
+            let mut graph_result = graph_results.remove(primary_rotation_index);
+            graph_result.integrand_result = average_result.clone();
+            let re_is_nan = average_result.re.is_nan() || average_result.re.is_infinite();
+            let im_is_nan = average_result.im.is_nan() || average_result.im.is_infinite();
+            let is_nan = re_is_nan || im_is_nan;
+            let nanless_result = if re_is_nan && !im_is_nan {
+                Complex::new(F(0.0), average_result.im)
+            } else if im_is_nan && !re_is_nan {
+                Complex::new(average_result.re, F(0.0))
+            } else if im_is_nan && re_is_nan {
+                Complex::new(F(0.0), F(0.0))
+            } else {
+                average_result
+            };
+
+            let parameterization_jacobian = match state.source {
+                EvaluationSource::XSpace(_) => {
+                    Some(state.gammaloop_sample.get_default_sample().jacobian())
+                }
+                EvaluationSource::Momentum(_) => None,
+            };
+            let full_factor =
+                full_event_multiplicative_factor(parameterization_jacobian, state.wgt);
+            let mut event_groups = graph_result.event_groups;
+            apply_full_event_multiplicative_factor(&mut event_groups, &full_factor);
+            timing.add_total_only_time(finalization_start.elapsed());
+
+            let mut evaluation_metadata = EvaluationMetaData::new_empty();
+            timing.apply_to_metadata(&mut evaluation_metadata);
+            evaluation_metadata.parameterization_time = state.parameterization_time;
+            evaluation_metadata.event_processing_time = event_processing_time;
+            evaluation_metadata.generated_event_count = graph_result.generated_event_count;
+            evaluation_metadata.accepted_event_count = graph_result.accepted_event_count;
+            evaluation_metadata.relative_instability_error = Complex::new_zero();
+            evaluation_metadata.is_nan = is_nan;
+            evaluation_metadata.loop_momenta_escalation = state.loop_momenta_escalation;
+            evaluation_metadata.stability_results = vec![StabilityResult {
+                precision: state.stability_level.precision,
+                estimated_relative_accuracy,
+                accepted_as_stable: true,
+                total_time: evaluation_metadata.total_timing,
+            }];
+
+            results[state.source_index] = Some(EvaluationResult {
+                integrand_result: nanless_result,
+                parameterization_jacobian,
+                integrator_weight: state.wgt,
+                event_groups,
+                evaluation_metadata,
+            });
+        }
+    }
+
+    Ok(results
+        .into_iter()
+        .map(|result| result.expect("missing batched evaluation result"))
+        .collect())
+}
+
 fn evaluate_from_source<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     model: &Model,
@@ -2697,6 +3405,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
                 total_timing: Duration::ZERO,
                 integrand_evaluation_time: Duration::ZERO,
                 evaluator_evaluation_time: Duration::ZERO,
+                average_evaluator_batch_size: None,
                 parameterization_time: Duration::ZERO,
                 event_processing_time: Duration::ZERO,
                 generated_event_count: 0,
@@ -2705,6 +3414,8 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
                 is_nan: true,
                 loop_momenta_escalation: None,
                 stability_results: Vec::new(),
+                evaluator_batch_size_sum: 0,
+                evaluator_batch_size_count: 0,
             },
         })
     }

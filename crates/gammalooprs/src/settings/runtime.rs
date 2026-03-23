@@ -259,6 +259,8 @@ pub struct IntegratorSettings {
     pub max_prob_ratio: f64,
     #[serde(skip_serializing_if = "is_u64::<69>")]
     pub seed: u64,
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub gammaloop_batch_size: usize,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub observables_output: ObservablesOutputSettings,
 }
@@ -279,6 +281,7 @@ impl Default for IntegratorSettings {
             show_max_wgt_info: true,
             max_prob_ratio: 30.0,
             seed: 69,
+            gammaloop_batch_size: 1,
             observables_output: ObservablesOutputSettings::default(),
         }
     }
@@ -427,6 +430,8 @@ pub struct IntegrationStatisticsSnapshot {
     pub average_parameterization_time_seconds: f64,
     pub average_integrand_time_seconds: f64,
     pub average_evaluator_time_seconds: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_evaluator_batch_size: Option<f64>,
     pub average_observable_time_seconds: f64,
     pub average_integrator_time_seconds: f64,
     pub f64_percentage: f64,

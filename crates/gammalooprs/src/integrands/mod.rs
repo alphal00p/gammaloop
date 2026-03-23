@@ -411,6 +411,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             total_timing: start_evaluate_sample.elapsed(),
             integrand_evaluation_time: evaluation_time,
             evaluator_evaluation_time: Duration::ZERO,
+            average_evaluator_batch_size: None,
             parameterization_time,
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
@@ -424,6 +425,8 @@ impl HasIntegrand for UnitSurfaceIntegrand {
                 accepted_as_stable: !is_nan,
                 total_time: start_evaluate_sample.elapsed(),
             }],
+            evaluator_batch_size_sum: 0,
+            evaluator_batch_size_count: 0,
         };
 
         Ok(EvaluationResult {
@@ -571,6 +574,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
             total_timing: start_evaluate_sample.elapsed(),
             integrand_evaluation_time: evaluation_time,
             evaluator_evaluation_time: Duration::ZERO,
+            average_evaluator_batch_size: None,
             parameterization_time,
             event_processing_time: Duration::ZERO,
             generated_event_count: 0,
@@ -584,6 +588,8 @@ impl HasIntegrand for UnitVolumeIntegrand {
                 accepted_as_stable: !is_nan,
                 total_time: start_evaluate_sample.elapsed(),
             }],
+            evaluator_batch_size_sum: 0,
+            evaluator_batch_size_count: 0,
         };
 
         Ok(EvaluationResult {
