@@ -24,6 +24,82 @@ pub trait Key<K> {
     fn key(&self, e: EdgeIndex) -> K;
 }
 
+/// Unfolds a graph of operations into a graph of trace keys.
+///
+/// The trait separates three concerns:
+///
+/// - [`TraceUnfold::key`] maps one traversed edge to its semantic operation label.
+/// - [`Independence`] decides when two labels commute and may live in the same Foata level.
+/// - [`TraceUnfold::realizations_for_op`] optionally expands one traversed edge into several
+///   equivalent operation sequences before canonicalization.
+///
+/// In the simplest case, each edge has exactly one realization and the unfolding merges paths
+/// that differ only by commuting independent operations.
+///
+/// # Examples
+///
+/// A minimal unfold where the two ways of reaching `AB` collapse to the same trace key:
+///
+/// ```
+/// use linnet::half_edge::{
+///     HedgeGraph, NoData, algorithms::trace_unfold::{HiddenData, Independence, TraceUnfold},
+///     builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::DefaultNodeStore,
+/// };
+///
+/// struct ExampleGraph {
+///     graph: HedgeGraph<String, &'static str, NoData, DefaultNodeStore<&'static str>>,
+/// }
+///
+/// impl Independence<HiddenData<String, EdgeIndex>> for ExampleGraph {
+///     fn independent(
+///         &self,
+///         a: &HiddenData<String, EdgeIndex>,
+///         b: &HiddenData<String, EdgeIndex>,
+///     ) -> bool {
+///         !a.order.chars().any(|c| b.order.contains(c))
+///     }
+/// }
+///
+/// impl TraceUnfold<String> for ExampleGraph {
+///     type EdgeData = String;
+///     type HedgeData = NoData;
+///     type NodeData = &'static str;
+///     type NodeStorage = DefaultNodeStore<&'static str>;
+///
+///     fn graph(
+///         &self,
+///     ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage> {
+///         &self.graph
+///     }
+///
+///     fn key(&self, e: EdgeIndex) -> String {
+///         self.graph[e].clone()
+///     }
+/// }
+///
+/// let mut builder = HedgeGraphBuilder::<String, &'static str>::new();
+/// let empty = builder.add_node("empty");
+/// let a = builder.add_node("A");
+/// let b = builder.add_node("B");
+/// let ab = builder.add_node("AB");
+///
+/// builder.add_edge(empty, a, "A".to_string(), true);
+/// builder.add_edge(empty, b, "B".to_string(), true);
+/// builder.add_edge(a, ab, "B".to_string(), true);
+/// builder.add_edge(b, ab, "A".to_string(), true);
+///
+/// let graph = ExampleGraph {
+///     graph: builder.build::<DefaultNodeStore<&'static str>>(),
+/// };
+/// let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+/// let labels: Vec<_> = unfolded.iter_nodes().map(|(_, _, key)| key.to_string()).collect();
+///
+/// assert_eq!(unfolded.n_nodes(), 4);
+/// assert!(labels.iter().any(|label| label == "∅"));
+/// assert!(labels.iter().any(|label| label == "{A}"));
+/// assert!(labels.iter().any(|label| label == "{B}"));
+/// assert!(labels.iter().any(|label| label == "{A,B}"));
+/// ```
 pub trait TraceUnfold<Key>: Independence<HiddenData<Key, EdgeIndex>> + Sized
 where
     Key: Eq + Hash + Clone + Ord,
@@ -38,6 +114,100 @@ where
     ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage>;
 
     fn key(&self, e: EdgeIndex) -> Key;
+
+    /// Returns all operation sequences represented by one traversed edge.
+    ///
+    /// The default is a single realization containing the edge's own label unchanged. Override
+    /// this when one graph transition may also be interpreted as a factorized sequence of more
+    /// primitive operations.
+    ///
+    /// # Examples
+    ///
+    /// Here one edge labeled `AB` is unfolded both atomically and as the commuting pair
+    /// `A, B`, producing two distinct trace nodes over the same underlying graph node.
+    ///
+    /// ```
+    /// use linnet::half_edge::{
+    ///     HedgeGraph, NoData, algorithms::trace_unfold::{HiddenData, Independence, TraceUnfold},
+    ///     builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::DefaultNodeStore,
+    /// };
+    ///
+    /// struct FactoringGraph {
+    ///     graph: HedgeGraph<String, &'static str, NoData, DefaultNodeStore<&'static str>>,
+    /// }
+    ///
+    /// impl Independence<HiddenData<String, EdgeIndex>> for FactoringGraph {
+    ///     fn independent(
+    ///         &self,
+    ///         a: &HiddenData<String, EdgeIndex>,
+    ///         b: &HiddenData<String, EdgeIndex>,
+    ///     ) -> bool {
+    ///         !a.order.chars().any(|c| b.order.contains(c))
+    ///     }
+    /// }
+    ///
+    /// impl TraceUnfold<String> for FactoringGraph {
+    ///     type EdgeData = String;
+    ///     type HedgeData = NoData;
+    ///     type NodeData = &'static str;
+    ///     type NodeStorage = DefaultNodeStore<&'static str>;
+    ///
+    ///     fn graph(
+    ///         &self,
+    ///     ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage> {
+    ///         &self.graph
+    ///     }
+    ///
+    ///     fn key(&self, e: EdgeIndex) -> String {
+    ///         self.graph[e].clone()
+    ///     }
+    ///
+    ///     fn realizations_for_op(
+    ///         &self,
+    ///         op: HiddenData<String, EdgeIndex>,
+    ///     ) -> Vec<Vec<HiddenData<String, EdgeIndex>>> {
+    ///         if op.order != "AB" {
+    ///             return vec![vec![op]];
+    ///         }
+    ///
+    ///         vec![
+    ///             vec![op.clone()],
+    ///             vec![
+    ///                 HiddenData {
+    ///                     order: "A".to_string(),
+    ///                     data: op.data,
+    ///                 },
+    ///                 HiddenData {
+    ///                     order: "B".to_string(),
+    ///                     data: op.data,
+    ///                 },
+    ///             ],
+    ///         ]
+    ///     }
+    /// }
+    ///
+    /// let mut builder = HedgeGraphBuilder::<String, &'static str>::new();
+    /// let empty = builder.add_node("empty");
+    /// let ab = builder.add_node("AB");
+    /// builder.add_edge(empty, ab, "AB".to_string(), true);
+    ///
+    /// let graph = FactoringGraph {
+    ///     graph: builder.build::<DefaultNodeStore<&'static str>>(),
+    /// };
+    /// let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+    /// let labels: Vec<_> = unfolded.iter_nodes().map(|(_, _, key)| key.to_string()).collect();
+    ///
+    /// assert_eq!(unfolded.n_nodes(), 3);
+    /// assert!(labels.iter().any(|label| label == "∅"));
+    /// assert!(labels.iter().any(|label| label == "{AB}"));
+    /// assert!(labels.iter().any(|label| label == "{A,B}"));
+    /// ```
+    fn realizations_for_op(
+        &self,
+        op: HiddenData<Key, EdgeIndex>,
+    ) -> Vec<Vec<HiddenData<Key, EdgeIndex>>> {
+        vec![vec![op]]
+    }
 
     #[allow(clippy::type_complexity)]
     fn trace_unfold_of<M: NodeStorageOps<NodeData = usize>, S: SubSetLike>(
@@ -63,24 +233,23 @@ where
             for hedge in g.iter_crown_in(subgraph, nid) {
                 if g.flow(hedge) == Flow::Source {
                     if let Some(to_node) = g.involved_node_id(hedge) {
-                        let edge = self.key(g[&hedge]);
+                        let op = HiddenData {
+                            order: self.key(g[&hedge]),
+                            data: g[&hedge],
+                        };
+                        for realization in self.realizations_for_op(op) {
+                            let new_key = realization
+                                .into_iter()
+                                .fold(key.clone(), |acc, factor| acc.push(self, factor));
+                            let (ind, is_new) = traces.insert_full((to_node, new_key.clone()));
+                            if is_new {
+                                let bbnid = builder.add_node(ind);
+                                debug_assert_eq!(bbnid.0, ind);
+                                q.push_back((bbnid, to_node, new_key.clone()))
+                            }
 
-                        let new_key: TraceKey<Key, EdgeIndex> = key.push(
-                            self,
-                            HiddenData {
-                                order: edge,
-                                data: g[&hedge],
-                            },
-                        );
-
-                        let (ind, is_new) = traces.insert_full((to_node, new_key.clone()));
-                        if is_new {
-                            let bbnid = builder.add_node(ind);
-                            debug_assert_eq!(bbnid.0, ind);
-                            q.push_back((bbnid, to_node, new_key.clone()))
+                            builder.add_edge(bnid, NodeIndex(ind), g[&hedge], true);
                         }
-
-                        builder.add_edge(bnid, NodeIndex(ind), g[&hedge], true);
                     }
                 }
             }

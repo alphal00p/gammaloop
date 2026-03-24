@@ -420,9 +420,9 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 cut_subgraph.sub(*p);
             }
 
-            if (self.count_connected_components(&cut_subgraph) == components
+            if self.count_connected_components(&cut_subgraph) == components
                 && self.number_of_nodes_in_subgraph(&cut_subgraph)
-                    == self.number_of_nodes_in_subgraph(subgraph))
+                    == self.number_of_nodes_in_subgraph(subgraph)
             {
                 // let externals = self.full_crown(subgraph);
 
