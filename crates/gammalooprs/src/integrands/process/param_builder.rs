@@ -695,6 +695,7 @@ pub struct ThresholdParams<T: FloatLike> {
     pub h_function: F<T>,
 }
 
+#[derive(Clone)]
 pub struct LUParams<T: FloatLike> {
     pub tstar: DualOrNot<F<T>>,
     pub h_function: DualOrNot<F<T>>,

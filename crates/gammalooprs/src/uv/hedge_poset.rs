@@ -107,7 +107,7 @@ impl PartialOrd for Spinney {
 pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
     pub root: NodeIndex,
-    vakint_settings: vakint::VakintSettings,
+    pub vakint_settings: vakint::VakintSettings,
     cuts: CutStructure,
     components_by_subgraph: AHashMap<SuBitGraph, Vec<SuBitGraph>>,
     representative_edge_by_subgraph: AHashMap<SuBitGraph, EdgeIndex>,

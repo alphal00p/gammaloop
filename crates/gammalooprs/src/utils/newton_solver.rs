@@ -1,4 +1,5 @@
 use serde::Serialize;
+use symbolica::domains::dual::HyperDual;
 
 use crate::utils::{F, FloatLike};
 
@@ -30,10 +31,46 @@ pub(crate) fn newton_iteration_and_derivative<T: FloatLike>(
     }
 }
 
+pub(crate) fn newton_iteration_and_derivative_dual<T: FloatLike>(
+    guess: &HyperDual<F<T>>,
+    f_x_and_df_x: impl Fn(&HyperDual<F<T>>) -> (HyperDual<F<T>>, HyperDual<F<T>>),
+    tolerance: &F<T>,
+    max_iterations: usize,
+    e_cm: &F<T>,
+) -> NewtonIterationResultDual<T> {
+    let mut x = guess.clone();
+    let (mut val_f_x, mut val_df_x) = f_x_and_df_x(&x);
+
+    let mut iteration = 0;
+
+    while iteration < max_iterations
+        && val_f_x.values[0].abs() > guess.values[0].epsilon() * tolerance * e_cm
+    {
+        x -= val_f_x / val_df_x;
+        (val_f_x, val_df_x) = f_x_and_df_x(&x);
+        iteration += 1;
+    }
+
+    NewtonIterationResultDual {
+        solution: x,
+        derivative_at_solution: val_df_x,
+        error_of_function: val_f_x.values[0].clone(),
+        num_iterations_used: iteration,
+    }
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub(crate) struct NewtonIterationResult<T: FloatLike> {
     pub solution: F<T>,
     pub derivative_at_solution: F<T>,
+    pub error_of_function: F<T>,
+    pub num_iterations_used: usize,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct NewtonIterationResultDual<T: FloatLike> {
+    pub solution: HyperDual<F<T>>,
+    pub derivative_at_solution: HyperDual<F<T>>,
     pub error_of_function: F<T>,
     pub num_iterations_used: usize,
 }
