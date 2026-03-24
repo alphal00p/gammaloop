@@ -3756,10 +3756,8 @@ mod tests {
     }
 
     fn render_update(request: StatusUpdateBuildRequest<'_>) -> String {
-        render_status_update_tabled(
-            &build_status_update(request),
-            &tabled_options_for_view(request.render_options),
-        )
+        let tabled_options = tabled_options_for_view(request.render_options);
+        render_status_update_tabled(&build_status_update(request), &tabled_options)
     }
 
     fn render_ratatui_update(

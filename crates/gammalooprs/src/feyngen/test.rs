@@ -861,7 +861,7 @@ fn nlo_fs_dis() {
     let options = dis_cart_prod(&["d", "d~", "g"], 1, &model);
 
     for option in options {
-        let diagrams = chain_dis_generate(&[option.clone()], &model);
+        let diagrams = chain_dis_generate(std::slice::from_ref(&option), &model);
 
         let process_name = option
             .initial_pdgs
