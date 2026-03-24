@@ -354,6 +354,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         .printer(PrintOptions {
                             color_builtin_symbols: false,
                             color_top_level_sum: false,
+                            bracket_level_colors: None,
                             ..Default::default()
                         })
                         .to_string(),
@@ -408,18 +409,27 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
             for eid in v {
                 let (_, p) = &self[eid];
+                let HedgePair::Paired { source, sink } = p else {
+                    continue;
+                };
+
+                //this is a self-loop
+                if self.node_id(*source) == self.node_id(*sink) {
+                    continue;
+                }
                 cut_subgraph.sub(*p);
             }
 
             if (self.count_connected_components(&cut_subgraph) == components
                 && self.number_of_nodes_in_subgraph(&cut_subgraph)
                     == self.number_of_nodes_in_subgraph(subgraph))
-                || cut_subgraph.is_empty()
             {
                 // let externals = self.full_crown(subgraph);
 
                 return self.lmb_impl(subgraph.included(), &cut_subgraph, externals.clone());
             }
+
+            //
         }
 
         panic!(
@@ -1332,6 +1342,22 @@ pub mod test {
         let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy_sub_ext, &lmb);
 
         assert_snapshot!(g.dot_lmb_of(&non_dummy, &lmb));
+        assert_snapshot!(g.dot_lmb_of(&subgraph, &sub_lmb));
+
+        let g: DotGraph = linnet::dot!(
+            digraph {
+              0:0:s	-> 0:1:s	    [id=0];
+              0:2	-> 1:3	        [id=1];
+              1:4:s	-> 1:5:s	    [id=2];
+            }
+
+        )
+        .unwrap();
+
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let non_dummy = g.full_filter();
+        let lmb = g.lmb_of(&non_dummy);
+        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy, &lmb);
         assert_snapshot!(g.dot_lmb_of(&subgraph, &sub_lmb));
     }
 }

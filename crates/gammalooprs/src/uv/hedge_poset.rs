@@ -21,7 +21,11 @@ use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     uv::{
         UVgenerationSettings, UltravioletGraph,
-        approx::{ApproximationKernel, ForestNodeLike, UVCtx, integrated::Integrated},
+        approx::{
+            ApproximationKernel, CutStructure, ForestNodeLike, UVCtx, integrated::Integrated,
+            local_3d::Local3DApproximation,
+        },
+        settings::VakintSettings,
     },
 };
 use color_eyre::Result;
@@ -33,6 +37,8 @@ pub struct Spinney {
     components: Vec<SuBitGraph>,
     pub dod: i32,
     pub lmb: LoopMomentumBasis,
+    /// The maximum number of loops in any component of this spinney.
+    max_comp_loop_count: usize,
     // pub topo_order: Option<usize>,
 }
 
@@ -48,6 +54,7 @@ impl Spinney {
 
             subgraph: g.as_ref().empty_subgraph(),
             lmb: g.empty_lmb(),
+            max_comp_loop_count: 0,
         }
     }
 
@@ -62,11 +69,19 @@ impl Spinney {
         g: &G,
         lmb: &LoopMomentumBasis,
     ) -> Self {
+        let components = g.as_ref().connected_components(&subgraph);
+        let max_comp_loop_count = components
+            .iter()
+            .map(|c| g.as_ref().cyclotomatic_number(c))
+            .max()
+            .unwrap_or(0);
+
         Spinney {
             components: g.as_ref().connected_components(&subgraph),
             dod: g.dod(&subgraph),
             lmb: g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb),
             subgraph,
+            max_comp_loop_count,
         }
     }
 }
@@ -92,6 +107,8 @@ impl PartialOrd for Spinney {
 pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
     pub root: NodeIndex,
+    vakint_settings: vakint::VakintSettings,
+    cuts: CutStructure,
 }
 
 impl Independence<HiddenData<SuBitGraph, EdgeIndex>> for Wood {
@@ -122,12 +139,42 @@ impl TraceUnfold<SuBitGraph> for Wood {
 }
 
 impl Wood {
-    pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = Spinney>>(
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph, vakint_settings: &VakintSettings) -> Self {
+        let mut subgraph = graph.full_filter();
+        subgraph.subtract_with(&graph.initial_state_cut.left);
+        let mut spinneys = AHashSet::new();
+
+        for cut in cuts.cuts.iter() {
+            let cut_sub = subgraph.subtract(&cut.union);
+            spinneys.extend(graph.spinneys(&cut_sub));
+        }
+
+        Self::from_spinneys(
+            spinneys
+                .drain()
+                .map(|a| Spinney::new(a.filter, graph, &graph.loop_momentum_basis)),
+            graph,
+            cuts,
+            vakint_settings,
+        )
+    }
+    pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
         s: I,
-        graph: impl AsRef<HedgeGraph<E, V, H>> + LMBext,
+        graph: &Graph,
+        cuts: CutStructure,
+        vakint_settings: &VakintSettings,
     ) -> Self {
-        let mut spinneyset: AHashSet<_> = s.into_iter().collect();
+        let mut max_loops = 0;
+        let mut spinneyset: AHashSet<_> = s
+            .into_iter()
+            .inspect(|a| {
+                max_loops = max_loops.max(a.max_comp_loop_count);
+            })
+            .collect();
+
         spinneyset.insert(Spinney::empty(&graph));
+        let mut vakint_settings = vakint_settings.true_settings();
+        vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64;
 
         let mut unions = AHashSet::new();
         let g: HedgeGraph<_, _> = HedgeGraph::poset(spinneyset);
@@ -197,28 +244,33 @@ impl Wood {
         Wood {
             graph: poset,
             root: root.expect("no empty spinney found"),
+            cuts,
+            vakint_settings,
         }
-    }
-
-    fn compatible_with(&self, cut: &CutSet) -> SuBitGraph {
-        let mut compatible: SuBitGraph = self.graph.empty_subgraph();
-        for (_, crown, s) in self.graph.iter_nodes() {
-            if s.compatible_with(cut) {
-                for h in crown {
-                    compatible.add(h);
-                }
-            }
-        }
-        compatible
     }
 
     pub fn unfold(&self) -> Forests {
+        let graph = self.trace_unfold::<NodeStorageVec<_>>(self.root).map(
+            |_, _, key| OperationNode { key },
+            |_, _, _, _, e| e,
+            |_, h| h,
+        );
+
+        let mut cuts: Vec<(SuBitGraph, CutSet)> = Vec::new();
+        for c in &self.cuts.cuts {
+            let mut compatible: SuBitGraph = graph.empty_subgraph();
+            for (_, crown, s) in graph.iter_nodes() {
+                if s.is_compatible_with(c) {
+                    for h in crown {
+                        compatible.add(h);
+                    }
+                }
+            }
+            cuts.push((compatible, c.clone()));
+        }
         Forests {
-            graph: self.trace_unfold::<NodeStorageVec<_>>(self.root).map(
-                |_, _, key| OperationNode { key },
-                |_, _, _, _, e| e,
-                |_, h| h,
-            ),
+            graph,
+            cuts,
             root: self.root,
             compute_store: AHashMap::new(),
         }
@@ -248,6 +300,8 @@ impl Display for Wood {
 pub struct Forests {
     pub graph: HedgeGraph<EdgeIndex, OperationNode>,
     pub root: NodeIndex,
+    /// Wood subgraph that has compatible
+    cuts: Vec<(SuBitGraph, CutSet)>,
     pub compute_store: AHashMap<OperationNode, ComputeNode>,
 }
 
@@ -262,6 +316,10 @@ pub struct ForestNode<'a> {
 }
 
 impl OperationNode {
+    pub fn is_compatible_with(&self, cut: &CutSet) -> bool {
+        self.covers().is_none_or(|c| !c.intersects(&cut.union))
+    }
+
     pub fn current<'a>(&'a self, wood: &'a Wood, topo_order: usize) -> Option<Vec<ForestNode<'a>>> {
         Some(
             self.key
@@ -507,10 +565,53 @@ impl Forests {
 
     pub fn local_subtract(
         &mut self,
-        _graph: &mut Graph,
-        _wood: &Wood,
-        _settings: &UVgenerationSettings,
+        graph: &mut Graph,
+        wood: &Wood,
+        settings: &UVgenerationSettings,
     ) -> Result<()> {
+        let local_orchestrator = Local3DApproximation {};
+        for (cut_compatible_forest_subset, c) in &self.cuts {
+            let mut integrands = Some(Local3DApproximation::root(graph, c)?);
+
+            let uvctx = UVCtx {
+                graph: &*graph,
+                settings,
+            };
+            for (order, nidx) in self
+                .graph
+                .topo_sort_kahn_of(cut_compatible_forest_subset)
+                .unwrap()
+                .iter()
+                .enumerate()
+            {
+                for h in self.iter_parents(*nidx, order, wood) {
+                    let (computed, current, given, parent_key, is_union) = h?;
+
+                    let Integrands::Multiple(a) = &computed.local_3d else {
+                        return Err(eyre!("{} integrated_4d not computed yet", parent_key));
+                    };
+
+                    if is_union {
+                        // integrand *= a;
+                    } else {
+                        integrands = Some(
+                            a.iter()
+                                .map(|a| local_orchestrator.kernel(&uvctx, &current, &given, a))
+                                .collect::<Result<_>>()?,
+                        );
+                    }
+                }
+
+                self.compute_store
+                    .entry(self.graph[*nidx].clone())
+                    .or_default()
+                    .local_3d = Integrands::Multiple(
+                    integrands
+                        .take()
+                        .ok_or(eyre!("Taken integrand not filled in"))?,
+                );
+            }
+        }
         Ok(())
     }
 
@@ -573,6 +674,55 @@ mod tests {
     use color_eyre::Result;
 
     #[test]
+    fn triple_tadpole() -> Result<()> {
+        test_initialise().unwrap();
+        let dumbell: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v3;
+                v3 -> v3;
+                v2 -> v2;
+                v1 -> v1;
+            },"scalars"
+        )?;
+
+        let spinneys = dumbell.spinneys(&dumbell.full_filter());
+        let f = Wood::new(
+            CutStructure::empty(&dumbell),
+            &dumbell,
+            &VakintSettings::default(),
+        );
+
+        println!("{}", f);
+
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"8",
+            // format!("Wood does not have correct number of spinneys: \n{}",f)
+        );
+
+        for (_, _, d) in f.graph.iter_nodes() {
+            println!(
+                "//Node {}: \n{}",
+                d.subgraph.string_label(),
+                dumbell.dot(&d.subgraph)
+            );
+        }
+        let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
+
+        // println!("{}", ff.dot(&dumbell));
+
+        let f = f.unfold();
+        println!("{}", f);
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"10");
+
+        Ok(())
+    }
+
+    #[test]
     fn dumbells() -> Result<()> {
         test_initialise().unwrap();
         let dumbell: Graph = dot!(
@@ -585,12 +735,10 @@ mod tests {
         )?;
 
         let spinneys = dumbell.spinneys(&dumbell.full_filter());
-        let f = Wood::from_spinneys(
-            dumbell
-                .spinneys(&dumbell.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &dumbell, &dumbell.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&dumbell),
             &dumbell,
+            &VakintSettings::default(),
         );
 
         println!("{}", f);
@@ -641,12 +789,7 @@ mod tests {
             Ok(g) => {
                 let g: Graph = g;
                 let spinneys = g.spinneys(&g.full_filter());
-                let f = Wood::from_spinneys(
-                    g.spinneys(&g.full_filter())
-                        .into_iter()
-                        .map(|a| Spinney::new(a.filter, &g, &g.loop_momentum_basis)),
-                    &g,
-                );
+                let f = Wood::new(CutStructure::empty(&g), &g, &VakintSettings::default());
 
                 println!("{}", f);
 
@@ -711,12 +854,10 @@ mod tests {
             },"scalars"
         )?;
 
-        let f = Wood::from_spinneys(
-            mercedes
-                .spinneys(&mercedes.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &mercedes, &mercedes.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&mercedes),
             &mercedes,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -748,12 +889,10 @@ mod tests {
             A -> B    [ id=2 ]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = Wood::from_spinneys(
-            sunrise
-                .spinneys(&sunrise.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &sunrise, &sunrise.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&sunrise),
             &sunrise,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -786,12 +925,10 @@ mod tests {
             A -> B    [ id=2]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = Wood::from_spinneys(
-            sunrise
-                .spinneys(&sunrise.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &sunrise, &sunrise.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&sunrise),
             &sunrise,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -826,12 +963,10 @@ mod tests {
 
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = Wood::from_spinneys(
-            sunrise
-                .spinneys(&sunrise.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &sunrise, &sunrise.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&sunrise),
             &sunrise,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -867,12 +1002,10 @@ mod tests {
         )?;
 
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let f = Wood::from_spinneys(
-            spectacles
-                .spinneys(&spectacles.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &spectacles, &spectacles.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&spectacles),
             &spectacles,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -903,12 +1036,10 @@ mod tests {
             },"scalars"
         )?;
 
-        let f = Wood::from_spinneys(
-            basketball
-                .spinneys(&basketball.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &basketball, &basketball.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&basketball),
             &basketball,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -943,12 +1074,10 @@ mod tests {
         )?;
 
         // let spinneys = fourloop_b.spinneys(&fourloop_b.full_filter());
-        let f = Wood::from_spinneys(
-            fourloop_b
-                .spinneys(&fourloop_b.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &fourloop_b, &fourloop_b.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&fourloop_b),
             &fourloop_b,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -982,12 +1111,10 @@ mod tests {
             },"scalars"
         )?;
 
-        let f = Wood::from_spinneys(
-            four_loop_a
-                .spinneys(&four_loop_a.full_filter())
-                .into_iter()
-                .map(|a| Spinney::new(a.filter, &four_loop_a, &four_loop_a.loop_momentum_basis)),
+        let f = Wood::new(
+            CutStructure::empty(&four_loop_a),
             &four_loop_a,
+            &VakintSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(

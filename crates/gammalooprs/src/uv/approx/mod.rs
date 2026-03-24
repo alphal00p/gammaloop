@@ -177,6 +177,14 @@ pub struct CutStructure {
     pub cuts: Vec<CutSet>,
 }
 
+impl CutStructure {
+    pub(crate) fn empty(graph: &Graph) -> Self {
+        Self {
+            cuts: vec![CutSet::empty(graph.n_hedges())],
+        }
+    }
+}
+
 impl CFFapprox {
     pub(crate) fn expr(&self) -> Option<(Vec<Atom>, Sign)> {
         match self {

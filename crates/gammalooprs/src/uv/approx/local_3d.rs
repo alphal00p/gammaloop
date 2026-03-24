@@ -1,4 +1,4 @@
-use linnet::half_edge::subgraph::SubSetLike;
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function, parse,
@@ -6,7 +6,7 @@ use symbolica::{
 use tracing::{info, instrument};
 
 use crate::{
-    graph::LMBext,
+    graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_},
     uv::{
         UltravioletGraph,
@@ -17,6 +17,33 @@ use crate::{
 use color_eyre::Result;
 
 pub struct Local3DApproximation;
+
+impl Local3DApproximation {
+    pub(crate) fn dependent(
+        graph: &mut Graph,
+        to_contract: &SuBitGraph,
+        cuts: &CutSet,
+    ) -> Result<Vec<Atom>> {
+        let cff = graph
+            .cff(
+                &to_contract
+                    .union(&graph.tree_edges)
+                    .subtract(&graph.initial_state_cut),
+                cuts,
+            )?
+            .expression_with_selectors();
+
+        let fourddenoms = GS.wrap_tree_denoms(
+            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
+        );
+
+        Ok(cff.iter().map(|a| a * &fourddenoms).collect())
+    }
+
+    pub(crate) fn root(graph: &mut Graph, cuts: &CutSet) -> Result<Vec<Atom>> {
+        Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts)
+    }
+}
 
 impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
     #[instrument(skip(self, ctx, current, given, cff))]

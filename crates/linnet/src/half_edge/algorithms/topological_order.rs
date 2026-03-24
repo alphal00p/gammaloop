@@ -1,8 +1,10 @@
 use std::collections::VecDeque;
 
 use crate::half_edge::{
-    involution::Flow, nodestore::NodeStorageOps, swap::Swap, HedgeGraph, NodeIndex,
+    involution::Flow, nodestore::NodeStorageOps, subgraph::SubSetLike, swap::Swap, HedgeGraph,
+    NodeIndex,
 };
+use ahash::AHashMap;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -16,6 +18,63 @@ pub enum TopoError {
 }
 
 impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+    pub fn topo_sort_kahn_of<S: SubSetLike>(
+        &self,
+        subgraph: &S,
+    ) -> Result<Vec<NodeIndex>, TopoError> {
+        let mut indeg: AHashMap<NodeIndex, usize> = self
+            .iter_nodes_of(subgraph)
+            .map(|(i, neighs, _)| (i, neighs.filter(|h| self.flow(*h) == Flow::Sink).count()))
+            .collect();
+
+        let mut q = VecDeque::new();
+        for (i, d) in indeg.iter() {
+            if *d == 0 {
+                q.push_back(*i);
+            }
+        }
+
+        let mut order = Vec::with_capacity(indeg.len());
+        while let Some(v) = q.pop_front() {
+            order.push(v);
+            for u in self.iter_crown_in(subgraph, v) {
+                if self.flow(u) == Flow::Sink {
+                    continue;
+                }
+                let invh = self.inv(u);
+                if invh == u || !subgraph.includes(&invh) {
+                    continue;
+                }
+
+                let n = self.node_id(invh);
+                indeg.entry(n).and_modify(|d| *d -= 1);
+                if indeg[&n] == 0 {
+                    q.push_back(n);
+                }
+            }
+        }
+
+        if order.len() != indeg.len() {
+            let remaining_nodes: Vec<(NodeIndex, usize)> = indeg
+                .iter()
+                .filter_map(|(&node, &degree)| {
+                    if degree > 0 {
+                        Some((node, degree))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            return Err(TopoError::NotDag {
+                nodes_processed: order.len(),
+                total_nodes: indeg.len(),
+                remaining_nodes,
+            });
+        }
+        Ok(order)
+    }
+
     pub fn topo_sort_kahn(&self) -> Result<Vec<NodeIndex>, TopoError> {
         let mut indeg = self
             .new_nodevec(|_i, neighs, _| neighs.filter(|h| self.flow(*h) == Flow::Sink).count());
