@@ -60,10 +60,25 @@ impl Graph {
         }
 
         let cff = self.generate_cff(&contract_edges, &canonize_esurface)?;
-        let residue = if let Some(esurfaces) = &cutset.esurfaces {
-            cff.select_esurface_residue(esurfaces)
+        let residue = if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
+            cff.select_esurface_residue(right_threshold).pop().unwrap()
         } else {
-            vec![cff]
+            cff
+        };
+
+        let residue = if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
+            residue
+                .select_esurface_residue(left_threshold)
+                .pop()
+                .unwrap()
+        } else {
+            residue
+        };
+
+        let residue = if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
+            residue.select_esurface_residue(lu_cut)
+        } else {
+            vec![residue]
         };
 
         // println!("residue orders: {}", residue.len());

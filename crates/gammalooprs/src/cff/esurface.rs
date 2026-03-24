@@ -811,7 +811,20 @@ pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
 #[derive(
-    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq, Encode, Decode, Hash,
+    Debug,
+    Copy,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    From,
+    Into,
+    Eq,
+    Encode,
+    Decode,
+    Hash,
+    PartialOrd,
+    Ord,
 )]
 pub struct EsurfaceID(pub usize);
 

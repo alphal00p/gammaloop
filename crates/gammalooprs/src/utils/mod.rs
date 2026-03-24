@@ -3662,27 +3662,6 @@ fn strip_ansi_escape_codes(line: &str) -> String {
     stripped
 }
 
-pub(crate) fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
-    vec1: &TiSlice<K, T>,
-    vec2: &TiSlice<K, T>,
-) -> String {
-    let mut result = String::new();
-
-    result.push_str("elements of vec1 that are not in vec2:\n");
-
-    vec1.iter()
-        .filter(|vec1_element| !vec2.contains(vec1_element))
-        .for_each(|vec1_element| result.push_str(&format!("{:#?}\n", vec1_element)));
-
-    result.push_str("elements of vec2 that are not in vec1:\n");
-
-    vec2.iter()
-        .filter(|vec2_element| !vec1.contains(vec2_element))
-        .for_each(|vec2_element| result.push_str(&format!("{:#?}", vec2_element)));
-
-    result
-}
-
 pub(crate) fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {
     Complex::new(c.re.into_ff64(), c.im.into_ff64())
 }

@@ -243,6 +243,23 @@ impl Graph {
         }
     }
 
+    pub(crate) fn get_edge_subgraph(&self, edge: EdgeIndex) -> SuBitGraph {
+        let mut subgraph: SuBitGraph = self.underlying.empty_subgraph();
+
+        match self[&edge].1 {
+            HedgePair::Paired { source, sink } => {
+                subgraph.add(source);
+                subgraph.add(sink);
+            }
+            HedgePair::Unpaired { hedge, .. } => {
+                subgraph.add(hedge);
+            }
+            HedgePair::Split { .. } => unreachable!(),
+        }
+
+        subgraph
+    }
+
     pub(crate) fn iter_loop_edges(
         &self,
     ) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {

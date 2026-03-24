@@ -30,7 +30,8 @@ use crate::{
         expression::{CFFExpression, OrientationID},
     },
     graph::{
-        GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis, cuts::CutSet,
+        GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+        cuts::{CutSet, ResidueSelector},
     },
     integrands::process::{
         LmbMultiChannelingSetup,
@@ -873,7 +874,11 @@ impl AmplitudeGraph {
             }
 
             let cutset = CutSet {
-                esurfaces: Some(raised_data.clone()),
+                residue_selector: ResidueSelector {
+                    lu_cut: None,
+                    left_th_cut: Some(raised_data.clone()),
+                    right_th_cut: None,
+                },
                 union: cut_union,
             };
 
@@ -901,7 +906,7 @@ impl AmplitudeGraph {
                 parametric_local: local,
                 parametric_integrated: integrated,
             };
-            let esurfaces = expr.cuts.esurfaces.unwrap();
+            let esurfaces = expr.cuts.residue_selector.left_th_cut.unwrap();
             let esurface_id = esurfaces.esurface_ids[0];
 
             counterterms[esurface_id] = counterterm_atom;

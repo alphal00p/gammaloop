@@ -25,7 +25,7 @@ use crate::{
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId},
     settings::{GlobalSettings, RuntimeSettings, runtime::IntegralUnit},
-    subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
+    subtraction::lu_counterterm::{LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators},
     utils::{
         F, FloatLike, Length, h, h_dual,
         hyperdual_utils::{
@@ -42,6 +42,7 @@ use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
 use std::{
+    collections::HashSet,
     slice,
     time::{Duration, Instant},
 };
@@ -298,7 +299,7 @@ pub struct CrossSectionGraphTerm {
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
-    pub reversed_edges: TiVec<CutId, Vec<EdgeIndex>>,
+    pub reversed_edges: TiVec<RaisedCutId, Vec<EdgeIndex>>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub estimated_scale: Option<F<f64>>,
@@ -390,8 +391,20 @@ impl CrossSectionGraphTerm {
             .iter()
             .map(|ct_data| {
                 (
-                    ct_data.left_thresholds.clone(),
-                    ct_data.right_thresholds.clone(),
+                    ct_data
+                        .left_thresholds
+                        .iter()
+                        .map(|esurface_id| {
+                            graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                        })
+                        .collect(),
+                    ct_data
+                        .right_thresholds
+                        .iter()
+                        .map(|esurface_id| {
+                            graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                        })
+                        .collect(),
                 )
             })
             .collect();
@@ -403,24 +416,30 @@ impl CrossSectionGraphTerm {
         };
 
         let reversed_edges = graph
-            .cuts
+            .derived_data
+            .raised_data
+            .raised_cut_groups
             .iter()
-            .map(|cut| {
-                cut.cut
-                    .iter_edges(&graph.graph)
-                    .filter_map(|(orientation, edge_data)| {
-                        if orientation == Orientation::Reversed {
-                            Some(
-                                graph
-                                    .graph
-                                    .edge_name_to_index(&edge_data.data.name)
-                                    .unwrap(),
-                            )
-                        } else {
-                            None
-                        }
-                    })
-                    .collect_vec()
+            .map(|cut_group| {
+                let mut reversed_edges = HashSet::new();
+
+                cut_group.cuts.iter().for_each(|cut_id| {
+                    let cut = &graph.cuts[*cut_id];
+                    cut.cut
+                        .iter_edges(&graph.graph)
+                        .for_each(|(orientation, edge_data)| {
+                            if orientation == Orientation::Reversed {
+                                reversed_edges.insert(
+                                    graph
+                                        .graph
+                                        .edge_name_to_index(&edge_data.data.name)
+                                        .unwrap(),
+                                );
+                            }
+                        });
+                });
+
+                reversed_edges.into_iter().sorted().collect()
             })
             .collect();
 
@@ -819,6 +838,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
             let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
+            let mut kinematic_point = LUCTKinematicPoint::new();
             for num_esurfaces in 1..=max_occurance {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
@@ -898,6 +918,16 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let lu_params = LUParams { h_function, tstar };
 
+                kinematic_point
+                    .dualized_momentum_sample_cache
+                    .push(rescaled_momenta.clone());
+                kinematic_point
+                    .lu_cut_parameter_cache
+                    .push(lu_params.clone());
+                kinematic_point
+                    .lu_cut_esurface_values
+                    .push(esurface_derivatives.clone().unwrap_real());
+
                 let prefactor =
                     Complex::new_re(if let Some((_channel_index, _alpha)) = &channel_id {
                         if matches!(lu_params.tstar, DualOrNot::Dual(_)) {
@@ -938,12 +968,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .pop()
                     .unwrap();
 
-                let ct_result = if settings.subtraction.disable_threshold_subtraction {
-                    Complex::new_re(momentum_sample.zero())
-                } else {
-                    todo!();
-                };
-
                 debug!("pass 1 result {}", result);
 
                 let mut params_for_pass_two = vec![];
@@ -981,15 +1005,34 @@ impl GraphTerm for CrossSectionGraphTerm {
                 );
 
                 debug!("pass_two_result: {:+16e}", pass_two_result);
-
-                cut_threshold_counterterms.push(ct_result.clone());
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
                 let bare_contribution = pass_two_result * prefactor; //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
                 bare_cut_total += bare_contribution.clone();
-                threshold_counterterm_weights.push(ct_result);
                 cut_results.push(bare_contribution);
             }
+
+            let ct_result = if settings.subtraction.disable_threshold_subtraction {
+                Complex::new_re(momentum_sample.zero())
+            } else {
+                self.counterterm.evaluate(
+                    &kinematic_point,
+                    raised_cut,
+                    &self.reversed_edges[raised_cut],
+                    &self.lmbs,
+                    &self.graph,
+                    &self.graph.get_real_mass_vector(model),
+                    rotation,
+                    settings,
+                    &mut self.param_builder,
+                    orientations,
+                    evaluation_metadata,
+                    record_primary_timing,
+                )
+            };
+
+            threshold_counterterm_weights.push(ct_result.clone());
+            cut_threshold_counterterms.push(ct_result.clone());
 
             if let Some(mut event) = accepted_event {
                 let threshold_counterterm_total = threshold_counterterm_weights

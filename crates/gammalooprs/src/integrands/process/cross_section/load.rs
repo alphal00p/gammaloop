@@ -38,7 +38,7 @@ use symbolica::{
     try_parse,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 2;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 3;
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneCrossSectionArchive<S = Vec<u8>, T = Vec<u8>> {
@@ -59,14 +59,11 @@ pub struct StandaloneCrossSectionGraphTermArchive<A = Vec<u8>> {
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneCountertermArchive<A = Vec<u8>> {
-    pub(crate) left_thresholds_parametric: Vec<StandaloneGenericEvaluatorArchive<A>>,
-    pub(crate) right_thresholds_parametric: Vec<StandaloneGenericEvaluatorArchive<A>>,
-    pub(crate) iterated_parametric:
-        StandaloneIteratedCollectionArchive<StandaloneGenericEvaluatorArchive<A>>,
-    pub(crate) left_thresholds_iterative: Option<Vec<StandaloneGenericEvaluatorArchive<A>>>,
-    pub(crate) right_thresholds_iterative: Option<Vec<StandaloneGenericEvaluatorArchive<A>>>,
-    pub(crate) iterated_iterative:
-        Option<StandaloneIteratedCollectionArchive<StandaloneGenericEvaluatorArchive<A>>>,
+    pub(crate) left_thresholds_evaluator: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
+    pub(crate) right_thresholds_evaluator: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
+    pub(crate) iterated_evaluator:
+        StandaloneIteratedCollectionArchive<Vec<StandaloneEvaluatorStackArchive<A>>>,
+    pub(crate) pass_two_evaluator: StandaloneGenericEvaluatorArchive<A>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -363,12 +360,10 @@ pub struct LoadedStandaloneCrossSectionGraphTerm {
 }
 
 pub struct LoadedStandaloneCounterterm {
-    pub left_thresholds_parametric: Vec<LoadedGenericEvaluator>,
-    pub right_thresholds_parametric: Vec<LoadedGenericEvaluator>,
-    pub iterated_parametric: LoadedStandaloneIteratedCollection<LoadedGenericEvaluator>,
-    pub left_thresholds_iterative: Option<Vec<LoadedGenericEvaluator>>,
-    pub right_thresholds_iterative: Option<Vec<LoadedGenericEvaluator>>,
-    pub iterated_iterative: Option<LoadedStandaloneIteratedCollection<LoadedGenericEvaluator>>,
+    pub left_thresholds_evaluator: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
+    pub right_thresholds_evaluator: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
+    pub iterated_evaluator: LoadedStandaloneIteratedCollection<Vec<LoadedStandaloneEvaluatorStack>>,
+    pub pass_two_evaluator: LoadedGenericEvaluator,
 }
 
 pub struct LoadedStandaloneIteratedCollection<T> {
@@ -459,84 +454,89 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                 .into_iter()
                 .enumerate()
                 .map(|(cut_id, counterterm)| {
-                    let build_collection = |payloads: Vec<StandaloneGenericEvaluatorArchive<A>>,
-                                            label: &str,
-                                            iterate: bool|
-                     -> Result<Vec<LoadedGenericEvaluator>> {
+                    let build_stack_collection =
+                        |payloads: Vec<StandaloneEvaluatorStackArchive<A>>,
+                         label: &str|
+                         -> Result<Vec<LoadedStandaloneEvaluatorStack>> {
                             payloads
                                 .into_iter()
                                 .enumerate()
                                 .map(|(i, payload)| {
-                                    let started = Instant::now();
-                                    let evaluator = build_evaluator(
+                                    build_stack(
                                         payload,
                                         &params,
-                                        parse_fn_map_entries(&graph.fn_map_entries, state_map)?,
+                                        &graph.fn_map_entries,
                                         state_map,
-                                        iterate,
-                                    )?;
-                                    println!(
-                                        "[timing] build_evaluator {}::counterterm[{cut_id}]::{label}[{i}] took {:?}",
-                                        graph.graph_name,
-                                        started.elapsed()
-                                    );
-                                    Ok(evaluator)
+                                        &graph.graph_name,
+                                        &format!("counterterm[{cut_id}]::{label}[{i}]"),
+                                    )
                                 })
                                 .collect::<Result<Vec<_>>>()
                         };
 
-                    let build_iterated = |payloads: StandaloneIteratedCollectionArchive<_>,
-                                          label: &str,
-                                          iterate: bool|
-                     -> Result<LoadedStandaloneIteratedCollection<LoadedGenericEvaluator>> {
-                        Ok(LoadedStandaloneIteratedCollection {
-                            data: build_collection(payloads.data, label, iterate)?,
-                            num_left_thresholds: payloads.num_left_thresholds,
-                        })
-                    };
+                    let build_stack_iterated =
+                        |payloads: StandaloneIteratedCollectionArchive<_>,
+                         label: &str|
+                         -> Result<
+                            LoadedStandaloneIteratedCollection<Vec<LoadedStandaloneEvaluatorStack>>,
+                        > {
+                            let data = payloads
+                                .data
+                                .into_iter()
+                                .enumerate()
+                                .map(|(i, payload)| {
+                                    build_stack_collection(payload, &format!("{label}[{i}]"))
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+
+                            Ok(LoadedStandaloneIteratedCollection {
+                                data,
+                                num_left_thresholds: payloads.num_left_thresholds,
+                            })
+                        };
+
+                    let pass_two_started = Instant::now();
+                    let pass_two_evaluator = build_evaluator(
+                        counterterm.pass_two_evaluator,
+                        &params,
+                        parse_fn_map_entries(&graph.fn_map_entries, state_map)?,
+                        state_map,
+                        false,
+                    )?;
+                    println!(
+                        "[timing] build_evaluator {}::counterterm[{cut_id}]::pass_two_evaluator took {:?}",
+                        graph.graph_name,
+                        pass_two_started.elapsed()
+                    );
 
                     Ok(LoadedStandaloneCounterterm {
-                        left_thresholds_parametric: build_collection(
-                            counterterm.left_thresholds_parametric,
-                            "left_thresholds_parametric",
-                            false,
-                        )?,
-                        right_thresholds_parametric: build_collection(
-                            counterterm.right_thresholds_parametric,
-                            "right_thresholds_parametric",
-                            false,
-                        )?,
-                        iterated_parametric: build_iterated(
-                            counterterm.iterated_parametric,
-                            "iterated_parametric",
-                            false,
-                        )?,
-                        left_thresholds_iterative: counterterm
-                            .left_thresholds_iterative
-                            .map(|payloads| {
-                                build_collection(
-                                    payloads,
-                                    "left_thresholds_iterative",
-                                    true,
+                        left_thresholds_evaluator: counterterm
+                            .left_thresholds_evaluator
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, payload)| {
+                                build_stack_collection(
+                                    payload,
+                                    &format!("left_thresholds_evaluator[{i}]"),
                                 )
                             })
-                            .transpose()?,
-                        right_thresholds_iterative: counterterm
-                            .right_thresholds_iterative
-                            .map(|payloads| {
-                                build_collection(
-                                    payloads,
-                                    "right_thresholds_iterative",
-                                    true,
+                            .collect::<Result<Vec<_>>>()?,
+                        right_thresholds_evaluator: counterterm
+                            .right_thresholds_evaluator
+                            .into_iter()
+                            .enumerate()
+                            .map(|(i, payload)| {
+                                build_stack_collection(
+                                    payload,
+                                    &format!("right_thresholds_evaluator[{i}]"),
                                 )
                             })
-                            .transpose()?,
-                        iterated_iterative: counterterm
-                            .iterated_iterative
-                            .map(|payloads| {
-                                build_iterated(payloads, "iterated_iterative", true)
-                            })
-                            .transpose()?,
+                            .collect::<Result<Vec<_>>>()?,
+                        iterated_evaluator: build_stack_iterated(
+                            counterterm.iterated_evaluator,
+                            "iterated_evaluator",
+                        )?,
+                        pass_two_evaluator,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -608,22 +608,11 @@ fn main() -> Result<()> {
         }
         for (cut_id, counterterm) in graph.counterterms.iter().enumerate() {
             println!(
-                "  counterterm[{cut_id}] left={} right={} iterated={} iterative_left={} iterative_right={} iterative_iterated={}",
-                counterterm.left_thresholds_parametric.len(),
-                counterterm.right_thresholds_parametric.len(),
-                counterterm.iterated_parametric.data.len(),
-                counterterm
-                    .left_thresholds_iterative
-                    .as_ref()
-                    .map_or(0, Vec::len),
-                counterterm
-                    .right_thresholds_iterative
-                    .as_ref()
-                    .map_or(0, Vec::len),
-                counterterm
-                    .iterated_iterative
-                    .as_ref()
-                    .map_or(0, |collection| collection.data.len())
+                "  counterterm[{cut_id}] left={} right={} iterated={} pass_two_exprs={}",
+                counterterm.left_thresholds_evaluator.len(),
+                counterterm.right_thresholds_evaluator.len(),
+                counterterm.iterated_evaluator.data.len(),
+                counterterm.pass_two_evaluator.0.len()
             );
         }
     }

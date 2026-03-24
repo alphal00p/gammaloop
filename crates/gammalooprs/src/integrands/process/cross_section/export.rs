@@ -77,13 +77,17 @@ fn export_evaluator_stack<T: ExportAtomTo>(
     })
 }
 
-fn export_iterated_collection<T: ExportAtomTo>(
-    collection: &IteratedCtCollection<GenericEvaluator>,
-) -> Result<StandaloneIteratedCollectionArchive<StandaloneGenericEvaluatorArchive<T>>> {
+fn export_iterated_collection<U, V, F>(
+    collection: &IteratedCtCollection<U>,
+    export_item: F,
+) -> Result<StandaloneIteratedCollectionArchive<V>>
+where
+    F: Fn(&U) -> Result<V>,
+{
     Ok(StandaloneIteratedCollectionArchive {
         data: collection
             .iter()
-            .map(export_generic_evaluator)
+            .map(export_item)
             .collect::<Result<Vec<_>>>()?,
         num_left_thresholds: collection.num_left_thresholds(),
     })
@@ -93,42 +97,33 @@ fn export_counterterm<T: ExportAtomTo>(
     evaluators: &LUCounterTermEvaluators,
 ) -> Result<StandaloneCountertermArchive<T>> {
     Ok(StandaloneCountertermArchive {
-        left_thresholds_parametric: evaluators
-            .parametric_left_thresholds_evaluator
+        left_thresholds_evaluator: evaluators
+            .left_thresholds_evaluator
             .iter()
-            .map(export_generic_evaluator)
-            .collect::<Result<Vec<_>>>()?,
-        right_thresholds_parametric: evaluators
-            .parametric_right_threshold_evaluator
-            .iter()
-            .map(export_generic_evaluator)
-            .collect::<Result<Vec<_>>>()?,
-        iterated_parametric: export_iterated_collection(&evaluators.parametric_iterated_evaluator)?,
-        left_thresholds_iterative: evaluators
-            .iterative_left_thresholds_evaluator
-            .as_ref()
-            .map(|items| {
-                items
+            .map(|stacks| {
+                stacks
                     .iter()
-                    .map(export_generic_evaluator)
+                    .map(export_evaluator_stack)
                     .collect::<Result<Vec<_>>>()
             })
-            .transpose()?,
-        right_thresholds_iterative: evaluators
-            .iterative_right_threshold_evaluator
-            .as_ref()
-            .map(|items| {
-                items
+            .collect::<Result<Vec<_>>>()?,
+        right_thresholds_evaluator: evaluators
+            .right_thresholds_evaluator
+            .iter()
+            .map(|stacks| {
+                stacks
                     .iter()
-                    .map(export_generic_evaluator)
+                    .map(export_evaluator_stack)
                     .collect::<Result<Vec<_>>>()
             })
-            .transpose()?,
-        iterated_iterative: evaluators
-            .iterative_iterated_evaluator
-            .as_ref()
-            .map(export_iterated_collection)
-            .transpose()?,
+            .collect::<Result<Vec<_>>>()?,
+        iterated_evaluator: export_iterated_collection(&evaluators.iterated_evaluator, |stacks| {
+            stacks
+                .iter()
+                .map(export_evaluator_stack)
+                .collect::<Result<Vec<_>>>()
+        })?,
+        pass_two_evaluator: export_generic_evaluator(&evaluators.pass_two_evaluator)?,
     })
 }
 
