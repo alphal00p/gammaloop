@@ -5,14 +5,6 @@ use rand::{Rng, SeedableRng, rngs::SmallRng};
 use std::cmp::Ordering;
 use std::ffi::c_void;
 
-#[cfg(target_vendor = "apple")]
-#[link(name = "c++")]
-unsafe extern "C" {}
-
-#[cfg(all(not(target_vendor = "apple"), not(target_env = "msvc")))]
-#[link(name = "stdc++")]
-unsafe extern "C" {}
-
 #[link(name = "fjcore_test", kind = "static")]
 unsafe extern "C" {
     fn fastjet_workspace() -> *mut c_void;
@@ -29,6 +21,15 @@ unsafe extern "C" {
         whichjets: *mut i32,
     );
 }
+
+// The final Rust test binary also needs the C++ runtime for the static fjcore wrapper.
+#[cfg(target_vendor = "apple")]
+#[link(name = "c++")]
+unsafe extern "C" {}
+
+#[cfg(all(not(target_vendor = "apple"), not(target_env = "msvc")))]
+#[link(name = "stdc++")]
+unsafe extern "C" {}
 
 struct FjcoreWorkspace(*mut c_void);
 

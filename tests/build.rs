@@ -17,8 +17,6 @@ fn main() {
         "cargo:rerun-if-changed={}",
         fjcore_dir.join("wrapper.cc").display()
     );
-    println!("cargo:rustc-link-lib={}", cpp_stdlib_for_target(&target));
-
     cc::Build::new()
         .cpp(true)
         .files([fjcore_dir.join("fjcore.cc"), fjcore_dir.join("wrapper.cc")])
@@ -29,6 +27,9 @@ fn main() {
         .std("c++14")
         .warnings(false)
         .compile("fjcore_test");
+
+    // Keep the C++ standard library after the static archive on the linker line.
+    println!("cargo:rustc-link-lib={}", cpp_stdlib_for_target(&target));
 }
 
 fn cpp_stdlib_for_target(target: &str) -> &'static str {
