@@ -1,10 +1,10 @@
 commands = [
   "run generate",
-  #"run integrate_triangle_below_threshold",  
-  #"run integrate_triangle_above_threshold",
-  #"run integrate_box_below_threshold",  
-  #"run integrate_box_above_threshold",
-  #"run integrate_triangle_and_box_below_threshold",
+  # "run integrate_triangle_below_threshold",
+  # "run integrate_triangle_above_threshold",
+  # "run integrate_box_below_threshold",
+  # "run integrate_box_above_threshold",
+  # "run integrate_triangle_and_box_below_threshold",
   "run integrate_box_above_and_below_threshold",
   "quit -n"
 ]
@@ -14,24 +14,34 @@ commands = [
 folder = "./examples/cli/scalar_topologies/state"
 name = "multi_scalar_integrand"
 
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = false
+
 [[command_blocks]]
 name = "generate"
 commands = [
+  "import model scalars-default.json",
 
-    "import model scalars-default.json",
+  "reset processes",
+  "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri_below_thres --global-prefactor-num '1𝑖'",
+  "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box_below_thres --select-graphs GL0",
+  "generate",
+  "duplicate integrand -p triangle -i scalar_tri_below_thres --output_process_name triangle --output_integrand_name scalar_tri_above_thres",
+  "duplicate integrand -p box -i scalar_box_below_thres --output_process_name box --output_integrand_name scalar_box_above_thres",
+  "save dot",
+  "save standalone",
 
-    "reset processes",
-    "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri_below_thres --global-prefactor-num '1𝑖'",
-    "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box_below_thres --select-graphs GL0",
-	"generate",
-    "duplicate integrand -p triangle -i scalar_tri_below_thres --output_process_name triangle --output_integrand_name scalar_tri_above_thres",
-    "duplicate integrand -p box -i scalar_box_below_thres --output_process_name box --output_integrand_name scalar_box_above_thres",
-    "save dot",
-    "save standalone",
+  "set model mass_scalar_2=2.0",
 
-    "set model mass_scalar_2=2.0",
-
-    """set process -p triangle -i scalar_tri_below_thres string '
+  """set process -p triangle -i scalar_tri_below_thres string '
 [kinematics.externals]
 type = "constant"
 
@@ -48,7 +58,7 @@ helicities = [
 ]
     '""",
 
-    """set process -p triangle -i scalar_tri_above_thres string '
+  """set process -p triangle -i scalar_tri_above_thres string '
 [kinematics.externals]
 type = "constant"
 
@@ -65,7 +75,7 @@ helicities = [
 ]
     '""",
 
-	"""set process -p box -i scalar_box_below_thres string '
+  """set process -p box -i scalar_box_below_thres string '
 [kinematics.externals]
 type = "constant"
 
@@ -84,7 +94,7 @@ helicities = [
 ]
     '""",
 
-	"""set process -p box -i scalar_box_above_thres string '
+  """set process -p box -i scalar_box_above_thres string '
 [kinematics.externals]
 type = "constant"
 
@@ -103,129 +113,118 @@ helicities = [
 ]
     '""",
 
-    "save state -o",
-
+  "save state -o",
 ]
 
 [[command_blocks]]
 name = "integrate_triangle_below_threshold"
 commands = [
+  # Naive sampling
+  # """set process -p triangle -i scalar_tri_below_thres string '
+  # [default_runtime_settings.sampling]
+  # type = "default"
+  # mode = "spherical"
+  # mapping = "linear"
+  # b = 1.0
+  #    '""",
 
-	# Naive sampling
-#	"""set process -p triangle -i scalar_tri_below_thres string '
-#	[default_runtime_settings.sampling]
-#	type = "default"
-#	mode = "spherical"
-#	mapping = "linear"
-#	b = 1.0
-#    '""",
+  # Tropical sampling run
+  # """set process -p triangle -i scalar_tri_below_thres string '
+  # [sampling]
+  # type = "discrete_graph_sampling"
+  #
+  # [sampling.sampling_type]
+  # subtype = "tropical"
+  #    '""",
 
-	# Tropical sampling run
-#	"""set process -p triangle -i scalar_tri_below_thres string '
-#	[sampling]
-#	type = "discrete_graph_sampling"
-#
-#	[sampling.sampling_type]
-#	subtype = "tropical"
-#    '""",
+  # MC over LMB with explicit sum per sample point
+  # """set process -p triangle -i scalar_tri_below_thres string '
+  # [sampling]
+  # type = "discrete_graph_sampling"
+  #
+  # [sampling.sampling_type]
+  # subtype = "multi_channeling"
+  # '""",
 
-	# MC over LMB with explicit sum per sample point
-#	"""set process -p triangle -i scalar_tri_below_thres string '
-#	[sampling]
-#	type = "discrete_graph_sampling"
-#
-#	[sampling.sampling_type]
-#	subtype = "multi_channeling"
-#	'""",
-	
-	# MC over LMB with importance sampling of channels
-#	"""set process -p triangle -i scalar_tri_below_thres string '
-#	[sampling]
-#	type = "discrete_graph_sampling"
-#
-#	[sampling.sampling_type]
-#	subtype = "discrete_multi_channeling"
-#	'""",
-	
-	#  MC over LMB and single orientation per sample, both importance-sampled
-#	"""set process -p triangle -i scalar_tri_below_thres string '
-#	[sampling]
-#	type = "discrete_graph_sampling"
-#	sample_orientations = true
-#
-#	[sampling.sampling_type]
-#	subtype = "discrete_multi_channeling"
-#	'""",
+  # MC over LMB with importance sampling of channels
+  # """set process -p triangle -i scalar_tri_below_thres string '
+  # [sampling]
+  # type = "discrete_graph_sampling"
+  #
+  # [sampling.sampling_type]
+  # subtype = "discrete_multi_channeling"
+  # '""",
 
-    "set process -p triangle -i scalar_tri_below_thres kv integrator.target_relative_accuracy=0.00001 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=200000000000 integrator.seed=1337",
+  # MC over LMB and single orientation per sample, both importance-sampled
+  # """set process -p triangle -i scalar_tri_below_thres string '
+  # [sampling]
+  # type = "discrete_graph_sampling"
+  # sample_orientations = true
+  #
+  # [sampling.sampling_type]
+  # subtype = "discrete_multi_channeling"
+  # '""",
 
-	"""integrate --process triangle -i scalar_tri_below_thres --n-cores 1
+  "set process -p triangle -i scalar_tri_below_thres kv integrator.target_relative_accuracy=0.00001 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=200000000000 integrator.seed=1337",
+
+  """integrate --process triangle -i scalar_tri_below_thres --n-cores 1
 	             --target -8.086356446518081e-4 0.0
                  --restart
     """,
-
 ]
-#timing   total        165 µs       param        4.70 µs      itg          64.4 µs      evaluators    3.52 µs # 12 cores  # 179 µs /sample/core 
-#timing   total        9.76 µs      param        0.13 µs      itg          3.68 µs      evaluators    1.70 µs # 1 core    # 10.1 µs /sample/core
+# timing   total        165 µs       param        4.70 µs      itg          64.4 µs      evaluators    3.52 µs # 12 cores  # 179 µs /sample/core
+# timing   total        9.76 µs      param        0.13 µs      itg          3.68 µs      evaluators    1.70 µs # 1 core    # 10.1 µs /sample/core
 
 [[command_blocks]]
 name = "integrate_triangle_above_threshold"
 commands = [
+  "set process -p triangle -i scalar_tri_above_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=200000000000 integrator.seed=1337",
 
-    "set process -p triangle -i scalar_tri_above_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=1000000 integrator.n_max=200000000000 integrator.seed=1337",
-
-	"""integrate --process triangle -i scalar_tri_above_thres --n-cores 1
+  """integrate --process triangle -i scalar_tri_above_thres --n-cores 1
 	             --target -1.5883680319580244e-6 -6.234096084919228e-4
                  --restart
     """,
-
 ]
 
 [[command_blocks]]
 name = "integrate_box_below_threshold"
 commands = [
+  "set process -p box -i scalar_box_below_thres kv integrator.target_relative_accuracy=0.0001 integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=2000000000 integrator.seed=1337",
 
-    "set process -p box -i scalar_box_below_thres kv integrator.target_relative_accuracy=0.0001 integrator.n_increase=0 integrator.n_start=100000 integrator.n_max=2000000000 integrator.seed=1337",
-
-	"""integrate --process box -i scalar_box_below_thres --n-cores 1
+  """integrate --process box -i scalar_box_below_thres --n-cores 1
 	             --target 6.626887713315055e-05 0.0
 				 --renderer ratatui
+					--ratatui-inline-height 32
                  --restart
     """,
-
 ]
 
 [[command_blocks]]
 name = "integrate_box_above_threshold"
 commands = [
+  "set process -p box -i scalar_box_above_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000000 integrator.seed=1337",
 
-    "set process -p box -i scalar_box_above_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000000 integrator.seed=1337",
-
-	"""integrate --process box -i scalar_box_above_thres --n-cores 1
+  """integrate --process box -i scalar_box_above_thres --n-cores 1
 	             --target 7.841453335814232e-6 7.410964890068131e-5
                  --restart
     """,
-
 ]
 
 [[command_blocks]]
 name = "integrate_triangle_and_box_below_threshold"
 commands = [
+  "set process -p triangle -i scalar_tri_below_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
 
-    "set process -p triangle -i scalar_tri_below_thres kv integrator.target_relative_accuracy=0.001 integrator.n_increase=0 integrator.n_start=10000 integrator.n_max=2000000 integrator.seed=1337",
-
-	"""integrate -p triangle -i scalar_tri_below_thres -p box -i scalar_box_below_thres --n-cores 1
+  """integrate -p triangle -i scalar_tri_below_thres -p box -i scalar_box_below_thres --n-cores 1
                  --target triangle@scalar_tri_below_thres=-8.086356446518081e-4,0.0 box@scalar_box_below_thres=6.626887713315055e-05,0.0
                  --restart
     """,
-
 ]
 
 [[command_blocks]]
 name = "integrate_box_above_and_below_threshold"
 commands = [
-
-	"""set process -p box -i scalar_box_above_thres string '
+  """set process -p box -i scalar_box_above_thres string '
     [sampling]
     type = "discrete_graph_sampling"
 	sample_orientations = true
@@ -233,7 +232,7 @@ commands = [
     subtype = "multi_channeling"
     '""",
 
-	"""set process -p box -i scalar_box_below_thres string '
+  """set process -p box -i scalar_box_below_thres string '
     [sampling]
     type = "discrete_graph_sampling"
 	sample_orientations = true
@@ -241,22 +240,23 @@ commands = [
     subtype = "multi_channeling"
     '""",
 
-    "set process -p box -i scalar_box_above_thres kv integrator.target_relative_accuracy=0.001 integrator.target_absolute_accuracy=1.0e-9",
-    "set process -p box -i scalar_box_above_thres kv integrator.n_increase=0 integrator.n_start=500000 integrator.n_max=50000000 integrator.seed=1337",
-    # --show-max-weight-info-for-discrete-bins
-	# --batch-size 100000
-	# --no-stream-iterations
-	# --show-max-weight-info-for-discrete-bins
-	# --no-stream-iterations	
-	#			 --show-phase both
-	#			 --show-top-discrete-grid
-	#			 --show-discrete-contributions-sum
-	#			 --sort-contributions integral
-	#			 --show-max-weight-info
-	#			 --renderer ratatui
-	"""integrate -p box -i scalar_box_above_thres -p box -i scalar_box_below_thres --n-cores 5
+  "set process -p box -i scalar_box_above_thres kv integrator.target_relative_accuracy=0.001 integrator.target_absolute_accuracy=1.0e-9",
+  "set process -p box -i scalar_box_above_thres kv integrator.n_increase=0 integrator.n_start=500000 integrator.n_max=50000000 integrator.seed=1337",
+  # --show-max-weight-info-for-discrete-bins
+  # --batch-size 100000
+  # --no-stream-iterations
+  # --show-max-weight-info-for-discrete-bins
+  # --no-stream-iterations
+  # 		 --show-phase both
+  # 		 --show-top-discrete-grid
+  # 		 --show-discrete-contributions-sum
+  # 		 --sort-contributions integral
+  # 		 --show-max-weight-info
+  # 		 --renderer ratatui
+  """integrate -p box -i scalar_box_above_thres -p box -i scalar_box_below_thres --n-cores 5
                  --target box@scalar_box_above_thres=7.841453335814232e-6,7.410964890068131e-5 box@scalar_box_below_thres=6.626887713315055e-05,0.0
 				 --renderer ratatui
+				--ratatui-inline-height 52
 				 --batch-size 10000
 				 --show-phase both
 				 --show-max-weight-info
@@ -271,17 +271,6 @@ type = "default"
 mode = "spherical"
 mapping = "linear"
 b = 1.0
-
-[cli_settings.global.generation.evaluator]
-iterative_orientation_optimization = false
-store_atom = true
-compile = false
-summed = false
-summed_function_map = true
-
-[cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = true
-check_esurface_at_generation = false
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false

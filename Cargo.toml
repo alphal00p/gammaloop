@@ -55,6 +55,7 @@ vergen-gitcl = { version = "9", default-features = false }
 [patch.crates-io]
 graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+ratatui = { git = "https://github.com/ratatui/ratatui", branch = "main" }
 symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 
 [profile.bench]
