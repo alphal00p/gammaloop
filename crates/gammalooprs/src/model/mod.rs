@@ -870,6 +870,31 @@ impl Particle {
     pub(crate) fn is_massless(&self) -> bool {
         !self.is_massive()
     }
+
+    pub(crate) fn resolved_mass_value(&self, model: &Model) -> Result<Complex<F<f64>>> {
+        model
+            .parameters
+            .get(&self.mass)
+            .and_then(|parameter| parameter.value)
+            .ok_or_else(|| {
+                eyre!(
+                    "Particle '{}' (PDG {}) requires a resolved value for mass parameter '{}' in model '{}'.",
+                    self.name,
+                    self.pdg_code,
+                    self.mass.0,
+                    model.name
+                )
+            })
+    }
+
+    pub(crate) fn has_zero_resolved_mass(&self, model: &Model) -> Result<bool> {
+        let mass_value = self.resolved_mass_value(model)?;
+        Ok(mass_value.re == mass_value.re.zero() && mass_value.im == mass_value.im.zero())
+    }
+
+    pub(crate) fn is_qcd_charged(&self) -> bool {
+        self.color != 1
+    }
     // pub fn decoration(&self) -> Decoration {
     //     match self.spin {
     //         0 => Decoration::Dashed,

@@ -371,8 +371,13 @@ pub(crate) fn summarize_selector(settings: &SelectorSettings) -> String {
 }
 
 fn summarize_jet_clustering(label: &str, settings: &JetClusteringSettings) -> String {
+    let clustered_pdgs = settings
+        .clustered_pdgs
+        .as_ref()
+        .map(|pdgs| format!("{pdgs:?}"))
+        .unwrap_or_else(|| "None (model default)".to_string());
     format!(
-        "{label} algorithm={:?} dR={} min_jpt={}",
+        "{label} algorithm={:?} dR={} min_jpt={} clustered_pdgs={clustered_pdgs}",
         settings.algorithm, settings.dR, settings.min_jpt
     )
 }

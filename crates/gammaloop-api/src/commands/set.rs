@@ -1483,6 +1483,33 @@ mod test {
     }
 
     #[test]
+    fn parse_set_process_add_quantity_with_negative_integer_list() {
+        let cmd = Set::from_str(
+            "set process -p epem_a_tth -i LO add quantity jets jet_pt clustered_pdgs=[-1,1,21,82]",
+        )
+        .unwrap();
+
+        match cmd {
+            Set::Process { input, .. } => {
+                assert_eq!(
+                    input,
+                    ProcessSetArgs::Add {
+                        target: ProcessAddTarget::Quantity {
+                            name: "jets".to_string(),
+                            kind: "jet_pt".to_string(),
+                            pairs: vec![KvPair {
+                                key: "clustered_pdgs".to_string(),
+                                value: "[-1,1,21,82]".to_string(),
+                            }],
+                        }
+                    }
+                );
+            }
+            other => panic!("Expected set process command, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn parse_set_process_update_observable() {
         let cmd = Set::from_str(
             "set process -p epem_a_tth -i LO update observable top_pt_hist n_bins=100",
@@ -1702,6 +1729,12 @@ max = 500.0
     fn infer_cli_value_accepts_yaml_sequences() {
         let parsed = super::infer_cli_value("[alphaloop, matad]").unwrap();
         assert_eq!(parsed, serde_json::json!(["alphaloop", "matad"]));
+    }
+
+    #[test]
+    fn infer_cli_value_accepts_negative_integer_sequences() {
+        let parsed = super::infer_cli_value("[-1,1,21,82]").unwrap();
+        assert_eq!(parsed, serde_json::json!([-1, 1, 21, 82]));
     }
 
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

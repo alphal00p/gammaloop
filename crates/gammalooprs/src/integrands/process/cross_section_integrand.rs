@@ -227,7 +227,10 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
             a.warm_up(&self.settings, model)?;
         }
         self.event_processing_runtime
-            .set(EventProcessingRuntime::from_settings(&self.settings)?);
+            .set(EventProcessingRuntime::from_settings_with_model(
+                &self.settings,
+                model,
+            )?);
         Ok(())
     }
 

@@ -201,7 +201,7 @@ fn compare_against_fjcore(
     min_jpt: f64,
     momenta: &[FourMomentum<F<f64>>],
 ) {
-    let rust_clustering = JetClustering::new(algorithm, r, min_jpt);
+    let rust_clustering = JetClustering::new(algorithm, r, min_jpt, Vec::new());
     let rust_result = rust_clustering.cluster_momenta(momenta);
     let fjcore_result = run_fjcore(algorithm, r, min_jpt, momenta);
 

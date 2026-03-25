@@ -26,8 +26,8 @@ use crate::{
     completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
     session::CliSession,
     settings_tree::{
-        schema_at_path, schema_enum_values, serialize_schema, serialize_settings_with_defaults,
-        value_at_path,
+        schema_at_path, schema_enum_values, schema_example_values, schema_value_hint,
+        serialize_schema, serialize_settings_with_defaults, value_at_path,
     },
     CLISettings,
 };
@@ -1793,7 +1793,7 @@ fn add_settings_kv_suggestions(
         return;
     }
 
-    add_settings_path_suggestions(root, &key_request, pos, suggestions, seen);
+    add_settings_path_suggestions(root, schema, &key_request, pos, suggestions, seen);
 }
 
 fn add_process_settings_suggestions(
@@ -1853,7 +1853,13 @@ fn add_process_settings_add_suggestions(
             span_start: context.current_token.start,
             quote_style: context.current_token.quote_style,
         };
-        add_type_hint_suggestion(SettingsValueKind::String, &request, pos, suggestions, seen);
+        add_type_hint_suggestion(
+            SettingsValueKind::String.description(),
+            &request,
+            pos,
+            suggestions,
+            seen,
+        );
         return;
     }
 
@@ -2037,7 +2043,7 @@ fn add_process_settings_kv_suggestions(
         return;
     }
 
-    add_settings_path_suggestions(root, &key_request, pos, suggestions, seen);
+    add_settings_path_suggestions(root, schema, &key_request, pos, suggestions, seen);
 }
 
 fn add_literal_value_suggestions<'a>(
@@ -2522,6 +2528,7 @@ fn split_kv_completion_request(
 
 fn add_settings_path_suggestions(
     root: &JsonValue,
+    schema: &JsonValue,
     key_request: &str,
     pos: usize,
     suggestions: &mut Vec<Suggestion>,
@@ -2554,10 +2561,18 @@ fn add_settings_path_suggestions(
         if !seen.insert(replacement.clone()) {
             continue;
         }
+        let full_path = if container_path.is_empty() {
+            key.to_string()
+        } else {
+            format!("{container_path}.{key}")
+        };
+        let description = schema_at_path(schema, &full_path)
+            .and_then(|schema_node| schema_value_hint(schema, schema_node))
+            .unwrap_or_else(|| settings_path_description(path_kind).to_string());
 
         suggestions.push(Suggestion {
             value: replacement.clone(),
-            description: Some(settings_path_description(path_kind).to_string()),
+            description: Some(description),
             style: None,
             extra: None,
             span: Span::new(pos.saturating_sub(key_request.len()), pos),
@@ -2579,7 +2594,10 @@ fn add_settings_value_suggestions(
         return;
     };
 
-    if let Some(schema_node) = schema_at_path(schema, key_request) {
+    let schema_node = schema_at_path(schema, key_request);
+    let schema_hint = schema_node.and_then(|node| schema_value_hint(schema, node));
+
+    if let Some(schema_node) = schema_node {
         let enum_values = schema_enum_values(schema, schema_node);
         if !enum_values.is_empty() {
             for candidate in enum_values {
@@ -2601,6 +2619,33 @@ fn add_settings_value_suggestions(
             }
             return;
         }
+
+        let mut added_example = false;
+        for candidate in schema_example_values(schema, schema_node) {
+            if !candidate.starts_with(&value_request.partial_value) {
+                continue;
+            }
+            let rendered = render_value_completion(&candidate, value_request.quote_style);
+            if !seen.insert(rendered.clone()) {
+                continue;
+            }
+            suggestions.push(Suggestion {
+                value: rendered,
+                description: Some(
+                    schema_hint
+                        .clone()
+                        .unwrap_or_else(|| "example value".to_string()),
+                ),
+                style: None,
+                extra: None,
+                span: Span::new(value_request.span_start, pos),
+                append_whitespace: true,
+            });
+            added_example = true;
+        }
+        if added_example {
+            return;
+        }
     }
 
     let kind = settings_value_kind(value);
@@ -2616,7 +2661,11 @@ fn add_settings_value_suggestions(
             }
             suggestions.push(Suggestion {
                 value: rendered,
-                description: Some(kind.description().to_string()),
+                description: Some(
+                    schema_hint
+                        .clone()
+                        .unwrap_or_else(|| kind.description().to_string()),
+                ),
                 style: None,
                 extra: None,
                 span: Span::new(value_request.span_start, pos),
@@ -2626,25 +2675,32 @@ fn add_settings_value_suggestions(
         return;
     }
 
-    add_type_hint_suggestion(kind, value_request, pos, suggestions, seen);
+    add_type_hint_suggestion(
+        schema_hint.unwrap_or_else(|| kind.description().to_string()),
+        value_request,
+        pos,
+        suggestions,
+        seen,
+    );
 }
 
 fn add_type_hint_suggestion(
-    kind: SettingsValueKind,
+    description: impl Into<String>,
     value_request: &ValueCompletionRequest,
     pos: usize,
     suggestions: &mut Vec<Suggestion>,
     seen: &mut HashSet<String>,
 ) {
+    let description = description.into();
     let rendered = render_value_completion(&value_request.partial_value, value_request.quote_style);
-    let marker = format!("{}::{}", rendered, kind.description());
+    let marker = format!("{rendered}::{description}");
     if !seen.insert(marker) {
         return;
     }
 
     suggestions.push(Suggestion {
         value: rendered,
-        description: Some(kind.description().to_string()),
+        description: Some(description),
         style: None,
         extra: None,
         span: Span::new(value_request.span_start, pos),
@@ -4352,6 +4408,49 @@ mod tests {
             suggestions
                 .iter()
                 .any(|suggestion| suggestion.description.as_deref() == Some("expects an integer")),
+            "{suggestions:?}"
+        );
+    }
+
+    #[test]
+    fn completion_uses_schema_hint_for_clustered_pdgs_key() {
+        let suggestions = completion_suggestions(
+            "set process -p triangle add quantity jets jet_pt clustered_p",
+            &generate_completion_state(),
+        );
+
+        let suggestion = suggestions
+            .iter()
+            .find(|suggestion| suggestion.value == "clustered_pdgs=")
+            .unwrap();
+        let description = suggestion.description.as_deref().unwrap();
+        assert!(description.contains("PDG IDs allowed to be clustered"));
+        assert!(description.contains("[-1,1,21,82]"));
+    }
+
+    #[test]
+    fn completion_offers_clustered_pdgs_example_value() {
+        let suggestions = completion_suggestions(
+            "set process -p triangle add quantity jets jet_pt clustered_pdgs=",
+            &generate_completion_state(),
+        );
+
+        assert!(
+            suggestions.iter().any(|suggestion| {
+                suggestion
+                    .description
+                    .as_deref()
+                    .is_some_and(|description| {
+                        description.contains("PDG IDs allowed to be clustered")
+                            && description.contains("[-1,1,21,82]")
+                    })
+            }),
+            "{suggestions:?}"
+        );
+        assert!(
+            suggestions
+                .iter()
+                .all(|suggestion| suggestion.description.as_deref() != Some("expects null")),
             "{suggestions:?}"
         );
     }

@@ -828,7 +828,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         }
 
         self.event_processing_runtime
-            .set(EventProcessingRuntime::from_settings(&self.settings)?);
+            .set(EventProcessingRuntime::from_settings_with_model(
+                &self.settings,
+                model,
+            )?);
 
         Ok(())
     }

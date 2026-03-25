@@ -1,3 +1,4 @@
+use crate::model::Model;
 use crate::settings::RuntimeSettings;
 use crate::utils::serde_utils::{
     IsDefault, is_false, is_float, is_true, is_usize, show_defaults_helper,
@@ -122,6 +123,69 @@ pub struct JetClusteringSettings {
     pub dR: f64,
     #[serde(skip_serializing_if = "is_float::<0>")]
     pub min_jpt: f64,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Optional list of PDG IDs allowed to be clustered. Use null to derive the default from the model, or a compact list like [-1,1,21,82] in CLI key-value assignments.",
+        example = clustered_pdgs_completion_example()
+    )]
+    pub clustered_pdgs: Option<Vec<isize>>,
+}
+
+fn clustered_pdgs_completion_example() -> Option<Vec<isize>> {
+    Some(vec![-1, 1, 21, 82])
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ResolvedJetClusteringSettings {
+    algorithm: JetAlgorithm,
+    d_r: f64,
+    min_jpt: f64,
+    clustered_pdgs: Vec<isize>,
+}
+
+impl JetClusteringSettings {
+    fn resolve(&self, model: Option<&Model>) -> Result<ResolvedJetClusteringSettings> {
+        Ok(ResolvedJetClusteringSettings {
+            algorithm: self.algorithm,
+            d_r: self.dR,
+            min_jpt: self.min_jpt,
+            clustered_pdgs: self.resolve_clustered_pdgs(model)?,
+        })
+    }
+
+    fn resolve_clustered_pdgs(&self, model: Option<&Model>) -> Result<Vec<isize>> {
+        let clustered_pdgs = match &self.clustered_pdgs {
+            Some(clustered_pdgs) => clustered_pdgs.clone(),
+            None => Self::default_clustered_pdgs(model.ok_or_else(|| {
+                eyre!(
+                    "Cannot resolve default clustered_pdgs without a model. Provide a model-aware event-processing runtime or set clustered_pdgs explicitly."
+                )
+            })?)?,
+        };
+        Ok(Self::normalize_clustered_pdgs(clustered_pdgs))
+    }
+
+    fn default_clustered_pdgs(model: &Model) -> Result<Vec<isize>> {
+        Ok(model
+            .particles
+            .iter()
+            .filter(|particle| particle.is_qcd_charged())
+            .map(|particle| {
+                particle
+                    .has_zero_resolved_mass(model)
+                    .map(|has_zero_mass| has_zero_mass.then_some(particle.pdg_code))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect())
+    }
+
+    fn normalize_clustered_pdgs(mut clustered_pdgs: Vec<isize>) -> Vec<isize> {
+        clustered_pdgs.sort_unstable();
+        clustered_pdgs.dedup();
+        clustered_pdgs
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -416,7 +480,7 @@ type ClusteringHandle = usize;
 
 #[derive(Debug, Clone)]
 struct CompiledClustering {
-    settings: JetClusteringSettings,
+    settings: ResolvedJetClusteringSettings,
     clustering: JetClustering,
 }
 
@@ -426,20 +490,30 @@ struct CompiledClusteringRegistry {
 }
 
 impl CompiledClusteringRegistry {
-    fn register(&mut self, settings: &JetClusteringSettings) -> ClusteringHandle {
+    fn register(
+        &mut self,
+        settings: &JetClusteringSettings,
+        model: Option<&Model>,
+    ) -> Result<ClusteringHandle> {
+        let resolved_settings = settings.resolve(model)?;
         if let Some(index) = self
             .entries
             .iter()
-            .position(|entry| entry.settings == *settings)
+            .position(|entry| entry.settings == resolved_settings)
         {
-            index
+            Ok(index)
         } else {
             let index = self.entries.len();
             self.entries.push(CompiledClustering {
-                settings: settings.clone(),
-                clustering: JetClustering::new(settings.algorithm, settings.dR, settings.min_jpt),
+                clustering: JetClustering::new(
+                    resolved_settings.algorithm,
+                    resolved_settings.d_r,
+                    resolved_settings.min_jpt,
+                    resolved_settings.clustered_pdgs.clone(),
+                ),
+                settings: resolved_settings,
             });
-            index
+            Ok(index)
         }
     }
 
@@ -605,10 +679,11 @@ impl JetPtDefinition {
     fn new(
         settings: &JetClusteringSettings,
         clustering_registry: &mut CompiledClusteringRegistry,
-    ) -> Self {
-        Self {
-            clustering_handle: clustering_registry.register(settings),
-        }
+        model: Option<&Model>,
+    ) -> Result<Self> {
+        Ok(Self {
+            clustering_handle: clustering_registry.register(settings, model)?,
+        })
     }
 
     fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
@@ -632,10 +707,11 @@ impl JetCountDefinition {
     fn new(
         settings: &JetClusteringSettings,
         clustering_registry: &mut CompiledClusteringRegistry,
-    ) -> Self {
-        Self {
-            clustering_handle: clustering_registry.register(settings),
-        }
+        model: Option<&Model>,
+    ) -> Result<Self> {
+        Ok(Self {
+            clustering_handle: clustering_registry.register(settings, model)?,
+        })
     }
 
     fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
@@ -661,17 +737,19 @@ impl ObservableDefinition {
     fn from_settings(
         settings: &QuantitySettings,
         clustering_registry: &mut CompiledClusteringRegistry,
-    ) -> Self {
-        match settings {
+        model: Option<&Model>,
+    ) -> Result<Self> {
+        Ok(match settings {
             QuantitySettings::ParticleScalar(settings) => ObservableDefinition::ParticleScalar(
                 ParticleScalarDefinition::new(settings.quantity, settings.pdgs.clone()),
             ),
             QuantitySettings::JetPt(settings) => ObservableDefinition::JetPt(JetPtDefinition::new(
                 &settings.clustering,
                 clustering_registry,
-            )),
+                model,
+            )?),
             QuantitySettings::JetCount(settings) => ObservableDefinition::JetCount(
-                JetCountDefinition::new(&settings.clustering, clustering_registry),
+                JetCountDefinition::new(&settings.clustering, clustering_registry, model)?,
             ),
             QuantitySettings::AFB {} => {
                 ObservableDefinition::ForwardBackward(ForwardBackwardDefinition)
@@ -679,7 +757,7 @@ impl ObservableDefinition {
             QuantitySettings::CrossSection {} => {
                 ObservableDefinition::CrossSection(CrossSectionDefinition)
             }
-        }
+        })
     }
 
     fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
@@ -1059,7 +1137,7 @@ impl HistogramSnapshot {
         if contiguous_bins == 0 {
             return Err(eyre!("Rebinning factor must be strictly positive."));
         }
-        if self.bins.is_empty() || self.bins.len().is_multiple_of(contiguous_bins) {
+        if self.bins.is_empty() || !self.bins.len().is_multiple_of(contiguous_bins) {
             return Err(eyre!(
                 "Rebinning factor {} does not divide the {} histogram bins exactly.",
                 contiguous_bins,
@@ -1489,6 +1567,7 @@ impl ConfiguredSelector {
         settings: &SelectorSettings,
         quantities: &QuantitiesSettings,
         clustering_registry: &mut CompiledClusteringRegistry,
+        model: Option<&Model>,
     ) -> Result<Self> {
         let quantity = quantities.get(&settings.quantity).ok_or_else(|| {
             eyre!(
@@ -1514,7 +1593,7 @@ impl ConfiguredSelector {
         };
 
         Ok(Self {
-            definition: ObservableDefinition::from_settings(quantity, clustering_registry),
+            definition: ObservableDefinition::from_settings(quantity, clustering_registry, model)?,
             criteria: vec![criterion],
         })
     }
@@ -1547,11 +1626,13 @@ impl Selectors {
         settings: &SelectorSettings,
         quantities: &QuantitiesSettings,
         clustering_registry: &mut CompiledClusteringRegistry,
+        model: Option<&Model>,
     ) -> Result<Self> {
         Ok(Selectors::Configured(ConfiguredSelector::new(
             settings,
             quantities,
             clustering_registry,
+            model,
         )?))
     }
 
@@ -1577,12 +1658,25 @@ pub struct EventProcessingRuntime {
 
 impl EventProcessingRuntime {
     pub fn from_settings(settings: &RuntimeSettings) -> Result<Self> {
+        Self::from_settings_inner(settings, None)
+    }
+
+    pub fn from_settings_with_model(settings: &RuntimeSettings, model: &Model) -> Result<Self> {
+        Self::from_settings_inner(settings, Some(model))
+    }
+
+    fn from_settings_inner(settings: &RuntimeSettings, model: Option<&Model>) -> Result<Self> {
         let mut clustering_registry = CompiledClusteringRegistry::default();
         let selectors = settings
             .selectors
             .values()
             .map(|selector| {
-                Selectors::from_settings(selector, &settings.quantities, &mut clustering_registry)
+                Selectors::from_settings(
+                    selector,
+                    &settings.quantities,
+                    &mut clustering_registry,
+                    model,
+                )
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -1596,6 +1690,7 @@ impl EventProcessingRuntime {
                     observable,
                     &settings.quantities,
                     &mut clustering_registry,
+                    model,
                 )
                 .map(|observable| {
                     if let Some(handle) = observable.required_clustering_handle()
@@ -2074,6 +2169,7 @@ impl Observables {
         settings: &ObservableSettings,
         quantities: &QuantitiesSettings,
         clustering_registry: &mut CompiledClusteringRegistry,
+        model: Option<&Model>,
     ) -> Result<Self> {
         let quantity = quantities.get(&settings.quantity).ok_or_else(|| {
             eyre!(
@@ -2084,7 +2180,7 @@ impl Observables {
         })?;
 
         Ok(Observables::Histogram(HistogramObservable::new(
-            ObservableDefinition::from_settings(quantity, clustering_registry),
+            ObservableDefinition::from_settings(quantity, clustering_registry, model)?,
             quantity,
             name,
             settings,
@@ -2275,8 +2371,8 @@ impl ObservablePhase {
 #[cfg(test)]
 mod tests {
     use super::{
-        HistogramBinSnapshot, HistogramSnapshot, HistogramStatisticsSnapshot, ObservablePhase,
-        ObservableValueTransform,
+        HistogramBinSnapshot, HistogramSnapshot, HistogramStatisticsSnapshot,
+        JetClusteringSettings, ObservablePhase, ObservableValueTransform,
     };
     use std::fs;
 
@@ -2321,6 +2417,30 @@ mod tests {
                 mitigated_pair_count: 4,
             },
         }
+    }
+
+    #[test]
+    fn jet_clustering_settings_normalize_explicit_clustered_pdgs() {
+        let settings = JetClusteringSettings {
+            clustered_pdgs: Some(vec![21, -1, 21, 1, -1]),
+            ..JetClusteringSettings::default()
+        };
+        let resolved = settings
+            .resolve(None)
+            .expect("explicit clustered_pdgs should not require a model");
+        assert_eq!(resolved.clustered_pdgs, vec![-1, 1, 21]);
+    }
+
+    #[test]
+    fn jet_clustering_settings_require_model_for_default_clustered_pdgs() {
+        let error = JetClusteringSettings::default()
+            .resolve(None)
+            .expect_err("default clustered_pdgs should require model context");
+        assert!(
+            error
+                .to_string()
+                .contains("Cannot resolve default clustered_pdgs without a model")
+        );
     }
 
     #[test]

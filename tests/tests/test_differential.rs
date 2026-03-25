@@ -149,7 +149,10 @@ fn jet_count_runtime_settings(with_misbinning: bool) -> RuntimeSettings {
     settings.quantities.insert(
         "jet_count".to_string(),
         QuantitySettings::JetCount(JetCountQuantitySettings {
-            clustering: JetClusteringSettings::default(),
+            clustering: JetClusteringSettings {
+                clustered_pdgs: Some(vec![21]),
+                ..JetClusteringSettings::default()
+            },
         }),
     );
     settings.observables.insert(

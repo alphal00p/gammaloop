@@ -90,6 +90,27 @@ pub(crate) fn schema_enum_values(root: &JsonValue, node: &JsonValue) -> Vec<Stri
     values
 }
 
+pub(crate) fn schema_value_hint(root: &JsonValue, node: &JsonValue) -> Option<String> {
+    let description = schema_description(root, node);
+    let type_hint = schema_type_hint(root, node);
+    let example = schema_example_values(root, node).into_iter().next();
+
+    match (description, type_hint, example) {
+        (Some(description), _, Some(example)) => Some(format!("{description} Example: {example}")),
+        (Some(description), _, None) => Some(description),
+        (None, Some(type_hint), Some(example)) => Some(format!("{type_hint}; e.g. {example}")),
+        (None, Some(type_hint), None) => Some(type_hint),
+        (None, None, Some(example)) => Some(format!("e.g. {example}")),
+        (None, None, None) => None,
+    }
+}
+
+pub(crate) fn schema_example_values(root: &JsonValue, node: &JsonValue) -> Vec<String> {
+    let mut values = Vec::new();
+    collect_schema_examples(root, node, &mut values);
+    values
+}
+
 fn schema_child_for_segment<'a>(
     root: &'a JsonValue,
     node: &'a JsonValue,
@@ -155,5 +176,130 @@ fn collect_schema_enum_values(root: &JsonValue, node: &JsonValue, values: &mut V
         for variant in variants {
             collect_schema_enum_values(root, variant, values);
         }
+    }
+}
+
+fn schema_description(root: &JsonValue, node: &JsonValue) -> Option<String> {
+    let node = resolve_schema_refs(root, node)?;
+    node.get("description")
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|description| !description.is_empty())
+        .map(str::to_string)
+}
+
+fn schema_type_hint(root: &JsonValue, node: &JsonValue) -> Option<String> {
+    let mut type_names = Vec::new();
+    collect_schema_type_names(root, node, &mut type_names);
+    if type_names.is_empty() {
+        return None;
+    }
+
+    let mut descriptions = type_names
+        .into_iter()
+        .map(schema_type_description)
+        .collect::<Vec<_>>();
+    descriptions.dedup();
+
+    Some(match descriptions.as_slice() {
+        [] => return None,
+        [only] => format!("expects {only}"),
+        [first, second] => format!("expects {first} or {second}"),
+        _ => {
+            let last = descriptions.pop().unwrap();
+            format!("expects {} or {last}", descriptions.join(", "))
+        }
+    })
+}
+
+fn collect_schema_type_names(root: &JsonValue, node: &JsonValue, values: &mut Vec<&'static str>) {
+    let Some(node) = resolve_schema_refs(root, node) else {
+        return;
+    };
+
+    match node.get("type") {
+        Some(JsonValue::String(name)) => push_unique_type_name(values, name),
+        Some(JsonValue::Array(type_names)) => {
+            for type_name in type_names {
+                if let Some(name) = type_name.as_str() {
+                    push_unique_type_name(values, name);
+                }
+            }
+        }
+        _ => {}
+    }
+
+    for keyword in ["anyOf", "oneOf", "allOf"] {
+        let Some(variants) = node.get(keyword).and_then(JsonValue::as_array) else {
+            continue;
+        };
+        for variant in variants {
+            collect_schema_type_names(root, variant, values);
+        }
+    }
+}
+
+fn push_unique_type_name(values: &mut Vec<&'static str>, type_name: &str) {
+    let normalized = match type_name {
+        "boolean" => Some("boolean"),
+        "integer" => Some("integer"),
+        "number" => Some("number"),
+        "string" => Some("string"),
+        "array" => Some("array"),
+        "object" => Some("object"),
+        "null" => Some("null"),
+        _ => None,
+    };
+    let Some(normalized) = normalized else {
+        return;
+    };
+    if !values.contains(&normalized) {
+        values.push(normalized);
+    }
+}
+
+fn schema_type_description(type_name: &'static str) -> &'static str {
+    match type_name {
+        "array" => "an array",
+        "boolean" => "a boolean",
+        "integer" => "an integer",
+        "null" => "null",
+        "number" => "a number",
+        "object" => "an object",
+        "string" => "a string",
+        _ => type_name,
+    }
+}
+
+fn collect_schema_examples(root: &JsonValue, node: &JsonValue, values: &mut Vec<String>) {
+    let Some(node) = resolve_schema_refs(root, node) else {
+        return;
+    };
+
+    if let Some(examples) = node.get("examples").and_then(JsonValue::as_array) {
+        for example in examples {
+            push_unique_example(values, example);
+        }
+    }
+    if let Some(example) = node.get("example") {
+        push_unique_example(values, example);
+    }
+
+    for keyword in ["anyOf", "oneOf", "allOf"] {
+        let Some(variants) = node.get(keyword).and_then(JsonValue::as_array) else {
+            continue;
+        };
+        for variant in variants {
+            collect_schema_examples(root, variant, values);
+        }
+    }
+}
+
+fn push_unique_example(values: &mut Vec<String>, example: &JsonValue) {
+    let Ok(rendered) = serde_json::to_string(example) else {
+        return;
+    };
+    if !values.contains(&rendered) {
+        values.push(rendered);
     }
 }

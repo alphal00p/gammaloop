@@ -9,17 +9,29 @@ use ndarray::{Array1, Array2};
 use serial_test::serial;
 
 fn configure_jet_quantities(cli: &mut CLIState) -> Result<()> {
-    cli.run_command(
+    configure_jet_quantities_with_clustered_pdgs(cli, None)
+}
+
+fn configure_jet_quantities_with_clustered_pdgs(
+    cli: &mut CLIState,
+    clustered_pdgs: Option<&str>,
+) -> Result<()> {
+    let clustered_pdgs = clustered_pdgs
+        .map(|clustered_pdgs| format!("clustered_pdgs = {clustered_pdgs}\n"))
+        .unwrap_or_default();
+    cli.run_command(&format!(
         r#"set process string '
 [quantities.leading_jet_pt]
 type = "jet_pt"
 dR = 0.4
+{clustered_pdgs}
 
 [quantities.jet_count]
 type = "jet_count"
 dR = 0.4
+{clustered_pdgs}
 '"#,
-    )
+    ))
 }
 
 fn add_jet_observables(cli: &mut CLIState) -> Result<()> {
@@ -501,6 +513,33 @@ fn lu_rust_xspace_integrator_weights_scale_observable_histograms() -> Result<()>
         weighted_total,
         3.0 * unit_total
     );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_rust_default_clustered_pdgs_match_explicit_massless_qcd_list() -> Result<()> {
+    let mut default_cli = setup_sm_differential_lu_cli("lu_rust_default_clustered_pdgs")?;
+    default_cli.run_command("set process kv general.generate_events=true")?;
+    configure_jet_quantities(&mut default_cli)?;
+    add_jet_observables(&mut default_cli)?;
+
+    let point = default_xspace_point(&default_cli)?;
+    let default_results = evaluate_x_samples(&mut default_cli, std::slice::from_ref(&point))?;
+
+    let mut explicit_cli =
+        setup_sm_differential_lu_cli("lu_rust_explicit_clustered_pdgs_default_match")?;
+    explicit_cli.run_command("set process kv general.generate_events=true")?;
+    configure_jet_quantities_with_clustered_pdgs(
+        &mut explicit_cli,
+        Some("[-4, -3, -2, -1, 1, 2, 3, 4, 21]"),
+    )?;
+    add_jet_observables(&mut explicit_cli)?;
+
+    let explicit_results = evaluate_x_samples(&mut explicit_cli, std::slice::from_ref(&point))?;
+
+    assert_eq!(default_results.observables, explicit_results.observables);
 
     Ok(())
 }

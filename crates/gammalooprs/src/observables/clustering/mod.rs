@@ -25,14 +25,21 @@ pub enum JetAlgorithm {
 #[derive(Debug, Clone, Default)]
 pub struct JetClustering {
     algorithm: JetAlgorithm,
+    clustered_pdgs: Vec<isize>,
     d_r: f64,
     min_jpt: f64,
 }
 
 impl JetClustering {
-    pub fn new(algorithm: JetAlgorithm, d_r: f64, min_jpt: f64) -> Self {
+    pub fn new(
+        algorithm: JetAlgorithm,
+        d_r: f64,
+        min_jpt: f64,
+        clustered_pdgs: Vec<isize>,
+    ) -> Self {
         Self {
             algorithm,
+            clustered_pdgs,
             d_r,
             min_jpt,
         }
@@ -47,7 +54,7 @@ impl JetClustering {
             .copied()
             .zip(event.kinematic_configuration.1.iter().cloned())
             .enumerate()
-            .filter(|(_, (pdg, _))| is_qcd_like_jet_pdg(*pdg))
+            .filter(|(_, (pdg, _))| is_qcd_like_jet_pdg(&self.clustered_pdgs, *pdg))
             .map(|(index, (_pdg, momentum))| types::PseudoJet::from_momentum(index, momentum))
             .collect::<SmallVec<[_; 8]>>();
         self.cluster_candidates(candidates)
@@ -74,6 +81,6 @@ impl JetClustering {
     }
 }
 
-fn is_qcd_like_jet_pdg(pdg: isize) -> bool {
-    pdg.abs() < 6 || pdg == 21 || pdg.abs() == 82 || (3370..3380).contains(&pdg.abs()) || pdg == 0
+fn is_qcd_like_jet_pdg(clustered_pdgs: &[isize], pdg: isize) -> bool {
+    clustered_pdgs.binary_search(&pdg).is_ok()
 }
