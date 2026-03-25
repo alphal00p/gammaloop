@@ -247,7 +247,7 @@ impl Default for UVgenerationSettings {
             pole_part: false,
             only_integrated: false,
             inner_products: true,
-            use_legacy: false,
+            use_legacy: true,
             cached_integrated: true,
             add_sigma: false,
             vakint: VakintSettings::default(),

@@ -394,6 +394,11 @@ impl<'a, O, D> TraceKeyView<'a, O, D> {
         self.levels.is_empty()
     }
 
+    /// Returns the total number of operations across all viewed levels.
+    pub fn op_count(&self) -> usize {
+        self.levels.iter().map(Vec::len).sum()
+    }
+
     /// Iterates over the Foata levels in their stored order.
     ///
     /// Each item is itself a [`TraceKeyView`] over exactly one level.
@@ -422,6 +427,17 @@ impl<'a, O, D> TraceKeyView<'a, O, D> {
             .last()
             .into_iter()
             .flat_map(|level| level.iter())
+    }
+
+    /// Splits the viewed trace into its strict prefix and its leaf level.
+    pub fn split_last_level(&self) -> Option<(TraceKeyView<'a, O, D>, TraceKeyView<'a, O, D>)> {
+        let (leaf, prefix) = self.levels.split_last()?;
+        Some((
+            TraceKeyView { levels: prefix },
+            TraceKeyView {
+                levels: slice::from_ref(leaf),
+            },
+        ))
     }
 
     /// Writes the viewed trace using explicit Foata levels and a custom label mapping.
@@ -626,6 +642,11 @@ impl<O, D> TraceKey<O, D> {
         self.levels.is_empty()
     }
 
+    /// Returns the total number of operations across all levels.
+    pub fn op_count(&self) -> usize {
+        self.view().op_count()
+    }
+
     /// Iterates over the Foata levels in their stored order.
     ///
     /// This is the same top-down order used by [`Display`] and [`TraceKey::write_foata_like`]:
@@ -708,6 +729,11 @@ impl<O, D> TraceKey<O, D> {
     /// ```
     pub fn iter_leaf_ops(&self) -> impl DoubleEndedIterator<Item = &HiddenData<O, D>> + '_ {
         self.view().iter_leaf_ops()
+    }
+
+    /// Splits the trace into its strict prefix and its leaf level.
+    pub fn split_last_level(&self) -> Option<(TraceKeyView<'_, O, D>, TraceKeyView<'_, O, D>)> {
+        self.view().split_last_level()
     }
 
     /// Inserts one operation into the trace, placing it as late as possible.

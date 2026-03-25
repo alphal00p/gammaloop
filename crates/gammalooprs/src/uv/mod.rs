@@ -40,6 +40,8 @@ pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
 }
 
 pub mod hedge_poset;
+pub mod renormalization;
+pub use renormalization::{RenormalizationPart, RenormalizationStats};
 pub mod settings;
 pub use settings::UVgenerationSettings;
 pub mod uv_graph;
