@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
+use std::slice;
 
 use indexmap::set::MutableValues;
 use indexmap::IndexSet;
@@ -331,8 +332,10 @@ where
 
 #[derive(Clone, Debug)]
 pub struct HiddenData<O, D> {
-    pub order: O, // the semantic label used for identity + ordering
-    pub data: D,  // extra context used only for independence tests
+    /// the semantic label used for identity + ordering
+    pub order: O,
+    /// extra context used only for independence tests
+    pub data: D,
 }
 
 // Equality/hash only by `order` so merging works.
@@ -361,16 +364,384 @@ impl<O: PartialOrd, D> PartialOrd for HiddenData<O, D> {
     }
 }
 
+/// A borrowed view over a trace key's Foata levels.
+///
+/// # Examples
+///
+/// ```
+/// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+///
+/// let trace = TraceKey::from_levels(vec![
+///     vec![HiddenData { order: "A", data: () }],
+///     vec![HiddenData { order: "B", data: () }],
+/// ]);
+/// let levels: Vec<_> = trace
+///     .view()
+///     .iter_levels_top_down()
+///     .map(|level| level.to_string())
+///     .collect();
+///
+/// assert_eq!(levels, vec!["{A}", "{B}"]);
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TraceKeyView<'a, O, D> {
+    levels: &'a [Vec<HiddenData<O, D>>],
+}
+
+impl<'a, O, D> TraceKeyView<'a, O, D> {
+    /// Returns whether the viewed trace has no levels.
+    pub fn is_empty(&self) -> bool {
+        self.levels.is_empty()
+    }
+
+    /// Iterates over the Foata levels in their stored order.
+    ///
+    /// Each item is itself a [`TraceKeyView`] over exactly one level.
+    pub fn iter_levels_top_down(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'a, O, D>> + ExactSizeIterator + 'a {
+        self.levels.iter().map(|level| TraceKeyView {
+            levels: slice::from_ref(level),
+        })
+    }
+
+    /// Iterates over the Foata levels in reverse order.
+    ///
+    /// Each item is itself a [`TraceKeyView`] over exactly one level.
+    pub fn iter_levels_bottom_up(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'a, O, D>> + ExactSizeIterator + 'a {
+        self.levels.iter().rev().map(|level| TraceKeyView {
+            levels: slice::from_ref(level),
+        })
+    }
+
+    /// Iterates over the operations in the leaf level of the viewed trace.
+    pub fn iter_leaf_ops(&self) -> impl DoubleEndedIterator<Item = &'a HiddenData<O, D>> + 'a {
+        self.levels
+            .last()
+            .into_iter()
+            .flat_map(|level| level.iter())
+    }
+
+    /// Writes the viewed trace using explicit Foata levels and a custom label mapping.
+    pub fn write_foata_like<W: fmt::Write>(
+        &self,
+        f: &mut W,
+        mut map: impl FnMut(&O) -> String,
+    ) -> fmt::Result
+    where
+        O: Op,
+    {
+        if self.is_empty() {
+            return write!(f, "∅");
+        }
+
+        for (i, level) in self.iter_levels_top_down().enumerate() {
+            if i > 0 {
+                write!(f, " · ")?;
+            }
+            write!(f, "{{")?;
+            for (j, op) in level.iter_leaf_ops().enumerate() {
+                if j > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", map(&op.order))?;
+            }
+            write!(f, "}}")?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a, O: Clone, D: Clone> TraceKeyView<'a, O, D> {
+    /// Clones the viewed levels into an owned [`TraceKey`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![HiddenData { order: "B", data: () }],
+    /// ]);
+    ///
+    /// let cloned = trace.view().to_owned();
+    ///
+    /// assert_eq!(cloned, trace);
+    /// ```
+    pub fn to_owned(&self) -> TraceKey<O, D> {
+        TraceKey::from_levels(self.levels.to_vec())
+    }
+}
+
+impl<'a, O: Clone, D: Clone> From<TraceKeyView<'a, O, D>> for TraceKey<O, D> {
+    fn from(value: TraceKeyView<'a, O, D>) -> Self {
+        value.to_owned()
+    }
+}
+
+impl<O, D> Display for TraceKeyView<'_, O, D>
+where
+    O: Op + Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.write_foata_like(f, |o| o.to_string())
+    }
+}
+
+/// A canonical Foata-style trace normal form.
+///
+/// `TraceKey` stores a trace as a list of levels, where each inner vector contains operations
+/// that are pairwise independent and therefore commute. The levels are ordered, so operations in
+/// later levels could not be moved further left without breaking the independence relation used
+/// when the key was constructed.
+///
+/// `TraceKey` is the owning form. Use [`TraceKey::view`] when you only need borrowed access to
+/// the levels, and [`TraceKey::from_levels`] when you already have an explicit canonical level
+/// structure and want to build an owned key directly.
+///
+/// The intended split is:
+///
+/// - [`TraceKey`] owns a canonical trace.
+/// - [`TraceKeyView`] borrows the same trace without exposing the private storage.
+///
+/// # Examples
+///
+/// ```
+/// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, Independence, TraceKey};
+///
+/// struct CommutesOnlyAandC;
+///
+/// impl Independence<HiddenData<&'static str, ()>> for CommutesOnlyAandC {
+///     fn independent(
+///         &self,
+///         a: &HiddenData<&'static str, ()>,
+///         b: &HiddenData<&'static str, ()>,
+///     ) -> bool {
+///         matches!(
+///             (a.order, b.order),
+///             ("A", "C") | ("C", "A")
+///         )
+///     }
+/// }
+///
+/// let trace = TraceKey::empty()
+///     .push(&CommutesOnlyAandC, HiddenData { order: "A", data: () })
+///     .push(&CommutesOnlyAandC, HiddenData { order: "B", data: () })
+///     .push(&CommutesOnlyAandC, HiddenData { order: "C", data: () });
+///
+/// assert_eq!(trace.to_string(), "{A,C} · {B}");
+/// assert_eq!(trace.view().to_owned(), trace);
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TraceKey<O, D> {
-    pub levels: Vec<Vec<HiddenData<O, D>>>,
+    levels: Vec<Vec<HiddenData<O, D>>>,
 }
 
 impl<O, D> TraceKey<O, D> {
+    /// Returns the empty trace.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::TraceKey;
+    ///
+    /// let empty = TraceKey::<&'static str, ()>::empty();
+    /// assert!(empty.is_empty());
+    /// assert_eq!(empty.to_string(), "∅");
+    /// ```
     pub fn empty() -> Self {
         Self { levels: Vec::new() }
     }
 
+    /// Builds a trace key from explicit Foata levels.
+    ///
+    /// This does not validate that the levels satisfy any independence relation; it assumes the
+    /// caller is providing an already-canonical arrangement.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![
+    ///         HiddenData { order: "B", data: () },
+    ///         HiddenData { order: "C", data: () },
+    ///     ],
+    /// ]);
+    ///
+    /// assert_eq!(trace.to_string(), "{A} · {B,C}");
+    /// ```
+    pub fn from_levels(levels: Vec<Vec<HiddenData<O, D>>>) -> Self {
+        Self { levels }
+    }
+
+    /// Borrows the trace as a lightweight view over its levels.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![HiddenData { order: "B", data: () }],
+    /// ]);
+    ///
+    /// assert!(!trace.view().is_empty());
+    /// let levels: Vec<_> = trace
+    ///     .view()
+    ///     .iter_levels_bottom_up()
+    ///     .map(|level| level.to_string())
+    ///     .collect();
+    /// assert_eq!(levels, vec!["{B}", "{A}"]);
+    /// ```
+    pub fn view(&self) -> TraceKeyView<'_, O, D> {
+        TraceKeyView {
+            levels: &self.levels,
+        }
+    }
+
+    /// Returns whether the trace has no levels.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let empty = TraceKey::<&'static str, ()>::empty();
+    /// let non_empty = TraceKey::from_levels(vec![vec![HiddenData {
+    ///     order: "A",
+    ///     data: (),
+    /// }]]);
+    ///
+    /// assert!(empty.is_empty());
+    /// assert!(!non_empty.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.levels.is_empty()
+    }
+
+    /// Iterates over the Foata levels in their stored order.
+    ///
+    /// This is the same top-down order used by [`Display`] and [`TraceKey::write_foata_like`]:
+    /// earlier levels are yielded first, later levels last.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///         vec![HiddenData { order: "A", data: () }],
+    ///         vec![
+    ///             HiddenData { order: "B", data: () },
+    ///             HiddenData { order: "C", data: () },
+    ///         ],
+    ///     ]);
+    ///
+    /// let levels: Vec<_> = trace
+    ///     .iter_levels_top_down()
+    ///     .map(|level| level.to_string())
+    ///     .collect();
+    ///
+    /// assert_eq!(levels, vec!["{A}", "{B,C}"]);
+    /// ```
+    pub fn iter_levels_top_down(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'_, O, D>> + ExactSizeIterator + '_ {
+        self.view().iter_levels_top_down()
+    }
+
+    /// Iterates over the Foata levels in reverse order.
+    ///
+    /// This yields the last level first and works entirely by reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///         vec![HiddenData { order: "A", data: () }],
+    ///         vec![
+    ///             HiddenData { order: "B", data: () },
+    ///             HiddenData { order: "C", data: () },
+    ///         ],
+    ///     ]);
+    ///
+    /// let levels: Vec<_> = trace
+    ///     .iter_levels_bottom_up()
+    ///     .map(|level| level.to_string())
+    ///     .collect();
+    ///
+    /// assert_eq!(levels, vec!["{B,C}", "{A}"]);
+    /// ```
+    pub fn iter_levels_bottom_up(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'_, O, D>> + ExactSizeIterator + '_ {
+        self.view().iter_levels_bottom_up()
+    }
+
+    /// Iterates over the operations in the leaf level of the trace.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![
+    ///         HiddenData { order: "B", data: () },
+    ///         HiddenData { order: "C", data: () },
+    ///     ],
+    /// ]);
+    ///
+    /// let leaf: Vec<_> = trace.iter_leaf_ops().map(|op| op.order).collect();
+    ///
+    /// assert_eq!(leaf, vec!["B", "C"]);
+    /// ```
+    pub fn iter_leaf_ops(&self) -> impl DoubleEndedIterator<Item = &HiddenData<O, D>> + '_ {
+        self.view().iter_leaf_ops()
+    }
+
+    /// Inserts one operation into the trace, placing it as late as possible.
+    ///
+    /// The new operation is appended to the latest level whose members are all independent of it.
+    /// If no existing level is compatible, a new level is created at the end.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, Independence, TraceKey};
+    ///
+    /// struct CommutesOnlyAandC;
+    ///
+    /// impl Independence<HiddenData<&'static str, ()>> for CommutesOnlyAandC {
+    ///     fn independent(
+    ///         &self,
+    ///         a: &HiddenData<&'static str, ()>,
+    ///         b: &HiddenData<&'static str, ()>,
+    ///     ) -> bool {
+    ///         matches!(
+    ///             (a.order, b.order),
+    ///             ("A", "C") | ("C", "A")
+    ///         )
+    ///     }
+    /// }
+    ///
+    /// let trace = TraceKey::empty()
+    ///     .push(&CommutesOnlyAandC, HiddenData { order: "A", data: () })
+    ///     .push(&CommutesOnlyAandC, HiddenData { order: "B", data: () })
+    ///     .push(&CommutesOnlyAandC, HiddenData { order: "C", data: () });
+    ///
+    /// assert_eq!(trace.to_string(), "{A,C} · {B}");
+    /// ```
     pub fn push<I>(&self, indep: &I, op: HiddenData<O, D>) -> Self
     where
         I: Independence<HiddenData<O, D>>,
@@ -392,6 +763,28 @@ impl<O, D> TraceKey<O, D> {
         Self { levels }
     }
 
+    /// Writes the trace using explicit Foata levels and a custom label mapping.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///         vec![HiddenData { order: 1_u8, data: () }],
+    ///         vec![
+    ///             HiddenData { order: 2_u8, data: () },
+    ///             HiddenData { order: 3_u8, data: () },
+    ///         ],
+    ///     ]);
+    ///
+    /// let mut rendered = String::new();
+    /// trace
+    ///     .write_foata_like(&mut rendered, |order| format!("op{order}"))
+    ///     .unwrap();
+    ///
+    /// assert_eq!(rendered, "{op1} · {op2,op3}");
+    /// ```
     pub fn write_foata_like<W: fmt::Write>(
         &self,
         f: &mut W,
@@ -400,24 +793,7 @@ impl<O, D> TraceKey<O, D> {
     where
         O: Op,
     {
-        if self.levels.is_empty() {
-            return write!(f, "∅");
-        }
-
-        for (i, level) in self.levels.iter().enumerate() {
-            if i > 0 {
-                write!(f, " · ")?;
-            }
-            write!(f, "{{")?;
-            for (j, op) in level.iter().enumerate() {
-                if j > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", map(&op.order))?;
-            }
-            write!(f, "}}")?;
-        }
-        Ok(())
+        self.view().write_foata_like(f, &mut map)
     }
 }
 

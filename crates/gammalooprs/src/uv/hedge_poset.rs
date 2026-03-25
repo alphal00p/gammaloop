@@ -174,7 +174,8 @@ impl Wood {
 
         spinneyset.insert(Spinney::empty(&graph));
         let mut vakint_settings = vakint_settings.true_settings();
-        vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64;
+        // Set the number of terms in epsilon expansion to max number of loops across all components + 1
+        vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64 + 1;
 
         let mut unions = AHashSet::new();
         let g: HedgeGraph<_, _> = HedgeGraph::poset(spinneyset);
@@ -320,11 +321,13 @@ impl OperationNode {
     }
 
     pub fn current<'a>(&'a self, wood: &'a Wood, topo_order: usize) -> Option<Vec<ForestNode<'a>>> {
+        if self.key.is_empty() {
+            return None;
+        }
+
         Some(
             self.key
-                .levels
-                .last()?
-                .iter()
+                .iter_leaf_ops()
                 .map(|op| {
                     let HedgePair::Paired { sink, .. } = wood.graph[&op.data].1 else {
                         panic!("edge in trace key is not paired");
@@ -335,7 +338,7 @@ impl OperationNode {
                         topo_order,
                     }
                 })
-                .collect(),
+                .collect::<Vec<_>>(),
         )
     }
 }
@@ -360,7 +363,7 @@ impl ForestNodeLike for ForestNode<'_> {
 
 impl Display for OperationNode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.key.levels.is_empty() {
+        if self.key.is_empty() {
             write!(f, "∅")
         } else {
             let mut acc: Option<SuBitGraph> = None;
@@ -386,12 +389,8 @@ impl OperationNode {
     pub fn covers(&self) -> Option<SuBitGraph> {
         let mut acc: Option<SuBitGraph> = None;
 
-        if self.key.levels.is_empty() {
-            return acc;
-        }
-
-        for level in self.key.levels.iter() {
-            for op in level.iter() {
+        for level in self.key.iter_levels_top_down() {
+            for op in level.iter_leaf_ops() {
                 if let Some(a) = &mut acc {
                     a.union_with(&op.order);
                 } else {
@@ -402,16 +401,22 @@ impl OperationNode {
 
         acc
     }
+
     pub fn to_atom(&self) -> Atom {
         let mut acc = Atom::one();
 
         let approx = FunctionBuilder::new(symbol!("T"));
-        if self.key.levels.is_empty() {
+        let mut levels = self.key.iter_levels_top_down();
+        let Some(first_level) = levels.next() else {
             return acc;
-        }
+        };
 
-        let mut last = SuBitGraph::empty(self.key.levels[0][0].order.size());
-        for l in &self.key.levels {
+        let Some(first_op) = first_level.iter_leaf_ops().next() else {
+            return acc;
+        };
+
+        let mut last = SuBitGraph::empty(first_op.order.size());
+        for l in std::iter::once(first_level).chain(levels) {
             let last_sym = if last.is_empty() {
                 Atom::Zero
             } else {
@@ -420,7 +425,7 @@ impl OperationNode {
 
             let mut mul = Atom::one();
 
-            for op in l {
+            for op in l.iter_leaf_ops() {
                 let new = function!(
                     symbol!(format!("S_{}", op.order.string_label())),
                     usize::from(op.data)
@@ -529,10 +534,10 @@ impl Forests {
         &mut self,
         graph: &mut Graph,
         wood: &Wood,
-        vakint: (&Vakint, &vakint::VakintSettings),
+        vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let integrated_orchestrator = Integrated::new(vakint.0, vakint.1);
+        let integrated_orchestrator = Integrated::new(vakint, &wood.vakint_settings);
         let uvctx = UVCtx {
             graph: &*graph,
             settings,
