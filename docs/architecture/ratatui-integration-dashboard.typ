@@ -18,6 +18,11 @@ The `integrate` command selects `ratatui` by default for live interactive update
 semantic `StatusUpdate` data, so choosing a terminal presentation must not change integration
 state, convergence, results, or persisted artifacts.
 
+`--ratatui-inline-height 32` reserves a 32-line dashboard in the normal terminal
+instead of entering the alternate screen. The height must be positive; omitting
+the option keeps the fullscreen viewport. Inline rendering leaves surrounding
+terminal output visible and uses the same suspension and shutdown acknowledgements.
+
 The authoritative CLI arguments and renderer controller live in
 #source-link("crates/gammaloop-api/src/commands/integrate.rs", label: "the integrate command").
 Use the generated CLI reference for the exact flags accepted by a particular build.
@@ -28,7 +33,7 @@ The application layer owns terminal and command concerns:
 
 + `StreamingDisplayController` decides whether updates and iteration summaries are streamed.
 + `RatatuiStreamRenderer` sends semantic updates and lifecycle commands to one dashboard thread.
-+ `RatatuiTerminal` owns raw mode, the alternate screen, cursor visibility, drawing, and cleanup.
++ `RatatuiTerminal` owns raw mode, viewport selection, cursor visibility, drawing, and cleanup.
 + `dashboard_event_loop` handles terminal input, redraws, suspend acknowledgements, and shutdown.
 
 The domain layer owns renderer-independent integration status and the state needed to present
@@ -46,7 +51,7 @@ integration workers
        -> dashboard command channel
             -> terminal event loop
             -> RatatuiDashboardState
-            -> stderr alternate screen
+            -> stderr fullscreen or inline viewport
 ```
 
 This boundary keeps terminal dependencies and input handling out of the numerical workers. The
@@ -71,7 +76,9 @@ sample, adapt, copy descendants, or alter the production RNG sequence.
 
 == Terminal lifecycle and failure containment
 
-The alternate screen is entered lazily on the first update. Before a canonical tabled summary
+The selected viewport is entered lazily on the first update; only fullscreen mode
+enters and leaves the alternate screen. Both modes restore cursor visibility and
+disable raw mode on suspension or shutdown. Before a canonical tabled summary
 is printed, the controller synchronously suspends the dashboard and waits until the dashboard
 thread has restored the terminal. Shutdown follows the same acknowledged path. With streaming
 enabled, a panic during integration is caught at the command boundary: the controller shuts
