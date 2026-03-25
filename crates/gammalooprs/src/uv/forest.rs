@@ -19,7 +19,7 @@ use tracing::{debug, instrument};
 use vakint::Vakint;
 
 use super::{
-    UVgenerationSettings,
+    RenormalizationPart, UVgenerationSettings,
     approx::Approximation,
     poset::{DAG, DagNode},
 };
@@ -139,7 +139,7 @@ impl Forest {
         Ok(())
     }
 
-    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<Atom> {
+    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
 
         let wild = Atom::var(W_.x___);
@@ -224,7 +224,9 @@ impl Forest {
         //         sum += p * Atom::var(GS.dim_epsilon).pow(power);
         //     }
         // }
-        Ok(sum.replace_multiple(&replacements))
+        Ok(RenormalizationPart::legacy(
+            sum.replace_multiple(&replacements),
+        ))
     }
 
     #[instrument(skip_all)]

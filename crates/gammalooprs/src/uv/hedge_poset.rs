@@ -21,10 +21,9 @@ use vakint::Vakint;
 
 use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
-    model::Order,
     utils::{W_, symbolica_ext::LogPrint},
     uv::{
-        UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{
             ApproximationKernel, CutStructure, ForestNodeLike, UVCtx, integrated::Integrated,
             local_3d::Local3DApproximation,
@@ -161,7 +160,7 @@ impl Wood {
         // this is the current node, which we want to compute with
         let current = self.graph[current_for_h].forest_node(order);
 
-        (given, current)
+        (current, given)
     }
 
     pub(crate) fn new(cuts: CutStructure, graph: &Graph, vakint_settings: &VakintSettings) -> Self {
@@ -297,7 +296,7 @@ impl Wood {
             graph,
             cuts,
             root: self.root,
-            compute_store: AHashMap::new(),
+            compute_store: ComputeStore::default(),
         }
     }
 }
@@ -322,12 +321,35 @@ impl Display for Wood {
 //     }
 // }
 
+#[derive(Default)]
+pub struct ComputeStore {
+    entries: AHashMap<OperationNode, ComputeNode>,
+    pub kernel_hits: usize,
+}
+
+impl ComputeStore {
+    fn get(&self, key: &OperationNode) -> Option<&ComputeNode> {
+        self.entries.get(key)
+    }
+
+    fn entry(
+        &mut self,
+        key: OperationNode,
+    ) -> std::collections::hash_map::Entry<'_, OperationNode, ComputeNode> {
+        self.entries.entry(key)
+    }
+
+    fn record_kernel_hit(&mut self) {
+        self.kernel_hits += 1;
+    }
+}
+
 pub struct Forests {
     pub graph: HedgeGraph<EdgeIndex, OperationNode>,
     pub root: NodeIndex,
     /// Wood subgraph that has compatible
     cuts: Vec<(SuBitGraph, CutSet)>,
-    pub compute_store: AHashMap<OperationNode, ComputeNode>,
+    pub compute_store: ComputeStore,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -468,26 +490,41 @@ impl OperationNode {
     pub fn integrated(
         &self,
         graph: &Graph,
-        compute_store: &mut AHashMap<OperationNode, ComputeNode>,
+        compute_store: &mut ComputeStore,
         wood: &Wood,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<Atom> {
         let mut acc = Atom::one();
         let integrated_orchestrator = Integrated::new(vakint, &wood.vakint_settings);
-        let uvctx = UVCtx {
-            graph: &*graph,
-            settings,
-        };
+        let uvctx = UVCtx { graph, settings };
 
         let mut order = 0;
-        for l in self.key.iter_levels_top_down() {
+        let mut levels = self.key.view();
+        if settings.cached_integrated
+            && let Some((prefix, leaf_level)) = self.key.split_last_level()
+        {
+            let prefix_key = OperationNode {
+                key: prefix.to_owned(),
+            };
+            if let Some(computed) = compute_store.get(&prefix_key) {
+                let Integrand::Single(cached) = &computed.integrated_4d else {
+                    return Err(eyre!("{} integrated_4d not computed yet", prefix_key));
+                };
+                acc = cached.clone();
+                order = prefix.op_count();
+                levels = leaf_level;
+            }
+        }
+
+        for l in levels.iter_levels_top_down() {
             let mut mul = Atom::one();
 
             for op in l.iter_leaf_ops() {
                 let (current, given) = wood.current_given_pair(op.data, order);
                 order += 1;
-                mul *= integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+                compute_store.record_kernel_hit();
+                mul *= -integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
             }
 
             acc = mul
@@ -575,7 +612,7 @@ impl Forests {
                 let current = wood.graph[current_for_h].forest_node(order);
 
                 // this is the parent node, in the forest, which has already been computed and we want to get the computed value
-                let parent_node = self.graph.node_id(h);
+                let parent_node = self.graph.involved_node_id(h).unwrap();
                 let parent_key = &self.graph[parent_node];
                 let computed = self
                     .compute_store
@@ -593,32 +630,15 @@ impl Forests {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let integrated_orchestrator = Integrated::new(vakint, &wood.vakint_settings);
-        let uvctx = UVCtx { graph, settings };
         for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
-            let mut integrand = Atom::num(1);
-            if settings.cached_integrated {
-                for h in self.iter_parents(*nidx, order, wood) {
-                    let (computed, current, given, parent_key, is_union) = h?;
-
-                    let Integrand::Single(a) = &computed.integrated_4d else {
-                        return Err(eyre!("{} integrated_4d not computed yet", parent_key));
-                    };
-                    if is_union {
-                        integrand *= a;
-                    } else {
-                        integrand = integrated_orchestrator.kernel(&uvctx, &current, &given, a)?;
-                    }
-                }
-            } else {
-                integrand = self.graph[*nidx].integrated(
-                    graph,
-                    &mut self.compute_store,
-                    wood,
-                    vakint,
-                    settings,
-                )?;
-            }
+            debug!(order=%order,cache=%settings.cached_integrated,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
+            let integrand = self.graph[*nidx].integrated(
+                graph,
+                &mut self.compute_store,
+                wood,
+                vakint,
+                settings,
+            )?;
 
             self.compute_store
                 .entry(self.graph[*nidx].clone())
@@ -639,10 +659,7 @@ impl Forests {
         for (cut_compatible_forest_subset, c) in &self.cuts {
             let mut integrands = Some(Local3DApproximation::root(graph, c)?);
 
-            let uvctx = UVCtx {
-                graph: &*graph,
-                settings,
-            };
+            let uvctx = UVCtx { graph, settings };
             for (order, nidx) in self
                 .graph
                 .topo_sort_kahn_of(cut_compatible_forest_subset)
@@ -681,7 +698,7 @@ impl Forests {
         Ok(())
     }
 
-    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<Atom> {
+    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
 
         let wild = Atom::var(W_.x___);
@@ -721,7 +738,11 @@ impl Forests {
             sum += atom;
         }
 
-        Ok(sum.replace_multiple(&replacements))
+        Ok(RenormalizationPart::new(
+            sum.replace_multiple(&replacements),
+            self.compute_store.kernel_hits,
+            self.graph.n_nodes(),
+        ))
     }
 
     pub fn debug_walk(&self) {

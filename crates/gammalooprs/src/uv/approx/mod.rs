@@ -350,10 +350,7 @@ impl Approximation {
             unreachable!()
         };
 
-        let ctx = UVCtx {
-            graph: &*graph,
-            settings,
-        };
+        let ctx = UVCtx { graph, settings };
 
         let mut integrands = vec![];
         for (local, t_arg) in cff.into_iter().zip(t_arg.integrands) {

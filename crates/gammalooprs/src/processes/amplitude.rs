@@ -44,7 +44,7 @@ use crate::{
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, integrated::to_vakint_integrand},
         hedge_poset::Wood as NewWood,
         settings::VakintSettings,
@@ -451,7 +451,10 @@ impl AmplitudeGraph {
 }
 
 impl AmplitudeGraph {
-    pub fn renormalization_part(&mut self, settings: &UVgenerationSettings) -> Result<Atom> {
+    pub fn renormalization_part(
+        &mut self,
+        settings: &UVgenerationSettings,
+    ) -> Result<RenormalizationPart> {
         if settings.use_legacy {
             let mut vk_settings = settings.vakint.true_settings();
             let wood = self.graph.wood(&self.graph.no_dummy());
