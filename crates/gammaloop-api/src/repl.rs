@@ -428,6 +428,7 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
     let mut suggestions = Vec::new();
     let mut seen = HashSet::new();
     let used_arg_ids = collect_used_arg_ids(context.cmd, context.completed_tokens);
+    let seen_arg_ids = collect_seen_arg_ids(context.cmd, context.completed_tokens);
 
     if let Some(flag_value_context) = flag_value_completion_request(
         context.cmd,
@@ -445,6 +446,8 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                 &mut suggestions,
                 &mut seen,
                 &used_arg_ids,
+                &seen_arg_ids,
+                false,
             );
             if !suggestions.is_empty() {
                 return suggestions;
@@ -530,6 +533,8 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
             &mut suggestions,
             &mut seen,
             &used_arg_ids,
+            &seen_arg_ids,
+            false,
         );
         return suggestions;
     }
@@ -543,6 +548,8 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
             &mut suggestions,
             &mut seen,
             &used_arg_ids,
+            &seen_arg_ids,
+            true,
         );
     }
 
@@ -770,6 +777,17 @@ fn collect_used_arg_ids(
     used_arg_ids
 }
 
+fn collect_seen_arg_ids(
+    cmd: &clap::Command,
+    completed_tokens: &[CompletionToken],
+) -> HashSet<String> {
+    completed_tokens
+        .iter()
+        .filter_map(|token| find_flag(cmd, token.cooked.as_str()))
+        .map(arg_id)
+        .collect()
+}
+
 fn arg_allows_multiple_occurrences(arg: &clap::Arg) -> bool {
     matches!(
         arg.get_action(),
@@ -833,11 +851,17 @@ fn add_flag_suggestions(
     suggestions: &mut Vec<reedline::Suggestion>,
     seen: &mut HashSet<String>,
     used_arg_ids: &HashSet<String>,
+    seen_arg_ids: &HashSet<String>,
+    hide_seen_repeatable_args: bool,
 ) {
     let prefix = current_token.cooked.as_str();
 
     for arg in cmd.get_arguments() {
-        if used_arg_ids.contains(&arg_id(arg)) {
+        let arg_id = arg_id(arg);
+        if used_arg_ids.contains(&arg_id) {
+            continue;
+        }
+        if hide_seen_repeatable_args && seen_arg_ids.contains(&arg_id) {
             continue;
         }
         if let Some(short) = arg.get_short() {

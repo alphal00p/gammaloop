@@ -818,7 +818,7 @@ impl Default for StateManifest {
     }
 }
 
-fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Result<()> {
+fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<()> {
     if manifest.version > CURRENT_STATE_MANIFEST_VERSION {
         return Err(eyre!(
             "State version {} is newer than this binary supports (max {}). Please upgrade gammaloop.",
@@ -826,6 +826,12 @@ fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Res
             CURRENT_STATE_MANIFEST_VERSION
         ));
     }
+
+    Ok(())
+}
+
+fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Result<()> {
+    ensure_supported_state_manifest_version(manifest)?;
 
     match manifest.version {
         1 => {
@@ -920,8 +926,7 @@ fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
             manifest_path.display()
         )
     })?;
-
-    run_state_migration_checks(&manifest, save_path)?;
+    ensure_supported_state_manifest_version(&manifest)?;
     Ok(manifest)
 }
 
@@ -1487,6 +1492,7 @@ impl State {
     ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
         let manifest = load_state_manifest(&save_path)?;
+        run_state_migration_checks(&manifest, &save_path)?;
         debug!("Loading state manifest version {}", manifest.version);
 
         let mut model = if let Some(model_path) = &model_path {

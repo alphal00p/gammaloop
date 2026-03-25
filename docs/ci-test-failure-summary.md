@@ -358,3 +358,37 @@ Date: 2026-03-25
 
 - The exclusion-based nextest run was intentionally non-CI and only used to see what is behind the first workspace blocker.
 - The initial version of this file was written before the long-running background jobs completed; the later sections record the final outcomes of those runs.
+
+## Local Validation Update
+
+- Additional local validation on 2026-03-25 used:
+  - `direnv exec . cargo nextest run --workspace --profile ci --locked --no-fail-fast --status-level all`
+- Confirmed non-`gammalooprs` failures in that run:
+  - `gammaloop-api repl::tests::completion_does_not_repeat_used_options_by_short_or_long_form`
+    - panic at `crates/gammaloop-api/src/repl.rs:4463`
+    - `-p` is still offered after `integrate --process triangle `
+  - `gammaloop-api state::tests::state_manifest_roundtrip_current_version`
+    - panic due to missing `symbolica_state.bin`
+    - call path reaches `crates/gammaloop-api/src/state.rs:833`
+  - `gammaloop-integration-tests::test_evaluation_command evaluate_1l_scalar_vacuum`
+    - `Could not find muV in graph`
+    - location: `crates/gammalooprs/src/processes/amplitude.rs:744`
+  - `gammaloop-integration-tests::test_feyngen example_graph_count`
+    - snapshot drift in color-factor ordering/sign placement
+  - `gammaloop-integration-tests::test_feyngen graph_count_from_amplitude_load`
+    - `No such file or directory (os error 2)`
+    - location: `crates/gammalooprs/src/utils/serde_utils.rs:41`
+  - `gammaloop-integration-tests::test_feyngen from_symbolica`
+    - snapshot drift including renamed sign factors (`ExtFerm`/`IntFerm` -> expanded names)
+  - `gammaloop-integration-tests::test_feyngen test_generate_sm_a_ddx`
+    - snapshot drift in `Nc` vs `Nc^(-1)` ordering/sign placement
+  - `gammaloop-integration-tests::test_feyngen test_generate_aa_ttx_amplitude`
+    - snapshot `generate_aa_ttx_amplitude-3` changed from `152 | 28 = 28` to `144 | 36 = 36`
+  - `gammaloop-integration-tests::test_feyngen simple_epem_ddx_generation`
+    - long-running test aborts with stack overflow
+    - same run also emitted `not yet implemented` at `crates/gammalooprs/src/uv/approx/local_3d.rs:151`
+    - and `InvalidIntegralFormat(...)` at `crates/gammalooprs/src/uv/approx/integrated.rs:581`
+- Confirmed improvements relative to the earlier summary:
+  - `linnet-py` compiles in the workspace run and no longer blocks the test matrix.
+  - `gammaloop-integration-tests::test_differential event_processing_runtime_merges_worker_results_and_batch_histograms` passed.
+  - `gammaloop-integration-tests::test_clustering` passed after the local C++ link fix.
