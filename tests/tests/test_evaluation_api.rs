@@ -5,7 +5,7 @@ use gammaloop_api::commands::evaluate_samples::{EvaluateSamples, EvaluateSamples
 use gammaloop_integration_tests::{
     CLIState, default_momentum_space_point, default_xspace_point, setup_sm_differential_lu_cli,
 };
-use ndarray::Array2;
+use ndarray::{Array1, Array2};
 use serial_test::serial;
 
 fn configure_jet_quantities(cli: &mut CLIState) -> Result<()> {
@@ -58,12 +58,21 @@ fn evaluate_x_samples(
     cli: &mut CLIState,
     points: &[Vec<f64>],
 ) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
+    evaluate_x_samples_with_weights(cli, points, None)
+}
+
+fn evaluate_x_samples_with_weights(
+    cli: &mut CLIState,
+    points: &[Vec<f64>],
+    integrator_weights: Option<&[f64]>,
+) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
     let ncols = points.first().map(Vec::len).unwrap_or(0);
     let flat = points
         .iter()
         .flat_map(|point| point.iter().copied())
         .collect::<Vec<_>>();
     let array = Array2::from_shape_vec((points.len(), ncols), flat)?;
+    let integrator_weights = integrator_weights.map(|weights| Array1::from_vec(weights.to_vec()));
     EvaluateSamples {
         process_id: None,
         integrand_name: None,
@@ -71,6 +80,7 @@ fn evaluate_x_samples(
         minimal_output: false,
         momentum_space: false,
         points: array.view(),
+        integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
         discrete_dims: None,
         graph_names: None,
         orientations: None,
@@ -82,7 +92,16 @@ fn evaluate_momentum_sample(
     cli: &mut CLIState,
     point: &[f64],
 ) -> Result<gammalooprs::integrands::evaluation::SingleSampleEvaluationResult> {
+    evaluate_momentum_sample_with_weight(cli, point, None)
+}
+
+fn evaluate_momentum_sample_with_weight(
+    cli: &mut CLIState,
+    point: &[f64],
+    integrator_weight: Option<f64>,
+) -> Result<gammalooprs::integrands::evaluation::SingleSampleEvaluationResult> {
     let array = Array2::from_shape_vec((1, point.len()), point.to_vec())?;
+    let integrator_weights = integrator_weight.map(|weight| Array1::from_vec(vec![weight]));
     let results = EvaluateSamples {
         process_id: None,
         integrand_name: None,
@@ -90,6 +109,7 @@ fn evaluate_momentum_sample(
         minimal_output: false,
         momentum_space: true,
         points: array.view(),
+        integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
         discrete_dims: None,
         graph_names: None,
         orientations: None,
@@ -121,6 +141,7 @@ fn evaluate_x_samples_minimal(
         minimal_output: true,
         momentum_space: false,
         points: array.view(),
+        integrator_weights: None,
         discrete_dims: None,
         graph_names: None,
         orientations: None,
@@ -145,11 +166,45 @@ fn evaluate_x_samples_precise(
         minimal_output: false,
         momentum_space: false,
         points: array.view(),
+        integrator_weights: None,
         discrete_dims: None,
         graph_names: None,
         orientations: None,
     }
     .run(&mut cli.state)
+}
+
+fn assert_complex_scaled(
+    scaled: &spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>,
+    baseline: &spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>,
+    factor: f64,
+) {
+    let expected_re = baseline.re.0 * factor;
+    let expected_im = baseline.im.0 * factor;
+    let re_scale = expected_re.abs().max(1.0);
+    let im_scale = expected_im.abs().max(1.0);
+    assert!(
+        (scaled.re.0 - expected_re).abs() <= 1.0e-12 * re_scale,
+        "real part mismatch: got {}, expected {}",
+        scaled.re.0,
+        expected_re
+    );
+    assert!(
+        (scaled.im.0 - expected_im).abs() <= 1.0e-12 * im_scale,
+        "imaginary part mismatch: got {}, expected {}",
+        scaled.im.0,
+        expected_im
+    );
+}
+
+fn histogram_total_sum_weights(histogram: &gammalooprs::observables::HistogramSnapshot) -> f64 {
+    histogram
+        .bins
+        .iter()
+        .map(|bin| bin.sum_weights)
+        .sum::<f64>()
+        + histogram.underflow_bin.sum_weights
+        + histogram.overflow_bin.sum_weights
 }
 
 fn metadata(
@@ -347,6 +402,111 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
 
 #[test]
 #[serial]
+fn lu_rust_xspace_integrator_weights_align_per_sample_and_scale_events() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_rust_xspace_integrator_weights_per_sample")?;
+    cli.run_command(
+        "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
+    )?;
+
+    let point = default_xspace_point(&cli)?;
+    let mut results =
+        evaluate_x_samples_with_weights(&mut cli, &[point.clone(), point], Some(&[1.0, 3.0]))?;
+
+    assert_eq!(results.samples.len(), 2);
+    let first = results.samples.remove(0);
+    let second = results.samples.remove(0);
+
+    assert_eq!(first.evaluation.integrator_weight.0, 1.0);
+    assert_eq!(second.evaluation.integrator_weight.0, 3.0);
+    assert_eq!(
+        first.evaluation.parameterization_jacobian,
+        second.evaluation.parameterization_jacobian
+    );
+    assert_eq!(
+        first.evaluation.integrand_result,
+        second.evaluation.integrand_result
+    );
+    assert_eq!(
+        first
+            .evaluation
+            .event_groups
+            .iter()
+            .map(|group| group.len())
+            .collect::<Vec<_>>(),
+        second
+            .evaluation
+            .event_groups
+            .iter()
+            .map(|group| group.len())
+            .collect::<Vec<_>>()
+    );
+
+    for (first_group, second_group) in first
+        .evaluation
+        .event_groups
+        .iter()
+        .zip(second.evaluation.event_groups.iter())
+    {
+        for (first_event, second_event) in first_group.iter().zip(second_group.iter()) {
+            assert_complex_scaled(&second_event.weight, &first_event.weight, 3.0);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_rust_xspace_integrator_weights_scale_observable_histograms() -> Result<()> {
+    let mut unit_cli = setup_sm_differential_lu_cli("lu_rust_xspace_integrator_weights_unit")?;
+    unit_cli.run_command("set process kv general.generate_events=true")?;
+    configure_jet_quantities(&mut unit_cli)?;
+    add_jet_observables(&mut unit_cli)?;
+
+    let point = default_xspace_point(&unit_cli)?;
+    let unit_results =
+        evaluate_x_samples_with_weights(&mut unit_cli, std::slice::from_ref(&point), Some(&[1.0]))?;
+    let unit_histogram = unit_results
+        .observables
+        .histograms
+        .get("leading_jet_pt_hist")
+        .expect("missing leading-jet histogram for unit-weight evaluation");
+
+    let mut weighted_cli =
+        setup_sm_differential_lu_cli("lu_rust_xspace_integrator_weights_weighted")?;
+    weighted_cli.run_command("set process kv general.generate_events=true")?;
+    configure_jet_quantities(&mut weighted_cli)?;
+    add_jet_observables(&mut weighted_cli)?;
+
+    let weighted_results = evaluate_x_samples_with_weights(
+        &mut weighted_cli,
+        std::slice::from_ref(&point),
+        Some(&[3.0]),
+    )?;
+    let weighted_histogram = weighted_results
+        .observables
+        .histograms
+        .get("leading_jet_pt_hist")
+        .expect("missing leading-jet histogram for weighted evaluation");
+
+    assert_eq!(unit_histogram.sample_count, 1);
+    assert_eq!(weighted_histogram.sample_count, 1);
+    assert_eq!(unit_histogram.statistics, weighted_histogram.statistics);
+    let unit_total = histogram_total_sum_weights(unit_histogram);
+    let weighted_total = histogram_total_sum_weights(weighted_histogram);
+    let scale = unit_total.abs().max(1.0);
+    assert!(
+        (weighted_total - 3.0 * unit_total).abs() <= 1.0e-12 * scale,
+        "histogram total weight mismatch: got {}, expected {}",
+        weighted_total,
+        3.0 * unit_total
+    );
+
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn lu_rust_momentum_space_evaluate_sample_reports_no_parameterization_jacobian() -> Result<()> {
     let mut cli = setup_sm_differential_lu_cli("lu_rust_momentum_space_evaluate_sample")?;
     cli.run_command("set process kv general.generate_events=true")?;
@@ -362,6 +522,62 @@ fn lu_rust_momentum_space_evaluate_sample_reports_no_parameterization_jacobian()
     let formatted = result.to_string();
     assert!(formatted.contains("parameterization jacobian"));
     assert!(formatted.contains("None"));
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_rust_momentum_space_integrator_weights_scale_events_without_jacobian() -> Result<()> {
+    let mut cli =
+        setup_sm_differential_lu_cli("lu_rust_momentum_space_integrator_weights_scale_events")?;
+    cli.run_command("set process kv general.generate_events=true")?;
+    let point = default_momentum_space_point(&cli)?;
+
+    let unit = evaluate_momentum_sample_with_weight(&mut cli, &point, Some(1.0))?;
+    let weighted = evaluate_momentum_sample_with_weight(&mut cli, &point, Some(2.5))?;
+
+    assert!(unit.sample.evaluation.parameterization_jacobian.is_none());
+    assert!(
+        weighted
+            .sample
+            .evaluation
+            .parameterization_jacobian
+            .is_none()
+    );
+    assert_eq!(unit.sample.evaluation.integrator_weight.0, 1.0);
+    assert_eq!(weighted.sample.evaluation.integrator_weight.0, 2.5);
+    assert_eq!(
+        unit.sample.evaluation.integrand_result,
+        weighted.sample.evaluation.integrand_result
+    );
+    assert_eq!(
+        unit.sample
+            .evaluation
+            .event_groups
+            .iter()
+            .map(|group| group.len())
+            .collect::<Vec<_>>(),
+        weighted
+            .sample
+            .evaluation
+            .event_groups
+            .iter()
+            .map(|group| group.len())
+            .collect::<Vec<_>>()
+    );
+
+    for (unit_group, weighted_group) in unit
+        .sample
+        .evaluation
+        .event_groups
+        .iter()
+        .zip(weighted.sample.evaluation.event_groups.iter())
+    {
+        for (unit_event, weighted_event) in unit_group.iter().zip(weighted_group.iter()) {
+            assert_complex_scaled(&weighted_event.weight, &unit_event.weight, 2.5);
+        }
+    }
 
     Ok(())
 }

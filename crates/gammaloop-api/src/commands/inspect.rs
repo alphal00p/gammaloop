@@ -73,6 +73,7 @@ impl Inspect {
                 minimal_output: false,
                 momentum_space: self.momentum_space,
                 points: points.view(),
+                integrator_weights: None,
                 discrete_dims: Some(discrete_dims.view()),
                 graph_names: None,
                 orientations: None,

@@ -1,0 +1,79 @@
+{
+  "slots": [
+    {
+      "key": "triangle@scalar_tri_below_thres",
+      "process": "triangle",
+      "integrand": "scalar_tri_below_thres",
+      "target": {
+        "re": -0.0008086356446518081,
+        "im": 0.0
+      },
+      "integral": {
+        "neval": 240000,
+        "real_zero": 0,
+        "im_zero": 240000,
+        "result": {
+          "re": -0.0008065846164910182,
+          "im": 0.0
+        },
+        "error": {
+          "re": 5.484804189867952e-6,
+          "im": 0.0
+        },
+        "real_chisq": 0.0,
+        "im_chisq": 0.0
+      },
+      "table_results": [
+        {
+          "component": "re",
+          "value": -0.0008065846164910182,
+          "error": 5.484804189867952e-6,
+          "relative_error_percent": 0.6800035703295648,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": 0.3739473807613271,
+          "target_delta_percent": 0.253640582672191,
+          "max_weight_impact": 0.00012009140445292689
+        },
+        {
+          "component": "im",
+          "value": 0.0,
+          "error": 0.0,
+          "relative_error_percent": null,
+          "chi_sq_per_dof": 0.0,
+          "target_delta_sigma": 0.0,
+          "target_delta_percent": 0.0,
+          "max_weight_impact": 0.0
+        }
+      ],
+      "integration_statistics": {
+        "num_evals": 240000,
+        "average_total_time_seconds": 0.000028957,
+        "average_parameterization_time_seconds": 6.39e-7,
+        "average_integrand_time_seconds": 0.000011184,
+        "average_evaluator_time_seconds": 2.384e-6,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 2.58e-7,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "max_weight_info": [
+        {
+          "component": "re",
+          "sign": "-",
+          "max_eval": -0.023247331057087633,
+          "coordinates": "xs: [ 2.7263419861922156e-02 4.5954705169324328e-01 3.9765233646360532e-04 ]"
+        }
+      ],
+      "grid_breakdown": {
+        "re": null,
+        "im": null
+      }
+    }
+  ]
+}

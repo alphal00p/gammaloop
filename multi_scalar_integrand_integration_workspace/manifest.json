@@ -1,0 +1,50 @@
+{
+  "slots": [
+    {
+      "process_name": "triangle",
+      "integrand_name": "scalar_tri_below_thres"
+    }
+  ],
+  "targets": [
+    {
+      "re": -0.0008086356446518081,
+      "im": 0.0
+    }
+  ],
+  "effective_model_parameters": [
+    {
+      "data": {
+        "Gf": [
+          0.0000116639,
+          0.0
+        ],
+        "aEWM1": [
+          132.507,
+          0.0
+        ],
+        "aS": [
+          0.118,
+          0.0
+        ],
+        "lam": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_1": [
+          1.0,
+          0.0
+        ],
+        "mass_scalar_2": [
+          2.0,
+          0.0
+        ]
+      }
+    }
+  ],
+  "integrand_fingerprints": [
+    "cfd54c73dc934fb3"
+  ],
+  "training_slot": 0,
+  "integrator_settings_slot": 0,
+  "sampling_correlation_mode": "correlated"
+}

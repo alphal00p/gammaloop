@@ -53,9 +53,12 @@ vakint = { path = "crates/vakint/" }
 vergen-gitcl = { version = "9", default-features = false }
 
 [patch.crates-io]
-graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+#graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+#numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+#symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+graphica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+numerica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+symbolica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
 
 [profile.bench]
 opt-level = 3
@@ -77,3 +80,4 @@ inherits = "release"
 opt-level = 3
 debug = true
 lto = "fat"
+

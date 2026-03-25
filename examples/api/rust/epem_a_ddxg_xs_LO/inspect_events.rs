@@ -5,6 +5,15 @@
 //! ndarray = "0.17"
 //! gammaloop-api = { path = "../../../../crates/gammaloop-api", default-features = false, features = ["cli"] }
 //! gammalooprs = { path = "../../../../crates/gammalooprs" }
+//!
+//! [patch.crates-io]
+//! #graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+//! #numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+//! #symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+//! graphica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+//! numerica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+//! symbolica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+//!
 //! ```
 //!
 //! Run from the repository root with `rust-script`, for example:
@@ -63,9 +72,10 @@ fn main() -> Result<()> {
             process_id: None,
             integrand_name: None,
             use_arb_prec: false,
-                minimal_output: false,
+            minimal_output: false,
             momentum_space: false,
             points: single_point.view(),
+            integrator_weights: None,
             discrete_dims: None,
             graph_names: None,
             orientations: None,
@@ -74,75 +84,79 @@ fn main() -> Result<()> {
     println!("\n== evaluate_sample ==\n");
     println!("{single_result}");
 
-    let momentum_point: Array2<f64> = arr2(&[[0.11, -0.07, 0.19, -0.13, 0.05, 0.29]]);
-    let momentum_result = evaluate_sample(
-        &mut loaded.state,
-        &EvaluateSamples {
-            process_id: None,
-            integrand_name: None,
-            use_arb_prec: false,
-                minimal_output: false,
-            momentum_space: true,
-            points: momentum_point.view(),
-            discrete_dims: None,
-            graph_names: None,
-            orientations: None,
-        },
-    )?;
-    println!("\n== momentum-space evaluate_sample ==\n");
-    println!("{momentum_result}");
+    // let momentum_point: Array2<f64> = arr2(&[[0.11, -0.07, 0.19, -0.13, 0.05, 0.29]]);
+    // let momentum_result = evaluate_sample(
+    //     &mut loaded.state,
+    //     &EvaluateSamples {
+    //         process_id: None,
+    //         integrand_name: None,
+    //         use_arb_prec: false,
+    //         minimal_output: false,
+    //         momentum_space: true,
+    //         points: momentum_point.view(),
+    //         integrator_weights: None,
+    //         discrete_dims: None,
+    //         graph_names: None,
+    //         orientations: None,
+    //     },
+    // )?;
+    // println!("\n== momentum-space evaluate_sample ==\n");
+    // println!("{momentum_result}");
 
-    let precise_result = evaluate_sample_precise(
-        &mut loaded.state,
-        &EvaluateSamplesPrecise {
-            process_id: None,
-            integrand_name: None,
-            use_arb_prec: true,
-                minimal_output: false,
-            momentum_space: false,
-            points: single_point.view(),
-            discrete_dims: None,
-            graph_names: None,
-            orientations: None,
-        },
-    )?;
-    println!("\n== evaluate_sample_precise ==\n");
-    println!("{precise_result}");
+    // let precise_result = evaluate_sample_precise(
+    //     &mut loaded.state,
+    //     &EvaluateSamplesPrecise {
+    //         process_id: None,
+    //         integrand_name: None,
+    //         use_arb_prec: true,
+    //         minimal_output: false,
+    //         momentum_space: false,
+    //         points: single_point.view(),
+    //         integrator_weights: None,
+    //         discrete_dims: None,
+    //         graph_names: None,
+    //         orientations: None,
+    //     },
+    // )?;
+    // println!("\n== evaluate_sample_precise ==\n");
+    // println!("{precise_result}");
 
-    let batch_points: Array2<f64> = arr2(&[
-        [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
-        [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
-    ]);
-    let batch_results = EvaluateSamples {
-        process_id: None,
-        integrand_name: None,
-        use_arb_prec: false,
-        minimal_output: false,
-        momentum_space: false,
-        points: batch_points.view(),
-        discrete_dims: None,
-        graph_names: None,
-        orientations: None,
-    }
-    .run(&mut loaded.state)?;
+    // let batch_points: Array2<f64> = arr2(&[
+    //     [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
+    //     [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
+    // ]);
+    // let batch_results = EvaluateSamples {
+    //     process_id: None,
+    //     integrand_name: None,
+    //     use_arb_prec: false,
+    //     minimal_output: false,
+    //     momentum_space: false,
+    //     points: batch_points.view(),
+    //     integrator_weights: None,
+    //     discrete_dims: None,
+    //     graph_names: None,
+    //     orientations: None,
+    // }
+    // .run(&mut loaded.state)?;
 
-    println!("\n== evaluate_samples ==\n");
-    println!("{batch_results}");
+    // println!("\n== evaluate_samples ==\n");
+    // println!("{batch_results}");
 
-    let precise_batch_results = EvaluateSamplesPrecise {
-        process_id: None,
-        integrand_name: None,
-        use_arb_prec: true,
-        minimal_output: true,
-        momentum_space: false,
-        points: batch_points.view(),
-        discrete_dims: None,
-        graph_names: None,
-        orientations: None,
-    }
-    .run(&mut loaded.state)?;
-    println!("\n== evaluate_samples_precise ==\n");
-    println!("{precise_batch_results}");
+    // let precise_batch_results = EvaluateSamplesPrecise {
+    //     process_id: None,
+    //     integrand_name: None,
+    //     use_arb_prec: true,
+    //     minimal_output: true,
+    //     momentum_space: false,
+    //     points: batch_points.view(),
+    //     integrator_weights: None,
+    //     discrete_dims: None,
+    //     graph_names: None,
+    //     orientations: None,
+    // }
+    // .run(&mut loaded.state)?;
+    // println!("\n== evaluate_samples_precise ==\n");
+    // println!("{precise_batch_results}");
 
     Ok(())
 }

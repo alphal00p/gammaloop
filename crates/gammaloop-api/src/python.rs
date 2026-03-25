@@ -17,7 +17,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
 };
-use numpy::PyReadonlyArray2;
+use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -1502,7 +1502,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_sample",
-        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, discrete_dim=None, graph_name=None, orientation=None)
+        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
     )]
     pub fn evaluate_sample<'py>(
         &mut self,
@@ -1513,12 +1513,17 @@ impl GammaLoopAPI {
         use_arb_prec: bool,
         minimal_output: bool,
         momentum_space: bool,
+        integrator_weight: Option<f64>,
         discrete_dim: Option<Vec<usize>>,
         graph_name: Option<String>,
         orientation: Option<usize>,
     ) -> Result<PyEvaluationResult> {
         let points =
             ndarray::Array2::from_shape_vec((1, point.len()), point).map_err(|e| eyre!(e))?;
+        let integrator_weights = integrator_weight
+            .map(|weight| ndarray::Array1::from_shape_vec(1, vec![weight]))
+            .transpose()
+            .map_err(|e| eyre!(e))?;
         let discrete_dims = discrete_dim.unwrap_or_default();
         let discrete_dims = Some(
             ndarray::Array2::from_shape_vec((1, discrete_dims.len()), discrete_dims)
@@ -1531,6 +1536,7 @@ impl GammaLoopAPI {
             minimal_output,
             momentum_space,
             points: points.view(),
+            integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
             discrete_dims: discrete_dims.as_ref().map(|dims| dims.view()),
             graph_names: Some(vec![graph_name]),
             orientations: Some(vec![orientation]),
@@ -1553,7 +1559,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_samples",
-        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, discrete_dims=None, graph_names=None, orientations=None)
+        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, integrator_weights=None, discrete_dims=None, graph_names=None, orientations=None)
     )]
     pub fn evaluate_samples<'py>(
         &mut self,
@@ -1564,6 +1570,7 @@ impl GammaLoopAPI {
         use_arb_prec: bool,
         minimal_output: bool,
         momentum_space: bool,
+        integrator_weights: Option<PyReadonlyArray1<'py, f64>>,
         discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
         graph_names: Option<Vec<Option<String>>>,
         orientations: Option<Vec<Option<usize>>>,
@@ -1577,6 +1584,7 @@ impl GammaLoopAPI {
             minimal_output,
             momentum_space,
             points: points_rust,
+            integrator_weights: integrator_weights.as_ref().map(PyReadonlyArray1::as_array),
             discrete_dims: discrete_dims.as_ref().map(PyReadonlyArray2::as_array),
             graph_names,
             orientations,

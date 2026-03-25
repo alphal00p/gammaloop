@@ -13,7 +13,7 @@ use gammalooprs::{
     observables::ObservableSnapshotBundle,
     utils::F,
 };
-use ndarray::ArrayView2;
+use ndarray::{ArrayView1, ArrayView2};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
 
@@ -27,6 +27,7 @@ pub struct EvaluateSamples<'a> {
     pub minimal_output: bool,
     pub momentum_space: bool,
     pub points: ArrayView2<'a, f64>,
+    pub integrator_weights: Option<ArrayView1<'a, f64>>,
     pub discrete_dims: Option<ArrayView2<'a, usize>>,
     pub graph_names: Option<Vec<Option<String>>>,
     pub orientations: Option<Vec<Option<usize>>>,
@@ -45,6 +46,8 @@ impl<'a> EvaluateSamples<'a> {
         integrand.warm_up(&model)?;
 
         let batch_len = self.points.nrows();
+        let integrator_weights =
+            normalize_integrator_weights(self.integrator_weights.as_ref(), batch_len)?;
         let graph_names =
             normalize_optional_per_sample(self.graph_names.as_ref(), batch_len, "graph_names")?;
         let orientations =
@@ -72,6 +75,7 @@ impl<'a> EvaluateSamples<'a> {
             let inputs = build_momentum_inputs(
                 integrand,
                 &self.points,
+                &integrator_weights,
                 self.discrete_dims.as_ref(),
                 &graph_names,
                 &orientations,
@@ -80,8 +84,12 @@ impl<'a> EvaluateSamples<'a> {
                 .evaluate_momentum_configurations_raw(&model, &inputs, self.use_arb_prec)?
                 .samples
         } else {
-            let samples =
-                build_havana_samples(integrand, &self.points, self.discrete_dims.as_ref())?;
+            let samples = build_havana_samples(
+                integrand,
+                &self.points,
+                &integrator_weights,
+                self.discrete_dims.as_ref(),
+            )?;
             integrand
                 .evaluate_samples_raw(
                     &model,
@@ -118,6 +126,7 @@ pub struct EvaluateSamplesPrecise<'a> {
     pub minimal_output: bool,
     pub momentum_space: bool,
     pub points: ArrayView2<'a, f64>,
+    pub integrator_weights: Option<ArrayView1<'a, f64>>,
     pub discrete_dims: Option<ArrayView2<'a, usize>>,
     pub graph_names: Option<Vec<Option<String>>>,
     pub orientations: Option<Vec<Option<usize>>>,
@@ -136,6 +145,8 @@ impl<'a> EvaluateSamplesPrecise<'a> {
         integrand.warm_up(&model)?;
 
         let batch_len = self.points.nrows();
+        let integrator_weights =
+            normalize_integrator_weights(self.integrator_weights.as_ref(), batch_len)?;
         let graph_names =
             normalize_optional_per_sample(self.graph_names.as_ref(), batch_len, "graph_names")?;
         let orientations =
@@ -163,6 +174,7 @@ impl<'a> EvaluateSamplesPrecise<'a> {
             let inputs = build_momentum_inputs(
                 integrand,
                 &self.points,
+                &integrator_weights,
                 self.discrete_dims.as_ref(),
                 &graph_names,
                 &orientations,
@@ -171,8 +183,12 @@ impl<'a> EvaluateSamplesPrecise<'a> {
                 .evaluate_momentum_configurations_precise_raw(&model, &inputs, self.use_arb_prec)?
                 .samples
         } else {
-            let samples =
-                build_havana_samples(integrand, &self.points, self.discrete_dims.as_ref())?;
+            let samples = build_havana_samples(
+                integrand,
+                &self.points,
+                &integrator_weights,
+                self.discrete_dims.as_ref(),
+            )?;
             integrand
                 .evaluate_samples_precise_raw(
                     &model,
@@ -266,10 +282,30 @@ fn normalize_optional_per_sample<T: Clone>(
     }
 }
 
+fn normalize_integrator_weights(
+    integrator_weights: Option<&ArrayView1<'_, f64>>,
+    batch_len: usize,
+) -> Result<Vec<f64>> {
+    match integrator_weights {
+        Some(weights) => {
+            if weights.len() != batch_len {
+                return Err(eyre!(
+                    "Expected {} entries in integrator_weights, got {}.",
+                    batch_len,
+                    weights.len()
+                ));
+            }
+            Ok(weights.iter().copied().collect())
+        }
+        None => Ok(vec![1.0; batch_len]),
+    }
+}
+
 fn build_havana_sample(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
     discrete_dim: &[usize],
+    integrator_weight: f64,
 ) -> Result<Sample<F<f64>>> {
     let expected_dimension = integrand.expected_x_space_dimension(discrete_dim)?;
     if point.len() != expected_dimension {
@@ -283,12 +319,14 @@ fn build_havana_sample(
     Ok(havana_sample(
         point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>(),
         discrete_dim,
+        F(integrator_weight),
     ))
 }
 
 fn build_havana_samples(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     points: &ArrayView2<'_, f64>,
+    integrator_weights: &[f64],
     discrete_dims: Option<&ArrayView2<'_, usize>>,
 ) -> Result<Vec<Sample<F<f64>>>> {
     (0..points.nrows())
@@ -304,6 +342,7 @@ fn build_havana_samples(
                     .as_slice()
                     .expect("point rows are contiguous"),
                 &discrete_dim,
+                integrator_weights[sample_index],
             )
         })
         .collect()
@@ -312,6 +351,7 @@ fn build_havana_samples(
 fn build_momentum_input(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     point: &[f64],
+    integrator_weight: f64,
     discrete_dim: &[usize],
     graph_name: Option<&str>,
     orientation: Option<usize>,
@@ -379,6 +419,7 @@ fn build_momentum_input(
 
             Ok(MomentumSpaceEvaluationInput {
                 loop_momenta,
+                integrator_weight: F(integrator_weight),
                 graph_id,
                 group_id: None,
                 orientation,
@@ -430,6 +471,7 @@ fn build_momentum_input(
 
             Ok(MomentumSpaceEvaluationInput {
                 loop_momenta,
+                integrator_weight: F(integrator_weight),
                 graph_id: None,
                 group_id,
                 orientation,
@@ -442,6 +484,7 @@ fn build_momentum_input(
 fn build_momentum_inputs(
     integrand: &gammalooprs::integrands::process::ProcessIntegrand,
     points: &ArrayView2<'_, f64>,
+    integrator_weights: &[f64],
     discrete_dims: Option<&ArrayView2<'_, usize>>,
     graph_names: &[Option<String>],
     orientations: &[Option<usize>],
@@ -458,6 +501,7 @@ fn build_momentum_inputs(
                     .row(sample_index)
                     .as_slice()
                     .expect("point rows are contiguous"),
+                integrator_weights[sample_index],
                 &discrete_dim,
                 graph_names[sample_index].as_deref(),
                 orientations[sample_index],
@@ -509,12 +553,25 @@ fn merge_precise_observables(
     Ok(observables)
 }
 
-fn havana_sample(cont: Vec<F<f64>>, discrete_dimensions: &[usize]) -> Sample<F<f64>> {
+fn set_top_level_sample_weight(sample: &mut Sample<F<f64>>, integrator_weight: F<f64>) {
+    match sample {
+        Sample::Continuous(weight, _)
+        | Sample::Discrete(weight, _, _)
+        | Sample::Uniform(weight, _, _) => *weight = integrator_weight,
+    }
+}
+
+fn havana_sample(
+    cont: Vec<F<f64>>,
+    discrete_dimensions: &[usize],
+    integrator_weight: F<f64>,
+) -> Sample<F<f64>> {
     let mut sample = Sample::Continuous(F(1.0), cont);
 
     for &discrete_dimension in discrete_dimensions.iter().rev() {
         sample = Sample::Discrete(F(1.0), discrete_dimension, Some(Box::new(sample)));
     }
 
+    set_top_level_sample_weight(&mut sample, integrator_weight);
     sample
 }
