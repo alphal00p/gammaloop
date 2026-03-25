@@ -2,6 +2,7 @@ use std::{collections::BTreeMap, fmt::Display};
 
 use ahash::{AHashMap, AHashSet};
 use eyre::eyre;
+use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -12,13 +13,16 @@ use linnet::half_edge::{
 };
 use spenso::network::library::TensorLibraryData;
 use symbolica::{
-    atom::{Atom, FunctionBuilder},
+    atom::{Atom, AtomCore, FunctionBuilder},
     function, symbol,
 };
+use tracing::debug;
 use vakint::Vakint;
 
 use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
+    model::Order,
+    utils::{W_, symbolica_ext::LogPrint},
     uv::{
         UVgenerationSettings, UltravioletGraph,
         approx::{
@@ -139,6 +143,27 @@ impl TraceUnfold<SuBitGraph> for Wood {
 }
 
 impl Wood {
+    pub fn current_given_pair<'a>(
+        &'a self,
+        edge_id: EdgeIndex,
+        order: usize,
+    ) -> (ForestNode<'a>, ForestNode<'a>) {
+        let HedgePair::Paired { source, sink } = self.graph[&edge_id].1 else {
+            panic!("edge in self is not paired");
+        };
+
+        // get this hedge's forest node from the self. This is the node that has already been computed (as it is a parent to this edge)
+        let given = self.graph[self.graph.node_id(source)].forest_node(order);
+
+        // this is the current node, which should be the same for all union edges (since they all have the same sink)
+        let current_for_h = self.graph.node_id(sink);
+
+        // this is the current node, which we want to compute with
+        let current = self.graph[current_for_h].forest_node(order);
+
+        (given, current)
+    }
+
     pub(crate) fn new(cuts: CutStructure, graph: &Graph, vakint_settings: &VakintSettings) -> Self {
         let mut subgraph = graph.full_filter();
         subgraph.subtract_with(&graph.initial_state_cut.left);
@@ -440,6 +465,37 @@ impl OperationNode {
         acc
     }
 
+    pub fn integrated(
+        &self,
+        graph: &Graph,
+        compute_store: &mut AHashMap<OperationNode, ComputeNode>,
+        wood: &Wood,
+        vakint: &Vakint,
+        settings: &UVgenerationSettings,
+    ) -> Result<Atom> {
+        let mut acc = Atom::one();
+        let integrated_orchestrator = Integrated::new(vakint, &wood.vakint_settings);
+        let uvctx = UVCtx {
+            graph: &*graph,
+            settings,
+        };
+
+        let mut order = 0;
+        for l in self.key.iter_levels_top_down() {
+            let mut mul = Atom::one();
+
+            for op in l.iter_leaf_ops() {
+                let (current, given) = wood.current_given_pair(op.data, order);
+                order += 1;
+                mul *= integrated_orchestrator.kernel(&uvctx, &current, &given, &acc)?;
+            }
+
+            acc = mul
+        }
+
+        Ok(acc)
+    }
+
     // fn simple_op()
 }
 
@@ -532,30 +588,36 @@ impl Forests {
 
     pub fn integrate(
         &mut self,
-        graph: &mut Graph,
+        graph: &Graph,
         wood: &Wood,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         let integrated_orchestrator = Integrated::new(vakint, &wood.vakint_settings);
-        let uvctx = UVCtx {
-            graph: &*graph,
-            settings,
-        };
+        let uvctx = UVCtx { graph, settings };
         for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
             let mut integrand = Atom::num(1);
+            if settings.cached_integrated {
+                for h in self.iter_parents(*nidx, order, wood) {
+                    let (computed, current, given, parent_key, is_union) = h?;
 
-            for h in self.iter_parents(*nidx, order, wood) {
-                let (computed, current, given, parent_key, is_union) = h?;
-
-                let Integrand::Single(a) = &computed.integrated_4d else {
-                    return Err(eyre!("{} integrated_4d not computed yet", parent_key));
-                };
-                if is_union {
-                    integrand *= a;
-                } else {
-                    integrand = integrated_orchestrator.kernel(&uvctx, &current, &given, a)?;
+                    let Integrand::Single(a) = &computed.integrated_4d else {
+                        return Err(eyre!("{} integrated_4d not computed yet", parent_key));
+                    };
+                    if is_union {
+                        integrand *= a;
+                    } else {
+                        integrand = integrated_orchestrator.kernel(&uvctx, &current, &given, a)?;
+                    }
                 }
+            } else {
+                integrand = self.graph[*nidx].integrated(
+                    graph,
+                    &mut self.compute_store,
+                    wood,
+                    vakint,
+                    settings,
+                )?;
             }
 
             self.compute_store
@@ -617,6 +679,49 @@ impl Forests {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<Atom> {
+        let mut sum = Atom::Zero;
+
+        let wild = Atom::var(W_.x___);
+
+        let replacements =
+            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+        for (_, mut crown, key) in self.graph.iter_nodes() {
+            if crown.any(|r| self.graph.flow(r).is_source()) {
+                continue;
+            }
+
+            let computed = self
+                .compute_store
+                .get(key)
+                .ok_or(eyre!("{} not yet added to store", key))?;
+
+            let Integrand::Single(atom) = &computed.integrated_4d else {
+                return Err(eyre!("{} integrated_4d not computed yet", key));
+            };
+            debug!(
+                key=%key,
+               expr = % atom.expand_num().log_print(None),"Term before simplification"
+            );
+
+            let atom = (atom
+                * &graph.global_prefactor.projector
+                * &graph.global_prefactor.num
+                * &graph.overall_factor)
+                .simplify_color()
+                .expand_num()
+                .to_dots();
+
+            debug!(
+                key=%key,
+               expr = % atom.log_print(None),"Term"
+            );
+            sum += atom;
+        }
+
+        Ok(sum.replace_multiple(&replacements))
     }
 
     pub fn debug_walk(&self) {
