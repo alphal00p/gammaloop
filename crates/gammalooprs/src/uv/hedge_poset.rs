@@ -109,8 +109,6 @@ pub struct Wood {
     pub root: NodeIndex,
     pub vakint_settings: vakint::VakintSettings,
     cuts: CutStructure,
-    components_by_subgraph: AHashMap<SuBitGraph, Vec<SuBitGraph>>,
-    representative_edge_by_subgraph: AHashMap<SuBitGraph, EdgeIndex>,
 }
 
 impl Independence<HiddenData<SuBitGraph, EdgeIndex>> for Wood {
@@ -137,37 +135,6 @@ impl TraceUnfold<SuBitGraph> for Wood {
 
     fn key(&self, e: EdgeIndex) -> SuBitGraph {
         self.graph[e].clone()
-    }
-
-    fn realizations_for_op(
-        &self,
-        op: HiddenData<SuBitGraph, EdgeIndex>,
-    ) -> Vec<Vec<HiddenData<SuBitGraph, EdgeIndex>>> {
-        let mut variants = vec![vec![op.clone()]];
-
-        let Some(components) = self.components_by_subgraph.get(&op.order) else {
-            return variants;
-        };
-        if components.len() <= 1 {
-            return variants;
-        }
-
-        let mut sorted_components = components.clone();
-        sorted_components.sort();
-        let split_realization = sorted_components
-            .into_iter()
-            .map(|component| HiddenData {
-                order: component.clone(),
-                data: self
-                    .representative_edge_by_subgraph
-                    .get(&component)
-                    .copied()
-                    .unwrap_or(op.data),
-            })
-            .collect();
-        variants.push(split_realization);
-
-        variants
     }
 }
 
@@ -243,8 +210,9 @@ impl Wood {
 
         let mut to_remove: SuBitGraph = poset.empty_subgraph();
 
-        // Not quite transitive closure. For disjoint unions, only keep incoming edges whose
-        // source spinney is itself a connected component of the sink spinney.
+        // Not quite transitive closure. For disjoint unions, only keep edges that add a
+        // single connected component of the sink; those are the only ones that can be
+        // composed canonically by trace unfolding.
         for u in unions {
             // println!("//{u}:{}", poset[u].subgraph.string_label());
             let mut comps: AHashSet<_> = graph
@@ -256,12 +224,9 @@ impl Wood {
                 let Flow::Sink = poset.flow(c) else {
                     continue;
                 };
-
-                let Some(nid) = poset.involved_node_id(c) else {
-                    continue;
-                };
-                if comps.contains(&poset[nid].subgraph) {
-                    comps.remove(&poset[nid].subgraph);
+                let edge_id = poset[&c];
+                if comps.contains(&poset[edge_id]) {
+                    comps.remove(&poset[edge_id]);
                 } else {
                     to_remove.add(c);
                     to_remove.add(poset.inv(c));
@@ -269,29 +234,7 @@ impl Wood {
             }
         }
 
-        println!("//To remove:\n{}", poset.dot(&to_remove));
-
         poset.delete_hedges(&to_remove);
-        let components_by_subgraph = poset
-            .iter_nodes()
-            .map(|(_, _, spinney)| (spinney.subgraph.clone(), spinney.components.clone()))
-            .collect();
-        let mut representative_edge_by_subgraph = AHashMap::new();
-        for (pair, edge_id, _) in poset.iter_edges() {
-            let HedgePair::Paired { sink, .. } = pair else {
-                continue;
-            };
-            let sink_subgraph = poset[poset.node_id(sink)].subgraph.clone();
-            representative_edge_by_subgraph
-                .entry(sink_subgraph)
-                .and_modify(|best| {
-                    if edge_id < *best {
-                        *best = edge_id;
-                    }
-                })
-                .or_insert(edge_id);
-        }
-
         let root = poset
             .iter_nodes()
             .find(|(_, _, s)| s.subgraph.is_empty())
@@ -302,8 +245,6 @@ impl Wood {
             root: root.expect("no empty spinney found"),
             cuts,
             vakint_settings,
-            components_by_subgraph,
-            representative_edge_by_subgraph,
         }
     }
 
@@ -775,7 +716,7 @@ mod tests {
         println!("{}", f);
         insta::assert_snapshot!(
             f.graph.n_nodes(),
-            @"11");
+            @"8");
 
         Ok(())
     }
