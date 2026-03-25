@@ -46,6 +46,7 @@ use crate::{
     uv::{
         UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, integrated::to_vakint_integrand},
+        hedge_poset::Wood as NewWood,
         settings::VakintSettings,
         wood::CutWoods,
     },
@@ -451,18 +452,27 @@ impl AmplitudeGraph {
 
 impl AmplitudeGraph {
     pub fn renormalization_part(&mut self, settings: &UVgenerationSettings) -> Result<Atom> {
-        let mut vk_settings = settings.vakint.true_settings();
-        let wood = self.graph.wood(&self.graph.no_dummy());
-        //  it needs to be the max number of loops across all divergent spinneys of that graph
-        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+        if settings.use_legacy {
+            let mut vk_settings = settings.vakint.true_settings();
+            let wood = self.graph.wood(&self.graph.no_dummy());
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
 
-        let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+            let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-        let vk = (crate::utils::vakint()?, &vk_settings);
-        let cuts = CutSet::empty(self.graph.n_hedges());
-        forest.compute(&mut self.graph, vk, &cuts, settings)?;
+            let vk = (crate::utils::vakint()?, &vk_settings);
+            let cuts = CutSet::empty(self.graph.n_hedges());
+            forest.compute(&mut self.graph, vk, &cuts, settings)?;
 
-        forest.pole_part_of_ends(&self.graph)
+            forest.pole_part_of_ends(&self.graph)
+        } else {
+            let cuts = CutStructure::empty(&self.graph);
+            let wood = NewWood::new(cuts, &self.graph, &settings.vakint);
+            let mut forest = wood.unfold();
+            forest.integrate(&self.graph, &wood, crate::utils::vakint()?, settings)?;
+
+            forest.pole_part_of_ends(&self.graph)
+        }
     }
 
     #[allow(dead_code)]

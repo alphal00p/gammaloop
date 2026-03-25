@@ -4,7 +4,7 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::Amplitude,
-    utils::load_generic_model,
+    utils::{load_generic_model, symbolica_ext::LogPrint},
     uv::{
         UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
@@ -841,6 +841,11 @@ fn finite_part_ghost_2loop() {
         },
         ..Default::default()
     };
+
+    let new_settings = UVgenerationSettings {
+        use_legacy: false,
+        ..settings.clone()
+    };
     let model = load_generic_model("sm");
 
     let a = amp.graphs[0].renormalization_part(&settings).unwrap();
@@ -848,6 +853,15 @@ fn finite_part_ghost_2loop() {
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/16+5/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
     );
+
+    let new_a = amp.graphs[0].renormalization_part(&new_settings).unwrap();
+    assert_eq!(
+        new_a,
+        a,
+        "New renormalization gives:\n{}\n vs old\n{}",
+        new_a.log_print(Some(120)),
+        a.log_print(Some(120))
+    )
 
     // //p1.p1*i_*gs^4*ca^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
     // let a = amp.graphs[1].renormalization_part(&settings).unwrap();

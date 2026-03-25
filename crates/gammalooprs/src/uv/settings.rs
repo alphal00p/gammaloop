@@ -230,6 +230,10 @@ pub struct UVgenerationSettings {
     pub add_sigma: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub inner_products: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub use_legacy: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub cached_integrated: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
 }
@@ -243,6 +247,8 @@ impl Default for UVgenerationSettings {
             pole_part: false,
             only_integrated: false,
             inner_products: true,
+            use_legacy: false,
+            cached_integrated: true,
             add_sigma: false,
             vakint: VakintSettings::default(),
         }
