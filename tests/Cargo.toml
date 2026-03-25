@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+default = []
+python-api-tests = []
+
 [lib]
 path = "src/lib.rs"
 
@@ -34,3 +38,8 @@ serde_json = { workspace = true }
 
 [build-dependencies]
 cc = "1.1"
+
+[[test]]
+name = "test_python_api"
+path = "tests/test_python_api.rs"
+required-features = ["python-api-tests"]

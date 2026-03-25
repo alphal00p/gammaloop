@@ -6,6 +6,7 @@ dependencies = []
 
 [tool.maturin]
 module-name = "linnet_py"
+features = ["extension-module"]
 
 [build-system]
 requires = ["maturin>=1.7"]

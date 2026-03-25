@@ -123,6 +123,10 @@ test-ci TEST_NAME="":
         cargo nextest run --workspace --profile ci --locked --no-fail-fast
     fi
 
+# Run the Python API integration tests explicitly after preparing the Python env.
+test-python-api:
+    cargo nextest run -p gammaloop-integration-tests --features python-api-tests --test test_python_api --profile ci --locked --no-fail-fast
+
 # Run tests in release mode with full parallelism
 test-fast TEST_NAME="":
     #!/usr/bin/env bash

@@ -19,9 +19,9 @@ pyo3 = { workspace = true }
 pyo3-stub-gen = { workspace = true, default-features = false }
 
 [build-dependencies]
-pyo3-build-config = { version = "0.25" }
+pyo3-build-config = { workspace = true }
 
 [features]
-default = ["extension-module"]
+default = []
 abi3-py310 = ["pyo3/abi3-py310"]
 extension-module = ["pyo3/extension-module"]
