@@ -533,6 +533,54 @@ impl OperationNode {
         Ok(acc)
     }
 
+    pub fn local(
+        &self,
+        graph: &Graph,
+        cutset: &CutSet,
+        compute_store: &mut ComputeStore,
+        wood: &Wood,
+        settings: &UVgenerationSettings,
+    ) -> Result<Vec<Atom>> {
+        let mut acc = None;
+        let local = Local3DApproximation {};
+        let uvctx = UVCtx { graph, settings };
+
+        let mut order = 0;
+        let mut levels = self.key.view();
+        if settings.cached_integrated
+            && let Some((prefix, leaf_level)) = self.key.split_last_level()
+        {
+            let prefix_key = OperationNode {
+                key: prefix.to_owned(),
+            };
+            if let Some(computed) = compute_store.get(&prefix_key) {
+                let Integrands::Multiple(cached) = &computed.local_3d[cutset] else {
+                    return Err(eyre!("{} local_3d not computed yet", prefix_key));
+                };
+                acc = Some(cached.clone());
+                order = prefix.op_count();
+                levels = leaf_level;
+            }
+        }
+        // let acc = acc.unwrap_or(Local3DApproximation::root(graph, cutset)?);
+
+        for l in levels.iter_levels_top_down() {
+            let mut mul = Atom::one();
+
+            for op in l.iter_leaf_ops() {
+                let (current, given) = wood.current_given_pair(op.data, order);
+                order += 1;
+                compute_store.record_kernel_hit();
+                // mul *= -local.kernel(&uvctx, &current, &given, &acc)?;
+            }
+
+            // acc = mul
+        }
+
+        Ok(vec![])
+        // Ok(acc)
+    }
+
     // fn simple_op()
 }
 
@@ -546,7 +594,7 @@ pub enum Integrands {
 }
 
 pub struct ComputeNode {
-    pub local_3d: Integrands, //3d denoms
+    pub local_3d: AHashMap<CutSet, Integrands>,
     pub final_integrand: Integrands,
     pub integrated_4d: Integrand, //4d
     pub simple: Integrand,
@@ -555,7 +603,7 @@ pub struct ComputeNode {
 impl Default for ComputeNode {
     fn default() -> Self {
         ComputeNode {
-            local_3d: Integrands::NotComputed,
+            local_3d: AHashMap::new(),
             final_integrand: Integrands::NotComputed,
             integrated_4d: Integrand::NotComputed,
             simple: Integrand::NotComputed,
@@ -655,11 +703,9 @@ impl Forests {
         wood: &Wood,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let local_orchestrator = Local3DApproximation {};
-        for (cut_compatible_forest_subset, c) in &self.cuts {
-            let mut integrands = Some(Local3DApproximation::root(graph, c)?);
+        for (cut_compatible_forest_subset, cuts) in &self.cuts {
+            let mut first = true;
 
-            let uvctx = UVCtx { graph, settings };
             for (order, nidx) in self
                 .graph
                 .topo_sort_kahn_of(cut_compatible_forest_subset)
@@ -667,36 +713,73 @@ impl Forests {
                 .iter()
                 .enumerate()
             {
-                for h in self.iter_parents(*nidx, order, wood) {
-                    let (computed, current, given, parent_key, is_union) = h?;
-
-                    let Integrands::Multiple(a) = &computed.local_3d else {
-                        return Err(eyre!("{} integrated_4d not computed yet", parent_key));
-                    };
-
-                    if is_union {
-                        // integrand *= a;
-                    } else {
-                        integrands = Some(
-                            a.iter()
-                                .map(|a| local_orchestrator.kernel(&uvctx, &current, &given, a))
-                                .collect::<Result<_>>()?,
-                        );
-                    }
-                }
+                debug!(order=%order,cache=%settings.cached_integrated,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
+                let integrands = if first {
+                    first = false;
+                    Local3DApproximation::root(graph, cuts)
+                } else {
+                    self.graph[*nidx].local(graph, cuts, &mut self.compute_store, wood, settings)
+                }?;
 
                 self.compute_store
                     .entry(self.graph[*nidx].clone())
                     .or_default()
-                    .local_3d = Integrands::Multiple(
-                    integrands
-                        .take()
-                        .ok_or(eyre!("Taken integrand not filled in"))?,
-                );
+                    .local_3d
+                    .insert(cuts.clone(), Integrands::Multiple(integrands));
             }
         }
+
         Ok(())
     }
+
+    // pub fn local_subtract(
+    //     &mut self,
+    //     graph: &mut Graph,
+    //     wood: &Wood,
+    //     settings: &UVgenerationSettings,
+    // ) -> Result<()> {
+    //     let local_orchestrator = Local3DApproximation {};
+    //     for (cut_compatible_forest_subset, c) in &self.cuts {
+    //         let mut integrands = Some(Local3DApproximation::root(graph, c)?);
+
+    //         let uvctx = UVCtx { graph, settings };
+    //         for (order, nidx) in self
+    //             .graph
+    //             .topo_sort_kahn_of(cut_compatible_forest_subset)
+    //             .unwrap()
+    //             .iter()
+    //             .enumerate()
+    //         {
+    //             for h in self.iter_parents(*nidx, order, wood) {
+    //                 let (computed, current, given, parent_key, is_union) = h?;
+
+    //                 let Integrands::Multiple(a) = &computed.local_3d else {
+    //                     return Err(eyre!("{} integrated_4d not computed yet", parent_key));
+    //                 };
+
+    //                 if is_union {
+    //                     // integrand *= a;
+    //                 } else {
+    //                     integrands = Some(
+    //                         a.iter()
+    //                             .map(|a| local_orchestrator.kernel(&uvctx, &current, &given, a))
+    //                             .collect::<Result<_>>()?,
+    //                     );
+    //                 }
+    //             }
+
+    //             self.compute_store
+    //                 .entry(self.graph[*nidx].clone())
+    //                 .or_default()
+    //                 .local_3d = Integrands::Multiple(
+    //                 integrands
+    //                     .take()
+    //                     .ok_or(eyre!("Taken integrand not filled in"))?,
+    //             );
+    //         }
+    //     }
+    //     Ok(())
+    // }
 
     pub(crate) fn pole_part_of_ends(&self, graph: &Graph) -> Result<RenormalizationPart> {
         let mut sum = Atom::Zero;
@@ -759,7 +842,7 @@ impl Forests {
                     .and_modify(|e| e.push(*nidx))
                     .or_insert_with(|| vec![*nidx]);
 
-                println!("Node {}: {}:{:#}", nidx, trace_key, trace_key);
+                println!("Node {}:{:#}", nidx, trace_key);
             });
 
         println!("edge [constraint=true style=invis];");
@@ -848,6 +931,104 @@ mod tests {
         insta::assert_snapshot!(
             f.graph.n_nodes(),
             @"8");
+
+        Ok(())
+    }
+
+    #[test]
+    fn triple_double_tadpole() -> Result<()> {
+        test_initialise().unwrap();
+        let dumbell: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v3;
+                v3 -> v3;//v3 -> v3;
+                v2 -> v2; //v2 -> v2;
+                v1 -> v1;v1 -> v1;
+            },"scalars"
+        )?;
+
+        let spinneys = dumbell.spinneys(&dumbell.full_filter());
+        let f = Wood::new(
+            CutStructure::empty(&dumbell),
+            &dumbell,
+            &VakintSettings::default(),
+        );
+
+        println!("{}", f);
+
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"16",
+            // format!("Wood does not have correct number of spinneys: \n{}",f)
+        );
+
+        for (_, _, d) in f.graph.iter_nodes() {
+            println!(
+                "//Node {}: \n{}",
+                d.subgraph.string_label(),
+                dumbell.dot(&d.subgraph)
+            );
+        }
+        let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
+
+        // println!("{}", ff.dot(&dumbell));
+
+        let f = f.unfold();
+        f.debug_walk();
+        println!("{}", f);
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"24");
+
+        Ok(())
+    }
+
+    #[test]
+    fn lobsided_double_dumbell() -> Result<()> {
+        test_initialise().unwrap();
+        let dumbell: Graph = dot!(
+            digraph G{
+                edge [particle="scalar_1"];
+                v1 -> v2;
+                v2 -> v2; //v2 -> v2;
+                v1 -> v1;v1 -> v1;
+            },"scalars"
+        )?;
+
+        let spinneys = dumbell.spinneys(&dumbell.full_filter());
+        let f = Wood::new(
+            CutStructure::empty(&dumbell),
+            &dumbell,
+            &VakintSettings::default(),
+        );
+
+        println!("{}", f);
+
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"8",
+            // format!("Wood does not have correct number of spinneys: \n{}",f)
+        );
+
+        for (_, _, d) in f.graph.iter_nodes() {
+            println!(
+                "//Node {}: \n{}",
+                d.subgraph.string_label(),
+                dumbell.dot(&d.subgraph)
+            );
+        }
+        let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
+
+        // println!("{}", ff.dot(&dumbell));
+
+        let f = f.unfold();
+        f.debug_walk();
+        println!("{}", f);
+        insta::assert_snapshot!(
+            f.graph.n_nodes(),
+            @"12");
 
         Ok(())
     }
