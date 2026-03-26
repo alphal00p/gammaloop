@@ -4,9 +4,10 @@ use color_eyre::Result;
 use gammalooprs::{
     observables::{
         CountRangeSelectorSettings, EntrySelection, FilterQuantity, HistogramSettings,
-        JetClusteringSettings, JetCountQuantitySettings, JetPtQuantitySettings, ObservablePhase,
-        ObservableSettings, ObservableValueTransform, ParticleScalarQuantitySettings,
-        QuantitySettings, SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
+        JetClusteringSettings, JetQuantitySettings, ObservablePhase, ObservableSettings,
+        ObservableValueTransform, PairQuantity, ParticleQuantitySettings, QuantityComputation,
+        QuantityComputationSettings, QuantityOrdering, QuantitySettings,
+        SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
         ValueRangeSelectorSettings,
     },
     settings::RuntimeSettings,
@@ -88,26 +89,20 @@ fn quantity_templates() -> &'static [KindedTemplate<QuantitySettings>] {
     TEMPLATES.get_or_init(|| {
         vec![
             build_kinded_template(
-                QuantitySettings::ParticleScalar(ParticleScalarQuantitySettings {
+                QuantitySettings::Particle(ParticleQuantitySettings {
                     pdgs: Vec::new(),
-                    quantity: FilterQuantity::PT,
+                    computation: QuantityComputationSettings::scalar(FilterQuantity::PT),
                 }),
                 "type",
-                "particle scalar quantity template",
+                "particle quantity template",
             ),
             build_kinded_template(
-                QuantitySettings::JetPt(JetPtQuantitySettings {
+                QuantitySettings::Jet(JetQuantitySettings {
                     clustering: JetClusteringSettings::default(),
+                    computation: QuantityComputationSettings::scalar(FilterQuantity::PT),
                 }),
                 "type",
-                "jet-pt quantity template",
-            ),
-            build_kinded_template(
-                QuantitySettings::JetCount(JetCountQuantitySettings {
-                    clustering: JetClusteringSettings::default(),
-                }),
-                "type",
-                "jet-count quantity template",
+                "jet quantity template",
             ),
             build_kinded_template(QuantitySettings::AFB {}, "type", "afb quantity template"),
             build_kinded_template(
@@ -129,7 +124,7 @@ fn selector_templates() -> &'static [KindedTemplate<SelectorSettings>] {
                     entry_selection: EntrySelection::All,
                     entry_index: 0,
                     selector: SelectorDefinitionSettings::ValueRange(ValueRangeSelectorSettings {
-                        min: 0.0,
+                        min: None,
                         max: None,
                         reduction: SelectorReduction::AnyInRange,
                     }),
@@ -288,9 +283,8 @@ where
 
 pub(crate) fn quantity_kind(settings: &QuantitySettings) -> &'static str {
     match settings {
-        QuantitySettings::ParticleScalar(_) => "particle_scalar",
-        QuantitySettings::JetPt(_) => "jet_pt",
-        QuantitySettings::JetCount(_) => "jet_count",
+        QuantitySettings::Particle(_) => "particle",
+        QuantitySettings::Jet(_) => "jet",
         QuantitySettings::AFB {} => "afb",
         QuantitySettings::CrossSection {} => "cross_section",
     }
@@ -309,36 +303,81 @@ pub(crate) fn observable_kind(_settings: &ObservableSettings) -> &'static str {
 
 pub(crate) fn summarize_quantity(settings: &QuantitySettings) -> String {
     match settings {
-        QuantitySettings::ParticleScalar(settings) => format!(
-            "quantity={} pdgs={}",
-            match settings.quantity {
-                FilterQuantity::Energy => "E",
-                FilterQuantity::CosThetaP => "CosTheta",
-                FilterQuantity::PT => "PT",
-                FilterQuantity::Rapidity => "y",
-                FilterQuantity::PseudoRapidity => "eta",
-            },
-            format_integer_list(&settings.pdgs)
-        ),
-        QuantitySettings::JetPt(settings) => summarize_jet_clustering("pt", &settings.clustering),
-        QuantitySettings::JetCount(settings) => {
-            summarize_jet_clustering("count", &settings.clustering)
-        }
+        QuantitySettings::Particle(settings) => summarize_particle_quantity(settings),
+        QuantitySettings::Jet(settings) => summarize_jet_quantity(settings),
         QuantitySettings::AFB {} => "forward/backward asymmetry".to_string(),
         QuantitySettings::CrossSection {} => "cross section weight".to_string(),
     }
 }
 
+fn summarize_particle_quantity(settings: &ParticleQuantitySettings) -> String {
+    let QuantitySettings::Particle(settings) =
+        QuantitySettings::Particle(settings.clone()).normalized()
+    else {
+        unreachable!("particle quantity normalization must preserve its variant");
+    };
+    format!(
+        "{} pdgs={}",
+        summarize_quantity_computation(&settings.computation),
+        format_integer_list(&settings.pdgs)
+    )
+}
+
+fn summarize_jet_quantity(settings: &JetQuantitySettings) -> String {
+    let QuantitySettings::Jet(settings) = QuantitySettings::Jet(settings.clone()).normalized()
+    else {
+        unreachable!("jet quantity normalization must preserve its variant");
+    };
+    format!(
+        "{} algorithm={:?} dR={} min_jpt={} clustered_pdgs={}",
+        summarize_quantity_computation(&settings.computation),
+        settings.clustering.algorithm,
+        settings.clustering.dR,
+        settings.clustering.min_jpt,
+        settings
+            .clustering
+            .clustered_pdgs
+            .as_ref()
+            .map(|pdgs| format!("{pdgs:?}"))
+            .unwrap_or_else(|| "None (model default)".to_string())
+    )
+}
+
+fn summarize_quantity_computation(settings: &QuantityComputationSettings) -> String {
+    match settings.computation {
+        QuantityComputation::Scalar => format!(
+            "computation=scalar quantity={} ordering={} order={}",
+            settings.quantity.unwrap_or(FilterQuantity::PT),
+            settings.ordering.unwrap_or(QuantityOrdering::Quantity),
+            settings.order
+        ),
+        QuantityComputation::Count => "computation=count".to_string(),
+        QuantityComputation::Pair => format!(
+            "computation=pair pair_quantity={} pairing={} ordering={} order={}",
+            settings.pair_quantity.unwrap_or(PairQuantity::DeltaR),
+            settings.pairing.unwrap_or_default(),
+            settings.ordering.unwrap_or(QuantityOrdering::Quantity),
+            settings.order
+        ),
+    }
+}
+
 pub(crate) fn summarize_observable(settings: &ObservableSettings) -> String {
     format!(
-        "quantity={} selection={} transform={:?} phase={:?} bins={} range=[{}, {}]",
+        "quantity={} selection={} transform={:?} phase={:?} bins={} range=[{}, {}] title={} type_description={}",
         format_reference(&settings.quantity),
         format_entry_selection(settings.entry_selection, settings.entry_index),
         settings.value_transform,
         settings.phase,
         settings.histogram.n_bins,
         settings.histogram.x_min,
-        settings.histogram.x_max
+        settings.histogram.x_max,
+        settings
+            .histogram
+            .title
+            .clone()
+            .unwrap_or_else(|| "<observable name>".to_string()),
+        settings.histogram.type_description,
     )
 }
 
@@ -346,7 +385,10 @@ pub(crate) fn summarize_selector(settings: &SelectorSettings) -> String {
     let selector_summary = match &settings.selector {
         SelectorDefinitionSettings::ValueRange(selector) => format!(
             "range=[{}, {}] reduction={:?}",
-            selector.min,
+            selector
+                .min
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "-inf".to_string()),
             selector
                 .max
                 .map(|value| value.to_string())
@@ -367,18 +409,6 @@ pub(crate) fn summarize_selector(settings: &SelectorSettings) -> String {
         "quantity={} selection={} {selector_summary}",
         format_reference(&settings.quantity),
         format_entry_selection(settings.entry_selection, settings.entry_index),
-    )
-}
-
-fn summarize_jet_clustering(label: &str, settings: &JetClusteringSettings) -> String {
-    let clustered_pdgs = settings
-        .clustered_pdgs
-        .as_ref()
-        .map(|pdgs| format!("{pdgs:?}"))
-        .unwrap_or_else(|| "None (model default)".to_string());
-    format!(
-        "{label} algorithm={:?} dR={} min_jpt={} clustered_pdgs={clustered_pdgs}",
-        settings.algorithm, settings.dR, settings.min_jpt
     )
 }
 

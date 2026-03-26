@@ -453,6 +453,32 @@ fn booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_w
     Ok(())
 }
 
+#[test]
+#[serial]
+fn state_load_option_clean_state_removes_saved_state_before_load() -> Result<()> {
+    let test_name = "state_load_option_clean_state_removes_saved_state_before_load";
+    let mut cli = new_cli(test_name)?;
+
+    cli.run_history.commands.push(command("quit -n"));
+    cli.save_state()?;
+
+    let state_folder = cli.cli_settings.state.folder.clone();
+    assert!(state_folder.exists());
+
+    let loaded = StateLoadOption {
+        state_folder: Some(state_folder.clone()),
+        clean_state: true,
+        ..StateLoadOption::default()
+    }
+    .load()?;
+
+    assert!(loaded.run_history.commands.is_empty());
+    assert!(loaded.state_load_summary.is_none());
+    assert_eq!(loaded.cli_settings.state.folder, state_folder);
+    assert!(!loaded.cli_settings.state.folder.exists());
+    Ok(())
+}
+
 fn command_block_definition_mode_defers_execution_and_omits_history() -> Result<()> {
     let mut cli = new_cli("command_block_definition_mode_defers_execution_and_omits_history")?;
     let original_display = cli.cli_settings.global.display_directive.clone();

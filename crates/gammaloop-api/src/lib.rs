@@ -66,7 +66,7 @@ use state::{
 use std::{
     borrow::Cow, ffi::OsString, io::IsTerminal, path::Path, path::PathBuf, sync::atomic::Ordering,
 };
-use std::{fs::File, ops::ControlFlow, time::Duration, time::Instant};
+use std::{fs, fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use walkdir::WalkDir;
 
 // use tracing::LogLevel;
@@ -117,6 +117,10 @@ pub struct OneShot {
     /// Don't try to load state, just start with a new one
     #[arg(short = 'f', long, default_value_t = false)]
     pub fresh_state: bool,
+
+    /// Remove the resolved state folder before startup so the session starts from a blank state
+    #[arg(long, default_value_t = false)]
+    pub clean_state: bool,
 
     /// Optional TOML card to load at boot time
     #[arg(value_hint = clap::ValueHint::FilePath)]
@@ -328,6 +332,7 @@ impl SmartSerde for CLISettings {}
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StateLoadOption {
     pub fresh_state: bool,
+    pub clean_state: bool,
     pub boot_commands_path: Option<PathBuf>,
     pub state_folder: Option<PathBuf>,
     pub model_file: Option<PathBuf>,
@@ -372,6 +377,7 @@ impl StateLoadOption {
         let state_folder_explicitly_set = self.state_folder.is_some();
         OneShot {
             fresh_state: self.fresh_state,
+            clean_state: self.clean_state,
             boot_commands_path: self.boot_commands_path,
             state_folder: self
                 .state_folder
@@ -639,6 +645,7 @@ impl OneShot {
             no_try_strings: false,
             completions: None,
             fresh_state: false,
+            clean_state: false,
             trace_logs_filename: None,
         }
     }
@@ -648,6 +655,43 @@ impl OneShot {
             return Ok(StateFolderKind::Missing);
         }
         classify_state_folder(&self.state_folder)
+    }
+
+    fn clean_resolved_state_folder(&self) -> Result<()> {
+        if !self.clean_state {
+            return Ok(());
+        }
+
+        let metadata = match fs::symlink_metadata(&self.state_folder) {
+            Ok(metadata) => metadata,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => {
+                return Err(err).wrap_err_with(|| {
+                    format!(
+                        "Failed to inspect state path '{}' before cleaning",
+                        self.state_folder.display()
+                    )
+                })
+            }
+        };
+
+        if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
+            fs::remove_dir_all(&self.state_folder).wrap_err_with(|| {
+                format!(
+                    "Failed to remove state folder '{}' before startup",
+                    self.state_folder.display()
+                )
+            })?;
+        } else {
+            fs::remove_file(&self.state_folder).wrap_err_with(|| {
+                format!(
+                    "Failed to remove state path '{}' before startup",
+                    self.state_folder.display()
+                )
+            })?;
+        }
+
+        Ok(())
     }
 
     fn initial_cli_settings_for_startup(
@@ -932,6 +976,7 @@ impl OneShot {
         let boot_run_history = self.load_boot_run_history()?;
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
+        self.clean_resolved_state_folder()?;
         let state_folder_kind = self.current_state_folder_kind()?;
         if let StateFolderKind::Invalid(reason) = &state_folder_kind {
             return Err(eyre::eyre!(reason.clone()));
@@ -947,6 +992,7 @@ impl OneShot {
         let boot_run_history = self.load_boot_run_history()?;
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
+        self.clean_resolved_state_folder()?;
         let state_folder_kind = self.current_state_folder_kind()?;
         if let StateFolderKind::Invalid(reason) = &state_folder_kind {
             return Err(eyre::eyre!(reason.clone()));
@@ -1443,6 +1489,39 @@ mod tests {
     }
 
     #[test]
+    fn oneshot_accepts_clean_state_flag() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "--clean-state"]).unwrap();
+        assert!(parsed.clean_state);
+    }
+
+    #[test]
+    fn clean_state_removes_resolved_run_card_state_before_validation() {
+        let temp = tempdir().unwrap();
+        let state_path = temp.path().join("from_run_card");
+        let run_path = temp.path().join("run.toml");
+        write_run_card(&run_path, state_path.to_string_lossy().as_ref());
+
+        fs::create_dir_all(&state_path).unwrap();
+        fs::write(state_path.join("stale.txt"), "stale").unwrap();
+
+        let mut one_shot = OneShot::try_parse_from([
+            "gammaloop",
+            "--clean-state",
+            run_path.to_string_lossy().as_ref(),
+        ])
+        .unwrap();
+
+        let (_state, run_history, cli_settings, runtime_settings, summary) =
+            one_shot.load().unwrap();
+
+        assert!(summary.is_none());
+        assert!(run_history.commands.is_empty());
+        assert_eq!(cli_settings.state.folder, state_path);
+        assert_eq!(runtime_settings, RuntimeSettings::default());
+        assert!(!cli_settings.state.folder.exists());
+    }
+
+    #[test]
     fn oneshot_parses_run_subcommand_block_names() {
         let parsed =
             OneShot::try_parse_from(["gammaloop", "run", "generation", "integration"]).unwrap();
@@ -1536,6 +1615,12 @@ mod tests {
     fn oneshot_accepts_logging_prefix_long_flag_override() {
         let parsed = OneShot::try_parse_from(["gammaloop", "--logging-prefix", "long"]).unwrap();
         assert_eq!(parsed.logging_prefix, Some(LogFormat::Long));
+    }
+
+    #[test]
+    fn oneshot_accepts_logging_prefix_full_flag_override() {
+        let parsed = OneShot::try_parse_from(["gammaloop", "--logging-prefix", "full"]).unwrap();
+        assert_eq!(parsed.logging_prefix, Some(LogFormat::Full));
     }
 
     #[test]

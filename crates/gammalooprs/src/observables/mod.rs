@@ -1,4 +1,5 @@
 use crate::model::Model;
+use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
 use crate::utils::serde_utils::{
     IsDefault, is_false, is_float, is_true, is_usize, show_defaults_helper,
@@ -98,16 +99,337 @@ pub enum FilterQuantity {
     Rapidity,
     #[serde(rename = "eta")]
     PseudoRapidity,
+    #[serde(rename = "Px")]
+    Px,
+    #[serde(rename = "Py")]
+    Py,
+    #[serde(rename = "Pz")]
+    Pz,
+    #[serde(rename = "Mass")]
+    Mass,
+}
+
+impl FilterQuantity {
+    pub(crate) fn setting_name(&self) -> &'static str {
+        match self {
+            FilterQuantity::Energy => "E",
+            FilterQuantity::CosThetaP => "CosTheta",
+            FilterQuantity::PT => "PT",
+            FilterQuantity::Rapidity => "y",
+            FilterQuantity::PseudoRapidity => "eta",
+            FilterQuantity::Px => "Px",
+            FilterQuantity::Py => "Py",
+            FilterQuantity::Pz => "Pz",
+            FilterQuantity::Mass => "Mass",
+        }
+    }
+
+    fn project_momentum<T: FloatLike>(
+        &self,
+        momentum: &FourMomentum<F<T>>,
+        incoming_beam: Option<&FourMomentum<F<T>>>,
+    ) -> Option<F<T>> {
+        match self {
+            FilterQuantity::Energy => Some(momentum.temporal.value.clone()),
+            FilterQuantity::CosThetaP => incoming_beam.map(|beam| {
+                let beam_spatial = beam.spatial.clone();
+                let momentum_spatial = momentum.spatial.clone();
+                beam_spatial.clone() * momentum_spatial.clone()
+                    / (beam_spatial.norm() * momentum_spatial.norm())
+            }),
+            FilterQuantity::PT => Some(momentum.pt()),
+            FilterQuantity::Rapidity => Some(momentum.rapidity()),
+            FilterQuantity::PseudoRapidity => Some(momentum.spatial.pseudo_rap()),
+            FilterQuantity::Px => Some(momentum.spatial.px.clone()),
+            FilterQuantity::Py => Some(momentum.spatial.py.clone()),
+            FilterQuantity::Pz => Some(momentum.spatial.pz.clone()),
+            FilterQuantity::Mass => Some(momentum.square().abs().sqrt()),
+        }
+    }
 }
 
 impl fmt::Display for FilterQuantity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.setting_name())
+    }
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+pub enum QuantityOrdering {
+    #[serde(rename = "PT")]
+    PT,
+    #[serde(rename = "Energy")]
+    Energy,
+    #[serde(rename = "AbsRapidity")]
+    AbsRapidity,
+    #[serde(rename = "Quantity")]
+    Quantity,
+}
+
+impl QuantityOrdering {
+    pub(crate) fn setting_name(&self) -> &'static str {
         match self {
-            FilterQuantity::Energy => write!(f, "Energy"),
-            FilterQuantity::CosThetaP => write!(f, "CosTheta"),
-            FilterQuantity::PT => write!(f, "Pt"),
-            FilterQuantity::Rapidity => write!(f, "y"),
-            FilterQuantity::PseudoRapidity => write!(f, "eta"),
+            QuantityOrdering::PT => "PT",
+            QuantityOrdering::Energy => "Energy",
+            QuantityOrdering::AbsRapidity => "AbsRapidity",
+            QuantityOrdering::Quantity => "Quantity",
+        }
+    }
+
+    fn scalar_sort_key<T: FloatLike>(
+        &self,
+        momentum: &FourMomentum<F<T>>,
+        quantity_value: &F<T>,
+    ) -> F<T> {
+        match self {
+            QuantityOrdering::PT => momentum.pt(),
+            QuantityOrdering::Energy => momentum.temporal.value.clone(),
+            QuantityOrdering::AbsRapidity => momentum.rapidity().abs(),
+            QuantityOrdering::Quantity => quantity_value.clone(),
+        }
+    }
+}
+
+impl fmt::Display for QuantityOrdering {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.setting_name())
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
+)]
+pub enum QuantityOrder {
+    #[serde(rename = "Ascending")]
+    Ascending,
+    #[default]
+    #[serde(rename = "Descending")]
+    Descending,
+}
+
+impl QuantityOrder {
+    pub(crate) fn setting_name(&self) -> &'static str {
+        match self {
+            QuantityOrder::Ascending => "Ascending",
+            QuantityOrder::Descending => "Descending",
+        }
+    }
+}
+
+impl fmt::Display for QuantityOrder {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.setting_name())
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum QuantityComputation {
+    #[default]
+    Scalar,
+    Count,
+    Pair,
+}
+
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+pub enum PairQuantity {
+    #[serde(rename = "DeltaR")]
+    DeltaR,
+}
+
+impl PairQuantity {
+    pub(crate) fn setting_name(&self) -> &'static str {
+        match self {
+            PairQuantity::DeltaR => "DeltaR",
+        }
+    }
+
+    fn project_momenta<T: FloatLike>(
+        &self,
+        left: &FourMomentum<F<T>>,
+        right: &FourMomentum<F<T>>,
+    ) -> F<T> {
+        match self {
+            PairQuantity::DeltaR => left.delta_r(right),
+        }
+    }
+}
+
+impl fmt::Display for PairQuantity {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.setting_name())
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum PairingMode {
+    #[default]
+    AllPairs,
+}
+
+impl PairingMode {
+    pub(crate) fn setting_name(&self) -> &'static str {
+        match self {
+            PairingMode::AllPairs => "all_pairs",
+        }
+    }
+}
+
+impl fmt::Display for PairingMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.setting_name())
+    }
+}
+
+fn filter_quantity_completion_example() -> FilterQuantity {
+    FilterQuantity::PT
+}
+
+fn pair_quantity_completion_example() -> PairQuantity {
+    PairQuantity::DeltaR
+}
+
+fn pairing_mode_completion_example() -> PairingMode {
+    PairingMode::AllPairs
+}
+
+fn quantity_ordering_completion_example() -> QuantityOrdering {
+    QuantityOrdering::Quantity
+}
+
+fn quantity_order_completion_example() -> QuantityOrder {
+    QuantityOrder::Descending
+}
+
+#[derive(Debug, Clone, Copy)]
+enum QuantitySourceKind {
+    Particle,
+    Jet,
+}
+
+impl QuantitySourceKind {
+    fn default_scalar_ordering(self) -> QuantityOrdering {
+        match self {
+            QuantitySourceKind::Particle => QuantityOrdering::Quantity,
+            QuantitySourceKind::Jet => QuantityOrdering::PT,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[allow(non_snake_case)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(default, deny_unknown_fields)]
+pub struct QuantityComputationSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Quantity computation mode: scalar projection per object, exact object count, or pairwise quantity."
+    )]
+    pub computation: QuantityComputation,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Per-object scalar quantity used when computation = \"scalar\".",
+        example = filter_quantity_completion_example()
+    )]
+    pub quantity: Option<FilterQuantity>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Pairwise quantity used when computation = \"pair\".",
+        example = pair_quantity_completion_example()
+    )]
+    pub pair_quantity: Option<PairQuantity>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Pairing strategy used when computation = \"pair\".",
+        example = pairing_mode_completion_example()
+    )]
+    pub pairing: Option<PairingMode>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Ordering key used before entry_selection. Particle scalar quantities default to Quantity, jet scalar quantities default to PT, and pair quantities default to Quantity.",
+        example = quantity_ordering_completion_example()
+    )]
+    pub ordering: Option<QuantityOrdering>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Sorting direction applied together with ordering.",
+        example = quantity_order_completion_example()
+    )]
+    pub order: QuantityOrder,
+}
+
+impl QuantityComputationSettings {
+    pub fn scalar(quantity: FilterQuantity) -> Self {
+        Self {
+            computation: QuantityComputation::Scalar,
+            quantity: Some(quantity),
+            pair_quantity: None,
+            pairing: None,
+            ordering: None,
+            order: QuantityOrder::Descending,
+        }
+    }
+
+    fn try_normalized_for_source(&self, source: QuantitySourceKind) -> Result<Self> {
+        match self.computation {
+            QuantityComputation::Scalar => Ok(Self {
+                computation: QuantityComputation::Scalar,
+                quantity: Some(self.quantity.unwrap_or(FilterQuantity::PT)),
+                pair_quantity: None,
+                pairing: None,
+                ordering: Some(self.ordering.unwrap_or(source.default_scalar_ordering())),
+                order: self.order,
+            }),
+            QuantityComputation::Count => Ok(Self {
+                computation: QuantityComputation::Count,
+                quantity: None,
+                pair_quantity: None,
+                pairing: None,
+                ordering: None,
+                order: QuantityOrder::Descending,
+            }),
+            QuantityComputation::Pair => {
+                let ordering = self.ordering.unwrap_or(QuantityOrdering::Quantity);
+                if ordering != QuantityOrdering::Quantity {
+                    return Err(eyre!(
+                        "Pair quantities only support ordering=Quantity, got ordering={ordering}"
+                    ));
+                }
+
+                Ok(Self {
+                    computation: QuantityComputation::Pair,
+                    quantity: None,
+                    pair_quantity: Some(self.pair_quantity.unwrap_or(PairQuantity::DeltaR)),
+                    pairing: Some(self.pairing.unwrap_or_default()),
+                    ordering: Some(QuantityOrdering::Quantity),
+                    order: self.order,
+                })
+            }
+        }
+    }
+
+    fn resolve_for_source(
+        &self,
+        source: QuantitySourceKind,
+    ) -> Result<ResolvedQuantityComputation> {
+        let normalized = self.try_normalized_for_source(source)?;
+        match normalized.computation {
+            QuantityComputation::Scalar => Ok(ResolvedQuantityComputation::Scalar {
+                quantity: normalized.quantity.unwrap(),
+                ordering: normalized.ordering.unwrap(),
+                order: normalized.order,
+            }),
+            QuantityComputation::Count => Ok(ResolvedQuantityComputation::Count),
+            QuantityComputation::Pair => Ok(ResolvedQuantityComputation::Pair {
+                quantity: normalized.pair_quantity.unwrap(),
+                pairing: normalized.pairing.unwrap(),
+                order: normalized.order,
+            }),
         }
     }
 }
@@ -192,28 +514,44 @@ impl JetClusteringSettings {
 #[allow(non_snake_case)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
-pub struct ParticleScalarQuantitySettings {
+pub struct ParticleQuantitySettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub pdgs: Vec<isize>,
-    pub quantity: FilterQuantity,
+    #[serde(flatten)]
+    pub computation: QuantityComputationSettings,
+}
+
+impl ParticleQuantitySettings {
+    fn try_normalized(&self) -> Result<Self> {
+        Ok(Self {
+            pdgs: self.pdgs.clone(),
+            computation: self
+                .computation
+                .try_normalized_for_source(QuantitySourceKind::Particle)?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
-pub struct JetPtQuantitySettings {
+pub struct JetQuantitySettings {
     #[serde(flatten)]
     pub clustering: JetClusteringSettings,
+    #[serde(flatten)]
+    pub computation: QuantityComputationSettings,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
-#[allow(non_snake_case)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
-#[serde(deny_unknown_fields)]
-pub struct JetCountQuantitySettings {
-    #[serde(flatten)]
-    pub clustering: JetClusteringSettings,
+impl JetQuantitySettings {
+    fn try_normalized(&self) -> Result<Self> {
+        Ok(Self {
+            clustering: self.clustering.clone(),
+            computation: self
+                .computation
+                .try_normalized_for_source(QuantitySourceKind::Jet)?,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -221,11 +559,30 @@ pub struct JetCountQuantitySettings {
 #[serde(tag = "type", rename_all = "snake_case")]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum QuantitySettings {
-    ParticleScalar(ParticleScalarQuantitySettings),
-    JetPt(JetPtQuantitySettings),
-    JetCount(JetCountQuantitySettings),
+    Particle(ParticleQuantitySettings),
+    Jet(JetQuantitySettings),
     AFB {},
     CrossSection {},
+}
+
+impl QuantitySettings {
+    pub fn try_normalized(&self) -> Result<Self> {
+        match self {
+            QuantitySettings::Particle(settings) => {
+                Ok(QuantitySettings::Particle(settings.try_normalized()?))
+            }
+            QuantitySettings::Jet(settings) => {
+                Ok(QuantitySettings::Jet(settings.try_normalized()?))
+            }
+            QuantitySettings::AFB {} => Ok(QuantitySettings::AFB {}),
+            QuantitySettings::CrossSection {} => Ok(QuantitySettings::CrossSection {}),
+        }
+    }
+
+    pub fn normalized(&self) -> Self {
+        self.try_normalized()
+            .expect("quantity settings should normalize successfully")
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -233,8 +590,11 @@ pub enum QuantitySettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct ValueRangeSelectorSettings {
-    pub min: f64,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(description = "Optional lower bound. Use null to disable the lower cut.")]
+    pub min: Option<f64>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(description = "Optional upper bound. Use null to disable the upper cut.")]
     pub max: Option<f64>,
     #[serde(default, skip_serializing_if = "is_default_selector_reduction")]
     pub reduction: SelectorReduction,
@@ -285,7 +645,8 @@ struct ValueRangeSelectorSettingsSerde {
     #[serde(default, skip_serializing_if = "is_default_entry_index")]
     entry_index: usize,
     selector: SelectorSerdeTag,
-    min: f64,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    min: Option<f64>,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     max: Option<f64>,
     #[serde(default, skip_serializing_if = "is_default_selector_reduction")]
@@ -401,6 +762,17 @@ pub struct HistogramSettings {
     pub log_x_axis: bool,
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub log_y_axis: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[schemars(
+        description = "Optional histogram title. Defaults to the observable name when omitted."
+    )]
+    pub title: Option<String>,
+    #[serde(
+        default = "default_histogram_type_description",
+        skip_serializing_if = "is_default_histogram_type_description"
+    )]
+    #[schemars(description = "HwU TYPE description written after TYPE@ in the histogram header.")]
+    pub type_description: String,
 }
 
 impl Default for HistogramSettings {
@@ -411,6 +783,8 @@ impl Default for HistogramSettings {
             n_bins: 0,
             log_x_axis: false,
             log_y_axis: true,
+            title: None,
+            type_description: default_histogram_type_description(),
         }
     }
 }
@@ -437,6 +811,14 @@ pub struct ObservableSettings {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_histogram_type_description() -> String {
+    "AL".to_string()
+}
+
+fn is_default_histogram_type_description(value: &String) -> bool {
+    show_defaults_helper(value == &default_histogram_type_description())
 }
 
 fn is_default_entry_selection(selection: &EntrySelection) -> bool {
@@ -532,7 +914,7 @@ enum SelectorCriterion {
         selection: EntrySelection,
         entry_index: usize,
         reduction: SelectorReduction,
-        min: f64,
+        min: Option<f64>,
         max: Option<f64>,
     },
     CountRange {
@@ -591,51 +973,166 @@ impl CrossSectionDefinition {
 }
 
 #[derive(Debug, Clone)]
-struct ParticleScalarDefinition {
-    pdgs: Vec<isize>,
-    quantity: FilterQuantity,
+enum ResolvedQuantityComputation {
+    Scalar {
+        quantity: FilterQuantity,
+        ordering: QuantityOrdering,
+        order: QuantityOrder,
+    },
+    Count,
+    Pair {
+        quantity: PairQuantity,
+        pairing: PairingMode,
+        order: QuantityOrder,
+    },
 }
 
-impl ParticleScalarDefinition {
-    fn new(quantity: FilterQuantity, pdgs: Vec<isize>) -> Self {
-        Self { pdgs, quantity }
+impl ResolvedQuantityComputation {
+    fn process_momenta<T: FloatLike>(
+        &self,
+        momenta: &[&FourMomentum<F<T>>],
+        incoming_beam: Option<&FourMomentum<F<T>>>,
+        event: &GenericEvent<T>,
+    ) -> ObservableEntries<T> {
+        match self {
+            ResolvedQuantityComputation::Scalar {
+                quantity,
+                ordering,
+                order,
+            } => {
+                let mut entries = momenta
+                    .iter()
+                    .filter_map(|momentum| {
+                        quantity
+                            .project_momentum(momentum, incoming_beam)
+                            .map(|value| SortableObservableEntry {
+                                sort_key: ordering.scalar_sort_key(momentum, &value),
+                                entry: ObservableEntry::unit(value),
+                            })
+                    })
+                    .collect::<SmallVec<[SortableObservableEntry<T>; 8]>>();
+                sort_observable_entries(&mut entries, *order);
+                entries.into_iter().map(|entry| entry.entry).collect()
+            }
+            ResolvedQuantityComputation::Count => {
+                let one = event_representative_one(event);
+                smallvec![ObservableEntry::unit(one.from_usize(momenta.len()))]
+            }
+            ResolvedQuantityComputation::Pair {
+                quantity,
+                pairing,
+                order,
+            } => match pairing {
+                PairingMode::AllPairs => {
+                    let mut entries = SmallVec::<[SortableObservableEntry<T>; 8]>::new();
+                    for left_index in 0..momenta.len() {
+                        for right_index in left_index + 1..momenta.len() {
+                            let value =
+                                quantity.project_momenta(momenta[left_index], momenta[right_index]);
+                            entries.push(SortableObservableEntry {
+                                sort_key: value.clone(),
+                                entry: ObservableEntry::unit(value),
+                            });
+                        }
+                    }
+                    sort_observable_entries(&mut entries, *order);
+                    entries.into_iter().map(|entry| entry.entry).collect()
+                }
+            },
+        }
+    }
+
+    fn supports_misbinning_mitigation(&self) -> bool {
+        !matches!(self, ResolvedQuantityComputation::Count)
+    }
+}
+
+#[derive(Debug, Clone)]
+enum QuantitySourceDefinition {
+    Particle { pdgs: Vec<isize> },
+    Jet { clustering_handle: ClusteringHandle },
+}
+
+impl QuantitySourceDefinition {
+    fn required_clustering_handle(&self) -> Option<ClusteringHandle> {
+        match self {
+            QuantitySourceDefinition::Particle { .. } => None,
+            QuantitySourceDefinition::Jet { clustering_handle } => Some(*clustering_handle),
+        }
+    }
+
+    fn collect_momenta<'a, T: FloatLike>(
+        &self,
+        event: &'a GenericEvent<T>,
+    ) -> SmallVec<[&'a FourMomentum<F<T>>; 8]> {
+        match self {
+            QuantitySourceDefinition::Particle { pdgs } => event
+                .cut_info
+                .particle_pdgs
+                .1
+                .iter()
+                .copied()
+                .zip(event.kinematic_configuration.1.iter())
+                .filter(|(pdg, _)| pdgs.contains(pdg))
+                .map(|(_, momentum)| momentum)
+                .collect(),
+            QuantitySourceDefinition::Jet { clustering_handle } => event
+                .cached_clustering(*clustering_handle)
+                .expect("jet quantity requires precomputed clustering")
+                .jets
+                .iter()
+                .map(|jet| &jet.momentum)
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ObjectQuantityDefinition {
+    source: QuantitySourceDefinition,
+    computation: ResolvedQuantityComputation,
+}
+
+impl ObjectQuantityDefinition {
+    fn particle(settings: &ParticleQuantitySettings) -> Result<Self> {
+        Ok(Self {
+            source: QuantitySourceDefinition::Particle {
+                pdgs: settings.pdgs.clone(),
+            },
+            computation: settings
+                .computation
+                .resolve_for_source(QuantitySourceKind::Particle)?,
+        })
+    }
+
+    fn jet(
+        settings: &JetQuantitySettings,
+        clustering_registry: &mut CompiledClusteringRegistry,
+        model: Option<&Model>,
+    ) -> Result<Self> {
+        Ok(Self {
+            source: QuantitySourceDefinition::Jet {
+                clustering_handle: clustering_registry.register(&settings.clustering, model)?,
+            },
+            computation: settings
+                .computation
+                .resolve_for_source(QuantitySourceKind::Jet)?,
+        })
     }
 
     fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
-        let incoming_beam = event.kinematic_configuration.0.get(1).cloned();
-        let mut entries = ObservableEntries::new();
+        let incoming_beam = event.kinematic_configuration.0.get(1);
+        let momenta = self.source.collect_momenta(event);
+        self.computation
+            .process_momenta(&momenta, incoming_beam, event)
+    }
 
-        for (pdg, momentum) in event
-            .cut_info
-            .particle_pdgs
-            .1
-            .iter()
-            .copied()
-            .zip(event.kinematic_configuration.1.iter().cloned())
-        {
-            if !self.pdgs.contains(&pdg) {
-                continue;
-            }
+    fn required_clustering_handle(&self) -> Option<ClusteringHandle> {
+        self.source.required_clustering_handle()
+    }
 
-            let Some(value) = (match self.quantity {
-                FilterQuantity::Energy => Some(momentum.temporal.value),
-                FilterQuantity::PT => Some(momentum.pt()),
-                FilterQuantity::Rapidity => Some(momentum.rapidity()),
-                FilterQuantity::PseudoRapidity => Some(momentum.spatial.pseudo_rap()),
-                FilterQuantity::CosThetaP => incoming_beam.clone().map(|beam| {
-                    let beam_spatial = beam.spatial.clone();
-                    let momentum_spatial = momentum.spatial.clone();
-                    beam_spatial.clone() * momentum_spatial.clone()
-                        / (beam_spatial.norm() * momentum_spatial.norm())
-                }),
-            }) else {
-                continue;
-            };
-
-            entries.push(ObservableEntry::unit(value));
-        }
-
-        entries
+    fn supports_misbinning_mitigation(&self) -> bool {
+        self.computation.supports_misbinning_mitigation()
     }
 }
 
@@ -671,66 +1168,10 @@ impl ForwardBackwardDefinition {
 }
 
 #[derive(Debug, Clone)]
-struct JetPtDefinition {
-    clustering_handle: ClusteringHandle,
-}
-
-impl JetPtDefinition {
-    fn new(
-        settings: &JetClusteringSettings,
-        clustering_registry: &mut CompiledClusteringRegistry,
-        model: Option<&Model>,
-    ) -> Result<Self> {
-        Ok(Self {
-            clustering_handle: clustering_registry.register(settings, model)?,
-        })
-    }
-
-    fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
-        let jets = event
-            .cached_clustering(self.clustering_handle)
-            .expect("jet-pt observable requires precomputed clustering");
-        let mut entries = ObservableEntries::new();
-        for jet in &jets.jets {
-            entries.push(ObservableEntry::unit(jet.pt()));
-        }
-        entries
-    }
-}
-
-#[derive(Debug, Clone)]
-struct JetCountDefinition {
-    clustering_handle: ClusteringHandle,
-}
-
-impl JetCountDefinition {
-    fn new(
-        settings: &JetClusteringSettings,
-        clustering_registry: &mut CompiledClusteringRegistry,
-        model: Option<&Model>,
-    ) -> Result<Self> {
-        Ok(Self {
-            clustering_handle: clustering_registry.register(settings, model)?,
-        })
-    }
-
-    fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
-        let jets = event
-            .cached_clustering(self.clustering_handle)
-            .expect("jet-count observable requires precomputed clustering");
-        let one = event_representative_one(event);
-        let jet_count = one.from_usize(jets.len()) + jet_count_offset(event);
-        smallvec![ObservableEntry::unit(jet_count)]
-    }
-}
-
-#[derive(Debug, Clone)]
 enum ObservableDefinition {
     CrossSection(CrossSectionDefinition),
-    ParticleScalar(ParticleScalarDefinition),
+    ObjectQuantity(ObjectQuantityDefinition),
     ForwardBackward(ForwardBackwardDefinition),
-    JetPt(JetPtDefinition),
-    JetCount(JetCountDefinition),
 }
 
 impl ObservableDefinition {
@@ -740,16 +1181,11 @@ impl ObservableDefinition {
         model: Option<&Model>,
     ) -> Result<Self> {
         Ok(match settings {
-            QuantitySettings::ParticleScalar(settings) => ObservableDefinition::ParticleScalar(
-                ParticleScalarDefinition::new(settings.quantity, settings.pdgs.clone()),
-            ),
-            QuantitySettings::JetPt(settings) => ObservableDefinition::JetPt(JetPtDefinition::new(
-                &settings.clustering,
-                clustering_registry,
-                model,
-            )?),
-            QuantitySettings::JetCount(settings) => ObservableDefinition::JetCount(
-                JetCountDefinition::new(&settings.clustering, clustering_registry, model)?,
+            QuantitySettings::Particle(settings) => {
+                ObservableDefinition::ObjectQuantity(ObjectQuantityDefinition::particle(settings)?)
+            }
+            QuantitySettings::Jet(settings) => ObservableDefinition::ObjectQuantity(
+                ObjectQuantityDefinition::jet(settings, clustering_registry, model)?,
             ),
             QuantitySettings::AFB {} => {
                 ObservableDefinition::ForwardBackward(ForwardBackwardDefinition)
@@ -763,23 +1199,27 @@ impl ObservableDefinition {
     fn process_event<T: FloatLike>(&mut self, event: &GenericEvent<T>) -> ObservableEntries<T> {
         match self {
             ObservableDefinition::CrossSection(definition) => definition.process_event(event),
-            ObservableDefinition::ParticleScalar(definition) => definition.process_event(event),
+            ObservableDefinition::ObjectQuantity(definition) => definition.process_event(event),
             ObservableDefinition::ForwardBackward(definition) => definition.process_event(event),
-            ObservableDefinition::JetPt(definition) => definition.process_event(event),
-            ObservableDefinition::JetCount(definition) => definition.process_event(event),
         }
     }
 
     fn required_clustering_handle(&self) -> Option<ClusteringHandle> {
         match self {
-            ObservableDefinition::JetPt(definition) => Some(definition.clustering_handle),
-            ObservableDefinition::JetCount(definition) => Some(definition.clustering_handle),
+            ObservableDefinition::ObjectQuantity(definition) => {
+                definition.required_clustering_handle()
+            }
             _ => None,
         }
     }
 
     fn supports_misbinning_mitigation(&self) -> bool {
-        !matches!(self, ObservableDefinition::JetCount(_))
+        match self {
+            ObservableDefinition::ObjectQuantity(definition) => {
+                definition.supports_misbinning_mitigation()
+            }
+            _ => true,
+        }
     }
 }
 
@@ -799,9 +1239,25 @@ fn event_representative_one<T: FloatLike>(event: &GenericEvent<T>) -> F<T> {
         .unwrap_or_else(|| event.weight.re.one())
 }
 
-fn jet_count_offset<T: FloatLike>(event: &GenericEvent<T>) -> F<T> {
-    let one = event_representative_one(event);
-    one.clone() / one.from_usize(2)
+#[derive(Debug, Clone)]
+struct SortableObservableEntry<T: FloatLike> {
+    sort_key: F<T>,
+    entry: ObservableEntry<T>,
+}
+
+fn sort_observable_entries<T: FloatLike>(
+    entries: &mut SmallVec<[SortableObservableEntry<T>; 8]>,
+    order: QuantityOrder,
+) {
+    entries.sort_by(|lhs, rhs| compare_sort_keys(&lhs.sort_key, &rhs.sort_key, order));
+}
+
+fn compare_sort_keys<T: FloatLike>(lhs: &F<T>, rhs: &F<T>, order: QuantityOrder) -> Ordering {
+    let base = lhs.partial_cmp(rhs).unwrap_or(Ordering::Equal);
+    match order {
+        QuantityOrder::Ascending => base,
+        QuantityOrder::Descending => base.reverse(),
+    }
 }
 
 fn ensure_event_clustering<T: FloatLike>(
@@ -1025,6 +1481,7 @@ pub struct HistogramStatisticsSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct HistogramSnapshot {
     pub title: String,
+    pub type_description: String,
     pub phase: ObservablePhase,
     pub value_transform: ObservableValueTransform,
     pub supports_misbinning_mitigation: bool,
@@ -1058,11 +1515,12 @@ impl HistogramSnapshot {
         writeln!(writer, "##& xmin & xmax & central value & dy &\n")?;
         writeln!(
             writer,
-            "<histogram> {} \"{} |X_AXIS@{} |Y_AXIS@{} |TYPE@AL\"",
+            "<histogram> {} \"{} |X_AXIS@{} |Y_AXIS@{} |TYPE@{}\"",
             self.bins.len(),
             self.title,
             x_axis_mode,
             y_axis_mode,
+            self.type_description,
         )?;
 
         for bin in &self.bins {
@@ -1092,6 +1550,7 @@ impl HistogramSnapshot {
 
     pub fn merge_in_place(&mut self, other: &HistogramSnapshot) -> Result<()> {
         if self.title != other.title
+            || self.type_description != other.type_description
             || self.phase != other.phase
             || self.value_transform != other.value_transform
             || self.supports_misbinning_mitigation != other.supports_misbinning_mitigation
@@ -1161,6 +1620,7 @@ impl HistogramSnapshot {
 
         Ok(Self {
             title: self.title.clone(),
+            type_description: self.type_description.clone(),
             phase: self.phase,
             value_transform: self.value_transform,
             supports_misbinning_mitigation: self.supports_misbinning_mitigation,
@@ -1188,6 +1648,7 @@ impl HistogramSnapshot {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HistogramAccumulatorState {
     pub title: String,
+    pub type_description: String,
     pub phase: ObservablePhase,
     pub value_transform: ObservableValueTransform,
     pub supports_misbinning_mitigation: bool,
@@ -1206,6 +1667,7 @@ pub struct HistogramAccumulatorState {
 impl HistogramAccumulatorState {
     fn new(
         title: String,
+        type_description: String,
         phase: ObservablePhase,
         value_transform: ObservableValueTransform,
         supports_misbinning_mitigation: bool,
@@ -1217,6 +1679,7 @@ impl HistogramAccumulatorState {
     ) -> Self {
         Self {
             title,
+            type_description,
             phase,
             value_transform,
             supports_misbinning_mitigation,
@@ -1236,6 +1699,7 @@ impl HistogramAccumulatorState {
     fn cleared_clone(&self) -> Self {
         Self::new(
             self.title.clone(),
+            self.type_description.clone(),
             self.phase,
             self.value_transform,
             self.supports_misbinning_mitigation,
@@ -1270,6 +1734,7 @@ impl HistogramAccumulatorState {
 
         HistogramSnapshot {
             title: self.title.clone(),
+            type_description: self.type_description.clone(),
             phase: self.phase,
             value_transform: self.value_transform,
             supports_misbinning_mitigation: self.supports_misbinning_mitigation,
@@ -1332,24 +1797,24 @@ impl HistogramAccumulatorState {
         for (i, bin) in self.bins.iter().enumerate() {
             let c1 = (self.x_max - self.x_min) * i as f64 / self.bins.len() as f64 + self.x_min;
             let c2 = (self.x_max - self.x_min) * (i + 1) as f64 / self.bins.len() as f64;
-            info!(
-                "{}={}: {} +/- {}",
-                c1,
-                c2,
-                bin.average(self.sample_count),
-                bin.error(self.sample_count)
-            );
+            // info!(
+            //     "{}={}: {} +/- {}",
+            //     c1,
+            //     c2,
+            //     bin.average(self.sample_count),
+            //     bin.error(self.sample_count)
+            // );
         }
 
-        info!(
-            "{} stats: entries={}, underflow={}, overflow={}, nan_values={}, mitigated_pairs={}",
-            self.title,
-            self.statistics.in_range_entry_count,
-            self.underflow_bin.total_entry_count(),
-            self.overflow_bin.total_entry_count(),
-            self.statistics.nan_value_count,
-            self.statistics.mitigated_pair_count,
-        );
+        // info!(
+        //     "{} stats: entries={}, underflow={}, overflow={}, nan_values={}, mitigated_pairs={}",
+        //     self.title,
+        //     self.statistics.in_range_entry_count,
+        //     self.underflow_bin.total_entry_count(),
+        //     self.overflow_bin.total_entry_count(),
+        //     self.statistics.nan_value_count,
+        //     self.statistics.mitigated_pair_count,
+        // );
     }
 
     fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
@@ -1359,11 +1824,12 @@ impl HistogramAccumulatorState {
         writeln!(writer, "##& xmin & xmax & central value & dy &\n")?;
         writeln!(
             writer,
-            "<histogram> {} \"{} |X_AXIS@{} |Y_AXIS@{} |TYPE@AL\"",
+            "<histogram> {} \"{} |X_AXIS@{} |Y_AXIS@{} |TYPE@{}\"",
             self.bins.len(),
             self.title,
             x_axis_mode,
             y_axis_mode,
+            self.type_description,
         )?;
 
         for (i, bin) in self.bins.iter().enumerate() {
@@ -1387,6 +1853,7 @@ impl HistogramAccumulatorState {
     fn from_snapshot(snapshot: &HistogramSnapshot) -> Self {
         Self {
             title: snapshot.title.clone(),
+            type_description: snapshot.type_description.clone(),
             phase: snapshot.phase,
             value_transform: snapshot.value_transform,
             supports_misbinning_mitigation: snapshot.supports_misbinning_mitigation,
@@ -1436,6 +1903,7 @@ impl HistogramAccumulatorState {
 
     fn ensure_compatible(&self, other: &HistogramAccumulatorState) -> Result<()> {
         if self.title != other.title
+            || self.type_description != other.type_description
             || self.phase != other.phase
             || self.value_transform != other.value_transform
             || self.supports_misbinning_mitigation != other.supports_misbinning_mitigation
@@ -1896,7 +2364,12 @@ impl HistogramObservable {
             entry_index: settings.entry_index,
             misbinning_max_normalized_distance: settings.misbinning_max_normalized_distance,
             state: HistogramAccumulatorState::new(
-                observable_name.to_string(),
+                settings
+                    .histogram
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| observable_name.to_string()),
+                settings.histogram.type_description.clone(),
                 settings.phase,
                 settings.value_transform,
                 supports_misbinning_mitigation,
@@ -2340,8 +2813,10 @@ fn transform_value<T: FloatLike>(value: &F<T>, value_transform: ObservableValueT
     }
 }
 
-fn value_in_range(value: f64, min: f64, max: Option<f64>) -> bool {
-    if value < min {
+fn value_in_range(value: f64, min: Option<f64>, max: Option<f64>) -> bool {
+    if let Some(min) = min
+        && value < min
+    {
         return false;
     }
 
@@ -2379,6 +2854,7 @@ mod tests {
     fn sample_histogram_snapshot() -> HistogramSnapshot {
         HistogramSnapshot {
             title: "top_pt".to_string(),
+            type_description: "AL".to_string(),
             phase: ObservablePhase::Real,
             value_transform: ObservableValueTransform::Identity,
             supports_misbinning_mitigation: true,
@@ -2489,5 +2965,17 @@ mod tests {
             scaled.bins[0].error(scaled.sample_count),
             snapshot.bins[0].error(snapshot.sample_count) * 2.0
         );
+    }
+
+    #[test]
+    fn histogram_snapshot_hwu_header_uses_type_description() {
+        let mut snapshot = sample_histogram_snapshot();
+        snapshot.type_description = "SB".to_string();
+
+        let mut output = Vec::new();
+        snapshot.write_hwu_block(&mut output).unwrap();
+        let output = String::from_utf8(output).unwrap();
+
+        assert!(output.contains("|TYPE@SB\""), "{output}");
     }
 }

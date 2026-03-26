@@ -63,7 +63,14 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
-use tabled::Tabled;
+use tabled::{
+    Tabled,
+    builder::Builder,
+    settings::{
+        Alignment, Modify, Panel, Style,
+        object::{Columns, Rows},
+    },
+};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
@@ -2969,7 +2976,44 @@ fn emit_results_output_summary(
     emitted_paths: &[Option<PathBuf>],
     output_control: WorkspaceSnapshotControl,
 ) {
+    let rendered =
+        render_results_output_summary_table(workspace, slots, emitted_paths, output_control);
+    let Some(rendered) = rendered else {
+        return;
+    };
+
+    info!("");
+    info!("{rendered}");
+}
+
+fn render_results_output_summary_table(
+    workspace: Option<&Path>,
+    slots: &[IntegrationSlot],
+    emitted_paths: &[Option<PathBuf>],
+    output_control: WorkspaceSnapshotControl,
+) -> Option<String> {
     let mut summary_rows = Vec::new();
+    if let Some(workspace) = workspace {
+        summary_rows.push((
+            "workspace path".to_string(),
+            workspace.display().to_string(),
+        ));
+        summary_rows.push((
+            "results".to_string(),
+            workspace_relative_display_path(workspace, &workspace_result_snapshot_path(workspace)),
+        ));
+        if output_control.write_iteration_archives {
+            summary_rows.push((
+                "results iteration snapshots".to_string(),
+                workspace_relative_display_path(
+                    workspace,
+                    &workspace_result_archive_path(workspace, 1),
+                )
+                .replace("iter_0001", "iter_*"),
+            ));
+        }
+    }
+
     for (slot, emitted_path) in slots.iter().zip(emitted_paths.iter()) {
         let Some(final_path) = emitted_path else {
             continue;
@@ -2991,47 +3035,46 @@ fn emit_results_output_summary(
                 )
             })
             .flatten();
-        summary_rows.push((&slot.meta, final_path, iteration_pattern));
-    }
-
-    if summary_rows.is_empty() && workspace.is_none() {
-        return;
-    }
-
-    info!("");
-    info!("{}", "Integration results emitted:".green().bold());
-    if let Some(workspace) = workspace {
-        info!(
-            "results -> {}",
-            workspace_relative_display_path(workspace, &workspace_result_snapshot_path(workspace))
-        );
-        if output_control.write_iteration_archives {
-            info!(
-                "results iteration snapshots -> {}",
-                workspace_relative_display_path(
-                    workspace,
-                    &workspace_result_archive_path(workspace, 1),
-                )
-                .replace("iter_0001", "iter_*")
-            );
-        }
-    }
-    for (slot_meta, final_path, iteration_pattern) in summary_rows {
         let display_path = workspace
             .map(|root| workspace_relative_display_path(root, final_path))
             .unwrap_or_else(|| final_path.display().to_string());
-        info!("{} -> {}", slot_key_label(slot_meta), display_path);
+        summary_rows.push((slot_key_label(&slot.meta), display_path));
         if let Some(iteration_pattern) = iteration_pattern {
             let display_pattern = workspace
                 .map(|root| workspace_relative_display_path(root, Path::new(&iteration_pattern)))
                 .unwrap_or(iteration_pattern);
-            info!(
-                "{} iteration snapshots -> {}",
-                format!("{} ", slot_key_label(slot_meta)).dimmed(),
-                display_pattern
-            );
+            summary_rows.push((
+                format!("{} iteration snapshots", slot_key_label(&slot.meta)),
+                display_pattern,
+            ));
         }
     }
+
+    if summary_rows.is_empty() {
+        return None;
+    }
+
+    let mut builder = Builder::default();
+    builder.push_record([
+        "type".blue().bold().to_string(),
+        "path".blue().bold().to_string(),
+    ]);
+    for (row_type, row_path) in summary_rows {
+        builder.push_record([
+            row_type.blue().bold().to_string(),
+            row_path.green().to_string(),
+        ]);
+    }
+
+    let mut table = builder.build();
+    table.with(Panel::header(
+        "Integration results emitted".green().bold().to_string(),
+    ));
+    table.with(Style::rounded());
+    table.with(Modify::new(Rows::first()).with(Alignment::left()));
+    table.with(Modify::new(Columns::new(0..2)).with(Alignment::left()));
+
+    Some(utils::normalize_tabled_separator_rows(&table.to_string()))
 }
 
 /// This function actually evaluates the list of samples in parallel.
@@ -4293,6 +4336,36 @@ mod tests {
     }
 
     #[test]
+    fn results_output_summary_renders_tabled_workspace_rows() {
+        let workspace = Path::new("/tmp/gl_workspace");
+        let rendered = render_results_output_summary_table(
+            Some(workspace),
+            &[],
+            &[],
+            WorkspaceSnapshotControl {
+                write_iteration_archives: true,
+            },
+        )
+        .expect("workspace summary should render");
+
+        assert!(
+            rendered.contains("Integration results emitted"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("type"), "{rendered}");
+        assert!(rendered.contains("path"), "{rendered}");
+        assert!(rendered.contains("workspace path"), "{rendered}");
+        assert!(rendered.contains("/tmp/gl_workspace"), "{rendered}");
+        assert!(rendered.contains("results"), "{rendered}");
+        assert!(rendered.contains("integration_result.json"), "{rendered}");
+        assert!(
+            rendered.contains("results iteration snapshots"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("integration_result_iter_*"), "{rendered}");
+    }
+
+    #[test]
     fn ratatui_overview_shows_eta_and_all_slot_metrics() {
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
@@ -4600,6 +4673,52 @@ mod tests {
     }
 
     #[test]
+    fn target_accuracy_status_requires_all_slots_to_reach_relative_target() {
+        let mut state = make_integration_state();
+        state.all_integrals[0].re.avg = F(1.0);
+        state.all_integrals[0].re.err = F(1.0e-5);
+        state.all_integrals[1].re.avg = F(1.0);
+        state.all_integrals[1].re.err = F(2.0e-3);
+
+        let status = status_update::evaluate_target_accuracy(
+            &state,
+            100_000,
+            Duration::from_secs(10),
+            &[None, None],
+            IntegrationStatusPhaseDisplay::Real,
+            Some(1.0e-3),
+            None,
+        );
+
+        assert!(!status.is_reached());
+        assert!(!status.relative_reached);
+        assert!(status.eta_to_target.is_some());
+    }
+
+    #[test]
+    fn target_accuracy_status_requires_all_displayed_components_to_reach_target() {
+        let mut state = make_integration_state();
+        state.all_integrals[0].re.avg = F(1.0);
+        state.all_integrals[0].re.err = F(1.0e-5);
+        state.all_integrals[0].im.avg = F(1.0);
+        state.all_integrals[0].im.err = F(2.0e-3);
+
+        let status = status_update::evaluate_target_accuracy(
+            &state,
+            100_000,
+            Duration::from_secs(10),
+            &[Some(Complex::new(F(1.0), F(1.0))), None],
+            IntegrationStatusPhaseDisplay::Both,
+            Some(1.0e-3),
+            None,
+        );
+
+        assert!(!status.is_reached());
+        assert!(!status.relative_reached);
+        assert!(status.eta_to_target.is_some());
+    }
+
+    #[test]
     fn target_accuracy_status_treats_zero_relative_reference_as_inactive() {
         let state = make_integration_state();
         let status = status_update::evaluate_target_accuracy(
@@ -4615,6 +4734,112 @@ mod tests {
         assert!(!status.relative_reached);
         assert!(!status.absolute_reached);
         assert_eq!(status.eta_to_target, None);
+    }
+
+    #[test]
+    fn target_accuracy_status_reports_infinite_eta_for_unreachable_absolute_target() {
+        let state = make_integration_state();
+        let status = status_update::evaluate_target_accuracy(
+            &state,
+            100_000,
+            Duration::from_secs(10),
+            &[None, None],
+            IntegrationStatusPhaseDisplay::Real,
+            None,
+            Some(1.0e-99),
+        );
+
+        assert!(!status.is_reached());
+        assert_eq!(status.eta_to_target, Some(Duration::MAX));
+    }
+
+    #[test]
+    fn target_accuracy_status_prefers_finite_relative_eta_over_infinite_absolute_eta() {
+        let state = make_integration_state();
+        let status = status_update::evaluate_target_accuracy(
+            &state,
+            100_000,
+            Duration::from_secs(10),
+            &[None, None],
+            IntegrationStatusPhaseDisplay::Real,
+            Some(1.0e-3),
+            Some(1.0e-99),
+        );
+
+        assert!(!status.is_reached());
+        assert!(status.eta_to_target.is_some());
+        assert_ne!(status.eta_to_target, Some(Duration::MAX));
+    }
+
+    #[test]
+    fn ratatui_overview_displays_infinite_eta_to_target() {
+        let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            target_absolute_accuracy: Some(1.0e-99),
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            })),
+            |_| {},
+        );
+
+        assert!(rendered.contains("ETA to target"), "{rendered}");
+        assert!(rendered.contains("∞"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_overview_prefers_finite_relative_eta_over_infinite_absolute_eta() {
+        let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            target_relative_accuracy: Some(1.0e-3),
+            target_absolute_accuracy: Some(1.0e-99),
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(0.0))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(25),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            })),
+            |_| {},
+        );
+
+        assert!(rendered.contains("ETA to target"), "{rendered}");
+        assert!(!rendered.contains("∞"), "{rendered}");
     }
 
     #[test]

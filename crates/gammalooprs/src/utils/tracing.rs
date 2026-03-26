@@ -32,6 +32,7 @@ use tracing_subscriber::{EnvFilter, fmt, prelude::*, registry::Registry, reload}
 pub enum LogFormat {
     #[default]
     Long,
+    Full,
     Short,
     Min,
     None,

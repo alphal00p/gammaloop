@@ -22,12 +22,14 @@ fn configure_jet_quantities_with_clustered_pdgs(
     cli.run_command(&format!(
         r#"set process string '
 [quantities.leading_jet_pt]
-type = "jet_pt"
+type = "jet"
+quantity = "PT"
 dR = 0.4
 {clustered_pdgs}
 
 [quantities.jet_count]
-type = "jet_count"
+type = "jet"
+computation = "count"
 dR = 0.4
 {clustered_pdgs}
 '"#,

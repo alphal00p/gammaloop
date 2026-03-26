@@ -26,8 +26,9 @@ use crate::{
     completion::{arg_value_completion, ArgValueCompletion, SelectorKind},
     session::CliSession,
     settings_tree::{
-        schema_at_path, schema_enum_values, schema_example_values, schema_value_hint,
-        serialize_schema, serialize_settings_with_defaults, value_at_path,
+        schema_at_path, schema_enum_values, schema_example_values, schema_is_object_container,
+        schema_object_property_names, schema_value_hint, serialize_schema,
+        serialize_settings_with_defaults, value_at_path,
     },
     CLISettings,
 };
@@ -1953,6 +1954,8 @@ fn add_process_settings_update_suggestions(
     let Some(root) = intersect_settings_roots(&roots) else {
         return;
     };
+    let completion_root =
+        merged_named_setting_completion_root(setting_kind, &root).unwrap_or(root.clone());
 
     let schema = match setting_kind {
         NamedProcessSettingKind::Quantity => quantity_schema(),
@@ -1966,7 +1969,7 @@ fn add_process_settings_update_suggestions(
     );
 
     add_process_settings_kv_suggestions(
-        &root,
+        &completion_root,
         schema,
         accepts_quantity_reference.then_some(quantity_candidates.as_slice()),
         context.current_token,
@@ -1974,6 +1977,40 @@ fn add_process_settings_update_suggestions(
         suggestions,
         seen,
     );
+}
+
+fn merged_named_setting_completion_root(
+    setting_kind: NamedProcessSettingKind,
+    current_root: &JsonValue,
+) -> Option<JsonValue> {
+    let template = match setting_kind {
+        NamedProcessSettingKind::Quantity => {
+            quantity_completion_root_for_kind(current_root.get("type")?.as_str()?)?.clone()
+        }
+        NamedProcessSettingKind::Observable => observable_completion_root().clone(),
+        NamedProcessSettingKind::Selector => {
+            selector_completion_root_for_kind(current_root.get("selector")?.as_str()?)?.clone()
+        }
+    };
+
+    Some(merge_json_value(&template, current_root))
+}
+
+fn merge_json_value(base: &JsonValue, overlay: &JsonValue) -> JsonValue {
+    match (base, overlay) {
+        (JsonValue::Object(base_map), JsonValue::Object(overlay_map)) => {
+            let mut merged = base_map.clone();
+            for (key, overlay_value) in overlay_map {
+                if let Some(base_value) = merged.get(key) {
+                    merged.insert(key.clone(), merge_json_value(base_value, overlay_value));
+                } else {
+                    merged.insert(key.clone(), overlay_value.clone());
+                }
+            }
+            JsonValue::Object(merged)
+        }
+        (_, overlay) => overlay.clone(),
+    }
 }
 
 fn add_process_settings_name_suggestions_for_existing_entries(
@@ -2542,22 +2579,35 @@ fn add_settings_path_suggestions(
         return;
     };
 
-    let mut entries = map.iter().collect::<Vec<_>>();
-    entries.sort_by(|(left_key, left_value), (right_key, right_value)| {
-        let left_is_container = matches!(left_value, JsonValue::Object(_));
-        let right_is_container = matches!(right_value, JsonValue::Object(_));
+    let mut keys = map.keys().cloned().collect::<Vec<_>>();
+    if let Some(schema_container) = schema_at_path(schema, &container_path) {
+        for key in schema_object_property_names(schema, schema_container) {
+            if !keys.iter().any(|existing| existing == &key) {
+                keys.push(key);
+            }
+        }
+    }
+
+    keys.sort_by(|left_key, right_key| {
+        let left_is_container =
+            settings_path_kind_for_key(map.get(left_key), schema, &container_path, left_key)
+                == SettingsPathKind::Container;
+        let right_is_container =
+            settings_path_kind_for_key(map.get(right_key), schema, &container_path, right_key)
+                == SettingsPathKind::Container;
         right_is_container
             .cmp(&left_is_container)
             .then_with(|| left_key.cmp(right_key))
     });
 
-    for (key, value) in entries {
+    for key in keys {
         if !child_prefix.is_empty() && !key.starts_with(&child_prefix) {
             continue;
         }
 
-        let path_kind = settings_path_kind(value);
-        let replacement = render_settings_path_completion(&container_path, key, path_kind);
+        let value = map.get(&key);
+        let path_kind = settings_path_kind_for_key(value, schema, &container_path, &key);
+        let replacement = render_settings_path_completion(&container_path, &key, path_kind);
         if !seen.insert(replacement.clone()) {
             continue;
         }
@@ -2578,6 +2628,30 @@ fn add_settings_path_suggestions(
             span: Span::new(pos.saturating_sub(key_request.len()), pos),
             append_whitespace: value_completion_appends_whitespace(&replacement),
         });
+    }
+}
+
+fn settings_path_kind_for_key(
+    value: Option<&JsonValue>,
+    schema: &JsonValue,
+    container_path: &str,
+    key: &str,
+) -> SettingsPathKind {
+    if let Some(value) = value {
+        return settings_path_kind(value);
+    }
+
+    let full_path = if container_path.is_empty() {
+        key.to_string()
+    } else {
+        format!("{container_path}.{key}")
+    };
+
+    match schema_at_path(schema, &full_path) {
+        Some(schema_node) if schema_is_object_container(schema, schema_node) => {
+            SettingsPathKind::Container
+        }
+        _ => SettingsPathKind::Leaf(SettingsValueKind::String),
     }
 }
 
@@ -3643,9 +3717,14 @@ mod tests {
                 quantities: BTreeMap::from([(
                     "top_pt".to_string(),
                     json!({
-                        "type": "particle_scalar",
+                        "type": "particle",
                         "pdgs": [6, -6],
-                        "quantity": "PT"
+                        "computation": "scalar",
+                        "quantity": "PT",
+                        "pair_quantity": null,
+                        "pairing": null,
+                        "ordering": "Quantity",
+                        "order": "Descending"
                     }),
                 )]),
                 observables: BTreeMap::from([(
@@ -3684,9 +3763,14 @@ mod tests {
                 quantities: BTreeMap::from([(
                     "top_pt".to_string(),
                     json!({
-                        "type": "particle_scalar",
+                        "type": "particle",
                         "pdgs": [6, -6],
-                        "quantity": "PT"
+                        "computation": "scalar",
+                        "quantity": "PT",
+                        "pair_quantity": null,
+                        "pairing": null,
+                        "ordering": "Quantity",
+                        "order": "Descending"
                     }),
                 )]),
                 observables: BTreeMap::from([(
@@ -3725,9 +3809,14 @@ mod tests {
                 quantities: BTreeMap::from([(
                     "mll".to_string(),
                     json!({
-                        "type": "particle_scalar",
+                        "type": "particle",
                         "pdgs": [11, -11],
-                        "quantity": "E"
+                        "computation": "scalar",
+                        "quantity": "E",
+                        "pair_quantity": null,
+                        "pairing": null,
+                        "ordering": "Quantity",
+                        "order": "Descending"
                     }),
                 )]),
                 observables: BTreeMap::new(),
@@ -3750,6 +3839,34 @@ mod tests {
             process_settings_entries: sample_process_settings_entries(),
             ..CompletionState::default()
         }
+    }
+
+    fn generate_completion_state_without_optional_histogram_metadata() -> CompletionState {
+        let mut state = generate_completion_state();
+        let entry = state
+            .process_settings_entries
+            .iter_mut()
+            .find(|entry| entry.process_name == "triangle" && entry.integrand_name == "LO")
+            .expect("sample process settings entry should exist");
+        entry
+            .observables
+            .get_mut("top_pt_hist")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("observable should be an object")
+            .remove("title");
+        entry
+            .observables
+            .get_mut("top_pt_hist")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("observable should be an object")
+            .remove("type_description");
+        entry
+            .selectors
+            .get_mut("top_cut")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("selector should be an object")
+            .remove("min");
+        state
     }
 
     fn completion_values(line: &str, completion_state: &CompletionState) -> Vec<String> {
@@ -4232,6 +4349,34 @@ mod tests {
     }
 
     #[test]
+    fn completion_offers_observable_add_paths_for_histogram_metadata() {
+        let values = completion_values(
+            "set process -p triangle -i LO add observable top_pt_hist t",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"title=".to_string()), "{values:?}");
+        assert!(
+            values.contains(&"type_description=".to_string()),
+            "{values:?}"
+        );
+    }
+
+    #[test]
+    fn completion_offers_observable_update_paths_for_optional_histogram_metadata() {
+        let values = completion_values(
+            "set process -p triangle -i LO update observable top_pt_hist t",
+            &generate_completion_state_without_optional_histogram_metadata(),
+        );
+
+        assert!(values.contains(&"title=".to_string()), "{values:?}");
+        assert!(
+            values.contains(&"type_description=".to_string()),
+            "{values:?}"
+        );
+    }
+
+    #[test]
     fn completion_offers_observable_update_enum_values() {
         let values = completion_values(
             "set process -p triangle -i LO update observable top_pt_hist phase=",
@@ -4254,6 +4399,17 @@ mod tests {
             values.contains(&"entry_selection=".to_string()),
             "{values:?}"
         );
+    }
+
+    #[test]
+    fn completion_offers_selector_update_paths_for_optional_value_range_bounds() {
+        let values = completion_values(
+            "set process -p triangle -i LO update selector top_cut m",
+            &generate_completion_state_without_optional_histogram_metadata(),
+        );
+
+        assert!(values.contains(&"max=".to_string()), "{values:?}");
+        assert!(values.contains(&"min=".to_string()), "{values:?}");
     }
 
     #[test]
@@ -4283,11 +4439,8 @@ mod tests {
             &generate_completion_state(),
         );
 
-        assert!(
-            values.contains(&"particle_scalar".to_string()),
-            "{values:?}"
-        );
-        assert!(values.contains(&"jet_pt".to_string()), "{values:?}");
+        assert!(values.contains(&"particle".to_string()), "{values:?}");
+        assert!(values.contains(&"jet".to_string()), "{values:?}");
         assert!(values.contains(&"cross_section".to_string()), "{values:?}");
     }
 
@@ -4415,7 +4568,7 @@ mod tests {
     #[test]
     fn completion_uses_schema_hint_for_clustered_pdgs_key() {
         let suggestions = completion_suggestions(
-            "set process -p triangle add quantity jets jet_pt clustered_p",
+            "set process -p triangle add quantity jets jet clustered_p",
             &generate_completion_state(),
         );
 
@@ -4431,7 +4584,7 @@ mod tests {
     #[test]
     fn completion_offers_clustered_pdgs_example_value() {
         let suggestions = completion_suggestions(
-            "set process -p triangle add quantity jets jet_pt clustered_pdgs=",
+            "set process -p triangle add quantity jets jet clustered_pdgs=",
             &generate_completion_state(),
         );
 
@@ -4453,6 +4606,62 @@ mod tests {
                 .all(|suggestion| suggestion.description.as_deref() != Some("expects null")),
             "{suggestions:?}"
         );
+    }
+
+    #[test]
+    fn completion_offers_quantity_computation_fields_for_process_add() {
+        let values = completion_values(
+            "set process -p triangle add quantity my_quantity jet p",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"pair_quantity=".to_string()), "{values:?}");
+        assert!(values.contains(&"pairing=".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_quantity_ordering_fields_for_process_add() {
+        let values = completion_values(
+            "set process -p triangle add quantity my_quantity jet o",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"order=".to_string()), "{values:?}");
+        assert!(values.contains(&"ordering=".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_pair_quantity_enum_values() {
+        let values = completion_values(
+            "set process -p triangle add quantity my_quantity jet pair_quantity=",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"DeltaR".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_quantity_ordering_enum_values() {
+        let values = completion_values(
+            "set process -p triangle add quantity my_quantity particle ordering=",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"PT".to_string()), "{values:?}");
+        assert!(values.contains(&"Energy".to_string()), "{values:?}");
+        assert!(values.contains(&"AbsRapidity".to_string()), "{values:?}");
+        assert!(values.contains(&"Quantity".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_quantity_order_enum_values() {
+        let values = completion_values(
+            "set process -p triangle add quantity my_quantity particle order=",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"Ascending".to_string()), "{values:?}");
+        assert!(values.contains(&"Descending".to_string()), "{values:?}");
     }
 
     #[test]

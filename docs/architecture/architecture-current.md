@@ -250,10 +250,28 @@ live accumulator state. The Rust-facing histogram API exposes `merge(...)`,
 
 Current built-in quantities include:
 
-- `particle_scalar`
-- `jet_pt`
+- `particle` with `computation = scalar | count | pair`
+- `jet` with `computation = scalar | count | pair`
 - `afb`
 - `cross_section`
+
+Current pair quantities include `DeltaR`. Current scalar projections include
+`E`, `CosTheta`, `PT`, `y`, `eta`, `Px`, `Py`, `Pz`, and `Mass`.
+
+Object and pair quantities are ordered before `entry_selection` is applied.
+The ordering contract is configurable per quantity through:
+
+- `ordering = PT | Energy | AbsRapidity | Quantity`
+- `order = Ascending | Descending`
+
+Family defaults are:
+
+- particle scalar quantities: `ordering = Quantity`
+- jet scalar quantities: `ordering = PT`
+- pair quantities: `ordering = Quantity`
+
+`leading_only` and `nth_only` therefore operate on this explicit ordered list,
+not on incidental source/event enumeration order.
 
 Jet clustering is implemented natively in Rust with IRC-safe algorithms:
 

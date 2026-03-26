@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::time::Duration;
 
 use ratatui::{
     Frame,
@@ -704,7 +705,13 @@ impl RatatuiDashboardState {
                     update
                         .meta
                         .eta_to_target()
-                        .map(|duration| utils::format_wdhms(duration.as_secs() as usize))
+                        .map(|duration| {
+                            if duration == Duration::MAX {
+                                "∞".to_string()
+                            } else {
+                                utils::format_wdhms(duration.as_secs() as usize)
+                            }
+                        })
                         .unwrap_or_else(|| "N/A".to_string()),
                     TextStyle::PLAIN,
                 );

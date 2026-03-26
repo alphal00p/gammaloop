@@ -105,6 +105,53 @@ pub(crate) fn schema_value_hint(root: &JsonValue, node: &JsonValue) -> Option<St
     }
 }
 
+pub(crate) fn schema_object_property_names(root: &JsonValue, node: &JsonValue) -> Vec<String> {
+    let mut values = Vec::new();
+    collect_schema_object_property_names(root, node, &mut values);
+    values
+}
+
+pub(crate) fn schema_is_object_container(root: &JsonValue, node: &JsonValue) -> bool {
+    let Some(node) = resolve_schema_refs(root, node) else {
+        return false;
+    };
+
+    if node
+        .get("properties")
+        .and_then(JsonValue::as_object)
+        .is_some_and(|properties| !properties.is_empty())
+    {
+        return true;
+    }
+
+    match node.get("type") {
+        Some(JsonValue::String(type_name)) if type_name == "object" => return true,
+        Some(JsonValue::Array(type_names))
+            if type_names
+                .iter()
+                .filter_map(JsonValue::as_str)
+                .any(|type_name| type_name == "object") =>
+        {
+            return true;
+        }
+        _ => {}
+    }
+
+    for keyword in ["anyOf", "oneOf", "allOf"] {
+        let Some(variants) = node.get(keyword).and_then(JsonValue::as_array) else {
+            continue;
+        };
+        if variants
+            .iter()
+            .any(|variant| schema_is_object_container(root, variant))
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
 pub(crate) fn schema_example_values(root: &JsonValue, node: &JsonValue) -> Vec<String> {
     let mut values = Vec::new();
     collect_schema_examples(root, node, &mut values);
@@ -175,6 +222,33 @@ fn collect_schema_enum_values(root: &JsonValue, node: &JsonValue, values: &mut V
         };
         for variant in variants {
             collect_schema_enum_values(root, variant, values);
+        }
+    }
+}
+
+fn collect_schema_object_property_names(
+    root: &JsonValue,
+    node: &JsonValue,
+    values: &mut Vec<String>,
+) {
+    let Some(node) = resolve_schema_refs(root, node) else {
+        return;
+    };
+
+    if let Some(properties) = node.get("properties").and_then(JsonValue::as_object) {
+        for key in properties.keys() {
+            if !values.iter().any(|existing| existing == key) {
+                values.push(key.clone());
+            }
+        }
+    }
+
+    for keyword in ["anyOf", "oneOf", "allOf"] {
+        let Some(variants) = node.get(keyword).and_then(JsonValue::as_array) else {
+            continue;
+        };
+        for variant in variants {
+            collect_schema_object_property_names(root, variant, values);
         }
     }
 }

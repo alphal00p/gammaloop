@@ -687,6 +687,11 @@ where
         } else {
             format_target(meta.module_path().unwrap_or("").to_string(), *meta.level())
         };
+        let full_source = if style.full_line_source {
+            format_full_source(meta)
+        } else {
+            format_target_full(meta.module_path().unwrap_or("").to_string())
+        };
 
         match style.log_format {
             LogFormat::Long => {
@@ -700,6 +705,21 @@ where
                     "[{}] @{} {}: {}",
                     timestamp,
                     long_source,
+                    format_level(*meta.level()),
+                    rendered
+                )?;
+            }
+            LogFormat::Full => {
+                let timestamp = if style.short_timestamp {
+                    &ts_short_ms
+                } else {
+                    &ts_long
+                };
+                write!(
+                    w,
+                    "[{}] @{} {}: {}",
+                    timestamp,
+                    full_source,
                     format_level(*meta.level()),
                     rendered
                 )?;
@@ -746,6 +766,10 @@ pub(crate) fn format_target(target: String, level: tracing::Level) -> ColoredStr
     format!("{:<20}", shortened_path).bright_blue()
 }
 
+pub(crate) fn format_target_full(target: String) -> ColoredString {
+    format!("{:<20}", target).bright_blue()
+}
+
 pub(crate) fn format_full_source(meta: &tracing::Metadata<'_>) -> ColoredString {
     let module = meta.module_path().unwrap_or("");
     let file = meta.file().unwrap_or("");
@@ -780,9 +804,9 @@ mod tests {
     use tracing_subscriber::filter::LevelFilter;
 
     use super::{
-        collapse_scoped_gamma_level, display_filter_from, file_filter_from, get_stderr_log_filter,
-        get_stderr_log_filter_label, set_stderr_log_filter, set_stderr_log_filter_override,
-        StderrLogSpecState, STDERR_LOG_SPEC,
+        collapse_scoped_gamma_level, display_filter_from, file_filter_from, format_target,
+        format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
+        set_stderr_log_filter, set_stderr_log_filter_override, StderrLogSpecState, STDERR_LOG_SPEC,
     };
 
     struct StderrStateRestore(StderrLogSpecState);
@@ -861,5 +885,14 @@ mod tests {
             file_filter_from("").unwrap().max_level_hint(),
             Some(LevelFilter::WARN)
         );
+    }
+
+    #[test]
+    fn full_target_format_preserves_long_module_paths() {
+        let target = "gammaloop_api::commands::very_long_module_name".to_string();
+        assert_eq!(format_target_full(target.clone()).to_string(), target);
+        assert!(format_target(target, tracing::Level::INFO)
+            .to_string()
+            .contains("..."));
     }
 }

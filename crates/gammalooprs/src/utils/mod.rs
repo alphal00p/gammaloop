@@ -1399,6 +1399,10 @@ impl<T: FloatLike> F<T> {
         F(self.0.norm())
     }
 
+    pub(crate) fn sqrt(&self) -> Self {
+        F(self.0.sqrt())
+    }
+
     pub(crate) fn log10(&self) -> Self {
         self.ln()
     }
@@ -3493,17 +3497,23 @@ pub(crate) fn format_evaluation_time(time: Duration) -> String {
 }
 
 pub(crate) fn duration_from_secs_f64_saturating(time: f64) -> Duration {
-    if !time.is_finite() || time <= 0.0 {
+    if time.is_nan() || time <= 0.0 {
         return Duration::ZERO;
     }
 
-    let max_seconds = Duration::MAX.as_secs_f64();
-    let clamped = if time >= max_seconds {
-        max_seconds
-    } else {
-        time
-    };
-    Duration::from_secs_f64(clamped)
+    if time.is_infinite() {
+        return Duration::MAX;
+    }
+
+    let max_seconds = Duration::MAX.as_secs();
+    if time >= max_seconds as f64 {
+        return Duration::MAX;
+    }
+
+    let seconds = time.trunc() as u64;
+    let fractional = (time - seconds as f64).clamp(0.0, 0.999_999_999_999);
+    let nanos = (fractional * 1_000_000_000.0) as u32;
+    Duration::new(seconds, nanos)
 }
 
 pub(crate) fn format_evaluation_time_from_f64(time: f64) -> String {

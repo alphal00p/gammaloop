@@ -286,6 +286,8 @@ mod tests {
                     n_bins: 1,
                     log_x_axis: false,
                     log_y_axis: true,
+                    title: None,
+                    type_description: "AL".to_string(),
                 },
             },
         );

@@ -649,7 +649,10 @@ fn apply_process_set_args(
             }
             Ok(())
         }
-    }
+    }?;
+
+    normalize_runtime_quantities(settings)?;
+    Ok(())
 }
 
 fn apply_process_add_target(
@@ -1043,7 +1046,16 @@ fn merge_runtime_settings_input(
             .insert(parameter_name, value);
     }
 
+    normalize_runtime_quantities(&mut merged_settings)?;
     Ok(merged_settings)
+}
+
+fn normalize_runtime_quantities(settings: &mut RuntimeSettings) -> Result<()> {
+    settings.quantities = std::mem::take(&mut settings.quantities)
+        .into_iter()
+        .map(|(name, quantity)| quantity.try_normalized().map(|quantity| (name, quantity)))
+        .collect::<Result<_>>()?;
+    Ok(())
 }
 
 fn yaml_to_json(v: Y) -> Result<J> {
@@ -1099,7 +1111,10 @@ mod test {
     use figment::{providers::Serialized, Figment};
     use gammalooprs::{
         model::{ParameterNature, ParameterType, UFOSymbol},
-        observables::{FilterQuantity, QuantitySettings, SelectorDefinitionSettings},
+        observables::{
+            FilterQuantity, PairQuantity, QuantityComputation, QuantityOrder, QuantityOrdering,
+            QuantitySettings, SelectorDefinitionSettings,
+        },
         settings::RuntimeSettings,
         utils::{load_generic_model, F},
     };
@@ -1453,7 +1468,7 @@ mod test {
     #[test]
     fn parse_set_process_add_quantity() {
         let cmd = Set::from_str(
-            "set process -p epem_a_tth -i LO add quantity top_pt particle_scalar quantity=PT",
+            "set process -p epem_a_tth -i LO add quantity top_pt particle quantity=PT",
         )
         .unwrap();
 
@@ -1464,7 +1479,7 @@ mod test {
                     ProcessSetArgs::Add {
                         target: ProcessAddTarget::Quantity {
                             name: "top_pt".to_string(),
-                            kind: "particle_scalar".to_string(),
+                            kind: "particle".to_string(),
                             pairs: vec![KvPair {
                                 key: "quantity".to_string(),
                                 value: "PT".to_string(),
@@ -1485,7 +1500,7 @@ mod test {
     #[test]
     fn parse_set_process_add_quantity_with_negative_integer_list() {
         let cmd = Set::from_str(
-            "set process -p epem_a_tth -i LO add quantity jets jet_pt clustered_pdgs=[-1,1,21,82]",
+            "set process -p epem_a_tth -i LO add quantity jets jet quantity=PT clustered_pdgs=[-1,1,21,82]",
         )
         .unwrap();
 
@@ -1496,11 +1511,17 @@ mod test {
                     ProcessSetArgs::Add {
                         target: ProcessAddTarget::Quantity {
                             name: "jets".to_string(),
-                            kind: "jet_pt".to_string(),
-                            pairs: vec![KvPair {
-                                key: "clustered_pdgs".to_string(),
-                                value: "[-1,1,21,82]".to_string(),
-                            }],
+                            kind: "jet".to_string(),
+                            pairs: vec![
+                                KvPair {
+                                    key: "quantity".to_string(),
+                                    value: "PT".to_string(),
+                                },
+                                KvPair {
+                                    key: "clustered_pdgs".to_string(),
+                                    value: "[-1,1,21,82]".to_string(),
+                                },
+                            ],
                         }
                     }
                 );
@@ -1563,7 +1584,7 @@ mod test {
             &ProcessSetArgs::Add {
                 target: ProcessAddTarget::Quantity {
                     name: "top_pt".to_string(),
-                    kind: "particle_scalar".to_string(),
+                    kind: "particle".to_string(),
                     pairs: vec![
                         KvPair {
                             key: "pdgs".to_string(),
@@ -1587,11 +1608,20 @@ mod test {
             .get("top_pt")
             .expect("quantity should have been inserted");
         match quantity {
-            QuantitySettings::ParticleScalar(particle) => {
+            QuantitySettings::Particle(particle) => {
                 assert_eq!(particle.pdgs, vec![6, -6]);
-                assert_eq!(particle.quantity, FilterQuantity::PT);
+                assert_eq!(
+                    particle.computation.computation,
+                    QuantityComputation::Scalar
+                );
+                assert_eq!(particle.computation.quantity, Some(FilterQuantity::PT));
+                assert_eq!(
+                    particle.computation.ordering,
+                    Some(QuantityOrdering::Quantity)
+                );
+                assert_eq!(particle.computation.order, QuantityOrder::Descending);
             }
-            other => panic!("Expected particle-scalar quantity, got {other:?}"),
+            other => panic!("Expected particle quantity, got {other:?}"),
         }
 
         apply_process_set_args(
@@ -1653,7 +1683,7 @@ max = 500.0
         assert_eq!(selector.quantity, "top_pt");
         match &selector.selector {
             SelectorDefinitionSettings::ValueRange(selector) => {
-                assert_eq!(selector.min, 10.0);
+                assert_eq!(selector.min, Some(10.0));
                 assert_eq!(selector.max, Some(500.0));
             }
             other => panic!("Expected value-range selector, got {other:?}"),
@@ -1723,6 +1753,237 @@ max = 500.0
         )
         .unwrap();
         assert!(!settings.quantities.contains_key("top_pt"));
+    }
+
+    #[test]
+    fn process_quantity_normalization_clears_irrelevant_scalar_fields_for_counts() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "jet_count".to_string(),
+                    kind: "jet".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "computation".to_string(),
+                            value: "count".to_string(),
+                        },
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "PT".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+
+        let QuantitySettings::Jet(jet) = settings.quantities["jet_count"].clone() else {
+            panic!("expected jet quantity");
+        };
+        assert_eq!(jet.computation.computation, QuantityComputation::Count);
+        assert_eq!(jet.computation.quantity, None);
+        assert_eq!(jet.computation.pair_quantity, None);
+        assert_eq!(jet.computation.ordering, None);
+        assert_eq!(jet.computation.order, QuantityOrder::Descending);
+    }
+
+    #[test]
+    fn process_quantity_normalization_defaults_pair_settings() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "jet_delta_r".to_string(),
+                    kind: "jet".to_string(),
+                    pairs: vec![KvPair {
+                        key: "computation".to_string(),
+                        value: "pair".to_string(),
+                    }],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+
+        let QuantitySettings::Jet(jet) = settings.quantities["jet_delta_r"].clone() else {
+            panic!("expected jet quantity");
+        };
+        assert_eq!(jet.computation.computation, QuantityComputation::Pair);
+        assert_eq!(jet.computation.pair_quantity, Some(PairQuantity::DeltaR));
+        assert!(jet.computation.quantity.is_none());
+        assert_eq!(jet.computation.ordering, Some(QuantityOrdering::Quantity));
+        assert_eq!(jet.computation.order, QuantityOrder::Descending);
+    }
+
+    #[test]
+    fn process_quantity_normalization_defaults_scalar_ordering_by_source_family() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "particle_energy".to_string(),
+                    kind: "particle".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "pdgs".to_string(),
+                            value: "[6,-6]".to_string(),
+                        },
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "E".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "jet_energy".to_string(),
+                    kind: "jet".to_string(),
+                    pairs: vec![KvPair {
+                        key: "quantity".to_string(),
+                        value: "E".to_string(),
+                    }],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+
+        let QuantitySettings::Particle(particle) = settings.quantities["particle_energy"].clone()
+        else {
+            panic!("expected particle quantity");
+        };
+        let QuantitySettings::Jet(jet) = settings.quantities["jet_energy"].clone() else {
+            panic!("expected jet quantity");
+        };
+
+        assert_eq!(
+            particle.computation.ordering,
+            Some(QuantityOrdering::Quantity)
+        );
+        assert_eq!(jet.computation.ordering, Some(QuantityOrdering::PT));
+    }
+
+    #[test]
+    fn process_quantity_normalization_rejects_non_quantity_pair_ordering() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        let err = apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "jet_delta_r".to_string(),
+                    kind: "jet".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "computation".to_string(),
+                            value: "pair".to_string(),
+                        },
+                        KvPair {
+                            key: "ordering".to_string(),
+                            value: "PT".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("Pair quantities only support ordering=Quantity"));
+    }
+
+    #[test]
+    fn process_selector_allows_missing_value_range_minimum() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        apply_process_set_args(
+            &ProcessSetArgs::String {
+                string: r#"
+[selectors.top_pt_cut]
+quantity = "top_pt"
+selector = "value_range"
+max = 250.0
+"#
+                .to_string(),
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+
+        let selector = settings.selectors.get("top_pt_cut").unwrap();
+        let SelectorDefinitionSettings::ValueRange(selector) = &selector.selector else {
+            panic!("expected value-range selector");
+        };
+        assert_eq!(selector.min, None);
+        assert_eq!(selector.max, Some(250.0));
+    }
+
+    #[test]
+    fn process_observable_accepts_histogram_title_and_type_description() {
+        let defaults = RuntimeSettings::default();
+        let mut settings = RuntimeSettings::default();
+
+        apply_process_set_args(
+            &ProcessSetArgs::Add {
+                target: ProcessAddTarget::Observable {
+                    name: "top_pt_hist".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "top_pt".to_string(),
+                        },
+                        KvPair {
+                            key: "title".to_string(),
+                            value: "\"Leading top pT\"".to_string(),
+                        },
+                        KvPair {
+                            key: "type_description".to_string(),
+                            value: "SB".to_string(),
+                        },
+                    ],
+                },
+            },
+            &mut settings,
+            &defaults,
+            None,
+        )
+        .unwrap();
+
+        let observable = settings.observables.get("top_pt_hist").unwrap();
+        assert_eq!(
+            observable.histogram.title.as_deref(),
+            Some("Leading top pT")
+        );
+        assert_eq!(observable.histogram.type_description, "SB");
     }
 
     #[test]

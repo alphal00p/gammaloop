@@ -2257,7 +2257,8 @@ fn configure_differential_leading_jet_observable(
         &[
             r#"set process string '
 [quantities.leading_jet_pt]
-type = "jet_pt"
+type = "jet"
+quantity = "PT"
 dR = 0.4
 '"#,
             r#"set process string '

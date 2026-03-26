@@ -252,11 +252,13 @@ fn python_evaluate_sample_honors_generate_events_and_observable_snapshots() -> R
     commands.push(
         r#"set process string '
 [quantities.leading_jet_pt]
-type = "jet_pt"
+type = "jet"
+quantity = "PT"
 dR = 0.4
 
 [quantities.jet_count]
-type = "jet_count"
+type = "jet"
+computation = "count"
 dR = 0.4
 
 [selectors.leading_jet_pt_cut]
@@ -384,11 +386,13 @@ fn python_evaluate_samples_batch_and_momentum_space_have_expected_shape() -> Res
     commands.push(
         r#"set process string '
 [quantities.leading_jet_pt]
-type = "jet_pt"
+type = "jet"
+quantity = "PT"
 dR = 0.4
 
 [quantities.jet_count]
-type = "jet_count"
+type = "jet"
+computation = "count"
 dR = 0.4
 
 [observables.leading_jet_pt_hist]

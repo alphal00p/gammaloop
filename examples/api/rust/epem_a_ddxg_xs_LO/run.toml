@@ -38,19 +38,21 @@ name = "set_differential_setup"
 commands = [
   """set process string '
 [quantities.leading_jet_pt]
-type = "jet_pt"
+type = "jet"
+quantity = "PT"
 algorithm = "anti_kt"
 dR = 0.4
 min_jpt = 0.0
 
 [quantities.jet_count]
-type = "jet_count"
+type = "jet"
+computation = "count"
 algorithm = "anti_kt"
 dR = 0.4
 min_jpt = 0.0
 
 [quantities.down_energy]
-type = "particle_scalar"
+type = "particle"
 pdgs = [1, -1]
 quantity = "E"
 

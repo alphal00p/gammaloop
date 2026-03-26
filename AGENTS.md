@@ -109,6 +109,7 @@
 - The Rust API has precise endpoints `evaluate_sample_precise` and `evaluate_samples_precise`; the Python API intentionally stays `f64`-only.
 - Python API end-to-end tests are subprocess-based and assume the user already built/installed the Python extension in the active environment (`maturin develop` or `just build-api`). Do not try to embed Python into the Rust test binary for these tests.
 - The top-level `.venv` in the repo is a reasonable default development environment for running the Python API examples/tests after building the extension there.
+- If the extension module environment is an issue when compiling the Python api, your can try `build-api-abi`.
 
 ## Environment and Build Quirks
 - `NO_SYMBOLICA_OEM_LICENSE` is read via `option_env!` in `gammalooprs` initialization, so it is a compile-time switch, not a pure runtime one. If you need to disable the OEM-license activation path, that variable must be present when building the relevant binary or Python extension.

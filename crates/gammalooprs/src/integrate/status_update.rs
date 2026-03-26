@@ -426,46 +426,72 @@ pub(crate) fn evaluate_target_accuracy(
         return TargetAccuracyStatus::default();
     }
 
-    let Some(component) = ComponentKind::from_training_phase_display(training_phase_display) else {
+    let components = ComponentKind::all_for_display(training_phase_display);
+    if components.is_empty() {
         return TargetAccuracyStatus::default();
-    };
-    let Some(accumulator) = integration_state.all_integrals.first() else {
+    }
+    if integration_state.all_integrals.is_empty() {
         return TargetAccuracyStatus::default();
-    };
-    let (avg, err) = match component {
-        ComponentKind::Real => (accumulator.re.avg.0, accumulator.re.err.0),
-        ComponentKind::Imag => (accumulator.im.avg.0, accumulator.im.err.0),
-    };
+    }
 
     let absolute_target_error = target_absolute_accuracy.filter(|target| *target >= 0.0);
-    let relative_target_error = target_relative_accuracy
-        .filter(|target| *target >= 0.0)
-        .and_then(|target_accuracy| {
-            let reference = targets
-                .first()
-                .and_then(|target| target.as_ref())
-                .map(|target| match component {
-                    ComponentKind::Real => target.re.0,
-                    ComponentKind::Imag => target.im.0,
-                })
-                .unwrap_or(avg)
-                .abs();
-            if reference == 0.0 {
-                None
-            } else {
-                Some(target_accuracy * reference)
-            }
-        });
+    let relative_target_accuracy = target_relative_accuracy.filter(|target| *target >= 0.0);
 
-    let absolute_reached = absolute_target_error.is_some_and(|target_error| err <= target_error);
-    let relative_reached = relative_target_error.is_some_and(|target_error| err <= target_error);
-    let eta_to_target = [
-        estimate_eta_to_target(total_points, elapsed_time, err, absolute_target_error),
-        estimate_eta_to_target(total_points, elapsed_time, err, relative_target_error),
-    ]
-    .into_iter()
-    .flatten()
-    .min();
+    let mut absolute_reached = absolute_target_error.is_some();
+    let mut relative_reached = relative_target_accuracy.is_some();
+    let mut saw_absolute_constraint = false;
+    let mut saw_relative_constraint = false;
+    let mut absolute_eta_to_target = None;
+    let mut relative_eta_to_target = None;
+
+    for (slot_index, accumulator) in integration_state.all_integrals.iter().enumerate() {
+        let target = targets.get(slot_index).and_then(|target| target.as_ref());
+        for component in &components {
+            let (avg, err) = match component {
+                ComponentKind::Real => (accumulator.re.avg.0, accumulator.re.err.0),
+                ComponentKind::Imag => (accumulator.im.avg.0, accumulator.im.err.0),
+            };
+
+            if let Some(target_error) = absolute_target_error {
+                saw_absolute_constraint = true;
+                absolute_reached &= err <= target_error;
+                absolute_eta_to_target = max_duration_option(
+                    absolute_eta_to_target,
+                    estimate_eta_to_target(total_points, elapsed_time, err, Some(target_error)),
+                );
+            }
+
+            if let Some(target_accuracy) = relative_target_accuracy {
+                let reference = target
+                    .map(|target| match component {
+                        ComponentKind::Real => target.re.0,
+                        ComponentKind::Imag => target.im.0,
+                    })
+                    .unwrap_or(avg)
+                    .abs();
+                if reference != 0.0 {
+                    saw_relative_constraint = true;
+                    let target_error = target_accuracy * reference;
+                    relative_reached &= err <= target_error;
+                    relative_eta_to_target = max_duration_option(
+                        relative_eta_to_target,
+                        estimate_eta_to_target(total_points, elapsed_time, err, Some(target_error)),
+                    );
+                }
+            }
+        }
+    }
+
+    if !saw_absolute_constraint {
+        absolute_reached = false;
+        absolute_eta_to_target = None;
+    }
+    if !saw_relative_constraint {
+        relative_reached = false;
+        relative_eta_to_target = None;
+    }
+
+    let eta_to_target = min_duration_option(absolute_eta_to_target, relative_eta_to_target);
 
     TargetAccuracyStatus {
         relative_reached,
@@ -968,8 +994,11 @@ fn estimate_eta_to_target(
     if current_error <= target_error {
         return Some(Duration::ZERO);
     }
-    if total_points == 0 || elapsed_time.is_zero() || current_error <= 0.0 || target_error == 0.0 {
+    if total_points == 0 || elapsed_time.is_zero() || current_error <= 0.0 {
         return None;
+    }
+    if target_error == 0.0 {
+        return Some(Duration::MAX);
     }
 
     let rate_per_second = total_points as f64 / elapsed_time.as_secs_f64();
@@ -978,10 +1007,31 @@ fn estimate_eta_to_target(
     }
 
     let target_points = total_points as f64 * (current_error / target_error).powi(2);
+    if !target_points.is_finite() {
+        return Some(Duration::MAX);
+    }
     let remaining_points = (target_points - total_points as f64).max(0.0);
     Some(utils::duration_from_secs_f64_saturating(
         remaining_points / rate_per_second,
     ))
+}
+
+fn min_duration_option(lhs: Option<Duration>, rhs: Option<Duration>) -> Option<Duration> {
+    match (lhs, rhs) {
+        (Some(lhs), Some(rhs)) => Some(lhs.min(rhs)),
+        (Some(lhs), None) => Some(lhs),
+        (None, Some(rhs)) => Some(rhs),
+        (None, None) => None,
+    }
+}
+
+fn max_duration_option(lhs: Option<Duration>, rhs: Option<Duration>) -> Option<Duration> {
+    match (lhs, rhs) {
+        (Some(lhs), Some(rhs)) => Some(lhs.max(rhs)),
+        (Some(lhs), None) => Some(lhs),
+        (None, Some(rhs)) => Some(rhs),
+        (None, None) => None,
+    }
 }
 
 fn styled_plain(text: impl Into<String>) -> StyledText {
