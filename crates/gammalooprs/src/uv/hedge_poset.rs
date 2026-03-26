@@ -1,12 +1,17 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+};
 
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashMap;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
-    algorithms::trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold},
+    algorithms::trace_unfold::{
+        HiddenData, Independence, TraceKey, TraceUnfold, UnfoldedTraceGraph,
+    },
     involution::{EdgeIndex, Flow, HedgePair},
     nodestore::{NodeStorageOps, NodeStorageVec},
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
@@ -20,7 +25,7 @@ use tracing::debug;
 use vakint::Vakint;
 
 use crate::{
-    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
+    graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
     utils::{W_, symbolica_ext::LogPrint},
     uv::{
         RenormalizationPart, UVgenerationSettings, UltravioletGraph,
@@ -107,6 +112,12 @@ impl PartialOrd for Spinney {
     }
 }
 
+impl Ord for Spinney {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.subgraph.cmp(&other.subgraph)
+    }
+}
+
 pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
     pub root: NodeIndex,
@@ -166,16 +177,18 @@ impl Wood {
     pub(crate) fn new(cuts: CutStructure, graph: &Graph, vakint_settings: &VakintSettings) -> Self {
         let mut subgraph = graph.full_filter();
         subgraph.subtract_with(&graph.initial_state_cut.left);
-        let mut spinneys = AHashSet::new();
+        let mut spinneys = Vec::new();
 
         for cut in cuts.cuts.iter() {
             let cut_sub = subgraph.subtract(&cut.union);
             spinneys.extend(graph.spinneys(&cut_sub));
         }
+        spinneys.sort_by(|a, b| a.filter.cmp(&b.filter));
+        spinneys.dedup_by(|a, b| a.filter == b.filter);
 
         Self::from_spinneys(
             spinneys
-                .drain()
+                .into_iter()
                 .map(|a| Spinney::new(a.filter, graph, &graph.loop_momentum_basis)),
             graph,
             cuts,
@@ -189,7 +202,7 @@ impl Wood {
         vakint_settings: &VakintSettings,
     ) -> Self {
         let mut max_loops = 0;
-        let mut spinneyset: AHashSet<_> = s
+        let mut spinneyset: BTreeSet<_> = s
             .into_iter()
             .inspect(|a| {
                 max_loops = max_loops.max(a.max_comp_loop_count);
@@ -201,7 +214,7 @@ impl Wood {
         // Set the number of terms in epsilon expansion to max number of loops across all components + 1
         vakint_settings.number_of_terms_in_epsilon_expansion = max_loops as i64 + 1;
 
-        let mut unions = AHashSet::new();
+        let mut unions = BTreeSet::new();
         let g: HedgeGraph<_, _> = HedgeGraph::poset(spinneyset);
         let mut poset = g.map(
             |_, _, v| v,
@@ -240,7 +253,7 @@ impl Wood {
         // composed canonically by trace unfolding.
         for u in unions {
             // println!("//{u}:{}", poset[u].subgraph.string_label());
-            let mut comps: AHashSet<_> = graph
+            let mut comps: BTreeSet<_> = graph
                 .as_ref()
                 .connected_components(&poset[u].subgraph)
                 .into_iter()
@@ -273,12 +286,9 @@ impl Wood {
         }
     }
 
-    pub fn unfold(&self) -> Forests {
-        let graph = self.trace_unfold::<NodeStorageVec<_>>(self.root).map(
-            |_, _, key| OperationNode { key },
-            |_, _, _, _, e| e,
-            |_, h| h,
-        );
+    pub fn unfold(self) -> Forests {
+        let unfolded = self.trace_unfold::<NodeStorageVec<_>>(self.root);
+        let graph = unfolded.map(|_, _, key| OperationNode { key });
 
         let mut cuts: Vec<(SuBitGraph, CutSet)> = Vec::new();
         for c in &self.cuts.cuts {
@@ -297,7 +307,9 @@ impl Wood {
             cuts,
             root: self.root,
             compute_store: ComputeStore::default(),
+            wood: self,
         }
+        .with_cached_node_label_atoms()
     }
 }
 
@@ -345,11 +357,12 @@ impl ComputeStore {
 }
 
 pub struct Forests {
-    pub graph: HedgeGraph<EdgeIndex, OperationNode>,
+    pub graph: UnfoldedTraceGraph<Wood, OperationNode, NodeStorageVec<OperationNode>>,
     pub root: NodeIndex,
     /// Wood subgraph that has compatible
     cuts: Vec<(SuBitGraph, CutSet)>,
     pub compute_store: ComputeStore,
+    wood: Wood,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -390,6 +403,12 @@ impl OperationNode {
     }
 }
 
+impl AsRef<TraceKey<SuBitGraph, EdgeIndex>> for OperationNode {
+    fn as_ref(&self) -> &TraceKey<SuBitGraph, EdgeIndex> {
+        &self.key
+    }
+}
+
 impl ForestNodeLike for ForestNode<'_> {
     fn dod(&self) -> i32 {
         self.spinney.dod
@@ -413,21 +432,7 @@ impl Display for OperationNode {
         if self.key.is_empty() {
             write!(f, "∅")
         } else {
-            let mut acc: Option<SuBitGraph> = None;
-
-            if f.alternate() {
-                self.key.write_foata_like(f, |op| {
-                    if let Some(a) = &mut acc {
-                        a.union_with(op);
-                    } else {
-                        acc = Some(op.clone());
-                    }
-                    op.string_label()
-                })?;
-            }
-            write!(f, "{}", self.to_atom())?;
-
-            Ok(())
+            self.key.write_foata_like(f, |op| op.string_label())
         }
     }
 }
@@ -580,8 +585,6 @@ impl OperationNode {
         Ok(vec![])
         // Ok(acc)
     }
-
-    // fn simple_op()
 }
 
 pub enum Integrand {
@@ -598,6 +601,7 @@ pub struct ComputeNode {
     pub final_integrand: Integrands,
     pub integrated_4d: Integrand, //4d
     pub simple: Integrand,
+    pub node_label_atom: Option<Atom>,
 }
 
 impl Default for ComputeNode {
@@ -607,16 +611,102 @@ impl Default for ComputeNode {
             final_integrand: Integrands::NotComputed,
             integrated_4d: Integrand::NotComputed,
             simple: Integrand::NotComputed,
+            node_label_atom: None,
         }
     }
 }
 
 impl Forests {
+    fn node_label_atom_factor(
+        &self,
+        node: NodeIndex,
+        op: &HiddenData<SuBitGraph, EdgeIndex>,
+    ) -> Atom {
+        let approx = FunctionBuilder::new(symbol!("T"));
+        let frontier = self.graph.op_dependency_frontier(node, op, &self.wood);
+        let frontier_atom = frontier
+            .and_then(|frontier| {
+                self.compute_store
+                    .get(&self.graph[frontier])
+                    .and_then(|computed| computed.node_label_atom.as_ref())
+            })
+            .cloned()
+            .unwrap_or_else(Atom::one);
+
+        let current = function!(
+            symbol!(format!("S_{}", op.order.string_label())),
+            usize::from(op.data)
+        );
+        let argument = if frontier.is_none_or(|frontier| self.graph[frontier].covers().is_none()) {
+            current
+        } else {
+            let previous = Atom::var(symbol!(format!(
+                "S_{}",
+                self.graph[frontier.unwrap()]
+                    .covers()
+                    .expect("non-empty frontier cover must exist")
+                    .string_label()
+            )));
+            (current - previous) * frontier_atom
+        };
+        approx.add_arg(argument).finish()
+    }
+
+    fn node_label_atom(&self, node: NodeIndex) -> Atom {
+        if self.graph[node].key.is_empty() {
+            return Atom::one();
+        }
+
+        self.graph[node]
+            .key
+            .iter_leaf_ops()
+            .fold(Atom::one(), |acc, op| {
+                acc * self.node_label_atom_factor(node, op)
+            })
+    }
+
+    fn with_cached_node_label_atoms(mut self) -> Self {
+        self.cache_node_label_atoms();
+        self
+    }
+
+    fn cache_node_label_atoms(&mut self) {
+        for nidx in self.graph.topo_sort_kahn().unwrap() {
+            let atom = self.node_label_atom(nidx);
+
+            self.compute_store
+                .entry(self.graph[nidx].clone())
+                .or_default()
+                .node_label_atom = Some(atom);
+        }
+    }
+
+    fn forest_edge_op(&self, hedge: linnet::half_edge::involution::Hedge) -> EdgeIndex {
+        self.graph[self.graph[&hedge]]
+    }
+
+    fn node_label(&self, node: NodeIndex) -> String {
+        let key = &self.graph[node];
+        if key.key.is_empty() {
+            return "∅".to_string();
+        }
+
+        let mut foata = String::new();
+        key.key
+            .write_foata_like(&mut foata, |op| op.string_label())
+            .expect("writing a trace key into a string must succeed");
+        let atom = self
+            .compute_store
+            .get(key)
+            .and_then(|computed| computed.node_label_atom.as_ref())
+            .expect("node label atoms must be cached during forest construction");
+        format!("{foata}: {}", atom.to_ordered_simple())
+    }
+
     pub fn iter_parents<'a>(
         &'a self,
         node: NodeIndex,
         order: usize,
-        wood: &'a Wood,
     ) -> impl Iterator<
         Item = Result<(
             &'a ComputeNode,
@@ -635,17 +725,17 @@ impl Forests {
                 // iterate over the sink-half-edges of the forest, i.e. the incoming half-edges to the current node
                 // most of the time this will be a single half-edge, but in the case of a union, there may be multiple
 
-                let wood_eid = self.graph[self.graph[&self.graph[&h]].0];
+                let wood_eid = self.forest_edge_op(h);
 
-                let HedgePair::Paired { source, sink } = wood.graph[&wood_eid].1 else {
+                let HedgePair::Paired { source, sink } = self.wood.graph[&wood_eid].1 else {
                     panic!("edge in wood is not paired");
                 };
 
                 // get this hedge's forest node from the wood. This is the node that has already been computed (as it is a parent to this edge)
-                let given = wood.graph[wood.graph.node_id(source)].forest_node(order);
+                let given = self.wood.graph[self.wood.graph.node_id(source)].forest_node(order);
 
                 // this is the current node, which should be the same for all union edges (since they all have the same sink)
-                let current_for_h = wood.graph.node_id(sink);
+                let current_for_h = self.wood.graph.node_id(sink);
                 if let Some(current) = &current {
                     if current != &current_for_h {
                         return Err(eyre!("Mismatched current nodes"));
@@ -657,7 +747,7 @@ impl Forests {
                 }
 
                 // this is the current node, which we want to compute with
-                let current = wood.graph[current_for_h].forest_node(order);
+                let current = self.wood.graph[current_for_h].forest_node(order);
 
                 // this is the parent node, in the forest, which has already been computed and we want to get the computed value
                 let parent_node = self.graph.involved_node_id(h).unwrap();
@@ -674,7 +764,6 @@ impl Forests {
     pub fn integrate(
         &mut self,
         graph: &Graph,
-        wood: &Wood,
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
@@ -683,7 +772,7 @@ impl Forests {
             let integrand = self.graph[*nidx].integrated(
                 graph,
                 &mut self.compute_store,
-                wood,
+                &self.wood,
                 vakint,
                 settings,
             )?;
@@ -700,7 +789,6 @@ impl Forests {
     pub fn local_subtract(
         &mut self,
         graph: &mut Graph,
-        wood: &Wood,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         for (cut_compatible_forest_subset, cuts) in &self.cuts {
@@ -718,7 +806,13 @@ impl Forests {
                     first = false;
                     Local3DApproximation::root(graph, cuts)
                 } else {
-                    self.graph[*nidx].local(graph, cuts, &mut self.compute_store, wood, settings)
+                    self.graph[*nidx].local(
+                        graph,
+                        cuts,
+                        &mut self.compute_store,
+                        &self.wood,
+                        settings,
+                    )
                 }?;
 
                 self.compute_store
@@ -842,7 +936,7 @@ impl Forests {
                     .and_modify(|e| e.push(*nidx))
                     .or_insert_with(|| vec![*nidx]);
 
-                println!("Node {}:{:#}", nidx, trace_key);
+                println!("Node {}:{}", nidx, self.node_label(*nidx));
             });
 
         println!("edge [constraint=true style=invis];");
@@ -863,13 +957,18 @@ impl Forests {
 
 impl Display for Forests {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let labels: AHashMap<_, _> = self
+            .graph
+            .iter_nodes()
+            .map(|(node, _, key)| (key.clone(), self.node_label(node)))
+            .collect();
         self.graph.dot_impl_fmt(
             f,
             &self.graph.full_filter(),
             "start=2;\n",
             &|_| None,
             &|_| None,
-            &|v| Some(format!("label=\"{}\"", v)),
+            &|v| Some(format!("label=\"{}\"", labels[v])),
         )
     }
 }
@@ -943,8 +1042,8 @@ mod tests {
                 edge [particle="scalar_1"];
                 v1 -> v2;
                 v2 -> v3;
-                v3 -> v3;//v3 -> v3;
-                v2 -> v2; //v2 -> v2;
+                v3 -> v3;v3 -> v3;
+                v2 -> v2; v2 -> v2;
                 v1 -> v1;v1 -> v1;
             },"scalars"
         )?;
@@ -960,7 +1059,7 @@ mod tests {
 
         insta::assert_snapshot!(
             f.graph.n_nodes(),
-            @"16",
+            @"64",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
         );
 
@@ -980,7 +1079,7 @@ mod tests {
         println!("{}", f);
         insta::assert_snapshot!(
             f.graph.n_nodes(),
-            @"24");
+            @"160");
 
         Ok(())
     }
@@ -1026,6 +1125,14 @@ mod tests {
         let f = f.unfold();
         f.debug_walk();
         println!("{}", f);
+        insta::assert_snapshot!(
+            f.node_label(NodeIndex(10)),
+            @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
+        );
+        insta::assert_snapshot!(
+            f.node_label(NodeIndex(11)),
+            @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+        );
         insta::assert_snapshot!(
             f.graph.n_nodes(),
             @"12");
