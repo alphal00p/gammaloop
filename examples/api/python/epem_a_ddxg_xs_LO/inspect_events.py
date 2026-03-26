@@ -15,7 +15,7 @@ def main() -> None:
     api = GammaLoopAPI(
         state_folder=state_dir,
         boot_commands_path=run_card,
-        fresh_state=True,
+        clean_state=True,
     )
     # The example card includes a reusable block that shows the new named
     # process-setting display commands through the Python `run(...)` bridge.

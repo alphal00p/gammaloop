@@ -2329,6 +2329,41 @@ fn lu_differential_integration_writes_json_observables() -> Result<()> {
 
 #[test]
 #[serial]
+fn lu_differential_observables_without_selectors_still_fill_histograms() -> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
+    configure_differential_leading_jet_observable(&mut cli)?;
+    cli.run_command(
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+    )?;
+
+    let workspace =
+        get_tests_workspace_path().join("lu_differential_integration_json/no_selector_workspace");
+    Integrate {
+        process: vec![],
+        integrand_name: vec!["default".to_string()],
+        workspace_path: Some(workspace.clone()),
+        target: vec![],
+        n_cores: Some(1),
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
+    let final_file = slot_workspace.join("observables_final.json");
+    let final_bundle =
+        gammalooprs::observables::ObservableSnapshotBundle::from_json_file(&final_file)?;
+    let histogram = final_bundle
+        .histograms
+        .get("leading_jet_pt_hist")
+        .expect("missing leading-jet histogram");
+    assert!(histogram.sample_count > 0);
+
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result<()> {
     let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
     configure_differential_leading_jet_observable(&mut cli)?;

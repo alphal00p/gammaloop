@@ -69,6 +69,7 @@ use tabled::{
     settings::{
         Alignment, Modify, Panel, Style,
         object::{Columns, Rows},
+        style::HorizontalLine,
     },
 };
 #[allow(unused_imports)]
@@ -2598,7 +2599,6 @@ where
             workspace.as_deref(),
             &slots,
             &emitted_latest_observable_paths,
-            output_control,
         );
     }
 
@@ -2813,19 +2813,6 @@ fn archived_observable_output_path(
     Some(workspace.join(format!("observables_final_iter_{iter:04}.{extension}")))
 }
 
-fn observable_iteration_output_pattern(
-    workspace: &Path,
-    format: ObservableFileFormat,
-) -> Option<String> {
-    let extension = observable_output_extension(format)?;
-    Some(
-        workspace
-            .join(format!("observables_final_iter_<iter>.{extension}"))
-            .display()
-            .to_string(),
-    )
-}
-
 fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
         return false;
@@ -2836,6 +2823,7 @@ fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
         .observables_output
         .format
         != ObservableFileFormat::None
+        && integrand.has_observables()
 }
 
 fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -2889,6 +2877,9 @@ fn write_observable_snapshot_archive(
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
         return Ok(None);
     };
+    if !user_facing_observables_output_enabled(integrand) {
+        return Ok(None);
+    }
     if !output_control.write_iteration_archives {
         return Ok(None);
     }
@@ -2974,23 +2965,19 @@ fn emit_results_output_summary(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
     emitted_paths: &[Option<PathBuf>],
-    output_control: WorkspaceSnapshotControl,
 ) {
-    let rendered =
-        render_results_output_summary_table(workspace, slots, emitted_paths, output_control);
+    let rendered = render_results_output_summary_table(workspace, slots, emitted_paths);
     let Some(rendered) = rendered else {
         return;
     };
 
-    info!("");
-    info!("{rendered}");
+    info!("\n{rendered}");
 }
 
 fn render_results_output_summary_table(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
     emitted_paths: &[Option<PathBuf>],
-    output_control: WorkspaceSnapshotControl,
 ) -> Option<String> {
     let mut summary_rows = Vec::new();
     if let Some(workspace) = workspace {
@@ -3002,52 +2989,22 @@ fn render_results_output_summary_table(
             "results".to_string(),
             workspace_relative_display_path(workspace, &workspace_result_snapshot_path(workspace)),
         ));
-        if output_control.write_iteration_archives {
-            summary_rows.push((
-                "results iteration snapshots".to_string(),
-                workspace_relative_display_path(
-                    workspace,
-                    &workspace_result_archive_path(workspace, 1),
-                )
-                .replace("iter_0001", "iter_*"),
-            ));
-        }
     }
 
     for (slot, emitted_path) in slots.iter().zip(emitted_paths.iter()) {
         let Some(final_path) = emitted_path else {
             continue;
         };
-        let Integrand::ProcessIntegrand(process_integrand) = &slot.integrand else {
+        if !final_path.exists() {
+            continue;
+        }
+        let Integrand::ProcessIntegrand(_) = &slot.integrand else {
             continue;
         };
-        let format = process_integrand
-            .get_settings()
-            .integrator
-            .observables_output
-            .format;
-        let iteration_pattern = output_control
-            .write_iteration_archives
-            .then(|| {
-                observable_iteration_output_pattern(
-                    final_path.parent().unwrap_or_else(|| Path::new(".")),
-                    format,
-                )
-            })
-            .flatten();
         let display_path = workspace
             .map(|root| workspace_relative_display_path(root, final_path))
             .unwrap_or_else(|| final_path.display().to_string());
         summary_rows.push((slot_key_label(&slot.meta), display_path));
-        if let Some(iteration_pattern) = iteration_pattern {
-            let display_pattern = workspace
-                .map(|root| workspace_relative_display_path(root, Path::new(&iteration_pattern)))
-                .unwrap_or(iteration_pattern);
-            summary_rows.push((
-                format!("{} iteration snapshots", slot_key_label(&slot.meta)),
-                display_pattern,
-            ));
-        }
     }
 
     if summary_rows.is_empty() {
@@ -3055,10 +3012,7 @@ fn render_results_output_summary_table(
     }
 
     let mut builder = Builder::default();
-    builder.push_record([
-        "type".blue().bold().to_string(),
-        "path".blue().bold().to_string(),
-    ]);
+    builder.push_record(["type".to_string(), "path".to_string()]);
     for (row_type, row_path) in summary_rows {
         builder.push_record([
             row_type.blue().bold().to_string(),
@@ -3070,7 +3024,15 @@ fn render_results_output_summary_table(
     table.with(Panel::header(
         "Integration results emitted".green().bold().to_string(),
     ));
-    table.with(Style::rounded());
+    table.with(
+        Style::rounded().horizontals([(
+            1,
+            HorizontalLine::new('─')
+                .intersection('┼')
+                .left('├')
+                .right('┤'),
+        )]),
+    );
     table.with(Modify::new(Rows::first()).with(Alignment::left()));
     table.with(Modify::new(Columns::new(0..2)).with(Alignment::left()));
 
@@ -3614,6 +3576,7 @@ fn render_integral_result(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{UnitVolumeIntegrand, UnitVolumeSettings};
     use colored::control;
     use ratatui::{Terminal, backend::TestBackend};
     use symbolica::numerical_integration::ContinuousGrid;
@@ -4338,15 +4301,8 @@ mod tests {
     #[test]
     fn results_output_summary_renders_tabled_workspace_rows() {
         let workspace = Path::new("/tmp/gl_workspace");
-        let rendered = render_results_output_summary_table(
-            Some(workspace),
-            &[],
-            &[],
-            WorkspaceSnapshotControl {
-                write_iteration_archives: true,
-            },
-        )
-        .expect("workspace summary should render");
+        let rendered = render_results_output_summary_table(Some(workspace), &[], &[])
+            .expect("workspace summary should render");
 
         assert!(
             rendered.contains("Integration results emitted"),
@@ -4358,11 +4314,36 @@ mod tests {
         assert!(rendered.contains("/tmp/gl_workspace"), "{rendered}");
         assert!(rendered.contains("results"), "{rendered}");
         assert!(rendered.contains("integration_result.json"), "{rendered}");
-        assert!(
-            rendered.contains("results iteration snapshots"),
-            "{rendered}"
+        assert!(rendered.contains("├"), "{rendered}");
+        assert!(!rendered.contains("iteration snapshots"), "{rendered}");
+        assert!(!rendered.contains("iter_*"), "{rendered}");
+    }
+
+    #[test]
+    fn results_output_summary_skips_missing_observable_outputs() {
+        let settings = RuntimeSettings::default();
+        let slot = IntegrationSlot::new(
+            SlotMeta {
+                process_name: "proc".to_string(),
+                integrand_name: "default".to_string(),
+            },
+            settings.clone(),
+            Model::default(),
+            Integrand::UnitVolume(UnitVolumeIntegrand::new(
+                settings,
+                UnitVolumeSettings { n_3d_momenta: 1 },
+            )),
+            None,
         );
-        assert!(rendered.contains("integration_result_iter_*"), "{rendered}");
+        let rendered = render_results_output_summary_table(
+            None,
+            &[slot],
+            &[Some(PathBuf::from(
+                "/tmp/definitely_missing_observables_final.json",
+            ))],
+        );
+
+        assert!(rendered.is_none(), "{rendered:?}");
     }
 
     #[test]

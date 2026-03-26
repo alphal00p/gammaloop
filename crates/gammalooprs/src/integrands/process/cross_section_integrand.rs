@@ -27,7 +27,7 @@ use crate::{
         CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId,
         StandaloneExportSettings,
     },
-    settings::{GlobalSettings, RuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, runtime::IntegralUnit},
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
         F, FloatLike, Length, h, h_dual,
@@ -81,6 +81,14 @@ use super::{
 
 #[allow(clippy::excessive_precision)]
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
+
+fn barn_conversion_factor<T: FloatLike>(unit: IntegralUnit, one: F<T>) -> F<T> {
+    let Some(relative_to_picobarn) = unit.relative_to_picobarn_factor(&one) else {
+        return one.one();
+    };
+
+    F::from_ff64(PICOBARN_CONVERSION) * relative_to_picobarn
+}
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -1011,6 +1019,9 @@ impl GraphTerm for CrossSectionGraphTerm {
             all_cut_result += result + ct_result;
         }
 
+        let resolved_integral_unit = settings.general.integral_unit.resolve_for_cross_section(
+            self.graph.initial_state_cut.iter_edges(&self.graph).count(),
+        );
         let flux_factor = if settings.general.disable_flux_factor {
             F::from_f64(1.0)
         } else {
@@ -1042,11 +1053,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
 
                     momentum_sample.one() / f
-                        * if settings.general.use_picobarns {
-                            F::from_ff64(PICOBARN_CONVERSION)
-                        } else {
-                            F::from_f64(1.0)
-                        }
+                        * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())
                 }
                 _ => unimplemented!(
                     "Flux factor for more than 3 or more incoming particles not implemented yet"

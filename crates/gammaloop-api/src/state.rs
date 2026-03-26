@@ -1929,7 +1929,7 @@ commands = [
 ]
 
 [default_runtime_settings.general]
-use_picobarns = true
+integral_unit = "picobarn"
 "#;
 
         let run_history: RunHistory = toml::from_str(toml).unwrap();
@@ -1953,7 +1953,10 @@ use_picobarns = true
             other => panic!("Expected set default-runtime kv command, got {other:?}"),
         }
 
-        assert!(run_history.default_runtime_settings.general.use_picobarns);
+        assert_eq!(
+            run_history.default_runtime_settings.general.integral_unit,
+            gammalooprs::settings::runtime::IntegralUnit::Picobarn
+        );
     }
 
     #[test]

@@ -197,7 +197,7 @@
                 "helicities": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/SignOrZero"
+                    "$ref": "#/$defs/Helicity"
                   }
                 },
                 "improvement_settings": {
@@ -240,7 +240,11 @@
         "CosTheta",
         "PT",
         "y",
-        "eta"
+        "eta",
+        "Px",
+        "Py",
+        "Pz",
+        "Mass"
       ]
     },
     "GeneralSettings": {
@@ -268,6 +272,9 @@
         "generate_events": {
           "type": "boolean"
         },
+        "integral_unit": {
+          "$ref": "#/$defs/IntegralUnit"
+        },
         "load_compiled_cff": {
           "type": "boolean"
         },
@@ -286,9 +293,6 @@
           "type": "boolean"
         },
         "use_ltd": {
-          "type": "boolean"
-        },
-        "use_picobarns": {
           "type": "boolean"
         }
       },
@@ -336,6 +340,33 @@
       },
       "required": [
         "h_function"
+      ]
+    },
+    "Helicity": {
+      "description": "Helicity input. Use -1, 0, or 1 for fixed helicities; or use a string for summed modes.",
+      "oneOf": [
+        {
+          "type": "integer",
+          "enum": [
+            -1,
+            0,
+            1
+          ]
+        },
+        {
+          "type": "string",
+          "enum": [
+            "+",
+            "-",
+            "0",
+            "plus",
+            "minus",
+            "zero",
+            "summed",
+            "summed_averaged",
+            "summed-averaged"
+          ]
+        }
       ]
     },
     "ImprovementMode": {
@@ -387,6 +418,17 @@
             "type"
           ]
         }
+      ]
+    },
+    "IntegralUnit": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "picobarn",
+        "femtobarn",
+        "attobarn",
+        "millibarn",
+        "none"
       ]
     },
     "IntegratedCounterTermRange": {
@@ -505,6 +547,20 @@
         "show_max_wgt_info": {
           "type": "boolean"
         },
+        "target_absolute_accuracy": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
+        "target_relative_accuracy": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "double"
+        },
         "train_on_avg": {
           "type": "boolean"
         }
@@ -591,6 +647,17 @@
         "quantity": {
           "type": "string"
         },
+        "title": {
+          "description": "Optional histogram title. Defaults to the observable name when omitted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "type_description": {
+          "description": "HwU TYPE description written after TYPE@ in the histogram header.",
+          "type": "string"
+        },
         "value_transform": {
           "$ref": "#/$defs/ObservableValueTransform"
         },
@@ -670,6 +737,18 @@
       },
       "additionalProperties": false
     },
+    "PairQuantity": {
+      "type": "string",
+      "enum": [
+        "DeltaR"
+      ]
+    },
+    "PairingMode": {
+      "type": "string",
+      "enum": [
+        "all_pairs"
+      ]
+    },
     "ParameterizationMapping": {
       "type": "string",
       "enum": [
@@ -739,11 +818,88 @@
         "Arb"
       ]
     },
+    "QuantityComputation": {
+      "type": "string",
+      "enum": [
+        "scalar",
+        "count",
+        "pair"
+      ]
+    },
+    "QuantityOrder": {
+      "type": "string",
+      "enum": [
+        "Ascending",
+        "Descending"
+      ]
+    },
+    "QuantityOrdering": {
+      "type": "string",
+      "enum": [
+        "PT",
+        "Energy",
+        "AbsRapidity",
+        "Quantity"
+      ]
+    },
     "QuantitySettings": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
+            "computation": {
+              "description": "Quantity computation mode: scalar projection per object, exact object count, or pairwise quantity.",
+              "$ref": "#/$defs/QuantityComputation"
+            },
+            "order": {
+              "description": "Sorting direction applied together with ordering.",
+              "$ref": "#/$defs/QuantityOrder",
+              "examples": [
+                "Descending"
+              ]
+            },
+            "ordering": {
+              "description": "Ordering key used before entry_selection. Particle scalar quantities default to Quantity, jet scalar quantities default to PT, and pair quantities default to Quantity.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/QuantityOrdering"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "Quantity"
+              ]
+            },
+            "pair_quantity": {
+              "description": "Pairwise quantity used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "DeltaR"
+              ]
+            },
+            "pairing": {
+              "description": "Pairing strategy used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairingMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "all_pairs"
+              ]
+            },
             "pdgs": {
               "type": "array",
               "items": {
@@ -752,18 +908,28 @@
               }
             },
             "quantity": {
-              "$ref": "#/$defs/FilterQuantity"
+              "description": "Per-object scalar quantity used when computation = \"scalar\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FilterQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "PT"
+              ]
             },
             "type": {
               "type": "string",
-              "const": "particle_scalar"
+              "const": "particle"
             }
           },
           "additionalProperties": false,
           "required": [
             "type",
-            "pdgs",
-            "quantity"
+            "pdgs"
           ]
         },
         {
@@ -771,6 +937,29 @@
           "properties": {
             "algorithm": {
               "$ref": "#/$defs/JetAlgorithm"
+            },
+            "clustered_pdgs": {
+              "description": "Optional list of PDG IDs allowed to be clustered. Use null to derive the default from the model, or a compact list like [-1,1,21,82] in CLI key-value assignments.",
+              "type": [
+                "array",
+                "null"
+              ],
+              "examples": [
+                [
+                  -1,
+                  1,
+                  21,
+                  82
+                ]
+              ],
+              "items": {
+                "type": "integer",
+                "format": "int"
+              }
+            },
+            "computation": {
+              "description": "Quantity computation mode: scalar projection per object, exact object count, or pairwise quantity.",
+              "$ref": "#/$defs/QuantityComputation"
             },
             "dR": {
               "type": "number",
@@ -780,33 +969,72 @@
               "type": "number",
               "format": "double"
             },
+            "order": {
+              "description": "Sorting direction applied together with ordering.",
+              "$ref": "#/$defs/QuantityOrder",
+              "examples": [
+                "Descending"
+              ]
+            },
+            "ordering": {
+              "description": "Ordering key used before entry_selection. Particle scalar quantities default to Quantity, jet scalar quantities default to PT, and pair quantities default to Quantity.",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/QuantityOrdering"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "Quantity"
+              ]
+            },
+            "pair_quantity": {
+              "description": "Pairwise quantity used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "DeltaR"
+              ]
+            },
+            "pairing": {
+              "description": "Pairing strategy used when computation = \"pair\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PairingMode"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "all_pairs"
+              ]
+            },
+            "quantity": {
+              "description": "Per-object scalar quantity used when computation = \"scalar\".",
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/FilterQuantity"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "examples": [
+                "PT"
+              ]
+            },
             "type": {
               "type": "string",
-              "const": "jet_pt"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "algorithm": {
-              "$ref": "#/$defs/JetAlgorithm"
-            },
-            "dR": {
-              "type": "number",
-              "format": "double"
-            },
-            "min_jpt": {
-              "type": "number",
-              "format": "double"
-            },
-            "type": {
-              "type": "string",
-              "const": "jet_count"
+              "const": "jet"
             }
           },
           "additionalProperties": false,
@@ -1012,6 +1240,7 @@
           "type": "object",
           "properties": {
             "max": {
+              "description": "Optional upper bound. Use null to disable the upper cut.",
               "type": [
                 "number",
                 "null"
@@ -1019,7 +1248,11 @@
               "format": "double"
             },
             "min": {
-              "type": "number",
+              "description": "Optional lower bound. Use null to disable the lower cut.",
+              "type": [
+                "number",
+                "null"
+              ],
               "format": "double"
             },
             "reduction": {
@@ -1032,8 +1265,7 @@
           },
           "additionalProperties": false,
           "required": [
-            "selector",
-            "min"
+            "selector"
           ]
         },
         {
@@ -1095,14 +1327,6 @@
         "entry_selection",
         "entry_index",
         "selector"
-      ]
-    },
-    "SignOrZero": {
-      "type": "string",
-      "enum": [
-        "Zero",
-        "Plus",
-        "Minus"
       ]
     },
     "StabilityLevelSetting": {

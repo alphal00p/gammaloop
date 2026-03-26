@@ -114,10 +114,6 @@ pub struct Repl {
 )]
 #[command(next_line_help = true)]
 pub struct OneShot {
-    /// Don't try to load state, just start with a new one
-    #[arg(short = 'f', long, default_value_t = false)]
-    pub fresh_state: bool,
-
     /// Remove the resolved state folder before startup so the session starts from a blank state
     #[arg(long, default_value_t = false)]
     pub clean_state: bool,
@@ -331,7 +327,6 @@ impl SmartSerde for CLISettings {}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StateLoadOption {
-    pub fresh_state: bool,
     pub clean_state: bool,
     pub boot_commands_path: Option<PathBuf>,
     pub state_folder: Option<PathBuf>,
@@ -376,7 +371,6 @@ impl StateLoadOption {
     fn into_oneshot(self) -> OneShot {
         let state_folder_explicitly_set = self.state_folder.is_some();
         OneShot {
-            fresh_state: self.fresh_state,
             clean_state: self.clean_state,
             boot_commands_path: self.boot_commands_path,
             state_folder: self
@@ -644,16 +638,12 @@ impl OneShot {
             settings_runtime_defaults_path: None,
             no_try_strings: false,
             completions: None,
-            fresh_state: false,
             clean_state: false,
             trace_logs_filename: None,
         }
     }
 
     fn current_state_folder_kind(&self) -> Result<StateFolderKind> {
-        if self.fresh_state {
-            return Ok(StateFolderKind::Missing);
-        }
         classify_state_folder(&self.state_folder)
     }
 
@@ -923,19 +913,11 @@ impl OneShot {
                     )
                 }
                 StateFolderKind::Missing | StateFolderKind::Scratch => {
-                    if self.fresh_state && self.state_folder.exists() {
-                        info!(
-                            "{} {}",
-                            "Starting fresh state in".blue(),
-                            self.state_folder.display().to_string().green()
-                        );
-                    } else {
-                        info!(
-                            "{} {}",
-                            "Initializing new state in".blue(),
-                            self.state_folder.display().to_string().green()
-                        );
-                    }
+                    info!(
+                        "{} {}",
+                        "Initializing new state in".blue(),
+                        self.state_folder.display().to_string().green()
+                    );
 
                     let mut run_history = RunHistory::default();
                     if let Some(boot_run_history) = boot_run_history {
@@ -1519,6 +1501,12 @@ mod tests {
         assert_eq!(cli_settings.state.folder, state_path);
         assert_eq!(runtime_settings, RuntimeSettings::default());
         assert!(!cli_settings.state.folder.exists());
+    }
+
+    #[test]
+    fn oneshot_rejects_removed_fresh_state_flag() {
+        assert!(OneShot::try_parse_from(["gammaloop", "--fresh-state"]).is_err());
+        assert!(OneShot::try_parse_from(["gammaloop", "-f"]).is_err());
     }
 
     #[test]

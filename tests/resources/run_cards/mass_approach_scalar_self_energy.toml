@@ -5,7 +5,7 @@ commands = [
 ]
 
 [default_runtime_settings.general]
-use_picobarns = false
+integral_unit = "none"
 disable_flux_factor = true
 
 [default_runtime_settings.kinematics.externals]

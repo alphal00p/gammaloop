@@ -1449,7 +1449,6 @@ impl GammaLoopAPI {
         read_only_state=false,
         settings_global_path=None,
         settings_runtime_defaults_path=None,
-        fresh_state=false,
         clean_state=false
     ))]
     pub fn new_python(
@@ -1463,7 +1462,6 @@ impl GammaLoopAPI {
         read_only_state: bool,
         settings_global_path: Option<PathBuf>,
         settings_runtime_defaults_path: Option<PathBuf>,
-        fresh_state: bool,
         clean_state: bool,
     ) -> Result<Self> {
         let LoadedState {
@@ -1474,7 +1472,6 @@ impl GammaLoopAPI {
             session_state,
             ..
         } = StateLoadOption {
-            fresh_state,
             clean_state,
             boot_commands_path,
             state_folder,

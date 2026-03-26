@@ -172,16 +172,21 @@ helicities = [1, 1, 0, 0, 0]
 ## c) MC over LMB with importance sampling of channels
 [default_runtime_settings.sampling]
 type = "discrete_graph_sampling"
-
 [default_runtime_settings.sampling.sampling_type]
 subtype = "discrete_multi_channeling"
 
-## d) MC over LMB and single orientation per, both importance-sampled
-# [default_runtime_settings.sampling]
-# type = "discrete_graph_sampling"
-# sample_orientations = true
-# [default_runtime_settings.sampling.sampling_type]
-# subtype = "discrete_multi_channeling"
+[default_runtime_settings.sampling]
+type = "multi_channeling"
+mode = "spherical"
+mapping = "linear"
+b = 10.0
+
+# d) MC over LMB and single orientation per, both importance-sampled
+[default_runtime_settings.sampling]
+type = "discrete_graph_sampling"
+sample_orientations = true
+[default_runtime_settings.sampling.sampling_type]
+subtype = "discrete_multi_channeling"
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false

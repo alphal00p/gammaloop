@@ -180,6 +180,13 @@ impl Integrand {
         }
     }
 
+    pub fn has_observables(&self) -> bool {
+        match self {
+            Integrand::ProcessIntegrand(integrand) => integrand.has_observables(),
+            _ => false,
+        }
+    }
+
     pub fn observable_snapshot_bundle(&self) -> Option<ObservableSnapshotBundle> {
         match self {
             Integrand::ProcessIntegrand(integrand) => integrand.observable_snapshot_bundle(),

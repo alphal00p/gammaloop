@@ -29,7 +29,7 @@ helicities = ["summed", "summed"]
 evaluator_method = "SummedFunctionMap"
 enable_cache = false
 debug_cache = false
-use_picobarns = true
+integral_unit = "picobarn"
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true

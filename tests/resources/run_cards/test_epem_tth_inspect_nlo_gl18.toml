@@ -7,7 +7,7 @@ commands = [
 [default_runtime_settings.general]
 m_uv = 1.0
 mu_r_sq = 1.0
-use_picobarns = true
+integral_unit = "picobarn"
 
 [default_runtime_settings.kinematics]
 e_cm = 1000.0

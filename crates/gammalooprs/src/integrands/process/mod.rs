@@ -759,6 +759,17 @@ impl ProcessIntegrand {
         }
     }
 
+    pub fn has_observables(&self) -> bool {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand
+                .event_processing_runtime()
+                .is_some_and(EventProcessingRuntime::has_observables),
+            ProcessIntegrand::CrossSection(integrand) => integrand
+                .event_processing_runtime()
+                .is_some_and(EventProcessingRuntime::has_observables),
+        }
+    }
+
     pub fn observable_snapshot_bundle(&self) -> Option<ObservableSnapshotBundle> {
         match self {
             ProcessIntegrand::Amplitude(integrand) => observable_snapshot_bundle(integrand),

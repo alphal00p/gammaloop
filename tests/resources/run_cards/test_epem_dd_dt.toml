@@ -6,7 +6,9 @@ commands = [
   # "import graphs ./tests/resources/graphs/epem_dd_dt.dot",
   # "generate",
   # "save dot",
-  "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes ",
+  "generate xs e+ e- > d~ d | d~ d g e+ e- a QCD^2>=2 QED^2>=2 [{{2}}] --select-graphs GL2 --clear-existing-processes --only-diagrams",
+  "save dot",
+  "generate"
   # "integrate"
 ]
 

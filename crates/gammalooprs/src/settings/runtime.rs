@@ -18,7 +18,7 @@ use crate::{
     observables::ObservableFileFormat,
     settings::runtime::kinematic::{Externals, improvement::generate_default_momenta},
     utils::{
-        ApproxEq, F, format_uncertainty,
+        ApproxEq, F, FloatLike, format_uncertainty,
         serde_utils::{
             _default_rotation_axis, _default_stability_levels, IsDefault, is_default_rotation_axis,
             is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
@@ -133,6 +133,42 @@ impl<'a> LockedRuntimeSettings<'a> {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(
+    Debug, Copy, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegralUnit {
+    #[default]
+    Auto,
+    Picobarn,
+    Femtobarn,
+    Attobarn,
+    Millibarn,
+    None,
+}
+
+impl IntegralUnit {
+    pub(crate) fn resolve_for_cross_section(self, n_initial_state_particles: usize) -> Self {
+        match self {
+            Self::Auto if n_initial_state_particles > 1 => Self::Picobarn,
+            Self::Auto => Self::None,
+            explicit => explicit,
+        }
+    }
+
+    pub(crate) fn relative_to_picobarn_factor<T: FloatLike>(self, one: &F<T>) -> Option<F<T>> {
+        match self {
+            Self::Picobarn => Some(one.one()),
+            Self::Femtobarn => Some(one.from_i64(1_000)),
+            Self::Attobarn => Some(one.from_i64(1_000_000)),
+            Self::Millibarn => Some(one.one() / one.from_i64(1_000_000_000)),
+            Self::None => None,
+            Self::Auto => unreachable!("integral unit must be resolved before conversion"),
+        }
+    }
+}
+
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -159,8 +195,8 @@ pub struct GeneralSettings {
     pub mu_r_sq: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub additional_param_values: Vec<f64>,
-    #[serde(skip_serializing_if = "is_false")]
-    pub use_picobarns: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub integral_unit: IntegralUnit,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_flux_factor: bool,
     #[serde(skip_serializing_if = "is_false")]
@@ -181,7 +217,7 @@ impl Default for GeneralSettings {
             m_uv: 1000.0,
             mu_r_sq: 1000000.0,
             additional_param_values: vec![],
-            use_picobarns: false,
+            integral_unit: IntegralUnit::Auto,
             disable_flux_factor: false,
             generate_events: false,
             store_additional_weights_in_event: false,
@@ -599,6 +635,40 @@ mod tests {
         let serialized = toml::to_string(&settings).expect("serialize configured integrator");
         assert!(serialized.contains("target_relative_accuracy = 0.05"));
         assert!(serialized.contains("target_absolute_accuracy = 1e-6"));
+    }
+
+    #[test]
+    fn integral_unit_auto_resolves_by_initial_state_count() {
+        assert_eq!(
+            IntegralUnit::Auto.resolve_for_cross_section(1),
+            IntegralUnit::None
+        );
+        assert_eq!(
+            IntegralUnit::Auto.resolve_for_cross_section(2),
+            IntegralUnit::Picobarn
+        );
+    }
+
+    #[test]
+    fn integral_unit_relative_scalings_match_requested_barn_unit() {
+        let one = F(1.0f64);
+        assert_eq!(
+            IntegralUnit::Picobarn.relative_to_picobarn_factor(&one),
+            Some(F(1.0))
+        );
+        assert_eq!(
+            IntegralUnit::Femtobarn.relative_to_picobarn_factor(&one),
+            Some(F(1_000.0))
+        );
+        assert_eq!(
+            IntegralUnit::Attobarn.relative_to_picobarn_factor(&one),
+            Some(F(1_000_000.0))
+        );
+        assert_eq!(
+            IntegralUnit::Millibarn.relative_to_picobarn_factor(&one),
+            Some(F(1.0e-9))
+        );
+        assert_eq!(IntegralUnit::None.relative_to_picobarn_factor(&one), None);
     }
 }
 

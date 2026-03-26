@@ -502,6 +502,24 @@ fn command_block_definition_mode_defers_execution_and_omits_history() -> Result<
     Ok(())
 }
 
+fn run_command_block_then_inline_quit_preserves_override_flag() -> Result<()> {
+    let mut cli = new_cli("run_command_block_then_inline_quit_preserves_override_flag")?;
+    cli.run_history.command_blocks.push(block(
+        "demo",
+        &["set global kv global.display_directive=warn"],
+    ));
+
+    let flow = cli.run_command_flow("run demo -c 'quit -o'")?.flow;
+    let ControlFlow::Break(save_state) = flow else {
+        panic!("expected run demo -c 'quit -o' to break the session");
+    };
+
+    assert_eq!(save_state.override_state, Some(true));
+    assert_eq!(history_strings(&cli.run_history), Vec::<String>::new());
+    assert_eq!(cli.cli_settings.global.display_directive, "warn");
+    Ok(())
+}
+
 fn finish_commands_block_without_active_definition_fails() -> Result<()> {
     let mut cli = new_cli("finish_commands_block_without_active_definition_fails")?;
 
@@ -656,6 +674,7 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     boot_run_history_allows_identical_semantic_redefinitions()?;
     booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_warns()?;
     command_block_definition_mode_defers_execution_and_omits_history()?;
+    run_command_block_then_inline_quit_preserves_override_flag()?;
     finish_commands_block_without_active_definition_fails()?;
     start_commands_block_cannot_nest()?;
     quit_during_block_definition_dismisses_the_pending_block()?;

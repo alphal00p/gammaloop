@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     let state_dir = example_dir.join("state");
 
     let mut loaded = StateLoadOption {
-        fresh_state: true,
+        clean_state: true,
         boot_commands_path: Some(run_card),
         state_folder: Some(state_dir),
         ..StateLoadOption::default()
