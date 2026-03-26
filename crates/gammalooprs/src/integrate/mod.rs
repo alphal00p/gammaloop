@@ -1570,6 +1570,7 @@ pub struct IntegrationState {
     #[bincode(with_serde)]
     slot_im_summaries: Vec<Option<DiscreteGridAccumulatorSummary>>,
     pub stats: StatisticsCounter,
+    pub slot_stats: Vec<StatisticsCounter>,
     pub slot_metas: Vec<SlotMeta>,
     pub sampling_correlation_mode: SamplingCorrelationMode,
     sampling_states: Vec<SamplingSlotState>,
@@ -1613,6 +1614,7 @@ impl IntegrationState {
             })
             .collect();
         let stats = StatisticsCounter::new_empty();
+        let slot_stats = vec![StatisticsCounter::new_empty(); slot_metas.len()];
 
         Self {
             num_points,
@@ -1620,6 +1622,7 @@ impl IntegrationState {
             slot_re_summaries,
             slot_im_summaries,
             stats,
+            slot_stats,
             slot_metas,
             sampling_correlation_mode,
             sampling_states,
@@ -1669,6 +1672,7 @@ impl IntegrationState {
 struct CoreIterationState {
     slot_integrands: Vec<Integrand>,
     stats: StatisticsCounter,
+    slot_stats: Vec<StatisticsCounter>,
     integrals: Vec<ComplexAccumulator>,
     sampling_correlation_mode: SamplingCorrelationMode,
     sampling_states: Vec<CoreSamplingSlotState>,
@@ -1715,6 +1719,7 @@ impl CoreIterationState {
         Self {
             slot_integrands,
             stats: StatisticsCounter::new_empty(),
+            slot_stats: vec![StatisticsCounter::new_empty(); n_slots],
             integrals: vec![ComplexAccumulator::new(); n_slots],
             sampling_correlation_mode,
             sampling_states,
@@ -1793,6 +1798,8 @@ impl CoreIterationState {
                     batch_evaluation_time += evaluation_start.elapsed();
                     total_sample_evaluations += raw_batch.samples.len();
                     batch_stats = batch_stats.merged(&raw_batch.statistics);
+                    self.slot_stats[slot_index] =
+                        self.slot_stats[slot_index].merged(&raw_batch.statistics);
                     slot_results.push(raw_batch.samples);
                 }
 
@@ -1880,6 +1887,8 @@ impl CoreIterationState {
                     batch_evaluation_time += evaluation_start.elapsed();
                     total_sample_evaluations += raw_batch.samples.len();
                     batch_stats = batch_stats.merged(&raw_batch.statistics);
+                    self.slot_stats[slot_index] =
+                        self.slot_stats[slot_index].merged(&raw_batch.statistics);
 
                     for (sample, result) in samples.iter().zip(raw_batch.samples.iter()) {
                         let jacobian = result.parameterization_jacobian.unwrap_or(F(1.0));
@@ -1988,6 +1997,13 @@ fn apply_iteration_core_states(
             .zip(core_state.integrals.iter())
         {
             integral.merge(core_integral);
+        }
+        for (slot_stats, core_slot_stats) in integration_state
+            .slot_stats
+            .iter_mut()
+            .zip(core_state.slot_stats.iter())
+        {
+            *slot_stats = slot_stats.merged(core_slot_stats);
         }
     }
 
@@ -3603,6 +3619,37 @@ mod tests {
         accumulator
     }
 
+    struct StatisticsFixture {
+        precision: crate::settings::runtime::Precision,
+        total_time: Duration,
+        integrand_time: Duration,
+        evaluator_time: Duration,
+        parameterization_time: Duration,
+        event_time: Duration,
+        generated_event_count: usize,
+        accepted_event_count: usize,
+    }
+
+    fn make_statistics_counter(fixture: StatisticsFixture) -> StatisticsCounter {
+        let mut evaluation = EvaluationResult::zero();
+        evaluation.evaluation_metadata.total_timing = fixture.total_time;
+        evaluation.evaluation_metadata.integrand_evaluation_time = fixture.integrand_time;
+        evaluation.evaluation_metadata.evaluator_evaluation_time = fixture.evaluator_time;
+        evaluation.evaluation_metadata.parameterization_time = fixture.parameterization_time;
+        evaluation.evaluation_metadata.event_processing_time = fixture.event_time;
+        evaluation.evaluation_metadata.generated_event_count = fixture.generated_event_count;
+        evaluation.evaluation_metadata.accepted_event_count = fixture.accepted_event_count;
+        evaluation.evaluation_metadata.stability_results.push(
+            crate::integrands::evaluation::StabilityResult {
+                precision: fixture.precision,
+                estimated_relative_accuracy: None,
+                accepted_as_stable: true,
+                total_time: fixture.total_time,
+            },
+        );
+        StatisticsCounter::from_evaluation_results(&[evaluation])
+    }
+
     fn make_integration_state() -> IntegrationState {
         let sampling_grid = Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
         let mut state = IntegrationState::new_from_settings(
@@ -3625,12 +3672,32 @@ mod tests {
         );
         state.iter = 1;
         state.num_points = 100_000;
-        let mut evaluation = EvaluationResult::zero();
-        evaluation.evaluation_metadata.integrand_evaluation_time = Duration::from_micros(414);
-        evaluation.evaluation_metadata.evaluator_evaluation_time = Duration::from_micros(279);
-        evaluation.evaluation_metadata.parameterization_time = Duration::from_nanos(5_800);
-        evaluation.evaluation_metadata.total_timing = Duration::from_micros(462);
-        state.stats = StatisticsCounter::from_evaluation_results(&[evaluation]);
+        state.slot_stats = vec![
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Double,
+                total_time: Duration::from_micros(462),
+                integrand_time: Duration::from_micros(414),
+                evaluator_time: Duration::from_micros(279),
+                parameterization_time: Duration::from_nanos(5_800),
+                event_time: Duration::from_micros(12),
+                generated_event_count: 7,
+                accepted_event_count: 5,
+            }),
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Quad,
+                total_time: Duration::from_micros(900),
+                integrand_time: Duration::from_micros(810),
+                evaluator_time: Duration::from_micros(120),
+                parameterization_time: Duration::from_micros(34),
+                event_time: Duration::from_micros(40),
+                generated_event_count: 9,
+                accepted_event_count: 6,
+            }),
+        ];
+        state.stats = state.slot_stats[0].merged(&state.slot_stats[1]);
+        state
+            .stats
+            .add_integrator_overhead(Duration::from_micros(110), 2);
         state.all_integrals = vec![
             make_accumulator(7.5e-5, 9.8e-5, 0.394, 3.2e-5, 1.5e-5, 0.378),
             make_accumulator(2.1e-5, 2.0e-6, 0.221, -1.7e-5, 3.0e-6, 0.187),
@@ -3682,12 +3749,32 @@ mod tests {
             Some(vec!["GL0".to_string(), "GL1".to_string()]);
         state.iter = 2;
         state.num_points = 210_000;
-        let mut evaluation = EvaluationResult::zero();
-        evaluation.evaluation_metadata.integrand_evaluation_time = Duration::from_micros(414);
-        evaluation.evaluation_metadata.evaluator_evaluation_time = Duration::from_micros(279);
-        evaluation.evaluation_metadata.parameterization_time = Duration::from_nanos(5_800);
-        evaluation.evaluation_metadata.total_timing = Duration::from_micros(462);
-        state.stats = StatisticsCounter::from_evaluation_results(&[evaluation]);
+        state.slot_stats = vec![
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Double,
+                total_time: Duration::from_micros(462),
+                integrand_time: Duration::from_micros(414),
+                evaluator_time: Duration::from_micros(279),
+                parameterization_time: Duration::from_nanos(5_800),
+                event_time: Duration::from_micros(12),
+                generated_event_count: 7,
+                accepted_event_count: 5,
+            }),
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Quad,
+                total_time: Duration::from_micros(900),
+                integrand_time: Duration::from_micros(810),
+                evaluator_time: Duration::from_micros(120),
+                parameterization_time: Duration::from_micros(34),
+                event_time: Duration::from_micros(40),
+                generated_event_count: 9,
+                accepted_event_count: 6,
+            }),
+        ];
+        state.stats = state.slot_stats[0].merged(&state.slot_stats[1]);
+        state
+            .stats
+            .add_integrator_overhead(Duration::from_micros(110), 2);
         state.all_integrals = vec![
             make_accumulator(7.5e-5, 9.8e-5, 0.394, 3.2e-5, 1.5e-5, 0.378),
             make_accumulator(2.1e-5, 2.0e-6, 0.221, -1.7e-5, 3.0e-6, 0.187),
@@ -3759,6 +3846,51 @@ mod tests {
                 .show_max_weight_info_for_discrete_bins,
             ..default_tabled_options()
         }
+    }
+
+    #[test]
+    fn correlated_core_iteration_state_populates_slot_statistics() {
+        let settings_a = RuntimeSettings::default();
+        let settings_b = RuntimeSettings::default();
+        let integrand_a = Integrand::UnitVolume(UnitVolumeIntegrand::new(
+            settings_a.clone(),
+            UnitVolumeSettings { n_3d_momenta: 1 },
+        ));
+        let integrand_b = Integrand::UnitVolume(UnitVolumeIntegrand::new(
+            settings_b.clone(),
+            UnitVolumeSettings { n_3d_momenta: 1 },
+        ));
+        let sampling_grid_template = SamplingSlotState::from_integrand(&integrand_a).grid;
+        let mut core_state = CoreIterationState::new(
+            vec![integrand_a, integrand_b],
+            SamplingCorrelationMode::Correlated,
+            &[sampling_grid_template],
+            1337,
+            0,
+            8,
+        );
+        let model = Model::default();
+        let slot_settings = [&settings_a, &settings_b];
+        let slot_models = [&model, &model];
+        let current_max_evals = [Complex::new(F(0.0), F(0.0)), Complex::new(F(0.0), F(0.0))];
+
+        let processed = core_state
+            .evaluate_chunk(&slot_settings, &slot_models, 0, &current_max_evals, 8)
+            .expect("correlated chunk evaluation should succeed");
+
+        assert_eq!(processed, 8);
+        assert!(
+            core_state
+                .slot_stats
+                .iter()
+                .all(|stats| stats.snapshot().num_evals == processed),
+            "{:?}",
+            core_state
+                .slot_stats
+                .iter()
+                .map(|stats| stats.snapshot().num_evals)
+                .collect_vec()
+        );
     }
 
     fn render_update(request: StatusUpdateBuildRequest<'_>) -> String {
@@ -3947,6 +4079,37 @@ mod tests {
         assert!(!rendered.contains("Δ ="), "{rendered}");
         assert!(rendered.contains("Integration statistics"), "{rendered}");
         assert!(rendered.contains("mwi"), "{rendered}");
+    }
+
+    #[test]
+    fn tabled_statistics_panel_uses_global_scope_label() {
+        let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: true,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                100_000,
+                100_000,
+                100_000,
+            ),
+        );
+
+        assert!(
+            rendered.contains("Integration statistics [global]"),
+            "{rendered}"
+        );
     }
 
     #[test]
@@ -4350,7 +4513,7 @@ mod tests {
     fn ratatui_overview_shows_eta_and_all_slot_metrics() {
         let state = make_integration_state();
         let view_options = IntegrationStatusViewOptions {
-            show_statistics: false,
+            show_statistics: true,
             show_max_weight_details: false,
             ..default_view_options()
         };
@@ -4384,11 +4547,91 @@ mod tests {
         assert!(rendered.contains("Integrands"), "{rendered}");
         assert!(rendered.contains("Focused integrand"), "{rendered}");
         assert!(rendered.contains("Results summary"), "{rendered}");
+        assert!(
+            rendered.contains("Integration statistics [global]"),
+            "{rendered}"
+        );
         assert!(rendered.contains("% err"), "{rendered}");
         assert!(rendered.contains("chi^2"), "{rendered}");
         assert!(rendered.contains("m.w.i"), "{rendered}");
-        assert!(rendered.contains("Timing composition"), "{rendered}");
-        assert!(rendered.contains("Precision mix"), "{rendered}");
+        assert!(
+            rendered.contains("Timing composition [global]"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("Precision mix [global]"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_statistics_panels_can_toggle_to_focused_slot_scope() {
+        let state = make_integration_state();
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: true,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(15),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            ),
+            |dashboard| {
+                dashboard.focus_next_slot();
+                dashboard.toggle_statistics_scope();
+            },
+        );
+
+        assert!(
+            rendered.contains("Integration statistics [proc_b@itg_b]"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("Timing composition [proc_b@itg_b]"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("Precision mix [proc_b@itg_b]"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn slot_scoped_statistics_rows_hide_shared_integrator_overhead() {
+        let state = make_integration_state();
+        let update = build_status_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[None, None],
+                &default_view_options(),
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(1),
+                Duration::from_secs(1),
+                100_000,
+                100_000,
+                100_000,
+            ),
+        );
+        let statistics = update.statistics.expect("statistics section should exist");
+        let rows = statistics.table_rows(status_update::StatisticsScope::Slot(1));
+        let integrator_entry = rows[2]
+            .entries
+            .last()
+            .expect("integrator entry should be present");
+
+        assert_eq!(integrator_entry.label.to_plain_string(), "integrator");
+        assert_eq!(integrator_entry.value.to_plain_string(), "N/A");
     }
 
     #[test]

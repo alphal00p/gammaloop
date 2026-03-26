@@ -8,6 +8,28 @@ pub fn split_command_line(input: &str) -> Result<Vec<String>, CommandLineParseEr
     shlex::split(&normalized).ok_or(CommandLineParseError::IncompleteShellSyntax)
 }
 
+pub fn normalize_clap_args(args: Vec<String>) -> Vec<String> {
+    let mut normalized = Vec::with_capacity(args.len());
+    let mut index = 0usize;
+    while index < args.len() {
+        let current = &args[index];
+        if matches!(current.as_str(), "--target" | "-t")
+            && index + 2 < args.len()
+            && !args[index + 1].contains('=')
+            && is_shared_target_component(&args[index + 1])
+            && is_shared_target_component(&args[index + 2])
+        {
+            normalized.push(format!("{current}={},{}", args[index + 1], args[index + 2]));
+            index += 3;
+            continue;
+        }
+
+        normalized.push(current.clone());
+        index += 1;
+    }
+    normalized
+}
+
 pub fn split_command_list(input: &str) -> Result<Vec<String>, CommandLineParseError> {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Mode {
@@ -174,9 +196,13 @@ fn escape_process_ref_hash_ids(input: &str) -> String {
     escaped
 }
 
+fn is_shared_target_component(token: &str) -> bool {
+    token.parse::<f64>().is_ok()
+}
+
 #[cfg(test)]
 mod test {
-    use super::{split_command_line, split_command_list};
+    use super::{normalize_clap_args, split_command_line, split_command_list};
 
     #[test]
     fn split_supports_multiline_quoted_values() {
@@ -260,5 +286,38 @@ mod test {
         let err =
             split_command_list("display processes; set process string 'unterminated").unwrap_err();
         assert_eq!(err, super::CommandLineParseError::IncompleteShellSyntax);
+    }
+
+    #[test]
+    fn normalize_clap_args_rewrites_shared_target_components() {
+        let args = vec![
+            "integrate".to_string(),
+            "--target".to_string(),
+            "-1.0214510394091818e-6".to_string(),
+            "0.0".to_string(),
+            "--restart".to_string(),
+        ];
+
+        assert_eq!(
+            normalize_clap_args(args),
+            vec![
+                "integrate".to_string(),
+                "--target=-1.0214510394091818e-6,0.0".to_string(),
+                "--restart".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn normalize_clap_args_preserves_repeated_keyed_targets() {
+        let args = vec![
+            "integrate".to_string(),
+            "--target".to_string(),
+            "aa_aa@1L=-1.0,0.0".to_string(),
+            "--target".to_string(),
+            "aa_aa@1L_up=-1.0,0.0".to_string(),
+        ];
+
+        assert_eq!(normalize_clap_args(args.clone()), args);
     }
 }

@@ -43,7 +43,7 @@ use gammalooprs::{
 };
 
 use crate::{
-    command_parser::split_command_line,
+    command_parser::{normalize_clap_args, split_command_line},
     commands::{save::SaveState, Commands},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
@@ -469,12 +469,14 @@ impl CommandHistory {
         use clap::error::ErrorKind;
         use clap::Parser;
 
-        let args = split_command_line(raw_string).map_err(|_| {
-            clap::Error::raw(
-                ErrorKind::InvalidValue,
-                "Could not parse command: unmatched quotes or trailing escape",
-            )
-        })?;
+        let args = split_command_line(raw_string)
+            .map(normalize_clap_args)
+            .map_err(|_| {
+                clap::Error::raw(
+                    ErrorKind::InvalidValue,
+                    "Could not parse command: unmatched quotes or trailing escape",
+                )
+            })?;
         let cli = Repl::try_parse_from(
             std::iter::once("gammaloop").chain(args.iter().map(String::as_str)),
         )?;

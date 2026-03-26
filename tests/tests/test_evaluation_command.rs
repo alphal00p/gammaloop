@@ -61,7 +61,7 @@ fn evaluate_1l_scalar_vacuum() -> Result<()> {
     let form_exe_path = which("form").expect("FORM executable could not be located.");
 
     cli.run_command("import graphs ./tests/resources/graphs/1l_vacuum.dot")?;
-    cli.run_command("set default-runtime kv general.mu_r_sq=12.0")?;
+    cli.run_command("set default-runtime kv general.mu_r=12.0")?;
     cli.run_command("set model mass_scalar_1=1.0")?;
 
     #[rustfmt::skip]

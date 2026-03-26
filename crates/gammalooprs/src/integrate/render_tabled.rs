@@ -18,7 +18,7 @@ use super::{
     display::{StyledText, TextColor},
     status_update::{
         DiscreteMaxWeightDetailsSection, MainResultsRowGroupKind, MainResultsSection,
-        MaxWeightDetailsSection, StatisticsSection, StatusUpdate,
+        MaxWeightDetailsSection, StatisticsScope, StatisticsSection, StatusUpdate,
     },
 };
 
@@ -494,7 +494,7 @@ fn build_discrete_max_weight_details_table(
 }
 
 fn build_statistics_table(section: &StatisticsSection) -> StatusTable {
-    let rows = section.table_rows();
+    let rows = section.table_rows(StatisticsScope::Global);
     let mut builder = Builder::new();
     for row in &rows {
         let mut record = vec![render_styled_text(&row.row_label)];
@@ -506,7 +506,9 @@ fn build_statistics_table(section: &StatisticsSection) -> StatusTable {
     }
 
     let mut table = builder.build();
-    table.with(Panel::header(render_styled_text(&section.title())));
+    table.with(Panel::header(render_styled_text(
+        &section.statistics_title(StatisticsScope::Global),
+    )));
     table.with(
         Style::rounded()
             .remove_horizontals()

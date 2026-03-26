@@ -272,7 +272,9 @@ impl StatusUpdate {
     }
 
     pub(crate) fn statistics_snapshot(&self) -> Option<IntegrationStatisticsSnapshot> {
-        self.statistics.map(|section| section.raw.snapshot())
+        self.statistics
+            .as_ref()
+            .map(StatisticsSection::global_snapshot)
     }
 
     pub(crate) fn training_target(&self) -> Option<F<f64>> {
@@ -350,6 +352,12 @@ impl StatusUpdate {
         let target = self.target_for_slot_component(slot_index, row.component.raw);
         format_delta_fields_from_estimate(value.raw.0, value.raw.1, target)
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StatisticsScope {
+    Global,
+    Slot(usize),
 }
 
 impl StatusMeta {
@@ -623,12 +631,64 @@ impl DiscreteMaxWeightDetailsSection {
 }
 
 impl StatisticsSection {
-    pub(crate) fn title(&self) -> StyledText {
-        styled_colored("Integration statistics", TextStyle::green().bold())
+    pub(crate) fn global_snapshot(&self) -> IntegrationStatisticsSnapshot {
+        self.global.snapshot()
     }
 
-    pub(crate) fn table_rows(&self) -> Vec<StatisticsTableRow> {
-        let snapshot = self.raw.snapshot();
+    fn scoped_counter(&self, scope: StatisticsScope) -> Option<&StatisticsCounter> {
+        match scope {
+            StatisticsScope::Global => Some(&self.global),
+            StatisticsScope::Slot(slot_index) => self.slot_counters.get(slot_index),
+        }
+    }
+
+    fn scope_label(&self, scope: StatisticsScope) -> StyledText {
+        let label = match scope {
+            StatisticsScope::Global => "[global]".to_string(),
+            StatisticsScope::Slot(slot_index) => self
+                .slot_labels
+                .get(slot_index)
+                .map(|label| format!("[{label}]"))
+                .unwrap_or_else(|| "[global]".to_string()),
+        };
+        styled_colored(format!(" {label}"), TextStyle::blue().bold())
+    }
+
+    fn scoped_title(&self, prefix: &str, scope: StatisticsScope) -> StyledText {
+        let mut title = styled_colored(prefix, TextStyle::green().bold());
+        title.append(self.scope_label(scope));
+        title
+    }
+
+    fn uses_global_integrator_scope(scope: StatisticsScope) -> bool {
+        matches!(scope, StatisticsScope::Global)
+    }
+
+    pub(crate) fn statistics_title(&self, scope: StatisticsScope) -> StyledText {
+        self.scoped_title("Integration statistics", scope)
+    }
+
+    pub(crate) fn timing_title(&self, scope: StatisticsScope) -> StyledText {
+        self.scoped_title("Timing composition", scope)
+    }
+
+    pub(crate) fn precision_title(&self, scope: StatisticsScope) -> StyledText {
+        self.scoped_title("Precision mix", scope)
+    }
+
+    pub(crate) fn table_rows(&self, scope: StatisticsScope) -> Vec<StatisticsTableRow> {
+        let snapshot = self
+            .scoped_counter(scope)
+            .map(StatisticsCounter::snapshot)
+            .unwrap_or_else(|| self.global.snapshot());
+        let integrator_value = if Self::uses_global_integrator_scope(scope) {
+            styled_colored(
+                utils::format_evaluation_time_from_f64(snapshot.average_integrator_time_seconds),
+                TextStyle::green(),
+            )
+        } else {
+            styled_plain("N/A")
+        };
         vec![
             StatisticsTableRow {
                 row_label: styled_colored("  timing", TextStyle::blue().bold()),
@@ -733,27 +793,24 @@ impl StatisticsSection {
                     },
                     StatisticsTableEntry {
                         label: styled_plain("integrator"),
-                        value: styled_colored(
-                            utils::format_evaluation_time_from_f64(
-                                snapshot.average_integrator_time_seconds,
-                            ),
-                            TextStyle::green(),
-                        ),
+                        value: integrator_value,
                     },
                 ],
             },
         ]
     }
 
-    pub(crate) fn timing_mix_segments(&self) -> Vec<StatisticsMixSegment> {
-        let snapshot = self.raw.snapshot();
+    pub(crate) fn timing_mix_segments(&self, scope: StatisticsScope) -> Vec<StatisticsMixSegment> {
+        let snapshot = self
+            .scoped_counter(scope)
+            .map(StatisticsCounter::snapshot)
+            .unwrap_or_else(|| self.global.snapshot());
         let parameterization = snapshot.average_parameterization_time_seconds.max(0.0);
         let evaluator = snapshot.average_evaluator_time_seconds.max(0.0);
         let observable = snapshot.average_observable_time_seconds.max(0.0);
         let integrand_core =
             (snapshot.average_integrand_time_seconds.max(0.0) - observable - evaluator).max(0.0);
-        let integrator = snapshot.average_integrator_time_seconds.max(0.0);
-        let mut segments = normalize_mix_segments(vec![
+        let mut raw_segments = vec![
             (
                 styled_colored("evaluators", TextStyle::green().bold()),
                 evaluator,
@@ -770,8 +827,14 @@ impl StatisticsSection {
                 styled_colored("param", TextStyle::red().bold()),
                 parameterization,
             ),
-            (styled_plain("integrator"), integrator),
-        ]);
+        ];
+        if Self::uses_global_integrator_scope(scope) {
+            raw_segments.push((
+                styled_plain("integrator"),
+                snapshot.average_integrator_time_seconds.max(0.0),
+            ));
+        }
+        let mut segments = normalize_mix_segments(raw_segments);
         segments.sort_by(|lhs, rhs| {
             rhs.percentage
                 .partial_cmp(&lhs.percentage)
@@ -780,8 +843,14 @@ impl StatisticsSection {
         segments
     }
 
-    pub(crate) fn precision_mix_segments(&self) -> Vec<StatisticsMixSegment> {
-        let snapshot = self.raw.snapshot();
+    pub(crate) fn precision_mix_segments(
+        &self,
+        scope: StatisticsScope,
+    ) -> Vec<StatisticsMixSegment> {
+        let snapshot = self
+            .scoped_counter(scope)
+            .map(StatisticsCounter::snapshot)
+            .unwrap_or_else(|| self.global.snapshot());
         normalize_mix_segments(vec![
             (
                 styled_colored("f64", TextStyle::green()),
@@ -799,8 +868,14 @@ impl StatisticsSection {
         ])
     }
 
-    pub(crate) fn stability_mix_segments(&self) -> Vec<StatisticsMixSegment> {
-        let snapshot = self.raw.snapshot();
+    pub(crate) fn stability_mix_segments(
+        &self,
+        scope: StatisticsScope,
+    ) -> Vec<StatisticsMixSegment> {
+        let snapshot = self
+            .scoped_counter(scope)
+            .map(StatisticsCounter::snapshot)
+            .unwrap_or_else(|| self.global.snapshot());
         let unstable = (snapshot.nan_or_unstable_percentage - snapshot.nan_percentage).max(0.0);
         let stable = (100.0 - snapshot.nan_or_unstable_percentage).max(0.0);
         normalize_mix_segments(vec![
@@ -895,9 +970,11 @@ pub(crate) struct SlotCoordinateEntry {
     pub(crate) coordinates: DisplayField<String>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct StatisticsSection {
-    pub(crate) raw: StatisticsCounter,
+    pub(crate) global: StatisticsCounter,
+    pub(crate) slot_counters: Vec<StatisticsCounter>,
+    pub(crate) slot_labels: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -2023,7 +2100,14 @@ pub(crate) fn build_status_update(request: StatusUpdateBuildRequest<'_>) -> Stat
             request.render_options,
         ),
         statistics: Some(StatisticsSection {
-            raw: request.integration_state.stats,
+            global: request.integration_state.stats,
+            slot_counters: request.integration_state.slot_stats.clone(),
+            slot_labels: request
+                .integration_state
+                .slot_metas
+                .iter()
+                .map(|slot_meta| slot_meta.key())
+                .collect(),
         }),
     }
 }

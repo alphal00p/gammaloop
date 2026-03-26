@@ -10,7 +10,7 @@ global_settings:
 default_runtime_settings:
   general:
     m_uv: 1.0
-    mu_r_sq: 1.0
+    mu_r: 1.0
   kinematics:
     e_cm: 64.0
     externals:

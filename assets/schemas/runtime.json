@@ -282,7 +282,7 @@
           "type": "number",
           "format": "double"
         },
-        "mu_r_sq": {
+        "mu_r": {
           "type": "number",
           "format": "double"
         },

@@ -20,7 +20,7 @@ use super::{
     display::{StyledText, TextColor, TextStyle},
     status_update::{
         ComponentKind, ContributionKind, ContributionSortMode, MainResultsRow,
-        MainResultsRowGroupKind, MainTableSlotCells, StatisticsMixSegment,
+        MainResultsRowGroupKind, MainTableSlotCells, StatisticsMixSegment, StatisticsScope,
     },
 };
 
@@ -77,6 +77,13 @@ enum ChartHistoryWindow {
     #[default]
     Full,
     RecentIterations(usize),
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum DashboardStatisticsScope {
+    #[default]
+    Global,
+    FocusedSlot,
 }
 
 const MAX_HISTORY_POINTS: usize = 4096;
@@ -208,6 +215,7 @@ pub struct RatatuiDashboardState {
     density: DensityMode,
     metric_visibility: SlotMetricVisibility,
     focused_slot: usize,
+    statistics_scope: DashboardStatisticsScope,
     selected_discrete_row: usize,
     discrete_sort: ContributionSortMode,
     discrete_descending: bool,
@@ -226,6 +234,7 @@ impl Default for RatatuiDashboardState {
             density: DensityMode::Metrics,
             metric_visibility: SlotMetricVisibility::default(),
             focused_slot: 0,
+            statistics_scope: DashboardStatisticsScope::Global,
             selected_discrete_row: 0,
             discrete_sort: ContributionSortMode::Error,
             discrete_descending: true,
@@ -307,6 +316,13 @@ impl RatatuiDashboardState {
             self.focused_slot = (self.focused_slot + slot_count - 1) % slot_count;
         }
         self.clamp_state();
+    }
+
+    pub fn toggle_statistics_scope(&mut self) {
+        self.statistics_scope = match self.statistics_scope {
+            DashboardStatisticsScope::Global => DashboardStatisticsScope::FocusedSlot,
+            DashboardStatisticsScope::FocusedSlot => DashboardStatisticsScope::Global,
+        };
     }
 
     pub fn select_next_discrete_row(&mut self) {
@@ -1373,6 +1389,7 @@ impl RatatuiDashboardState {
             );
             return;
         };
+        let statistics_scope = self.selected_statistics_scope(update);
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -1385,7 +1402,7 @@ impl RatatuiDashboardState {
         let mut summary_rows = vec![blank_table_row(9)];
         summary_rows.extend(
             statistics
-                .table_rows()
+                .table_rows(statistics_scope)
                 .into_iter()
                 .map(|row| {
                     let mut cells = vec![cell_from_styled_text(&row.row_label)];
@@ -1398,7 +1415,7 @@ impl RatatuiDashboardState {
                 .collect::<Vec<_>>(),
         );
         summary_rows.push(blank_table_row(9));
-        let title = statistics.title();
+        let title = statistics.statistics_title(statistics_scope);
         let summary_table = Table::new(
             summary_rows,
             [
@@ -1420,14 +1437,14 @@ impl RatatuiDashboardState {
         self.draw_mix_panel(
             frame,
             layout[1],
-            "Timing composition",
-            &statistics.timing_mix_segments(),
+            &statistics.timing_title(statistics_scope),
+            &statistics.timing_mix_segments(statistics_scope),
         );
         self.draw_mix_panel(
             frame,
             layout[2],
-            "Precision mix",
-            &statistics.precision_mix_segments(),
+            &statistics.precision_title(statistics_scope),
+            &statistics.precision_mix_segments(statistics_scope),
         );
     }
 
@@ -1890,6 +1907,7 @@ impl RatatuiDashboardState {
                 Line::from("j / k               move selected discrete row"),
                 Line::from("s                   cycle discrete sort"),
                 Line::from("v                   reverse discrete sort order"),
+                Line::from("i                   toggle global/focused statistics"),
                 Line::from("r / c / w           toggle rel err, chi^2, mwi columns"),
                 Line::from("p                   toggle convergence real/imag phase"),
                 Line::from("g                   toggle full/recent chart history"),
@@ -1911,10 +1929,10 @@ impl RatatuiDashboardState {
         &self,
         frame: &mut Frame<'_>,
         area: Rect,
-        title: &str,
+        title: &StyledText,
         segments: &[StatisticsMixSegment],
     ) {
-        let block = titled_block(title);
+        let block = titled_block_styled(title);
         let inner = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -1974,6 +1992,16 @@ impl RatatuiDashboardState {
             .focused_slot
             .min(update.main_results.slot_headers.len().saturating_sub(1));
         self.discrete_rows_for_slot(focused_slot)
+    }
+
+    fn selected_statistics_scope(&self, update: &StatusUpdate) -> StatisticsScope {
+        match self.statistics_scope {
+            DashboardStatisticsScope::Global => StatisticsScope::Global,
+            DashboardStatisticsScope::FocusedSlot => StatisticsScope::Slot(
+                self.focused_slot
+                    .min(update.main_results.slot_headers.len().saturating_sub(1)),
+            ),
+        }
     }
 
     fn discrete_rows_for_slot(&self, slot_index: usize) -> Vec<DiscreteRowRef<'_>> {

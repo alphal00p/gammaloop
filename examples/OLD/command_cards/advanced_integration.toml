@@ -58,7 +58,7 @@ integrate = 8
 
 [default_runtime_settings.general]
 m_uv = 1.0
-mu_r_sq = 25000.0
+mu_r = 158.11388300841898
 
 [default_runtime_settings.kinematics]
 e_cm = 500.0

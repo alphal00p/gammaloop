@@ -15,7 +15,7 @@ use serde_json::Value as JsonValue;
 use reedline::{Prompt, Reedline, Signal, Span, Suggestion, ValidationResult};
 
 use crate::{
-    command_parser::split_command_line,
+    command_parser::{normalize_clap_args, split_command_line},
     commands::import::model::{builtin_json_model_names, builtin_json_model_restriction_names},
     commands::process_settings::{
         observable_completion_root, observable_schema, quantity_completion_root_for_kind,
@@ -3597,6 +3597,7 @@ impl<C: Parser + Send + Sync + 'static> ClapEditor<C> {
 
         match split_command_line(&line) {
             Ok(split) => {
+                let split = normalize_clap_args(split);
                 match C::try_parse_from(std::iter::once("").chain(split.iter().map(String::as_str)))
                 {
                     Ok(c) => ReadCommandOutput::Command(c, line),

@@ -814,7 +814,14 @@ impl OneShot {
 
     /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
     pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
-        let argv: Vec<OsString> = std::env::args_os().collect();
+        let argv: Vec<OsString> = command_parser::normalize_clap_args(
+            std::env::args_os()
+                .map(|arg| arg.to_string_lossy().into_owned())
+                .collect(),
+        )
+        .into_iter()
+        .map(OsString::from)
+        .collect();
 
         // Build a Command (same as derive(Parser)) and get matches
         let mut cmd = <OneShot as CommandFactory>::command();
@@ -1870,7 +1877,7 @@ mod tests {
         .unwrap();
 
         let mut runtime_file_settings = RuntimeSettings::default();
-        runtime_file_settings.general.mu_r_sq = 37.0;
+        runtime_file_settings.general.mu_r = 37.0;
         fs::write(
             &runtime_path,
             toml::to_string_pretty(&runtime_file_settings).unwrap(),
@@ -1898,7 +1905,7 @@ mod tests {
 
         assert_eq!(cli_settings.state.folder, PathBuf::from("./keep"));
         assert_eq!(cli_settings.global.display_directive, "warn");
-        assert_eq!(runtime_settings.general.mu_r_sq, 37.0);
+        assert_eq!(runtime_settings.general.mu_r, 37.0);
     }
 
     #[test]
@@ -2006,14 +2013,14 @@ mod tests {
     fn settings_file_overrides_replace_boot_card_settings() {
         let mut run_history = RunHistory::default();
         run_history.cli_settings.global.display_directive = "error".into();
-        run_history.default_runtime_settings.general.mu_r_sq = 11.0;
+        run_history.default_runtime_settings.general.mu_r = 11.0;
 
         let overridden_global = GlobalSettings {
             display_directive: "warn".into(),
             ..Default::default()
         };
         let mut overridden_runtime = RuntimeSettings::default();
-        overridden_runtime.general.mu_r_sq = 29.0;
+        overridden_runtime.general.mu_r = 29.0;
 
         let overrides = super::SettingsFileOverrides {
             global: Some(overridden_global),
@@ -2023,9 +2030,9 @@ mod tests {
         let overridden = overrides.apply_to_run_history(&run_history);
 
         assert_eq!(overridden.cli_settings.global.display_directive, "warn");
-        assert_eq!(overridden.default_runtime_settings.general.mu_r_sq, 29.0);
+        assert_eq!(overridden.default_runtime_settings.general.mu_r, 29.0);
         assert_eq!(run_history.cli_settings.global.display_directive, "error");
-        assert_eq!(run_history.default_runtime_settings.general.mu_r_sq, 11.0);
+        assert_eq!(run_history.default_runtime_settings.general.mu_r, 11.0);
     }
 
     #[test]

@@ -150,7 +150,7 @@ commands = [
 
 ### Runtime Settings
 - `general.m_uv`: UV mass parameter
-- `general.mu_r_sq`: Renormalization scale squared
+- `general.mu_r`: Renormalization scale
 - `kinematics.e_cm`: Center-of-mass energy
 - `integrator.n_max`: Maximum number of evaluations
 - `integrator.max_prob_ratio`: Maximum probability ratio for sampling

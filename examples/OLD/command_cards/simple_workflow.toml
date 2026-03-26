@@ -36,7 +36,7 @@ display_directive = "info"
 # Default runtime settings for integration
 [default_runtime_settings.general]
 m_uv = 1.0
-mu_r_sq = 91.1876  # Z boson mass squared
+mu_r = 91.1876  # Z boson mass
 
 [default_runtime_settings.kinematics]
 e_cm = 91.1876  # Center of mass energy (Z resonance)

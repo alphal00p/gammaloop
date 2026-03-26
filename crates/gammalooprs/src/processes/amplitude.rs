@@ -629,7 +629,7 @@ impl AmplitudeGraph {
                 param_builder.update_model_values(model);
             }
             param_builder.m_uv_value(Complex::new_re(F(run_time_settings.general.m_uv)));
-            param_builder.mu_r_sq_value(Complex::new_re(F(run_time_settings.general.mu_r_sq)));
+            param_builder.mu_r_sq_value(Complex::new_re(F(run_time_settings.general.mu_r_sq())));
 
             // println!("\nParamBuilder parameters:\n{}", param_builder);
 

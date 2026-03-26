@@ -152,6 +152,95 @@ fn resolve_generated_model_targets(
     }
 }
 
+fn generated_process_setting_targets_for_process(
+    state: &State,
+    process_id: usize,
+) -> Vec<(usize, String)> {
+    let process = &state.process_list.processes[process_id];
+    match &process.collection {
+        ProcessCollection::Amplitudes(amplitudes) => amplitudes
+            .iter()
+            .filter(|(_, amplitude)| amplitude.integrand.is_some())
+            .map(|(name, _)| (process_id, name.clone()))
+            .collect(),
+        ProcessCollection::CrossSections(cross_sections) => cross_sections
+            .iter()
+            .filter(|(_, cross_section)| cross_section.integrand.is_some())
+            .map(|(name, _)| (process_id, name.clone()))
+            .collect(),
+    }
+}
+
+fn resolve_process_settings_targets(
+    state: &State,
+    target: &ProcessArgs,
+) -> Result<Vec<(usize, String)>> {
+    match (&target.process, &target.integrand_name) {
+        (None, Some(_)) => Err(eyre!(
+            "--integrand-name requires --process for `set process`"
+        )),
+        (None, None) => Ok(state
+            .process_list
+            .processes
+            .iter()
+            .enumerate()
+            .flat_map(|(process_id, _)| {
+                generated_process_setting_targets_for_process(state, process_id)
+            })
+            .collect()),
+        (Some(process), None) => {
+            let process_id = state.resolve_process_ref(Some(process))?;
+            Ok(generated_process_setting_targets_for_process(
+                state, process_id,
+            ))
+        }
+        (Some(process), Some(integrand_name)) => {
+            let process_id = state.resolve_process_ref(Some(process))?;
+            let resolved = state
+                .process_list
+                .get_integrand(process_id, integrand_name)?;
+            resolved.require_generated()?;
+            Ok(vec![(process_id, resolved.canonical_name)])
+        }
+    }
+}
+
+fn apply_process_settings_transactionally(
+    state: &mut State,
+    input: &ProcessSetArgs,
+    target: &ProcessArgs,
+    default_runtime_settings: &RuntimeSettings,
+    runtime_model_validation: &RuntimeModelValidationContext,
+) -> Result<()> {
+    let targets = resolve_process_settings_targets(state, target)?;
+    let mut updated_settings = Vec::with_capacity(targets.len());
+
+    for (process_id, integrand_name) in &targets {
+        let mut settings = state
+            .process_list
+            .get_integrand(*process_id, integrand_name)?
+            .require_generated()?
+            .get_settings()
+            .clone();
+        apply_process_set_args(
+            input,
+            &mut settings,
+            default_runtime_settings,
+            Some(runtime_model_validation),
+        )?;
+        updated_settings.push(settings);
+    }
+
+    for ((process_id, integrand_name), settings) in targets.into_iter().zip(updated_settings) {
+        *state
+            .process_list
+            .get_integrand_mut(process_id, &integrand_name)?
+            .get_mut_settings() = settings;
+    }
+
+    Ok(())
+}
+
 #[allow(clippy::type_complexity)]
 fn parse_model_assignments(
     state: &State,
@@ -332,42 +421,13 @@ impl Set {
                 *default_runtime_settings = merged;
             }
             Self::Process { input, process } => {
-                let process_id = state.resolve_process_ref(process.process.as_ref())?;
-                let apply_runtime_settings = |settings: &mut RuntimeSettings| -> Result<()> {
-                    apply_process_set_args(
-                        input,
-                        settings,
-                        default_runtime_settings,
-                        Some(&runtime_model_validation),
-                    )
-                };
-
-                if let Some(name) = &process.integrand_name {
-                    let integrand = state.process_list.get_integrand_mut(process_id, name)?;
-
-                    let settings = integrand.get_mut_settings();
-                    apply_runtime_settings(settings)?;
-                } else {
-                    match &mut state.process_list.processes[process_id].collection {
-                        ProcessCollection::Amplitudes(a) => {
-                            for (_, amp) in a.iter_mut() {
-                                if let Some(a) = &mut amp.integrand {
-                                    let settings = a.get_mut_settings();
-                                    apply_runtime_settings(settings)?;
-                                };
-                            }
-                        }
-                        ProcessCollection::CrossSections(a) => {
-                            for (_, xs) in a.iter_mut() {
-                                if let Some(a) = &mut xs.integrand {
-                                    let settings = a.get_mut_settings();
-                                    apply_runtime_settings(settings)?;
-                                };
-                            }
-                            // a[name].preprocess(&self.model, &global_settings.generation)?;
-                        }
-                    }
-                }
+                apply_process_settings_transactionally(
+                    state,
+                    input,
+                    process,
+                    default_runtime_settings,
+                    &runtime_model_validation,
+                )?;
             }
         }
         Ok(())
@@ -1105,11 +1165,15 @@ fn yaml_to_json(v: Y) -> Result<J> {
 
 #[cfg(test)]
 mod test {
+    use std::path::PathBuf;
     use std::str::FromStr;
 
     use clap::Parser;
     use figment::{providers::Serialized, Figment};
     use gammalooprs::{
+        graph::Graph,
+        initialisation::test_initialise,
+        model::InputParamCard,
         model::{ParameterNature, ParameterType, UFOSymbol},
         observables::{
             FilterQuantity, PairQuantity, QuantityComputation, QuantityOrder, QuantityOrdering,
@@ -1136,6 +1200,45 @@ mod test {
         ModelSetValue, ProcessAddTarget, ProcessArgs, ProcessRemoveTarget, ProcessSetArgs,
         ProcessUpdateTarget, Set, SetArgs,
     };
+
+    fn build_generated_scalar_bubble_state(process_names: &[&str]) -> State {
+        test_initialise().expect("test initialisation should succeed");
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        let graph_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/resources/graphs/scalar_bubble.dot");
+        let graphs = Graph::from_path(&graph_path, &state.model)
+            .expect("scalar bubble graph fixture should load");
+
+        for process_name in process_names {
+            state
+                .import_graphs(
+                    graphs.clone(),
+                    Some((*process_name).to_string()),
+                    None,
+                    Some("default".to_string()),
+                    false,
+                    false,
+                )
+                .expect("graph import should succeed");
+        }
+
+        let runtime_defaults = RuntimeSettings::default();
+        state
+            .generate_integrands(&CLISettings::default().global, (&runtime_defaults).into())
+            .expect("integrand generation should succeed");
+        state
+    }
+
+    fn first_integrand_name(state: &State, process_id: usize) -> String {
+        state.process_list.processes[process_id]
+            .get_integrand_names()
+            .into_iter()
+            .next()
+            .expect("fixture process should expose one integrand")
+            .to_string()
+    }
 
     #[test]
     fn serialize_complex() {
@@ -1573,6 +1676,179 @@ mod test {
             }
             other => panic!("Expected set process command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn set_process_without_targets_applies_to_all_generated_integrands() {
+        let mut state =
+            build_generated_scalar_bubble_state(&["scalar_bubble", "scalar_bubble_copy"]);
+        let mut cli_settings = CLISettings::default();
+        let mut default_runtime_settings = RuntimeSettings::default();
+
+        Set::Process {
+            input: ProcessSetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "integrator.n_start".to_string(),
+                    value: "321".to_string(),
+                }],
+            },
+            process: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut default_runtime_settings)
+        .expect("set process should apply to every generated integrand");
+
+        for process_id in 0..state.process_list.processes.len() {
+            let integrand_name = first_integrand_name(&state, process_id);
+            let settings = state
+                .process_list
+                .get_integrand(process_id, &integrand_name)
+                .expect("integrand should exist")
+                .get_settings()
+                .expect("fixture integrand should be generated");
+            assert_eq!(settings.integrator.n_start, 321);
+        }
+    }
+
+    #[test]
+    fn set_process_without_integrand_applies_to_all_generated_integrands_in_one_process() {
+        let mut state =
+            build_generated_scalar_bubble_state(&["scalar_bubble", "scalar_bubble_copy"]);
+        let mut cli_settings = CLISettings::default();
+        let mut default_runtime_settings = RuntimeSettings::default();
+
+        Set::Process {
+            input: ProcessSetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "integrator.n_start".to_string(),
+                    value: "654".to_string(),
+                }],
+            },
+            process: ProcessArgs {
+                process: Some(ProcessRef::Id(0)),
+                integrand_name: None,
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut default_runtime_settings)
+        .expect("set process should apply to every generated integrand in the selected process");
+
+        let first_integrand = first_integrand_name(&state, 0);
+        let first_settings = state
+            .process_list
+            .get_integrand(0, &first_integrand)
+            .expect("first integrand should exist")
+            .get_settings()
+            .expect("first integrand should be generated");
+        assert_eq!(first_settings.integrator.n_start, 654);
+
+        let second_integrand = first_integrand_name(&state, 1);
+        let second_settings = state
+            .process_list
+            .get_integrand(1, &second_integrand)
+            .expect("second integrand should exist")
+            .get_settings()
+            .expect("second integrand should be generated");
+        assert_eq!(
+            second_settings.integrator.n_start,
+            RuntimeSettings::default().integrator.n_start
+        );
+    }
+
+    #[test]
+    fn set_process_rejects_integrand_without_process_target() {
+        let mut state = build_generated_scalar_bubble_state(&["scalar_bubble"]);
+        let mut cli_settings = CLISettings::default();
+        let mut default_runtime_settings = RuntimeSettings::default();
+
+        let err = Set::Process {
+            input: ProcessSetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "integrator.n_start".to_string(),
+                    value: "321".to_string(),
+                }],
+            },
+            process: ProcessArgs {
+                process: None,
+                integrand_name: Some("default".to_string()),
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut default_runtime_settings)
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("--integrand-name requires --process for `set process`"));
+    }
+
+    #[test]
+    fn set_process_updates_are_transactional_across_multiple_targets() {
+        let mut state =
+            build_generated_scalar_bubble_state(&["scalar_bubble", "scalar_bubble_copy"]);
+        let mut cli_settings = CLISettings::default();
+        let mut default_runtime_settings = RuntimeSettings::default();
+
+        Set::Process {
+            input: ProcessSetArgs::Add {
+                target: ProcessAddTarget::Quantity {
+                    name: "top_pt".to_string(),
+                    kind: "particle".to_string(),
+                    pairs: vec![
+                        KvPair {
+                            key: "pdgs".to_string(),
+                            value: "[6,-6]".to_string(),
+                        },
+                        KvPair {
+                            key: "quantity".to_string(),
+                            value: "PT".to_string(),
+                        },
+                    ],
+                },
+            },
+            process: ProcessArgs {
+                process: Some(ProcessRef::Id(0)),
+                integrand_name: Some(first_integrand_name(&state, 0)),
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut default_runtime_settings)
+        .expect("preparing the first target should succeed");
+
+        let err = Set::Process {
+            input: ProcessSetArgs::Update {
+                target: ProcessUpdateTarget::Quantity {
+                    name: "top_pt".to_string(),
+                    pairs: vec![KvPair {
+                        key: "quantity".to_string(),
+                        value: "E".to_string(),
+                    }],
+                },
+            },
+            process: ProcessArgs {
+                process: None,
+                integrand_name: None,
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut default_runtime_settings)
+        .unwrap_err();
+
+        assert!(err.to_string().contains("No quantity named 'top_pt'"));
+
+        let first_integrand_name = first_integrand_name(&state, 0);
+        let first_settings = state
+            .process_list
+            .get_integrand(0, &first_integrand_name)
+            .expect("first integrand should exist")
+            .get_settings()
+            .expect("first integrand should stay generated");
+        let QuantitySettings::Particle(quantity) = first_settings
+            .quantities
+            .get("top_pt")
+            .expect("first integrand quantity should remain present")
+        else {
+            panic!("expected particle quantity");
+        };
+        assert_eq!(quantity.computation.quantity, Some(FilterQuantity::PT));
     }
 
     #[test]

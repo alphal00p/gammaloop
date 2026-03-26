@@ -1,0 +1,252 @@
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/aa_aa/1L/state"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+    "import model sm-default.json",
+    "set global kv global.n_cores.feyngen=10",
+
+    "reset processes",
+    """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        -p aa_aa -i 1L""",
+    "save dot",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_m_uv_UP",
+    "set process -p aa_aa -i 1L_m_uv_UP kv general.m_uv=364.752",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_m_uv_DOWN",
+    "set process -p aa_aa -i 1L_m_uv_DOWN kv general.m_uv=22.797",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_mu_r_UP",
+    "set process -p aa_aa -i 1L_mu_r_UP kv general.mu_r=364.752",
+    "duplicate integrand -p aa_aa -i 1L --output_process_name aa_aa --output_integrand_name 1L_mu_r_DOWN",
+    "set process -p aa_aa -i 1L_mu_r_DOWN kv general.mu_r=22.797",
+    "save state -o"
+]
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+   	[ 500.0, 0.0, 0.0,  500.0 ],
+   	[ 500.0, 0.0, 0.0, -500.0 ],
+    [ 500.0, 500.0, 0.0, 0.0 ],
+    "dependent"
+]
+helicities = [+1,+1,-1,-1]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[cli_settings.global.generation.compile]
+inline_asm = true
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[default_runtime_settings.sampling]
+type = "discrete_graph_sampling"
+sample_orientations = true
+[default_runtime_settings.sampling.sampling_type]
+# For importance-sampling over channels, use the quantity below
+# subtype = "discrete_multi_channeling"
+subtype = "multi_channeling"
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "run set_model_parameters",
+
+    # --target -1.0214510394091818e-6 0.0
+    "run set_kinematics_a",
+    "set process kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+
+    # "set process kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    # "set process kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
+    # "set process kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
+    # "set process kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+
+    """set process -p aa_aa -i 1L kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer tabled
+	"""integrate -p aa_aa -i 1L -p aa_aa -i 1L_m_uv_UP -p aa_aa -i 1L_m_uv_DOWN -p aa_aa -i 1L_mu_r_UP -p aa_aa -i 1L_mu_r_DOWN
+	             --n-cores 5
+                 --target -1.0214510394091818e-6 0.0
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
+    "set model aS=0.118",
+    "set model aEWM1=137.036",
+    "set model Gf=1.166390e-05",
+    "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics_a"
+commands = [
+    # s / m_t^2 = 1, t / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 86.5, 0.0, 0.0, 86.5 ],
+       	[ 86.5, 0.0, 0.0, -86.5 ],
+        [ 86.5, 0.0, -79.27855952273603, 34.6 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_b"
+commands = [
+    # s / m_t^2 = 1.44, t / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 103.8, 0.0, 0.0, 103.8 ],
+       	[ 103.8, 0.0, 0.0, -103.8 ],
+        [ 103.8, 0.0, -95.13427142728324, 41.52 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_c"
+commands = [
+    # s / m_t^2 = 2.985984, t / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 149.472, 0.0, 0.0, 149.472 ],
+       	[ 149.472, 0.0, 0.0, -149.472 ],
+        [ 149.472, 0.0, -136.99335085528787, 59.7888 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_d"
+commands = [
+    # s / m_t^2 = 4.29981696, t / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 179.3664, 0.0, 0.0, 179.3664 ],
+       	[ 179.3664, 0.0, 0.0, -179.3664 ],
+        [ 179.3664, 0.0, -164.39202102634547, 71.74656 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_e"
+commands = [
+    # s / m_t^2 = 22.18611106740436992, t / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 407.4334663894049, 0.0, 0.0, 407.4334663894049 ],
+       	[ 407.4334663894049, 0.0, 0.0, -407.4334663894049 ],
+        [ 407.4334663894049, 0.0, -373.4189400775389, 162.97338655576192 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_f"
+commands = [
+    # s / m_t^2 = 410.186270246002225336426103593500274, t / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+       	[ 1751.8893288527534, 0.0, 0.0, 1751.8893288527534 ],
+       	[ 1751.8893288527534, 0.0, 0.0, -1751.8893288527534 ],
+        [ 1751.8893288527534, 0.0, -1605.6330917306252, 700.755731541101 ],
+        "dependent"
+    ]
+    '""",
+]

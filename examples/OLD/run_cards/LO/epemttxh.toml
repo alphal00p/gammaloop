@@ -36,7 +36,7 @@ compile = 10
 integrate = 10
 
 [default_runtime_settings.general]
-use_picobarns = true
+integral_unit = "picobarn"
 
 [default_runtime_settings.kinematics.externals]
 type = "constant"

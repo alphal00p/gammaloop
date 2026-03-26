@@ -347,7 +347,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
         self.graph
             .param_builder
-            .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq)));
+            .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
         self.graph.param_builder.update_model_values(model);
 
         self.param_builder = self.graph.param_builder.clone();

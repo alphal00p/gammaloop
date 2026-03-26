@@ -191,8 +191,8 @@ pub struct GeneralSettings {
     pub debug_cache: bool,
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_uv: f64,
-    #[serde(skip_serializing_if = "is_float::<1000_000>")]
-    pub mu_r_sq: f64,
+    #[serde(skip_serializing_if = "is_float::<1000>")]
+    pub mu_r: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub additional_param_values: Vec<f64>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -215,13 +215,19 @@ impl Default for GeneralSettings {
             debug_cache: false,
             orientation_pat: OrientationPattern::default(),
             m_uv: 1000.0,
-            mu_r_sq: 1000000.0,
+            mu_r: 1000.0,
             additional_param_values: vec![],
             integral_unit: IntegralUnit::Auto,
             disable_flux_factor: false,
             generate_events: false,
             store_additional_weights_in_event: false,
         }
+    }
+}
+
+impl GeneralSettings {
+    pub(crate) fn mu_r_sq(&self) -> f64 {
+        self.mu_r * self.mu_r
     }
 }
 
@@ -669,6 +675,21 @@ mod tests {
             Some(F(1.0e-9))
         );
         assert_eq!(IntegralUnit::None.relative_to_picobarn_factor(&one), None);
+    }
+
+    #[test]
+    fn general_settings_store_mu_r_and_compute_mu_r_sq_internally() {
+        let settings = GeneralSettings {
+            mu_r: 91.188,
+            ..GeneralSettings::default()
+        };
+
+        assert_eq!(settings.mu_r, 91.188);
+        assert!((settings.mu_r_sq() - 8315.251344).abs() < 1.0e-12);
+
+        let serialized = toml::to_string(&settings).expect("serialize general settings");
+        assert!(serialized.contains("mu_r = 91.188"));
+        assert!(!serialized.contains("mu_r_sq"));
     }
 }
 

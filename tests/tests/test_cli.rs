@@ -153,10 +153,7 @@ fn run_records_only_the_wrapper_command() -> Result<()> {
             "set_display",
             &["set global kv global.display_directive=warn"],
         ),
-        block(
-            "set_runtime",
-            &["set default-runtime kv general.mu_r_sq=12.0"],
-        ),
+        block("set_runtime", &["set default-runtime kv general.mu_r=12.0"]),
     ];
 
     cli.run_command(
@@ -164,7 +161,7 @@ fn run_records_only_the_wrapper_command() -> Result<()> {
     )?;
 
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
-    assert_eq!(cli.default_runtime_settings.general.mu_r_sq, 12.0);
+    assert_eq!(cli.default_runtime_settings.general.mu_r, 12.0);
     assert_eq!(cli.cli_settings.global.logfile_directive, "error");
     assert_eq!(cli.run_history.commands.len(), 1);
     assert!(matches!(
@@ -227,7 +224,7 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     let mut frozen_global = cli.cli_settings.global.clone();
     frozen_global.display_directive = "warn".into();
     let mut frozen_runtime = RuntimeSettings::default();
-    frozen_runtime.general.mu_r_sq = 24.0;
+    frozen_runtime.general.mu_r = 24.0;
 
     let boot_run_history = RunHistory {
         cli_settings: CLISettings {
@@ -241,7 +238,7 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
         )],
         commands: vec![
             command("run boot_block"),
-            command("set default-runtime kv general.mu_r_sq=24.0"),
+            command("set default-runtime kv general.mu_r=24.0"),
         ],
         ..RunHistory::default()
     };
@@ -250,7 +247,7 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
 
     assert!(matches!(flow, ControlFlow::Continue(())));
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
-    assert_eq!(cli.default_runtime_settings.general.mu_r_sq, 24.0);
+    assert_eq!(cli.default_runtime_settings.general.mu_r, 24.0);
     assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert_eq!(history_strings(&cli.run_history).len(), 2);
 
@@ -403,7 +400,7 @@ fn booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_w
     let mut cli = new_cli(test_name)?;
 
     cli.run_history.cli_settings.global.display_directive = "info".into();
-    cli.run_history.default_runtime_settings.general.mu_r_sq = 11.0;
+    cli.run_history.default_runtime_settings.general.mu_r = 11.0;
     cli.save_state()?;
 
     let boot_card_path = run_card_path("boot_settings_mismatch.toml");
@@ -414,7 +411,7 @@ fn booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_w
     let mut boot_global = CLISettings::default().global;
     boot_global.display_directive = "warn".into();
     let mut boot_runtime = RuntimeSettings::default();
-    boot_runtime.general.mu_r_sq = 29.0;
+    boot_runtime.general.mu_r = 29.0;
     let boot_run_history = RunHistory {
         cli_settings: CLISettings {
             global: boot_global.clone(),

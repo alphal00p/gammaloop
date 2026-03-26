@@ -91,14 +91,13 @@ pub struct Integrate {
     #[arg(short = 'w', long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
 
-    /// Specify a target as either `re im` for a single integrand or `process@integrand=re,im`
+    /// Specify a target as either `re im` / `re,im` for one shared target or `process@integrand=re,im`
     #[arg(
         short = 't',
         long,
         num_args = 1..=2,
         action = ArgAction::Append,
         allow_negative_numbers = true,
-        allow_hyphen_values = true,
         completion_selected_integrand_target()
     )]
     pub target: Vec<String>,
@@ -881,6 +880,7 @@ fn handle_dashboard_key_event(
         KeyCode::Right => dashboard.next_tab(),
         KeyCode::Char('[') => dashboard.focus_previous_slot(),
         KeyCode::Char(']') => dashboard.focus_next_slot(),
+        KeyCode::Char('i') | KeyCode::Char('I') => dashboard.toggle_statistics_scope(),
         KeyCode::Down | KeyCode::Char('j') => dashboard.select_next_discrete_row(),
         KeyCode::Up | KeyCode::Char('k') => dashboard.select_previous_discrete_row(),
         KeyCode::Char('s') => dashboard.cycle_discrete_sort(),
@@ -1189,17 +1189,17 @@ impl Integrate {
             return Ok(resolved);
         }
 
-        if selected_slots.len() == 1 && self.target.iter().all(|target| !target.contains('=')) {
+        if self.target.iter().all(|target| !target.contains('=')) {
             let target = match self.target.as_slice() {
                 [single] => Self::parse_target_components(single, None)?,
                 [re, im] => Self::parse_target_components(re, Some(im))?,
                 _ => {
                     return Err(eyre!(
-                        "A single-integrand target must be given as `--target re im` or `--target re,im`"
+                        "A shared target must be given as `--target re im` or `--target re,im`"
                     ));
                 }
             };
-            resolved[0] = Some(target);
+            resolved.fill(Some(target));
             return Ok(resolved);
         }
 
@@ -1808,7 +1808,11 @@ mod tests {
     use super::IntegrationOutput;
     use super::ResolvedIntegrandSlot;
     use super::{ContributionSortOption, DashboardKeyAction, ShowPhaseOption, TabledKeyAction};
-    use crate::{state::ProcessRef, CLISettings, SessionSettings, StateSettings};
+    use crate::{
+        state::{CommandHistory, ProcessRef},
+        CLISettings, Commands, SessionSettings, StateSettings,
+    };
+    use clap::Parser;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use gammalooprs::{
         integrate::{ContributionSortMode, IntegrationStatusPhaseDisplay, SlotMeta},
@@ -1829,6 +1833,12 @@ mod tests {
                 integrand_name: integrand_name.to_string(),
             },
         }
+    }
+
+    #[derive(Debug, Parser)]
+    struct IntegrateCli {
+        #[command(flatten)]
+        integrate: Integrate,
     }
 
     #[test]
@@ -1918,6 +1928,81 @@ mod tests {
         let targets = integrate.resolve_targets(&slots).unwrap();
 
         assert_eq!(targets, vec![Some(Complex::new(F(1.0), F(2.0)))]);
+    }
+
+    #[test]
+    fn resolve_targets_applies_shared_legacy_target_to_all_selected_slots() {
+        let integrate = Integrate {
+            target: vec!["1.0".to_string(), "2.0".to_string()],
+            ..Integrate::default()
+        };
+        let slots = vec![
+            resolved_slot("triangle", "LO"),
+            resolved_slot("box", "scalar_box"),
+        ];
+
+        let targets = integrate.resolve_targets(&slots).unwrap();
+
+        assert_eq!(
+            targets,
+            vec![
+                Some(Complex::new(F(1.0), F(2.0))),
+                Some(Complex::new(F(1.0), F(2.0))),
+            ]
+        );
+    }
+
+    #[test]
+    fn clap_parses_repeated_keyed_targets() {
+        let parsed = IntegrateCli::try_parse_from([
+            "gammaloop",
+            "--target",
+            "triangle@LO=1.0,2.0",
+            "--target",
+            "box@scalar_box=3.0,4.0",
+        ])
+        .unwrap();
+
+        assert_eq!(
+            parsed.integrate.target,
+            vec![
+                "triangle@LO=1.0,2.0".to_string(),
+                "box@scalar_box=3.0,4.0".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn clap_still_parses_legacy_single_slot_target_components() {
+        let parsed =
+            IntegrateCli::try_parse_from(["gammaloop", "--target", "-1.0", "2.0"]).unwrap();
+
+        assert_eq!(
+            parsed.integrate.target,
+            vec!["-1.0".to_string(), "2.0".to_string()]
+        );
+    }
+
+    #[test]
+    fn clap_parses_single_token_negative_target_when_attached_to_flag() {
+        let parsed = IntegrateCli::try_parse_from(["gammaloop", "--target=-1.0,-2.0"]).unwrap();
+
+        assert_eq!(parsed.integrate.target, vec!["-1.0,-2.0".to_string()]);
+    }
+
+    #[test]
+    fn command_history_parses_shared_target_for_multi_integrand_integration() {
+        let raw = "integrate -p aa_aa -i 1L -p aa_aa -i 1L_m_uv_UP -p aa_aa -i 1L_m_uv_DOWN -p aa_aa -i 1L_mu_r_UP -p aa_aa -i 1L_mu_r_DOWN --n-cores 5 --target -1.0214510394091818e-6 0.0 --renderer ratatui --batch-size 10000 --show-phase both --show-max-weight-info --show-top-discrete-grid --show-discrete-contributions-sum --write-results-for-each-iteration --restart";
+        let parsed = CommandHistory::from_raw_string(raw).unwrap();
+
+        let Commands::Integrate(integrate) = parsed.command else {
+            panic!("expected integrate command");
+        };
+
+        assert_eq!(
+            integrate.target,
+            vec!["-1.0214510394091818e-6,0.0".to_string()]
+        );
     }
 
     #[test]
@@ -2141,6 +2226,19 @@ mod tests {
             super::handle_dashboard_key_event(
                 &mut dashboard,
                 KeyEvent::new(KeyCode::Char('p'), KeyModifiers::NONE),
+            ),
+            DashboardKeyAction::Redraw
+        );
+    }
+
+    #[test]
+    fn dashboard_i_toggles_statistics_scope() {
+        let mut dashboard = gammalooprs::integrate::RatatuiDashboardState::new();
+
+        assert_eq!(
+            super::handle_dashboard_key_event(
+                &mut dashboard,
+                KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE),
             ),
             DashboardKeyAction::Redraw
         );

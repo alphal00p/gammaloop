@@ -6,7 +6,7 @@ commands = [
 
 [default_runtime_settings.general]
 m_uv = 1.0
-mu_r_sq = 8315.251344
+mu_r = 91.188
 
 [default_runtime_settings.kinematics]
 e_cm = 2.0
