@@ -23,10 +23,7 @@ use crate::{
         sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
-    processes::{
-        CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId,
-        StandaloneExportSettings,
-    },
+    processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId},
     settings::{GlobalSettings, RuntimeSettings, runtime::IntegralUnit},
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
@@ -79,6 +76,9 @@ use super::{
     evaluate_sample,
 };
 
+pub mod export;
+pub mod load;
+
 #[allow(clippy::excessive_precision)]
 const PICOBARN_CONVERSION: F<f64> = F(3.89379372171859372125651613062e8);
 
@@ -115,14 +115,6 @@ pub struct CrossSectionIntegrandData {
 }
 
 impl CrossSectionIntegrand {
-    pub(crate) fn export_standalone(
-        &self,
-        _path: impl AsRef<Path>,
-        _settings: &StandaloneExportSettings,
-    ) -> Result<()> {
-        Ok(())
-    }
-
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;

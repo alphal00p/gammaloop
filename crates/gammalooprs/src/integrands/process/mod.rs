@@ -41,7 +41,7 @@ use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 pub mod amplitude;
 pub mod cache_debugging;
-pub mod cross_section_integrand;
+pub mod cross_section;
 pub mod gammaloop_sample;
 pub mod ir;
 use crate::{
@@ -122,7 +122,7 @@ impl<C, T> bincode::Decode<C> for RuntimeCache<T> {
 #[enum_dispatch(HasIntegrand)]
 pub enum ProcessIntegrand {
     Amplitude(amplitude::AmplitudeIntegrand),
-    CrossSection(cross_section_integrand::CrossSectionIntegrand),
+    CrossSection(cross_section::CrossSectionIntegrand),
 }
 
 impl ProcessIntegrand {

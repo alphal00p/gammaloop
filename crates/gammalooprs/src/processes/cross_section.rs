@@ -33,7 +33,7 @@ use crate::{
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
-        cross_section_integrand::CrossSectionIntegrandData,
+        cross_section::CrossSectionIntegrandData,
     },
     model::ArcParticle,
     momentum::{
@@ -69,7 +69,7 @@ use crate::{
     graph::{ExternalConnection, FeynmanGraph, Graph},
     integrands::process::{
         ProcessIntegrand,
-        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
+        cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
     model::Model,
     numerator::ParsingNet,
@@ -93,6 +93,14 @@ impl<T> IteratedCtCollection<T> {
             data,
             num_left_thresholds: self.num_left_thresholds,
         }
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+        self.data.iter()
+    }
+
+    pub(crate) fn num_left_thresholds(&self) -> usize {
+        self.num_left_thresholds
     }
 }
 
@@ -266,6 +274,23 @@ pub struct CrossSection {
 }
 
 impl CrossSection {
+    pub fn export_standalone(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &crate::processes::StandaloneExportSettings,
+    ) -> Result<()> {
+        if let Some(integrand) = &self.integrand {
+            integrand.export_standalone(path, settings)?;
+        } else {
+            return Err(eyre!(
+                "Cannot export standalone cross section {} without integrand",
+                self.name
+            ));
+        }
+
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,

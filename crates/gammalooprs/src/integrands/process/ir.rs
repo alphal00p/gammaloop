@@ -21,7 +21,7 @@ use crate::{
     integrands::evaluation::EvaluationResult,
     integrands::process::{
         ProcessIntegrandImpl,
-        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
+        cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
     model::Model,
     momentum::ThreeMomentum,

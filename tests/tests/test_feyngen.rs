@@ -1,9 +1,12 @@
 use color_eyre::Result;
+use std::fs;
 
 use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
-use gammalooprs::processes::ProcessCollection;
+use gammalooprs::processes::{
+    ProcessCollection, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+};
 
 use gammaloop_integration_tests::{get_test_cli, get_tests_workspace_path};
 use serial_test::serial;
@@ -176,6 +179,48 @@ fn from_symbolica() -> Result<()> {
 
     // clean_test(&cli.cli_settings.state.folder);
 
+    Ok(())
+}
+
+#[test]
+fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
+    let workspace = get_tests_workspace_path().join("cross_section_standalone_export");
+    let output_dir = workspace.join("standalone_export_check");
+    if workspace.exists() {
+        fs::remove_dir_all(&workspace)?;
+    }
+
+    let mut cli = get_test_cli(
+        Some("sm_load.toml".into()),
+        workspace.clone(),
+        Some("cross_section_standalone_export".to_string()),
+        true,
+    )?;
+    cli.run_command("set global kv global.generation.evaluator.store_atom=true")?;
+    cli.run_command("generate xs z > d d~")?;
+    cli.run_command("generate")?;
+
+    cli.state.process_list.export_standalone(
+        &output_dir,
+        &StandaloneExportSettings {
+            mode: StandaloneExportMode::Rust,
+            format: StandaloneDataFormat::Json,
+        },
+    )?;
+
+    let exported_base = output_dir
+        .join("processes")
+        .join("cross_sections")
+        .join("z_ddx")
+        .join("default");
+    assert!(exported_base.join("standalone_cross_section.json").exists());
+    assert!(
+        exported_base
+            .join("standalone_cross_section_rust.rs")
+            .exists()
+    );
+
+    fs::remove_dir_all(workspace)?;
     Ok(())
 }
 

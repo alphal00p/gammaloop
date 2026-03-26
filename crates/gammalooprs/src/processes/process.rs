@@ -680,7 +680,7 @@ impl Process {
                 let p = path.as_ref().join("cross_sections");
                 let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
                 fs::create_dir_all(&path)?;
-                for (xs_name, cs) in cs {
+                for cs in cs.values() {
                     // Create a folder for each cross section
                     let cs_path = path.join(&cs.name);
                     fs::create_dir_all(&cs_path).with_context(|| {
@@ -690,11 +690,7 @@ impl Process {
                         )
                     })?;
 
-                    let _ = (xs_name, cs);
-                    warn!(
-                        "Standalone evaluator export is currently implemented for amplitudes only; skipping cross section output in {}",
-                        cs_path.display()
-                    );
+                    cs.export_standalone(&cs_path, settings)?;
                 }
             }
         }

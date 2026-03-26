@@ -9,7 +9,7 @@ use crate::integrands::evaluation::{
 // use crate::integrands::process::ProcessIntegrandImpl;
 use crate::integrands::builtin::h_function::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::integrands::process::ProcessIntegrand;
-use crate::integrands::process::{amplitude, cross_section_integrand};
+use crate::integrands::process::{amplitude, cross_section};
 use crate::model::Model;
 use crate::momentum::FourMomentum;
 use crate::observables::{
