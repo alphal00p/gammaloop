@@ -1707,6 +1707,7 @@ fn settings_catalog_kind(context: &CommandContext<'_>) -> Option<SettingsCatalog
         Some(SettingsCatalogKind::Global)
     } else if matches_command_path(context, &["set", "default-runtime", "kv"])
         || matches_command_path(context, &["set", "process", "kv"])
+        || matches_command_path(context, &["display", "settings", "process"])
     {
         Some(SettingsCatalogKind::Runtime)
     } else {
@@ -3955,6 +3956,18 @@ mod tests {
         let values = completion_values("display settings global ", &CompletionState::default());
 
         assert!(values.is_empty());
+    }
+
+    #[test]
+    fn completion_offers_runtime_paths_for_display_settings_process_target() {
+        let values = completion_values(
+            "display settings process -p triangle -i LO ",
+            &generate_completion_state(),
+        );
+
+        assert!(values.contains(&"general.".to_string()));
+        assert!(values.contains(&"integrator.".to_string()));
+        assert!(values.contains(&"kinematics.".to_string()));
     }
 
     #[test]
