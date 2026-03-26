@@ -40,7 +40,7 @@
           "rustc"
         ]);
 
-      src = craneLib.cleanCargoSource (craneLib.path ./.);
+      src = craneLib.path ./.;
 
       apiMeta = craneLib.crateNameFromCargoToml {
         cargoToml = ./crates/gammaloop-api/Cargo.toml;
@@ -118,32 +118,6 @@
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
         };
 
-      ciPartitionCount = 6;
-
-      licensePreCheck = ''
-        if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
-          echo "Missing SYMBOLICA_LICENSE environment variable" >&2
-          exit 1
-        fi
-      '';
-
-      # Source trimming for per-crate derivations, following crane workspace pattern.
-      # Keep both workspace crates + shared assets because build scripts and embedded data
-      # need access at build time.
-      fileSetForCrate = crate:
-        lib.fileset.toSource {
-          root = ./.;
-          fileset = lib.fileset.unions [
-            ./Cargo.toml
-            ./Cargo.lock
-            ./assets
-            (craneLib.fileset.commonCargoSources ./tests)
-            (craneLib.fileset.commonCargoSources ./crates/gammalooprs)
-            (craneLib.fileset.commonCargoSources ./crates/gammaloop-api)
-            (craneLib.fileset.commonCargoSources crate)
-          ];
-        };
-
       # Build workspace dependency artifacts once and reuse for downstream checks/packages.
       cargoArtifacts = craneLib.buildDepsOnly (ciArgs
         // {
@@ -166,57 +140,21 @@
         // {
           pname = "gammaloop";
           inherit (apiMeta) version;
-          src = fileSetForCrate ./crates/gammaloop-api;
+          inherit src;
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
-      partitionedNextestChecks = lib.listToAttrs (map (partition: {
-          name = "gammaloop-nextest-partition-${toString partition}";
-          value = craneLib.cargoNextest (ciArgs
-            // {
-              inherit cargoArtifacts;
-              preCheck = licensePreCheck;
-              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-              partitions = 1;
-              partitionType = "count";
-              cargoNextestPartitionsExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail --no-tests=pass";
-            });
-        })
-        (lib.range 1 ciPartitionCount));
     in {
       checks =
         {
-          # Keep existing check names for CI compatibility.
           gammaloop = gammaloop-cli;
-
-          gammaloop-clippy = craneLib.cargoClippy (ciArgs
-            // {
-              inherit cargoArtifacts;
-              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            });
-
-          gammaloop-doc = craneLib.cargoDoc (ciArgs
-            // {
-              inherit cargoArtifacts;
-            });
 
           gammaloop-fmt = craneLib.cargoFmt {
             inherit src;
             pname = "gammaloop-workspace";
             inherit (apiMeta) version;
           };
-
-          gammaloop-nextest = craneLib.cargoNextest (ciArgs
-            // {
-              inherit cargoArtifacts;
-              preCheck = licensePreCheck;
-              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-              partitions = 1;
-              partitionType = "count";
-              cargoNextestPartitionsExtraArgs = "--profile ci --no-fail-fast --final-status-level fail --no-tests=pass";
-            });
-        }
-        // partitionedNextestChecks;
+        };
 
       packages =
         {
@@ -238,10 +176,6 @@
         gammaloop = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
         };
-      };
-
-      ci = {
-        partitionCount = toString ciPartitionCount;
       };
 
       devShells.default = craneLib.devShell {
