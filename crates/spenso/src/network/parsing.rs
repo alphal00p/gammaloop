@@ -1076,10 +1076,10 @@ pub mod test {
           3	 [label = "T:P(2,mink(4,1))"];
           ext0	 [style=invis];
           0:0:s	-> ext0	 [id=0 color="red"];
-          2:6:s	-> 3:8:s	 [id=1 dir=none  color="red:blue;0.5" label="mink4|1"];
+          3:7:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
           2:5:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
           1:4:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
-          3:7:s	-> 0:1:s	 [id=4  color="red:blue;0.5"];
+          2:6:s	-> 3:8:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
         }
         "#);
 
@@ -1183,22 +1183,22 @@ pub mod test {
           11	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
           ext0	 [style=invis];
           0:0:s	-> ext0	 [id=0 color="red"];
-          3:16:s	-> 11:32:s	 [id=1 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
-          6:22:s	-> 10:30:s	 [id=2 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
-          2:14:s	-> 9:28:s	 [id=3 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
-          5:20:s	-> 8:26:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
-          4:18:s	-> 7:24:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
-          9:27:s	-> 0:3:s	 [id=6  color="red:blue;0.5"];
-          7:23:s	-> 0:5:s	 [id=7  color="red:blue;0.5"];
-          6:21:s	-> 0:6:s	 [id=8  color="red:blue;0.5"];
-          10:29:s	-> 0:2:s	 [id=9  color="red:blue;0.5"];
-          8:25:s	-> 0:4:s	 [id=10  color="red:blue;0.5"];
+          11:31:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+          10:29:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
+          9:27:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
+          8:25:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
+          7:23:s	-> 0:5:s	 [id=5  color="red:blue;0.5"];
+          6:21:s	-> 0:6:s	 [id=6  color="red:blue;0.5"];
+          5:19:s	-> 0:7:s	 [id=7  color="red:blue;0.5"];
+          4:17:s	-> 0:8:s	 [id=8  color="red:blue;0.5"];
+          3:15:s	-> 0:9:s	 [id=9  color="red:blue;0.5"];
+          2:13:s	-> 0:10:s	 [id=10  color="red:blue;0.5"];
           1:12:s	-> 0:11:s	 [id=11  color="red:blue;0.5"];
-          2:13:s	-> 0:10:s	 [id=12  color="red:blue;0.5"];
-          3:15:s	-> 0:9:s	 [id=13  color="red:blue;0.5"];
-          4:17:s	-> 0:8:s	 [id=14  color="red:blue;0.5"];
-          5:19:s	-> 0:7:s	 [id=15  color="red:blue;0.5"];
-          11:31:s	-> 0:1:s	 [id=16  color="red:blue;0.5"];
+          2:14:s	-> 9:28:s	 [id=12 dir=none  color="red:blue;0.5" label="mink4|edge_5_1"];
+          3:16:s	-> 11:32:s	 [id=13 dir=none  color="red:blue;0.5" label="mink4|edge_6_1"];
+          4:18:s	-> 7:24:s	 [id=14 dir=none  color="red:blue;0.5" label="mink4|hedge_0"];
+          5:20:s	-> 8:26:s	 [id=15 dir=none  color="red:blue;0.5" label="mink4|hedge_3"];
+          6:22:s	-> 10:30:s	 [id=16 dir=none  color="red:blue;0.5" label="mink4|hedge_4"];
         }
         "#);
         assert_eq!(net.simple_execute(), expr);
@@ -1234,13 +1234,13 @@ pub mod test {
           5	 [label = "T:d(mink(4,2))"];
           ext0	 [style=invis];
           0:0:s	-> ext0	 [id=0 color="red"];
-          5:13:s	-> 4:11:s	 [id=1  color="red:blue;0.5"];
-          2:7:s	-> 3:9:s	 [id=2 dir=none  color="red:blue;0.5" label="mink4|1"];
+          4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+          3:8:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
           2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
           1:5:s	-> 0:4:s	 [id=4  color="red:blue;0.5"];
-          3:8:s	-> 0:2:s	 [id=5  color="red:blue;0.5"];
+          2:7:s	-> 3:9:s	 [id=5 dir=none  color="red:blue;0.5" label="mink4|1"];
           5:14:s	-> 4:12:s	 [id=6 dir=none  color="red:blue;0.5" label="mink4|2"];
-          4:10:s	-> 0:1:s	 [id=7  color="red:blue;0.5"];
+          5:13:s	-> 4:11:s	 [id=7  color="red:blue;0.5"];
         }
         "#
         );
@@ -1722,11 +1722,11 @@ pub mod test {
           ext0	 [style=invis];
           0:0:s	-> ext0	 [id=0 color="red"];
           ext1	 [style=invis];
-          0:2:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_1"];
+          0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
           ext2	 [style=invis];
-          0:3:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_0"];
+          0:2:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_1"];
           ext3	 [style=invis];
-          0:1:s	-> ext3	 [id=3 dir=none color="red" label="mink4|l_4"];
+          0:3:s	-> ext3	 [id=3 dir=none color="red" label="mink4|l_4"];
         }
         "#
         );

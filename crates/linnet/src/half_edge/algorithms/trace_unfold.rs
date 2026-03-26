@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::ops::Deref;
 use std::slice;
 
 use indexmap::set::MutableValues;
@@ -9,9 +11,59 @@ use indexmap::IndexSet;
 
 use crate::half_edge::builder::HedgeGraphBuilder;
 use crate::half_edge::involution::{EdgeIndex, Flow};
-use crate::half_edge::nodestore::NodeStorageOps;
+use crate::half_edge::nodestore::{NodeStorageOps, NodeStorageVec};
 use crate::half_edge::subgraph::SubSetLike;
-use crate::half_edge::{HedgeGraph, NoData, NodeIndex};
+use crate::half_edge::{HedgeGraph, NoData, NodeIndex, NodeVec};
+
+pub struct UnfoldedTraceGraph<G, V, N: NodeStorageOps<NodeData = V> = NodeStorageVec<V>> {
+    graph: HedgeGraph<EdgeIndex, V, NoData, N>,
+    source_nodes: NodeVec<NodeIndex>,
+    source_ty: PhantomData<fn() -> G>,
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+    pub fn new(
+        graph: HedgeGraph<EdgeIndex, V, NoData, N>,
+        source_nodes: NodeVec<NodeIndex>,
+    ) -> Self {
+        Self {
+            graph,
+            source_nodes,
+            source_ty: PhantomData,
+        }
+    }
+
+    pub fn map<V2>(
+        self,
+        f: impl FnMut(&crate::half_edge::involution::Involution, NodeIndex, V) -> V2,
+    ) -> UnfoldedTraceGraph<G, V2, N::OpStorage<V2>> {
+        UnfoldedTraceGraph {
+            graph: self.graph.map(f, |_, _, _, _, e| e, |_, h| h),
+            source_nodes: self.source_nodes,
+            source_ty: PhantomData,
+        }
+    }
+
+    pub fn source_node(&self, node: NodeIndex) -> NodeIndex {
+        self.source_nodes[node]
+    }
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> AsRef<HedgeGraph<EdgeIndex, V, NoData, N>>
+    for UnfoldedTraceGraph<G, V, N>
+{
+    fn as_ref(&self) -> &HedgeGraph<EdgeIndex, V, NoData, N> {
+        &self.graph
+    }
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> Deref for UnfoldedTraceGraph<G, V, N> {
+    type Target = HedgeGraph<EdgeIndex, V, NoData, N>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.graph
+    }
+}
 
 /// Ops must be owned, hashable, and totally ordered for canonicalization.
 pub trait Op: Clone + Eq + Ord {}
@@ -215,12 +267,8 @@ where
         &self,
         subgraph: &S,
         start: NodeIndex,
-    ) -> HedgeGraph<
-        EdgeIndex,
-        TraceKey<Key, EdgeIndex>,
-        NoData,
-        M::OpStorage<TraceKey<Key, EdgeIndex>>,
-    > {
+    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
+    {
         let root = (start, TraceKey::empty());
         let mut q = VecDeque::new();
         let mut traces: IndexSet<(NodeIndex, TraceKey<Key, EdgeIndex>)> = IndexSet::new();
@@ -256,29 +304,248 @@ where
             }
         }
 
-        builder.build::<M>().map(
-            |_, _, v| {
-                let mut trace: TraceKey<Key, EdgeIndex> = TraceKey::empty();
-                let v = &mut traces.get_index_mut2(v).unwrap().1;
-                std::mem::swap(v, &mut trace);
-                trace
-            },
-            |_, _, _, _, a| a,
-            |_, h| h,
-        )
+        let source_nodes = traces.iter().map(|(source_node, _)| *source_node).collect();
+        let unfolded = UnfoldedTraceGraph::new(
+            builder.build::<M>().map(
+                |_, _, v| {
+                    let mut trace: TraceKey<Key, EdgeIndex> = TraceKey::empty();
+                    let v = &mut traces.get_index_mut2(v).unwrap().1;
+                    std::mem::swap(v, &mut trace);
+                    trace
+                },
+                |_, _, _, _, a| a,
+                |_, h| h,
+            ),
+            source_nodes,
+        );
+        unfolded
+            .validate_invariant()
+            .expect("trace-unfolded graph violates non-union unique-parent invariant");
+        unfolded
     }
 
     #[allow(clippy::type_complexity)]
     fn trace_unfold<M: NodeStorageOps<NodeData = usize>>(
         &self,
         start: NodeIndex,
-    ) -> HedgeGraph<
-        EdgeIndex,
-        TraceKey<Key, EdgeIndex>,
-        NoData,
-        M::OpStorage<TraceKey<Key, EdgeIndex>>,
-    > {
+    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
+    {
         self.trace_unfold_of::<M, _>(&self.graph().full_filter(), start)
+    }
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+    fn incoming_parents(&self, node: NodeIndex) -> Vec<(NodeIndex, EdgeIndex)> {
+        self.graph
+            .iter_crown(node)
+            .filter(|hedge| self.graph.flow(*hedge) == Flow::Sink)
+            .filter_map(|hedge| {
+                let parent = self.graph.involved_node_id(hedge)?;
+                let unfolded_edge = self.graph[&hedge];
+                Some((parent, self.graph[unfolded_edge]))
+            })
+            .collect()
+    }
+
+    fn all_ops<'b, K>(
+        &'b self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = &'b HiddenData<K, EdgeIndex>> + 'b
+    where
+        K: Eq + Hash + Clone + Ord + 'b,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        self.graph[node]
+            .as_ref()
+            .iter_levels_top_down()
+            .flat_map(|level| level.iter_leaf_ops())
+    }
+
+    fn node_contains_op<K>(&self, node: NodeIndex, target: &HiddenData<K, EdgeIndex>) -> bool
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        self.all_ops(node).any(|op| op == target)
+    }
+
+    fn introduced_ops<K>(
+        &self,
+        parent: NodeIndex,
+        child: NodeIndex,
+    ) -> Vec<HiddenData<K, EdgeIndex>>
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        let mut parent_ops: Vec<_> = self.all_ops(parent).cloned().collect();
+        let mut introduced = Vec::new();
+        for op in self.all_ops(child) {
+            if let Some(index) = parent_ops.iter().position(|parent_op| parent_op == op) {
+                parent_ops.swap_remove(index);
+            } else {
+                introduced.push(op.clone());
+            }
+        }
+        introduced
+    }
+
+    fn deepest_common_ancestor(&self, nodes: &[NodeIndex]) -> Option<NodeIndex> {
+        let first = *nodes.first()?;
+        let first_chain: Vec<_> = std::iter::once(first)
+            .chain(self.path_to_root(first).map(|(parent, _)| parent))
+            .collect();
+
+        first_chain.into_iter().find(|candidate| {
+            nodes.iter().skip(1).all(|node| {
+                std::iter::once(*node)
+                    .chain(self.path_to_root(*node).map(|(parent, _)| parent))
+                    .any(|ancestor| ancestor == *candidate)
+            })
+        })
+    }
+
+    fn strip_independent_prefix<K>(
+        &self,
+        start: NodeIndex,
+        target: &HiddenData<K, EdgeIndex>,
+        indep: &impl Independence<HiddenData<K, EdgeIndex>>,
+    ) -> NodeIndex
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        let mut current = start;
+
+        loop {
+            if self.is_disjoint_union(current) {
+                let leaf_ops: Vec<_> = self.leaf_ops(current).cloned().collect();
+                if leaf_ops.iter().all(|op| indep.independent(op, target)) {
+                    let parents: Vec<_> = self
+                        .incoming_parents(current)
+                        .into_iter()
+                        .map(|(parent, _)| parent)
+                        .collect();
+                    if let Some(prefix) = self.deepest_common_ancestor(&parents) {
+                        current = prefix;
+                        continue;
+                    }
+                }
+                return current;
+            }
+
+            let Some((parent, _)) = self.unique_parent(current) else {
+                return current;
+            };
+            let introduced = self.introduced_ops(parent, current);
+            if introduced.iter().all(|op| indep.independent(op, target)) {
+                current = parent;
+            } else {
+                return current;
+            }
+        }
+    }
+
+    pub fn leaf_ops<'b, K>(
+        &'b self,
+        node: NodeIndex,
+    ) -> impl DoubleEndedIterator<Item = &'b HiddenData<K, EdgeIndex>> + 'b
+    where
+        K: Eq + Hash + Clone + Ord + 'b,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        self.graph[node].as_ref().iter_leaf_ops()
+    }
+
+    pub fn is_disjoint_union(&self, node: NodeIndex) -> bool {
+        self.incoming_parents(node).len() > 1
+    }
+
+    pub fn unique_parent(&self, node: NodeIndex) -> Option<(NodeIndex, EdgeIndex)> {
+        let mut incoming = self.incoming_parents(node).into_iter();
+        let parent = incoming.next()?;
+        if incoming.next().is_some() {
+            return None;
+        }
+        Some(parent)
+    }
+
+    pub fn path_to_root(
+        &self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = (NodeIndex, EdgeIndex)> + '_ {
+        let mut current = Some(node);
+        std::iter::from_fn(move || {
+            let node = current?;
+            let parent = self.unique_parent(node)?;
+            current = Some(parent.0);
+            Some(parent)
+        })
+    }
+
+    pub fn op_dependency_frontier<K>(
+        &self,
+        node: NodeIndex,
+        target: &HiddenData<K, EdgeIndex>,
+        indep: &impl Independence<HiddenData<K, EdgeIndex>>,
+    ) -> Option<NodeIndex>
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        let mut current = node;
+        loop {
+            if self.is_disjoint_union(current) {
+                if let Some((parent, _)) = self
+                    .incoming_parents(current)
+                    .into_iter()
+                    .find(|(parent, _)| self.node_contains_op(*parent, target))
+                {
+                    current = parent;
+                    continue;
+                }
+                return self.deepest_common_ancestor(
+                    &self
+                        .incoming_parents(current)
+                        .into_iter()
+                        .map(|(parent, _)| parent)
+                        .collect::<Vec<_>>(),
+                );
+            }
+
+            let Some((parent, _)) = self.unique_parent(current) else {
+                return Some(current);
+            };
+            if self.node_contains_op(parent, target) {
+                current = parent;
+                continue;
+            }
+
+            return Some(self.strip_independent_prefix(parent, target, indep));
+        }
+    }
+
+    pub fn validate_invariant<K>(&self) -> Result<(), String>
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        for (node, _, _) in self.graph.iter_nodes() {
+            let incoming = self.incoming_parents(node);
+            for (i, (_, edge)) in incoming.iter().enumerate() {
+                if incoming
+                    .iter()
+                    .skip(i + 1)
+                    .any(|(_, other_edge)| other_edge == edge)
+                {
+                    return Err(format!(
+                        "node {node} has duplicate incoming branches for edge {edge}"
+                    ));
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -554,6 +821,12 @@ where
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TraceKey<O, D> {
     levels: Vec<Vec<HiddenData<O, D>>>,
+}
+
+impl<O, D> AsRef<TraceKey<O, D>> for TraceKey<O, D> {
+    fn as_ref(&self) -> &TraceKey<O, D> {
+        self
+    }
 }
 
 impl<O, D> TraceKey<O, D> {
