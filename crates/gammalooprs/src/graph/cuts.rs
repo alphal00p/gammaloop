@@ -3,13 +3,13 @@ use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 
 use crate::cff::esurface::RaisedEsurfaceGroup;
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct CutSet {
     pub residue_selector: ResidueSelector,
     pub union: SuBitGraph,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct ResidueSelector {
     pub lu_cut: Option<RaisedEsurfaceGroup>,
     pub left_th_cut: Option<RaisedEsurfaceGroup>,
