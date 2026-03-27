@@ -3643,7 +3643,7 @@ mod tests {
             crate::integrands::evaluation::StabilityResult {
                 precision: fixture.precision,
                 estimated_relative_accuracy: None,
-                accepted_as_stable: true,
+                status: crate::integrands::evaluation::StabilityStatus::Stable(2),
                 total_time: fixture.total_time,
             },
         );

@@ -110,7 +110,8 @@ def summarize_result(result):
             {{
                 "precision": entry.precision,
                 "estimated_relative_accuracy": entry.estimated_relative_accuracy,
-                "accepted_as_stable": entry.accepted_as_stable,
+                "status": entry.status,
+                "sample_count": entry.sample_count,
                 "total_time_seconds": entry.total_time_seconds,
             }}
             for entry in (result.stability_results or [])

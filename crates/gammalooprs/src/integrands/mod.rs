@@ -4,6 +4,7 @@ pub mod process;
 
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, RawBatchEvaluationResult, StabilityResult,
+    StabilityStatus,
 };
 // use crate::integrands::process::ProcessIntegrandImpl;
 use crate::integrands::builtin::h_function::{HFunctionTestIntegrand, HFunctionTestSettings};
@@ -441,7 +442,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             stability_results: vec![StabilityResult {
                 precision: Precision::Double,
                 estimated_relative_accuracy: None,
-                accepted_as_stable: !is_nan,
+                status: StabilityStatus::Unknown,
                 total_time: start_evaluate_sample.elapsed(),
             }],
         };
@@ -601,7 +602,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
             stability_results: vec![StabilityResult {
                 precision: Precision::Double,
                 estimated_relative_accuracy: None,
-                accepted_as_stable: !is_nan,
+                status: StabilityStatus::Unknown,
                 total_time: start_evaluate_sample.elapsed(),
             }],
         };

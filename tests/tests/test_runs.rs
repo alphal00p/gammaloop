@@ -514,6 +514,35 @@ fn photons_1l_inspect() -> Result<()> {
 }
 
 #[test]
+fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("z_decay_test.toml".into()),
+        get_tests_workspace_path().join("z_decay_invalid_inspect_point"),
+        None,
+        true,
+    )?;
+
+    let error = Inspect {
+        process: Some(ProcessRef::Id(0)),
+        integrand_name: Some("default".to_string()),
+        point: vec![0.1, 0.2],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .expect_err("inspect should reject an invalid x-space point length");
+
+    let rendered = format!("{error:#}");
+    assert!(
+        rendered.contains("Expected 3 x-space coordinates for this integrand selection, got 2."),
+        "{rendered}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 fn photons_phys_1l_inspect() -> Result<()> {
     let mut cli = get_test_cli(
         Some("generate_threshold_1L_6photons.toml".into()),
@@ -1414,6 +1443,45 @@ fn scalar_box() -> Result<()> {
 
     clean_test(&cli.cli_settings.state.folder);
 
+    Ok(())
+}
+
+#[test]
+fn inspect_momentum_space_graph_id_is_sampling_agnostic() -> Result<()> {
+    let mut cli = setup_scalar_topologies_cli("scalar_box_graph_id_inspect")?;
+
+    cli.run_command(
+        r#"set process -p box -i scalar_box string '
+[sampling]
+type = "discrete_graph_sampling"
+[sampling.sampling_type]
+subtype = "multi_channeling"
+'"#,
+    )?;
+
+    let (_, graph_selected) = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: true,
+        graph_id: Some(0),
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    let (_, discrete_selected) = Inspect {
+        process: Some(ProcessRef::Unqualified("box".to_string())),
+        integrand_name: Some("scalar_box".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: true,
+        discrete_dim: vec![0],
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    assert_eq!(graph_selected, discrete_selected);
+
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 

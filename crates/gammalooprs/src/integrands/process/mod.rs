@@ -6,7 +6,7 @@ use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
     LoopMomentaEscalationMetrics, PreciseEvaluationResult, RawBatchEvaluationResult,
     RawPreciseBatchEvaluationResult, RotatedEvaluation, StabilityFailureReason, StabilityResult,
-    StatisticsCounter,
+    StabilityStatus, StatisticsCounter,
 };
 use crate::model::Model;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
@@ -262,6 +262,21 @@ impl ProcessIntegrand {
                 .graph_terms
                 .iter()
                 .position(|term| term.graph.name == graph_name),
+        }
+    }
+
+    pub fn graph_name_by_id(&self, graph_id: usize) -> Option<&str> {
+        match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand
+                .data
+                .graph_terms
+                .get(graph_id)
+                .map(|term| term.graph.name.as_str()),
+            ProcessIntegrand::CrossSection(integrand) => integrand
+                .data
+                .graph_terms
+                .get(graph_id)
+                .map(|term| term.graph.name.as_str()),
         }
     }
 
@@ -1259,6 +1274,7 @@ pub struct StabilityLevelResult {
     pub graph_result: GraphEvaluationResult<f64>,
     pub stability_level_used: Precision,
     pub estimated_relative_accuracy: Option<F<f64>>,
+    pub sample_count: usize,
     pub total_time: Duration,
     pub parameterization_time: Duration,
     pub parameterization_jacobian: Option<F<f64>>,
@@ -1275,6 +1291,7 @@ struct PreciseStabilityLevelResult<T: FloatLike> {
     pub graph_result: GraphEvaluationResult<T>,
     pub stability_level_used: Precision,
     pub estimated_relative_accuracy: Option<F<T>>,
+    pub sample_count: usize,
     pub total_time: Duration,
     pub parameterization_time: Duration,
     pub parameterization_jacobian: Option<F<T>>,
@@ -1294,6 +1311,7 @@ impl<T: FloatLike> PreciseStabilityLevelResult<T> {
             estimated_relative_accuracy: self
                 .estimated_relative_accuracy
                 .map(|value| value.into_ff64()),
+            sample_count: self.sample_count,
             total_time: self.total_time,
             parameterization_time: self.parameterization_time,
             parameterization_jacobian: self
@@ -1880,6 +1898,7 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
         graph_result,
         stability_level_used: stability_level.precision,
         estimated_relative_accuracy,
+        sample_count: results.len(),
         total_time: level_start.elapsed(),
         parameterization_time,
         parameterization_jacobian: match source {
@@ -2441,6 +2460,15 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
         input.orientation,
     )?;
 
+    if let Some(graph_id) = input.graph_id {
+        if input.group_id.is_some() || input.channel_id.is_some() {
+            return Err(eyre!(
+                "Explicit graph selection is mutually exclusive with discrete graph/channel selections in momentum-space evaluation."
+            ));
+        }
+        return Ok(GammaLoopSample::Graph { graph_id, sample });
+    }
+
     match &integrand.get_settings().sampling {
         SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => {
             if input.group_id.is_some() || input.channel_id.is_some() {
@@ -2449,17 +2477,17 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
                 ));
             }
 
-            Ok(match input.graph_id {
-                Some(graph_id) => GammaLoopSample::Graph { graph_id, sample },
-                None => GammaLoopSample::Default(sample),
-            })
+            Ok(GammaLoopSample::Default(sample))
         }
         SamplingSettings::DiscreteGraphs(settings) => {
-            let group_id = input.group_id.ok_or_else(|| {
-                eyre!(
-                    "Momentum-space evaluation for discrete-graph sampling requires selecting a graph group."
-                )
-            })?;
+            let Some(group_id) = input.group_id else {
+                if input.orientation.is_some() || input.channel_id.is_some() {
+                    return Err(eyre!(
+                        "Explicit orientation or channel selections require selecting a graph group in momentum-space evaluation."
+                    ));
+                }
+                return Ok(GammaLoopSample::Default(sample));
+            };
             let discrete_sample = match &settings.sampling_type {
                 DiscreteGraphSamplingType::Default(_) => {
                     if input.channel_id.is_some() {
@@ -2669,7 +2697,7 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
             .map(|level| StabilityResult {
                 precision: level.stability_level_used,
                 estimated_relative_accuracy: level.estimated_relative_accuracy,
-                accepted_as_stable: level.is_stable,
+                status: StabilityStatus::from_sample_count(level.sample_count, level.is_stable),
                 total_time: level.total_time,
             })
             .collect();

@@ -1835,6 +1835,88 @@ mod tests {
     }
 
     #[test]
+    fn repl_parses_inspect_discrete_dims_from_one_flag_occurrence() {
+        let parsed = Repl::try_parse_from([
+            "gammaloop",
+            "inspect",
+            "-p",
+            "triangle",
+            "-i",
+            "LO",
+            "-m",
+            "-x",
+            "0.1",
+            "0.2",
+            "0.3",
+            "-d",
+            "0",
+            "0",
+        ])
+        .unwrap();
+
+        let Commands::Inspect(inspect) = parsed.command else {
+            panic!("expected inspect command");
+        };
+        assert_eq!(inspect.discrete_dim, vec![0, 0]);
+    }
+
+    #[test]
+    fn repl_parses_inspect_discrete_dims_from_repeated_flags() {
+        let parsed = Repl::try_parse_from([
+            "gammaloop",
+            "inspect",
+            "-p",
+            "triangle",
+            "-i",
+            "LO",
+            "-m",
+            "-x",
+            "0.1",
+            "0.2",
+            "0.3",
+            "-d",
+            "0",
+            "-d",
+            "0",
+        ])
+        .unwrap();
+
+        let Commands::Inspect(inspect) = parsed.command else {
+            panic!("expected inspect command");
+        };
+        assert_eq!(inspect.discrete_dim, vec![0, 0]);
+    }
+
+    #[test]
+    fn repl_parses_inspect_graph_and_orientation_ids() {
+        let parsed = Repl::try_parse_from([
+            "gammaloop",
+            "inspect",
+            "-p",
+            "triangle",
+            "-i",
+            "LO",
+            "-m",
+            "-x",
+            "0.1",
+            "0.2",
+            "0.3",
+            "--graph-id",
+            "2",
+            "--orientation-id",
+            "1",
+        ])
+        .unwrap();
+
+        let Commands::Inspect(inspect) = parsed.command else {
+            panic!("expected inspect command");
+        };
+        assert_eq!(inspect.graph_id, Some(2));
+        assert_eq!(inspect.orientation_id, Some(1));
+        assert!(inspect.discrete_dim.is_empty());
+    }
+
+    #[test]
     fn repl_parses_reset_processes_with_normalized_selectors() {
         let parsed = Repl::try_parse_from([
             "gammaloop",

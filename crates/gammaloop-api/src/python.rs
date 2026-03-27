@@ -394,7 +394,8 @@ impl PyIntegrationResult {
 pub struct PyStabilityResult {
     pub precision: String,
     pub estimated_relative_accuracy: Option<f64>,
-    pub accepted_as_stable: bool,
+    pub status: String,
+    pub sample_count: usize,
     pub total_time_seconds: f64,
 }
 
@@ -479,7 +480,8 @@ impl PySampleEvaluationResult {
                         estimated_relative_accuracy: result
                             .estimated_relative_accuracy
                             .map(|value| value.0),
-                        accepted_as_stable: result.accepted_as_stable,
+                        status: result.status.to_string(),
+                        sample_count: result.status.sample_count(),
                         total_time_seconds: result.total_time.as_secs_f64(),
                     })
                     .collect()

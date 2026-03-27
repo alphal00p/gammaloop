@@ -579,8 +579,53 @@ pub struct RotatedEvaluation {
 pub struct StabilityResult {
     pub precision: Precision,
     pub estimated_relative_accuracy: Option<F<f64>>,
-    pub accepted_as_stable: bool,
+    pub status: StabilityStatus,
     pub total_time: Duration,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub enum StabilityStatus {
+    Unknown,
+    Stable(usize),
+    Unstable(usize),
+}
+
+impl StabilityStatus {
+    pub fn from_sample_count(sample_count: usize, accepted_as_stable: bool) -> Self {
+        if sample_count <= 1 {
+            Self::Unknown
+        } else if accepted_as_stable {
+            Self::Stable(sample_count)
+        } else {
+            Self::Unstable(sample_count)
+        }
+    }
+
+    pub fn sample_count(&self) -> usize {
+        match self {
+            Self::Unknown => 1,
+            Self::Stable(sample_count) | Self::Unstable(sample_count) => *sample_count,
+        }
+    }
+
+    fn styled_label(&self) -> String {
+        let label = self.to_string();
+        match self {
+            Self::Unknown => label.yellow().to_string(),
+            Self::Stable(_) => label.green().to_string(),
+            Self::Unstable(_) => label.red().to_string(),
+        }
+    }
+}
+
+impl Display for StabilityStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Unknown => write!(f, "Unknown(1 sample)"),
+            Self::Stable(sample_count) => write!(f, "Stable({sample_count} samples)"),
+            Self::Unstable(sample_count) => write!(f, "Unstable({sample_count} samples)"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -654,11 +699,7 @@ impl Display for EvaluationMetaData {
                         result.estimated_relative_accuracy.as_ref(),
                     ),
                     time: format_duration(result.total_time),
-                    status: if result.accepted_as_stable {
-                        "stable".green().to_string()
-                    } else {
-                        "unstable".red().to_string()
-                    },
+                    status: result.status.styled_label(),
                 })
                 .collect::<Vec<_>>();
             writeln!(f)?;
@@ -757,7 +798,7 @@ impl StatisticsCounter {
                         .evaluation_metadata
                         .stability_results
                         .last()
-                        .map(|result| !result.accepted_as_stable)
+                        .map(|result| matches!(result.status, StabilityStatus::Unstable(_)))
                         .unwrap_or(false)
                 {
                     accumulator.num_nan_or_unstable_evals += 1;
@@ -1084,7 +1125,9 @@ impl StatisticsCounter {
 mod tests {
     use std::time::Duration;
 
-    use super::StatisticsCounter;
+    use crate::settings::runtime::Precision;
+
+    use super::{EvaluationMetaData, StabilityResult, StabilityStatus, StatisticsCounter};
 
     #[test]
     fn status_table_renders_three_rows_without_header() {
@@ -1152,5 +1195,31 @@ mod tests {
         assert!(rendered.contains("f64 :     0.00%"), "{rendered}");
         assert!(rendered.contains("nans+unstable :     0.0%"), "{rendered}");
         assert!(rendered.contains("integrator :   0.00 ns"), "{rendered}");
+    }
+
+    #[test]
+    fn evaluation_metadata_renders_stability_status_with_sample_counts() {
+        let metadata = EvaluationMetaData {
+            stability_results: vec![
+                StabilityResult {
+                    precision: Precision::Double,
+                    estimated_relative_accuracy: Some(1.0e-5.into()),
+                    status: StabilityStatus::Stable(3),
+                    total_time: Duration::from_micros(120),
+                },
+                StabilityResult {
+                    precision: Precision::Quad,
+                    estimated_relative_accuracy: None,
+                    status: StabilityStatus::Unknown,
+                    total_time: Duration::from_micros(240),
+                },
+            ],
+            ..EvaluationMetaData::new_empty()
+        };
+
+        let rendered = metadata.to_string();
+        assert!(rendered.contains("Stable(3 samples)"), "{rendered}");
+        assert!(rendered.contains("Unknown(1 sample)"), "{rendered}");
+        assert!(rendered.contains("None"), "{rendered}");
     }
 }

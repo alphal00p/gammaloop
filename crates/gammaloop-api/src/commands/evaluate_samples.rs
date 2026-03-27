@@ -427,6 +427,48 @@ fn build_momentum_input(
             })
         }
         gammalooprs::settings::runtime::SamplingSettings::DiscreteGraphs(settings) => {
+            if !discrete_dim.is_empty() && (graph_name.is_some() || orientation.is_some()) {
+                return Err(eyre!(
+                    "Discrete dimensions are mutually exclusive with explicit graph/orientation selection in momentum-space evaluation."
+                ));
+            }
+
+            if let Some(graph_name) = graph_name {
+                let graph_id = integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
+                    eyre!(
+                        "Unknown graph '{}' in momentum-space evaluation.",
+                        graph_name
+                    )
+                })?;
+
+                if let Some(orientation) = orientation {
+                    let orientation_count =
+                        integrand.graph_orientation_count(graph_id).ok_or_else(|| {
+                            eyre!(
+                                "Graph id {} is invalid for momentum-space evaluation.",
+                                graph_id
+                            )
+                        })?;
+                    if orientation >= orientation_count {
+                        return Err(eyre!(
+                            "Orientation {} is out of range for graph '{}'; the graph has {} orientations.",
+                            orientation,
+                            graph_name,
+                            orientation_count
+                        ));
+                    }
+                }
+
+                return Ok(MomentumSpaceEvaluationInput {
+                    loop_momenta,
+                    integrator_weight: F(integrator_weight),
+                    graph_id: Some(graph_id),
+                    group_id: None,
+                    orientation,
+                    channel_id: None,
+                });
+            }
+
             let (group_from_dims, orientation_from_dims, channel_id) = if discrete_dim.is_empty() {
                 (None, None, None)
             } else {
@@ -462,6 +504,12 @@ fn build_momentum_input(
                 (Some(from_dims), _) => Some(from_dims),
                 (None, from_arg) => from_arg,
             };
+
+            if group_id.is_none() && orientation.is_some() {
+                return Err(eyre!(
+                    "A specific orientation requires a specific graph group in momentum-space evaluation."
+                ));
+            }
 
             if settings.sample_orientations && group_id.is_some() && orientation.is_none() {
                 return Err(eyre!(

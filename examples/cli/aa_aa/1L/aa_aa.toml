@@ -83,7 +83,7 @@ disable_tropical_generation = false
 
 [default_runtime_settings.sampling]
 type = "discrete_graph_sampling"
-sample_orientations = true
+sample_orientations = false
 [default_runtime_settings.sampling.sampling_type]
 # For importance-sampling over channels, use the quantity below
 # subtype = "discrete_multi_channeling"
@@ -95,10 +95,12 @@ commands = [
     "run set_model_parameters",
 
     # --target -1.0214510394091818e-6 0.0
-    "run set_kinematics_a",
-    "set process kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+    # "run set_kinematics_a",
+    # "set process kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
 
-    # "set process kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    # --target -5.9925800791548554e-9 0.0
+    "run set_kinematics_a",
+    "set process kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
     # "set process kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
     # "set process kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
     # "set process kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
@@ -125,7 +127,7 @@ commands = [
 	#			 --renderer tabled
 	"""integrate -p aa_aa -i 1L -p aa_aa -i 1L_m_uv_UP -p aa_aa -i 1L_m_uv_DOWN -p aa_aa -i 1L_mu_r_UP -p aa_aa -i 1L_mu_r_DOWN
 	             --n-cores 5
-                 --target -1.0214510394091818e-6 0.0
+                 --target -5.9925800791548554e-9 0.0
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
@@ -152,7 +154,7 @@ commands = [
 [[command_blocks]]
 name = "set_kinematics_a"
 commands = [
-    # s / m_t^2 = 1, t / s = -0.3
+    # s / m_t^2 = 1, u / s = -0.3
     """set process string '
     [kinematics.externals]
     type = "constant"
@@ -160,7 +162,7 @@ commands = [
     momenta = [
        	[ 86.5, 0.0, 0.0, 86.5 ],
        	[ 86.5, 0.0, 0.0, -86.5 ],
-        [ 86.5, 0.0, -79.27855952273603, 34.6 ],
+        [ 86.5, 0.0, -79.27855952273603, -34.6 ],
         "dependent"
     ]
     '""",
@@ -169,7 +171,7 @@ commands = [
 [[command_blocks]]
 name = "set_kinematics_b"
 commands = [
-    # s / m_t^2 = 1.44, t / s = -0.3
+    # s / m_t^2 = 1.44, u / s = -0.3
     """set process string '
     [kinematics.externals]
     type = "constant"
@@ -177,7 +179,7 @@ commands = [
     momenta = [
        	[ 103.8, 0.0, 0.0, 103.8 ],
        	[ 103.8, 0.0, 0.0, -103.8 ],
-        [ 103.8, 0.0, -95.13427142728324, 41.52 ],
+        [ 103.8, 0.0, -95.13427142728324, -41.52 ],
         "dependent"
     ]
     '""",
@@ -186,7 +188,7 @@ commands = [
 [[command_blocks]]
 name = "set_kinematics_c"
 commands = [
-    # s / m_t^2 = 2.985984, t / s = -0.3
+    # s / m_t^2 = 2.985984, u / s = -0.3
     """set process string '
     [kinematics.externals]
     type = "constant"
@@ -194,7 +196,7 @@ commands = [
     momenta = [
        	[ 149.472, 0.0, 0.0, 149.472 ],
        	[ 149.472, 0.0, 0.0, -149.472 ],
-        [ 149.472, 0.0, -136.99335085528787, 59.7888 ],
+        [ 149.472, 0.0, -136.99335085528787, -59.7888 ],
         "dependent"
     ]
     '""",
@@ -203,7 +205,7 @@ commands = [
 [[command_blocks]]
 name = "set_kinematics_d"
 commands = [
-    # s / m_t^2 = 4.29981696, t / s = -0.3
+    # s / m_t^2 = 4.29981696, u / s = -0.3
     """set process string '
     [kinematics.externals]
     type = "constant"
@@ -211,7 +213,7 @@ commands = [
     momenta = [
        	[ 179.3664, 0.0, 0.0, 179.3664 ],
        	[ 179.3664, 0.0, 0.0, -179.3664 ],
-        [ 179.3664, 0.0, -164.39202102634547, 71.74656 ],
+        [ 179.3664, 0.0, -164.39202102634547, -71.74656 ],
         "dependent"
     ]
     '""",
@@ -220,7 +222,7 @@ commands = [
 [[command_blocks]]
 name = "set_kinematics_e"
 commands = [
-    # s / m_t^2 = 22.18611106740436992, t / s = -0.3
+    # s / m_t^2 = 22.18611106740436992, u / s = -0.3
     """set process string '
     [kinematics.externals]
     type = "constant"
@@ -228,7 +230,7 @@ commands = [
     momenta = [
        	[ 407.4334663894049, 0.0, 0.0, 407.4334663894049 ],
        	[ 407.4334663894049, 0.0, 0.0, -407.4334663894049 ],
-        [ 407.4334663894049, 0.0, -373.4189400775389, 162.97338655576192 ],
+        [ 407.4334663894049, 0.0, -373.4189400775389, -162.97338655576192 ],
         "dependent"
     ]
     '""",
@@ -237,7 +239,7 @@ commands = [
 [[command_blocks]]
 name = "set_kinematics_f"
 commands = [
-    # s / m_t^2 = 410.186270246002225336426103593500274, t / s = -0.3
+    # s / m_t^2 = 410.186270246002225336426103593500274, u / s = -0.3
     """set process string '
     [kinematics.externals]
     type = "constant"
@@ -245,7 +247,7 @@ commands = [
     momenta = [
        	[ 1751.8893288527534, 0.0, 0.0, 1751.8893288527534 ],
        	[ 1751.8893288527534, 0.0, 0.0, -1751.8893288527534 ],
-        [ 1751.8893288527534, 0.0, -1605.6330917306252, 700.755731541101 ],
+        [ 1751.8893288527534, 0.0, -1605.6330917306252, -700.755731541101 ],
         "dependent"
     ]
     '""",

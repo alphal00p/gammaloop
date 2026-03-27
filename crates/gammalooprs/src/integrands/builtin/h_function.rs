@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::integrands::evaluation::EvaluationResult;
-use crate::integrands::evaluation::{EvaluationMetaData, StabilityResult};
+use crate::integrands::evaluation::{EvaluationMetaData, StabilityResult, StabilityStatus};
 use crate::integrands::*;
 use crate::model::Model;
 use crate::settings::RuntimeSettings;
@@ -207,7 +207,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
             stability_results: vec![StabilityResult {
                 precision,
                 estimated_relative_accuracy: None,
-                accepted_as_stable: !is_nan,
+                status: StabilityStatus::Unknown,
                 total_time: start_evaluate_sample.elapsed(),
             }],
         };
