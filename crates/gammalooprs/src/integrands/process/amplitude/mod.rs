@@ -43,13 +43,14 @@ use crate::{
     model::Model,
     momentum::sample::{ExternalIndex, MomentumSample},
     momentum::signature::SignatureLike,
-    momentum::{Rotation, RotationMethod},
-    observables::EventProcessingRuntime,
+    momentum::{Rotation, RotationMethod, SignOrZero},
+    observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
-        amplitude_counterterm::AmplitudeCountertermAtom,
-        amplitude_counterterm::AmplitudeCountertermData,
+        amplitude_counterterm::{
+            AmplitudeCountertermAtom, AmplitudeCountertermData, AmplitudeCountertermEvaluation,
+        },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
     utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
@@ -75,6 +76,8 @@ pub struct AmplitudeGraphTerm {
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder,
     pub real_mass_vec: Option<EdgeVec<Option<F<f64>>>>,
+    pub master_external_signature: SignatureLike<ExternalIndex>,
+    pub master_external_pdgs: Vec<isize>,
 }
 
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
@@ -151,6 +154,13 @@ impl AmplitudeGraphTerm {
                 .clone(),
             param_builder: graph.graph.param_builder.clone(),
             real_mass_vec: None,
+            master_external_signature: graph.graph.get_external_signature(),
+            master_external_pdgs: graph
+                .graph
+                .get_external_partcles()
+                .into_iter()
+                .map(|particle| particle.pdg_code)
+                .collect(),
         })
     }
 
@@ -197,6 +207,59 @@ impl AmplitudeGraphTerm {
               term.name = %self.name(),
           )
     )]
+    fn generate_event<T: FloatLike>(&self, settings: &RuntimeSettings) -> Result<GenericEvent<T>> {
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(DependentMomentaConstructor::Amplitude(
+                &self.master_external_signature,
+            ))
+            .with_context(|| {
+                format!(
+                    "when getting master externals to build amplitude event for graph: {}",
+                    self.graph.name
+                )
+            })?;
+
+        if externals.len() != self.master_external_pdgs.len() {
+            return Err(eyre!(
+                "Amplitude graph '{}' has inconsistent master external metadata: {} momenta vs {} PDGs.",
+                self.graph.name,
+                externals.len(),
+                self.master_external_pdgs.len()
+            ));
+        }
+
+        let mut event = GenericEvent::default();
+        event.cut_info.cut_id = 0;
+
+        for ((sign, momentum), pdg) in self
+            .master_external_signature
+            .iter()
+            .zip(externals.iter())
+            .zip(self.master_external_pdgs.iter().copied())
+        {
+            match sign {
+                SignOrZero::Plus => {
+                    event.kinematic_configuration.0.push(momentum.clone());
+                    event.cut_info.particle_pdgs.0.push(pdg);
+                }
+                SignOrZero::Minus => {
+                    event.kinematic_configuration.1.push(momentum.clone());
+                    event.cut_info.particle_pdgs.1.push(pdg);
+                }
+                SignOrZero::Zero => {
+                    return Err(eyre!(
+                        "Amplitude graph '{}' has an invalid zero-sign external momentum in its master signature.",
+                        self.graph.name
+                    ));
+                }
+            }
+        }
+
+        Ok(event)
+    }
+
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -206,7 +269,7 @@ impl AmplitudeGraphTerm {
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
-    ) -> Result<Complex<F<T>>> {
+    ) -> Result<(Complex<F<T>>, AmplitudeCountertermEvaluation<T>)> {
         let (momentum_sample, prefactor) = if let Some((channel_id, alpha)) = channel_id {
             self.multi_channeling_setup
                 .reinterpret_loop_momenta_and_compute_prefactor(
@@ -253,7 +316,7 @@ impl AmplitudeGraphTerm {
             .unwrap()
             .unwrap_real();
         // debug!("parambuilder 244: {}", self.param_builder);
-        let sum_of_cts = self.threshold_counterterm.evaluate(
+        let counterterm_evaluation = self.threshold_counterterm.evaluate(
             &momentum_sample,
             &self.graph,
             model,
@@ -265,6 +328,7 @@ impl AmplitudeGraphTerm {
             evaluation_metadata,
             record_primary_timing,
         );
+        let sum_of_cts = counterterm_evaluation.total.clone();
 
         debug!(
             bare_cff = format!("{result:16e}"),
@@ -279,9 +343,19 @@ impl AmplitudeGraphTerm {
             "evaluated sum of threshold counterterms"
         );
 
-        let diff = result - sum_of_cts;
+        let diff = result - sum_of_cts.clone();
 
-        Ok(diff * prefactor)
+        Ok((
+            diff * prefactor.clone(),
+            AmplitudeCountertermEvaluation {
+                total: sum_of_cts * prefactor.clone(),
+                local_counterterms: counterterm_evaluation
+                    .local_counterterms
+                    .into_iter()
+                    .map(|counterterm| counterterm * prefactor.clone())
+                    .collect(),
+            },
+        ))
     }
 }
 
@@ -384,7 +458,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<GraphEvaluationResult<T>> {
-        self.evaluate_impl(
+        let (integrand_result, counterterm_evaluation) = self.evaluate_impl(
             momentum_sample,
             model,
             settings,
@@ -392,13 +466,44 @@ impl GraphTerm for AmplitudeGraphTerm {
             evaluation_metadata,
             record_primary_timing,
             channel_id,
-        )
-        .map(|integrand_result| GraphEvaluationResult {
+        )?;
+
+        let mut event_groups = crate::observables::GenericEventGroupList::default();
+        let mut generated_event_count = 0;
+        let mut accepted_event_count = 0;
+        if settings.should_return_generated_events() {
+            let mut event = self.generate_event(settings)?;
+            event.weight = integrand_result.clone();
+
+            if settings.general.store_additional_weights_in_event {
+                let original = integrand_result.clone() + counterterm_evaluation.total;
+                event
+                    .additional_weights
+                    .weights
+                    .insert(AdditionalWeightKey::Original, original);
+                for (subset_index, threshold_counterterm) in counterterm_evaluation
+                    .local_counterterms
+                    .into_iter()
+                    .enumerate()
+                {
+                    event.additional_weights.weights.insert(
+                        AdditionalWeightKey::ThresholdCounterterm { subset_index },
+                        -threshold_counterterm,
+                    );
+                }
+            }
+
+            event_groups.push_singleton(event);
+            generated_event_count = 1;
+            accepted_event_count = 1;
+        }
+
+        Ok(GraphEvaluationResult {
             integrand_result,
-            event_groups: Default::default(),
+            event_groups,
             event_processing_time: std::time::Duration::ZERO,
-            generated_event_count: 0,
-            accepted_event_count: 0,
+            generated_event_count,
+            accepted_event_count,
         })
     }
 
@@ -896,6 +1001,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
     fn event_processing_runtime_mut(&mut self) -> Option<&mut EventProcessingRuntime> {
         self.event_processing_runtime.as_mut()
+    }
+
+    fn groups_default_sample_events_by_graph_group(&self) -> bool {
+        true
     }
     // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
     //     &self.data.builder_cache

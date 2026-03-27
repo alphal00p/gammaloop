@@ -300,9 +300,18 @@ impl Amplitude {
                 .multi_channeling_setup
                 .as_ref()
                 .unwrap();
+            let master_graph = &self.graphs[master_graph_id].graph;
+            let master_external_signature = master_graph.get_external_signature();
+            let master_external_pdgs = master_graph
+                .get_external_partcles()
+                .into_iter()
+                .map(|particle| particle.pdg_code)
+                .collect_vec();
 
             for graph_id in group.into_iter() {
                 terms[graph_id].multi_channeling_setup = mc_of_master.clone();
+                terms[graph_id].master_external_signature = master_external_signature.clone();
+                terms[graph_id].master_external_pdgs = master_external_pdgs.clone();
             }
         }
 

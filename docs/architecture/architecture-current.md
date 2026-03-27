@@ -187,6 +187,12 @@ such as:
 - `Original`
 - `ThresholdCounterterm { subset_index }`
 
+When threshold-counterterm weights are stored, they are stored with the same sign
+with which they contribute to the final event weight. This means the fully
+normalized event weight is reconstructed as:
+
+`(Original + sum(ThresholdCounterterm { subset_index })) * FullMultiplicativeFactor`.
+
 This is populated only when
 `settings.general.store_additional_weights_in_event = true`.
 

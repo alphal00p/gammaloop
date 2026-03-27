@@ -15,7 +15,7 @@ use itertools::Itertools;
 use momtrop::vector::Vector;
 use symbolica::numerical_integration::Sample;
 
-use super::{ChannelIndex, ProcessIntegrandImpl};
+use super::{ChannelIndex, ProcessIntegrandImpl, resolve_discrete_selection_for_sampling};
 
 // discrete dimensions, continious dimensions
 fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
@@ -394,6 +394,13 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
     let loop_mom_cache_id = integrand.loop_cache_id();
     let external_mom_cache_id = integrand.external_cache_id();
     let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
+    let (group_id, orientation_id, channel_id) = resolve_discrete_selection_for_sampling(
+        &settings.sampling,
+        &discrete_indices,
+        integrand.get_group_structure().len(),
+        |group_id| Some(integrand.get_master_graph(group_id).get_num_orientations()),
+        |group_id| Some(integrand.get_master_graph(group_id).get_num_channels()),
+    )?;
 
     match &settings.sampling {
         SamplingSettings::Default(parameterization_settings) => {
@@ -422,12 +429,9 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
             })
         }
         SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
-            let group_id = GroupId(discrete_indices[0]);
-            let orientation_id = if discrete_graph_settings.sample_orientations {
-                Some(discrete_indices[1])
-            } else {
-                None
-            };
+            let group_id = group_id.ok_or_else(|| {
+                eyre!("Internal error: missing graph-group selection for discrete graph sampling.")
+            })?;
 
             match &discrete_graph_settings.sampling_type {
                 DiscreteGraphSamplingType::Default(parameterization_settings) => {
@@ -524,13 +528,17 @@ pub(crate) fn parameterize<T: FloatLike, I: ProcessIntegrandImpl>(
                     })
                 }
                 DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
-                    let channel_id = *discrete_indices.last().expect("invalid_sample_structure");
+                    let channel_id = channel_id.ok_or_else(|| {
+                        eyre!(
+                            "Internal error: missing channel selection for discrete multi-channeling."
+                        )
+                    })?;
 
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
                         sample: DiscreteGraphSample::DiscreteMultiChanneling {
                             alpha: F::from_f64(multichanneling_settings.alpha),
-                            channel_id: channel_id.into(),
+                            channel_id,
                             sample: default_parametrize(
                                 &xs,
                                 dependent_momenta_constructor,

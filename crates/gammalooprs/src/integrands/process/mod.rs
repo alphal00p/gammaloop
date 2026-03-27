@@ -125,6 +125,133 @@ pub enum ProcessIntegrand {
     CrossSection(cross_section::CrossSectionIntegrand),
 }
 
+fn discrete_sampling_type_name(sampling_type: &DiscreteGraphSamplingType) -> &'static str {
+    match sampling_type {
+        DiscreteGraphSamplingType::Default(_) => "default",
+        DiscreteGraphSamplingType::MultiChanneling(_) => "multi_channeling",
+        DiscreteGraphSamplingType::TropicalSampling(_) => "tropical",
+        DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => "discrete_multi_channeling",
+    }
+}
+
+pub(crate) fn discrete_sampling_depth_for_settings(
+    settings: &DiscreteGraphSamplingSettings,
+) -> usize {
+    let orientation_depth = usize::from(settings.sample_orientations);
+    match &settings.sampling_type {
+        DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => 2 + orientation_depth,
+        _ => 1 + orientation_depth,
+    }
+}
+
+fn invalid_discrete_sampling_depth_error(
+    settings: &DiscreteGraphSamplingSettings,
+    actual_depth: usize,
+) -> eyre::Report {
+    let mut axes = vec!["graph group"];
+    if settings.sample_orientations {
+        axes.push("orientation");
+    }
+    if matches!(
+        settings.sampling_type,
+        DiscreteGraphSamplingType::DiscreteMultiChanneling(_)
+    ) {
+        axes.push("channel");
+    }
+
+    eyre!(
+        "This integrand uses discrete graph sampling (sample_orientations = {}, sampling_type = {}), so x-space evaluation requires {} discrete dimensions [{}], but got {}.",
+        settings.sample_orientations,
+        discrete_sampling_type_name(&settings.sampling_type),
+        axes.len(),
+        axes.join(", "),
+        actual_depth
+    )
+}
+
+pub(crate) fn resolve_discrete_selection_for_sampling(
+    sampling: &SamplingSettings,
+    discrete_dimensions: &[usize],
+    group_count: usize,
+    mut orientation_count_for_group: impl FnMut(GroupId) -> Option<usize>,
+    mut channel_count_for_group: impl FnMut(GroupId) -> Option<usize>,
+) -> Result<(Option<GroupId>, Option<usize>, Option<ChannelIndex>)> {
+    match sampling {
+        SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => {
+            if !discrete_dimensions.is_empty() {
+                return Err(eyre!(
+                    "This integrand does not use discrete graph sampling; expected no discrete dimensions, got {:?}.",
+                    discrete_dimensions
+                ));
+            }
+            Ok((None, None, None))
+        }
+        SamplingSettings::DiscreteGraphs(settings) => {
+            let expected_depth = discrete_sampling_depth_for_settings(settings);
+            if discrete_dimensions.len() != expected_depth {
+                return Err(invalid_discrete_sampling_depth_error(
+                    settings,
+                    discrete_dimensions.len(),
+                ));
+            }
+
+            let group_id = GroupId(discrete_dimensions[0]);
+            if group_id.0 >= group_count {
+                return Err(eyre!(
+                    "Discrete graph group index {} is out of range; the integrand has {} groups.",
+                    group_id.0,
+                    group_count
+                ));
+            }
+
+            let orientation = if settings.sample_orientations {
+                let orientation = discrete_dimensions[1];
+                let orientation_count = orientation_count_for_group(group_id).ok_or_else(|| {
+                    eyre!(
+                        "Could not determine orientation count for group {}.",
+                        group_id.0
+                    )
+                })?;
+                if orientation >= orientation_count {
+                    return Err(eyre!(
+                        "Orientation {} is out of range for graph group {}; the group has {} orientations.",
+                        orientation,
+                        group_id.0,
+                        orientation_count
+                    ));
+                }
+                Some(orientation)
+            } else {
+                None
+            };
+
+            let channel = match &settings.sampling_type {
+                DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                    let channel_index = *discrete_dimensions.last().expect("validated depth");
+                    let channel_count = channel_count_for_group(group_id).ok_or_else(|| {
+                        eyre!(
+                            "Could not determine channel count for group {}.",
+                            group_id.0
+                        )
+                    })?;
+                    if channel_index >= channel_count {
+                        return Err(eyre!(
+                            "Channel {} is out of range for graph group {}; the group has {} channels.",
+                            channel_index,
+                            group_id.0,
+                            channel_count
+                        ));
+                    }
+                    Some(ChannelIndex::from(channel_index))
+                }
+                _ => None,
+            };
+
+            Ok((Some(group_id), orientation, channel))
+        }
+    }
+}
+
 impl ProcessIntegrand {
     pub fn resume_fingerprint(&self) -> Result<String> {
         let mut bytes = match self {
@@ -341,95 +468,23 @@ impl ProcessIntegrand {
         &self,
         discrete_dimensions: &[usize],
     ) -> Result<(Option<GroupId>, Option<usize>, Option<ChannelIndex>)> {
-        match &self.get_settings().sampling {
-            SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => {
-                if !discrete_dimensions.is_empty() {
-                    return Err(eyre!(
-                        "This integrand does not use discrete graph sampling; expected no discrete dimensions, got {:?}.",
-                        discrete_dimensions
-                    ));
-                }
-                Ok((None, None, None))
-            }
-            SamplingSettings::DiscreteGraphs(settings) => {
-                let expected_depth = self.discrete_sampling_depth();
-                if discrete_dimensions.len() != expected_depth {
-                    return Err(eyre!(
-                        "Expected {} discrete dimensions, got {}.",
-                        expected_depth,
-                        discrete_dimensions.len()
-                    ));
-                }
+        let group_count = match self {
+            ProcessIntegrand::Amplitude(integrand) => integrand.data.graph_group_structure.len(),
+            ProcessIntegrand::CrossSection(integrand) => integrand.data.graph_group_structure.len(),
+        };
 
-                let group_id = GroupId(discrete_dimensions[0]);
-                let group_count = match self {
-                    ProcessIntegrand::Amplitude(integrand) => {
-                        integrand.data.graph_group_structure.len()
-                    }
-                    ProcessIntegrand::CrossSection(integrand) => {
-                        integrand.data.graph_group_structure.len()
-                    }
-                };
-                if group_id.0 >= group_count {
-                    return Err(eyre!(
-                        "Discrete graph group index {} is out of range; the integrand has {} groups.",
-                        group_id.0,
-                        group_count
-                    ));
-                }
-
-                let orientation = if settings.sample_orientations {
-                    let orientation = discrete_dimensions[1];
-                    let orientation_count =
-                        self.group_orientation_count(group_id).ok_or_else(|| {
-                            eyre!(
-                                "Could not determine orientation count for group {}.",
-                                group_id.0
-                            )
-                        })?;
-                    if orientation >= orientation_count {
-                        return Err(eyre!(
-                            "Orientation {} is out of range for graph group {}; the group has {} orientations.",
-                            orientation,
-                            group_id.0,
-                            orientation_count
-                        ));
-                    }
-                    Some(orientation)
-                } else {
-                    None
-                };
-
-                let channel = match &settings.sampling_type {
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
-                        let channel_index = *discrete_dimensions.last().expect("validated depth");
-                        let channel_count =
-                            self.group_channel_count(group_id).ok_or_else(|| {
-                                eyre!(
-                                    "Could not determine channel count for group {}.",
-                                    group_id.0
-                                )
-                            })?;
-                        if channel_index >= channel_count {
-                            return Err(eyre!(
-                                "Channel {} is out of range for graph group {}; the group has {} channels.",
-                                channel_index,
-                                group_id.0,
-                                channel_count
-                            ));
-                        }
-                        Some(ChannelIndex::from(channel_index))
-                    }
-                    _ => None,
-                };
-
-                Ok((Some(group_id), orientation, channel))
-            }
-        }
+        resolve_discrete_selection_for_sampling(
+            &self.get_settings().sampling,
+            discrete_dimensions,
+            group_count,
+            |group_id| self.group_orientation_count(group_id),
+            |group_id| self.group_channel_count(group_id),
+        )
     }
 
     pub fn expected_x_space_dimension(&self, discrete_dimensions: &[usize]) -> Result<usize> {
         let settings = self.get_settings();
+        let (group_id, _, _) = self.resolve_discrete_selection(discrete_dimensions)?;
         if matches!(
             &settings.sampling,
             SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
@@ -437,7 +492,6 @@ impl ProcessIntegrand {
                 ..
             })
         ) {
-            let (group_id, _, _) = self.resolve_discrete_selection(discrete_dimensions)?;
             let group_id = group_id.ok_or_else(|| {
                 eyre!("Tropical sampling requires a discrete graph-group selection.")
             })?;
@@ -485,11 +539,7 @@ impl ProcessIntegrand {
         match &self.get_settings().sampling {
             SamplingSettings::Default(_) | SamplingSettings::MultiChanneling(_) => 0,
             SamplingSettings::DiscreteGraphs(settings) => {
-                let orientation_depth = usize::from(settings.sample_orientations);
-                match &settings.sampling_type {
-                    DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => 2 + orientation_depth,
-                    _ => 1 + orientation_depth,
-                }
+                discrete_sampling_depth_for_settings(settings)
             }
         }
     }
@@ -1659,6 +1709,9 @@ pub trait ProcessIntegrandImpl {
     fn event_processing_runtime_mut(&mut self) -> Option<&mut EventProcessingRuntime> {
         None
     }
+    fn groups_default_sample_events_by_graph_group(&self) -> bool {
+        false
+    }
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
 }
@@ -1735,6 +1788,129 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
             event.cut_info.graph_id = graph_id;
         }
     }
+    Ok(result)
+}
+
+fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    group_id: GroupId,
+    sample: &DiscreteGraphSample<T>,
+    model: &Model,
+    settings: &RuntimeSettings,
+    rotation: &Rotation,
+    evaluation_metadata: &mut EvaluationMetaData,
+    record_primary_timing: bool,
+    zero: &F<T>,
+) -> Result<GraphEvaluationResult<T>> {
+    let group = integrand.get_group(group_id).into_iter().collect_vec();
+
+    let mut result = GraphEvaluationResult::zero(zero.clone());
+    let mut grouped_events = crate::observables::GenericEventGroup::default();
+
+    for graph_id in group {
+        let graph_term_result = match sample {
+            DiscreteGraphSample::Default(sample) => evaluate_graph_term(
+                integrand,
+                graph_id,
+                sample,
+                model,
+                settings,
+                rotation,
+                evaluation_metadata,
+                record_primary_timing,
+                None,
+            ),
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => evaluate_graph_term(
+                integrand,
+                graph_id,
+                sample,
+                model,
+                settings,
+                rotation,
+                evaluation_metadata,
+                record_primary_timing,
+                Some((*channel_id, alpha.clone())),
+            ),
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                let num_channels = integrand.get_master_graph(group_id).get_num_channels();
+                (0..num_channels)
+                    .map(ChannelIndex::from)
+                    .map(|channel_index| {
+                        evaluate_graph_term(
+                            integrand,
+                            graph_id,
+                            sample,
+                            model,
+                            settings,
+                            rotation,
+                            evaluation_metadata,
+                            record_primary_timing,
+                            Some((channel_index, alpha.clone())),
+                        )
+                    })
+                    .try_fold(
+                        GraphEvaluationResult::zero(zero.clone()),
+                        |mut sum, term| {
+                            sum.merge_in_place(term?);
+                            Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
+                        },
+                    )
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                let master_graph = integrand.get_master_graph(group_id).get_graph();
+
+                let energy_cache = master_graph.get_energy_cache(
+                    model,
+                    sample.loop_moms(),
+                    sample.external_moms(),
+                    &master_graph.loop_momentum_basis,
+                );
+
+                let prefactor = master_graph
+                    .iter_loop_edges()
+                    .map(|(_, edge_index, _)| edge_index)
+                    .zip(
+                        integrand
+                            .get_master_graph(group_id)
+                            .get_tropical_sampler()
+                            .iter_edge_weights(),
+                    )
+                    .fold(sample.one(), |product, (edge_id, weight)| {
+                        let energy = &energy_cache[edge_id];
+                        product * energy.powf(&F::from_f64(2. * weight))
+                    });
+
+                let mut graph_result = evaluate_graph_term(
+                    integrand,
+                    graph_id,
+                    sample,
+                    model,
+                    settings,
+                    rotation,
+                    evaluation_metadata,
+                    record_primary_timing,
+                    None,
+                )?;
+                graph_result.integrand_result *= Complex::new_re(prefactor);
+                Ok(graph_result)
+            }
+        }?;
+
+        let mut graph_term_result = graph_term_result;
+        for mut event_group in graph_term_result.event_groups.drain(..) {
+            grouped_events.append(&mut event_group);
+        }
+        result.merge_in_place(graph_term_result);
+    }
+
+    if !grouped_events.is_empty() {
+        result.event_groups.push(grouped_events);
+    }
+
     Ok(result)
 }
 
@@ -2076,24 +2252,53 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     };
     let result = (|| -> Result<GraphEvaluationResult<T>> {
         let result = match &gammaloop_sample {
-            GammaLoopSample::Default(sample) => (0..integrand.graph_count()).try_fold(
-                GraphEvaluationResult::zero(zero.clone()),
-                |mut sum, graph_id| {
-                    let graph_result = evaluate_graph_term(
-                        integrand,
-                        graph_id,
-                        sample,
-                        model,
-                        &settings,
-                        rotation,
-                        evaluation_metadata,
-                        record_primary_timing,
-                        None,
-                    )?;
-                    sum.merge_in_place(graph_result);
-                    Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
-                },
-            )?,
+            GammaLoopSample::Default(sample) => {
+                if integrand.groups_default_sample_events_by_graph_group() {
+                    integrand
+                        .get_group_structure()
+                        .iter_enumerated()
+                        .map(|(group_id, _)| group_id)
+                        .collect_vec()
+                        .into_iter()
+                        .try_fold(
+                            GraphEvaluationResult::zero(zero.clone()),
+                            |mut sum, group_id| {
+                                let group_result = evaluate_graph_group(
+                                    integrand,
+                                    group_id,
+                                    &DiscreteGraphSample::Default(sample.clone()),
+                                    model,
+                                    &settings,
+                                    rotation,
+                                    evaluation_metadata,
+                                    record_primary_timing,
+                                    &zero,
+                                )?;
+                                sum.merge_in_place(group_result);
+                                Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
+                            },
+                        )?
+                } else {
+                    (0..integrand.graph_count()).try_fold(
+                        GraphEvaluationResult::zero(zero.clone()),
+                        |mut sum, graph_id| {
+                            let graph_result = evaluate_graph_term(
+                                integrand,
+                                graph_id,
+                                sample,
+                                model,
+                                &settings,
+                                rotation,
+                                evaluation_metadata,
+                                record_primary_timing,
+                                None,
+                            )?;
+                            sum.merge_in_place(graph_result);
+                            Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
+                        },
+                    )?
+                }
+            }
             GammaLoopSample::Graph { graph_id, sample } => evaluate_graph_term(
                 integrand,
                 *graph_id,
@@ -2110,120 +2315,17 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                     "deprecated due to annyoing borrow issues, just set each graph to the same group"
                 );
             }
-            GammaLoopSample::DiscreteGraph { group_id, sample } => {
-                let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
-
-                let mut res = GraphEvaluationResult::zero(zero.clone());
-                let mut grouped_events = crate::observables::GenericEventGroup::default();
-
-                for graph_id in group.into_iter() {
-                    let graph_term_res = match sample {
-                        DiscreteGraphSample::Default(sample) => evaluate_graph_term(
-                            integrand,
-                            graph_id,
-                            sample,
-                            model,
-                            &settings,
-                            rotation,
-                            evaluation_metadata,
-                            record_primary_timing,
-                            None,
-                        ),
-                        DiscreteGraphSample::DiscreteMultiChanneling {
-                            alpha,
-                            channel_id,
-                            sample,
-                        } => evaluate_graph_term(
-                            integrand,
-                            graph_id,
-                            sample,
-                            model,
-                            &settings,
-                            rotation,
-                            evaluation_metadata,
-                            record_primary_timing,
-                            Some((*channel_id, alpha.clone())),
-                        ),
-                        DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                            let num_channels =
-                                integrand.get_master_graph(*group_id).get_num_channels();
-                            (0..num_channels)
-                                .map(ChannelIndex::from)
-                                .map(|channel_index| {
-                                    evaluate_graph_term(
-                                        integrand,
-                                        graph_id,
-                                        sample,
-                                        model,
-                                        &settings,
-                                        rotation,
-                                        evaluation_metadata,
-                                        record_primary_timing,
-                                        Some((channel_index, alpha.clone())),
-                                    )
-                                })
-                                .try_fold(
-                                    GraphEvaluationResult::zero(zero.clone()),
-                                    |mut sum, term| {
-                                        sum.merge_in_place(term?);
-                                        Ok::<GraphEvaluationResult<T>, eyre::Report>(sum)
-                                    },
-                                )
-                        }
-                        DiscreteGraphSample::Tropical(sample) => {
-                            let master_graph = integrand.get_master_graph(*group_id).get_graph();
-
-                            let energy_cache = master_graph.get_energy_cache(
-                                model,
-                                sample.loop_moms(),
-                                sample.external_moms(),
-                                &master_graph.loop_momentum_basis,
-                            );
-
-                            let prefactor = master_graph
-                                .iter_loop_edges()
-                                .map(|(_, edge_index, _)| edge_index)
-                                .zip(
-                                    integrand
-                                        .get_master_graph(*group_id)
-                                        .get_tropical_sampler()
-                                        .iter_edge_weights(),
-                                )
-                                .fold(sample.one(), |product, (edge_id, weight)| {
-                                    let energy = &energy_cache[edge_id];
-                                    let edge_weight = weight;
-                                    product * energy.powf(&F::from_f64(2. * edge_weight))
-                                });
-
-                            let mut graph_result = evaluate_graph_term(
-                                integrand,
-                                graph_id,
-                                sample,
-                                model,
-                                &settings,
-                                rotation,
-                                evaluation_metadata,
-                                record_primary_timing,
-                                None,
-                            )?;
-                            graph_result.integrand_result *= Complex::new_re(prefactor);
-                            Ok(graph_result)
-                        }
-                    };
-
-                    let mut graph_term_res = graph_term_res?;
-                    for mut event_group in graph_term_res.event_groups.drain(..) {
-                        grouped_events.append(&mut event_group);
-                    }
-                    res.merge_in_place(graph_term_res);
-                }
-
-                if !grouped_events.is_empty() {
-                    res.event_groups.push(grouped_events);
-                }
-
-                res
-            }
+            GammaLoopSample::DiscreteGraph { group_id, sample } => evaluate_graph_group(
+                integrand,
+                *group_id,
+                sample,
+                model,
+                &settings,
+                rotation,
+                evaluation_metadata,
+                record_primary_timing,
+                &zero,
+            )?,
         };
 
         if cache {

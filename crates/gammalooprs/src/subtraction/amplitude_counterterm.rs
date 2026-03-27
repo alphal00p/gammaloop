@@ -104,6 +104,12 @@ pub struct AmplitudeCountertermEvaluator {
     pub evaluator_stack: RefCell<EvaluatorStack>,
 }
 
+#[derive(Debug, Clone)]
+pub struct AmplitudeCountertermEvaluation<T: FloatLike> {
+    pub total: Complex<F<T>>,
+    pub local_counterterms: Vec<Complex<F<T>>>,
+}
+
 impl AmplitudeCountertermData {
     pub fn new_empty(own_group_position: GraphGroupPosition) -> Self {
         Self {
@@ -141,7 +147,7 @@ impl AmplitudeCountertermData {
         orientation: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Complex<F<T>> {
+    ) -> AmplitudeCountertermEvaluation<T> {
         debug!("start evaluate threshold counterterm");
         let existing_esurfaces = self
             .overlap
@@ -166,6 +172,7 @@ impl AmplitudeCountertermData {
         );
 
         let mut result = Complex::new_re(momentum_sample.zero());
+        let mut local_counterterms = Vec::new();
 
         for group in self.overlap.overlap_groups.iter() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
@@ -194,10 +201,14 @@ impl AmplitudeCountertermData {
                     );
                 }
 
+                local_counterterms.push(single_result.clone());
                 result += single_result;
             }
         }
-        result
+        AmplitudeCountertermEvaluation {
+            total: result,
+            local_counterterms,
+        }
     }
 }
 
