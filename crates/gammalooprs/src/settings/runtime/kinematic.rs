@@ -3,8 +3,8 @@ pub mod improvement;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::eyre;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
-use spenso::algebra::complex::Complex;
+use serde::{Deserialize, Deserializer, Serialize};
+use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use tabled::{builder::Builder, settings::Style};
 use tracing::debug;
 use typed_index_collections::TiVec;
@@ -26,7 +26,7 @@ use crate::{
 use color_eyre::{Result, Section};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct KinematicsSettings {
@@ -34,6 +34,36 @@ pub struct KinematicsSettings {
     pub e_cm: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub externals: Externals,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct KinematicsSettingsParser {
+    pub e_cm: Option<f64>,
+    pub externals: Externals,
+}
+
+impl Default for KinematicsSettingsParser {
+    fn default() -> Self {
+        Self {
+            e_cm: None,
+            externals: Externals::default(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for KinematicsSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let KinematicsSettingsParser { e_cm, externals } =
+            KinematicsSettingsParser::deserialize(deserializer)?;
+
+        let e_cm = e_cm.unwrap_or_else(|| externals.sane_e_cm_value().0);
+
+        Ok(Self { e_cm, externals })
+    }
 }
 
 impl KinematicsSettings {
@@ -72,6 +102,34 @@ pub enum Externals {
         f_128_cache: Option<TiVec<ExternalIndex, FourMomentum<F<f128>>>>,
     },
     // add different type of pdfs here when needed
+}
+
+impl Externals {
+    pub fn sane_e_cm_value(&self) -> F<f64> {
+        match self {
+            Externals::Constant { momenta, .. } => {
+                let mut sum = F(0.0);
+                let mut num_non_zero = 0;
+
+                for m in momenta {
+                    if let ExternalMomenta::Independent(components) = m {
+                        for c in components {
+                            if !c.is_zero() {
+                                sum += c.abs();
+                                num_non_zero += 1;
+                            }
+                        }
+                    }
+                }
+
+                if num_non_zero > 0 {
+                    sum / F(num_non_zero as f64)
+                } else {
+                    F(64.0) // default value for vacuum amplitudes
+                }
+            }
+        }
+    }
 }
 
 impl Rotatable for Externals {

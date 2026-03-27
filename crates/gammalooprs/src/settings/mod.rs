@@ -429,6 +429,18 @@ mod tests {
         let toml = toml::to_string_pretty(&kinematics_settings).unwrap();
         let deserialized: KinematicsSettings = toml::from_str(&toml).unwrap();
         assert_eq!(kinematics_settings, deserialized);
+
+        let toml_without_ecm = format!(
+            "{}\n",
+            toml.lines()
+                .filter(|line| !line.trim_start().starts_with("e_cm = "))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let deserialized_without_ecm: KinematicsSettings =
+            toml::from_str(&toml_without_ecm).unwrap();
+        assert_eq!(deserialized_without_ecm.externals, kinematics_settings.externals);
+        assert_eq!(deserialized_without_ecm.e_cm, 2.5);
     }
 
     #[test]
