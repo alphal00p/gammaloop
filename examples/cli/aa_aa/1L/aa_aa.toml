@@ -95,12 +95,12 @@ commands = [
     "run set_model_parameters",
 
     # --target -1.0214510394091818e-6 0.0
-    # "run set_kinematics_a",
-    # "set process kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+    "run set_kinematics_a",
+    "set process kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
 
     # --target -5.9925800791548554e-9 0.0
-    "run set_kinematics_a",
-    "set process kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    # "run set_kinematics_a",
+    # "set process kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
     # "set process kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
     # "set process kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
     # "set process kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
@@ -127,7 +127,7 @@ commands = [
 	#			 --renderer tabled
 	"""integrate -p aa_aa -i 1L -p aa_aa -i 1L_m_uv_UP -p aa_aa -i 1L_m_uv_DOWN -p aa_aa -i 1L_mu_r_UP -p aa_aa -i 1L_mu_r_DOWN
 	             --n-cores 5
-                 --target -5.9925800791548554e-9 0.0
+				 --target -1.0214510394091818e-6 0.0
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
