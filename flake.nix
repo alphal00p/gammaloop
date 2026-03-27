@@ -120,6 +120,81 @@
 
       ciPartitionCount = 6;
 
+      workspaceCrates = [
+        {
+          attr = "clinnet";
+          package = "clinnet";
+          path = ./crates/clinnet;
+          usesSymbolica = false;
+        }
+        {
+          attr = "gammaloop-api";
+          package = "gammaloop-api";
+          path = ./crates/gammaloop-api;
+          usesSymbolica = true;
+        }
+        {
+          attr = "gammalooprs";
+          package = "gammalooprs";
+          path = ./crates/gammalooprs;
+          usesSymbolica = true;
+        }
+        {
+          attr = "idenso";
+          package = "idenso";
+          path = ./crates/idenso;
+          usesSymbolica = true;
+        }
+        {
+          attr = "linnest";
+          package = "linnest";
+          path = ./crates/linnest;
+          usesSymbolica = false;
+        }
+        {
+          attr = "linnet";
+          package = "linnet";
+          path = ./crates/linnet;
+          usesSymbolica = false;
+        }
+        {
+          attr = "linnet-py";
+          package = "linnet-py";
+          path = ./crates/linnet-py;
+          usesSymbolica = false;
+        }
+        {
+          attr = "spenso";
+          package = "spenso";
+          path = ./crates/spenso;
+          usesSymbolica = true;
+        }
+        {
+          attr = "spenso-hep-lib";
+          package = "spenso-hep-lib";
+          path = ./crates/spenso-hep-lib;
+          usesSymbolica = true;
+        }
+        {
+          attr = "spenso-macros";
+          package = "spenso-macros";
+          path = ./crates/spenso-macros;
+          usesSymbolica = true;
+        }
+        {
+          attr = "spynso3";
+          package = "spynso3";
+          path = ./crates/spynso3;
+          usesSymbolica = true;
+        }
+        {
+          attr = "vakint";
+          package = "vakint";
+          path = ./crates/vakint;
+          usesSymbolica = true;
+        }
+      ];
+
       licensePreCheck = ''
         if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
           echo "Missing SYMBOLICA_LICENSE environment variable" >&2
@@ -127,18 +202,17 @@
         fi
       '';
 
-      # Source trimming for per-crate derivations, following crane workspace pattern.
-      # Keep both workspace crates + shared assets because build scripts and embedded data
-      # need access at build time.
-      fileSetForCrate = crate:
+      # Per-crate derivations still need the full workspace crate tree because several
+      # crates embed non-Rust assets (templates, FORM sources, wasm payloads) at compile time.
+      fileSetForCrate = _:
         lib.fileset.toSource {
           root = ./.;
           fileset = lib.fileset.unions [
             ./Cargo.toml
             ./Cargo.lock
             ./assets
+            ./crates
             (craneLib.fileset.commonCargoSources ./tests)
-            (craneLib.fileset.commonCargoSources ./crates)
           ];
         };
 
@@ -159,6 +233,46 @@
           buildType = "release";
           doCheck = false;
         };
+
+      symbolicaCrateArgs = usesSymbolica:
+        lib.optionalAttrs usesSymbolica {
+          preBuild = licensePreCheck;
+          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+        };
+
+      crateChecks = lib.listToAttrs (map (crate: {
+          name = "crate-${crate.attr}";
+          value = craneLib.buildPackage (individualCrateArgs
+            // {
+              pname = crate.package;
+              inherit (apiMeta) version;
+              src = fileSetForCrate crate.path;
+              cargoExtraArgs = "--locked -p ${crate.package}";
+            }
+            // symbolicaCrateArgs crate.usesSymbolica);
+        })
+        workspaceCrates);
+
+      crateCheckRunnerPackages = lib.listToAttrs (map (crate: {
+          name = "nix-ci-check-${crate.attr}";
+          value = pkgs.writeShellApplication {
+            name = "nix-ci-check-${crate.attr}";
+            runtimeInputs = [pkgs.nix];
+            text = ''
+              set -euo pipefail
+              cd ${src}
+              exec nix \
+                --extra-experimental-features nix-command \
+                --extra-experimental-features flakes \
+                build \
+                --no-link \
+                --print-build-logs \
+                --impure \
+                .#checks.${system}.crate-${crate.attr}
+            '';
+          };
+        })
+        workspaceCrates);
 
       gammaloop-cli = craneLib.buildPackage (individualCrateArgs
         // {
@@ -214,6 +328,7 @@
               cargoNextestPartitionsExtraArgs = "--profile ci --no-fail-fast --final-status-level fail --no-tests=pass";
             });
         }
+        // crateChecks
         // partitionedNextestChecks;
 
       packages =
@@ -222,6 +337,7 @@
           gammaloop = gammaloop-cli;
           inherit cargoArtifacts;
         }
+        // crateCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
             // {
