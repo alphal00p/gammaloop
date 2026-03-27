@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Display};
 
 use bincode_trait_derive::{Decode, Encode};
+use clarabel::solver::default;
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
 use schemars::JsonSchema;
@@ -944,12 +945,19 @@ pub enum SamplingSettings {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingSettingsParser {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graphs: SumMode,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientations: SumMode,
+    #[serde(skip_serializing_if = "is_false")]
     pub lmb_multichanneling: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub lmb_channels: SumMode,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub coordinate_system: CoordinateSystem,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
+    #[serde(skip_serializing_if = "is_float::<1>")]
     pub b: f64,
 }
 
@@ -967,19 +975,21 @@ impl Default for SamplingSettingsParser {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 pub enum SumMode {
     #[serde(rename = "summed")]
+    #[default]
     Summed,
     #[serde(rename = "monte_carlo")]
     MonteCarlo,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
 pub enum CoordinateSystem {
     #[serde(rename = "cartesian")]
     Cartesian,
     #[serde(rename = "spherical")]
+    #[default]
     Spherical,
     #[serde(rename = "hyperspherical")]
     HyperSpherical,
