@@ -1129,13 +1129,6 @@ impl SamplingSettings {
                 );
             }
 
-            if !matches!(lmb_channels, SumMode::Summed) {
-                return Err(
-                    "Invalid sampling settings: coordinate_system = 'tropical' requires lmb_channels = 'summed'."
-                        .to_string(),
-                );
-            }
-
             return Ok(SamplingSettings::DiscreteGraphs(
                 DiscreteGraphSamplingSettings {
                     sample_orientations,
@@ -1188,13 +1181,6 @@ impl SamplingSettings {
                         }
                     }
                 } else {
-                    if !matches!(lmb_channels, SumMode::Summed) {
-                        return Err(
-                            "Invalid sampling settings: lmb_channels = 'monte_carlo' requires lmb_multichanneling = true."
-                                .to_string(),
-                        );
-                    }
-
                     DiscreteGraphSamplingType::Default(parameterization_settings)
                 };
 
