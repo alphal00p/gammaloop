@@ -50,13 +50,6 @@ let
     }
   ];
 
-  buildChecks =
-    [
-      "checks.x86_64-linux.gammaloop-fmt"
-    ]
-    ++ map
-    (crate: "checks.x86_64-linux.crate-${crate.attr}")
-    (builtins.filter (crate: !crate.usesSymbolica) crates);
 
   symbolicaTests = builtins.listToAttrs (map
     (crate: {
@@ -70,7 +63,7 @@ let
     (builtins.filter (crate: crate.usesSymbolica) crates));
 in {
   systems = ["x86_64-linux"];
-  onlyBuild = buildChecks;
+  doNotBuild = [];
   fail-fast = false;
   test = symbolicaTests;
 }
