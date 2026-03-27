@@ -15,6 +15,11 @@ use crate::half_edge::nodestore::{NodeStorageOps, NodeStorageVec};
 use crate::half_edge::subgraph::SubSetLike;
 use crate::half_edge::{HedgeGraph, NoData, NodeIndex, NodeVec};
 
+/// An owned trace-unfolded DAG together with the source-graph node each unfolded node came from.
+///
+/// The wrapper keeps the structural graph and the `source_nodes` mapping together across
+/// structure-preserving transformations such as [`UnfoldedTraceGraph::map`]. It also provides
+/// traversal helpers that are meaningful only for trace-unfolded graphs.
 pub struct UnfoldedTraceGraph<G, V, N: NodeStorageOps<NodeData = V> = NodeStorageVec<V>> {
     graph: HedgeGraph<EdgeIndex, V, NoData, N>,
     source_nodes: NodeVec<NodeIndex>,
@@ -22,6 +27,7 @@ pub struct UnfoldedTraceGraph<G, V, N: NodeStorageOps<NodeData = V> = NodeStorag
 }
 
 impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+    /// Creates a wrapper from an already-built unfolded graph and its source-node mapping.
     pub fn new(
         graph: HedgeGraph<EdgeIndex, V, NoData, N>,
         source_nodes: NodeVec<NodeIndex>,
@@ -33,6 +39,7 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         }
     }
 
+    /// Maps node data while preserving the unfolded graph structure and source-node mapping.
     pub fn map<V2>(
         self,
         f: impl FnMut(&crate::half_edge::involution::Involution, NodeIndex, V) -> V2,
@@ -44,6 +51,7 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         }
     }
 
+    /// Returns the source-graph node from which an unfolded node originated.
     pub fn source_node(&self, node: NodeIndex) -> NodeIndex {
         self.source_nodes[node]
     }
@@ -269,6 +277,9 @@ where
         start: NodeIndex,
     ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
     {
+        // `traces` is the canonical dedup table. Each unfolded node is identified by the pair
+        // `(source_graph_node, canonical_trace_key)`, so paths that differ only by commuting
+        // independent operations collapse to the same unfolded node.
         let root = (start, TraceKey::empty());
         let mut q = VecDeque::new();
         let mut traces: IndexSet<(NodeIndex, TraceKey<Key, EdgeIndex>)> = IndexSet::new();
@@ -335,6 +346,8 @@ where
 }
 
 impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+    /// Returns all unfolded parents of `node` together with the source-graph edge realized by
+    /// that branch.
     fn incoming_parents(&self, node: NodeIndex) -> Vec<(NodeIndex, EdgeIndex)> {
         self.graph
             .iter_crown(node)
@@ -381,6 +394,9 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         let mut parent_ops: Vec<_> = self.all_ops(parent).cloned().collect();
         let mut introduced = Vec::new();
         for op in self.all_ops(child) {
+            // `child` is the canonicalized extension of `parent`, so the multiset difference
+            // between their operations is exactly the set of newly introduced operations on that
+            // step.
             if let Some(index) = parent_ops.iter().position(|parent_op| parent_op == op) {
                 parent_ops.swap_remove(index);
             } else {
@@ -390,12 +406,14 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         introduced
     }
 
-    fn deepest_common_ancestor(&self, nodes: &[NodeIndex]) -> Option<NodeIndex> {
+    fn closest_common_ancestor(&self, nodes: &[NodeIndex]) -> Option<NodeIndex> {
         let first = *nodes.first()?;
         let first_chain: Vec<_> = std::iter::once(first)
             .chain(self.path_to_root(first).map(|(parent, _)| parent))
             .collect();
 
+        // `path_to_root` follows the unique-parent spine to the empty trace, so intersecting
+        // those spines is enough to recover the closest shared prefix of the given nodes.
         first_chain.into_iter().find(|candidate| {
             nodes.iter().skip(1).all(|node| {
                 std::iter::once(*node)
@@ -420,13 +438,16 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         loop {
             if self.is_disjoint_union(current) {
                 let leaf_ops: Vec<_> = self.leaf_ops(current).cloned().collect();
+                // If every operation introduced by this union is independent of `target`, the
+                // relevant reusable prefix is shared by all incoming branches, so we can replace
+                // the union by their closest common ancestor.
                 if leaf_ops.iter().all(|op| indep.independent(op, target)) {
                     let parents: Vec<_> = self
                         .incoming_parents(current)
                         .into_iter()
                         .map(|(parent, _)| parent)
                         .collect();
-                    if let Some(prefix) = self.deepest_common_ancestor(&parents) {
+                    if let Some(prefix) = self.closest_common_ancestor(&parents) {
                         current = prefix;
                         continue;
                     }
@@ -438,6 +459,8 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
                 return current;
             };
             let introduced = self.introduced_ops(parent, current);
+            // As long as the whole step from `parent -> current` is independent of `target`, that
+            // step can be factored out of the reusable prefix and we continue with `parent`.
             if introduced.iter().all(|op| indep.independent(op, target)) {
                 current = parent;
             } else {
@@ -457,10 +480,14 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         self.graph[node].as_ref().iter_leaf_ops()
     }
 
+    /// Returns whether `node` represents a disjoint-union step in the unfolded graph.
     pub fn is_disjoint_union(&self, node: NodeIndex) -> bool {
         self.incoming_parents(node).len() > 1
     }
 
+    /// Returns the unique parent of `node` when the node is not a disjoint union.
+    ///
+    /// The accompanying [`EdgeIndex`] is the original source-graph edge carried by that branch.
     pub fn unique_parent(&self, node: NodeIndex) -> Option<(NodeIndex, EdgeIndex)> {
         let mut incoming = self.incoming_parents(node).into_iter();
         let parent = incoming.next()?;
@@ -470,6 +497,10 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         Some(parent)
     }
 
+    /// Walks the unique-parent chain from `node` to the root.
+    ///
+    /// The iterator stops before a disjoint union, because such a node no longer has a single
+    /// canonical parent chain.
     pub fn path_to_root(
         &self,
         node: NodeIndex,
@@ -483,6 +514,17 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         })
     }
 
+    /// Returns the closest reusable prefix node for the contribution of `target` at `node`.
+    ///
+    /// The traversal is specific to trace-unfolded graphs:
+    ///
+    /// - it follows the unique branch that still contains `target`
+    /// - across a disjoint union, it continues with the branch containing `target`
+    /// - once `target` disappears, it strips off any prefix whose newly introduced operations are
+    ///   all independent of `target`
+    ///
+    /// This is the graph-level query used by clients that cache prefix computations per unfolded
+    /// node and need the closest reusable prefix for one leaf operation.
     pub fn op_dependency_frontier<K>(
         &self,
         node: NodeIndex,
@@ -501,10 +543,15 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
                     .into_iter()
                     .find(|(parent, _)| self.node_contains_op(*parent, target))
                 {
+                    // The target operation is still present on exactly one incoming branch, so
+                    // that branch remains the relevant prefix chain.
                     current = parent;
                     continue;
                 }
-                return self.deepest_common_ancestor(
+                // The target no longer appears on any incoming branch, so the reusable prefix is
+                // the closest common ancestor of all incoming branches rather than any particular
+                // parent.
+                return self.closest_common_ancestor(
                     &self
                         .incoming_parents(current)
                         .into_iter()
@@ -517,6 +564,7 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
                 return Some(current);
             };
             if self.node_contains_op(parent, target) {
+                // We have not yet reached the step at which `target` was introduced.
                 current = parent;
                 continue;
             }
@@ -525,6 +573,11 @@ impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
         }
     }
 
+    /// Checks the structural invariant used by the traversal helpers above.
+    ///
+    /// Distinct incoming branches of the same disjoint union must carry distinct source-graph
+    /// edges; otherwise helpers such as [`unique_parent`](Self::unique_parent) and
+    /// [`op_dependency_frontier`](Self::op_dependency_frontier) become ambiguous.
     pub fn validate_invariant<K>(&self) -> Result<(), String>
     where
         K: Eq + Hash + Clone + Ord,
@@ -1112,7 +1165,9 @@ mod tests {
 
     use crate::{
         dot,
-        half_edge::{involution::HedgePair, nodestore::DefaultNodeStore},
+        half_edge::{
+            builder::HedgeGraphBuilder, involution::HedgePair, nodestore::DefaultNodeStore, NoData,
+        },
         parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
     };
 
@@ -1128,6 +1183,45 @@ mod tests {
     fn remove_chars(source: &str, remove: &str) -> String {
         let to_remove: HashSet<char> = remove.chars().collect();
         source.chars().filter(|c| !to_remove.contains(c)).collect()
+    }
+
+    struct FrontierGraph {
+        graph: HedgeGraph<&'static str, &'static str, NoData, DefaultNodeStore<&'static str>>,
+        extra_independent_pairs: &'static [(&'static str, &'static str)],
+    }
+
+    impl Key<&'static str> for FrontierGraph {
+        fn key(&self, e: EdgeIndex) -> &'static str {
+            self.graph[e]
+        }
+    }
+
+    impl Independence<HiddenData<&'static str, EdgeIndex>> for FrontierGraph {
+        fn independent(
+            &self,
+            a: &HiddenData<&'static str, EdgeIndex>,
+            b: &HiddenData<&'static str, EdgeIndex>,
+        ) -> bool {
+            self.extra_independent_pairs.contains(&(a.order, b.order))
+        }
+    }
+
+    impl TraceUnfold<&'static str> for FrontierGraph {
+        type EdgeData = &'static str;
+        type NodeData = &'static str;
+        type NodeStorage = DefaultNodeStore<&'static str>;
+        type HedgeData = NoData;
+
+        fn graph(
+            &self,
+        ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage>
+        {
+            &self.graph
+        }
+
+        fn key(&self, e: EdgeIndex) -> &'static str {
+            self.graph[e]
+        }
     }
 
     impl Key<String> for HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> {
@@ -1303,6 +1397,129 @@ mod tests {
           10:34:s	-> 17:35:s	 [id=17  color="red:blue;0.5" label="e7"];
         }
         "#);
+    }
+
+    #[test]
+    fn dependency_frontier_walkthrough() {
+        let mut builder = HedgeGraphBuilder::<&'static str, &'static str>::new();
+        let empty = builder.add_node("empty");
+        let a = builder.add_node("A");
+        let b = builder.add_node("B");
+        let ab = builder.add_node("AB");
+        let bd = builder.add_node("BD");
+        let abd = builder.add_node("ABD");
+
+        builder.add_edge(empty, a, "A", true);
+        builder.add_edge(empty, b, "B", true);
+        builder.add_edge(a, ab, "B", true);
+        builder.add_edge(b, ab, "A", true);
+        builder.add_edge(b, bd, "D", true);
+        builder.add_edge(ab, abd, "D", true);
+        builder.add_edge(bd, abd, "A", true);
+
+        let graph = FrontierGraph {
+            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            extra_independent_pairs: &[("A", "B"), ("B", "A"), ("A", "D"), ("D", "A")],
+        };
+        println!("{}", graph.graph.dot_display(&graph.graph.full_filter()));
+        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        println!(
+            "{}",
+            unfolded.graph.dot_label(&unfolded.graph.full_filter())
+        );
+
+        let mut lines = unfolded
+            .iter_nodes()
+            .map(|(node, _, key)| {
+                let mut entry = key.to_string();
+                let frontiers = key
+                    .view()
+                    .iter_leaf_ops()
+                    .map(|op| {
+                        let frontier = unfolded
+                            .op_dependency_frontier(node, op, &graph)
+                            .expect("frontier must exist");
+                        format!("{} -> {}", op.order, unfolded[frontier])
+                    })
+                    .collect::<Vec<_>>();
+                // frontiers.sort();
+                if !frontiers.is_empty() {
+                    entry.push_str(" | ");
+                    entry.push_str(&frontiers.join(", "));
+                }
+                entry
+            })
+            .collect::<Vec<_>>();
+        lines.sort();
+
+        insta::assert_snapshot!(lines.join("\n"), @r#"
+        {A,B} | A -> ∅, B -> ∅
+        {A,B} · {D} | D -> {A,B}
+        {A} | A -> ∅
+        {B} | B -> ∅
+        {B} · {A,D} | A -> ∅, D -> {B}
+        {B} · {D} | D -> {B}
+        ∅
+        "#);
+    }
+
+    #[test]
+    fn multi_parent_node_need_not_have_matching_leaf_count() {
+        let mut builder = HedgeGraphBuilder::<&'static str, &'static str>::new();
+        let empty = builder.add_node("empty");
+        let a = builder.add_node("A");
+        let b = builder.add_node("B");
+        let ab = builder.add_node("AB");
+        let bd = builder.add_node("BD");
+        let abd = builder.add_node("ABD");
+
+        builder.add_edge(empty, a, "A", true);
+        builder.add_edge(empty, b, "B", true);
+        builder.add_edge(a, ab, "B", true);
+        builder.add_edge(b, ab, "A", true);
+        builder.add_edge(b, bd, "D", true);
+        builder.add_edge(ab, abd, "D", true);
+        builder.add_edge(bd, abd, "A", true);
+
+        let graph = FrontierGraph {
+            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            extra_independent_pairs: &[("A", "B"), ("B", "A")],
+        };
+        println!("{}", graph.graph.dot_label(&graph.graph.full_filter()));
+        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        println!(
+            "{}",
+            unfolded.graph.dot_label(&unfolded.graph.full_filter())
+        );
+        let node = unfolded
+            .iter_nodes()
+            .find_map(|(node, _, key)| (key.to_string() == "{A,B} · {D}").then_some(node))
+            .expect("expected canonical node {A,B} · {D}");
+
+        let parent_labels = unfolded
+            .incoming_parents(node)
+            .into_iter()
+            .map(|(parent, _)| unfolded[parent].to_string())
+            .collect::<BTreeSet<_>>();
+        let leaf_labels = unfolded
+            .leaf_ops(node)
+            .map(|op| op.order)
+            .collect::<Vec<_>>();
+
+        insta::assert_snapshot!(
+            format!(
+                "node={}\nparents={:?}\nleaf_ops={:?}",
+                unfolded[node], parent_labels, leaf_labels
+            ),
+            @r#"
+        node={A,B} · {D}
+        parents={"{A,B}", "{B} · {D}"}
+        leaf_ops=["D"]
+        "#
+        );
+
+        assert_eq!(unfolded.incoming_parents(node).len(), 2);
+        assert_eq!(unfolded.leaf_ops(node).count(), 1);
     }
 
     // #[test]

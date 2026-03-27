@@ -35,7 +35,7 @@ check_esurface_at_generation = true
 generate_integrated = true
 softct = false
 add_sigma = false
-inner_products = false
+inner_products = true
 
 [default_runtime_settings.general]
 evaluator_method = "SummedFunctionMap"
