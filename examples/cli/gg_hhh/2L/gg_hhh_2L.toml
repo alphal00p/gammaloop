@@ -56,10 +56,13 @@ commands = [
     "set process -p gg_hhh -i 2L defaults",
     """set process -p gg_hhh -i 2L string '
     [sampling]
-    type = "discrete_graph_sampling"
-    sample_orientations = true
-    [sampling.sampling_type]
-    subtype = "discrete_multi_channeling"
+    graphs = "monte_carlo"
+    orientations = "monte_carlo"
+    lmb_multichanneling = true
+    lmb_channels = "monte_carlo"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
     '""",
     "display settings process -p gg_hhh -i 2L",
 
@@ -119,9 +122,13 @@ helicities = [
 
 ##c) MC over LMB with importance sampling of channels
 [default_runtime_settings.sampling]
-type = "discrete_graph_sampling"
-[default_runtime_settings.sampling.sampling_type]
-subtype = "discrete_multi_channeling"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
 
 ##d) MC over LMB and single orientation per, both importance-sampled
 #[default_runtime_settings.sampling]

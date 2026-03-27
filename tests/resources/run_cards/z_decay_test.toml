@@ -25,10 +25,13 @@ enable_thresholds = false
 disable_threshold_subtraction = true
 
 [default_runtime_settings.sampling]
-type = "discrete_graph_sampling"
-
-[default_runtime_settings.sampling.sampling_type]
-subtype = "discrete_multi_channeling"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
 
 [default_runtime_settings.integrator]
 n_max = 1000000

@@ -82,12 +82,13 @@ panic_on_fail = true
 disable_tropical_generation = false
 
 [default_runtime_settings.sampling]
-type = "discrete_graph_sampling"
-sample_orientations = false
-[default_runtime_settings.sampling.sampling_type]
-# For importance-sampling over channels, use the quantity below
-# subtype = "discrete_multi_channeling"
-subtype = "multi_channeling"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
 
 [[command_blocks]]
 name = "integrate"

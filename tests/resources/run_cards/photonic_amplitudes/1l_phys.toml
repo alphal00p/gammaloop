@@ -89,8 +89,11 @@ escalate_for_large_weight_threshold = -1.0
 disable_threshold_subtraction = false
 
 [default_runtime_settings.sampling]
-type = "default"
-mode = "spherical"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
 mapping = "linear"
 b = 10.0
 

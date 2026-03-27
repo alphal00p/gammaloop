@@ -51,10 +51,11 @@ gamma = 0.2
 disable_threshold_subtraction = true
 
 [default_runtime_settings.sampling]
-type = "discrete_graph_sampling"
-
-[default_runtime_settings.sampling.sampling_type]
-subtype = "tropical"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "tropical"
 
 [default_runtime_settings.integrator]
 seed = 42

@@ -227,18 +227,24 @@ commands = [
 
 	"""set process -p box -i scalar_box_above_thres string '
     [sampling]
-    type = "discrete_graph_sampling"
-	sample_orientations = true
-    [sampling.sampling_type]
-    subtype = "multi_channeling"
+    graphs = "monte_carlo"
+    orientations = "monte_carlo"
+    lmb_multichanneling = true
+    lmb_channels = "summed"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
     '""",
 
 	"""set process -p box -i scalar_box_below_thres string '
     [sampling]
-    type = "discrete_graph_sampling"
-	sample_orientations = true
-    [sampling.sampling_type]
-    subtype = "multi_channeling"
+    graphs = "monte_carlo"
+    orientations = "monte_carlo"
+    lmb_multichanneling = true
+    lmb_channels = "summed"
+    coordinate_system = "spherical"
+    mapping = "linear"
+    b = 1.0
     '""",
 
     "set process -p box -i scalar_box_above_thres kv integrator.target_relative_accuracy=0.001 integrator.target_absolute_accuracy=1.0e-9",
@@ -267,8 +273,11 @@ commands = [
 ]
 
 [default_runtime_settings.sampling]
-type = "default"
-mode = "spherical"
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
 mapping = "linear"
 b = 1.0
 
