@@ -681,10 +681,6 @@ impl Forests {
         }
     }
 
-    fn forest_edge_op(&self, hedge: linnet::half_edge::involution::Hedge) -> EdgeIndex {
-        self.graph[self.graph[&hedge]]
-    }
-
     fn node_label(&self, node: NodeIndex) -> String {
         let key = &self.graph[node];
         if key.key.is_empty() {
@@ -701,64 +697,6 @@ impl Forests {
             .and_then(|computed| computed.node_label_atom.as_ref())
             .expect("node label atoms must be cached during forest construction");
         format!("{foata}: {}", atom.to_ordered_simple())
-    }
-
-    pub fn iter_parents<'a>(
-        &'a self,
-        node: NodeIndex,
-        order: usize,
-    ) -> impl Iterator<
-        Item = Result<(
-            &'a ComputeNode,
-            ForestNode<'a>,
-            ForestNode<'a>,
-            &'a OperationNode,
-            bool,
-        )>,
-    > + 'a {
-        let mut current = None;
-        let mut is_union = false;
-        self.graph
-            .iter_crown(node)
-            .filter(|h| self.graph.flow(*h).is_sink())
-            .map(move |h| {
-                // iterate over the sink-half-edges of the forest, i.e. the incoming half-edges to the current node
-                // most of the time this will be a single half-edge, but in the case of a union, there may be multiple
-
-                let wood_eid = self.forest_edge_op(h);
-
-                let HedgePair::Paired { source, sink } = self.wood.graph[&wood_eid].1 else {
-                    panic!("edge in wood is not paired");
-                };
-
-                // get this hedge's forest node from the wood. This is the node that has already been computed (as it is a parent to this edge)
-                let given = self.wood.graph[self.wood.graph.node_id(source)].forest_node(order);
-
-                // this is the current node, which should be the same for all union edges (since they all have the same sink)
-                let current_for_h = self.wood.graph.node_id(sink);
-                if let Some(current) = &current {
-                    if current != &current_for_h {
-                        return Err(eyre!("Mismatched current nodes"));
-                    } else {
-                        is_union = true;
-                    }
-                } else {
-                    current = Some(current_for_h);
-                }
-
-                // this is the current node, which we want to compute with
-                let current = self.wood.graph[current_for_h].forest_node(order);
-
-                // this is the parent node, in the forest, which has already been computed and we want to get the computed value
-                let parent_node = self.graph.involved_node_id(h).unwrap();
-                let parent_key = &self.graph[parent_node];
-                let computed = self
-                    .compute_store
-                    .get(parent_key)
-                    .ok_or(eyre!("{} not yet added to store", parent_key))?;
-
-                Ok((computed, current, given, parent_key, is_union))
-            })
     }
 
     pub fn integrate(
