@@ -942,6 +942,7 @@ pub enum SamplingSettings {
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
+#[serde(default, deny_unknown_fields)]
 pub struct SamplingSettingsParser {
     pub graphs: SumMode,
     pub orientations: SumMode,
