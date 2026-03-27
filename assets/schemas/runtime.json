@@ -58,100 +58,21 @@
   },
   "additionalProperties": false,
   "$defs": {
+    "CoordinateSystem": {
+      "type": "string",
+      "enum": [
+        "cartesian",
+        "spherical",
+        "hyperspherical",
+        "hyperspherical_flat",
+        "momentum_space",
+        "tropical"
+      ]
+    },
     "Dep": {
       "type": "string",
       "enum": [
         "dependent"
-      ]
-    },
-    "DiscreteGraphSamplingType": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "b": {
-              "type": "number",
-              "format": "double"
-            },
-            "mapping": {
-              "$ref": "#/$defs/ParameterizationMapping"
-            },
-            "mode": {
-              "$ref": "#/$defs/ParameterizationMode"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "default"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "alpha": {
-              "type": "number",
-              "format": "double"
-            },
-            "parameterization_settings": {
-              "$ref": "#/$defs/ParameterizationSettings"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "multi_channeling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "alpha": {
-              "type": "number",
-              "format": "double"
-            },
-            "parameterization_settings": {
-              "$ref": "#/$defs/ParameterizationSettings"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "discrete_multi_channeling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "matrix_stability_test": {
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "tropical"
-            },
-            "upcast_on_failure": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        }
       ]
     },
     "EntrySelection": {
@@ -377,6 +298,17 @@
         "none"
       ]
     },
+    "IntegralUnit": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "picobarn",
+        "femtobarn",
+        "attobarn",
+        "millibarn",
+        "none"
+      ]
+    },
     "IntegrandSettings": {
       "oneOf": [
         {
@@ -418,17 +350,6 @@
             "type"
           ]
         }
-      ]
-    },
-    "IntegralUnit": {
-      "type": "string",
-      "enum": [
-        "auto",
-        "picobarn",
-        "femtobarn",
-        "attobarn",
-        "millibarn",
-        "none"
       ]
     },
     "IntegratedCounterTermRange": {
@@ -755,32 +676,6 @@
         "log",
         "linear"
       ]
-    },
-    "ParameterizationMode": {
-      "type": "string",
-      "enum": [
-        "cartesian",
-        "spherical",
-        "hyperspherical",
-        "hyperspherical_flat",
-        "momentum_space"
-      ]
-    },
-    "ParameterizationSettings": {
-      "type": "object",
-      "properties": {
-        "b": {
-          "type": "number",
-          "format": "double"
-        },
-        "mapping": {
-          "$ref": "#/$defs/ParameterizationMapping"
-        },
-        "mode": {
-          "$ref": "#/$defs/ParameterizationMode"
-        }
-      },
-      "additionalProperties": false
     },
     "ParseableAtom": {
       "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
@@ -1169,70 +1064,32 @@
       }
     },
     "SamplingSettings": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "b": {
-              "type": "number",
-              "format": "double"
-            },
-            "mapping": {
-              "$ref": "#/$defs/ParameterizationMapping"
-            },
-            "mode": {
-              "$ref": "#/$defs/ParameterizationMode"
-            },
-            "type": {
-              "type": "string",
-              "const": "default"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+      "type": "object",
+      "properties": {
+        "b": {
+          "type": "number",
+          "format": "double"
         },
-        {
-          "type": "object",
-          "properties": {
-            "alpha": {
-              "type": "number",
-              "format": "double"
-            },
-            "parameterization_settings": {
-              "$ref": "#/$defs/ParameterizationSettings"
-            },
-            "type": {
-              "type": "string",
-              "const": "multi_channeling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+        "coordinate_system": {
+          "$ref": "#/$defs/CoordinateSystem"
         },
-        {
-          "type": "object",
-          "properties": {
-            "sample_orientations": {
-              "type": "boolean"
-            },
-            "sampling_type": {
-              "$ref": "#/$defs/DiscreteGraphSamplingType"
-            },
-            "type": {
-              "type": "string",
-              "const": "discrete_graph_sampling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+        "graphs": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "lmb_channels": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "lmb_multichanneling": {
+          "type": "boolean"
+        },
+        "mapping": {
+          "$ref": "#/$defs/ParameterizationMapping"
+        },
+        "orientations": {
+          "$ref": "#/$defs/SumMode"
         }
-      ]
+      },
+      "additionalProperties": false
     },
     "SelectorDefinitionSettings": {
       "oneOf": [
@@ -1427,6 +1284,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "SumMode": {
+      "type": "string",
+      "enum": [
+        "summed",
+        "monte_carlo"
+      ]
     },
     "UVLocalisationSettings": {
       "type": "object",
