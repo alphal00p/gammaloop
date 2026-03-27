@@ -4,7 +4,7 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use tracing::warn;
 use typed_index_collections::TiVec;
@@ -926,25 +926,330 @@ pub enum ParameterizationMapping {
     Linear,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, PartialEq, Encode, Decode, JsonSchema)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
-#[serde(deny_unknown_fields)]
 pub enum SamplingSettings {
-    #[serde(rename = "default")]
     Default(ParameterizationSettings),
-    #[serde(rename = "multi_channeling")]
     MultiChanneling(MultiChannelingSettings),
-    #[serde(rename = "discrete_graph_sampling")]
     DiscreteGraphs(DiscreteGraphSamplingSettings),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+pub struct SamplingSettingsParser {
+    pub graphs: SumMode,
+    pub orientations: SumMode,
+    pub lmb_multichanneling: bool,
+    pub lmb_channels: SumMode,
+    pub coordinate_system: CoordinateSystem,
+    pub mapping: ParameterizationMapping,
+    pub b: f64,
+}
+
+impl Default for SamplingSettingsParser {
+    fn default() -> Self {
+        Self {
+            graphs: SumMode::Summed,
+            orientations: SumMode::Summed,
+            lmb_multichanneling: false,
+            lmb_channels: SumMode::Summed,
+            coordinate_system: CoordinateSystem::Spherical,
+            mapping: ParameterizationMapping::Linear,
+            b: 1.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+pub enum SumMode {
+    #[serde(rename = "summed")]
+    Summed,
+    #[serde(rename = "monte_carlo")]
+    MonteCarlo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+pub enum CoordinateSystem {
+    #[serde(rename = "cartesian")]
+    Cartesian,
+    #[serde(rename = "spherical")]
+    Spherical,
+    #[serde(rename = "hyperspherical")]
+    HyperSpherical,
+    #[serde(rename = "hyperspherical_flat")]
+    HyperSphericalFlat,
+    #[serde(rename = "momentum_space")]
+    MomentumSpace,
+    #[serde(rename = "tropical")]
+    MomTrop,
 }
 
 impl Default for SamplingSettings {
     fn default() -> Self {
         Self::Default(ParameterizationSettings::default())
+    }
+}
+
+impl SamplingSettings {
+    fn as_parser(&self) -> SamplingSettingsParser {
+        match self {
+            SamplingSettings::Default(settings) => SamplingSettingsParser {
+                graphs: SumMode::Summed,
+                orientations: SumMode::Summed,
+                lmb_multichanneling: false,
+                lmb_channels: SumMode::Summed,
+                coordinate_system: CoordinateSystem::from_mode(settings.mode.clone()),
+                mapping: settings.mapping.clone(),
+                b: settings.b,
+            },
+            SamplingSettings::MultiChanneling(settings) => SamplingSettingsParser {
+                graphs: SumMode::Summed,
+                orientations: SumMode::Summed,
+                lmb_multichanneling: true,
+                lmb_channels: SumMode::Summed,
+                coordinate_system: CoordinateSystem::from_mode(
+                    settings.parameterization_settings.mode.clone(),
+                ),
+                mapping: settings.parameterization_settings.mapping.clone(),
+                b: settings.parameterization_settings.b,
+            },
+            SamplingSettings::DiscreteGraphs(settings) => {
+                let orientations = if settings.sample_orientations {
+                    SumMode::MonteCarlo
+                } else {
+                    SumMode::Summed
+                };
+
+                match &settings.sampling_type {
+                    DiscreteGraphSamplingType::Default(parameterization_settings) => {
+                        SamplingSettingsParser {
+                            graphs: SumMode::MonteCarlo,
+                            orientations,
+                            lmb_multichanneling: false,
+                            lmb_channels: SumMode::Summed,
+                            coordinate_system: CoordinateSystem::from_mode(
+                                parameterization_settings.mode.clone(),
+                            ),
+                            mapping: parameterization_settings.mapping.clone(),
+                            b: parameterization_settings.b,
+                        }
+                    }
+                    DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
+                        SamplingSettingsParser {
+                            graphs: SumMode::MonteCarlo,
+                            orientations,
+                            lmb_multichanneling: true,
+                            lmb_channels: SumMode::Summed,
+                            coordinate_system: CoordinateSystem::from_mode(
+                                multichanneling_settings
+                                    .parameterization_settings
+                                    .mode
+                                    .clone(),
+                            ),
+                            mapping: multichanneling_settings
+                                .parameterization_settings
+                                .mapping
+                                .clone(),
+                            b: multichanneling_settings.parameterization_settings.b,
+                        }
+                    }
+                    DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                        multichanneling_settings,
+                    ) => SamplingSettingsParser {
+                        graphs: SumMode::MonteCarlo,
+                        orientations,
+                        lmb_multichanneling: true,
+                        lmb_channels: SumMode::MonteCarlo,
+                        coordinate_system: CoordinateSystem::from_mode(
+                            multichanneling_settings
+                                .parameterization_settings
+                                .mode
+                                .clone(),
+                        ),
+                        mapping: multichanneling_settings
+                            .parameterization_settings
+                            .mapping
+                            .clone(),
+                        b: multichanneling_settings.parameterization_settings.b,
+                    },
+                    DiscreteGraphSamplingType::TropicalSampling(_) => SamplingSettingsParser {
+                        graphs: SumMode::MonteCarlo,
+                        orientations,
+                        lmb_multichanneling: false,
+                        lmb_channels: SumMode::Summed,
+                        coordinate_system: CoordinateSystem::MomTrop,
+                        mapping: ParameterizationMapping::default(),
+                        b: 1.0,
+                    },
+                }
+            }
+        }
+    }
+
+    fn from_parser(parser: SamplingSettingsParser) -> Result<Self, String> {
+        let SamplingSettingsParser {
+            graphs,
+            orientations,
+            lmb_multichanneling,
+            lmb_channels,
+            coordinate_system,
+            mapping,
+            b,
+        } = parser;
+
+        let sample_orientations = match (graphs.clone(), orientations) {
+            (SumMode::Summed, SumMode::Summed) => false,
+            (SumMode::Summed, SumMode::MonteCarlo) => {
+                return Err(
+                    "Invalid sampling settings: orientations can only be set to 'monte_carlo' when graphs is 'monte_carlo'.".to_string(),
+                )
+            }
+            (SumMode::MonteCarlo, SumMode::Summed) => false,
+            (SumMode::MonteCarlo, SumMode::MonteCarlo) => true,
+        };
+
+        if matches!(coordinate_system, CoordinateSystem::MomTrop) {
+            if !matches!(graphs, SumMode::MonteCarlo) {
+                return Err(
+                    "Invalid sampling settings: coordinate_system = 'tropical' requires graphs = 'monte_carlo'."
+                        .to_string(),
+                );
+            }
+
+            if lmb_multichanneling {
+                return Err(
+                    "Invalid sampling settings: coordinate_system = 'tropical' is incompatible with lmb_multichanneling = true."
+                        .to_string(),
+                );
+            }
+
+            if !matches!(lmb_channels, SumMode::Summed) {
+                return Err(
+                    "Invalid sampling settings: coordinate_system = 'tropical' requires lmb_channels = 'summed'."
+                        .to_string(),
+                );
+            }
+
+            return Ok(SamplingSettings::DiscreteGraphs(
+                DiscreteGraphSamplingSettings {
+                    sample_orientations,
+                    sampling_type: DiscreteGraphSamplingType::TropicalSampling(
+                        GammaloopTropicalSamplingSettings::default(),
+                    ),
+                },
+            ));
+        }
+
+        let mode = coordinate_system.into_mode();
+        let parameterization_settings = ParameterizationSettings { mode, mapping, b };
+
+        match graphs {
+            SumMode::Summed => {
+                if !matches!(lmb_channels, SumMode::Summed) {
+                    return Err(
+                        "Invalid sampling settings: lmb_channels = 'monte_carlo' requires graphs = 'monte_carlo'."
+                            .to_string(),
+                    );
+                }
+
+                if sample_orientations {
+                    return Err(
+                        "Invalid sampling settings: orientations can only be Monte Carlo sampled when graphs are Monte Carlo sampled."
+                            .to_string(),
+                    );
+                }
+
+                if lmb_multichanneling {
+                    Ok(SamplingSettings::MultiChanneling(MultiChannelingSettings {
+                        parameterization_settings,
+                        ..MultiChannelingSettings::default()
+                    }))
+                } else {
+                    Ok(SamplingSettings::Default(parameterization_settings))
+                }
+            }
+            SumMode::MonteCarlo => {
+                let sampling_type = if lmb_multichanneling {
+                    let settings = MultiChannelingSettings {
+                        parameterization_settings,
+                        ..MultiChannelingSettings::default()
+                    };
+
+                    match lmb_channels {
+                        SumMode::Summed => DiscreteGraphSamplingType::MultiChanneling(settings),
+                        SumMode::MonteCarlo => {
+                            DiscreteGraphSamplingType::DiscreteMultiChanneling(settings)
+                        }
+                    }
+                } else {
+                    if !matches!(lmb_channels, SumMode::Summed) {
+                        return Err(
+                            "Invalid sampling settings: lmb_channels = 'monte_carlo' requires lmb_multichanneling = true."
+                                .to_string(),
+                        );
+                    }
+
+                    DiscreteGraphSamplingType::Default(parameterization_settings)
+                };
+
+                Ok(SamplingSettings::DiscreteGraphs(
+                    DiscreteGraphSamplingSettings {
+                        sample_orientations,
+                        sampling_type,
+                    },
+                ))
+            }
+        }
+    }
+}
+
+impl Serialize for SamplingSettings {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.as_parser().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SamplingSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let parser = SamplingSettingsParser::deserialize(deserializer)?;
+        SamplingSettings::from_parser(parser).map_err(serde::de::Error::custom)
+    }
+}
+
+impl CoordinateSystem {
+    fn from_mode(mode: ParameterizationMode) -> Self {
+        match mode {
+            ParameterizationMode::Cartesian => Self::Cartesian,
+            ParameterizationMode::Spherical => Self::Spherical,
+            ParameterizationMode::HyperSpherical => Self::HyperSpherical,
+            ParameterizationMode::HyperSphericalFlat => Self::HyperSphericalFlat,
+            ParameterizationMode::MomentumSpace => Self::MomentumSpace,
+        }
+    }
+
+    fn into_mode(self) -> ParameterizationMode {
+        match self {
+            CoordinateSystem::Cartesian => ParameterizationMode::Cartesian,
+            CoordinateSystem::Spherical => ParameterizationMode::Spherical,
+            CoordinateSystem::HyperSpherical => ParameterizationMode::HyperSpherical,
+            CoordinateSystem::HyperSphericalFlat => ParameterizationMode::HyperSphericalFlat,
+            CoordinateSystem::MomentumSpace => ParameterizationMode::MomentumSpace,
+            CoordinateSystem::MomTrop => {
+                unreachable!("tropical coordinate system has no ParameterizationMode equivalent")
+            }
+        }
     }
 }
 
