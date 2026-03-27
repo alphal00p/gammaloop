@@ -927,7 +927,7 @@ pub enum ParameterizationMapping {
     Linear,
 }
 
-#[derive(Debug, Clone, PartialEq, Encode, Decode, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
 #[cfg_attr(
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
@@ -1222,6 +1222,16 @@ impl<'de> Deserialize<'de> for SamplingSettings {
     {
         let parser = SamplingSettingsParser::deserialize(deserializer)?;
         SamplingSettings::from_parser(parser).map_err(serde::de::Error::custom)
+    }
+}
+
+impl JsonSchema for SamplingSettings {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "SamplingSettings".into()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        SamplingSettingsParser::json_schema(generator)
     }
 }
 

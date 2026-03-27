@@ -384,100 +384,21 @@
         "Error"
       ]
     },
+    "CoordinateSystem": {
+      "type": "string",
+      "enum": [
+        "cartesian",
+        "spherical",
+        "hyperspherical",
+        "hyperspherical_flat",
+        "momentum_space",
+        "tropical"
+      ]
+    },
     "Dep": {
       "type": "string",
       "enum": [
         "dependent"
-      ]
-    },
-    "DiscreteGraphSamplingType": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "b": {
-              "type": "number",
-              "format": "double"
-            },
-            "mapping": {
-              "$ref": "#/$defs/ParameterizationMapping"
-            },
-            "mode": {
-              "$ref": "#/$defs/ParameterizationMode"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "default"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "alpha": {
-              "type": "number",
-              "format": "double"
-            },
-            "parameterization_settings": {
-              "$ref": "#/$defs/ParameterizationSettings"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "multi_channeling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "alpha": {
-              "type": "number",
-              "format": "double"
-            },
-            "parameterization_settings": {
-              "$ref": "#/$defs/ParameterizationSettings"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "discrete_multi_channeling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "matrix_stability_test": {
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
-            },
-            "subtype": {
-              "type": "string",
-              "const": "tropical"
-            },
-            "upcast_on_failure": {
-              "type": "boolean"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
-        }
       ]
     },
     "Display": {
@@ -1479,6 +1400,15 @@
             "minimum": 0
           }
         },
+        "graph_id": {
+          "description": "Select a specific graph in momentum-space inspect",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
         "integrand_name": {
           "description": "The integrand name to inspect",
           "type": [
@@ -1489,6 +1419,15 @@
         "momentum_space": {
           "description": "Interpret point as momentum-space coordinates",
           "type": "boolean"
+        },
+        "orientation_id": {
+          "description": "Select a specific orientation of the selected graph in momentum-space inspect",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
         },
         "point": {
           "description": "The point to inspect (x y) or (p0 px ...)",
@@ -1519,6 +1458,17 @@
         "use_arb_prec",
         "momentum_space",
         "discrete_dim"
+      ]
+    },
+    "IntegralUnit": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "picobarn",
+        "femtobarn",
+        "attobarn",
+        "millibarn",
+        "none"
       ]
     },
     "IntegrandSettings": {
@@ -1562,17 +1512,6 @@
             "type"
           ]
         }
-      ]
-    },
-    "IntegralUnit": {
-      "type": "string",
-      "enum": [
-        "auto",
-        "picobarn",
-        "femtobarn",
-        "attobarn",
-        "millibarn",
-        "none"
       ]
     },
     "Integrate": {
@@ -1675,7 +1614,7 @@
           "$ref": "#/$defs/ContributionSortOption"
         },
         "target": {
-          "description": "Specify a target as either `re im` for a single integrand or `process@integrand=re,im`",
+          "description": "Specify a target as either `re im` / `re,im` for one shared target or `process@integrand=re,im`",
           "type": "array",
           "items": {
             "type": "string"
@@ -2191,32 +2130,6 @@
         "log",
         "linear"
       ]
-    },
-    "ParameterizationMode": {
-      "type": "string",
-      "enum": [
-        "cartesian",
-        "spherical",
-        "hyperspherical",
-        "hyperspherical_flat",
-        "momentum_space"
-      ]
-    },
-    "ParameterizationSettings": {
-      "type": "object",
-      "properties": {
-        "b": {
-          "type": "number",
-          "format": "double"
-        },
-        "mapping": {
-          "$ref": "#/$defs/ParameterizationMapping"
-        },
-        "mode": {
-          "$ref": "#/$defs/ParameterizationMode"
-        }
-      },
-      "additionalProperties": false
     },
     "ParseableAtom": {
       "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
@@ -3277,70 +3190,32 @@
       "additionalProperties": false
     },
     "SamplingSettings": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "b": {
-              "type": "number",
-              "format": "double"
-            },
-            "mapping": {
-              "$ref": "#/$defs/ParameterizationMapping"
-            },
-            "mode": {
-              "$ref": "#/$defs/ParameterizationMode"
-            },
-            "type": {
-              "type": "string",
-              "const": "default"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+      "type": "object",
+      "properties": {
+        "b": {
+          "type": "number",
+          "format": "double"
         },
-        {
-          "type": "object",
-          "properties": {
-            "alpha": {
-              "type": "number",
-              "format": "double"
-            },
-            "parameterization_settings": {
-              "$ref": "#/$defs/ParameterizationSettings"
-            },
-            "type": {
-              "type": "string",
-              "const": "multi_channeling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+        "coordinate_system": {
+          "$ref": "#/$defs/CoordinateSystem"
         },
-        {
-          "type": "object",
-          "properties": {
-            "sample_orientations": {
-              "type": "boolean"
-            },
-            "sampling_type": {
-              "$ref": "#/$defs/DiscreteGraphSamplingType"
-            },
-            "type": {
-              "type": "string",
-              "const": "discrete_graph_sampling"
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+        "graphs": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "lmb_channels": {
+          "$ref": "#/$defs/SumMode"
+        },
+        "lmb_multichanneling": {
+          "type": "boolean"
+        },
+        "mapping": {
+          "$ref": "#/$defs/ParameterizationMapping"
+        },
+        "orientations": {
+          "$ref": "#/$defs/SumMode"
         }
-      ]
+      },
+      "additionalProperties": false
     },
     "Save": {
       "oneOf": [
@@ -4286,6 +4161,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "SumMode": {
+      "type": "string",
+      "enum": [
+        "summed",
+        "monte_carlo"
+      ]
     },
     "ThresholdSubtractionSettings": {
       "type": "object",

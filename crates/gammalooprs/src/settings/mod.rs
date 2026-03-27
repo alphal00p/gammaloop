@@ -145,7 +145,10 @@ mod tests {
                 kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
             },
         },
-        utils::{F, serde_utils::SHOWDEFAULTS},
+        utils::{
+            F,
+            serde_utils::{SHOWDEFAULTS, ShowDefaultsGuard},
+        },
     };
     use std::fmt::Debug;
 
@@ -437,6 +440,7 @@ mod tests {
             ),
         });
 
+        let _guard = ShowDefaultsGuard::new(true);
         let toml = toml::to_string_pretty(&sampling_settings).unwrap();
         assert!(toml.contains("graphs = \"monte_carlo\""));
         assert!(toml.contains("orientations = \"monte_carlo\""));
