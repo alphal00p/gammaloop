@@ -74,9 +74,30 @@ let
       };
     })
     (builtins.filter (crate: crate.usesSymbolica) crates));
+
+  nextestTests =
+    {
+      gammaloop-nextest = {
+        package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest";
+        system = "x86_64-linux";
+        in-repo = true;
+        secrets = ["SYMBOLICA_LICENSE"];
+      };
+    }
+    // builtins.listToAttrs (map
+      (partition: {
+        name = "gammaloop-nextest-partition-${toString partition}";
+        value = {
+          package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-partition-${toString partition}";
+          system = "x86_64-linux";
+          in-repo = true;
+          secrets = ["SYMBOLICA_LICENSE"];
+        };
+      })
+      (builtins.genList (partition: partition + 1) ciPartitionCount));
 in {
   systems = ["x86_64-linux"];
   doNotBuild = impureChecks;
   fail-fast = false;
-  test = symbolicaTests;
+  test = symbolicaTests // nextestTests;
 }

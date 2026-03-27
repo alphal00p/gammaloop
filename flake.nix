@@ -40,7 +40,19 @@
           "rustc"
         ]);
 
-      src = craneLib.cleanCargoSource (craneLib.path ./.);
+      workspaceSrc = lib.fileset.toSource {
+        root = ./.;
+        fileset = lib.fileset.unions [
+          ./.config
+          ./Cargo.toml
+          ./Cargo.lock
+          ./assets
+          ./crates
+          ./tests
+        ];
+      };
+
+      src = workspaceSrc;
 
       apiMeta = craneLib.crateNameFromCargoToml {
         cargoToml = ./crates/gammaloop-api/Cargo.toml;
@@ -204,17 +216,7 @@
 
       # Per-crate derivations still need the full workspace crate tree because several
       # crates embed non-Rust assets (templates, FORM sources, wasm payloads) at compile time.
-      fileSetForCrate = _:
-        lib.fileset.toSource {
-          root = ./.;
-          fileset = lib.fileset.unions [
-            ./Cargo.toml
-            ./Cargo.lock
-            ./assets
-            ./crates
-            (craneLib.fileset.commonCargoSources ./tests)
-          ];
-        };
+      fileSetForCrate = _: workspaceSrc;
 
       # Build workspace dependency artifacts once and reuse for downstream checks/packages.
       cargoArtifacts = craneLib.buildDepsOnly (ciArgs
@@ -253,26 +255,6 @@
         })
         workspaceCrates);
 
-      crateCheckRunnerPackages = lib.listToAttrs (map (crate: {
-          name = "nix-ci-check-${crate.attr}";
-          value = pkgs.writeShellApplication {
-            name = "nix-ci-check-${crate.attr}";
-            runtimeInputs = [pkgs.nix];
-            text = ''
-              set -euo pipefail
-              exec nix \
-                --extra-experimental-features nix-command \
-                --extra-experimental-features flakes \
-                build \
-                --no-link \
-                --print-build-logs \
-                --impure \
-                .#checks.${system}.crate-${crate.attr}
-            '';
-          };
-        })
-        workspaceCrates);
-
       gammaloop-cli = craneLib.buildPackage (individualCrateArgs
         // {
           pname = "gammaloop";
@@ -294,6 +276,43 @@
             });
         })
         (lib.range 1 ciPartitionCount));
+
+      impureCheckRunnerTargets =
+        (map (crate: {
+            runnerAttr = "nix-ci-check-${crate.attr}";
+            checkAttr = "crate-${crate.attr}";
+          })
+          (builtins.filter (crate: crate.usesSymbolica) workspaceCrates))
+        ++ [
+          {
+            runnerAttr = "nix-ci-check-gammaloop-nextest";
+            checkAttr = "gammaloop-nextest";
+          }
+        ]
+        ++ map (partition: {
+          runnerAttr = "nix-ci-check-gammaloop-nextest-partition-${toString partition}";
+          checkAttr = "gammaloop-nextest-partition-${toString partition}";
+        }) (lib.range 1 ciPartitionCount);
+
+      impureCheckRunnerPackages = lib.listToAttrs (map (target: {
+          name = target.runnerAttr;
+          value = pkgs.writeShellApplication {
+            name = target.runnerAttr;
+            runtimeInputs = [pkgs.nix];
+            text = ''
+              set -euo pipefail
+              exec nix \
+                --extra-experimental-features nix-command \
+                --extra-experimental-features flakes \
+                build \
+                --no-link \
+                --print-build-logs \
+                --impure \
+                .#checks.${system}.${target.checkAttr}
+            '';
+          };
+        })
+        impureCheckRunnerTargets);
     in {
       checks =
         {
@@ -336,7 +355,7 @@
           gammaloop = gammaloop-cli;
           inherit cargoArtifacts;
         }
-        // crateCheckRunnerPackages
+        // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
             // {
