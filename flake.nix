@@ -260,7 +260,6 @@
             runtimeInputs = [pkgs.nix];
             text = ''
               set -euo pipefail
-              cd ${src}
               exec nix \
                 --extra-experimental-features nix-command \
                 --extra-experimental-features flakes \
