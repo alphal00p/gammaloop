@@ -429,6 +429,75 @@ mod tests {
     }
 
     #[test]
+    fn sampling_settings_serializes_to_parser_shape() {
+        let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            sample_orientations: true,
+            sampling_type: DiscreteGraphSamplingType::DiscreteMultiChanneling(
+                crate::settings::runtime::MultiChannelingSettings::default(),
+            ),
+        });
+
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        assert!(toml.contains("graphs = \"monte_carlo\""));
+        assert!(toml.contains("orientations = \"monte_carlo\""));
+        assert!(toml.contains("lmb_multichanneling = true"));
+        assert!(toml.contains("lmb_channels = \"monte_carlo\""));
+        assert!(toml.contains("coordinate_system = \"spherical\""));
+        assert!(!toml.contains("type = \"discrete_graph_sampling\""));
+        assert!(!toml.contains("subtype = \"discrete_multi_channeling\""));
+    }
+
+    #[test]
+    fn sampling_settings_rejects_incompatible_orientation_sampling() {
+        let invalid_toml = r#"
+graphs = "summed"
+orientations = "monte_carlo"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+"#;
+
+        let err = toml::from_str::<SamplingSettings>(invalid_toml).unwrap_err();
+        assert!(err.to_string().contains(
+            "orientations can only be set to 'monte_carlo' when graphs is 'monte_carlo'"
+        ));
+    }
+
+    #[test]
+    fn sampling_settings_deserializes_from_parser_shape() {
+        let toml = r#"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "momentum_space"
+mapping = "log"
+b = 5.0
+"#;
+
+        let settings: SamplingSettings = toml::from_str(toml).unwrap();
+        assert_eq!(
+            settings,
+            SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+                sample_orientations: false,
+                sampling_type: DiscreteGraphSamplingType::MultiChanneling(
+                    crate::settings::runtime::MultiChannelingSettings {
+                        alpha: 3.0,
+                        parameterization_settings:
+                            crate::settings::runtime::ParameterizationSettings {
+                                mode: crate::settings::runtime::ParameterizationMode::MomentumSpace,
+                                mapping: crate::settings::runtime::ParameterizationMapping::Log,
+                                b: 5.0,
+                            },
+                    },
+                ),
+            })
+        );
+    }
+
+    #[test]
     fn how_does_tropical_look() {
         SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
         let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
