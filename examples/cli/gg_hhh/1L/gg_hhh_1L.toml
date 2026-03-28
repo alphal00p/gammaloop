@@ -47,7 +47,7 @@ commands = [
   "import model sm-default.json",
   "set global kv global.n_cores.feyngen=10",
 
-  "reset processes",
+  "remove processes",
   """generate amp g g > h h h / u d c s b QED==3 [{1}]
            --only-diagrams
            --numerator-grouping only_detect_zeroes

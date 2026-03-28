@@ -27,8 +27,8 @@ pub mod inspect;
 pub use inspect::Inspect;
 pub mod integrate;
 pub use integrate::{Integrate, IntegrationOutput};
-pub mod reset;
-pub use reset::Reset;
+pub mod remove;
+pub use remove::Remove;
 pub mod save;
 pub use save::Save;
 pub mod set;
@@ -100,8 +100,9 @@ pub enum Commands {
     #[command(name = "finish_commands_block")]
     FinishCommandsBlock,
 
+    #[command(name = "remove")]
     #[clap(subcommand)]
-    Reset(Reset),
+    Remove(Remove),
 
     Integrate(Integrate),
 
@@ -195,7 +196,7 @@ impl Commands {
                 let process_id = process.resolve(&state.process_list)?;
                 state.bench(samples, process_id, integrand_name, n_cores)?;
             }
-            Commands::Import(s) => s.run(state)?,
+            Commands::Import(s) => s.run(state, global_cli_settings)?,
             Commands::Save(s) => s.run(
                 state,
                 run_history,
@@ -247,7 +248,7 @@ impl Commands {
                     "Command block definition commands must be handled by the CLI session",
                 ));
             }
-            Commands::Reset(r) => r.run(state)?,
+            Commands::Remove(r) => r.run(state)?,
             Commands::Batch {
                 process_file: _process_file,
                 batch_input_file: _batch_input_file,

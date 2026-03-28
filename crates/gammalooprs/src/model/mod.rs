@@ -26,16 +26,20 @@ use tabled::{
 };
 
 // use log::{info, trace};
-use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::{
+    gamma::AGS,
+    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
+};
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
+use spenso::network::parsing::SPENSO_TAG;
 use spenso::structure::OrderedStructure;
 use spenso::structure::representation::Euclidean;
 use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{
-    representation::BaseRepName, representation::Lorentz, representation::RepName,
+    representation::BaseRepName, representation::Lorentz, representation::RepName, slot::DummyAind,
     slot::IsAbstractSlot, slot::Slot,
 };
 use spenso::tensors::data::{DataTensor, DenseTensor, SetTensorData, SparseTensor};
@@ -59,6 +63,7 @@ use std::path::Path;
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
+use crate::settings::global::VectorPolarizationSumGauge;
 use crate::utils::GS;
 
 use symbolica::printer::{AtomPrinter, PrintOptions};
@@ -830,27 +835,153 @@ pub struct Particle {
 }
 
 impl Particle {
-    pub(crate) fn spin_sum(&self, eid: EdgeIndex) -> Option<Replacement> {
+    fn fermion_polarization_sum_rhs(&self, eid: EdgeIndex) -> Option<Atom> {
+        if self.spin != 2 {
+            return None;
+        }
+
+        let mu: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+        let mass_sign = if self.is_antiparticle() { -1 } else { 1 };
+
+        Some(
+            GS.emr_mom(eid, mu.to_atom()) * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom())
+                + Atom::num(mass_sign)
+                    * Atom::from(self.mass.0)
+                    * function!(ETS.metric, W_.a_, W_.b_),
+        )
+    }
+
+    fn polarization_average_factor(&self) -> Result<Option<Atom>> {
         match self.spin {
-            2 => {
-                if !self.is_antiparticle() {
-                    Some(
-                        (function!(GS.u, eid.0, W_.a_) * function!(GS.ubar, eid.0, W_.b_))
-                            .replace_with(function!(ETS.metric, W_.a_, W_.b_)),
-                    )
+            1 => Ok(None),
+            2 => Ok(Some(Atom::num(1) / Atom::num(2))),
+            3 => Ok(Some(if self.is_massive() {
+                Atom::num(1) / Atom::num(3)
+            } else {
+                Atom::num(1) / Atom::num(2)
+            })),
+            4 => Ok(Some(Atom::num(1) / Atom::num(4))),
+            5 => Ok(Some(if self.is_massive() {
+                Atom::num(1) / Atom::num(5)
+            } else {
+                Atom::num(1) / Atom::num(4)
+            })),
+            spin => Err(eyre!(
+                "Polarization averaging for particle '{}' (PDG {}, spin {}) is not supported yet.",
+                self.name,
+                self.pdg_code,
+                spin
+            )),
+        }
+    }
+
+    fn vector_polarization_sum_rhs(
+        &self,
+        eid: EdgeIndex,
+        gauge: VectorPolarizationSumGauge,
+    ) -> Result<Option<Atom>> {
+        if self.spin != 3 {
+            return Ok(None);
+        }
+
+        let minus_metric = -function!(ETS.metric, W_.a_, W_.b_);
+
+        match gauge {
+            VectorPolarizationSumGauge::Feynman => Ok(Some(minus_metric)),
+            VectorPolarizationSumGauge::LightLikeAxial => {
+                if self.is_massive() {
+                    let mass_squared = Atom::from(self.mass.0).pow(2);
+                    Ok(Some(
+                        minus_metric
+                            + GS.emr_mom(eid, W_.a_) * GS.emr_mom(eid, W_.b_) / mass_squared,
+                    ))
                 } else {
-                    Some(
-                        (function!(GS.v, eid.0, W_.a_) * function!(GS.vbar, eid.0, W_.b_))
-                            .replace_with(function!(ETS.metric, W_.a_, W_.b_)),
-                    )
+                    let temporal_component = GS.emr_mom(eid, GS.cind(0));
+                    let n_a = temporal_component.clone() * GS.energy_delta(W_.a_)
+                        - GS.emr_vec_index(eid, W_.a_);
+                    let n_b = temporal_component.clone() * GS.energy_delta(W_.b_)
+                        - GS.emr_vec_index(eid, W_.b_);
+                    let q_dot_n = temporal_component.pow(2)
+                        + function!(
+                            SPENSO_TAG.dot,
+                            Euclidean {}.new_rep(4).to_symbolic([]),
+                            GS.emr_vec(eid),
+                            GS.emr_vec(eid)
+                        );
+
+                    Ok(Some(
+                        minus_metric
+                            + (GS.emr_mom(eid, W_.a_) * n_b + n_a * GS.emr_mom(eid, W_.b_))
+                                / q_dot_n,
+                    ))
                 }
             }
+        }
+    }
+
+    pub(crate) fn polarization_sum(
+        &self,
+        eid: EdgeIndex,
+        average: bool,
+        vector_polarization_sum_gauge: VectorPolarizationSumGauge,
+    ) -> Result<Option<Replacement>> {
+        let replacement = match self.spin {
+            1 => None,
+            2 => Some(if !self.is_antiparticle() {
+                (function!(GS.u, eid.0, W_.a_) * function!(GS.ubar, eid.0, W_.b_))
+                    .replace_with(self.fermion_polarization_sum_rhs(eid).unwrap())
+            } else {
+                (function!(GS.v, eid.0, W_.a_) * function!(GS.vbar, eid.0, W_.b_))
+                    .replace_with(self.fermion_polarization_sum_rhs(eid).unwrap())
+            }),
             3 => Some(
                 (function!(GS.epsilon, eid.0, W_.a_) * function!(GS.epsilonbar, eid.0, W_.b_))
-                    .replace_with(function!(ETS.metric, W_.a_, W_.b_)),
+                    .replace_with(
+                        self.vector_polarization_sum_rhs(eid, vector_polarization_sum_gauge)?
+                            .unwrap(),
+                    ),
             ),
-            _ => None,
-        }
+            spin => {
+                return Err(eyre!(
+                    "Polarization sum replacement for particle '{}' (PDG {}, spin {}) is not implemented yet.",
+                    self.name,
+                    self.pdg_code,
+                    spin
+                ));
+            }
+        };
+
+        let average_factor = if average {
+            self.polarization_average_factor()?
+        } else {
+            None
+        };
+
+        Ok(replacement.map(|replacement| {
+            let Some(average_factor) = average_factor.as_ref() else {
+                return replacement;
+            };
+            let Replacement {
+                pat,
+                rhs,
+                conditions,
+                settings,
+            } = replacement;
+            let rhs = match rhs {
+                symbolica::id::ReplaceWith::Pattern(rhs) => (average_factor.clone()
+                    * rhs.to_atom().unwrap())
+                .to_pattern()
+                .into(),
+                rhs => rhs,
+            };
+
+            Replacement {
+                pat,
+                rhs,
+                conditions,
+                settings,
+            }
+        }))
     }
     pub(crate) fn random_helicity(&self, seed: u64) -> Helicity {
         let mut rng = SmallRng::seed_from_u64(seed);
@@ -2581,8 +2712,11 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 }
 
 #[cfg(test)]
-mod tests {
+#[path = "test_polarization_sums.rs"]
+mod test_polarization_sums;
 
+#[cfg(test)]
+mod tests {
     use crate::{
         model::{
             ArcPropagator, ArcVertexRule, Parameter, ParameterName, ParameterNature, ParameterType,

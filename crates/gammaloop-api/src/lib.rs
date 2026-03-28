@@ -1351,7 +1351,7 @@ mod tests {
         utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
     };
 
-    use crate::commands::{Duplicate, Reset};
+    use crate::commands::{Duplicate, Remove};
     use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
     use crate::tracing::{
@@ -1917,10 +1917,10 @@ mod tests {
     }
 
     #[test]
-    fn repl_parses_reset_processes_with_normalized_selectors() {
+    fn repl_parses_remove_processes_with_normalized_selectors() {
         let parsed = Repl::try_parse_from([
             "gammaloop",
-            "reset",
+            "remove",
             "processes",
             "-p",
             "triangle",
@@ -1929,12 +1929,12 @@ mod tests {
         ])
         .unwrap();
 
-        let Commands::Reset(Reset::Processes {
+        let Commands::Remove(Remove::Processes {
             process,
             integrand_name,
         }) = parsed.command
         else {
-            panic!("expected reset processes command");
+            panic!("expected remove processes command");
         };
         assert_eq!(
             process,

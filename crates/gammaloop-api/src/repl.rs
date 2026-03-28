@@ -4186,14 +4186,14 @@ mod tests {
     }
 
     #[test]
-    fn completion_offers_integrands_for_reset_processes() {
+    fn completion_offers_integrands_for_remove_processes() {
         let completion_state = CompletionState {
             process_entries: sample_process_entries(),
             ..CompletionState::default()
         };
 
         let values = completion_values(
-            "reset processes --process epem_a_tth --integrand-name ",
+            "remove processes --process epem_a_tth --integrand-name ",
             &completion_state,
         );
 
@@ -4203,13 +4203,13 @@ mod tests {
     }
 
     #[test]
-    fn completion_offers_processes_for_reset_processes() {
+    fn completion_offers_processes_for_remove_processes() {
         let completion_state = CompletionState {
             process_entries: sample_process_entries(),
             ..CompletionState::default()
         };
 
-        let values = completion_values("reset processes -p e", &completion_state);
+        let values = completion_values("remove processes -p e", &completion_state);
 
         assert!(values.contains(&"epem_a_tth".to_string()));
         assert!(values.contains(&"epem_xs".to_string()));

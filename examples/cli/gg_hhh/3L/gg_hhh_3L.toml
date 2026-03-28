@@ -14,7 +14,7 @@ commands = [
 
     "import model sm-default.json",
 
-    "reset processes",
+    "remove processes",
     "import graphs ./examples/cli/gg_hhh/3L/3L_graph.dot -p gg_hhh -i 3L",
     "generate",
     "save dot",

@@ -2,9 +2,9 @@
 #![allow(unused_variables)]
 
 use std::{
-    fs,
+    env, fs,
     ops::{ControlFlow, Deref, DerefMut},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Mutex, MutexGuard, OnceLock},
 };
 
@@ -45,6 +45,35 @@ fn run_card_path(name: &str) -> PathBuf {
         .join("cli_refactor")
         .join("run_cards")
         .join(name)
+}
+
+fn graph_fixture_path(name: &str) -> PathBuf {
+    get_tests_workspace_path()
+        .parent()
+        .expect("tests workspace should have a parent")
+        .join("resources")
+        .join("graphs")
+        .join(name)
+}
+
+struct CurrentDirGuard {
+    previous: PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn enter(path: &Path) -> Result<Self> {
+        let previous = env::current_dir()?;
+        fs::create_dir_all(path)?;
+        env::set_current_dir(path)?;
+        Ok(Self { previous })
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        env::set_current_dir(&self.previous)
+            .expect("current working directory should be restored after the test");
+    }
 }
 
 fn new_cli(name: &str) -> Result<SharedCli<'static>> {
@@ -609,12 +638,74 @@ fn save_state_writes_global_settings_file() -> Result<()> {
     Ok(())
 }
 
-fn reset_processes_with_process_selector_removes_only_that_process() -> Result<()> {
-    let mut cli = new_cli("reset_processes_with_process_selector_removes_only_that_process")?;
+fn import_graphs_relative_path_prefers_active_state_root_parent() -> Result<()> {
+    let root = cli_state_path("import_graphs_relative_path_prefers_active_state_root_parent");
+    clean_test(&root);
+    fs::create_dir_all(&root)?;
+    let graph_name = "relative_state_root.dot";
+    fs::copy(graph_fixture_path("scalar_box.dot"), root.join(graph_name))?;
+
+    let mut cli = get_test_cli(None, root.join("state"), None, true)?;
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command(&format!("import graphs ./{graph_name}"))?;
+
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    assert_eq!(
+        cli.state.process_list.processes[0].definition.folder_name,
+        "relative_state_root"
+    );
+    Ok(())
+}
+
+fn import_graphs_relative_path_falls_back_to_current_working_directory() -> Result<()> {
+    let root =
+        cli_state_path("import_graphs_relative_path_falls_back_to_current_working_directory");
+    clean_test(&root);
+    fs::create_dir_all(&root)?;
+    let cwd = root.join("cwd");
+    let graph_name = "relative_cwd.dot";
+    fs::create_dir_all(&cwd)?;
+    fs::copy(graph_fixture_path("scalar_box.dot"), cwd.join(graph_name))?;
+    let _cwd_guard = CurrentDirGuard::enter(&cwd)?;
+
+    let mut cli = get_test_cli(None, root.join("state"), None, true)?;
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command(&format!("import graphs ./{graph_name}"))?;
+
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    assert_eq!(
+        cli.state.process_list.processes[0].definition.folder_name,
+        "relative_cwd"
+    );
+    Ok(())
+}
+
+fn import_graphs_relative_path_reports_lookup_locations() -> Result<()> {
+    let root = cli_state_path("import_graphs_relative_path_reports_lookup_locations");
+    clean_test(&root);
+    fs::create_dir_all(&root)?;
+    let cwd = root.join("cwd");
+    let _cwd_guard = CurrentDirGuard::enter(&cwd)?;
+
+    let mut cli = get_test_cli(None, root.join("state"), None, true)?;
+    let missing_name = "missing_relative.dot";
+    let err = cli
+        .run_command(&format!("import graphs ./{missing_name}"))
+        .unwrap_err();
+    let error_text = format!("{err:?}");
+
+    assert!(error_text.contains("Could not find graph file"));
+    assert!(error_text.contains(&root.join(missing_name).display().to_string()));
+    assert!(error_text.contains(&cwd.join(missing_name).display().to_string()));
+    Ok(())
+}
+
+fn remove_processes_with_process_selector_removes_only_that_process() -> Result<()> {
+    let mut cli = new_cli("remove_processes_with_process_selector_removes_only_that_process")?;
     populate_generated_scalar_box_process(&mut cli)?;
     duplicate_loaded_process(&mut cli, "second_process");
 
-    cli.run_command("reset processes -p second_process")?;
+    cli.run_command("remove processes -p second_process")?;
 
     assert_eq!(cli.state.process_list.processes.len(), 1);
     assert_eq!(
@@ -624,12 +715,12 @@ fn reset_processes_with_process_selector_removes_only_that_process() -> Result<(
     Ok(())
 }
 
-fn reset_processes_with_integrand_selector_removes_only_that_integrand() -> Result<()> {
-    let mut cli = new_cli("reset_processes_with_integrand_selector_removes_only_that_integrand")?;
+fn remove_processes_with_integrand_selector_removes_only_that_integrand() -> Result<()> {
+    let mut cli = new_cli("remove_processes_with_integrand_selector_removes_only_that_integrand")?;
     populate_generated_scalar_box_process(&mut cli)?;
     add_duplicate_integrand(&mut cli, 0, "virtual_copy");
 
-    cli.run_command("reset processes -p box -i virtual_copy")?;
+    cli.run_command("remove processes -p box -i virtual_copy")?;
 
     let remaining = cli.state.process_list.processes[0]
         .collection
@@ -638,19 +729,60 @@ fn reset_processes_with_integrand_selector_removes_only_that_integrand() -> Resu
     Ok(())
 }
 
-fn reset_processes_removing_last_integrand_drops_empty_process() -> Result<()> {
-    let mut cli = new_cli("reset_processes_removing_last_integrand_drops_empty_process")?;
+fn remove_processes_without_integrand_selector_drops_the_selected_process() -> Result<()> {
+    let mut cli =
+        new_cli("remove_processes_without_integrand_selector_drops_the_selected_process")?;
     populate_generated_scalar_box_process(&mut cli)?;
+    add_duplicate_integrand(&mut cli, 0, "virtual_copy");
 
-    cli.run_command("reset processes -p box -i scalar_box")?;
+    cli.run_command("remove processes -p box")?;
 
     assert!(cli.state.process_list.processes.is_empty());
     Ok(())
 }
 
-fn reset_processes_rejects_integrand_without_process() -> Result<()> {
-    let mut cli = new_cli("reset_processes_rejects_integrand_without_process")?;
-    let err = cli.run_command("reset processes -i 1L").unwrap_err();
+fn remove_processes_removing_last_integrand_drops_empty_process() -> Result<()> {
+    let mut cli = new_cli("remove_processes_removing_last_integrand_drops_empty_process")?;
+    populate_generated_scalar_box_process(&mut cli)?;
+
+    cli.run_command("remove processes -p box -i scalar_box")?;
+
+    assert!(cli.state.process_list.processes.is_empty());
+    Ok(())
+}
+
+fn remove_processes_without_selectors_clears_everything() -> Result<()> {
+    let mut cli = new_cli("remove_processes_without_selectors_clears_everything")?;
+    populate_generated_scalar_box_process(&mut cli)?;
+    duplicate_loaded_process(&mut cli, "second_process");
+    add_duplicate_integrand(&mut cli, 0, "virtual_copy");
+
+    cli.run_command("remove processes")?;
+
+    assert!(cli.state.process_list.processes.is_empty());
+    Ok(())
+}
+
+fn remove_processes_ignores_missing_processes_and_integrands() -> Result<()> {
+    let mut cli = new_cli("remove_processes_ignores_missing_processes_and_integrands")?;
+    populate_generated_scalar_box_process(&mut cli)?;
+
+    cli.run_command("remove processes -p does_not_exist")?;
+    cli.run_command("remove processes -p box -i does_not_exist")?;
+
+    assert_eq!(cli.state.process_list.processes.len(), 1);
+    assert_eq!(
+        cli.state.process_list.processes[0]
+            .collection
+            .get_integrand_names(),
+        vec!["scalar_box"]
+    );
+    Ok(())
+}
+
+fn remove_processes_rejects_integrand_without_process() -> Result<()> {
+    let mut cli = new_cli("remove_processes_rejects_integrand_without_process")?;
+    let err = cli.run_command("remove processes -i 1L").unwrap_err();
     assert!(format!("{err:?}").contains("--integrand-name requires --process"));
     Ok(())
 }
@@ -678,10 +810,16 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     ctrl_c_dismisses_pending_block_definition()?;
     ctrl_d_dismisses_pending_block_definition()?;
     recursive_run_limit_is_enforced()?;
-    reset_processes_with_process_selector_removes_only_that_process()?;
-    reset_processes_with_integrand_selector_removes_only_that_integrand()?;
-    reset_processes_removing_last_integrand_drops_empty_process()?;
-    reset_processes_rejects_integrand_without_process()?;
+    import_graphs_relative_path_prefers_active_state_root_parent()?;
+    import_graphs_relative_path_falls_back_to_current_working_directory()?;
+    import_graphs_relative_path_reports_lookup_locations()?;
+    remove_processes_with_process_selector_removes_only_that_process()?;
+    remove_processes_with_integrand_selector_removes_only_that_integrand()?;
+    remove_processes_without_integrand_selector_drops_the_selected_process()?;
+    remove_processes_removing_last_integrand_drops_empty_process()?;
+    remove_processes_without_selectors_clears_everything()?;
+    remove_processes_ignores_missing_processes_and_integrands()?;
+    remove_processes_rejects_integrand_without_process()?;
     save_state_writes_global_settings_file()?;
     Ok(())
 }

@@ -690,10 +690,11 @@ impl CrossSectionGraph {
     pub(crate) fn apply_spin_sum(
         &mut self,
         model: &Model,
+        generation_settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
-    ) {
+    ) -> Result<()> {
         for (extid, hel) in locked_runtime_settings.helicities().iter().enumerate() {
-            println!("{extid},{hel:?}");
+            //println!("{extid},{hel:?}");
             let eid = self.graph.loop_momentum_basis.ext_edges[ExternalIndex(extid)];
 
             let Some(p) = self.graph.underlying[eid].particle() else {
@@ -702,14 +703,24 @@ impl CrossSectionGraph {
 
             match hel {
                 Helicity::Summed => {
-                    let Some(p) = p.spin_sum(eid) else {
+                    let Some(p) = p.polarization_sum(
+                        eid,
+                        false,
+                        generation_settings.vector_polarization_sum_gauge,
+                    )?
+                    else {
                         continue;
                     };
                     self.graph.global_prefactor.projector =
                         self.graph.global_prefactor.projector.replace_multiple(&[p]);
                 }
                 Helicity::SummedAveraged => {
-                    let Some(p) = p.spin_sum(eid) else {
+                    let Some(p) = p.polarization_sum(
+                        eid,
+                        true,
+                        generation_settings.vector_polarization_sum_gauge,
+                    )?
+                    else {
                         continue;
                     };
                     self.graph.global_prefactor.projector =
@@ -726,6 +737,7 @@ impl CrossSectionGraph {
             &self.graph.loop_momentum_basis,
             &self.graph.param_builder.pairs.additional_params.params,
         );
+        Ok(())
     }
 
     pub(crate) fn preprocess(
@@ -735,7 +747,7 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
-        self.apply_spin_sum(model, &runtime_default);
+        self.apply_spin_sum(model, settings, &runtime_default)?;
         debug!("generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
         debug!("generating esurfaces corresponding to cuts");
