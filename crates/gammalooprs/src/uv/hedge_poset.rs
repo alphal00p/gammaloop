@@ -619,17 +619,14 @@ impl Default for ComputeNode {
 impl Forests {
     fn node_label_atom_factor(
         &self,
-        node: NodeIndex,
+        frontier: NodeIndex,
         op: &HiddenData<SuBitGraph, EdgeIndex>,
     ) -> Atom {
         let approx = FunctionBuilder::new(symbol!("T"));
-        let frontier = self.graph.op_dependency_frontier(node, op, &self.wood);
-        let frontier_atom = frontier
-            .and_then(|frontier| {
-                self.compute_store
-                    .get(&self.graph[frontier])
-                    .and_then(|computed| computed.node_label_atom.as_ref())
-            })
+        let frontier_atom = self
+            .compute_store
+            .get(&self.graph[frontier])
+            .and_then(|computed| computed.node_label_atom.as_ref())
             .cloned()
             .unwrap_or_else(Atom::one);
 
@@ -637,12 +634,12 @@ impl Forests {
             symbol!(format!("S_{}", op.order.string_label())),
             usize::from(op.data)
         );
-        let argument = if frontier.is_none_or(|frontier| self.graph[frontier].covers().is_none()) {
+        let argument = if self.graph[frontier].covers().is_none() {
             current
         } else {
             let previous = Atom::var(symbol!(format!(
                 "S_{}",
-                self.graph[frontier.unwrap()]
+                self.graph[frontier]
                     .covers()
                     .expect("non-empty frontier cover must exist")
                     .string_label()
@@ -657,11 +654,10 @@ impl Forests {
             return Atom::one();
         }
 
-        self.graph[node]
-            .key
-            .iter_leaf_ops()
-            .fold(Atom::one(), |acc, op| {
-                acc * self.node_label_atom_factor(node, op)
+        self.graph
+            .leaf_op_dependency_frontiers(node, &self.wood)
+            .fold(Atom::one(), |acc, (op, frontier)| {
+                acc * self.node_label_atom_factor(frontier, op)
             })
     }
 
