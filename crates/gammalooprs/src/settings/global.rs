@@ -45,6 +45,8 @@ pub struct GenerationSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub threshold_subtraction: ThresholdSubtractionSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub vector_polarization_sum_gauge: VectorPolarizationSumGauge,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv: UVgenerationSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_cuts: Vec<Vec<String>>,
@@ -77,6 +79,18 @@ impl Default for ThresholdSubtractionSettings {
             disable_integrated_ct: false,
         }
     }
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+pub enum VectorPolarizationSumGauge {
+    #[serde(rename = "Feynman", alias = "feynman")]
+    Feynman,
+    #[default]
+    #[serde(rename = "LightLikeAxial", alias = "light_like_axial")]
+    LightLikeAxial,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy, JsonSchema)]

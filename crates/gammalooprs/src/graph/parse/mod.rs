@@ -1,4 +1,8 @@
-use std::{collections::BTreeMap, ops::Deref, path::Path};
+use std::{
+    collections::BTreeMap,
+    ops::Deref,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     cff::generation::SurfaceCache,
@@ -634,6 +638,17 @@ struct NumeratorData {
     spin_vertex: Vec<Option<ParamTensor<OrderedStructure<Euclidean, Aind>>>>,
 }
 
+fn display_graph_source_path(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    }
+
+    let joined = std::env::current_dir()
+        .map(|cwd| cwd.join(path))
+        .unwrap_or_else(|_| path.to_path_buf());
+    joined.canonicalize().unwrap_or(joined)
+}
+
 impl Graph {
     pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {
         let mut out = String::new();
@@ -1175,7 +1190,12 @@ impl Graph {
         > = GraphSet::from_file(p.as_ref()).map_err(|a| match a {
             HedgeParseError::GraphFromFile(e) => match e.as_ref() {
                 dot_parser::ast::GraphFromFileError::FileError(e) => eyre!(e.to_string())
-                    .with_note(|| format!("Tried to access the file at:{}", p.as_ref().display())),
+                    .with_note(|| {
+                        format!(
+                            "Tried to access the file at: {}",
+                            display_graph_source_path(p.as_ref()).display()
+                        )
+                    }),
                 dot_parser::ast::GraphFromFileError::ParseError(e) => {
                     eyre!("Dot parsing error: {}", e)
                 }

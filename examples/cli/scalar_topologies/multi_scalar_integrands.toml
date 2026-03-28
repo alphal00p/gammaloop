@@ -20,7 +20,7 @@ commands = [
 
     "import model scalars-default.json",
 
-    "reset processes",
+    "remove processes",
     "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri_below_thres --global-prefactor-num '1𝑖'",
     "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box_below_thres --select-graphs GL0",
 	"generate",

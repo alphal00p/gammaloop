@@ -798,6 +798,7 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 )]
 #[derive(Clone)]
 pub struct State {
+    active_state_path: PathBuf,
     pub model: Model,
     pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
@@ -1028,6 +1029,112 @@ impl State {
     pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
         self.model = Model::from_file(path)?;
         Ok(())
+    }
+
+    fn matching_process_ids(&self, process: Option<&ProcessRef>) -> Result<Vec<usize>> {
+        let Some(process) = process else {
+            return Ok((0..self.process_list.processes.len()).collect());
+        };
+
+        match process {
+            ProcessRef::Id(id) => Ok((*id < self.process_list.processes.len())
+                .then_some(*id)
+                .into_iter()
+                .collect()),
+            ProcessRef::Name(name) => Ok(self
+                .process_list
+                .processes
+                .iter()
+                .position(|p| p.definition.folder_name == *name)
+                .into_iter()
+                .collect()),
+            ProcessRef::Unqualified(value) => {
+                let name_match = self
+                    .process_list
+                    .processes
+                    .iter()
+                    .position(|p| p.definition.folder_name == *value);
+                if let Ok(id) = value.parse::<usize>() {
+                    let id_valid = id < self.process_list.processes.len();
+                    match (id_valid, name_match) {
+                        (true, Some(_)) => Err(eyre!(
+                            "Ambiguous process reference '{}'. Use '#{}' or 'name:{}' to disambiguate.",
+                            value,
+                            id,
+                            value
+                        )),
+                        (true, None) => Ok(vec![id]),
+                        (false, Some(index)) => Ok(vec![index]),
+                        (false, None) => Ok(vec![]),
+                    }
+                } else {
+                    Ok(name_match.into_iter().collect())
+                }
+            }
+        }
+    }
+
+    pub fn remove_selected_integrands(
+        &mut self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&str>,
+    ) -> Result<Vec<RemovedIntegrand>> {
+        let process_ids = self.matching_process_ids(process)?;
+        let mut removed = Vec::new();
+
+        for process_id in process_ids.into_iter().rev() {
+            let process_name = self.process_list.processes[process_id]
+                .definition
+                .folder_name
+                .clone();
+            let integrand_names = {
+                let collection = &self.process_list.processes[process_id].collection;
+                match integrand_name {
+                    Some(name) => collection
+                        .get_integrand_names()
+                        .into_iter()
+                        .find(|candidate| *candidate == name)
+                        .map(|name| vec![name.to_string()])
+                        .unwrap_or_default(),
+                    None => collection
+                        .get_integrand_names()
+                        .into_iter()
+                        .map(str::to_string)
+                        .collect(),
+                }
+            };
+
+            if integrand_names.is_empty() {
+                continue;
+            }
+
+            {
+                let process_entry = &mut self.process_list.processes[process_id];
+                for integrand_name in &integrand_names {
+                    process_entry.collection.remove_integrand(integrand_name)?;
+                }
+            }
+
+            let removed_empty_process = self.process_list.processes[process_id]
+                .collection
+                .get_integrand_names()
+                .is_empty();
+            if removed_empty_process {
+                self.process_list.processes.remove(process_id);
+            }
+
+            for integrand_name in integrand_names {
+                removed.push(RemovedIntegrand {
+                    process_id,
+                    process_name: process_name.clone(),
+                    integrand_name,
+                    removed_empty_process,
+                });
+            }
+        }
+
+        removed.reverse();
+        Ok(removed)
     }
 
     pub fn remove_process(&mut self, process: Option<&ProcessRef>) -> Result<RemovedProcess> {
@@ -1445,6 +1552,7 @@ impl State {
         super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
 
         Self {
+            active_state_path: log_dir.as_ref().to_path_buf(),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1455,6 +1563,7 @@ impl State {
         let _ = init_test_tracing();
 
         Self {
+            active_state_path: PathBuf::from("./gammaloop_state"),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1465,6 +1574,7 @@ impl State {
         let _ = init_bench_tracing();
 
         Self {
+            active_state_path: PathBuf::from("./gammaloop_state"),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),

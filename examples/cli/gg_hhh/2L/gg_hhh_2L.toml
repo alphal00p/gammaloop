@@ -15,7 +15,7 @@ commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
 
-    "reset processes",
+    "remove processes",
     """generate amp g g > h h h | g h t t~ QED==3 [{2}]
            --veto-vertex-interactions V_6 V_9 V_36 V_37
            --number-of-fermion-loops 1 1

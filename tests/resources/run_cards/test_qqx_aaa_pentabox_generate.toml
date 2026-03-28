@@ -8,7 +8,7 @@ commands = [
   # "set global kv global.log_style.full_line_source=true global.log_style.include_fields=true",
   # Comment out the block of commands below if you want to skip re-generation
   ## # GENERATION: START ###
-  "reset processes",
+  "remove processes",
   # The version below imports a dot graph where gammaloop will be responsible of building the numerator
   "import graphs ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot -p qqx_aaa -i pentabox",
   # "import graphs ./qqx_aaa_pentabox/qqx_aaa_pentabox.dot -p qqx_aaa -i pentabox",
