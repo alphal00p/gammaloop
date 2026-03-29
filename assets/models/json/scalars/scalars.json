@@ -193,17 +193,17 @@
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "scalar_0_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "scalar_0"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_1^2",
     "name": "scalar_1_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "scalar_1"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_2^2",
     "name": "scalar_2_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "scalar_2"
   }],
   "restriction": null,

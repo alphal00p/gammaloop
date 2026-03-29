@@ -2038,217 +2038,217 @@
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "a_propFeynman",
-    "numerator": "-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "a"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MZ^2",
     "name": "Z_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MZ^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MZ^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
     "particle": "Z"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W+_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
     "particle": "W+"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "W-_propFeynman",
-    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::MW^(-2)*UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2)))*1𝑖",
     "particle": "W-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "g_propFeynman",
-    "numerator": "-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "g"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "ghA_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghA"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "ghA~_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghA~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MZ^2",
     "name": "ghZ_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghZ"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MZ^2",
     "name": "ghZ~_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghZ~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "ghWp_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghWp"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "ghWp~_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghWp~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "ghWm_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghWm"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "ghWm~_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghWm~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "ghG_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghG"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "ghG~_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "ghG~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "ve_propFeynman",
-    "numerator": "UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::j",
+    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
     "particle": "ve"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "ve~_propFeynman",
-    "numerator": "-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "ve~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "vm_propFeynman",
-    "numerator": "UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::j",
+    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
     "particle": "vm"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "vm~_propFeynman",
-    "numerator": "-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "vm~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "vt_propFeynman",
-    "numerator": "UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::j",
+    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
     "particle": "vt"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "vt~_propFeynman",
-    "numerator": "-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "vt~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "u_propFeynman",
-    "numerator": "UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::j",
+    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
     "particle": "u"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "u~_propFeynman",
-    "numerator": "-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "u~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MC^2",
     "name": "c_propFeynman",
-    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MC+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*UFO::{}::j",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MC+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "c"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MC^2",
     "name": "c~_propFeynman",
-    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MC)*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MC)*1𝑖",
     "particle": "c~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MT^2",
     "name": "t_propFeynman",
-    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MT+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*UFO::{}::j",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MT+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "t"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MT^2",
     "name": "t~_propFeynman",
-    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MT)*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MT)*1𝑖",
     "particle": "t~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "d_propFeynman",
-    "numerator": "UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::j",
+    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
     "particle": "d"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "d~_propFeynman",
-    "numerator": "-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "d~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "s_propFeynman",
-    "numerator": "UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::j",
+    "numerator": "1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1))",
     "particle": "s"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "s~_propFeynman",
-    "numerator": "-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::j",
+    "numerator": "-1𝑖*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))",
     "particle": "s~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MB^2",
     "name": "b_propFeynman",
-    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MB+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*UFO::{}::j",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MB+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "b"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MB^2",
     "name": "b~_propFeynman",
-    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MB)*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MB)*1𝑖",
     "particle": "b~"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MH^2",
     "name": "H_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "H"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MZ^2",
     "name": "G0_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "G0"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "G+_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "G+"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MW^2",
     "name": "G-_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "G-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::Me^2",
     "name": "e-_propFeynman",
-    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::Me+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*UFO::{}::j",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::Me+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "e-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::Me^2",
     "name": "e+_propFeynman",
-    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Me)*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Me)*1𝑖",
     "particle": "e+"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MM^2",
     "name": "mu-_propFeynman",
-    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MM+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*UFO::{}::j",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MM+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "mu-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MM^2",
     "name": "mu+_propFeynman",
-    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MM)*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MM)*1𝑖",
     "particle": "mu+"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MTA^2",
     "name": "ta-_propFeynman",
-    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MTA+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*UFO::{}::j",
+    "numerator": "(UFO::{}::Identity(UFO::{}::idx(1,2),UFO::{}::idx(1,1))*UFO::{}::MTA+UFO::{}::PSlash(UFO::{}::idx(1,2),UFO::{}::idx(1,1)))*1𝑖",
     "particle": "ta-"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::MTA^2",
     "name": "ta+_propFeynman",
-    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MTA)*UFO::{}::j",
+    "numerator": "(-1*UFO::{}::PSlash(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::Identity(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::MTA)*1𝑖",
     "particle": "ta+"
   }],
   "restriction": null,

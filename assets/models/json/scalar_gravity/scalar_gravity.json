@@ -310,22 +310,22 @@
   "propagators": [{
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "scalar_0_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "scalar_0"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_1^2",
     "name": "scalar_1_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "scalar_1"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_2^2",
     "name": "scalar_2_propFeynman",
-    "numerator": "UFO::{}::j",
+    "numerator": "1𝑖",
     "particle": "scalar_2"
   }, {
     "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "graviton_propFeynman",
-    "numerator": "((-2+UFO::{}::dim)^(-1)*-2*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(2,1))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(2,2))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(2,1),UFO::{}::idx(2,2))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(2,2))*UFO::{}::Metric(UFO::{}::idx(2,1),UFO::{}::idx(1,2)))*1/2*UFO::{}::j",
+    "numerator": "((-2+UFO::{}::dim)^(-1)*-2*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(2,1))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(2,2))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(2,1),UFO::{}::idx(2,2))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(2,2))*UFO::{}::Metric(UFO::{}::idx(2,1),UFO::{}::idx(1,2)))*1𝑖/2",
     "particle": "graviton"
   }],
   "restriction": null,
