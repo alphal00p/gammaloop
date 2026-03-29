@@ -2187,19 +2187,34 @@ impl EventProcessingRuntime {
         !self.observables.is_empty()
     }
 
-    pub fn process_event<T: FloatLike>(&mut self, event: &mut GenericEvent<T>) -> bool {
+    fn process_event_internal<T: FloatLike>(
+        &mut self,
+        event: &mut GenericEvent<T>,
+        prepare_observables: bool,
+    ) -> bool {
         for selector in self.selectors.iter_mut() {
             if !selector.process_event(event, &self.clustering_registry) {
                 return false;
             }
         }
 
-        if self.has_observables() {
+        if prepare_observables && self.has_observables() {
             for &handle in &self.observable_clustering_handles {
                 ensure_event_clustering(event, handle, &self.clustering_registry);
             }
         }
         true
+    }
+
+    pub fn process_event<T: FloatLike>(&mut self, event: &mut GenericEvent<T>) -> bool {
+        self.process_event_internal(event, true)
+    }
+
+    pub(crate) fn process_event_for_selectors<T: FloatLike>(
+        &mut self,
+        event: &mut GenericEvent<T>,
+    ) -> bool {
+        self.process_event_internal(event, false)
     }
 
     pub fn process_event_groups<T: FloatLike>(&mut self, event_groups: &GenericEventGroupList<T>) {
