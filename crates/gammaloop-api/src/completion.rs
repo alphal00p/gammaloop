@@ -13,6 +13,8 @@ pub(crate) enum ArgValueCompletion {
     ProcessSelector(SelectorKind),
     IntegrandSelector(SelectorKind),
     SelectedIntegrandTarget,
+    SelectedMasterGraph,
+    SelectedIntegrandCategory,
     Disabled,
 }
 
@@ -22,6 +24,8 @@ pub(crate) trait CompletionArgExt {
     fn completion_process_selector(self, kind: SelectorKind) -> Self;
     fn completion_integrand_selector(self, kind: SelectorKind) -> Self;
     fn completion_selected_integrand_target(self) -> Self;
+    fn completion_selected_master_graph(self) -> Self;
+    fn completion_selected_integrand_category(self) -> Self;
     fn completion_disable_special_value(self) -> Self;
 }
 
@@ -36,6 +40,14 @@ impl CompletionArgExt for Arg {
 
     fn completion_selected_integrand_target(self) -> Self {
         self.add(ArgValueCompletion::SelectedIntegrandTarget)
+    }
+
+    fn completion_selected_master_graph(self) -> Self {
+        self.add(ArgValueCompletion::SelectedMasterGraph)
+    }
+
+    fn completion_selected_integrand_category(self) -> Self {
+        self.add(ArgValueCompletion::SelectedIntegrandCategory)
     }
 
     fn completion_disable_special_value(self) -> Self {

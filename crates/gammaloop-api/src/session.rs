@@ -17,8 +17,12 @@ use crate::{
         save::SaveState,
         CommandExecution, Commands, StartCommandsBlock,
     },
-    repl::{IrProfileCompletionEntry, ProcessCompletionEntry, ProcessKind},
-    state::{CommandHistory, CommandsBlock, RunHistory, State},
+    integrand_info::IntegrandKind,
+    repl::{
+        IntegrandDetailCompletionEntry, IrProfileCompletionEntry, ProcessCompletionEntry,
+        ProcessKind,
+    },
+    state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory, State},
     CLISettings,
 };
 
@@ -268,6 +272,58 @@ impl<'a> CliSession<'a> {
                     .into_iter()
                     .map(str::to_string)
                     .collect(),
+            })
+            .collect()
+    }
+
+    pub fn current_integrand_detail_entries(&self) -> Vec<IntegrandDetailCompletionEntry> {
+        self.state
+            .process_list
+            .processes
+            .iter()
+            .enumerate()
+            .flat_map(|(process_id, process)| {
+                process
+                    .collection
+                    .get_integrand_names()
+                    .into_iter()
+                    .filter_map(move |integrand_name| {
+                        let integrand_name = integrand_name.to_string();
+                        let info = self
+                            .state
+                            .get_integrand_info(
+                                Some(&ProcessRef::Id(process_id)),
+                                Some(&integrand_name),
+                            )
+                            .ok()?;
+                        let mut master_graph_names = info
+                            .graph_groups
+                            .iter()
+                            .filter_map(|group| {
+                                group
+                                    .graphs
+                                    .iter()
+                                    .find(|graph| graph.is_master)
+                                    .map(|graph| graph.name.clone())
+                            })
+                            .collect::<Vec<_>>();
+                        master_graph_names.sort();
+                        master_graph_names.dedup();
+
+                        let mut categories =
+                            vec!["orientation".to_string(), "loop_momentum_basis".to_string()];
+                        if info.kind == IntegrandKind::CrossSection {
+                            categories.push("cuts".to_string());
+                        }
+
+                        Some(IntegrandDetailCompletionEntry {
+                            process_name: process.definition.folder_name.clone(),
+                            integrand_name,
+                            master_graph_names,
+                            categories,
+                        })
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect()
     }

@@ -45,6 +45,7 @@ use gammalooprs::{
 use crate::{
     command_parser::{normalize_clap_args, split_command_line},
     commands::{save::SaveState, Commands},
+    integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
@@ -1194,6 +1195,15 @@ impl State {
         Ok((process_id, integrand_name))
     }
 
+    pub fn get_integrand_info(
+        &self,
+        process: Option<&ProcessRef>,
+        integrand_name: Option<&String>,
+    ) -> Result<IntegrandInfo> {
+        let (process_id, integrand_name) = self.find_integrand_ref(process, integrand_name)?;
+        collect_integrand_info(self, process_id, &integrand_name)
+    }
+
     pub fn resolve_effective_model_parameter_card_for_settings(
         &self,
         settings: &RuntimeSettings,
@@ -2025,12 +2035,20 @@ subtype = "tropical"
 
     #[test]
     fn command_history_parses_hash_process_refs() {
-        let cmd = CommandHistory::from_raw_string("display integrands -p #12").unwrap();
+        let cmd = CommandHistory::from_raw_string("display integrand -p #12").unwrap();
         match cmd.command {
-            Commands::Display(Display::Integrands { process }) => {
+            Commands::Display(Display::Integrands {
+                process,
+                integrand_name,
+                graphs,
+                categories,
+            }) => {
                 assert_eq!(process, Some(ProcessRef::Id(12)));
+                assert_eq!(integrand_name, None);
+                assert!(graphs.is_empty());
+                assert!(categories.is_empty());
             }
-            other => panic!("Expected display integrands command, got {other:?}"),
+            other => panic!("Expected display integrand command, got {other:?}"),
         }
     }
 

@@ -1,7 +1,10 @@
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use color_eyre::Result;
-use gammaloop_api::commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise};
+use gammaloop_api::{
+    commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
+    integrand_info::IntegrandKind,
+};
 use gammaloop_integration_tests::{
     CLIState, default_momentum_space_point, default_xspace_point, setup_sm_differential_lu_cli,
 };
@@ -80,6 +83,23 @@ fn evaluate_x_samples_with_weights(
     points: &[Vec<f64>],
     integrator_weights: Option<&[f64]>,
 ) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
+    evaluate_x_samples_with_weights_and_discrete_dims(cli, points, integrator_weights, None)
+}
+
+fn evaluate_x_samples_with_discrete_dims(
+    cli: &mut CLIState,
+    points: &[Vec<f64>],
+    discrete_dims: &[Vec<usize>],
+) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
+    evaluate_x_samples_with_weights_and_discrete_dims(cli, points, None, Some(discrete_dims))
+}
+
+fn evaluate_x_samples_with_weights_and_discrete_dims(
+    cli: &mut CLIState,
+    points: &[Vec<f64>],
+    integrator_weights: Option<&[f64]>,
+    discrete_dims: Option<&[Vec<usize>]>,
+) -> Result<gammalooprs::integrands::evaluation::BatchSampleEvaluationResult> {
     let ncols = points.first().map(Vec::len).unwrap_or(0);
     let flat = points
         .iter()
@@ -87,6 +107,16 @@ fn evaluate_x_samples_with_weights(
         .collect::<Vec<_>>();
     let array = Array2::from_shape_vec((points.len(), ncols), flat)?;
     let integrator_weights = integrator_weights.map(|weights| Array1::from_vec(weights.to_vec()));
+    let discrete_dims = discrete_dims
+        .map(|dims| {
+            let ncols = dims.first().map(Vec::len).unwrap_or(0);
+            let flat = dims
+                .iter()
+                .flat_map(|dim| dim.iter().copied())
+                .collect::<Vec<_>>();
+            Array2::from_shape_vec((dims.len(), ncols), flat)
+        })
+        .transpose()?;
     EvaluateSamples {
         process_id: None,
         integrand_name: None,
@@ -95,7 +125,7 @@ fn evaluate_x_samples_with_weights(
         momentum_space: false,
         points: array.view(),
         integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
-        discrete_dims: None,
+        discrete_dims: discrete_dims.as_ref().map(|dims| dims.view()),
         graph_names: None,
         orientations: None,
     }
@@ -240,6 +270,120 @@ fn some_additional_weights_are_present(
         .iter()
         .flat_map(|group| group.iter())
         .any(|event| !event.additional_weights.weights.is_empty())
+}
+
+fn momentum_signature(
+    momentum: &gammalooprs::momentum::FourMomentum<gammalooprs::utils::F<f64>>,
+) -> String {
+    format!(
+        "{:.17e},{:.17e},{:.17e},{:.17e}",
+        momentum.temporal.value.0,
+        momentum.spatial.px.0,
+        momentum.spatial.py.0,
+        momentum.spatial.pz.0
+    )
+}
+
+fn event_signature(event: &gammalooprs::observables::Event) -> String {
+    let incoming = event
+        .kinematic_configuration
+        .0
+        .iter()
+        .map(momentum_signature)
+        .collect::<Vec<_>>()
+        .join("|");
+    let outgoing = event
+        .kinematic_configuration
+        .1
+        .iter()
+        .map(momentum_signature)
+        .collect::<Vec<_>>()
+        .join("|");
+    let lmb_channel = event
+        .cut_info
+        .lmb_channel_edge_ids
+        .as_ref()
+        .map(|edge_ids| {
+            edge_ids
+                .iter()
+                .map(|edge_id| edge_id.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        })
+        .unwrap_or_else(|| "none".to_string());
+
+    format!(
+        "graph={} cut={} lmb={} weight={:.17e},{:.17e} in={} out={}",
+        event.cut_info.graph_id,
+        event.cut_info.cut_id,
+        lmb_channel,
+        event.weight.re.0,
+        event.weight.im.0,
+        incoming,
+        outgoing
+    )
+}
+
+fn event_multiset(events: impl IntoIterator<Item = String>) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for event in events {
+        *counts.entry(event).or_insert(0) += 1;
+    }
+    counts
+}
+
+#[test]
+#[serial]
+fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Result<()> {
+    let cli = setup_sm_differential_lu_cli("lu_rust_get_integrand_info")?;
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;
+    let info = cli.state.get_integrand_info(None, None)?;
+    let process = &cli.state.process_list.processes[process_id];
+
+    assert_eq!(info.process_id, process.definition.process_id);
+    assert_eq!(info.process_name, process.definition.folder_name);
+    assert_eq!(info.integrand_name, integrand_name);
+    assert_eq!(info.kind, IntegrandKind::CrossSection);
+    assert_eq!(info.graph_group_count, info.graph_groups.len());
+    assert!(info.graph_count >= info.graph_group_count);
+    assert!(info.record_size_bytes > 0);
+
+    for group in &info.graph_groups {
+        assert_eq!(
+            group.graphs.iter().filter(|graph| graph.is_master).count(),
+            1
+        );
+        assert!(!group.graphs.is_empty());
+
+        assert!(!group.orientation_edge_ids.is_empty());
+
+        for (expected_id, orientation) in group.orientations.iter().enumerate() {
+            assert_eq!(orientation.orientation_id, expected_id);
+            assert_eq!(
+                orientation.signature.len(),
+                group.orientation_edge_ids.len()
+            );
+            assert!(
+                orientation
+                    .signature
+                    .iter()
+                    .all(|sign| matches!(*sign, -1 | 0 | 1))
+            );
+        }
+
+        for (expected_id, channel) in group.lmb_channels.iter().enumerate() {
+            assert_eq!(channel.channel_id, expected_id);
+            assert!(!channel.edge_ids.is_empty());
+        }
+
+        for (expected_id, cut) in group.cuts.iter().enumerate() {
+            assert_eq!(cut.cut_id, expected_id);
+            assert!(!cut.edge_ids.is_empty());
+            assert!(cut.raising_power >= 1);
+        }
+    }
+
+    Ok(())
 }
 
 #[test]
@@ -619,6 +763,129 @@ fn lu_rust_momentum_space_integrator_weights_scale_events_without_jacobian() -> 
             assert_complex_scaled(&weighted_event.weight, &unit_event.weight, 2.5);
         }
     }
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_rust_explicit_lmb_multichanneling_groups_channel_events_and_tags_metadata() -> Result<()> {
+    let point_group_label = "lu_rust_explicit_lmb_multichanneling_explicit";
+    let mut explicit_cli = setup_sm_differential_lu_cli(point_group_label)?;
+    explicit_cli.run_command(
+        "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
+    )?;
+    explicit_cli.run_command(
+        r#"set process string '
+[sampling]
+type = "discrete_graph_sampling"
+sample_orientations = false
+[sampling.sampling_type]
+subtype = "multi_channeling"
+'"#,
+    )?;
+
+    let (process_id, integrand_name) = explicit_cli.state.find_integrand_ref(None, None)?;
+    let integrand = explicit_cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?;
+    let group_id = (0..integrand.graph_count())
+        .filter_map(|graph_id| integrand.graph_name_by_id(graph_id))
+        .filter_map(|graph_name| integrand.resolve_group_id_by_master_name(graph_name).ok())
+        .find(|&group_id| integrand.group_channel_count(group_id).unwrap_or(0) > 1)
+        .expect("expected at least one graph group with more than one LMB channel");
+    let channel_count = integrand.group_channel_count(group_id).unwrap();
+    let point = default_xspace_point(&explicit_cli)?;
+
+    let mut explicit_results = evaluate_x_samples_with_discrete_dims(
+        &mut explicit_cli,
+        std::slice::from_ref(&point),
+        &[vec![group_id.0]],
+    )?;
+    let explicit = explicit_results.samples.remove(0);
+    assert_eq!(explicit.evaluation.event_groups.len(), 1);
+    let explicit_events = &explicit.evaluation.event_groups[0];
+    assert_eq!(
+        metadata(&explicit).generated_event_count,
+        metadata(&explicit).accepted_event_count
+    );
+    assert_eq!(
+        metadata(&explicit).generated_event_count,
+        explicit_events.len(),
+        "expected one retained event per generated accepted event for explicit LMB summation"
+    );
+    let explicit_channel_tags = explicit_events
+        .iter()
+        .map(|event| {
+            event
+                .cut_info
+                .lmb_channel_edge_ids
+                .as_ref()
+                .expect("explicit multi-channeling events should carry LMB channel metadata")
+                .iter()
+                .copied()
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let unique_channels = explicit_channel_tags
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        unique_channels.len(),
+        channel_count,
+        "explicit multi-channeling should contribute events from every LMB channel into the same event group"
+    );
+
+    let mut per_channel_cli =
+        setup_sm_differential_lu_cli("lu_rust_explicit_lmb_multichanneling_discrete_channels")?;
+    per_channel_cli.run_command(
+        "set process kv general.generate_events=true general.store_additional_weights_in_event=true",
+    )?;
+    per_channel_cli.run_command(
+        r#"set process string '
+[sampling]
+type = "discrete_graph_sampling"
+sample_orientations = false
+[sampling.sampling_type]
+subtype = "discrete_multi_channeling"
+'"#,
+    )?;
+
+    let mut discrete_event_signatures = Vec::new();
+    for channel in 0..channel_count {
+        let mut results = evaluate_x_samples_with_discrete_dims(
+            &mut per_channel_cli,
+            std::slice::from_ref(&point),
+            &[vec![group_id.0, channel]],
+        )?;
+        let result = results.samples.remove(0);
+        for group in result.evaluation.event_groups.iter() {
+            for event in group.iter() {
+                let lmb_channel_edge_ids = event
+                    .cut_info
+                    .lmb_channel_edge_ids
+                    .as_ref()
+                    .expect("discrete multi-channeling events should carry LMB channel metadata")
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>();
+                assert!(
+                    unique_channels.contains(&lmb_channel_edge_ids),
+                    "channel tag should correspond to one explicit-sum LMB basis"
+                );
+                discrete_event_signatures.push(event_signature(&event));
+            }
+        }
+    }
+
+    assert_eq!(
+        event_multiset(explicit_events.iter().map(event_signature)),
+        event_multiset(discrete_event_signatures),
+        "explicit multi-channeling should return the union of the per-channel event sets, grouped into one graph-group event group"
+    );
 
     Ok(())
 }

@@ -1,0 +1,339 @@
+use std::fmt;
+
+use color_eyre::Result;
+use eyre::{eyre, Context};
+use gammalooprs::{
+    graph::Graph,
+    processes::{Amplitude, CrossSection, CrossSectionCut, ProcessCollection},
+};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::state::State;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegrandKind {
+    Amplitude,
+    CrossSection,
+}
+
+impl fmt::Display for IntegrandKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Amplitude => f.write_str("amplitude"),
+            Self::CrossSection => f.write_str("cross section"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandGraphInfo {
+    pub graph_id: usize,
+    pub name: String,
+    pub is_master: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandOrientationInfo {
+    pub orientation_id: usize,
+    pub signature: Vec<i8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandLmbChannelInfo {
+    pub channel_id: usize,
+    pub edge_ids: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandCutInfo {
+    pub cut_id: usize,
+    pub edge_ids: Vec<usize>,
+    pub raising_power: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandGraphGroupInfo {
+    pub group_id: usize,
+    pub graphs: Vec<IntegrandGraphInfo>,
+    pub orientation_edge_ids: Vec<usize>,
+    pub orientations: Vec<IntegrandOrientationInfo>,
+    pub lmb_channels: Vec<IntegrandLmbChannelInfo>,
+    pub cuts: Vec<IntegrandCutInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandInfo {
+    pub process_id: usize,
+    pub process_name: String,
+    pub integrand_name: String,
+    pub kind: IntegrandKind,
+    pub graph_count: usize,
+    pub graph_group_count: usize,
+    pub record_size_bytes: usize,
+    pub graph_groups: Vec<IntegrandGraphGroupInfo>,
+}
+
+pub(crate) fn collect_integrand_info(
+    state: &State,
+    process_id: usize,
+    integrand_name: &str,
+) -> Result<IntegrandInfo> {
+    let process = &state.process_list.processes[process_id];
+    let resolved = process.get_integrand(integrand_name)?;
+    let generated = resolved.require_generated()?;
+
+    match (generated, &process.collection) {
+        (
+            gammalooprs::integrands::process::ProcessIntegrand::Amplitude(integrand),
+            ProcessCollection::Amplitudes(amplitudes),
+        ) => {
+            let amplitude = amplitudes.get(&resolved.canonical_name).ok_or_else(|| {
+                eyre!(
+                    "Could not resolve amplitude record '{}' in process #{} ({})",
+                    resolved.canonical_name,
+                    process.definition.process_id,
+                    process.definition.folder_name
+                )
+            })?;
+            Ok(IntegrandInfo {
+                process_id: process.definition.process_id,
+                process_name: process.definition.folder_name.clone(),
+                integrand_name: resolved.canonical_name,
+                kind: IntegrandKind::Amplitude,
+                graph_count: amplitude.graphs.len(),
+                graph_group_count: amplitude.graph_group_structure.len(),
+                record_size_bytes: integrand_record_size_from_amplitude(amplitude)?,
+                graph_groups: amplitude_graph_groups(integrand),
+            })
+        }
+        (
+            gammalooprs::integrands::process::ProcessIntegrand::CrossSection(integrand),
+            ProcessCollection::CrossSections(cross_sections),
+        ) => {
+            let cross_section = cross_sections
+                .get(&resolved.canonical_name)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Could not resolve cross-section record '{}' in process #{} ({})",
+                        resolved.canonical_name,
+                        process.definition.process_id,
+                        process.definition.folder_name
+                    )
+                })?;
+            Ok(IntegrandInfo {
+                process_id: process.definition.process_id,
+                process_name: process.definition.folder_name.clone(),
+                integrand_name: resolved.canonical_name,
+                kind: IntegrandKind::CrossSection,
+                graph_count: cross_section.supergraphs.len(),
+                graph_group_count: cross_section.graph_group_structure.len(),
+                record_size_bytes: integrand_record_size_from_cross_section(cross_section)?,
+                graph_groups: cross_section_graph_groups(integrand),
+            })
+        }
+        _ => Err(eyre!(
+            "Process/integrand type mismatch for '{}' in process #{} ({})",
+            resolved.canonical_name,
+            process.definition.process_id,
+            process.definition.folder_name
+        )),
+    }
+}
+
+fn orientation_signature(orientation: &EdgeVec<Orientation>) -> Vec<i8> {
+    orientation
+        .iter()
+        .map(|(_, orientation)| match *orientation {
+            Orientation::Default => 1,
+            Orientation::Reversed => -1,
+            Orientation::Undirected => 0,
+        })
+        .collect()
+}
+
+fn orientation_edge_ids(orientation: &EdgeVec<Orientation>) -> Vec<usize> {
+    orientation.iter().map(|(edge_id, _)| edge_id.0).collect()
+}
+
+fn cut_edge_ids(graph: &Graph, cut: &CrossSectionCut) -> Vec<usize> {
+    cut.cut
+        .iter_edges(&graph.underlying)
+        .map(|(_, edge)| {
+            graph
+                .underlying
+                .iter_edges()
+                .find_map(|(_, edge_id, edge_data)| {
+                    (edge_data.data.name == edge.data.name).then_some(edge_id.0)
+                })
+                .expect("cut edge should resolve in graph")
+        })
+        .collect()
+}
+
+fn cut_raising_powers(
+    graph: &gammalooprs::integrands::process::cross_section::CrossSectionGraphTerm,
+) -> Vec<usize> {
+    let mut raising_powers = vec![1; graph.cuts.len()];
+    for raised_cut_group in graph.raised_data.raised_cut_groups.iter() {
+        let raising_power = raised_cut_group.related_esurface_group.max_occurence;
+        for cut_id in &raised_cut_group.cuts {
+            raising_powers[cut_id.0] = raising_power;
+        }
+    }
+    raising_powers
+}
+
+fn amplitude_graph_groups(
+    integrand: &gammalooprs::integrands::process::amplitude::AmplitudeIntegrand,
+) -> Vec<IntegrandGraphGroupInfo> {
+    integrand
+        .data
+        .graph_group_structure
+        .iter()
+        .enumerate()
+        .map(|(group_id, group)| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should not be empty");
+            let master_graph = &integrand.data.graph_terms[master_graph_id];
+            IntegrandGraphGroupInfo {
+                group_id,
+                graphs: group
+                    .into_iter()
+                    .map(|graph_id| IntegrandGraphInfo {
+                        graph_id,
+                        name: integrand.data.graph_terms[graph_id].graph.name.clone(),
+                        is_master: graph_id == master_graph_id,
+                    })
+                    .collect(),
+                orientation_edge_ids: master_graph
+                    .orientations
+                    .first()
+                    .map(orientation_edge_ids)
+                    .unwrap_or_default(),
+                orientations: master_graph
+                    .orientations
+                    .iter()
+                    .enumerate()
+                    .map(|(orientation_id, orientation)| IntegrandOrientationInfo {
+                        orientation_id,
+                        signature: orientation_signature(orientation),
+                    })
+                    .collect(),
+                lmb_channels: master_graph
+                    .multi_channeling_setup
+                    .channels
+                    .iter()
+                    .enumerate()
+                    .map(|(channel_id, &channel_lmb)| IntegrandLmbChannelInfo {
+                        channel_id,
+                        edge_ids: master_graph.multi_channeling_setup.all_bases[channel_lmb]
+                            .loop_edges
+                            .iter()
+                            .map(|edge_id| edge_id.0)
+                            .collect(),
+                    })
+                    .collect(),
+                cuts: Vec::new(),
+            }
+        })
+        .collect()
+}
+
+fn cross_section_graph_groups(
+    integrand: &gammalooprs::integrands::process::cross_section::CrossSectionIntegrand,
+) -> Vec<IntegrandGraphGroupInfo> {
+    integrand
+        .data
+        .graph_group_structure
+        .iter()
+        .enumerate()
+        .map(|(group_id, group)| {
+            let master_graph_id = group
+                .into_iter()
+                .next()
+                .expect("graph group should not be empty");
+            let master_graph = &integrand.data.graph_terms[master_graph_id];
+            let cut_raising_powers = cut_raising_powers(master_graph);
+            IntegrandGraphGroupInfo {
+                group_id,
+                graphs: group
+                    .into_iter()
+                    .map(|graph_id| IntegrandGraphInfo {
+                        graph_id,
+                        name: integrand.data.graph_terms[graph_id].graph.name.clone(),
+                        is_master: graph_id == master_graph_id,
+                    })
+                    .collect(),
+                orientation_edge_ids: master_graph
+                    .orientations
+                    .first()
+                    .map(orientation_edge_ids)
+                    .unwrap_or_default(),
+                orientations: master_graph
+                    .orientations
+                    .iter()
+                    .enumerate()
+                    .map(|(orientation_id, orientation)| IntegrandOrientationInfo {
+                        orientation_id,
+                        signature: orientation_signature(orientation),
+                    })
+                    .collect(),
+                lmb_channels: master_graph
+                    .multi_channeling_setup
+                    .channels
+                    .iter()
+                    .enumerate()
+                    .map(|(channel_id, &channel_lmb)| IntegrandLmbChannelInfo {
+                        channel_id,
+                        edge_ids: master_graph.multi_channeling_setup.all_bases[channel_lmb]
+                            .loop_edges
+                            .iter()
+                            .map(|edge_id| edge_id.0)
+                            .collect(),
+                    })
+                    .collect(),
+                cuts: master_graph
+                    .cuts
+                    .iter()
+                    .enumerate()
+                    .map(|(cut_id, cut)| IntegrandCutInfo {
+                        cut_id,
+                        edge_ids: cut_edge_ids(&master_graph.graph, cut),
+                        raising_power: cut_raising_powers[cut_id],
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+fn integrand_record_size_from_amplitude(amplitude: &Amplitude) -> Result<usize> {
+    let mut record = amplitude.clone();
+    record.integrand = None;
+    let encoded =
+        bincode::encode_to_vec(&record, bincode::config::standard()).with_context(|| {
+            format!(
+                "While serializing amplitude '{}' for integrand info",
+                amplitude.name
+            )
+        })?;
+    Ok(encoded.len())
+}
+
+fn integrand_record_size_from_cross_section(cross_section: &CrossSection) -> Result<usize> {
+    let mut record = cross_section.clone();
+    record.integrand = None;
+    let encoded =
+        bincode::encode_to_vec(&record, bincode::config::standard()).with_context(|| {
+            format!(
+                "While serializing cross-section '{}' for integrand info",
+                cross_section.name
+            )
+        })?;
+    Ok(encoded.len())
+}

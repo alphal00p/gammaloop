@@ -225,9 +225,9 @@ mod test {
 
     #[test]
     fn split_preserves_hash_process_references() {
-        let line = "display integrands -p #12";
+        let line = "display integrand -p #12";
         let parts = split_command_line(line).unwrap();
-        assert_eq!(parts, vec!["display", "integrands", "-p", "#12"]);
+        assert_eq!(parts, vec!["display", "integrand", "-p", "#12"]);
     }
 
     #[test]

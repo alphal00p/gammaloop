@@ -25,6 +25,10 @@ use crate::{
         evaluate_samples::EvaluateSamples, import::model::ImportModel, integrate::Integrate,
         Evaluate,
     },
+    integrand_info::{
+        IntegrandCutInfo, IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo,
+        IntegrandLmbChannelInfo, IntegrandOrientationInfo,
+    },
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
@@ -89,6 +93,12 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyEvent>()?;
     m.add_class::<PyFourMomentum>()?;
     m.add_class::<PyCutInfo>()?;
+    m.add_class::<PyIntegrandInfo>()?;
+    m.add_class::<PyIntegrandGraphGroupInfo>()?;
+    m.add_class::<PyIntegrandGraphInfo>()?;
+    m.add_class::<PyIntegrandOrientationInfo>()?;
+    m.add_class::<PyIntegrandLmbChannelInfo>()?;
+    m.add_class::<PyIntegrandCutInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
     m.add_class::<PyHistogramSnapshot>()?;
     m.add_class::<PyHistogramBinSnapshot>()?;
@@ -153,6 +163,61 @@ pub struct PyCutInfo {
     pub outgoing_pdgs: Vec<isize>,
     pub cut_id: usize,
     pub graph_id: usize,
+    pub lmb_channel_edge_ids: Option<Vec<usize>>,
+}
+
+#[pyclass(from_py_object, name = "IntegrandGraph", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandGraphInfo {
+    pub graph_id: usize,
+    pub name: String,
+    pub is_master: bool,
+}
+
+#[pyclass(from_py_object, name = "IntegrandOrientation", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandOrientationInfo {
+    pub orientation_id: usize,
+    pub signature: Vec<i8>,
+}
+
+#[pyclass(from_py_object, name = "IntegrandLmbChannel", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandLmbChannelInfo {
+    pub channel_id: usize,
+    pub edge_ids: Vec<usize>,
+}
+
+#[pyclass(from_py_object, name = "IntegrandCut", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandCutInfo {
+    pub cut_id: usize,
+    pub edge_ids: Vec<usize>,
+    pub raising_power: usize,
+}
+
+#[pyclass(from_py_object, name = "IntegrandGraphGroup", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandGraphGroupInfo {
+    pub group_id: usize,
+    pub graphs: Vec<PyIntegrandGraphInfo>,
+    pub orientation_edge_ids: Vec<usize>,
+    pub orientations: Vec<PyIntegrandOrientationInfo>,
+    pub lmb_channels: Vec<PyIntegrandLmbChannelInfo>,
+    pub cuts: Vec<PyIntegrandCutInfo>,
+}
+
+#[pyclass(from_py_object, name = "IntegrandInfo", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandInfo {
+    pub process_id: usize,
+    pub process_name: String,
+    pub integrand_name: String,
+    pub kind: String,
+    pub graph_count: usize,
+    pub graph_group_count: usize,
+    pub record_size_bytes: usize,
+    pub graph_groups: Vec<PyIntegrandGraphGroupInfo>,
 }
 
 #[pyclass(from_py_object, name = "Event", get_all)]
@@ -698,6 +763,11 @@ fn py_event_from_event(event: &Event) -> PyEvent {
             outgoing_pdgs: event.cut_info.particle_pdgs.1.iter().copied().collect(),
             cut_id: event.cut_info.cut_id,
             graph_id: event.cut_info.graph_id,
+            lmb_channel_edge_ids: event
+                .cut_info
+                .lmb_channel_edge_ids
+                .as_ref()
+                .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
         weight: py_complex_from_complex(event.weight),
         additional_weights,
@@ -766,6 +836,11 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             ),
             cut_id: event.cut_info.cut_id,
             graph_id: event.cut_info.graph_id,
+            lmb_channel_edge_ids: event
+                .cut_info
+                .lmb_channel_edge_ids
+                .as_ref()
+                .map(|edge_ids| edge_ids.iter().copied().collect()),
         },
         weight: spenso::algebra::complex::Complex::new(
             gammalooprs::utils::F(event.weight.re),
@@ -1001,6 +1076,86 @@ fn py_integration_result_from_result(
             .slots
             .into_iter()
             .map(py_slot_integration_result_from_result)
+            .collect(),
+    }
+}
+
+fn py_integrand_graph_info_from_info(graph: IntegrandGraphInfo) -> PyIntegrandGraphInfo {
+    PyIntegrandGraphInfo {
+        graph_id: graph.graph_id,
+        name: graph.name,
+        is_master: graph.is_master,
+    }
+}
+
+fn py_integrand_orientation_info_from_info(
+    orientation: IntegrandOrientationInfo,
+) -> PyIntegrandOrientationInfo {
+    PyIntegrandOrientationInfo {
+        orientation_id: orientation.orientation_id,
+        signature: orientation.signature,
+    }
+}
+
+fn py_integrand_lmb_channel_info_from_info(
+    channel: IntegrandLmbChannelInfo,
+) -> PyIntegrandLmbChannelInfo {
+    PyIntegrandLmbChannelInfo {
+        channel_id: channel.channel_id,
+        edge_ids: channel.edge_ids,
+    }
+}
+
+fn py_integrand_cut_info_from_info(cut: IntegrandCutInfo) -> PyIntegrandCutInfo {
+    PyIntegrandCutInfo {
+        cut_id: cut.cut_id,
+        edge_ids: cut.edge_ids,
+        raising_power: cut.raising_power,
+    }
+}
+
+fn py_integrand_graph_group_info_from_info(
+    group: IntegrandGraphGroupInfo,
+) -> PyIntegrandGraphGroupInfo {
+    PyIntegrandGraphGroupInfo {
+        group_id: group.group_id,
+        graphs: group
+            .graphs
+            .into_iter()
+            .map(py_integrand_graph_info_from_info)
+            .collect(),
+        orientation_edge_ids: group.orientation_edge_ids,
+        orientations: group
+            .orientations
+            .into_iter()
+            .map(py_integrand_orientation_info_from_info)
+            .collect(),
+        lmb_channels: group
+            .lmb_channels
+            .into_iter()
+            .map(py_integrand_lmb_channel_info_from_info)
+            .collect(),
+        cuts: group
+            .cuts
+            .into_iter()
+            .map(py_integrand_cut_info_from_info)
+            .collect(),
+    }
+}
+
+fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
+    PyIntegrandInfo {
+        process_id: info.process_id,
+        process_name: info.process_name,
+        integrand_name: info.integrand_name,
+        kind: info.kind.to_string(),
+        graph_count: info.graph_count,
+        graph_group_count: info.graph_group_count,
+        record_size_bytes: info.record_size_bytes,
+        graph_groups: info
+            .graph_groups
+            .into_iter()
+            .map(py_integrand_graph_group_info_from_info)
             .collect(),
     }
 }
@@ -1883,6 +2038,22 @@ impl GammaLoopAPI {
             }
         }
         Ok((all_amplitudes, all_cross_sections))
+    }
+
+    #[pyo3(name="get_integrand_info", signature = (process_id=None, integrand_name=None))]
+    pub(crate) fn get_integrand_info(
+        &self,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+    ) -> PyResult<PyIntegrandInfo> {
+        let process_ref = process_id.map(ProcessRef::Id);
+        let info = self
+            .gammaloop_state
+            .get_integrand_info(process_ref.as_ref(), integrand_name.as_ref())
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!("Could not get integrand info: {}", e))
+            })?;
+        Ok(py_integrand_info_from_info(info))
     }
 
     #[pyo3(name="get_integrand_settings", signature = (process_id=None, integrand_name=None))]

@@ -18,6 +18,7 @@ pub struct CutInfo {
     pub particle_pdgs: (SmallVec<[isize; 2]>, SmallVec<[isize; 4]>),
     pub cut_id: usize,
     pub graph_id: usize,
+    pub lmb_channel_edge_ids: Option<SmallVec<[usize; 4]>>,
 }
 
 pub type Event = GenericEvent<f64>;
@@ -337,6 +338,21 @@ fn format_pdg_with_state_color(pdg: Option<isize>, incoming: bool) -> String {
     }
 }
 
+fn format_lmb_channel_edge_ids(edge_ids: Option<&[usize]>) -> String {
+    edge_ids
+        .map(|edge_ids| {
+            format!(
+                "({})",
+                edge_ids
+                    .iter()
+                    .map(|edge_id| edge_id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        })
+        .unwrap_or_else(|| "None".to_string())
+}
+
 fn momentum_mass_squared<T: FloatLike>(momentum: &FourMomentum<F<T>>) -> F<T> {
     momentum.temporal.value.clone() * momentum.temporal.value.clone()
         - momentum.spatial.px.clone() * momentum.spatial.px.clone()
@@ -472,6 +488,10 @@ impl fmt::Display for CutInfo {
                 field: "cut".to_string(),
                 value: self.cut_id.to_string(),
             },
+            EventSummaryRow {
+                field: "lmb channel".to_string(),
+                value: format_lmb_channel_edge_ids(self.lmb_channel_edge_ids.as_deref()),
+            },
         ];
         write!(f, "{}", Table::new(rows).with(Style::rounded()))
     }
@@ -487,6 +507,10 @@ impl<T: FloatLike> fmt::Display for GenericEvent<T> {
             EventSummaryRow {
                 field: "cut".to_string(),
                 value: self.cut_info.cut_id.to_string(),
+            },
+            EventSummaryRow {
+                field: "lmb channel".to_string(),
+                value: format_lmb_channel_edge_ids(self.cut_info.lmb_channel_edge_ids.as_deref()),
             },
             EventSummaryRow {
                 field: "weight".to_string(),

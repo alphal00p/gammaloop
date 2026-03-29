@@ -37,6 +37,7 @@ use crate::{
 pub struct CompletionState {
     commands_block_names: Vec<String>,
     process_entries: Vec<ProcessCompletionEntry>,
+    integrand_detail_entries: Vec<IntegrandDetailCompletionEntry>,
     process_settings_entries: Vec<ProcessSettingsCompletionEntry>,
     ir_profile_entries: Vec<IrProfileCompletionEntry>,
     model_parameter_entries: Vec<ModelParameterCompletionEntry>,
@@ -75,6 +76,14 @@ pub struct ProcessCompletionEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IntegrandDetailCompletionEntry {
+    pub process_name: String,
+    pub integrand_name: String,
+    pub master_graph_names: Vec<String>,
+    pub categories: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IrProfileCompletionEntry {
     pub process_name: String,
     pub integrand_name: String,
@@ -104,6 +113,7 @@ impl SharedCompletionState {
         self.write(|state| {
             state.commands_block_names = session.current_commands_block_names();
             state.process_entries = session.current_process_entries();
+            state.integrand_detail_entries = session.current_integrand_detail_entries();
             state.process_settings_entries = session.current_process_settings_entries();
             state.ir_profile_entries = session.current_ir_profile_entries();
             state.model_parameter_entries = session.current_model_parameter_entries();
@@ -488,6 +498,30 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                         context.all_completed_tokens,
                         context.root_cmd,
                         value_request,
+                        pos,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectedMasterGraph => {
+                    add_selected_master_graph_suggestions(
+                        completion_state,
+                        context.all_completed_tokens,
+                        context.root_cmd,
+                        value_request,
+                        &flag_value_context.consumed_values,
+                        pos,
+                        &mut suggestions,
+                        &mut seen,
+                    );
+                }
+                ArgValueCompletion::SelectedIntegrandCategory => {
+                    add_selected_integrand_category_suggestions(
+                        completion_state,
+                        context.all_completed_tokens,
+                        context.root_cmd,
+                        value_request,
+                        &flag_value_context.consumed_values,
                         pos,
                         &mut suggestions,
                         &mut seen,
@@ -2486,6 +2520,98 @@ fn add_selected_integrand_target_suggestions(
     }
 }
 
+fn add_selected_master_graph_suggestions(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+    request: &PathCompletionRequest,
+    consumed_values: &[String],
+    pos: usize,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let prefix = request.partial_path.as_str();
+    let consumed_values = consumed_values
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let Some(entry) =
+        find_selected_integrand_detail_entry(completion_state, root_cmd, completed_tokens)
+    else {
+        return;
+    };
+
+    for graph_name in &entry.master_graph_names {
+        if consumed_values.contains(graph_name.as_str()) {
+            continue;
+        }
+        if !prefix.is_empty() && !graph_name.starts_with(prefix) {
+            continue;
+        }
+        let rendered = render_value_completion(graph_name, request.quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(reedline::Suggestion {
+            value: rendered,
+            description: Some(format!(
+                "Master graph in {} / {}",
+                entry.process_name, entry.integrand_name
+            )),
+            style: None,
+            extra: None,
+            span: Span::new(request.span_start, pos),
+            append_whitespace: true,
+        });
+    }
+}
+
+fn add_selected_integrand_category_suggestions(
+    completion_state: &CompletionState,
+    completed_tokens: &[CompletionToken],
+    root_cmd: &clap::Command,
+    request: &PathCompletionRequest,
+    consumed_values: &[String],
+    pos: usize,
+    suggestions: &mut Vec<reedline::Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let prefix = request.partial_path.as_str();
+    let consumed_values = consumed_values
+        .iter()
+        .map(String::as_str)
+        .collect::<HashSet<_>>();
+    let Some(entry) =
+        find_selected_integrand_detail_entry(completion_state, root_cmd, completed_tokens)
+    else {
+        return;
+    };
+
+    for category in &entry.categories {
+        if consumed_values.contains(category.as_str()) {
+            continue;
+        }
+        if !prefix.is_empty() && !category.starts_with(prefix) {
+            continue;
+        }
+        let rendered = render_value_completion(category, request.quote_style);
+        if !seen.insert(rendered.clone()) {
+            continue;
+        }
+        suggestions.push(reedline::Suggestion {
+            value: rendered,
+            description: Some(format!(
+                "Display category for {} / {}",
+                entry.process_name, entry.integrand_name
+            )),
+            style: None,
+            extra: None,
+            span: Span::new(request.span_start, pos),
+            append_whitespace: true,
+        });
+    }
+}
+
 fn is_ir_profile_select_argument(context: &CommandContext<'_>, arg: &clap::Arg) -> bool {
     matches_command_path(context, &["profile", "infra-red"]) && arg.get_long() == Some("select")
 }
@@ -2926,6 +3052,22 @@ fn find_last_flag_value(
     }
 
     result
+}
+
+fn find_selected_integrand_detail_entry<'a>(
+    completion_state: &'a CompletionState,
+    root_cmd: &clap::Command,
+    completed_tokens: &[CompletionToken],
+) -> Option<&'a IntegrandDetailCompletionEntry> {
+    let process_entry = find_selected_process_entry(completion_state, root_cmd, completed_tokens)?;
+    let integrand_name = find_last_flag_value(root_cmd, completed_tokens, "integrand-name")?;
+
+    completion_state
+        .integrand_detail_entries
+        .iter()
+        .find(|entry| {
+            entry.process_name == process_entry.name && entry.integrand_name == integrand_name
+        })
 }
 
 fn selected_integrand_keys_for_target_completion(
@@ -3694,8 +3836,9 @@ mod tests {
     };
 
     use super::{
-        collect_completions, CompletionState, IrProfileCompletionEntry,
-        ModelParameterCompletionEntry, ProcessCompletionEntry, ProcessKind,
+        collect_completions, CompletionState, IntegrandDetailCompletionEntry,
+        IrProfileCompletionEntry, ModelParameterCompletionEntry, ProcessCompletionEntry,
+        ProcessKind,
     };
 
     fn sample_process_entries() -> Vec<ProcessCompletionEntry> {
@@ -3732,6 +3875,27 @@ mod tests {
                 "GL2 C[4,5]".to_string(),
             ],
         }]
+    }
+
+    fn sample_integrand_detail_entries() -> Vec<IntegrandDetailCompletionEntry> {
+        vec![
+            IntegrandDetailCompletionEntry {
+                process_name: "triangle".to_string(),
+                integrand_name: "LO".to_string(),
+                master_graph_names: vec!["GL0".to_string(), "GL1".to_string()],
+                categories: vec!["orientation".to_string(), "loop_momentum_basis".to_string()],
+            },
+            IntegrandDetailCompletionEntry {
+                process_name: "epem_xs".to_string(),
+                integrand_name: "subtracted".to_string(),
+                master_graph_names: vec!["GL0".to_string(), "GL2".to_string()],
+                categories: vec![
+                    "orientation".to_string(),
+                    "loop_momentum_basis".to_string(),
+                    "cuts".to_string(),
+                ],
+            },
+        ]
     }
 
     fn sample_process_settings_entries() -> Vec<ProcessSettingsCompletionEntry> {
@@ -3854,6 +4018,7 @@ mod tests {
     fn generate_completion_state() -> CompletionState {
         CompletionState {
             process_entries: sample_process_entries(),
+            integrand_detail_entries: sample_integrand_detail_entries(),
             model_particle_names: vec![
                 "g".to_string(),
                 "h".to_string(),
@@ -4326,6 +4491,41 @@ mod tests {
 
         assert!(!values.contains(&"triangle@LO=".to_string()));
         assert!(values.contains(&"epem_xs@subtracted=".to_string()));
+    }
+
+    #[test]
+    fn completion_offers_selected_master_graphs_for_display_integrand() {
+        let completion_state = generate_completion_state();
+
+        let values = completion_values(
+            "display integrand -p epem_xs -i subtracted -g G",
+            &completion_state,
+        );
+
+        assert!(values.contains(&"GL0".to_string()));
+        assert!(values.contains(&"GL2".to_string()));
+        assert!(!values.contains(&"GL1".to_string()));
+    }
+
+    #[test]
+    fn completion_filters_display_integrand_categories_by_integrand_kind() {
+        let completion_state = generate_completion_state();
+
+        let xs_values = completion_values(
+            "display integrand -p epem_xs -i subtracted --category ",
+            &completion_state,
+        );
+        assert!(xs_values.contains(&"orientation".to_string()));
+        assert!(xs_values.contains(&"loop_momentum_basis".to_string()));
+        assert!(xs_values.contains(&"cuts".to_string()));
+
+        let amp_values = completion_values(
+            "display integrand -p triangle -i LO --category ",
+            &completion_state,
+        );
+        assert!(amp_values.contains(&"orientation".to_string()));
+        assert!(amp_values.contains(&"loop_momentum_basis".to_string()));
+        assert!(!amp_values.contains(&"cuts".to_string()));
     }
 
     #[test]
