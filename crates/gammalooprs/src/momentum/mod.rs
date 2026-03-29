@@ -2779,6 +2779,77 @@ impl Rotation {
     pub(crate) fn is_identity(&self) -> bool {
         matches!(self.method, RotationMethod::Identity)
     }
+
+    pub(crate) fn inverse_rotate_three<T: FloatLike>(
+        &self,
+        momentum: &ThreeMomentum<F<T>>,
+    ) -> ThreeMomentum<F<T>> {
+        match self.method {
+            RotationMethod::Identity => momentum.clone(),
+            RotationMethod::Pi2X => ThreeMomentum {
+                px: momentum.px.clone(),
+                py: momentum.pz.clone(),
+                pz: -momentum.py.clone(),
+            },
+            RotationMethod::Pi2Y => ThreeMomentum {
+                px: -momentum.pz.clone(),
+                py: momentum.py.clone(),
+                pz: momentum.px.clone(),
+            },
+            RotationMethod::Pi2Z => ThreeMomentum {
+                px: momentum.py.clone(),
+                py: -momentum.px.clone(),
+                pz: momentum.pz.clone(),
+            },
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                // Rotation settings are persisted as f64, so reconstructing them at the
+                // active numeric precision is an explicit f64 boundary.
+                let alpha = F::<T>::from_f64(alpha);
+                let beta = F::<T>::from_f64(beta);
+                let gamma = F::<T>::from_f64(gamma);
+                let sin_alpha = alpha.sin();
+                let cos_alpha = alpha.cos();
+                let sin_beta = beta.sin();
+                let cos_beta = beta.cos();
+                let sin_gamma = gamma.sin();
+                let cos_gamma = gamma.cos();
+
+                let px = momentum.px.clone();
+                let py = momentum.py.clone();
+                let pz = momentum.pz.clone();
+
+                ThreeMomentum {
+                    px: cos_gamma.clone() * &cos_beta * &px + sin_gamma.clone() * &cos_beta * &py
+                        - sin_beta.clone() * &pz,
+                    py: (-(cos_alpha.clone()) * &sin_gamma
+                        + sin_alpha.clone() * &sin_beta * &cos_gamma)
+                        * &px
+                        + (cos_alpha.clone() * &cos_gamma
+                            + sin_alpha.clone() * &sin_beta * &sin_gamma)
+                            * &py
+                        + cos_beta.clone() * &sin_alpha * &pz,
+                    pz: (sin_alpha.clone() * &sin_gamma
+                        + cos_alpha.clone() * &sin_beta * &cos_gamma)
+                        * &px
+                        + (-sin_alpha.clone() * &cos_gamma
+                            + cos_alpha.clone() * &sin_beta * &sin_gamma)
+                            * &py
+                        + cos_alpha * &cos_beta * &pz,
+                }
+            }
+        }
+    }
+
+    pub(crate) fn inverse_rotate_four<T: FloatLike>(
+        &self,
+        momentum: &FourMomentum<F<T>>,
+    ) -> FourMomentum<F<T>> {
+        FourMomentum {
+            temporal: momentum.temporal.clone(),
+            spatial: self.inverse_rotate_three(&momentum.spatial),
+        }
+    }
+
     pub(crate) fn setting(&self) -> RotationSetting {
         match self.method {
             RotationMethod::EulerAngles(alpha, beta, gamma) => {

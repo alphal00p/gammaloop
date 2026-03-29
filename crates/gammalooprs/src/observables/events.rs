@@ -1,5 +1,5 @@
 use super::clustering::ClusteringResult;
-use crate::momentum::FourMomentum;
+use crate::momentum::{FourMomentum, Rotation};
 use crate::utils::{F, FloatLike, into_complex_ff64};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
@@ -171,6 +171,22 @@ pub struct GenericEvent<T: FloatLike> {
 }
 
 impl<T: FloatLike> GenericEvent<T> {
+    pub(crate) fn inverse_rotate(&mut self, rotation: &Rotation) {
+        if rotation.is_identity() {
+            return;
+        }
+
+        for momentum in self.kinematic_configuration.0.iter_mut() {
+            *momentum = rotation.inverse_rotate_four(momentum);
+        }
+        for momentum in self.kinematic_configuration.1.iter_mut() {
+            *momentum = rotation.inverse_rotate_four(momentum);
+        }
+
+        // Any cached clustering belongs to the rotated frame and must be recomputed.
+        self.derived_observable_data = GenericDerivedEventData::default();
+    }
+
     pub fn ensure_clustering_slots(&mut self, n_clusterings: usize) {
         if self.derived_observable_data.clustered_jets.len() < n_clusterings {
             self.derived_observable_data

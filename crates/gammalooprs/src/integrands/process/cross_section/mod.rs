@@ -581,6 +581,11 @@ impl CrossSectionGraphTerm {
 
             let cut_four_momentum = edge_spatial_momentum.into_on_shell_four_momentum(mass_value);
 
+            debug!(
+                "event cut leg: edge={eid:?} name={} pair={} graph_orientation={:?} cut_flow={:?} pdg={} p={}",
+                d.data.name, p, d.orientation, cut_flow, cut_pdg, cut_four_momentum,
+            );
+
             new_event.kinematic_configuration.1.push(cut_four_momentum);
             new_event.cut_info.particle_pdgs.1.push(cut_pdg);
         }
@@ -677,7 +682,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         mut event_processing_runtime: Option<&mut EventProcessingRuntime>,
-        _rotation: &Rotation,
+        rotation: &Rotation,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
@@ -700,6 +705,11 @@ impl GraphTerm for CrossSectionGraphTerm {
         let mut cut_threshold_counterterms = TiVec::<CutId, Complex<F<T>>>::new();
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
+        let should_buffer_events_for_rotation =
+            rotation.is_identity() && settings.should_buffer_generated_events();
+        let needs_selector_events = event_processing_runtime
+            .as_deref()
+            .is_some_and(EventProcessingRuntime::has_selectors);
 
         let momentum_sample = if let Some((channel_id, _alpha)) = &channel_id {
             MomentumSample {
@@ -755,15 +765,21 @@ impl GraphTerm for CrossSectionGraphTerm {
             debug!("solution: {:?}", solution);
 
             let mut event_timing = Duration::ZERO;
-            let event = if settings.should_generate_events() {
+            let should_build_event = if rotation.is_identity() {
+                settings.should_generate_events()
+            } else {
+                needs_selector_events
+            };
+            let event = if should_build_event {
                 let start = Instant::now();
-                let generated = self.generate_event_for_cut::<T>(
+                let mut generated = self.generate_event_for_cut::<T>(
                     model,
                     &solution,
                     &momentum_sample,
                     self.raised_data.raised_cut_groups[raised_cut].cuts[0],
                     &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
                 )?;
+                generated.inverse_rotate(rotation);
                 event_timing += start.elapsed();
                 Some(generated)
             } else {
@@ -773,15 +789,19 @@ impl GraphTerm for CrossSectionGraphTerm {
             let mut accepted_event = event;
             let mut selectors_pass = true;
             if let Some(evt) = accepted_event.as_mut() {
-                differential_result.generated_event_count += 1;
+                if rotation.is_identity() {
+                    differential_result.generated_event_count += 1;
+                }
                 let start = Instant::now();
-                if let Some(runtime) = event_processing_runtime.as_deref_mut()
-                    && (runtime.has_selectors() || runtime.has_observables())
-                {
-                    selectors_pass = runtime.process_event(evt);
+                if let Some(runtime) = event_processing_runtime.as_deref_mut() {
+                    selectors_pass = if rotation.is_identity() {
+                        runtime.process_event(evt)
+                    } else {
+                        runtime.process_event_for_selectors(evt)
+                    };
                 }
                 event_timing += start.elapsed();
-                if !selectors_pass {
+                if !selectors_pass || !should_buffer_events_for_rotation {
                     accepted_event = None;
                 }
             }
@@ -994,7 +1014,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
 
                 differential_result.accepted_event_count += 1;
-                if settings.should_buffer_generated_events() {
+                if should_buffer_events_for_rotation {
                     accepted_event_group.push(event);
                 }
             }

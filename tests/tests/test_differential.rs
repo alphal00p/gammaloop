@@ -93,6 +93,14 @@ fn singleton_groups(event: Event) -> EventGroupList {
     groups
 }
 
+fn single_group(events: impl IntoIterator<Item = Event>) -> EventGroupList {
+    let mut groups = EventGroupList::default();
+    groups.push(gammalooprs::observables::GenericEventGroup(
+        events.into_iter().collect(),
+    ));
+    groups
+}
+
 fn process_all_events(runtime: &mut EventProcessingRuntime, groups: &mut EventGroupList) {
     for event_group in groups.iter_mut() {
         for event in event_group.iter_mut() {
@@ -720,6 +728,76 @@ fn event_processing_runtime_merges_worker_results_and_batch_histograms() -> Resu
     assert_eq!(merged_again.sample_count, 4);
     assert_eq!(merged_again.bins[0].entry_count, 2);
     assert_eq!(merged_again.bins[1].entry_count, 2);
+
+    Ok(())
+}
+
+#[test]
+fn event_group_contributions_fill_multiple_bins_with_one_sample_per_bin() -> Result<()> {
+    let mut settings = runtime_settings();
+    settings.selectors.clear();
+
+    let mut runtime = EventProcessingRuntime::from_settings(&settings)?;
+    let mut groups = single_group([
+        make_event(0.25, 0.0, 0.0, 0.25, 1, (2.0, 0.0), []),
+        make_event(0.75, 0.0, 0.0, 0.75, 1, (3.0, 0.0), []),
+    ]);
+    process_all_events(&mut runtime, &mut groups);
+    runtime.process_event_groups(&groups);
+    runtime.update_results(0);
+
+    let histogram = &runtime.snapshot_bundle().histograms["pt_real"];
+    assert_eq!(histogram.sample_count, 1);
+    assert_eq!(histogram.bins[0].entry_count, 1);
+    assert_eq!(histogram.bins[1].entry_count, 1);
+    assert_close(histogram.bins[0].average(histogram.sample_count), 2.0);
+    assert_close(histogram.bins[1].average(histogram.sample_count), 3.0);
+    assert_eq!(
+        histogram
+            .bins
+            .iter()
+            .map(|bin| bin.entry_count)
+            .sum::<usize>(),
+        2
+    );
+
+    Ok(())
+}
+
+#[test]
+fn grouped_histogram_updates_keep_same_bin_entries_correlated() -> Result<()> {
+    let mut settings = runtime_settings();
+    settings.selectors.clear();
+
+    let mut runtime = EventProcessingRuntime::from_settings(&settings)?;
+
+    let mut first_groups = single_group([
+        make_event(0.25, 0.0, 0.0, 0.25, 1, (1.0, 0.0), []),
+        make_event(0.35, 0.0, 0.0, 0.35, 1, (2.0, 0.0), []),
+        make_event(0.75, 0.0, 0.0, 0.75, 1, (4.0, 0.0), []),
+    ]);
+    process_all_events(&mut runtime, &mut first_groups);
+    runtime.process_event_groups(&first_groups);
+
+    let mut second_groups = single_group([make_event(0.25, 0.0, 0.0, 0.25, 1, (5.0, 0.0), [])]);
+    process_all_events(&mut runtime, &mut second_groups);
+    runtime.process_event_groups(&second_groups);
+    runtime.update_results(0);
+
+    let histogram = &runtime.snapshot_bundle().histograms["pt_real"];
+    assert_eq!(histogram.sample_count, 2);
+
+    assert_eq!(histogram.bins[0].entry_count, 3);
+    assert_close(histogram.bins[0].sum_weights, 8.0);
+    assert_close(histogram.bins[0].sum_weights_squared, 34.0);
+    assert_close(histogram.bins[0].average(histogram.sample_count), 4.0);
+    assert_close(histogram.bins[0].error(histogram.sample_count), 1.0);
+
+    assert_eq!(histogram.bins[1].entry_count, 1);
+    assert_close(histogram.bins[1].sum_weights, 4.0);
+    assert_close(histogram.bins[1].sum_weights_squared, 16.0);
+    assert_close(histogram.bins[1].average(histogram.sample_count), 2.0);
+    assert_close(histogram.bins[1].error(histogram.sample_count), 2.0);
 
     Ok(())
 }

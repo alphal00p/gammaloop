@@ -1404,7 +1404,8 @@ impl<T: FloatLike> F<T> {
     }
 
     pub(crate) fn log10(&self) -> Self {
-        self.ln()
+        let ten = self.from_i64(10);
+        self.ln() / ten.ln()
     }
 
     pub(crate) fn complex_sqrt(&self) -> Complex<Self> {
