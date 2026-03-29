@@ -2812,34 +2812,46 @@ fn observable_output_extension(format: ObservableFileFormat) -> Option<&'static 
     }
 }
 
-fn latest_observable_output_path(
-    workspace: &Path,
-    format: ObservableFileFormat,
-) -> Option<PathBuf> {
-    let extension = observable_output_extension(format)?;
-    Some(workspace.join(format!("observables_final.{extension}")))
+fn latest_observable_output_path(workspace: &Path, format: ObservableFileFormat) -> PathBuf {
+    let extension = observable_output_extension(format)
+        .expect("user-facing observable outputs must use a real file format");
+    workspace.join(format!("observables_final.{extension}"))
 }
 
 fn archived_observable_output_path(
     workspace: &Path,
     format: ObservableFileFormat,
     iter: usize,
-) -> Option<PathBuf> {
-    let extension = observable_output_extension(format)?;
-    Some(workspace.join(format!("observables_final_iter_{iter:04}.{extension}")))
+) -> PathBuf {
+    let extension = observable_output_extension(format)
+        .expect("user-facing observable outputs must use a real file format");
+    workspace.join(format!("observables_final_iter_{iter:04}.{extension}"))
 }
 
-fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
+fn user_facing_observables_output_formats(
+    integrand: &Integrand,
+) -> &'static [ObservableFileFormat] {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return false;
+        return &[];
     };
-    process_integrand
+    if !integrand.has_observables() {
+        return &[];
+    }
+
+    match process_integrand
         .get_settings()
         .integrator
         .observables_output
         .format
-        != ObservableFileFormat::None
-        && integrand.has_observables()
+    {
+        ObservableFileFormat::None => &[],
+        ObservableFileFormat::Json => &[ObservableFileFormat::Json],
+        ObservableFileFormat::Hwu => &[ObservableFileFormat::Json, ObservableFileFormat::Hwu],
+    }
+}
+
+fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
+    !user_facing_observables_output_formats(integrand).is_empty()
 }
 
 fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -2889,56 +2901,46 @@ fn write_observable_snapshot_archive(
     workspace: Option<&Path>,
     iter: usize,
     output_control: WorkspaceSnapshotControl,
-) -> Result<Option<PathBuf>> {
-    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return Ok(None);
-    };
+) -> Result<()> {
     if !user_facing_observables_output_enabled(integrand) {
-        return Ok(None);
+        return Ok(());
     }
     if !output_control.write_iteration_archives {
-        return Ok(None);
+        return Ok(());
     }
-    let format = process_integrand
-        .get_settings()
-        .integrator
-        .observables_output
-        .format;
     let Some(workspace) = workspace else {
-        return Ok(None);
-    };
-    let Some(path) = archived_observable_output_path(workspace, format, iter) else {
-        return Ok(None);
+        return Ok(());
     };
 
-    integrand.write_observable_snapshots(&path, format)?;
-    Ok(Some(path))
+    for format in user_facing_observables_output_formats(integrand) {
+        let path = archived_observable_output_path(workspace, *format, iter);
+        integrand.write_observable_snapshots(&path, *format)?;
+    }
+
+    Ok(())
 }
 
 fn write_latest_observables_output(
     integrand: &Integrand,
     workspace: Option<&Path>,
 ) -> Result<Option<PathBuf>> {
-    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return Ok(None);
-    };
     if !user_facing_observables_output_enabled(integrand) {
         return Ok(None);
     }
-    let format = process_integrand
-        .get_settings()
-        .integrator
-        .observables_output
-        .format;
     let Some(workspace) = workspace else {
         return Ok(None);
     };
-    let Some(path) = latest_observable_output_path(workspace, format) else {
-        return Ok(None);
-    };
 
-    integrand.write_observable_snapshots(&path, format)?;
-    Ok(Some(path))
+    let mut primary_path = None;
+    for format in user_facing_observables_output_formats(integrand) {
+        let path = latest_observable_output_path(workspace, *format);
+        integrand.write_observable_snapshots(&path, *format)?;
+        if primary_path.is_none() {
+            primary_path = Some(path);
+        }
+    }
+
+    Ok(primary_path)
 }
 
 fn write_integration_state_to_workspace(
