@@ -1,18 +1,22 @@
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 use colored::Colorize;
+use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use tabled::{
     builder::Builder,
     settings::{style::HorizontalLine, themes::Theme, Style},
+    Tabled,
 };
 use tracing::info;
 
 use color_eyre::Result;
 use eyre::{eyre, Context};
-use gammalooprs::processes::{Amplitude, CrossSection, Process, ProcessCollection};
-use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::{
+    processes::{Amplitude, CrossSection, Process, ProcessCollection},
+    settings::RuntimeSettings,
+};
 
 use crate::{
     commands::generate::ProcessArgs,
@@ -21,6 +25,7 @@ use crate::{
         summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
     },
     completion::CompletionArgExt,
+    integrand_info::{IntegrandGraphGroupInfo, IntegrandInfo, IntegrandKind},
     session::display_command,
     settings_tree::{serialize_settings_with_defaults, value_at_path},
     state::{CommandsBlock, ProcessRef, RunHistory, State},
@@ -60,6 +65,7 @@ pub enum Display {
         integrand_name: Option<String>,
     },
     Processes,
+    #[command(name = "integrand")]
     Integrands {
         /// Process reference: #<id>, name:<name>, or <id>/<name>
         #[arg(
@@ -69,6 +75,34 @@ pub enum Display {
             completion_process_selector(crate::completion::SelectorKind::Any)
         )]
         process: Option<ProcessRef>,
+        /// Integrand name inside the selected process
+        #[arg(
+            short = 'i',
+            long = "integrand-name",
+            value_name = "NAME",
+            requires = "process",
+            completion_integrand_selector(crate::completion::SelectorKind::Any)
+        )]
+        integrand_name: Option<String>,
+        /// Restrict the detailed view to the selected master graph names
+        #[arg(
+            short = 'g',
+            long = "graph",
+            value_name = "MASTER_GRAPH",
+            num_args = 1..,
+            requires = "integrand_name",
+            completion_selected_master_graph()
+        )]
+        graphs: Vec<String>,
+        /// Restrict the detailed view to the selected category tables
+        #[arg(
+            long = "category",
+            value_name = "CATEGORY",
+            num_args = 1..,
+            requires = "integrand_name",
+            completion_selected_integrand_category()
+        )]
+        categories: Vec<IntegrandDisplayCategory>,
     },
     Quantities {
         #[command(flatten)]
@@ -132,12 +166,27 @@ impl Display {
         run_history: &RunHistory,
     ) -> Result<()> {
         match self {
-            Display::Integrands { process } => {
+            Display::Integrands {
+                process,
+                integrand_name,
+                graphs,
+                categories,
+            } => {
                 let process_id = process
                     .as_ref()
                     .map(|process_ref| state.resolve_process_ref(Some(process_ref)))
                     .transpose()?;
-                render_integrands_table(state, process_id)?;
+                if let Some(integrand_name) = integrand_name.as_deref() {
+                    render_integrand_detail(
+                        state,
+                        process_id.expect("clap requires --process when --integrand-name is set"),
+                        integrand_name,
+                        graphs,
+                        categories,
+                    )?;
+                } else {
+                    render_integrands_table(state, process_id)?;
+                }
             }
             Display::Processes => {
                 render_processes_table(state)?;
@@ -195,6 +244,359 @@ struct IntegrandMetrics {
     graphs: usize,
     graph_groups: usize,
     record_size_bytes: usize,
+}
+
+#[derive(
+    Debug, Clone, Copy, Serialize, Deserialize, ValueEnum, JsonSchema, PartialEq, Eq, Hash,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegrandDisplayCategory {
+    #[value(name = "orientation")]
+    Orientation,
+    #[value(name = "loop_momentum_basis")]
+    LoopMomentumBasis,
+    #[value(name = "cuts")]
+    Cuts,
+}
+
+impl IntegrandDisplayCategory {
+    fn title(self) -> &'static str {
+        match self {
+            Self::Orientation => "Orientations",
+            Self::LoopMomentumBasis => "Loop momentum bases",
+            Self::Cuts => "Cuts",
+        }
+    }
+
+    fn value_header(self) -> &'static str {
+        match self {
+            Self::Orientation => "orientation",
+            Self::LoopMomentumBasis => "loop momentum basis",
+            Self::Cuts => "cut",
+        }
+    }
+}
+
+#[derive(Tabled)]
+struct DetailSummaryRow {
+    field: String,
+    value: String,
+}
+
+fn render_orientation_signature(signature: &[i8]) -> String {
+    signature
+        .iter()
+        .map(|sign| match sign {
+            1 => "+".green().bold().to_string(),
+            -1 => "-".red().bold().to_string(),
+            0 => "0".dimmed().to_string(),
+            other => other.to_string(),
+        })
+        .join("")
+}
+
+fn render_edge_ids(edge_ids: &[usize]) -> String {
+    if edge_ids.is_empty() {
+        return String::new();
+    }
+
+    format!(
+        "({})",
+        edge_ids.iter().map(|edge_id| edge_id.to_string()).join(",")
+    )
+    .magenta()
+    .to_string()
+}
+
+fn render_cut(edge_ids: &[usize], raising_power: usize) -> String {
+    let edge_ids = render_edge_ids(edge_ids);
+    if edge_ids.is_empty() || raising_power <= 1 {
+        return edge_ids;
+    }
+
+    format!("{edge_ids}^{}", raising_power)
+        .magenta()
+        .to_string()
+}
+
+fn master_graph(
+    group: &IntegrandGraphGroupInfo,
+) -> Result<&crate::integrand_info::IntegrandGraphInfo> {
+    group
+        .graphs
+        .iter()
+        .find(|graph| graph.is_master)
+        .ok_or_else(|| eyre!("Graph group #{} has no master graph", group.group_id))
+}
+
+fn available_integrand_categories(detail: &IntegrandInfo) -> Vec<IntegrandDisplayCategory> {
+    match detail.kind {
+        IntegrandKind::Amplitude => vec![
+            IntegrandDisplayCategory::Orientation,
+            IntegrandDisplayCategory::LoopMomentumBasis,
+        ],
+        IntegrandKind::CrossSection => vec![
+            IntegrandDisplayCategory::Orientation,
+            IntegrandDisplayCategory::LoopMomentumBasis,
+            IntegrandDisplayCategory::Cuts,
+        ],
+    }
+}
+
+fn selected_integrand_categories(
+    detail: &IntegrandInfo,
+    requested: &[IntegrandDisplayCategory],
+) -> Result<Vec<IntegrandDisplayCategory>> {
+    let available = available_integrand_categories(detail);
+    if requested.is_empty() {
+        return Ok(available);
+    }
+
+    let mut selected = Vec::new();
+    for category in requested.iter().copied() {
+        if !available.contains(&category) {
+            return Err(eyre!(
+                "Category '{}' is not available for {} integrands.",
+                category.to_possible_value().expect("value enum").get_name(),
+                detail.kind
+            ));
+        }
+        if !selected.contains(&category) {
+            selected.push(category);
+        }
+    }
+    Ok(selected)
+}
+
+fn filtered_graph_groups<'a>(
+    detail: &'a IntegrandInfo,
+    requested_graphs: &[String],
+) -> Result<Vec<&'a IntegrandGraphGroupInfo>> {
+    if requested_graphs.is_empty() {
+        return Ok(detail.graph_groups.iter().collect());
+    }
+
+    let available_master_names = detail
+        .graph_groups
+        .iter()
+        .map(master_graph)
+        .collect::<Result<Vec<_>>>()?
+        .into_iter()
+        .map(|graph| graph.name.clone())
+        .collect::<Vec<_>>();
+    let missing = requested_graphs
+        .iter()
+        .filter(|graph_name| {
+            !available_master_names
+                .iter()
+                .any(|name| name == *graph_name)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(eyre!(
+            "Unknown master graph filter(s): {}. Available master graphs: {}",
+            missing.join(", "),
+            available_master_names.join(", ")
+        ));
+    }
+
+    Ok(detail
+        .graph_groups
+        .iter()
+        .filter(|group| {
+            master_graph(group)
+                .map(|graph| requested_graphs.iter().any(|name| name == &graph.name))
+                .unwrap_or(false)
+        })
+        .collect())
+}
+
+fn render_integrand_detail(
+    state: &State,
+    process_id: usize,
+    integrand_name: &str,
+    requested_graphs: &[String],
+    requested_categories: &[IntegrandDisplayCategory],
+) -> Result<()> {
+    let detail = state.get_integrand_info(
+        Some(&ProcessRef::Id(process_id)),
+        Some(&integrand_name.to_string()),
+    )?;
+    render_integrand_detail_from_info(&detail, requested_graphs, requested_categories)
+}
+
+fn category_rows(
+    group: &IntegrandGraphGroupInfo,
+    category: IntegrandDisplayCategory,
+) -> Vec<(usize, String)> {
+    match category {
+        IntegrandDisplayCategory::Orientation => group
+            .orientations
+            .iter()
+            .map(|orientation| {
+                (
+                    orientation.orientation_id,
+                    render_orientation_signature(&orientation.signature),
+                )
+            })
+            .collect(),
+        IntegrandDisplayCategory::LoopMomentumBasis => group
+            .lmb_channels
+            .iter()
+            .map(|channel| (channel.channel_id, render_edge_ids(&channel.edge_ids)))
+            .collect(),
+        IntegrandDisplayCategory::Cuts => group
+            .cuts
+            .iter()
+            .map(|cut| (cut.cut_id, render_cut(&cut.edge_ids, cut.raising_power)))
+            .collect(),
+    }
+}
+
+fn category_group_header(
+    group: &IntegrandGraphGroupInfo,
+    category: IntegrandDisplayCategory,
+) -> String {
+    match category {
+        IntegrandDisplayCategory::Orientation => render_edge_ids(&group.orientation_edge_ids),
+        IntegrandDisplayCategory::LoopMomentumBasis | IntegrandDisplayCategory::Cuts => {
+            String::new()
+        }
+    }
+}
+
+fn render_integrand_category_table(
+    groups: &[&IntegrandGraphGroupInfo],
+    category: IntegrandDisplayCategory,
+) -> Result<Option<String>> {
+    let mut builder = Builder::new();
+    builder.push_record([
+        "Group #".bold().blue().to_string(),
+        "Graph".bold().blue().to_string(),
+        "ID".bold().blue().to_string(),
+        category.value_header().bold().blue().to_string(),
+    ]);
+
+    let mut inserted_blocks = 0usize;
+    let mut separator_rows = vec![1usize];
+    let mut next_row = 1usize;
+
+    for group in groups {
+        let rows = category_rows(group, category);
+        if rows.is_empty() {
+            continue;
+        }
+
+        let master = master_graph(group)?;
+        inserted_blocks += 1;
+        builder.push_record([
+            format!("#{}", group.group_id).blue().to_string(),
+            format!("#{} : {}", master.graph_id, master.name)
+                .green()
+                .bold()
+                .to_string(),
+            String::new(),
+            category_group_header(group, category),
+        ]);
+        next_row += 1;
+        separator_rows.push(next_row);
+
+        for (item_id, value) in rows {
+            builder.push_record([
+                String::new(),
+                String::new(),
+                format!("#{}", item_id).yellow().to_string(),
+                value,
+            ]);
+            next_row += 1;
+        }
+        separator_rows.push(next_row);
+    }
+
+    if inserted_blocks == 0 {
+        return Ok(None);
+    }
+
+    let mut table = builder.build();
+    let mut style = Theme::from_style(Style::rounded().remove_horizontals());
+    let mut unique_separator_rows = separator_rows.into_iter().unique().collect_vec();
+    if let Some(last_row) = unique_separator_rows.pop() {
+        for row in unique_separator_rows {
+            style.insert_horizontal_line(
+                row,
+                HorizontalLine::new('─')
+                    .intersection('┼')
+                    .left('├')
+                    .right('┤'),
+            );
+        }
+        style.insert_horizontal_line(
+            last_row,
+            HorizontalLine::new('─')
+                .intersection('┴')
+                .left('╰')
+                .right('╯'),
+        );
+    }
+    table.with(style);
+    Ok(Some(table.to_string()))
+}
+
+fn render_integrand_detail_from_info(
+    detail: &IntegrandInfo,
+    requested_graphs: &[String],
+    requested_categories: &[IntegrandDisplayCategory],
+) -> Result<()> {
+    info!(
+        "{}",
+        format!(
+            "Integrand '{}' for process #{} ({})",
+            detail.integrand_name, detail.process_id, detail.process_name
+        )
+        .bold()
+        .blue()
+    );
+
+    let summary_rows = vec![
+        DetailSummaryRow {
+            field: "kind".to_string(),
+            value: detail.kind.to_string().yellow().to_string(),
+        },
+        DetailSummaryRow {
+            field: "graphs".to_string(),
+            value: detail.graph_count.to_string().yellow().to_string(),
+        },
+        DetailSummaryRow {
+            field: "graph groups".to_string(),
+            value: detail.graph_group_count.to_string().yellow().to_string(),
+        },
+        DetailSummaryRow {
+            field: ".bin size".to_string(),
+            value: format_bytes(detail.record_size_bytes).magenta().to_string(),
+        },
+    ];
+    let mut summary_table = tabled::Table::new(summary_rows);
+    summary_table.with(Style::rounded());
+    info!(
+        "
+{summary_table}"
+    );
+
+    let groups = filtered_graph_groups(detail, requested_graphs)?;
+    let categories = selected_integrand_categories(detail, requested_categories)?;
+    for category in categories {
+        if let Some(table) = render_integrand_category_table(&groups, category)? {
+            info!(
+                "
+{}
+{table}",
+                category.title().bold().blue()
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn render_processes_table(state: &State) -> Result<()> {
@@ -830,6 +1232,7 @@ mod test {
     use super::{
         command_block_contents, format_bytes, render_command_blocks_table,
         serialize_settings_with_defaults, value_at_path, Display, DisplaySettingsTarget,
+        IntegrandDisplayCategory,
     };
 
     #[test]
@@ -1069,14 +1472,98 @@ mod test {
     }
 
     #[test]
-    fn parse_display_integrands_without_process() {
-        let repl = Repl::try_parse_from(["gammaloop", "display", "integrands"]).unwrap();
+    fn parse_display_integrand_without_process() {
+        let repl = Repl::try_parse_from(["gammaloop", "display", "integrand"]).unwrap();
 
         match repl.command {
-            Commands::Display(Display::Integrands { process }) => {
+            Commands::Display(Display::Integrands {
+                process,
+                integrand_name,
+                graphs,
+                categories,
+            }) => {
                 assert_eq!(process, None);
+                assert_eq!(integrand_name, None);
+                assert!(graphs.is_empty());
+                assert!(categories.is_empty());
             }
-            other => panic!("Expected display integrands command, got {other:?}"),
+            other => panic!("Expected display integrand command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_display_integrand_detail() {
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "display",
+            "integrand",
+            "-p",
+            "epem_a_tth",
+            "-i",
+            "LO",
+        ])
+        .unwrap();
+
+        match repl.command {
+            Commands::Display(Display::Integrands {
+                process,
+                integrand_name,
+                graphs,
+                categories,
+            }) => {
+                assert_eq!(
+                    process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(integrand_name.as_deref(), Some("LO"));
+                assert!(graphs.is_empty());
+                assert!(categories.is_empty());
+            }
+            other => panic!("Expected display integrand command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_display_integrand_detail_filters() {
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "display",
+            "integrand",
+            "-p",
+            "epem_a_tth",
+            "-i",
+            "LO",
+            "-g",
+            "GL0",
+            "GL2",
+            "--category",
+            "orientation",
+            "cuts",
+        ])
+        .unwrap();
+
+        match repl.command {
+            Commands::Display(Display::Integrands {
+                process,
+                integrand_name,
+                graphs,
+                categories,
+            }) => {
+                assert_eq!(
+                    process,
+                    Some(ProcessRef::Unqualified("epem_a_tth".to_string()))
+                );
+                assert_eq!(integrand_name.as_deref(), Some("LO"));
+                assert_eq!(graphs, vec!["GL0".to_string(), "GL2".to_string()]);
+                assert_eq!(
+                    categories,
+                    vec![
+                        IntegrandDisplayCategory::Orientation,
+                        IntegrandDisplayCategory::Cuts,
+                    ]
+                );
+            }
+            other => panic!("Expected display integrand command, got {other:?}"),
         }
     }
 

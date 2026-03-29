@@ -32,6 +32,7 @@ use linnet::half_edge::involution::EdgeVec;
 use momtrop::SampleGenerator;
 use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
+use smallvec::SmallVec;
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::sync::Once;
@@ -1391,6 +1392,14 @@ pub struct LmbMultiChannelingSetup {
 }
 
 impl LmbMultiChannelingSetup {
+    pub(crate) fn channel_edge_ids(&self, channel_index: ChannelIndex) -> SmallVec<[usize; 4]> {
+        self.all_bases[self.channels[channel_index]]
+            .loop_edges
+            .iter()
+            .map(|edge_id| edge_id.0)
+            .collect()
+    }
+
     fn reinterpret_loop_momenta_impl<T: FloatLike>(
         &self,
         channel_index: ChannelIndex,

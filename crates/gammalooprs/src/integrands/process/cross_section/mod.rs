@@ -487,12 +487,15 @@ impl CrossSectionGraphTerm {
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
         cut: &CrossSectionCut,
+        channel_id: Option<ChannelIndex>,
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
 
         let mut new_event = GenericEvent::<T>::default();
         new_event.cut_info.cut_id = cut_id.0;
+        new_event.cut_info.lmb_channel_edge_ids =
+            channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
         // Set initial momenta and PDGs for the event
         new_event
             .kinematic_configuration
@@ -778,6 +781,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     &momentum_sample,
                     self.raised_data.raised_cut_groups[raised_cut].cuts[0],
                     &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
+                    channel_id.as_ref().map(|(channel_id, _)| *channel_id),
                 )?;
                 generated.inverse_rotate(rotation);
                 event_timing += start.elapsed();

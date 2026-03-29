@@ -80,6 +80,7 @@ fn make_multi_event(
             ),
             cut_id: 0,
             graph_id: 0,
+            lmb_channel_edge_ids: None,
         },
         weight: Complex::new(F(weight.0), F(weight.1)),
         additional_weights: gammalooprs::observables::GenericAdditionalWeightInfo { weights },

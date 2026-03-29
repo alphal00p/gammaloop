@@ -207,7 +207,11 @@ impl AmplitudeGraphTerm {
               term.name = %self.name(),
           )
     )]
-    fn generate_event<T: FloatLike>(&self, settings: &RuntimeSettings) -> Result<GenericEvent<T>> {
+    fn generate_event<T: FloatLike>(
+        &self,
+        settings: &RuntimeSettings,
+        channel_id: Option<ChannelIndex>,
+    ) -> Result<GenericEvent<T>> {
         let externals = settings
             .kinematics
             .externals
@@ -232,6 +236,8 @@ impl AmplitudeGraphTerm {
 
         let mut event = GenericEvent::default();
         event.cut_info.cut_id = 0;
+        event.cut_info.lmb_channel_edge_ids =
+            channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
 
         for ((sign, momentum), pdg) in self
             .master_external_signature
@@ -458,6 +464,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<GraphEvaluationResult<T>> {
+        let event_channel_id = channel_id.as_ref().map(|(channel_id, _)| *channel_id);
         let (integrand_result, counterterm_evaluation) = self.evaluate_impl(
             momentum_sample,
             model,
@@ -472,7 +479,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         let mut generated_event_count = 0;
         let mut accepted_event_count = 0;
         if settings.should_return_generated_events() {
-            let mut event = self.generate_event(settings)?;
+            let mut event = self.generate_event(settings, event_channel_id)?;
             event.weight = integrand_result.clone();
 
             if settings.general.store_additional_weights_in_event {
