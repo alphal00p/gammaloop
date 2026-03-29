@@ -25,7 +25,7 @@ dependencies = [
   "pytest",
   "pyyaml>=6.0.1",
   "symbolica>=0.14.0",
-  "ufo-model-loader>=0.1.1",
+  "ufo-model-loader>=0.1.5",
 ]
 
 [project.urls]
@@ -39,7 +39,7 @@ dev = [
   "inline-snapshot>=0.21.2",
   "pytest>=8.3.5,<9",
   "symbolica>=0.16.0",
-  "ufo-model-loader>=0.1.1",
+  "ufo-model-loader>=0.1.5",
 ]
 
 [build-system]

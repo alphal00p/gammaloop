@@ -1049,14 +1049,57 @@ impl CrossSectionGraph {
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv.vakint);
 
         let lu_prefactor = self.lu_prefactor_helper_new();
+        let cutkosky_corrections = self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .map(|raised_cut_group| {
+                let representative_cut = &self.cuts[raised_cut_group.cuts[0]];
+                let num_cut_propagators = representative_cut.cut.nedges(&self.graph);
+
+                debug_assert!(
+                    raised_cut_group.cuts.iter().all(|cut_id| {
+                        self.cuts[*cut_id].cut.nedges(&self.graph) == num_cut_propagators
+                    }),
+                    "Raised cut group has inconsistent cut sizes in graph {}",
+                    self.graph.name
+                );
+
+                Self::cutkosky_cut_correction(num_cut_propagators)
+            })
+            .collect_vec();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
         cut_forests.compute(&mut self.graph, vakint, &settings.uv)?;
-        Ok(cut_forests
-            .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
+
+        let parametric_integrands =
+            cut_forests.orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?;
+
+        debug_assert_eq!(
+            parametric_integrands.len(),
+            cutkosky_corrections.len(),
+            "Raised cut data and generated integrands disagree for graph {}",
+            self.graph.name
+        );
+
+        Ok(parametric_integrands
             .into_iter()
-            .map(|integrand| integrand.map(|a| a * &lu_prefactor))
+            .zip(cutkosky_corrections)
+            .map(|(integrand, cutkosky_correction)| {
+                integrand.map(|a| a * &lu_prefactor * &cutkosky_correction)
+            })
             .collect())
+    }
+
+    #[inline]
+    fn cutkosky_cut_correction_factor() -> Atom {
+        Atom::num(1) / Atom::i()
+    }
+
+    #[inline]
+    fn cutkosky_cut_correction(num_cut_propagators: usize) -> Atom {
+        Self::cutkosky_cut_correction_factor().pow(num_cut_propagators as i64)
     }
 
     fn lu_prefactor_helper(&self) -> Atom {
@@ -1814,4 +1857,22 @@ fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
     result.extend(f_parameters);
     result.extend(eta_params);
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CrossSectionGraph;
+    use symbolica::atom::{Atom, AtomCore};
+
+    #[test]
+    fn cutkosky_cut_correction_is_applied_once_per_cut_propagator() {
+        assert_eq!(
+            CrossSectionGraph::cutkosky_cut_correction_factor(),
+            Atom::num(1) / Atom::i()
+        );
+        assert_eq!(
+            CrossSectionGraph::cutkosky_cut_correction(3),
+            (Atom::num(1) / Atom::i()).pow(3)
+        );
+    }
 }

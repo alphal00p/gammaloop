@@ -1,11 +1,11 @@
 {
   "couplings": [{
-    "expression": "1𝑖*UFO::lam",
+    "expression": "1𝑖*UFO::{}::lam",
     "name": "SCALAR_COUPLING",
     "orders": [
       ["QCD", 1]
     ],
-    "value": null
+    "value": [0.0, 1.0]
   }],
   "lorentz_structures": [{
     "name": "SCALAR_3_LORENTZ_STRUCTURE",
@@ -97,7 +97,7 @@
     "name": "aEWM1",
     "nature": "external",
     "parameter_type": "real",
-    "value": [132.50698, 0.0]
+    "value": [132.507, 0.0]
   }, {
     "expression": null,
     "lhablock": "SMINPUTS",
@@ -123,33 +123,33 @@
     "parameter_type": "real",
     "value": [0.0, 0.0]
   }, {
-    "expression": "UFO::aEWM1^(-1)",
+    "expression": "UFO::{}::aEWM1^(-1)",
     "lhablock": null,
     "lhacode": null,
     "name": "aEW",
     "nature": "internal",
     "parameter_type": "real",
-    "value": null
+    "value": [0.0075467711139788835, 0.0]
   }, {
-    "expression": "2*UFO::aS^(1/2)*𝜋^(1/2)",
+    "expression": "2*UFO::{}::aS^(1/2)*𝜋^(1/2)",
     "lhablock": null,
     "lhacode": null,
     "name": "G",
     "nature": "internal",
     "parameter_type": "real",
-    "value": null
+    "value": [1.2177157847767195, 0.0]
   }, {
-    "expression": "2*UFO::aEW^(1/2)*𝜋^(1/2)",
+    "expression": "2*UFO::{}::aEW^(1/2)*𝜋^(1/2)",
     "lhablock": null,
     "lhacode": null,
     "name": "ee",
     "nature": "internal",
     "parameter_type": "real",
-    "value": null
+    "value": [0.3079537672443688, 0.0]
   }],
   "particles": [{
     "antiname": "scalar_0",
-    "antitexname": "\\phi0",
+    "antitexname": "\\phi_0",
     "charge": 0.0,
     "color": 1,
     "ghost_number": 0,
@@ -158,12 +158,12 @@
     "name": "scalar_0",
     "pdg_code": 1000,
     "spin": 1,
-    "texname": "\\phi0",
+    "texname": "\\phi_0",
     "width": "ZERO",
     "y_charge": 0
   }, {
     "antiname": "scalar_1",
-    "antitexname": "\\phi1",
+    "antitexname": "\\phi_1",
     "charge": 0.0,
     "color": 1,
     "ghost_number": 0,
@@ -172,12 +172,12 @@
     "name": "scalar_1",
     "pdg_code": 1001,
     "spin": 1,
-    "texname": "\\phi1",
+    "texname": "\\phi_1",
     "width": "width_scalar_1",
     "y_charge": 0
   }, {
     "antiname": "scalar_2",
-    "antitexname": "\\phi2",
+    "antitexname": "\\phi_2",
     "charge": 0.0,
     "color": 1,
     "ghost_number": 0,
@@ -186,24 +186,24 @@
     "name": "scalar_2",
     "pdg_code": 1002,
     "spin": 1,
-    "texname": "\\phi2",
+    "texname": "\\phi_2",
     "width": "width_scalar_2",
     "y_charge": 0
   }],
   "propagators": [{
-    "denominator": "(UFO::P(1))^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2",
     "name": "scalar_0_propFeynman",
-    "numerator": "1",
+    "numerator": "UFO::{}::j",
     "particle": "scalar_0"
   }, {
-    "denominator": "(UFO::P(1))^2+-1*UFO::mass_scalar_1^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_1^2",
     "name": "scalar_1_propFeynman",
-    "numerator": "1",
+    "numerator": "UFO::{}::j",
     "particle": "scalar_1"
   }, {
-    "denominator": "(UFO::P(1))^2+-1*UFO::mass_scalar_2^2",
+    "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_2^2",
     "name": "scalar_2_propFeynman",
-    "numerator": "1",
+    "numerator": "UFO::{}::j",
     "particle": "scalar_2"
   }],
   "restriction": null,
