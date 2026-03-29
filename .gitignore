@@ -42,8 +42,10 @@ gammaloop_state_integration_workspace/
 result/
 examples/amplitude_computation/GL_*
 gammaloop_state/
-examples/cli/epem
+examples/cli/epem_a_ttxh/NLO
+examples/cli/epem_a_ttxh/NNLO
 examples/**/state/
+examples/**/OLD_*
 examples/**/gammaloop_state/
 integration-tests/workspace/
 crates/integration-tests/workspace/
@@ -62,7 +64,6 @@ perf.data
 # logos
 logos/
 
-examples/cli/epem_a_ttxh
 crates/gammalooprs/src/old_observables
 crates/vakint/tests_workspace/*
 
