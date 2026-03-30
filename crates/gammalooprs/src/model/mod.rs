@@ -16,6 +16,7 @@ use linnet::half_edge::involution::{EdgeIndex, Flow};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
+use spenso::network::library::TensorLibraryData;
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::{IndexLess, PermutedStructure};
 use tabled::settings::Modify;
@@ -835,37 +836,30 @@ pub struct Particle {
 }
 
 impl Particle {
-    fn fermion_polarization_sum_rhs(&self, eid: EdgeIndex) -> Option<Atom> {
-        if self.spin != 2 {
-            return None;
-        }
-
+    fn fermion_polarization_sum_rhs(&self, eid: EdgeIndex) -> Atom {
+        assert!(self.is_spinor());
         let mu: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
         let mass_sign = if self.is_antiparticle() { -1 } else { 1 };
 
-        Some(
-            GS.emr_mom(eid, mu.to_atom()) * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom())
-                + Atom::num(mass_sign)
-                    * Atom::from(self.mass.0)
-                    * function!(ETS.metric, W_.a_, W_.b_),
-        )
+        GS.emr_mom(eid, mu.to_atom()) * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom())
+            + Atom::num(mass_sign) * Atom::from(self.mass.0) * function!(ETS.metric, W_.a_, W_.b_)
     }
 
-    fn polarization_average_factor(&self) -> Result<Option<Atom>> {
+    fn polarization_average_factor(&self) -> Result<Atom> {
         match self.spin {
-            1 => Ok(None),
-            2 => Ok(Some(Atom::num(1) / Atom::num(2))),
-            3 => Ok(Some(if self.is_massive() {
+            1 => Ok(Atom::one()),
+            2 => Ok(Atom::num(1) / Atom::num(2)),
+            3 => Ok(if self.is_massive() {
                 Atom::num(1) / Atom::num(3)
             } else {
                 Atom::num(1) / Atom::num(2)
-            })),
-            4 => Ok(Some(Atom::num(1) / Atom::num(4))),
-            5 => Ok(Some(if self.is_massive() {
+            }),
+            4 => Ok(Atom::num(1) / Atom::num(4)),
+            5 => Ok(if self.is_massive() {
                 Atom::num(1) / Atom::num(5)
             } else {
                 Atom::num(1) / Atom::num(4)
-            })),
+            }),
             spin => Err(eyre!(
                 "Polarization averaging for particle '{}' (PDG {}, spin {}) is not supported yet.",
                 self.name,
@@ -879,22 +873,18 @@ impl Particle {
         &self,
         eid: EdgeIndex,
         gauge: VectorPolarizationSumGauge,
-    ) -> Result<Option<Atom>> {
-        if self.spin != 3 {
-            return Ok(None);
-        }
+    ) -> Atom {
+        assert!(self.is_vector());
 
         let minus_metric = -function!(ETS.metric, W_.a_, W_.b_);
 
         match gauge {
-            VectorPolarizationSumGauge::Feynman => Ok(Some(minus_metric)),
+            VectorPolarizationSumGauge::Feynman => minus_metric,
             VectorPolarizationSumGauge::LightLikeAxial => {
                 if self.is_massive() {
                     let mass_squared = Atom::from(self.mass.0).pow(2);
-                    Ok(Some(
-                        minus_metric
-                            + GS.emr_mom(eid, W_.a_) * GS.emr_mom(eid, W_.b_) / mass_squared,
-                    ))
+
+                    minus_metric + GS.emr_mom(eid, W_.a_) * GS.emr_mom(eid, W_.b_) / mass_squared
                 } else {
                     let temporal_component = GS.emr_mom(eid, GS.cind(0));
                     let n_a = temporal_component.clone() * GS.energy_delta(W_.a_)
@@ -909,11 +899,8 @@ impl Particle {
                             GS.emr_vec(eid)
                         );
 
-                    Ok(Some(
-                        minus_metric
-                            + (GS.emr_mom(eid, W_.a_) * n_b + n_a * GS.emr_mom(eid, W_.b_))
-                                / q_dot_n,
-                    ))
+                    minus_metric
+                        + (GS.emr_mom(eid, W_.a_) * n_b + n_a * GS.emr_mom(eid, W_.b_)) / q_dot_n
                 }
             }
         }
@@ -925,20 +912,25 @@ impl Particle {
         average: bool,
         vector_polarization_sum_gauge: VectorPolarizationSumGauge,
     ) -> Result<Option<Replacement>> {
-        let replacement = match self.spin {
+        let average_factor = if average {
+            self.polarization_average_factor()?
+        } else {
+            Atom::one()
+        };
+        Ok(match self.spin {
             1 => None,
             2 => Some(if !self.is_antiparticle() {
                 (function!(GS.u, eid.0, W_.a_) * function!(GS.ubar, eid.0, W_.b_))
-                    .replace_with(self.fermion_polarization_sum_rhs(eid).unwrap())
+                    .replace_with(self.fermion_polarization_sum_rhs(eid) * average_factor)
             } else {
                 (function!(GS.v, eid.0, W_.a_) * function!(GS.vbar, eid.0, W_.b_))
-                    .replace_with(self.fermion_polarization_sum_rhs(eid).unwrap())
+                    .replace_with(self.fermion_polarization_sum_rhs(eid) * average_factor)
             }),
             3 => Some(
                 (function!(GS.epsilon, eid.0, W_.a_) * function!(GS.epsilonbar, eid.0, W_.b_))
                     .replace_with(
-                        self.vector_polarization_sum_rhs(eid, vector_polarization_sum_gauge)?
-                            .unwrap(),
+                        self.vector_polarization_sum_rhs(eid, vector_polarization_sum_gauge)
+                            * average_factor,
                     ),
             ),
             spin => {
@@ -949,39 +941,7 @@ impl Particle {
                     spin
                 ));
             }
-        };
-
-        let average_factor = if average {
-            self.polarization_average_factor()?
-        } else {
-            None
-        };
-
-        Ok(replacement.map(|replacement| {
-            let Some(average_factor) = average_factor.as_ref() else {
-                return replacement;
-            };
-            let Replacement {
-                pat,
-                rhs,
-                conditions,
-                settings,
-            } = replacement;
-            let rhs = match rhs {
-                symbolica::id::ReplaceWith::Pattern(rhs) => (average_factor.clone()
-                    * rhs.to_atom().unwrap())
-                .to_pattern()
-                .into(),
-                rhs => rhs,
-            };
-
-            Replacement {
-                pat,
-                rhs,
-                conditions,
-                settings,
-            }
-        }))
+        })
     }
     pub(crate) fn random_helicity(&self, seed: u64) -> Helicity {
         let mut rng = SmallRng::seed_from_u64(seed);
