@@ -371,10 +371,22 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
             );
         }
 
-        for (expected_id, channel) in group.lmb_channels.iter().enumerate() {
-            assert_eq!(channel.channel_id, expected_id);
-            assert!(!channel.edge_ids.is_empty());
+        let mut seen_channel_ids = std::collections::BTreeSet::new();
+        for (expected_id, basis) in group.loop_momentum_bases.iter().enumerate() {
+            assert_eq!(basis.basis_id, expected_id);
+            assert!(!basis.edge_ids.is_empty());
+            if let Some(channel_id) = basis.channel_id {
+                assert!(seen_channel_ids.insert(channel_id));
+            }
         }
+        assert_eq!(
+            group
+                .loop_momentum_bases
+                .iter()
+                .filter(|basis| basis.matches_generation_basis)
+                .count(),
+            1
+        );
 
         for (expected_id, cut) in group.cuts.iter().enumerate() {
             assert_eq!(cut.cut_id, expected_id);

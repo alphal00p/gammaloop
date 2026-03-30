@@ -283,29 +283,78 @@ struct DetailSummaryRow {
     value: String,
 }
 
-fn render_orientation_signature(signature: &[i8]) -> String {
-    signature
-        .iter()
-        .map(|sign| match sign {
-            1 => "+".green().bold().to_string(),
-            -1 => "-".red().bold().to_string(),
-            0 => "0".dimmed().to_string(),
-            other => other.to_string(),
-        })
-        .join("")
+fn orientation_column_widths(edge_ids: &[usize], fallback_count: usize) -> Vec<usize> {
+    if edge_ids.is_empty() {
+        vec![1; fallback_count]
+    } else {
+        edge_ids
+            .iter()
+            .map(|edge_id| edge_id.to_string().len().max(1))
+            .collect()
+    }
 }
 
-fn render_edge_ids(edge_ids: &[usize]) -> String {
+fn render_orientation_edge_ids(edge_ids: &[usize]) -> String {
     if edge_ids.is_empty() {
         return String::new();
     }
 
-    format!(
+    let widths = orientation_column_widths(edge_ids, edge_ids.len());
+    edge_ids
+        .iter()
+        .zip(widths.iter())
+        .map(|(edge_id, width)| {
+            format!("{edge_id:<width$}", width = *width)
+                .magenta()
+                .to_string()
+        })
+        .join(" ")
+}
+
+fn render_orientation_signature(signature: &[i8], edge_ids: &[usize]) -> String {
+    let widths = orientation_column_widths(edge_ids, signature.len());
+    signature
+        .iter()
+        .zip(widths.iter())
+        .map(|(sign, width)| {
+            let padded = format!(
+                "{:<width$}",
+                match sign {
+                    1 => "+",
+                    -1 => "-",
+                    0 => "0",
+                    _ => "?",
+                },
+                width = *width
+            );
+            match sign {
+                1 => padded.green().bold().to_string(),
+                -1 => padded.red().bold().to_string(),
+                0 => padded.dimmed().to_string(),
+                _ => padded.to_string(),
+            }
+        })
+        .join(" ")
+}
+
+fn render_edge_ids_with_highlight(edge_ids: &[usize], highlight: bool) -> String {
+    if edge_ids.is_empty() {
+        return String::new();
+    }
+
+    let rendered = format!(
         "({})",
         edge_ids.iter().map(|edge_id| edge_id.to_string()).join(",")
-    )
-    .magenta()
-    .to_string()
+    );
+    if highlight {
+        rendered.green().bold().to_string()
+    } else {
+        rendered.magenta().to_string()
+    }
+}
+
+fn render_edge_ids(edge_ids: &[usize]) -> String {
+    render_edge_ids_with_highlight(edge_ids, false)
 }
 
 fn render_cut(edge_ids: &[usize], raising_power: usize) -> String {
@@ -317,6 +366,27 @@ fn render_cut(edge_ids: &[usize], raising_power: usize) -> String {
     format!("{edge_ids}^{}", raising_power)
         .magenta()
         .to_string()
+}
+
+#[derive(Clone)]
+struct CategoryRow {
+    primary_id: String,
+    secondary_id: String,
+    value: String,
+}
+
+fn render_category_id(id: usize, highlight: bool) -> String {
+    let rendered = format!("#{id}");
+    if highlight {
+        rendered.green().bold().to_string()
+    } else {
+        rendered.yellow().to_string()
+    }
+}
+
+fn render_optional_category_id(id: Option<usize>, highlight: bool) -> String {
+    id.map(|id| render_category_id(id, highlight))
+        .unwrap_or_default()
 }
 
 fn master_graph(
@@ -429,27 +499,43 @@ fn render_integrand_detail(
 fn category_rows(
     group: &IntegrandGraphGroupInfo,
     category: IntegrandDisplayCategory,
-) -> Vec<(usize, String)> {
+) -> Vec<CategoryRow> {
     match category {
         IntegrandDisplayCategory::Orientation => group
             .orientations
             .iter()
-            .map(|orientation| {
-                (
-                    orientation.orientation_id,
-                    render_orientation_signature(&orientation.signature),
-                )
+            .map(|orientation| CategoryRow {
+                primary_id: render_category_id(orientation.orientation_id, false),
+                secondary_id: String::new(),
+                value: render_orientation_signature(
+                    &orientation.signature,
+                    &group.orientation_edge_ids,
+                ),
             })
             .collect(),
         IntegrandDisplayCategory::LoopMomentumBasis => group
-            .lmb_channels
+            .loop_momentum_bases
             .iter()
-            .map(|channel| (channel.channel_id, render_edge_ids(&channel.edge_ids)))
+            .map(|basis| CategoryRow {
+                primary_id: render_category_id(basis.basis_id, basis.matches_generation_basis),
+                secondary_id: render_optional_category_id(
+                    basis.channel_id,
+                    basis.matches_generation_basis,
+                ),
+                value: render_edge_ids_with_highlight(
+                    &basis.edge_ids,
+                    basis.matches_generation_basis,
+                ),
+            })
             .collect(),
         IntegrandDisplayCategory::Cuts => group
             .cuts
             .iter()
-            .map(|cut| (cut.cut_id, render_cut(&cut.edge_ids, cut.raising_power)))
+            .map(|cut| CategoryRow {
+                primary_id: render_category_id(cut.cut_id, false),
+                secondary_id: String::new(),
+                value: render_cut(&cut.edge_ids, cut.raising_power),
+            })
             .collect(),
     }
 }
@@ -459,7 +545,9 @@ fn category_group_header(
     category: IntegrandDisplayCategory,
 ) -> String {
     match category {
-        IntegrandDisplayCategory::Orientation => render_edge_ids(&group.orientation_edge_ids),
+        IntegrandDisplayCategory::Orientation => {
+            render_orientation_edge_ids(&group.orientation_edge_ids)
+        }
         IntegrandDisplayCategory::LoopMomentumBasis | IntegrandDisplayCategory::Cuts => {
             String::new()
         }
@@ -471,12 +559,22 @@ fn render_integrand_category_table(
     category: IntegrandDisplayCategory,
 ) -> Result<Option<String>> {
     let mut builder = Builder::new();
-    builder.push_record([
-        "Group #".bold().blue().to_string(),
-        "Graph".bold().blue().to_string(),
-        "ID".bold().blue().to_string(),
-        category.value_header().bold().blue().to_string(),
-    ]);
+    if category == IntegrandDisplayCategory::LoopMomentumBasis {
+        builder.push_record([
+            "Group #".bold().blue().to_string(),
+            "Graph".bold().blue().to_string(),
+            "basis ID".bold().blue().to_string(),
+            "channel ID".bold().blue().to_string(),
+            category.value_header().bold().blue().to_string(),
+        ]);
+    } else {
+        builder.push_record([
+            "Group #".bold().blue().to_string(),
+            "Graph".bold().blue().to_string(),
+            "ID".bold().blue().to_string(),
+            category.value_header().bold().blue().to_string(),
+        ]);
+    }
 
     let mut inserted_blocks = 0usize;
     let mut separator_rows = vec![1usize];
@@ -490,25 +588,43 @@ fn render_integrand_category_table(
 
         let master = master_graph(group)?;
         inserted_blocks += 1;
-        builder.push_record([
-            format!("#{}", group.group_id).blue().to_string(),
-            format!("#{} : {}", master.graph_id, master.name)
-                .green()
-                .bold()
-                .to_string(),
-            String::new(),
-            category_group_header(group, category),
-        ]);
+        if category == IntegrandDisplayCategory::LoopMomentumBasis {
+            builder.push_record([
+                format!("#{}", group.group_id).blue().to_string(),
+                format!("#{} : {}", master.graph_id, master.name)
+                    .green()
+                    .bold()
+                    .to_string(),
+                String::new(),
+                String::new(),
+                category_group_header(group, category),
+            ]);
+        } else {
+            builder.push_record([
+                format!("#{}", group.group_id).blue().to_string(),
+                format!("#{} : {}", master.graph_id, master.name)
+                    .green()
+                    .bold()
+                    .to_string(),
+                String::new(),
+                category_group_header(group, category),
+            ]);
+        }
         next_row += 1;
         separator_rows.push(next_row);
 
-        for (item_id, value) in rows {
-            builder.push_record([
-                String::new(),
-                String::new(),
-                format!("#{}", item_id).yellow().to_string(),
-                value,
-            ]);
+        for row in rows {
+            if category == IntegrandDisplayCategory::LoopMomentumBasis {
+                builder.push_record([
+                    String::new(),
+                    String::new(),
+                    row.primary_id,
+                    row.secondary_id,
+                    row.value,
+                ]);
+            } else {
+                builder.push_record([String::new(), String::new(), row.primary_id, row.value]);
+            }
             next_row += 1;
         }
         separator_rows.push(next_row);
