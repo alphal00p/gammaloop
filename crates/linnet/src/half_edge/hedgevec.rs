@@ -15,6 +15,10 @@ use super::{
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// A specialized vector-like structure for storing edge data along with its
 /// topological [`Involution`].
 ///
@@ -33,11 +37,11 @@ pub struct SmartEdgeVec<T> {
     /// and the [`HedgePair`] that describes the topological state of the edge
     /// (e.g., paired, unpaired, split). The index into this vector serves as
     /// an `EdgeIndex`.
-    pub(super) data: EdgeVec<(T, HedgePair)>,
+    pub(crate) data: EdgeVec<(T, HedgePair)>,
     /// The [`Involution`] structure that manages the topological relationships of half-edges.
     /// In this context, the `Involution` stores `EdgeIndex` as its data, pointing back
     /// to the `data` vector of this `SmartHedgeVec`.
-    pub(super) involution: Involution,
+    pub(crate) involution: Involution,
 }
 
 impl<T> AsRef<Involution> for SmartEdgeVec<T> {
