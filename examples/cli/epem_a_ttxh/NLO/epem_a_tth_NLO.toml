@@ -130,22 +130,22 @@ commands = [
 
     """set process -p epem_a_tth -i NLO string '
     [sampling]
-    type = "discrete_graph_sampling"
-    sample_orientations = false
-    [sampling.sampling_type]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
     # For importance-sampling over channels, use the quantity below
-    # subtype = "discrete_multi_channeling"
-    subtype = "multi_channeling"
+    # lmb_channels = "monte_carlo"
+    lmb_channels = "summed"
     '""",
 
     """set process -p epem_a_tth -i NLO_semi_inclusive string '
     [sampling]
-    type = "discrete_graph_sampling"
-    sample_orientations = false
-    [sampling.sampling_type]
+    graphs = "monte_carlo"
+    orientations = "summed"
+    lmb_multichanneling = true
     # For importance-sampling over channels, use the quantity below
-    # subtype = "discrete_multi_channeling"
-    subtype = "multi_channeling"
+    # lmb_channels = "monte_carlo"
+    lmb_channels = "summed"
     '""",
 
     """set process -p epem_a_tth -i NLO kv
