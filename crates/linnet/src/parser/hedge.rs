@@ -51,7 +51,7 @@ where
 }
 
 #[cfg(feature = "rkyv")]
-const fn compass_pt_to_u8(value: CompassPt) -> u8 {
+pub(crate) const fn compass_pt_to_u8(value: CompassPt) -> u8 {
     match value {
         CompassPt::N => 0,
         CompassPt::NE => 1,
@@ -67,7 +67,7 @@ const fn compass_pt_to_u8(value: CompassPt) -> u8 {
 }
 
 #[cfg(feature = "rkyv")]
-const fn u8_to_compass_pt(value: u8) -> CompassPt {
+pub(crate) const fn u8_to_compass_pt(value: u8) -> CompassPt {
     match value {
         0 => CompassPt::N,
         1 => CompassPt::NE,

@@ -80,7 +80,7 @@ macro_rules! define_indexed_vec {
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
         #[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]
-        $vec_vis struct $Vec<T>(::std::vec::Vec<T>);
+        $vec_vis struct $Vec<T>(pub(crate) ::std::vec::Vec<T>);
 
         /* --- Restricted indexing -------------------------------------------------- */
 

@@ -257,11 +257,11 @@ pub mod swap;
 ///   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses
 ///   [`NodeStorageVec<V>`]).
 pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {
-    hedge_data: HedgeVec<H>,
+    pub(crate) hedge_data: HedgeVec<H>,
     /// Internal storage for all half-edges, their data, and their topological
     /// relationships (e.g., opposite half-edge, next half-edge around a node).
     /// This is typically a [`SmartHedgeVec<E>`].
-    edge_store: SmartEdgeVec<E>,
+    pub(crate) edge_store: SmartEdgeVec<E>,
     /// Storage for all nodes in the graph, including their data (`V`) and
     /// information about the half-edges incident to them.
     /// The specific implementation is determined by the `S` type parameter.

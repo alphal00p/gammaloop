@@ -120,6 +120,14 @@ pub(crate) fn strip_quotes(s: &str) -> &str {
 pub mod set;
 pub use set::GraphSet;
 
+#[cfg(feature = "rkyv")]
+pub mod archive;
+#[cfg(feature = "rkyv")]
+pub use archive::{
+    ArchivedDotEdgeView, ArchivedDotGraphBytesSetView, ArchivedDotGraphView, ArchivedDotVertexView,
+    DotGraphBytesSet,
+};
+
 pub mod global;
 pub use global::GlobalData;
 

@@ -30,7 +30,7 @@ pub type SuBitGraph = SubSet<Hedge>;
 
 #[cfg(feature = "rkyv")]
 #[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-struct BitVecArchiveRepr {
+pub(crate) struct BitVecArchiveRepr {
     raw: Vec<usize>,
     bit_len: usize,
 }
@@ -180,6 +180,36 @@ impl<ID> SubSet<ID> {
 
     pub fn clear(&mut self) {
         self.set.fill(false);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<ID: IndexLike> ArchivedSubSet<ID> {
+    pub fn contains(&self, index: ID) -> bool {
+        self.contains_index(index.into())
+    }
+
+    pub fn contains_index(&self, index: usize) -> bool {
+        if index >= self.size() {
+            return false;
+        }
+
+        let bits_per_word = usize::BITS as usize;
+        let word_index = index / bits_per_word;
+        let bit_index = index % bits_per_word;
+        self.set
+            .raw
+            .as_slice()
+            .get(word_index)
+            .is_some_and(|word| ((*word >> bit_index) & 1) == 1)
+    }
+
+    pub fn size(&self) -> usize {
+        self.set.bit_len.try_into().unwrap()
+    }
+
+    pub fn intersects_owned(&self, other: &SubSet<ID>) -> bool {
+        other.included_iter().any(|index| self.contains(index))
     }
 }
 

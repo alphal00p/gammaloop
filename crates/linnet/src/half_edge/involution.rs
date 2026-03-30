@@ -13,7 +13,7 @@ use thiserror::Error;
 use super::{
     builder::HedgeData,
     nodestore::{NodeStorage, NodeStorageOps},
-    subgraph::SubSetLike,
+    subgraph::{Inclusion, SubSetLike},
     swap::Swap,
     GVEdgeAttrs, HedgeGraph, NodeIndex,
 };
@@ -832,6 +832,28 @@ impl HedgePair {
     }
 }
 
+#[cfg(feature = "rkyv")]
+impl ArchivedHedgePair {
+    pub fn any_hedge(&self) -> Hedge {
+        match self {
+            Self::Unpaired { hedge, .. } => Hedge(hedge.0.try_into().unwrap()),
+            Self::Paired { source, .. } | Self::Split { source, .. } => {
+                Hedge(source.0.try_into().unwrap())
+            }
+        }
+    }
+
+    pub fn intersects(&self, subgraph: &crate::half_edge::subgraph::SuBitGraph) -> bool {
+        match self {
+            Self::Unpaired { hedge, .. } => subgraph.includes(&Hedge(hedge.0.try_into().unwrap())),
+            Self::Paired { source, sink } | Self::Split { source, sink, .. } => {
+                subgraph.includes(&Hedge(source.0.try_into().unwrap()))
+                    || subgraph.includes(&Hedge(sink.0.try_into().unwrap()))
+            }
+        }
+    }
+}
+
 impl Display for Hedge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -1450,7 +1472,7 @@ pub struct Involution<E = EdgeIndex> {
     /// The core data storage: a vector where each element describes the mapping
     /// and data for a specific half-edge. The index in this vector corresponds
     /// to a `Hedge`'s underlying `usize` value.
-    pub(super) inv: HedgeVec<InvolutiveMapping<E>>,
+    pub(crate) inv: HedgeVec<InvolutiveMapping<E>>,
 }
 
 impl<E> AsRef<Involution<E>> for Involution<E> {
