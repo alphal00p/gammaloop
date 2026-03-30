@@ -42,9 +42,11 @@ pub struct IntegrandOrientationInfo {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
-pub struct IntegrandLmbChannelInfo {
-    pub channel_id: usize,
+pub struct IntegrandLoopMomentumBasisInfo {
+    pub basis_id: usize,
+    pub channel_id: Option<usize>,
     pub edge_ids: Vec<usize>,
+    pub matches_generation_basis: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -60,7 +62,7 @@ pub struct IntegrandGraphGroupInfo {
     pub graphs: Vec<IntegrandGraphInfo>,
     pub orientation_edge_ids: Vec<usize>,
     pub orientations: Vec<IntegrandOrientationInfo>,
-    pub lmb_channels: Vec<IntegrandLmbChannelInfo>,
+    pub loop_momentum_bases: Vec<IntegrandLoopMomentumBasisInfo>,
     pub cuts: Vec<IntegrandCutInfo>,
 }
 
@@ -186,6 +188,57 @@ fn cut_raising_powers(
     raising_powers
 }
 
+fn lmb_channel_ids(
+    graph: &Graph,
+    lmbs: &typed_index_collections::TiVec<
+        gammalooprs::graph::LmbIndex,
+        gammalooprs::graph::LoopMomentumBasis,
+    >,
+) -> Vec<Option<usize>> {
+    let mut channels = Vec::new();
+
+    for (lmb_index, lmb) in lmbs.iter_enumerated() {
+        let massless_edges = lmb
+            .loop_edges
+            .iter()
+            .filter(|&&edge_id| graph.underlying[edge_id].particle.mass_atom().is_zero())
+            .collect::<Vec<_>>();
+
+        if massless_edges.is_empty() {
+            continue;
+        }
+
+        if channels
+            .iter()
+            .any(|included_channel: &gammalooprs::graph::LmbIndex| {
+                let basis = &lmbs[*included_channel].loop_edges;
+                massless_edges.iter().all(|edge_id| basis.contains(edge_id))
+            })
+        {
+            continue;
+        }
+
+        channels.push(lmb_index);
+    }
+
+    channels.sort_by_key(|lmb_index| usize::from(*lmb_index));
+    if channels.is_empty() {
+        if let Some(current_lmb_index) = lmbs
+            .iter_enumerated()
+            .find(|(_lmb_index, lmb)| lmb.loop_edges == graph.loop_momentum_basis.loop_edges)
+            .map(|(lmb_index, _)| lmb_index)
+        {
+            channels.push(current_lmb_index);
+        }
+    }
+
+    let mut channel_ids = vec![None; lmbs.len()];
+    for (channel_id, lmb_index) in channels.into_iter().enumerate() {
+        channel_ids[usize::from(lmb_index)] = Some(channel_id);
+    }
+    channel_ids
+}
+
 fn amplitude_graph_groups(
     integrand: &gammalooprs::integrands::process::amplitude::AmplitudeIntegrand,
 ) -> Vec<IntegrandGraphGroupInfo> {
@@ -200,6 +253,7 @@ fn amplitude_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
+            let channel_ids = lmb_channel_ids(&master_graph.graph, &master_graph.lmbs);
             IntegrandGraphGroupInfo {
                 group_id,
                 graphs: group
@@ -224,18 +278,15 @@ fn amplitude_graph_groups(
                         signature: orientation_signature(orientation),
                     })
                     .collect(),
-                lmb_channels: master_graph
-                    .multi_channeling_setup
-                    .channels
-                    .iter()
-                    .enumerate()
-                    .map(|(channel_id, &channel_lmb)| IntegrandLmbChannelInfo {
-                        channel_id,
-                        edge_ids: master_graph.multi_channeling_setup.all_bases[channel_lmb]
-                            .loop_edges
-                            .iter()
-                            .map(|edge_id| edge_id.0)
-                            .collect(),
+                loop_momentum_bases: master_graph
+                    .lmbs
+                    .iter_enumerated()
+                    .map(|(basis_id, lmb)| IntegrandLoopMomentumBasisInfo {
+                        basis_id: usize::from(basis_id),
+                        channel_id: channel_ids[usize::from(basis_id)],
+                        edge_ids: lmb.loop_edges.iter().map(|edge_id| edge_id.0).collect(),
+                        matches_generation_basis: lmb.loop_edges
+                            == master_graph.graph.loop_momentum_basis.loop_edges,
                     })
                     .collect(),
                 cuts: Vec::new(),
@@ -258,6 +309,7 @@ fn cross_section_graph_groups(
                 .next()
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
+            let channel_ids = lmb_channel_ids(&master_graph.graph, &master_graph.lmbs);
             let cut_raising_powers = cut_raising_powers(master_graph);
             IntegrandGraphGroupInfo {
                 group_id,
@@ -283,18 +335,15 @@ fn cross_section_graph_groups(
                         signature: orientation_signature(orientation),
                     })
                     .collect(),
-                lmb_channels: master_graph
-                    .multi_channeling_setup
-                    .channels
-                    .iter()
-                    .enumerate()
-                    .map(|(channel_id, &channel_lmb)| IntegrandLmbChannelInfo {
-                        channel_id,
-                        edge_ids: master_graph.multi_channeling_setup.all_bases[channel_lmb]
-                            .loop_edges
-                            .iter()
-                            .map(|edge_id| edge_id.0)
-                            .collect(),
+                loop_momentum_bases: master_graph
+                    .lmbs
+                    .iter_enumerated()
+                    .map(|(basis_id, lmb)| IntegrandLoopMomentumBasisInfo {
+                        basis_id: usize::from(basis_id),
+                        channel_id: channel_ids[usize::from(basis_id)],
+                        edge_ids: lmb.loop_edges.iter().map(|edge_id| edge_id.0).collect(),
+                        matches_generation_basis: lmb.loop_edges
+                            == master_graph.graph.loop_momentum_basis.loop_edges,
                     })
                     .collect(),
                 cuts: master_graph

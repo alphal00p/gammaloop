@@ -1,0 +1,566 @@
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/epem_a_ttxh/NLO/state"
+
+[[command_blocks]]
+name = "generate_diagrams"
+# Mapping of the 11 NLO diagrams w.r.t our notation in https://arxiv.org/pdf/2203.11038
+# Targets from the real part of the cross-section in the OS+MSbar scheme
+# (table 7 of https://arxiv.org/pdf/2203.11038 and model parameters defined therein)
+# GL00 -> F.2 ->  +3.1908e-05
+# GL02 -> F.1 ->  -2.504e-06
+# GL06 -> F.8 ->  -2.4706e-04
+# GL08 -> F.5 ->  -3.2336e-06
+# GL10 -> F.9 ->  +4.7475e-05
+# GL12 -> F.6 ->  +5.5828e-05
+# GL18 -> F.3 ->  +1.3472e-04
+# GL20 -> F.10 -> +2.0875e-04
+# GL22 -> F.11 -> -9.1283e-05
+# GL26 -> F.4 ->  -1.47653e-04
+# GL30 -> F.7 ->  -1.18480e-04
+# Total: -1.3205e-04
+# --select-graphs GL00 GL02 GL06 GL08 GL10 GL12 GL18 GL20 GL22 GL26 GL30
+commands = [
+    "import model sm-default.json",
+    "set global kv global.n_cores.feyngen=10",
+
+    "remove processes",
+    """generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD=1]
+      --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+      --symmetrize-left-right-states true
+      -p epem_a_tth -i NLO
+      --select-graphs GL08
+      --only-diagrams""",
+    "save dot",
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+    "generate existing -p epem_a_tth -i NLO",
+    "duplicate integrand -p epem_a_tth -i NLO --output_process_name epem_a_tth --output_integrand_name NLO_semi_inclusive",
+    "save state -o"
+]
+
+
+[default_runtime_settings.kinematics]
+e_cm = 1000.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+   	[
+    	 500.0,
+    	 0.0,
+    	 0.0,
+    	 500.0,
+	],
+   	[
+    	 500.0,
+    	 0.0,
+    	 0.0,
+    	-500.0,
+	],
+]
+helicities = [
+    "summed_averaged",
+	"summed_averaged",
+]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "picobarn"
+mu_r = 91.188
+m_uv = 91.188
+
+[default_runtime_settings.integrator.observables_output]
+format="hwu"
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = true
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = true
+
+[default_runtime_settings.subtraction]
+# Threshold subtraction for LU not yet implemented
+disable_threshold_subtraction = true
+
+[cli_settings.global.generation.compile]
+inline_asm = true
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.uv]
+softct=false
+inner_products=true
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "run set_model_parameters",
+    "run set_differential_quantities",
+    "run set_differential_observables",
+    "run set_differential_selectors",
+
+    """set process -p epem_a_tth -i NLO string '
+    [sampling]
+    type = "discrete_graph_sampling"
+    sample_orientations = false
+    [sampling.sampling_type]
+    # For importance-sampling over channels, use the quantity below
+    # subtype = "discrete_multi_channeling"
+    subtype = "multi_channeling"
+    '""",
+
+    """set process -p epem_a_tth -i NLO_semi_inclusive string '
+    [sampling]
+    type = "discrete_graph_sampling"
+    sample_orientations = false
+    [sampling.sampling_type]
+    # For importance-sampling over channels, use the quantity below
+    # subtype = "discrete_multi_channeling"
+    subtype = "multi_channeling"
+    '""",
+
+    """set process -p epem_a_tth -i NLO kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+    """,
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer tabled
+	"""integrate -p epem_a_tth -i NLO -p epem_a_tth -i NLO_semi_inclusive --n-cores 5
+                 --target epem_a_tth@NLO=-3.2336e-06,0.0
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase real
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
+    "set model aS=0.118",
+    "set model aEWM1=132.507",
+    "set model Gf=1.166390e-05",
+    "set model MZ=91.188",
+
+]
+
+[[command_blocks]]
+name = "set_differential_quantities"
+commands = [
+  """set process -p epem_a_tth -i NLO string '
+
+[quantities.cross_section]
+type = "cross_section"
+
+[quantities.jet_pt]
+type = "jet"
+computation = "scalar"
+quantity = "PT"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_energy]
+type = "jet"
+computation = "scalar"
+quantity = "E"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_y]
+type = "jet"
+computation = "scalar"
+quantity = "y"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_eta]
+type = "jet"
+computation = "scalar"
+quantity = "eta"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_cos_theta]
+type = "jet"
+computation = "scalar"
+quantity = "CosTheta"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.jet_count]
+type = "jet"
+computation = "count"
+algorithm = "anti_kt"
+dR = 0.4
+min_jpt = 20.0
+clustered_pdgs = [-82, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 82]
+ordering = "PT"
+order = "Descending"
+
+[quantities.top_energy]
+type = "particle"
+computation = "scalar"
+pdgs = [-6,6]
+quantity = "E"
+ordering = "Quantity"
+order = "Descending"
+
+[quantities.higgs_energy]
+type = "particle"
+computation = "scalar"
+pdgs = [25,]
+quantity = "E"
+
+[quantities.top_pt]
+type = "particle"
+computation = "scalar"
+pdgs = [-6,6]
+quantity = "PT"
+
+[quantities.higgs_pt]
+type = "particle"
+computation = "scalar"
+pdgs = [25,]
+quantity = "PT"
+
+[quantities.top_y]
+type = "particle"
+computation = "scalar"
+pdgs = [-6,6]
+quantity = "y"
+
+[quantities.higgs_y]
+type = "particle"
+computation = "scalar"
+pdgs = [25,]
+quantity = "y"
+
+[quantities.top_eta]
+type = "particle"
+computation = "scalar"
+pdgs = [-6,6]
+quantity = "eta"
+
+[quantities.higgs_eta]
+type = "particle"
+computation = "scalar"
+pdgs = [25,]
+quantity = "eta"
+
+[quantities.top_cos_theta]
+type = "particle"
+computation = "scalar"
+pdgs = [-6,6]
+quantity = "CosTheta"
+
+[quantities.higgs_cos_theta]
+type = "particle"
+computation = "scalar"
+pdgs = [25,]
+quantity = "CosTheta"
+'""",
+
+"""set process -p epem_a_tth -i NLO_semi_inclusive string '
+
+[quantities.higgs_cos_theta]
+type = "particle"
+computation = "scalar"
+pdgs = [25,]
+quantity = "CosTheta"
+
+[quantities.higgs_energy]
+type = "particle"
+computation = "scalar"
+pdgs = [25,]
+quantity = "E"
+
+'"""
+]
+
+[[command_blocks]]
+name = "set_differential_selectors"
+commands = [
+  """set process -p epem_a_tth -i NLO_semi_inclusive string '
+
+[selectors.higgs_energy_cut]
+quantity = "higgs_energy"
+selector = "value_range"
+entry_selection = "leading_only"
+min = 250.0
+max = 500.0
+
+[selectors.higgs_cos_theta_cut]
+quantity = "higgs_cos_theta"
+selector = "value_range"
+entry_selection = "leading_only"
+min = -0.6
+max = 0.6
+
+'"""
+]
+
+[[command_blocks]]
+name = "set_differential_observables"
+commands = [
+  """set process -p epem_a_tth -i NLO string '
+
+[observables.cross_section]
+title = "xs"
+type_description = "AL,NLO"
+quantity = "cross_section"
+phase = "real"
+x_min = 0.0
+x_max = 1.0
+n_bins = 1
+
+# Higgs observables
+
+[observables.higgs_energy]
+title = "H E"
+type_description = "AL,NLO"
+quantity = "higgs_energy"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.higgs_log_energy]
+title = "H log E"
+type_description = "AL,NLO"
+quantity = "higgs_energy"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.higgs_pt]
+title = "H pt"
+type_description = "AL,NLO"
+quantity = "higgs_pt"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.higgs_log_pt]
+title = "H log pt"
+type_description = "AL,NLO"
+quantity = "higgs_pt"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.higgs_y]
+title = "H y"
+type_description = "AL,NLO"
+quantity = "higgs_y"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+[observables.higgs_eta]
+title = "H eta"
+type_description = "AL,NLO"
+quantity = "higgs_eta"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+# Top quark observables
+
+[observables.top_energy]
+title = "top E"
+type_description = "AL,NLO"
+quantity = "top_energy"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.top_log_energy]
+title = "top log E"
+type_description = "AL,NLO"
+quantity = "top_energy"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.top_pt]
+title = "top pt"
+type_description = "AL,NLO"
+quantity = "top_pt"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.top_log_pt]
+title = "top log pt"
+type_description = "AL,NLO"
+quantity = "top_pt"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.top_y]
+title = "top y"
+type_description = "AL,NLO"
+quantity = "top_y"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+[observables.top_eta]
+title = "top eta"
+type_description = "AL,NLO"
+quantity = "top_eta"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+# Jet observables
+
+[observables.jet_energy]
+title = "jet E"
+type_description = "AL,NLO"
+quantity = "jet_energy"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.jet_log_energy]
+title = "jet log E"
+type_description = "AL,NLO"
+quantity = "jet_energy"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.jet_pt]
+title = "jet pt"
+type_description = "AL,NLO"
+quantity = "jet_pt"
+phase = "real"
+x_min = 0.0
+x_max = 500.0
+n_bins = 100
+
+[observables.jet_log_pt]
+title = "jet log pt"
+type_description = "AL,NLO"
+quantity = "jet_pt"
+value_transform = "log10"
+phase = "real"
+x_min = 0.0
+x_max = 5.0
+n_bins = 100
+
+[observables.jet_y]
+title = "jet y"
+type_description = "AL,NLO"
+quantity = "jet_y"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+[observables.jet_eta]
+title = "jet eta"
+type_description = "AL,NLO"
+quantity = "jet_eta"
+phase = "real"
+x_min = -6.0
+x_max =  6.0
+n_bins = 60
+
+[observables.jet_count_hist]
+quantity = "jet_count"
+entry_selection = "all"
+phase = "real"
+x_min = 0.0
+x_max = 2.0
+n_bins = 2
+
+'"""
+]

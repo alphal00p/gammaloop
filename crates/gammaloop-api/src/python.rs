@@ -27,7 +27,7 @@ use crate::{
     },
     integrand_info::{
         IntegrandCutInfo, IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo,
-        IntegrandLmbChannelInfo, IntegrandOrientationInfo,
+        IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo,
     },
     session::{CliSession, CliSessionState},
     state::{ProcessRef, RunHistory, State},
@@ -97,7 +97,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrandGraphGroupInfo>()?;
     m.add_class::<PyIntegrandGraphInfo>()?;
     m.add_class::<PyIntegrandOrientationInfo>()?;
-    m.add_class::<PyIntegrandLmbChannelInfo>()?;
+    m.add_class::<PyIntegrandLoopMomentumBasisInfo>()?;
     m.add_class::<PyIntegrandCutInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
     m.add_class::<PyHistogramSnapshot>()?;
@@ -181,11 +181,13 @@ pub struct PyIntegrandOrientationInfo {
     pub signature: Vec<i8>,
 }
 
-#[pyclass(from_py_object, name = "IntegrandLmbChannel", get_all)]
+#[pyclass(from_py_object, name = "IntegrandLoopMomentumBasis", get_all)]
 #[derive(Clone)]
-pub struct PyIntegrandLmbChannelInfo {
-    pub channel_id: usize,
+pub struct PyIntegrandLoopMomentumBasisInfo {
+    pub basis_id: usize,
+    pub channel_id: Option<usize>,
     pub edge_ids: Vec<usize>,
+    pub matches_generation_basis: bool,
 }
 
 #[pyclass(from_py_object, name = "IntegrandCut", get_all)]
@@ -203,7 +205,7 @@ pub struct PyIntegrandGraphGroupInfo {
     pub graphs: Vec<PyIntegrandGraphInfo>,
     pub orientation_edge_ids: Vec<usize>,
     pub orientations: Vec<PyIntegrandOrientationInfo>,
-    pub lmb_channels: Vec<PyIntegrandLmbChannelInfo>,
+    pub loop_momentum_bases: Vec<PyIntegrandLoopMomentumBasisInfo>,
     pub cuts: Vec<PyIntegrandCutInfo>,
 }
 
@@ -1097,12 +1099,14 @@ fn py_integrand_orientation_info_from_info(
     }
 }
 
-fn py_integrand_lmb_channel_info_from_info(
-    channel: IntegrandLmbChannelInfo,
-) -> PyIntegrandLmbChannelInfo {
-    PyIntegrandLmbChannelInfo {
-        channel_id: channel.channel_id,
-        edge_ids: channel.edge_ids,
+fn py_integrand_loop_momentum_basis_info_from_info(
+    basis: IntegrandLoopMomentumBasisInfo,
+) -> PyIntegrandLoopMomentumBasisInfo {
+    PyIntegrandLoopMomentumBasisInfo {
+        basis_id: basis.basis_id,
+        channel_id: basis.channel_id,
+        edge_ids: basis.edge_ids,
+        matches_generation_basis: basis.matches_generation_basis,
     }
 }
 
@@ -1130,10 +1134,10 @@ fn py_integrand_graph_group_info_from_info(
             .into_iter()
             .map(py_integrand_orientation_info_from_info)
             .collect(),
-        lmb_channels: group
-            .lmb_channels
+        loop_momentum_bases: group
+            .loop_momentum_bases
             .into_iter()
-            .map(py_integrand_lmb_channel_info_from_info)
+            .map(py_integrand_loop_momentum_basis_info_from_info)
             .collect(),
         cuts: group
             .cuts
