@@ -12,7 +12,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ciborium = "0.2.2"
-linnet = { workspace = true, features = ["drawing", "serde"] }
+linnet = { workspace = true, features = ["drawing", "rkyv", "serde"] }
+rkyv = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 
 cgmath = { version = "0.18.0", features = ["serde"] }
