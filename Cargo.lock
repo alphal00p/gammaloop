@@ -2490,6 +2490,7 @@ dependencies = [
  "getrandom 0.2.17",
  "linnet",
  "rand 0.8.5",
+ "rkyv",
  "serde",
  "thiserror 2.0.18",
  "wasm-minimal-protocol",
