@@ -9,7 +9,6 @@ use linnet::half_edge::{
         SubSetLike, SubSetOps,
     },
 };
-use momtrop::float::MomTropFloat;
 
 use spenso::{
     algebra::{algebraic_traits::IsZero, complex::Complex},

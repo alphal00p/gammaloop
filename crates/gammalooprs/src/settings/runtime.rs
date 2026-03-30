@@ -1,7 +1,6 @@
 use std::{collections::BTreeMap, fmt::Display};
 
 use bincode_trait_derive::{Decode, Encode};
-use clarabel::solver::default;
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
 use schemars::JsonSchema;
@@ -976,6 +975,10 @@ impl Default for SamplingSettingsParser {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub enum SumMode {
     #[serde(rename = "summed")]
     #[default]
@@ -985,6 +988,10 @@ pub enum SumMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub enum CoordinateSystem {
     #[serde(rename = "cartesian")]
     Cartesian,

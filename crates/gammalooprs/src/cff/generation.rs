@@ -1136,7 +1136,6 @@ mod tests_cff {
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
     };
     use symbolica::{
-        domains::float::Real,
         evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
         parse, symbol,
     };

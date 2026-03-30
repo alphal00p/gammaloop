@@ -34,7 +34,6 @@ use rayon::prelude::*;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::atom::AtomField;
-use symbolica::domains::float::Real;
 use symbolica::numerical_integration::MonteCarloRng;
 use symbolica::poly::series::Series;
 use symbolica::symbol;

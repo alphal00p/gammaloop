@@ -33,7 +33,6 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
-use symbolica::domains::float::Real;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, instrument, trace, warn};

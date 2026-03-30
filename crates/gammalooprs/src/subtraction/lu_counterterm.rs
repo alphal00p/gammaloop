@@ -4,10 +4,7 @@ use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
-use symbolica::{
-    domains::float::{Real, RealLike},
-    evaluate::OptimizationSettings,
-};
+use symbolica::{domains::float::RealLike, evaluate::OptimizationSettings};
 use tracing::debug;
 use typed_index_collections::TiVec;
 

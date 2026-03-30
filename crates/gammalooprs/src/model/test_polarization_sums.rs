@@ -672,7 +672,6 @@ fn higher_spin_polarization_average_factor_uses_known_state_counts() {
         spin_three_halves
             .polarization_average_factor()
             .unwrap()
-            .unwrap()
             .to_canonical_string(),
         (Atom::num(1) / Atom::num(4)).to_canonical_string()
     );
@@ -680,14 +679,12 @@ fn higher_spin_polarization_average_factor_uses_known_state_counts() {
         massless_spin_two
             .polarization_average_factor()
             .unwrap()
-            .unwrap()
             .to_canonical_string(),
         (Atom::num(1) / Atom::num(4)).to_canonical_string()
     );
     assert_eq!(
         massive_spin_two
             .polarization_average_factor()
-            .unwrap()
             .unwrap()
             .to_canonical_string(),
         (Atom::num(1) / Atom::num(5)).to_canonical_string()

@@ -4,7 +4,7 @@ use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::{atom::Atom, domains::float::Real};
+use symbolica::atom::Atom;
 
 use color_eyre::Result;
 use tracing::{debug, instrument};

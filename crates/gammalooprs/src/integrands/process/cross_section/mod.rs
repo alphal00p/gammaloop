@@ -62,10 +62,7 @@ use std::{
     vec,
 };
 use symbolica::{
-    domains::{
-        dual::HyperDual,
-        float::{Real, SingleFloat},
-    },
+    domains::{dual::HyperDual, float::SingleFloat},
     numerical_integration::{Grid, Sample},
 };
 use tracing::debug;
