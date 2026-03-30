@@ -439,6 +439,10 @@ impl<H> HedgePairWithData<&H> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Describes the pairing status of a half-edge, indicating whether it forms a
 /// complete edge with another half-edge, is a dangling/external edge, or is
 /// part of a "split" edge in a subgraph context.
@@ -837,6 +841,10 @@ impl Display for Hedge {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents the state of a half-edge within an `Involution`.
 ///
 /// An `Involution` maps each half-edge to another, defining the graph's topology.
@@ -888,6 +896,10 @@ impl<E> InvolutiveMapping<E> {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Holds the data associated with an edge, including its [`Orientation`]
 /// and the custom data of type `E`.
 ///
@@ -1010,6 +1022,10 @@ impl<E> EdgeData<E> {
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents the superficial or conventional orientation of an edge.
 ///
 /// This orientation can be distinct from the underlying `Flow` of the half-edges
@@ -1045,6 +1061,10 @@ impl Mul for Orientation {
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents the underlying, intrinsic directionality of a half-edge
 /// relative to the full edge it is part of.
 ///
@@ -1408,6 +1428,10 @@ pub enum InvolutionError {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Manages the topological relationships between half-edges in a graph.
 ///
 /// An involution is a function `f` such that `f(f(x)) = x`. In this context,

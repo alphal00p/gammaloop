@@ -14,6 +14,11 @@ use super::{
     GlobalData, HedgeParseError,
 };
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct GraphSet<E, V, H, G, S: NodeStorage<NodeData = V>> {
     pub global_data: Vec<G>,
     pub set: Vec<HedgeGraph<E, V, H, S>>,
@@ -86,6 +91,24 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>>
     }
 }
 
+impl<E, V, H, G, S: NodeStorage<NodeData = V>> GraphSet<E, V, H, G, S> {
+    #[cfg(feature = "rkyv")]
+    pub fn to_rkyv_bytes<const N: usize>(&self) -> Result<rkyv::AlignedVec, String>
+    where
+        Self: rkyv::Serialize<rkyv::ser::serializers::AllocSerializer<N>>,
+    {
+        rkyv::to_bytes::<_, N>(self).map_err(|err| err.to_string())
+    }
+
+    #[cfg(feature = "rkyv")]
+    pub unsafe fn archived_from_bytes<'a>(bytes: &'a [u8]) -> &'a <Self as rkyv::Archive>::Archived
+    where
+        Self: rkyv::Archive,
+    {
+        unsafe { rkyv::archived_root::<Self>(bytes) }
+    }
+}
+
 impl<S: NodeStorageOps<NodeData = DotVertexData>> IntoIterator
     for GraphSet<DotEdgeData, DotVertexData, DotHedgeData, GlobalData, S>
 {
@@ -108,5 +131,25 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> IntoIterator
             .into_iter()
             .zip(self.global_data)
             .map(|(graph, global_data)| DotGraph { global_data, graph })
+    }
+}
+
+#[cfg(all(test, feature = "rkyv"))]
+mod tests {
+    use super::DotGraphSet;
+
+    #[test]
+    fn dot_graph_set_archives_without_reparse() {
+        let graphs =
+            DotGraphSet::from_string(r#"digraph first { a -> b } digraph second { x -> y }"#)
+                .unwrap();
+
+        let bytes = graphs.to_rkyv_bytes::<1024>().unwrap();
+        let archived = unsafe { DotGraphSet::archived_from_bytes(&bytes) };
+
+        assert_eq!(archived.global_data.len(), 2);
+        let names = archived.global_data.as_slice();
+        assert_eq!(names[0].name.as_str(), "first");
+        assert_eq!(names[1].name.as_str(), "second");
     }
 }

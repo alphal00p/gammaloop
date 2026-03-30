@@ -182,6 +182,10 @@ pub mod involution;
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents attributes for an edge when generating Graphviz DOT output.
 ///
 /// This struct allows specifying common DOT attributes like label, color,
@@ -229,6 +233,10 @@ pub mod swap;
     feature = "bincode",
     derive(bincode_trait_derive::Encode, bincode_trait_derive::Decode)
 )]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// The main graph data structure, representing a graph using the half-edge
 /// (or doubly connected edge list - DCEL) principle.
 ///
@@ -265,6 +273,10 @@ pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNo
 #[cfg_attr(
     feature = "bincode",
     derive(bincode_trait_derive::Encode, bincode_trait_derive::Decode)
+)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct NoData {}
 impl Display for NoData {

@@ -8,6 +8,11 @@ use std::{
 };
 
 use bitvec::{bitvec, order::Lsb0, vec::BitVec};
+#[cfg(feature = "rkyv")]
+use rkyv::{
+    with::{ArchiveWith, DeserializeWith, SerializeWith},
+    Archive, Archived, Deserialize, Fallible, Resolver, Serialize,
+};
 
 use crate::half_edge::{
     involution::{Flow, Hedge, HedgePair},
@@ -23,11 +28,77 @@ use crate::half_edge::{
 
 pub type SuBitGraph = SubSet<Hedge>;
 
+#[cfg(feature = "rkyv")]
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+struct BitVecArchiveRepr {
+    raw: Vec<usize>,
+    bit_len: usize,
+}
+
+#[cfg(feature = "rkyv")]
+impl From<&BitVec> for BitVecArchiveRepr {
+    fn from(value: &BitVec) -> Self {
+        Self {
+            raw: value.as_raw_slice().to_vec(),
+            bit_len: value.len(),
+        }
+    }
+}
+
+#[cfg(feature = "rkyv")]
+struct BitVecRkyv;
+
+#[cfg(feature = "rkyv")]
+impl ArchiveWith<BitVec> for BitVecRkyv {
+    type Archived = Archived<BitVecArchiveRepr>;
+    type Resolver = Resolver<BitVecArchiveRepr>;
+
+    unsafe fn resolve_with(
+        field: &BitVec,
+        pos: usize,
+        resolver: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        BitVecArchiveRepr::from(field).resolve(pos, resolver, out);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S: Fallible + ?Sized> SerializeWith<BitVec, S> for BitVecRkyv
+where
+    BitVecArchiveRepr: Serialize<S>,
+{
+    fn serialize_with(field: &BitVec, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        BitVecArchiveRepr::from(field).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<D: Fallible + ?Sized> DeserializeWith<Archived<BitVecArchiveRepr>, BitVec, D> for BitVecRkyv
+where
+    Archived<BitVecArchiveRepr>: Deserialize<BitVecArchiveRepr, D>,
+{
+    fn deserialize_with(
+        field: &Archived<BitVecArchiveRepr>,
+        deserializer: &mut D,
+    ) -> Result<BitVec, D::Error> {
+        let repr = field.deserialize(deserializer)?;
+        let mut bitvec = BitVec::from_vec(repr.raw);
+        bitvec.truncate(repr.bit_len);
+        Ok(bitvec)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct SubSet<ID> {
     #[cfg_attr(feature = "bincode", bincode(with_serde))]
+    #[cfg_attr(feature = "rkyv", with(BitVecRkyv))]
     set: BitVec,
     id: std::marker::PhantomData<ID>,
 }

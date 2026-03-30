@@ -22,6 +22,10 @@ use super::{NodeStorage, NodeStorageOps};
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// An implementation of [`NodeStorage`] and [`NodeStorageOps`] that uses `Vec`s
 /// and `BitVec`s to store node information and their incident half-edges.
 ///
