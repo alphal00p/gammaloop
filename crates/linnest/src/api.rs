@@ -1,5 +1,5 @@
 use figment::{providers::Serialized, Figment, Profile};
-use linnet::parser::set::DotGraphSet;
+use linnet::parser::{set::DotGraphSet, DotGraph, DotGraphBytesSet};
 use serde::{Deserialize, Serialize};
 
 use crate::{CBORTypstGraph, TypstGraph};
@@ -22,21 +22,21 @@ fn decode_dot_string(arg: &[u8]) -> Result<&str, String> {
 pub fn parse_dot_graphs_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let dot_string = decode_dot_string(arg)?;
     let dots = DotGraphSet::from_string(dot_string).map_err(|a| a.to_string())?;
-    dots.to_rkyv_bytes::<4096>().map(|bytes| bytes.to_vec())
+    dots.into_graph_bytes_set::<4096>()?
+        .to_rkyv_bytes::<4096>()
+        .map(|bytes| bytes.to_vec())
 }
 
 pub fn layout_parsed_graphs_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     let cbor_map = decode_cbor_map(arg2)?;
     let figment = Figment::from(Serialized::from(cbor_map.clone(), Profile::Default));
-    let mut dots = unsafe { rkyv::from_bytes_unchecked::<DotGraphSet>(arg) }
-        .map_err(|e| format!("Failed to deserialize archived dot graphs: {}", e))?;
-
-    for global_data in &mut dots.global_data {
-        global_data.set_figment(figment.clone());
-    }
+    let dots = DotGraphBytesSet::archived_view(arg);
 
     let mut graphs = Vec::new();
-    for g in dots.into_iter() {
+    for graph_bytes in dots.iter_bytes() {
+        let mut g = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(graph_bytes) }
+            .map_err(|e| format!("Failed to deserialize archived dot graph: {}", e))?;
+        g.global_data.set_figment(figment.clone());
         let mut typst_graph = TypstGraph::from_dot(g, &Figment::new());
 
         typst_graph.layout();

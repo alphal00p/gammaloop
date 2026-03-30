@@ -182,6 +182,10 @@ pub mod involution;
 #[derive(Clone, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents attributes for an edge when generating Graphviz DOT output.
 ///
 /// This struct allows specifying common DOT attributes like label, color,
@@ -229,6 +233,10 @@ pub mod swap;
     feature = "bincode",
     derive(bincode_trait_derive::Encode, bincode_trait_derive::Decode)
 )]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// The main graph data structure, representing a graph using the half-edge
 /// (or doubly connected edge list - DCEL) principle.
 ///
@@ -249,11 +257,11 @@ pub mod swap;
 ///   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses
 ///   [`NodeStorageVec<V>`]).
 pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {
-    hedge_data: HedgeVec<H>,
+    pub(crate) hedge_data: HedgeVec<H>,
     /// Internal storage for all half-edges, their data, and their topological
     /// relationships (e.g., opposite half-edge, next half-edge around a node).
     /// This is typically a [`SmartHedgeVec<E>`].
-    edge_store: SmartEdgeVec<E>,
+    pub(crate) edge_store: SmartEdgeVec<E>,
     /// Storage for all nodes in the graph, including their data (`V`) and
     /// information about the half-edges incident to them.
     /// The specific implementation is determined by the `S` type parameter.
@@ -265,6 +273,10 @@ pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNo
 #[cfg_attr(
     feature = "bincode",
     derive(bincode_trait_derive::Encode, bincode_trait_derive::Decode)
+)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 pub struct NoData {}
 impl Display for NoData {

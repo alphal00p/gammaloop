@@ -7,6 +7,10 @@ use super::strip_quotes;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct GlobalData {
     pub name: String,
     pub statements: BTreeMap<String, String>,

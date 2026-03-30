@@ -4,13 +4,95 @@ use dot_parser::ast::{CompassPt, Port};
 
 use crate::half_edge::involution::{Flow, Hedge};
 
+#[cfg(feature = "rkyv")]
+use rkyv::{
+    with::{ArchiveWith, DeserializeWith, SerializeWith},
+    Archive, Archived, Deserialize, Fallible, Resolver, Serialize,
+};
+
 use super::{strip_quotes, subgraph_free::PortExt};
 
+#[cfg(feature = "rkyv")]
+struct CompassPtRkyv;
+
+#[cfg(feature = "rkyv")]
+impl ArchiveWith<CompassPt> for CompassPtRkyv {
+    type Archived = Archived<u8>;
+    type Resolver = Resolver<u8>;
+
+    unsafe fn resolve_with(
+        field: &CompassPt,
+        pos: usize,
+        _: Self::Resolver,
+        out: *mut Self::Archived,
+    ) {
+        compass_pt_to_u8(*field).resolve(pos, (), out);
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<S: Fallible + ?Sized> SerializeWith<CompassPt, S> for CompassPtRkyv
+where
+    u8: Serialize<S>,
+{
+    fn serialize_with(field: &CompassPt, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        compass_pt_to_u8(*field).serialize(serializer)
+    }
+}
+
+#[cfg(feature = "rkyv")]
+impl<D: Fallible + ?Sized> DeserializeWith<Archived<u8>, CompassPt, D> for CompassPtRkyv
+where
+    Archived<u8>: Deserialize<u8, D>,
+{
+    fn deserialize_with(field: &Archived<u8>, deserializer: &mut D) -> Result<CompassPt, D::Error> {
+        Ok(u8_to_compass_pt(field.deserialize(deserializer)?))
+    }
+}
+
+#[cfg(feature = "rkyv")]
+pub(crate) const fn compass_pt_to_u8(value: CompassPt) -> u8 {
+    match value {
+        CompassPt::N => 0,
+        CompassPt::NE => 1,
+        CompassPt::E => 2,
+        CompassPt::SE => 3,
+        CompassPt::S => 4,
+        CompassPt::SW => 5,
+        CompassPt::W => 6,
+        CompassPt::NW => 7,
+        CompassPt::C => 8,
+        CompassPt::Underscore => 9,
+    }
+}
+
+#[cfg(feature = "rkyv")]
+pub(crate) const fn u8_to_compass_pt(value: u8) -> CompassPt {
+    match value {
+        0 => CompassPt::N,
+        1 => CompassPt::NE,
+        2 => CompassPt::E,
+        3 => CompassPt::SE,
+        4 => CompassPt::S,
+        5 => CompassPt::SW,
+        6 => CompassPt::W,
+        7 => CompassPt::NW,
+        8 => CompassPt::C,
+        9 => CompassPt::Underscore,
+        _ => panic!("invalid archived compass point"),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct DotHedgeData {
     pub statement: Option<String>,
     pub id: Option<Hedge>,
     pub port_label: Option<String>,
+    #[cfg_attr(feature = "rkyv", with(rkyv::with::Map<CompassPtRkyv>))]
     pub compasspt: Option<CompassPt>,
 }
 
