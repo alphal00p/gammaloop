@@ -81,22 +81,31 @@ helicities = [
 
 # Default "naive" parameterization
 # [default_runtime_settings.sampling]
-# type = "default"
-# mode = "spherical"
+# graphs = "summed"
+# orientations = "summed"
+# lmb_multichanneling = false
+# lmb_channels = "summed"
+# coordinate_system = "spherical"
 # mapping = "linear"
 # b = 10.0
 
 ## a) Tropical sampling run.
 #[default_runtime_settings.sampling]
-#type = "discrete_graph_sampling"
-#[default_runtime_settings.sampling.sampling_type]
-#subtype = "tropical"
+#graphs = "monte_carlo"
+#orientations = "summed"
+#lmb_multichanneling = false
+#lmb_channels = "summed"
+#coordinate_system = "tropical"
 
 ##b) MC over LMB with explicit sum per sample point.
 #[default_runtime_settings.sampling]
-#type = "discrete_graph_sampling"
-#[default_runtime_settings.sampling.sampling_type]
-#subtype = "multi_channeling"
+#graphs = "monte_carlo"
+#orientations = "summed"
+#lmb_multichanneling = true
+#lmb_channels = "summed"
+#coordinate_system = "spherical"
+#mapping = "linear"
+#b = 1.0
 
 ##c) MC over LMB with importance sampling of channels
 [default_runtime_settings.sampling]
@@ -110,10 +119,13 @@ b = 1.0
 
 ##d) MC over LMB and single orientation per, both importance-sampled
 #[default_runtime_settings.sampling]
-#type = "discrete_graph_sampling"
-#sample_orientations = true
-#[default_runtime_settings.sampling.sampling_type]
-#subtype = "discrete_multi_channeling"
+#graphs = "monte_carlo"
+#orientations = "monte_carlo"
+#lmb_multichanneling = true
+#lmb_channels = "monte_carlo"
+#coordinate_system = "spherical"
+#mapping = "linear"
+#b = 1.0
 
 [cli_settings.global.generation.compile]
 inline_asm = true
