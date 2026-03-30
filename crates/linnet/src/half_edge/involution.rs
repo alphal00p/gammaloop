@@ -13,7 +13,7 @@ use thiserror::Error;
 use super::{
     builder::HedgeData,
     nodestore::{NodeStorage, NodeStorageOps},
-    subgraph::SubSetLike,
+    subgraph::{Inclusion, SubSetLike},
     swap::Swap,
     GVEdgeAttrs, HedgeGraph, NodeIndex,
 };
@@ -439,6 +439,10 @@ impl<H> HedgePairWithData<&H> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Describes the pairing status of a half-edge, indicating whether it forms a
 /// complete edge with another half-edge, is a dangling/external edge, or is
 /// part of a "split" edge in a subgraph context.
@@ -851,6 +855,28 @@ impl HedgePair {
     }
 }
 
+#[cfg(feature = "rkyv")]
+impl ArchivedHedgePair {
+    pub fn any_hedge(&self) -> Hedge {
+        match self {
+            Self::Unpaired { hedge, .. } => Hedge(hedge.0.try_into().unwrap()),
+            Self::Paired { source, .. } | Self::Split { source, .. } => {
+                Hedge(source.0.try_into().unwrap())
+            }
+        }
+    }
+
+    pub fn intersects(&self, subgraph: &crate::half_edge::subgraph::SuBitGraph) -> bool {
+        match self {
+            Self::Unpaired { hedge, .. } => subgraph.includes(&Hedge(hedge.0.try_into().unwrap())),
+            Self::Paired { source, sink } | Self::Split { source, sink, .. } => {
+                subgraph.includes(&Hedge(source.0.try_into().unwrap()))
+                    || subgraph.includes(&Hedge(sink.0.try_into().unwrap()))
+            }
+        }
+    }
+}
+
 impl Display for Hedge {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -860,6 +886,10 @@ impl Display for Hedge {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents the state of a half-edge within an `Involution`.
 ///
 /// An `Involution` maps each half-edge to another, defining the graph's topology.
@@ -911,6 +941,10 @@ impl<E> InvolutiveMapping<E> {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Holds the data associated with an edge, including its [`Orientation`]
 /// and the custom data of type `E`.
 ///
@@ -1033,6 +1067,10 @@ impl<E> EdgeData<E> {
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents the superficial or conventional orientation of an edge.
 ///
 /// This orientation can be distinct from the underlying `Flow` of the half-edges
@@ -1068,6 +1106,10 @@ impl Mul for Orientation {
 #[derive(Clone, Debug, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Represents the underlying, intrinsic directionality of a half-edge
 /// relative to the full edge it is part of.
 ///
@@ -1431,6 +1473,10 @@ pub enum InvolutionError {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 /// Manages the topological relationships between half-edges in a graph.
 ///
 /// An involution is a function `f` such that `f(f(x)) = x`. In this context,
@@ -1449,7 +1495,7 @@ pub struct Involution<E = EdgeIndex> {
     /// The core data storage: a vector where each element describes the mapping
     /// and data for a specific half-edge. The index in this vector corresponds
     /// to a `Hedge`'s underlying `usize` value.
-    pub(super) inv: HedgeVec<InvolutiveMapping<E>>,
+    pub(crate) inv: HedgeVec<InvolutiveMapping<E>>,
 }
 
 impl<E> AsRef<Involution<E>> for Involution<E> {

@@ -4,7 +4,10 @@ use figment::providers::Serialized;
 use figment::{Figment, Profile};
 use linnet::half_edge::layout::spring::{Constraint, ShiftDirection};
 use linnet::half_edge::swap::Swap;
-use linnet::{dot, parser::set::DotGraphSet};
+use linnet::{
+    dot,
+    parser::{set::DotGraphSet, DotGraph, DotGraphBytesSet},
+};
 
 use crate::{
     layout_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes, CBORTypstGraph,
@@ -29,13 +32,13 @@ fn test_parse_pass_returns_archived_dot_graphs() {
     let parsed =
         parse_dot_graphs_bytes(br#"digraph first { a -> b } digraph second { c -> d }"#).unwrap();
 
-    let archived: &<DotGraphSet as rkyv::Archive>::Archived =
-        unsafe { DotGraphSet::archived_from_bytes(&parsed) };
+    let archived = DotGraphBytesSet::archived_view(&parsed);
 
-    assert_eq!(archived.global_data.len(), 2);
-    let globals = archived.global_data.as_slice();
-    assert_eq!(globals[0].name.as_str(), "first");
-    assert_eq!(globals[1].name.as_str(), "second");
+    assert_eq!(archived.len(), 2);
+    let first = DotGraph::archived_view(archived.get_bytes(0).unwrap());
+    let second = DotGraph::archived_view(archived.get_bytes(1).unwrap());
+    assert_eq!(first.global_data().name.as_str(), "first");
+    assert_eq!(second.global_data().name.as_str(), "second");
 }
 
 #[test]

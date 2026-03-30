@@ -7,6 +7,10 @@ use crate::half_edge::NodeIndex;
 use super::{strip_quotes, GlobalData};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct DotVertexData {
     pub name: Option<String>,
     pub index: Option<NodeIndex>,
