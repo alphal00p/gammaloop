@@ -20,7 +20,8 @@
   unit: 1,
   additional_data: (:),
 ) = {
-  let a = p.layout_graph(bytes(input), cbor.encode(
+  let parsed = p.parse_graph(bytes(input))
+  let a = p.layout_parsed_graph(parsed, cbor.encode(
     (
       steps: sys.inputs.at("steps", default: "15"),
       seed: sys.inputs.at("seed", default: "14"),
