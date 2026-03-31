@@ -12,6 +12,17 @@
   }
   eval(dict, scope: scope, mode: "code")
 }
+#let graph-info(graph) = cbor(p.graph_info(graph))
+#let graph-nodes(graph, subgraph: none) = if subgraph == none {
+  cbor(p.graph_nodes(graph))
+} else {
+  cbor(p.graph_nodes_of(graph, cbor.encode(subgraph)))
+}
+#let graph-edges(graph, subgraph: none) = if subgraph == none {
+  cbor(p.graph_edges(graph))
+} else {
+  cbor(p.graph_edges_of(graph, cbor.encode(subgraph)))
+}
 #let layout(
   input,
   split_edge: true,
@@ -21,7 +32,7 @@
   additional_data: (:),
 ) = {
   let parsed = p.parse_graph(bytes(input))
-  let a = p.layout_parsed_graph(parsed, cbor.encode(
+  let config = cbor.encode(
     (
       steps: sys.inputs.at("steps", default: "15"),
       seed: sys.inputs.at("seed", default: "14"),
@@ -46,19 +57,24 @@
       z_spring_growth:"1.3",
       length_scale: "0.1",
     ) + additional_data,
-  ))
-  let graphs = cbor(a)
+  )
+  let graphs = cbor(parsed)
   let diags = ()
-  for (g, parse) in graphs.graphs {
+  for graph in graphs {
+    let graph = p.layout_parsed_graph(graph, config)
+    let g = graph-info(graph)
+    let nodes = graph-nodes(graph)
+    let edges = graph-edges(graph)
     let noed = ()
     let n = (:)
 
 
-    for (i, v) in g.nodes.enumerate() {
+    for (i, v) in nodes.enumerate() {
       n.insert(str(i), v)
-      let (x, y) = v.remove("pos")
-      let b = v.remove("shift")
-      let ev = v.remove("eval", default: "(:)")
+      let pos = v.pos
+      let x = pos.x
+      let y = pos.y
+      let ev = v.eval
       if ev == none {
         ev = "(:)"
       }
@@ -71,29 +87,20 @@
     }
 
 
-    for (i, e) in g.edges.enumerate() {
+    for (i, e) in edges.enumerate() {
 
 
 
 
-      let start = e.data.remove("from")
-      let end = e.data.remove("to")
-
-      let (start,source) = if start==none{
-        (none,none)
-      }else{
-        start
-      }
-      let (end,sink) = if end==none{
-        (none,none)
-      }else{
-        end
-      }
+      let start = e.source
+      let end = e.sink
+      let source = if start == none { none } else { start.statement }
+      let sink = if end == none { none } else { end.statement }
 
       let ext = start == none or end == none;
-      let data = e.remove("data")
+      let data = e.statements
 
-      let o = e.remove("orientation")
+      let o = e.orientation
       let ev_sink = eval-dict(data, "eval_sink",scope+(orientation:o)+(eid:i)+(ext:ext))
       let ev_label = eval-dict(data,"eval_label",scope+(orientation:o)+(eid:i)+(ext:ext)+(sink:sink)+(source:source)+data)
       // let ev_label =[in]
@@ -103,60 +110,62 @@
       // ev_label
       let ev_source = eval-dict(data, "eval_source",scope+(orientation:o)+(eid:i))
 
-      let bend-angle = data.remove("bend")
-      let bend = bend-angle.remove("Ok", default: 0.)
+      let bend = e.bend
+      if bend == none {
+        bend = 0.
+      }
 
       let enmlab = label("em" + str(i))
       let (end-node, end-node-pos) = if end != none {
-        let nodelab = label(str(end))
-        if start != none and nodelab == label(str(start)){
+        let nodelab = label(str(end.node))
+        if start != none and nodelab == label(str(start.node)){
           bend = bend + 2
         }
 
           noed.push(edge(
-            vertices: ((data.pos.x * unit, data.pos.y * unit), nodelab),
+            vertices: ((e.pos.x * unit, e.pos.y * unit), nodelab),
             bend: bend * 0.5rad,
             ..ev_sink,
           ))
 
 
-        (nodelab, n.at(str(end)).pos)
+        (nodelab, n.at(str(end.node)).pos)
       } else {
         let lab = label("exte" + str(i))
         noed.push(node(
-          (data.pos.x * unit, data.pos.y * unit),
+          (e.pos.x * unit, e.pos.y * unit),
           name: lab,
           outset: -5mm,
           radius: 5mm,
           fill: none,
         ))
-        (lab, data.pos)
+        (lab, e.pos)
       }
 
       let snmlab = label("sm" + str(i))
       let (start-node, start-node-pos) = if start != none {
-        let nodelab = label(str(start))
+        let nodelab = label(str(start.node))
 
 
 
           noed.push(edge(
-            vertices: (nodelab, (data.pos.x * unit, data.pos.y * unit)),
+            vertices: (nodelab, (e.pos.x * unit, e.pos.y * unit)),
             bend: bend * 0.5rad,
             ..ev_source,
           ))
 
 
-        (nodelab, n.at(str(start)).pos)
+        (nodelab, n.at(str(start.node)).pos)
       } else {
         let lab = label("exts" + str(i))
         noed.push(node(
-          (data.pos.x * unit, data.pos.y * unit),
+          (e.pos.x * unit, e.pos.y * unit),
           name: lab,
           outset: -5mm,
           radius: 5mm,
           fill: none,
         ))
-        (lab, data.pos)
+        (lab, e.pos)
       }
 
 
@@ -184,8 +193,9 @@
         name: enmlab,
         outset: a,
       ))
-        noed.push(node(
-          (data.label_pos.x * unit, data.label_pos.y * unit),
+      let label-pos = if e.label_pos == none { e.pos } else { e.label_pos }
+      noed.push(node(
+          (label-pos.x * unit, label-pos.y * unit),
           ev_label,//rotate(data.label_angle*-1rad,ev_label)
           inset:0mm,
           snap:false,

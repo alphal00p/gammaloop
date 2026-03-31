@@ -124,8 +124,8 @@ pub use set::GraphSet;
 pub mod archive;
 #[cfg(feature = "rkyv")]
 pub use archive::{
-    ArchivedDotEdgeView, ArchivedDotGraphBytesSetView, ArchivedDotGraphView, ArchivedDotVertexView,
-    DotGraphBytesSet,
+    ArchivedDotEdgeEndpointsView, ArchivedDotEdgeView, ArchivedDotEndpointView,
+    ArchivedDotGraphBytesSetView, ArchivedDotGraphView, ArchivedDotVertexView, DotGraphBytesSet,
 };
 
 pub mod global;

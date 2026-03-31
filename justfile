@@ -2,6 +2,8 @@
 
 ci_cargo_profile := "dev-optim"
 
+mod linnet 'crates/linnet/Justfile'
+
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:
     cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim

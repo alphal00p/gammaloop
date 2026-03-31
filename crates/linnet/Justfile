@@ -13,11 +13,10 @@ default: wasm
 
 # Build WASM target for linnest
 wasm:
-    cargo build -p linnest --release --target wasm32-unknown-unknown --features custom
+    RUSTFLAGS='' cargo build -p linnest --release --target wasm32-unknown-unknown --features custom
 
-prepare-templates:
-    just wasm
-    cp target/wasm32-unknown-unknown/release/linnest.wasm clinnet/templates/linnest.wasm
+prepare-templates: wasm
+    cp "{{ justfile_directory() }}/target/wasm32-unknown-unknown/release/linnest.wasm" "{{ justfile_directory() }}/crates/clinnet/templates/linnest.wasm"
 
 # Build all packages
 build:
