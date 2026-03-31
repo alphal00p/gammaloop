@@ -134,7 +134,7 @@ fn scalar_bubble_root_integrand_reference(
     root_integrand / factors_of_pi
 }
 
-fn build_uv_scalars_amplitude(subtract_uv: bool) -> (Amplitude, Model) {
+fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
     test_initialise().unwrap();
 
     let g: Vec<Graph> = dot!(
@@ -186,13 +186,7 @@ fn build_uv_scalars_amplitude(subtract_uv: bool) -> (Amplitude, Model) {
 
     let runtime = RuntimeSettings::default();
     let generation_settings = GenerationSettings {
-        uv: UVgenerationSettings {
-            generate_integrated: false,
-            softct: false,
-            add_sigma: true,
-            subtract_uv,
-            ..Default::default()
-        },
+        uv,
         ..Default::default()
     };
     amp.preprocess(&model, &generation_settings, &(&runtime).into(), &theadpool)
@@ -244,7 +238,36 @@ fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_d
 
 #[test]
 fn scalars_profile() {
-    let (mut amp, model) = build_uv_scalars_amplitude(true);
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        ..Default::default()
+    });
+
+    let profile_settings = scalar_uv_profile_settings();
+    let res = amp.profile(&model, &profile_settings).unwrap();
+    let analysis = res.analyse();
+    let pass_fail = res.pass_fail(-0.9, &profile_settings);
+    assert_eq!(
+        pass_fail.failed,
+        0,
+        "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
+        scalar_profile_tables(&analysis, -0.9)
+    );
+}
+
+#[test]
+fn scalars_profile_new() {
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        use_legacy: false,
+        ..Default::default()
+    });
 
     let profile_settings = scalar_uv_profile_settings();
     let res = amp.profile(&model, &profile_settings).unwrap();
@@ -261,7 +284,13 @@ fn scalars_profile() {
 #[test]
 fn unsubtracted_scalars() {
     test_initialise().unwrap();
-    let (mut amp, model) = build_uv_scalars_amplitude(false);
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        ..Default::default()
+    });
 
     let profile_settings = scalar_uv_profile_settings();
     let res = amp.profile(&model, &profile_settings).unwrap();

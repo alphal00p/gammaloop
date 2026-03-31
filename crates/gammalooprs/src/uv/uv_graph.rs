@@ -1,8 +1,10 @@
+use std::collections::BTreeSet;
+
 use ahash::AHashSet;
 use idenso::metric::MetricSimplifier;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
-    involution::{Hedge, HedgePair},
+    involution::{Flow, Hedge, HedgePair},
     subgraph::{
         Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
         SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
@@ -22,6 +24,7 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     utils::{GS, W_, symbolica_ext::CallSymbol},
+    uv::settings::CTIdentifier,
 };
 
 use super::{Wood, spenso_lor_atom};
@@ -52,6 +55,58 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         subgraph: &S,
         edge_powers: T,
     ) -> Atom;
+
+    fn boundary_pdg_set<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+    ) -> BTreeSet<isize>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        let graph = self.as_ref();
+        graph
+            .full_crown(subgraph)
+            .included_iter()
+            .filter_map(|hedge| {
+                let edge_id = graph[&hedge];
+                graph[edge_id].particle_pdg_code().map(|pdg| {
+                    if graph.flow(hedge) == Flow::Source {
+                        -pdg
+                    } else {
+                        pdg
+                    }
+                })
+            })
+            .collect()
+    }
+
+    fn internal_pdg_set<E: UVE, V, H, S: SubGraphLike>(&self, subgraph: &S) -> BTreeSet<isize>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        self.as_ref()
+            .iter_edges_of(subgraph)
+            .filter_map(|(pair, edge_id, _)| {
+                pair.is_paired()
+                    .then(|| self.as_ref()[edge_id].particle_pdg_code())
+                    .flatten()
+            })
+            .collect()
+    }
+
+    fn ct_identifier<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+    ) -> CTIdentifier
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        CTIdentifier::new(
+            self.boundary_pdg_set(subgraph),
+            Some(self.internal_pdg_set(subgraph)),
+        )
+    }
+
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
@@ -287,4 +342,5 @@ impl UltravioletGraph for Graph {
 
 pub trait UVE {
     fn mass_atom(&self) -> Atom;
+    fn particle_pdg_code(&self) -> Option<isize>;
 }
