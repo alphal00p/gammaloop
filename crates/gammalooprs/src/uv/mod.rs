@@ -43,7 +43,9 @@ pub mod hedge_poset;
 pub mod renormalization;
 pub use renormalization::{RenormalizationPart, RenormalizationStats};
 pub mod settings;
-pub use settings::{CTIdentifier, RenormalizationScheme, UVgenerationSettings};
+pub use settings::{
+    CTIdentifier, CTRenormalizationRule, RenormalizationScheme, UVgenerationSettings,
+};
 pub mod uv_graph;
 pub use uv_graph::UltravioletGraph;
 
