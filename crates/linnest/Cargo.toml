@@ -12,6 +12,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ciborium = "0.2.2"
+dot-parser = { workspace = true }
 linnet = { workspace = true, features = ["drawing", "rkyv", "serde"] }
 rkyv = "0.7"
 serde = { version = "1.0", features = ["derive"] }

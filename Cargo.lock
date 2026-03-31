@@ -2238,6 +2238,7 @@ version = "0.1.0"
 dependencies = [
  "cgmath",
  "ciborium",
+ "dot-parser",
  "figment",
  "getrandom 0.2.17",
  "linnet",
