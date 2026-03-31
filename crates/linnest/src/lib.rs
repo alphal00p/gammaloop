@@ -4,6 +4,8 @@ mod graph_api;
 mod pin;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "custom")]
+mod wasm_random;
 
 pub use api::{
     layout_graph_bytes, layout_parsed_graph_bytes, layout_parsed_graphs_bytes,
@@ -55,28 +57,10 @@ initiate_protocol!();
 // Custom getrandom implementation for WASM
 #[cfg(feature = "custom")]
 use getrandom::register_custom_getrandom;
+#[cfg(feature = "custom")]
+use wasm_random::custom_getrandom;
 
 use crate::geom::{tangent_angle_toward_c_side, GeomError};
-
-#[cfg(feature = "custom")]
-fn custom_getrandom(buf: &mut [u8]) -> Result<(), getrandom::Error> {
-    // panic!("HHHHH");
-    // Simple deterministic implementation for WASM
-    // In production, you might want a better source of entropy
-    static mut COUNTER: u64 = 42;
-    unsafe {
-        for chunk in buf.chunks_mut(8) {
-            let bytes = COUNTER.to_le_bytes();
-            for (i, &byte) in bytes.iter().enumerate() {
-                if i < chunk.len() {
-                    chunk[i] = byte;
-                }
-            }
-            COUNTER = COUNTER.wrapping_add(1);
-        }
-    }
-    Ok(())
-}
 
 #[cfg(feature = "custom")]
 register_custom_getrandom!(custom_getrandom);
