@@ -899,7 +899,7 @@ impl CrossSectionGraph {
             .into_iter()
             .zip(cutkosky_corrections)
             .map(|(integrand, cutkosky_correction)| {
-                integrand.map(|a| a * &lu_prefactor * &cutkosky_correction)
+                integrand.map(|a| a * &lu_prefactor /* * &cutkosky_correction */)
             })
             .collect())
     }
@@ -1089,7 +1089,9 @@ impl CrossSectionGraph {
             for (_threshold_id, (left_threshold_diagram, threshold_cut, right_threshold_diagram)) in
                 all_possible_thresholds.iter_enumerated()
             {
-                if &cut.cut == threshold_cut {
+                if &cut.cut == threshold_cut
+                    && settings.threshold_subtraction.skip_thresholds_that_are_cuts
+                {
                     continue;
                 }
 

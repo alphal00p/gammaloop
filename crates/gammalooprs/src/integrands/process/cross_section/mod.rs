@@ -312,6 +312,31 @@ pub struct CrossSectionGraphTerm {
 }
 
 impl CrossSectionGraphTerm {
+    pub fn threshold_esurface_ids_for_raised_cut(
+        &self,
+        raised_cut_id: RaisedCutId,
+    ) -> (Vec<usize>, Vec<usize>) {
+        let (left_thresholds, right_thresholds) = &self.counterterm.thresholds[raised_cut_id];
+        let resolve_ids = |thresholds: &[Esurface]| {
+            thresholds
+                .iter()
+                .map(|threshold| {
+                    self.graph
+                        .surface_cache
+                        .esurface_cache
+                        .iter()
+                        .position(|candidate| candidate == threshold)
+                        .expect("threshold esurface should resolve in graph")
+                })
+                .collect::<Vec<_>>()
+        };
+
+        (
+            resolve_ids(left_thresholds.raw.as_slice()),
+            resolve_ids(right_thresholds.raw.as_slice()),
+        )
+    }
+
     pub fn from_cross_section_graph(
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
