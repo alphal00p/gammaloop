@@ -357,21 +357,39 @@ fn render_edge_ids(edge_ids: &[usize]) -> String {
     render_edge_ids_with_highlight(edge_ids, false)
 }
 
+fn render_threshold_esurface_ids(esurface_ids: &[usize]) -> String {
+    if esurface_ids.is_empty() {
+        return "none".dimmed().to_string();
+    }
+    format!(
+        "[{}]",
+        esurface_ids
+            .iter()
+            .map(|esurface_id| esurface_id.to_string())
+            .join(",")
+    )
+    .cyan()
+    .to_string()
+}
+
+fn render_threshold_esurface(edge_ids: &[usize]) -> String {
+    render_edge_ids(edge_ids)
+}
+
 fn render_cut(edge_ids: &[usize], raising_power: usize) -> String {
     let edge_ids = render_edge_ids(edge_ids);
     if edge_ids.is_empty() || raising_power <= 1 {
-        return edge_ids;
+        edge_ids
+    } else {
+        format!("{edge_ids}^{raising_power}").magenta().to_string()
     }
-
-    format!("{edge_ids}^{}", raising_power)
-        .magenta()
-        .to_string()
 }
 
 #[derive(Clone)]
 struct CategoryRow {
     primary_id: String,
     secondary_id: String,
+    tertiary_id: String,
     value: String,
 }
 
@@ -507,6 +525,7 @@ fn category_rows(
             .map(|orientation| CategoryRow {
                 primary_id: render_category_id(orientation.orientation_id, false),
                 secondary_id: String::new(),
+                tertiary_id: String::new(),
                 value: render_orientation_signature(
                     &orientation.signature,
                     &group.orientation_edge_ids,
@@ -522,6 +541,7 @@ fn category_rows(
                     basis.channel_id,
                     basis.matches_generation_basis,
                 ),
+                tertiary_id: String::new(),
                 value: render_edge_ids_with_highlight(
                     &basis.edge_ids,
                     basis.matches_generation_basis,
@@ -533,7 +553,8 @@ fn category_rows(
             .iter()
             .map(|cut| CategoryRow {
                 primary_id: render_category_id(cut.cut_id, false),
-                secondary_id: String::new(),
+                secondary_id: render_threshold_esurface_ids(&cut.left_threshold_esurface_ids),
+                tertiary_id: render_threshold_esurface_ids(&cut.right_threshold_esurface_ids),
                 value: render_cut(&cut.edge_ids, cut.raising_power),
             })
             .collect(),
@@ -554,26 +575,114 @@ fn category_group_header(
     }
 }
 
+fn render_integrand_thresholds_table(
+    groups: &[&IntegrandGraphGroupInfo],
+) -> Result<Option<String>> {
+    let mut builder = Builder::new();
+    builder.push_record([
+        "Group #".bold().blue().to_string(),
+        "Graph".bold().blue().to_string(),
+        "Esurface".bold().blue().to_string(),
+        "edges".bold().blue().to_string(),
+    ]);
+
+    let mut inserted_blocks = 0usize;
+    let mut separator_rows = vec![1usize];
+    let mut next_row = 1usize;
+
+    for group in groups {
+        if group.threshold_esurfaces.is_empty() {
+            continue;
+        }
+
+        let master = master_graph(group)?;
+        inserted_blocks += 1;
+        builder.push_record([
+            format!("#{}", group.group_id).blue().to_string(),
+            format!("#{} : {}", master.graph_id, master.name)
+                .green()
+                .bold()
+                .to_string(),
+            String::new(),
+            String::new(),
+        ]);
+        next_row += 1;
+        separator_rows.push(next_row);
+
+        for threshold in &group.threshold_esurfaces {
+            builder.push_record([
+                String::new(),
+                String::new(),
+                format!("#{}", threshold.esurface_id).yellow().to_string(),
+                render_threshold_esurface(&threshold.edge_ids),
+            ]);
+            next_row += 1;
+        }
+        separator_rows.push(next_row);
+    }
+
+    if inserted_blocks == 0 {
+        return Ok(None);
+    }
+
+    let mut table = builder.build();
+    let mut style = Theme::from_style(Style::rounded().remove_horizontals());
+    let mut unique_separator_rows = separator_rows.into_iter().unique().collect_vec();
+    if let Some(last_row) = unique_separator_rows.pop() {
+        for row in unique_separator_rows {
+            style.insert_horizontal_line(
+                row,
+                HorizontalLine::new('─')
+                    .intersection('┼')
+                    .left('├')
+                    .right('┤'),
+            );
+        }
+        style.insert_horizontal_line(
+            last_row,
+            HorizontalLine::new('─')
+                .intersection('┴')
+                .left('╰')
+                .right('╯'),
+        );
+    }
+    table.with(style);
+    Ok(Some(table.to_string()))
+}
+
 fn render_integrand_category_table(
     groups: &[&IntegrandGraphGroupInfo],
     category: IntegrandDisplayCategory,
 ) -> Result<Option<String>> {
     let mut builder = Builder::new();
-    if category == IntegrandDisplayCategory::LoopMomentumBasis {
-        builder.push_record([
-            "Group #".bold().blue().to_string(),
-            "Graph".bold().blue().to_string(),
-            "basis ID".bold().blue().to_string(),
-            "channel ID".bold().blue().to_string(),
-            category.value_header().bold().blue().to_string(),
-        ]);
-    } else {
-        builder.push_record([
-            "Group #".bold().blue().to_string(),
-            "Graph".bold().blue().to_string(),
-            "ID".bold().blue().to_string(),
-            category.value_header().bold().blue().to_string(),
-        ]);
+    match category {
+        IntegrandDisplayCategory::LoopMomentumBasis => {
+            builder.push_record([
+                "Group #".bold().blue().to_string(),
+                "Graph".bold().blue().to_string(),
+                "basis ID".bold().blue().to_string(),
+                "channel ID".bold().blue().to_string(),
+                category.value_header().bold().blue().to_string(),
+            ]);
+        }
+        IntegrandDisplayCategory::Cuts => {
+            builder.push_record([
+                "Group #".bold().blue().to_string(),
+                "Graph".bold().blue().to_string(),
+                "ID".bold().blue().to_string(),
+                category.value_header().bold().blue().to_string(),
+                "left thresholds".bold().blue().to_string(),
+                "right thresholds".bold().blue().to_string(),
+            ]);
+        }
+        _ => {
+            builder.push_record([
+                "Group #".bold().blue().to_string(),
+                "Graph".bold().blue().to_string(),
+                "ID".bold().blue().to_string(),
+                category.value_header().bold().blue().to_string(),
+            ]);
+        }
     }
 
     let mut inserted_blocks = 0usize;
@@ -588,42 +697,71 @@ fn render_integrand_category_table(
 
         let master = master_graph(group)?;
         inserted_blocks += 1;
-        if category == IntegrandDisplayCategory::LoopMomentumBasis {
-            builder.push_record([
-                format!("#{}", group.group_id).blue().to_string(),
-                format!("#{} : {}", master.graph_id, master.name)
-                    .green()
-                    .bold()
-                    .to_string(),
-                String::new(),
-                String::new(),
-                category_group_header(group, category),
-            ]);
-        } else {
-            builder.push_record([
-                format!("#{}", group.group_id).blue().to_string(),
-                format!("#{} : {}", master.graph_id, master.name)
-                    .green()
-                    .bold()
-                    .to_string(),
-                String::new(),
-                category_group_header(group, category),
-            ]);
+        match category {
+            IntegrandDisplayCategory::LoopMomentumBasis => {
+                builder.push_record([
+                    format!("#{}", group.group_id).blue().to_string(),
+                    format!("#{} : {}", master.graph_id, master.name)
+                        .green()
+                        .bold()
+                        .to_string(),
+                    String::new(),
+                    String::new(),
+                    category_group_header(group, category),
+                ]);
+            }
+            IntegrandDisplayCategory::Cuts => {
+                builder.push_record([
+                    format!("#{}", group.group_id).blue().to_string(),
+                    format!("#{} : {}", master.graph_id, master.name)
+                        .green()
+                        .bold()
+                        .to_string(),
+                    String::new(),
+                    category_group_header(group, category),
+                    String::new(),
+                    String::new(),
+                ]);
+            }
+            _ => {
+                builder.push_record([
+                    format!("#{}", group.group_id).blue().to_string(),
+                    format!("#{} : {}", master.graph_id, master.name)
+                        .green()
+                        .bold()
+                        .to_string(),
+                    String::new(),
+                    category_group_header(group, category),
+                ]);
+            }
         }
         next_row += 1;
         separator_rows.push(next_row);
 
         for row in rows {
-            if category == IntegrandDisplayCategory::LoopMomentumBasis {
-                builder.push_record([
-                    String::new(),
-                    String::new(),
-                    row.primary_id,
-                    row.secondary_id,
-                    row.value,
-                ]);
-            } else {
-                builder.push_record([String::new(), String::new(), row.primary_id, row.value]);
+            match category {
+                IntegrandDisplayCategory::LoopMomentumBasis => {
+                    builder.push_record([
+                        String::new(),
+                        String::new(),
+                        row.primary_id,
+                        row.secondary_id,
+                        row.value,
+                    ]);
+                }
+                IntegrandDisplayCategory::Cuts => {
+                    builder.push_record([
+                        String::new(),
+                        String::new(),
+                        row.primary_id,
+                        row.value,
+                        row.secondary_id,
+                        row.tertiary_id,
+                    ]);
+                }
+                _ => {
+                    builder.push_record([String::new(), String::new(), row.primary_id, row.value]);
+                }
             }
             next_row += 1;
         }
@@ -709,6 +847,17 @@ fn render_integrand_detail_from_info(
 {table}",
                 category.title().bold().blue()
             );
+        }
+
+        if category == IntegrandDisplayCategory::Cuts {
+            if let Some(table) = render_integrand_thresholds_table(&groups)? {
+                info!(
+                    "
+{}
+{table}",
+                    "Threshold esurfaces".bold().blue()
+                );
+            }
         }
     }
 

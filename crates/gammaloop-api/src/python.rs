@@ -27,7 +27,7 @@ use crate::{
     },
     integrand_info::{
         IntegrandCutInfo, IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo,
-        IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo,
+        IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
     },
     session::{CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
@@ -101,6 +101,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrandOrientationInfo>()?;
     m.add_class::<PyIntegrandLoopMomentumBasisInfo>()?;
     m.add_class::<PyIntegrandCutInfo>()?;
+    m.add_class::<PyIntegrandThresholdEsurfaceInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
     m.add_class::<PyHistogramSnapshot>()?;
     m.add_class::<PyHistogramBinSnapshot>()?;
@@ -485,6 +486,15 @@ pub struct PyIntegrandCutInfo {
     pub cut_id: usize,
     pub edge_ids: Vec<usize>,
     pub raising_power: usize,
+    pub left_threshold_esurface_ids: Vec<usize>,
+    pub right_threshold_esurface_ids: Vec<usize>,
+}
+
+#[pyclass(from_py_object, name = "IntegrandThresholdEsurface", get_all)]
+#[derive(Clone)]
+pub struct PyIntegrandThresholdEsurfaceInfo {
+    pub esurface_id: usize,
+    pub edge_ids: Vec<usize>,
 }
 
 #[pyclass(from_py_object, name = "IntegrandGraphGroup", get_all)]
@@ -495,6 +505,8 @@ pub struct PyIntegrandGraphGroupInfo {
     pub orientation_edge_ids: Vec<usize>,
     pub orientations: Vec<PyIntegrandOrientationInfo>,
     pub loop_momentum_bases: Vec<PyIntegrandLoopMomentumBasisInfo>,
+    pub threshold_esurface_ids: Vec<usize>,
+    pub threshold_esurfaces: Vec<PyIntegrandThresholdEsurfaceInfo>,
     pub cuts: Vec<PyIntegrandCutInfo>,
 }
 
@@ -1404,6 +1416,17 @@ fn py_integrand_cut_info_from_info(cut: IntegrandCutInfo) -> PyIntegrandCutInfo 
         cut_id: cut.cut_id,
         edge_ids: cut.edge_ids,
         raising_power: cut.raising_power,
+        left_threshold_esurface_ids: cut.left_threshold_esurface_ids,
+        right_threshold_esurface_ids: cut.right_threshold_esurface_ids,
+    }
+}
+
+fn py_integrand_threshold_esurface_info_from_info(
+    threshold: IntegrandThresholdEsurfaceInfo,
+) -> PyIntegrandThresholdEsurfaceInfo {
+    PyIntegrandThresholdEsurfaceInfo {
+        esurface_id: threshold.esurface_id,
+        edge_ids: threshold.edge_ids,
     }
 }
 
@@ -1427,6 +1450,12 @@ fn py_integrand_graph_group_info_from_info(
             .loop_momentum_bases
             .into_iter()
             .map(py_integrand_loop_momentum_basis_info_from_info)
+            .collect(),
+        threshold_esurface_ids: group.threshold_esurface_ids,
+        threshold_esurfaces: group
+            .threshold_esurfaces
+            .into_iter()
+            .map(py_integrand_threshold_esurface_info_from_info)
             .collect(),
         cuts: group
             .cuts

@@ -1,10 +1,10 @@
-use std::fmt;
+use std::{collections::BTreeSet, fmt};
 
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
     graph::Graph,
-    processes::{Amplitude, CrossSection, CrossSectionCut, ProcessCollection},
+    processes::{Amplitude, CrossSection, CrossSectionCut, ProcessCollection, RaisedCutId},
 };
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
@@ -54,6 +54,14 @@ pub struct IntegrandCutInfo {
     pub cut_id: usize,
     pub edge_ids: Vec<usize>,
     pub raising_power: usize,
+    pub left_threshold_esurface_ids: Vec<usize>,
+    pub right_threshold_esurface_ids: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct IntegrandThresholdEsurfaceInfo {
+    pub esurface_id: usize,
+    pub edge_ids: Vec<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -63,7 +71,22 @@ pub struct IntegrandGraphGroupInfo {
     pub orientation_edge_ids: Vec<usize>,
     pub orientations: Vec<IntegrandOrientationInfo>,
     pub loop_momentum_bases: Vec<IntegrandLoopMomentumBasisInfo>,
+    pub threshold_esurface_ids: Vec<usize>,
+    pub threshold_esurfaces: Vec<IntegrandThresholdEsurfaceInfo>,
     pub cuts: Vec<IntegrandCutInfo>,
+}
+
+fn threshold_esurface_edge_ids(graph: &Graph, esurface_id: usize) -> Vec<usize> {
+    graph
+        .surface_cache
+        .esurface_cache
+        .iter()
+        .nth(esurface_id)
+        .expect("threshold esurface id should resolve in graph")
+        .energies
+        .iter()
+        .map(|edge_id| edge_id.0)
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -289,6 +312,8 @@ fn amplitude_graph_groups(
                             == master_graph.graph.loop_momentum_basis.loop_edges,
                     })
                     .collect(),
+                threshold_esurface_ids: Vec::new(),
+                threshold_esurfaces: Vec::new(),
                 cuts: Vec::new(),
             }
         })
@@ -311,6 +336,59 @@ fn cross_section_graph_groups(
             let master_graph = &integrand.data.graph_terms[master_graph_id];
             let channel_ids = lmb_channel_ids(&master_graph.graph, &master_graph.lmbs);
             let cut_raising_powers = cut_raising_powers(master_graph);
+            let mut cut_to_raised_cut = vec![None; master_graph.cuts.len()];
+            for (raised_cut_id, raised_cut_group) in
+                master_graph.raised_data.raised_cut_groups.iter_enumerated()
+            {
+                for cut_id in &raised_cut_group.cuts {
+                    cut_to_raised_cut[cut_id.0] = Some(raised_cut_id);
+                }
+            }
+
+            let cuts = master_graph
+                .cuts
+                .iter()
+                .enumerate()
+                .map(|(cut_id, cut)| {
+                    let (left_threshold_esurface_ids, right_threshold_esurface_ids) =
+                        cut_to_raised_cut[cut_id].map_or_else(
+                            || (Vec::new(), Vec::new()),
+                            |raised_cut_id: RaisedCutId| {
+                                master_graph.threshold_esurface_ids_for_raised_cut(raised_cut_id)
+                            },
+                        );
+
+                    IntegrandCutInfo {
+                        cut_id,
+                        edge_ids: cut_edge_ids(&master_graph.graph, cut),
+                        raising_power: cut_raising_powers[cut_id],
+                        left_threshold_esurface_ids,
+                        right_threshold_esurface_ids,
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let threshold_esurface_ids = cuts
+                .iter()
+                .flat_map(|cut| {
+                    cut.left_threshold_esurface_ids
+                        .iter()
+                        .chain(cut.right_threshold_esurface_ids.iter())
+                })
+                .copied()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            let threshold_esurfaces = threshold_esurface_ids
+                .iter()
+                .copied()
+                .map(|esurface_id| IntegrandThresholdEsurfaceInfo {
+                    esurface_id,
+                    edge_ids: threshold_esurface_edge_ids(&master_graph.graph, esurface_id),
+                })
+                .collect::<Vec<_>>();
+
             IntegrandGraphGroupInfo {
                 group_id,
                 graphs: group
@@ -346,16 +424,9 @@ fn cross_section_graph_groups(
                             == master_graph.graph.loop_momentum_basis.loop_edges,
                     })
                     .collect(),
-                cuts: master_graph
-                    .cuts
-                    .iter()
-                    .enumerate()
-                    .map(|(cut_id, cut)| IntegrandCutInfo {
-                        cut_id,
-                        edge_ids: cut_edge_ids(&master_graph.graph, cut),
-                        raising_power: cut_raising_powers[cut_id],
-                    })
-                    .collect(),
+                threshold_esurface_ids,
+                threshold_esurfaces,
+                cuts,
             }
         })
         .collect()
