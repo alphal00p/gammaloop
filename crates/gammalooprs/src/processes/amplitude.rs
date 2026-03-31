@@ -457,7 +457,11 @@ impl AmplitudeGraph {
     ) -> Result<RenormalizationPart> {
         if settings.use_legacy {
             let mut vk_settings = settings.vakint.true_settings();
-            let wood = self.graph.wood(&self.graph.no_dummy());
+            let wood = self.graph.wood_with_settings(
+                &self.graph.no_dummy(),
+                settings,
+                &self.graph.loop_momentum_basis,
+            );
             //  it needs to be the max number of loops across all divergent spinneys of that graph
             vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
 
@@ -470,7 +474,7 @@ impl AmplitudeGraph {
             forest.pole_part_of_ends(&self.graph)
         } else {
             let cuts = CutStructure::empty(&self.graph);
-            let wood = NewWood::new(cuts, &self.graph, &settings.vakint);
+            let wood = NewWood::new_with_settings(cuts, &self.graph, settings);
             let mut forest = wood.unfold();
             forest.integrate(&self.graph, crate::utils::vakint()?, settings)?;
 

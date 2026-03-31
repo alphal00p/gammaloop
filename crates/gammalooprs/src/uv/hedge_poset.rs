@@ -121,6 +121,28 @@ impl Wood {
             vakint_settings,
         )
     }
+
+    pub(crate) fn new_with_settings(
+        cuts: CutStructure,
+        graph: &Graph,
+        settings: &UVgenerationSettings,
+    ) -> Self {
+        let mut subgraph = graph.full_filter();
+        subgraph.subtract_with(&graph.initial_state_cut.left);
+        let mut spinneys = Vec::new();
+
+        for cut in cuts.cuts.iter() {
+            let cut_sub = subgraph.subtract(&cut.union);
+            spinneys.extend(graph.classified_spinneys(
+                &cut_sub,
+                settings,
+                &graph.loop_momentum_basis,
+            ));
+        }
+
+        Self::from_spinneys(spinneys, graph, cuts, &settings.vakint)
+    }
+
     pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: &Graph,

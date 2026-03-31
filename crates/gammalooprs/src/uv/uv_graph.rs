@@ -24,7 +24,7 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     utils::{GS, W_, symbolica_ext::CallSymbol},
-    uv::settings::CTIdentifier,
+    uv::{RenormalizationScheme, UVgenerationSettings, settings::CTIdentifier},
 };
 
 use super::{Spinney, Wood, spenso_lor_atom};
@@ -107,6 +107,51 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         )
     }
 
+    fn renormalization_scheme<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+        settings: &UVgenerationSettings,
+    ) -> RenormalizationScheme
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        settings.renormalization_scheme_for(&self.ct_identifier(subgraph))
+    }
+
+    fn classify_spinney<E: UVE, V, H>(
+        &self,
+        spinney: InternalSubGraph,
+        settings: &UVgenerationSettings,
+        lmb: &LoopMomentumBasis,
+    ) -> Option<Spinney>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        let renormalization_scheme = self.renormalization_scheme(&spinney.filter, settings);
+
+        (renormalization_scheme != RenormalizationScheme::Unsubtracted)
+            .then(|| Spinney::with_scheme(spinney, self, lmb, renormalization_scheme))
+    }
+
+    fn classified_spinneys<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+        settings: &UVgenerationSettings,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<Spinney>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        if !settings.subtract_uv {
+            return vec![Spinney::empty(self)];
+        }
+
+        self.spinneys(subgraph)
+            .into_iter()
+            .filter_map(|spinney| self.classify_spinney(spinney, settings, lmb))
+            .collect()
+    }
+
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
@@ -181,20 +226,27 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         limits
     }
 
-    fn wood<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Wood
+    fn wood<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Wood
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        Wood::from_spinneys(
-            self.spinneys(subgraph).into_iter().map(|spinney| {
-                Spinney::new(
-                    spinney,
-                    self,
-                    &self.as_ref().lmb_of(&self.as_ref().full_filter()),
-                )
-            }),
-            self,
+        self.wood_with_settings(
+            subgraph,
+            &UVgenerationSettings::default(),
+            &self.as_ref().lmb_of(&self.as_ref().full_filter()),
         )
+    }
+
+    fn wood_with_settings<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+        settings: &UVgenerationSettings,
+        lmb: &LoopMomentumBasis,
+    ) -> Wood
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        Wood::from_spinneys(self.classified_spinneys(subgraph, settings, lmb), self)
     }
 
     fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
