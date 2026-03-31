@@ -1,11 +1,18 @@
 mod api;
 pub mod geom;
+mod graph_api;
 mod pin;
 #[cfg(test)]
 mod tests;
 
 pub use api::{
-    layout_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes, TypstOutput,
+    layout_graph_bytes, layout_parsed_graph_bytes, layout_parsed_graphs_bytes,
+    parse_dot_graphs_bytes,
+};
+pub use graph_api::{
+    graph_compass_subgraph_bytes, graph_edges_bytes, graph_edges_of_bytes, graph_info_bytes,
+    graph_nodes_bytes, graph_nodes_of_bytes, graph_subgraph_bytes, TypstDotEdge, TypstDotEndpoint,
+    TypstDotGraphInfo, TypstDotNode, TypstPoint,
 };
 pub use pin::{expand_template, PinConstraint};
 
@@ -76,6 +83,8 @@ register_custom_getrandom!(custom_getrandom);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TypstNode {
+    name: Option<String>,
+    index: Option<NodeIndex>,
     pos: Point2<f64>,
     constraints: PointConstraint,
     shift: Option<Vector2<f64>>,
@@ -86,6 +95,8 @@ pub struct TypstNode {
 impl Default for TypstNode {
     fn default() -> Self {
         TypstNode {
+            name: None,
+            index: None,
             pos: Point2::origin(),
             constraints: PointConstraint::default(),
             shift: None,
@@ -115,7 +126,7 @@ impl HasPointConstraint for TypstNode {
 impl TypstNode {
     /// Convert back to DotVertexData
     fn to_dot(&self) -> DotVertexData {
-        let mut statements = std::collections::BTreeMap::new();
+        let mut statements = self.statements.clone();
 
         // Add position as pos attribute
         statements.insert("pos".to_string(), format!("{},{}", self.pos.x, self.pos.y));
@@ -124,9 +135,13 @@ impl TypstNode {
             statements.insert("shift".to_string(), format!("{},{}", s.x, s.y));
         }
 
+        if let Some(eval) = &self.eval {
+            statements.insert("eval".to_string(), eval.clone());
+        }
+
         DotVertexData {
-            name: None,
-            index: None,
+            name: self.name.clone(),
+            index: self.index,
             statements,
         }
     }
@@ -155,6 +170,8 @@ impl TypstNode {
         let (pos, constraints) = init_points[nid];
 
         Self {
+            name: data.name,
+            index: data.index,
             statements: data.statements,
             pos,
             constraints,
@@ -354,7 +371,7 @@ impl TypstEdge {
 
     /// Convert back to DotEdgeData
     fn to_dot(&self) -> DotEdgeData {
-        let mut statements = std::collections::BTreeMap::new();
+        let mut statements = self.statements.clone();
 
         // Add position as pos attribute
         statements.insert("pos".to_string(), format!("{},{}", self.pos.x, self.pos.y));
@@ -378,7 +395,15 @@ impl TypstEdge {
         }
 
         if let Some(eval) = &self.eval_sink {
-            statements.insert("eval".to_string(), eval.clone());
+            statements.insert("eval_sink".to_string(), eval.clone());
+        }
+
+        if let Some(eval) = &self.eval_source {
+            statements.insert("eval_source".to_string(), eval.clone());
+        }
+
+        if let Some(eval) = &self.eval_label {
+            statements.insert("eval_label".to_string(), eval.clone());
         }
 
         if let Some(eval) = &self.mom_eval {
@@ -2068,6 +2093,13 @@ impl TypstGraph {
         // Reconstruct GlobalData from layout parameters
 
         let mut global_data = GlobalData::from(());
+        global_data.name = self.name.clone();
+        global_data.statements = self.global_statements.clone();
+        if let Some(eval) = &self.global_eval {
+            global_data
+                .statements
+                .insert("eval".to_string(), eval.clone());
+        }
         self.layout_config.add_to_global(&mut global_data);
         DotGraph { graph, global_data }
     }

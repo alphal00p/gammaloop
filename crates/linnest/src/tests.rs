@@ -6,12 +6,15 @@ use linnet::half_edge::layout::spring::{Constraint, ShiftDirection};
 use linnet::half_edge::swap::Swap;
 use linnet::{
     dot,
-    parser::{set::DotGraphSet, DotGraph, DotGraphBytesSet},
+    parser::{set::DotGraphSet, DotGraph},
 };
+use serde::Serialize;
 
 use crate::{
-    layout_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes, CBORTypstGraph,
-    TreeInitCfg, TypstGraph, TypstOutput,
+    graph_compass_subgraph_bytes, graph_edges_bytes, graph_edges_of_bytes, graph_info_bytes,
+    graph_nodes_bytes, graph_nodes_of_bytes, graph_subgraph_bytes, layout_graph_bytes,
+    layout_parsed_graph_bytes, layout_parsed_graphs_bytes, parse_dot_graphs_bytes, CBORTypstGraph,
+    TreeInitCfg, TypstDotEdge, TypstDotGraphInfo, TypstDotNode, TypstGraph,
 };
 
 fn test_figment() -> Figment {
@@ -27,18 +30,87 @@ fn empty_config_bytes() -> Vec<u8> {
     bytes
 }
 
+fn decode_graphs(bytes: &[u8]) -> Vec<Vec<u8>> {
+    ciborium::de::from_reader(bytes).unwrap()
+}
+
+fn encode_cbor<T: Serialize>(value: &T) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    ciborium::ser::into_writer(value, &mut bytes).unwrap();
+    bytes
+}
+
 #[test]
 fn test_parse_pass_returns_archived_dot_graphs() {
     let parsed =
         parse_dot_graphs_bytes(br#"digraph first { a -> b } digraph second { c -> d }"#).unwrap();
 
-    let archived = DotGraphBytesSet::archived_view(&parsed);
+    let archived = decode_graphs(&parsed);
 
     assert_eq!(archived.len(), 2);
-    let first = DotGraph::archived_view(archived.get_bytes(0).unwrap());
-    let second = DotGraph::archived_view(archived.get_bytes(1).unwrap());
+    let first = DotGraph::archived_view(&archived[0]);
+    let second = DotGraph::archived_view(&archived[1]);
     assert_eq!(first.global_data().name.as_str(), "first");
     assert_eq!(second.global_data().name.as_str(), "second");
+}
+
+#[test]
+fn test_graph_query_api_reads_nodes_edges_and_subgraphs() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph first {
+            graph [full_num="x+y"];
+            a [eval="left"];
+            b [eval="right"];
+            a:out:n -> b:in:s [label="ab"];
+            ext -> a [dir=back, source="src"];
+        }"#,
+    )
+    .unwrap();
+
+    let graphs = decode_graphs(&parsed);
+    let graph = &graphs[0];
+
+    let info: TypstDotGraphInfo =
+        ciborium::de::from_reader(graph_info_bytes(graph).unwrap().as_slice()).unwrap();
+    assert_eq!(info.name, "first");
+    assert_eq!(
+        info.global_statements.get("full_num").map(String::as_str),
+        Some("x+y")
+    );
+
+    let nodes: Vec<TypstDotNode> =
+        ciborium::de::from_reader(graph_nodes_bytes(graph).unwrap().as_slice()).unwrap();
+    assert_eq!(nodes.len(), 3);
+    assert_eq!(nodes[0].name.as_deref(), Some("a"));
+
+    let edges: Vec<TypstDotEdge> =
+        ciborium::de::from_reader(graph_edges_bytes(graph).unwrap().as_slice()).unwrap();
+    assert_eq!(edges.len(), 2);
+    assert_eq!(edges[0].orientation, "default");
+
+    let north = graph_compass_subgraph_bytes(graph, &encode_cbor(&"n")).unwrap();
+    let north_label: String = ciborium::de::from_reader(north.as_slice()).unwrap();
+
+    let north_edges: Vec<TypstDotEdge> = ciborium::de::from_reader(
+        graph_edges_of_bytes(graph, &encode_cbor(&north_label))
+            .unwrap()
+            .as_slice(),
+    )
+    .unwrap();
+    assert_eq!(north_edges.len(), 1);
+
+    let view = DotGraph::archived_view(graph);
+    let mut south_bits = vec![false; view.n_hedges()];
+    south_bits[view.n_hedges() - 1] = true;
+    let subgraph = graph_subgraph_bytes(graph, &encode_cbor(&south_bits)).unwrap();
+    let south_label: String = ciborium::de::from_reader(subgraph.as_slice()).unwrap();
+    let south_nodes: Vec<TypstDotNode> = ciborium::de::from_reader(
+        graph_nodes_of_bytes(graph, &encode_cbor(&south_label))
+            .unwrap()
+            .as_slice(),
+    )
+    .unwrap();
+    assert_eq!(south_nodes.len(), 1);
 }
 
 #[test]
@@ -52,8 +124,21 @@ fn test_split_parse_layout_matches_wrapper() {
 
     assert_eq!(split, wrapped);
 
-    let output: TypstOutput = ciborium::de::from_reader(split.as_slice()).unwrap();
-    assert_eq!(output.graphs.len(), 1);
+    let output = decode_graphs(&split);
+    assert_eq!(output.len(), 1);
+}
+
+#[test]
+fn test_single_graph_layout_mutates_graph_bytes() {
+    let parsed =
+        parse_dot_graphs_bytes(br#"digraph archived { a [pin="x:1.0"]; a -> b }"#).unwrap();
+    let graphs = decode_graphs(&parsed);
+    let laid_out = layout_parsed_graph_bytes(&graphs[0], &empty_config_bytes()).unwrap();
+
+    let nodes: Vec<TypstDotNode> =
+        ciborium::de::from_reader(graph_nodes_bytes(&laid_out).unwrap().as_slice()).unwrap();
+    assert_eq!(nodes.len(), 2);
+    assert!(nodes.iter().all(|node| node.pos.is_some()));
 }
 
 #[test]
