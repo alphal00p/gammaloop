@@ -6,7 +6,7 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
 //! numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
