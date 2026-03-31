@@ -158,7 +158,6 @@ impl Amplitude {
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
         info!("Compiling amplitude {}", self.name);
@@ -174,7 +173,7 @@ impl Amplitude {
             r?;
         }
         if let Some(integrand) = &mut self.integrand {
-            integrand.compile(&p, override_existing, settings, thread_pool)?;
+            integrand.compile(&p, override_existing, thread_pool)?;
         };
         Ok(())
     }
@@ -315,13 +314,17 @@ impl Amplitude {
             }
         }
 
-        let amplitude_integrand = AmplitudeIntegrand {
+        let mut amplitude_integrand = AmplitudeIntegrand {
             settings: runtime_default.into_with_modified_kinematics(
                 &self.external_signature,
                 &self.graphs[0].graph.get_external_masses(model),
             )?,
             data: AmplitudeIntegrandData {
                 name: self.name.clone(),
+                compilation: global_settings
+                    .generation
+                    .compile
+                    .frozen_mode(&global_settings.generation.evaluator),
                 rotations: None,
                 loop_cache_id: 0,
                 external_cache_id: 0,
@@ -332,7 +335,9 @@ impl Amplitude {
                 group_derived_data: self.group_derived_data.clone(),
             },
             event_processing_runtime: Default::default(),
+            active_f64_backend: Default::default(),
         };
+        amplitude_integrand.prepare_runtime_backends_after_generation()?;
         self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
         Ok(())
     }

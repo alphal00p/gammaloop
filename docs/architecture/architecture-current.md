@@ -102,7 +102,17 @@ The command model is stateful by design: commands mutate a long-lived `State` th
 2. `State::generate_integrand(s)` creates a generation thread pool.
 3. `ProcessList::preprocess` delegates to amplitude/cross-section preprocessors.
 4. `ProcessList::generate_integrands` builds `ProcessIntegrand` instances from preprocessed graphs.
-5. Optional compile/export steps persist compiled evaluators and DOT/standalone outputs.
+5. Optional compile/export steps persist compiled evaluator artifacts and DOT/standalone outputs.
+6. Each generated integrand now embeds its frozen f64 backend choice in `integrand.bin`:
+   - `eager`
+   - `symjit`
+   - external `c++` / `assembly` plus the external compile options used
+7. Runtime-only evaluator backends are then activated from that frozen metadata:
+   - eager uses the saved eager evaluator directly
+   - symjit is rebuilt after generation/load from the saved Symbolica evaluator
+   - external compiled backends load their saved shared-library artifacts lazily
+   - if external loading fails and startup globals explicitly opt into symjit,
+     GammaLoop falls back to symjit for that integrand and logs it
 
 ### 3. Evaluation and Integration Flow
 1. Commands (`inspect`, `evaluate`, `integrate`) resolve process + integrand references.
@@ -158,6 +168,14 @@ The differential pipeline is split into three layers:
 The runtime-only cache is intentionally not serialized in binary state dumps.
 It is wrapped in a no-op `Encode` / default-empty `Decode` container and is
 always rebuilt from settings at warm-up time.
+
+The same pattern is now also used for evaluator execution backends:
+
+- per-integrand frozen backend metadata lives inside `integrand.bin`
+- loaded external `.so` evaluators are runtime-only
+- symjit evaluators are runtime-only
+- the saved portable representation remains centered on eager Symbolica
+  evaluators
 
 ### 3.2 Differential event model
 

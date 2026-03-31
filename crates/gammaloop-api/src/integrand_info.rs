@@ -4,7 +4,9 @@ use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
     graph::Graph,
+    integrands::process::ActiveF64Backend,
     processes::{Amplitude, CrossSection, CrossSectionCut, ProcessCollection},
+    settings::global::FrozenCompilationMode,
 };
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
@@ -72,6 +74,8 @@ pub struct IntegrandInfo {
     pub process_name: String,
     pub integrand_name: String,
     pub kind: IntegrandKind,
+    pub generation_compilation: FrozenCompilationMode,
+    pub active_f64_backend: ActiveF64Backend,
     pub graph_count: usize,
     pub graph_group_count: usize,
     pub record_size_bytes: usize,
@@ -86,6 +90,8 @@ pub(crate) fn collect_integrand_info(
     let process = &state.process_list.processes[process_id];
     let resolved = process.get_integrand(integrand_name)?;
     let generated = resolved.require_generated()?;
+    let generation_compilation = generated.frozen_compilation().clone();
+    let active_f64_backend = generated.active_f64_backend();
 
     match (generated, &process.collection) {
         (
@@ -105,6 +111,8 @@ pub(crate) fn collect_integrand_info(
                 process_name: process.definition.folder_name.clone(),
                 integrand_name: resolved.canonical_name,
                 kind: IntegrandKind::Amplitude,
+                generation_compilation: generation_compilation.clone(),
+                active_f64_backend,
                 graph_count: amplitude.graphs.len(),
                 graph_group_count: amplitude.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_amplitude(amplitude)?,
@@ -130,6 +138,8 @@ pub(crate) fn collect_integrand_info(
                 process_name: process.definition.folder_name.clone(),
                 integrand_name: resolved.canonical_name,
                 kind: IntegrandKind::CrossSection,
+                generation_compilation,
+                active_f64_backend,
                 graph_count: cross_section.supergraphs.len(),
                 graph_group_count: cross_section.graph_group_structure.len(),
                 record_size_bytes: integrand_record_size_from_cross_section(cross_section)?,

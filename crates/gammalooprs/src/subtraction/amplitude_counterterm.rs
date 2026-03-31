@@ -125,12 +125,47 @@ impl AmplitudeCountertermData {
         &mut self,
         path: impl AsRef<Path>,
         _override_existing: bool,
-        settings: &GlobalSettings,
+        frozen_mode: &crate::settings::global::FrozenCompilationMode,
     ) -> Result<()> {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
             let mut evaluator_stack = e.evaluator_stack.borrow_mut();
-            evaluator_stack.compile(format!("esurface_{}", i.0), path.as_ref(), settings)?;
+            evaluator_stack.compile(format!("esurface_{}", i.0), path.as_ref(), frozen_mode)?;
         }
+
+        for (group_index, group) in self.overlap.overlap_groups.iter_mut().enumerate() {
+            if let Some(prefactor_evaluator) = group.prefactor_evaluator.as_mut() {
+                prefactor_evaluator.borrow_mut().compile_external(
+                    path.as_ref()
+                        .join(format!("overlap_prefactor_{group_index}"))
+                        .with_extension("cpp"),
+                    format!("overlap_prefactor_{group_index}"),
+                    path.as_ref()
+                        .join(format!("overlap_prefactor_{group_index}"))
+                        .with_extension("so"),
+                    frozen_mode,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
+    ) -> Result<()> {
+        for evaluator in self.evaluators.iter_mut() {
+            evaluator
+                .evaluator_stack
+                .get_mut()
+                .for_each_generic_evaluator_mut(&mut f)?;
+        }
+
+        for group in &mut self.overlap.overlap_groups {
+            if let Some(prefactor_evaluator) = group.prefactor_evaluator.as_mut() {
+                f(prefactor_evaluator.get_mut())?;
+            }
+        }
+
         Ok(())
     }
 

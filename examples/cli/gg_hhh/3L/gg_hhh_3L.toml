@@ -116,7 +116,7 @@ b = 1.0
 #subtype = "discrete_multi_channeling"
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true

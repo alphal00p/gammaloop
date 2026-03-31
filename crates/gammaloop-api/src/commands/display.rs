@@ -680,6 +680,37 @@ fn render_integrand_detail_from_info(
             value: detail.kind.to_string().yellow().to_string(),
         },
         DetailSummaryRow {
+            field: "compile enabled".to_string(),
+            value: detail
+                .generation_compilation
+                .compile_enabled()
+                .to_string()
+                .yellow()
+                .to_string(),
+        },
+        DetailSummaryRow {
+            field: "generation backend".to_string(),
+            value: detail
+                .generation_compilation
+                .active_backend_name()
+                .yellow()
+                .to_string(),
+        },
+        DetailSummaryRow {
+            field: "generation compile options".to_string(),
+            value: detail
+                .generation_compilation
+                .external_options()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "(none)".to_string())
+                .magenta()
+                .to_string(),
+        },
+        DetailSummaryRow {
+            field: "active f64 backend".to_string(),
+            value: detail.active_f64_backend.to_string().yellow().to_string(),
+        },
+        DetailSummaryRow {
             field: "graphs".to_string(),
             value: detail.graph_count.to_string().yellow().to_string(),
         },

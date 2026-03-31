@@ -459,7 +459,12 @@ impl Generate {
                     process_id,
                     process_args.integrand_name.clone(),
                 )?;
-                if global_settings.generation.evaluator.compile {
+                if global_settings.generation.evaluator.compile
+                    && global_settings
+                        .generation
+                        .compile
+                        .requires_external_compilation()
+                {
                     state.compile_integrands(
                         compile_folder,
                         override_existing_compiled,
@@ -472,7 +477,12 @@ impl Generate {
             }
             None => {
                 state.generate_integrands(global_settings, runtime_settings.into())?;
-                if global_settings.generation.evaluator.compile {
+                if global_settings.generation.evaluator.compile
+                    && global_settings
+                        .generation
+                        .compile
+                        .requires_external_compilation()
+                {
                     state.compile_integrands(
                         compile_folder,
                         override_existing_compiled,

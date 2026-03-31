@@ -1,0 +1,466 @@
+# symjit human <-> codex interactions
+
+## Interaction 1
+
+### User prompt
+
+The user asked me to:
+- work on branch `symjit` in the current `gammaloop_dev_branch` repo
+- first inspect the codebase and reason about how to add a new
+  `compilation_mode` setting with `eager`, `c++`, `assembly`, and `symjit`
+- use Symbolica/symjit docs as needed
+- write and maintain the implementation plan in `symjit.md`
+- keep this interaction log updated through the session
+- come back first with the plan for review before implementation
+
+### Assistant final answer
+
+I went through the settings layer, evaluator stack, generate/load flow, and the
+current Symbolica sources, and I wrote the working branch plan in `symjit.md`.
+
+Main findings:
+- `compilation_mode` has to become the new source of truth because backend
+  choice is currently split between
+  `crates/gammalooprs/src/settings/global.rs` (`inline_asm`) and
+  `crates/gammalooprs/src/processes/mod.rs` / 
+  `crates/gammaloop-api/src/commands/generate.rs` (`evaluator.compile`)
+- The current Symbolica pin in `Cargo.toml`
+  (`650ba97bf3da7cf2ff5ada92875f92d5f71e7a31`) does not expose symjit yet, so
+  this branch needs a Symbolica/graphica/numerica rev bump first
+- GammaLoop already saves enough to rebuild symjit cleanly:
+  `GenericEvaluator` stores the rational evaluator plus the eager evaluators in
+  `crates/gammalooprs/src/integrands/process/evaluators.rs`
+- The f64 dispatch path currently uses "compiled if present, otherwise eager",
+  which is no longer enough; we need an explicit runtime backend selection so
+  `eager`, `c++`/`assembly`, and `symjit` are chosen by mode, not by whichever
+  optional backend happens to be populated
+- State load currently does not receive global settings, so load-time symjit
+  rebuild needs either:
+  - threading the effective global settings into `State::load(...)`, or
+  - an immediate post-load initialization pass
+
+Implementation plan:
+1. Bump the patched Symbolica revs so `jit_compile(...)` is available.
+2. Add `CompilationMode` under `GammaloopCompileOptions`, default it to
+   `symjit`, and make it the new backend selector.
+3. Add a runtime-only symjit wrapper/cache in `GenericEvaluator`.
+4. Make `GenericEvaluator` track the active f64 backend explicitly.
+5. Initialize symjit right after evaluator construction and rebuild it again on
+   state load.
+6. Restrict `compile_integrands(...)` to the external backends (`c++` and
+   `assembly`); eager and symjit should not trigger filesystem compilation.
+7. Update schemas, tests, run cards, and examples to the new setting model.
+
+Main review questions before I start implementation:
+1. Do you want a legacy compatibility shim for
+   `generation.evaluator.compile` and `generation.compile.inline_asm`, or should
+   I hard-migrate the repo fixtures and treat old settings as a clean break?
+2. Should I apply symjit uniformly to every runtime `GenericEvaluator` user
+   (LU counterterms, overlap helpers, pass-two evaluators, etc.), or only to
+   the main evaluator stacks? My recommendation is to do it uniformly at the
+   `GenericEvaluator` level.
+
+## Interaction 2
+
+### User prompt
+
+The user clarified that:
+- the Symbolica pin should move to
+  `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`
+- `compile=true/false` should remain the eager-vs-compiled switch
+- the new setting should only absorb/deprecate `inline_asm`
+- symjit should be applied uniformly across all evaluator stacks
+- `to_symbolica_compile_options()` can be fixed or removed, whichever is
+  cleaner
+- the plan should be updated
+- I should expand on the post-load symjit construction idea and come back with
+  any remaining clarification points
+
+### Assistant final answer
+
+I updated `symjit.md` to reflect the revised structure:
+- `global.generation.evaluator.compile` stays authoritative for eager vs
+  compiled
+- the new selector under `global.generation.compile` is only for compiled
+  backends (`c++`, `assembly`, `symjit`)
+- the Symbolica bump target is fixed to
+  `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`
+- symjit is applied uniformly at the `GenericEvaluator` level
+
+My proposed post-load solution is:
+1. Keep `State::load(...)` focused on pure deserialization.
+2. Add an explicit backend refresh pass, e.g.
+   `State::refresh_evaluator_backends(&GlobalSettings)`.
+3. Call it immediately after `State::load(...)` returns in
+   `crates/gammaloop-api/src/lib.rs`, using the already-known startup global
+   settings.
+4. Reuse that same refresh entry point after generation, and possibly after
+   compilation-related `set global ...` changes if we want existing evaluators
+   to switch backend immediately.
+
+The main additional subtlety I found is that externally compiled evaluators are
+currently decoded eagerly: deserializing a saved compiled evaluator tries to
+reload its shared library right away. That means a state can fail during load
+before the post-load refresh pass has a chance to choose eager or symjit
+instead. So I likely need to make external compiled loading lazy/tolerant, or
+otherwise change that decode path, to keep the "deserialize first, choose
+backend after load" design coherent.
+
+The remaining clarification points are:
+1. Should `compilation_mode = "eager"` still be accepted as a deprecated input
+   alias, or should it disappear entirely now that `evaluator.compile` remains
+   the eager-vs-compiled switch?
+2. Should changing compilation settings through `set global ...` immediately
+   reconfigure already-loaded/generated evaluators, or should those changes only
+   apply to future load/generate actions?
+3. Are you okay with me changing the external compiled-evaluator loading model
+   to a lazier/tolerant form if that is the cleanest way to support automatic
+   post-load backend selection?
+
+## Interaction 3
+
+### User prompt
+
+The user clarified that:
+- `compilation_mode = "eager"` should not exist anymore
+- existing integrands are locked to the backend they were generated with
+- current global compilation settings must affect only future generated
+  integrands, never already-existing ones
+- existing integrands loaded from disk should restore their backend choice from
+  an integrand-side manifest, not from current globals
+- only symjit should do an extra rebuild on load, because it is intentionally
+  not serialized
+- I should reassess the plan, inspect the code again, critique it, and come
+  back with an updated review plan
+
+### Assistant final answer
+
+I re-audited the persistence and generation paths and updated `symjit.md`
+accordingly.
+
+The main correction is that process-level settings history is not sufficient for
+backend restoration:
+- `Process` only stores one `settings_history.toml`
+- one process can contain multiple generated integrands
+- targeted integrand regeneration can rebuild a single integrand without
+  updating that process-level history
+
+So if backend choice is truly locked per integrand, the authoritative metadata
+must be persisted per integrand.
+
+The revised plan is:
+1. Bump Symbolica to `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`.
+2. Keep `global.generation.evaluator.compile` as the eager-vs-compiled switch.
+3. Replace `inline_asm` with a compiled-backend selector
+   (`c++`, `assembly`, `symjit`).
+4. Persist a per-integrand frozen-backend manifest with each generated
+   integrand.
+5. Lock each generated integrand to that manifest at generation time.
+6. Keep eager and external compiled integrands loading as they do now.
+7. Rebuild only the symjit backend on load, using the saved eager/rational
+   evaluator plus the integrand's saved manifest.
+8. Do not let current global compilation settings reinterpret existing
+   integrands.
+
+The main extra critique point is that `AmplitudeIntegrand::save/load` and
+`CrossSectionIntegrand::save/load` currently have no per-integrand generation
+manifest at all, so that has to be introduced explicitly. After another code
+review, the lightest place to store it appears to be inside
+`AmplitudeIntegrandData` / `CrossSectionIntegrandData`, because those structs
+already define `integrand.bin` and are already used by
+`ProcessIntegrand::resume_fingerprint()`.
+
+The remaining clarification points are:
+1. Should the new per-integrand manifest store a resolved backend enum
+   (`Eager`, `Cpp`, `Assembly`, `Symjit`) or a raw snapshot of
+   `compile + GammaloopCompileOptions`? I recommend a resolved manifest.
+2. Do you need any compatibility fallback for older saved states that do not
+   have this new per-integrand manifest, or is it acceptable that the new
+   manifest becomes the authoritative format going forward?
+3. For `inline_asm`, should I keep a deprecated read-only parse shim and stop
+   serializing it, or do you want a hard break immediately?
+
+## Interaction 4
+
+### User prompt
+
+The user clarified that:
+- the manifest should contain only fields that freeze the generated integrand
+- there should be no backward compatibility
+- `inline_asm` is fully gone and absorbed into the new setting
+- non-`OLD` toml files should be updated to the new settings standard
+- I should do one more deep review of the relevant code and come back with the
+  updated plan and any remaining clarification needs
+
+### Assistant final answer
+
+I did another review of the save/load and evaluator ownership paths and updated
+`symjit.md` again.
+
+The main new design refinement is that the frozen backend metadata should
+probably live as an embedded manifest inside `integrand.bin`, not as an extra
+sidecar file. Concretely, the best place appears to be:
+- `AmplitudeIntegrandData`
+- `CrossSectionIntegrandData`
+
+That is cleaner because:
+- those are already the structs serialized into `integrand.bin`
+- their load path already runs for every integrand
+- `ProcessIntegrand::resume_fingerprint()` already hashes `integrand.data`, so
+  the frozen backend would automatically become part of the resume identity
+
+The updated plan is therefore:
+1. Bump Symbolica to `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`.
+2. Keep `evaluator.compile` as the eager-vs-compiled switch.
+3. Replace `inline_asm` with the new compiled-backend selector
+   (`c++`, `assembly`, `symjit`) and update non-`OLD` tomls.
+4. Persist only the resolved frozen backend per generated integrand, ideally as
+   an embedded enum like `Eager | Cpp | Assembly | Symjit`.
+5. Apply backend initialization uniformly across all `GenericEvaluator` owners.
+6. Rebuild only symjit on load, based on that embedded frozen-backend manifest.
+7. Keep eager and external compiled loading otherwise as close as possible to
+   current behavior.
+
+The main remaining risk I want to keep in mind is:
+- if an integrand is locked to `Cpp` or `Assembly` but somehow its serialized
+  compiled evaluator is missing/unloadable, the natural behavior is to treat
+  that as an invalid/incomplete saved state rather than silently changing
+  backend
+
+At this point the only possible clarification I still see is whether you want
+the frozen manifest stored as:
+1. a resolved enum only, which I recommend, or
+2. some larger structured manifest
+
+My recommendation remains the resolved enum only, since you explicitly want to
+store only what freezes the generated integrand.
+
+## Interaction 5
+
+### User prompt
+
+The user clarified that:
+- they are happy with embedding the frozen backend information directly inside
+  the serialized integrand `.bin`
+- if `.so` loading fails or the architecture is wrong, they want an automatic
+  fallback to symjit, but only if the global settings at load time opt into
+  symjit
+- I should review that fallback design critically and return with an updated
+  plan and comments
+
+### Assistant final answer
+
+After reviewing the current compiled-evaluator decode path, I think the symjit
+fallback is supportable, but not by keeping the current "serialize a loaded
+compiled evaluator directly" design.
+
+The relevant issue is:
+- `CompiledComplexEvaluator` in Symbolica decodes by immediately trying to load
+  the shared library
+- `CompiledComplexEvaluatorSpenso` currently inherits that eager behavior
+- so if we keep the current serialized shape, a bad/missing/wrong-arch `.so`
+  fails during bincode decode before GammaLoop has any chance to apply the
+  fallback policy
+
+So the clean implementation is likely:
+1. Stop serializing the loaded external compiled evaluator directly.
+2. Serialize only a lightweight external artifact descriptor, essentially
+   `(path, function_name)`.
+3. Keep the actually loaded `.so` evaluator in a runtime-only cache.
+4. During integrand load, use the embedded frozen-backend enum as the normal
+   selector.
+5. If that frozen backend is `Cpp` or `Assembly`, explicitly try to load the
+   external artifact.
+6. If that load fails and startup globals explicitly opt into symjit, log an
+   info and build symjit instead.
+7. Otherwise fail the load as an invalid/incomplete saved state.
+
+I think this is the cleanest way to satisfy your fallback requirement while
+keeping the intended semantics:
+- frozen backend remains embedded in the integrand and is not rewritten
+- current globals are not used to reinterpret existing integrands in general
+- current globals are used only as a narrow fallback permission when external
+  compiled loading fails
+
+My recommendation for the fallback gate is:
+- require `global.generation.evaluator.compile = true`
+- require the startup compiled backend selector to be `symjit`
+
+That seems like the least ambiguous reading of "globals say symjit".
+
+The only clarification I still see is whether you agree with that exact
+fallback gate, i.e. whether `compile=false` should disable the fallback even if
+the compiled-backend selector field still happens to say `symjit`.
+
+## Interaction 6
+
+### User prompt
+
+The user clarified that:
+- they are happy with embedding the extra frozen-backend information directly in
+  the serialized integrand `.bin`
+- they want `.so` load failure to fallback to symjit only if the global
+  settings at load time say symjit
+- I should review the plan accordingly in depth and come back with comments and
+  clarification
+
+### Assistant final answer
+
+I think the fallback is viable, but only with one important structural change:
+the external compiled evaluator can no longer stay serialized as an eagerly
+loaded object.
+
+The clean plan is:
+1. Embed only the frozen backend enum directly into `AmplitudeIntegrandData` /
+   `CrossSectionIntegrandData`.
+2. Store external compiled backends as serialized artifact metadata
+   `(path, function_name)`, not as an already-loaded evaluator.
+3. Keep the actual loaded `.so` evaluator in a runtime-only cache.
+4. During load, use the embedded frozen backend as the normal selector.
+5. If that frozen backend is external compiled, explicitly try to load the
+   artifact.
+6. If loading fails and startup globals opt into symjit, log an info and build
+   symjit instead.
+7. Otherwise fail the load.
+
+I also re-checked the load call chain and it is reasonably contained:
+`lib.rs -> state.rs -> ProcessList::load -> Process::load_* ->
+Amplitude/CrossSection::load -> *Integrand::load`.
+
+So threading a narrow startup load policy down that chain is manageable. The
+important point is that current globals are still not used as the normal backend
+selector for existing integrands; they are only used as an opt-in permission for
+the external-compiled-load failure fallback.
+
+My recommended fallback gate remains:
+- `global.generation.evaluator.compile = true`
+- startup compiled backend selector = `symjit`
+
+That is the least ambiguous reading of "globals say symjit".
+
+## Interaction 7
+
+### User prompt
+
+The user clarified that:
+- deferring actual `.so` loading into a runtime cache is acceptable given the
+  post-load activation step
+- GammaLoop must emit one `info!` for each integrand that actually falls back
+  from external compiled loading to symjit
+- `display integrands` metadata in the first table should show:
+  - the generation-time compilation mode/options available at load time
+  - the actual f64 backend currently active (`eager`, `c++`, `assembly`, or
+    `symjit`)
+- I should do one last global review of the plan and come back with any final
+  clarifications if needed
+
+### Assistant final answer
+
+I did the last global pass through the settings, evaluator, load, and display
+paths, and I updated `symjit.md` again.
+
+The main correction from this review is that the embedded per-integrand frozen
+metadata cannot stay just a bare backend enum if `display integrands` must show
+accurate generation-time compile options after load. Since process-level
+`settings_history.toml` is not precise per integrand, the frozen metadata should
+contain only fields that truly froze the generated evaluator state, but for
+external backends that includes the external compile options themselves.
+
+So the current recommended embedded metadata shape is:
+- `Eager`
+- `Symjit`
+- `Cpp { optimization_level, fast_math, unsafe_math, compiler, custom }`
+- `Assembly { optimization_level, fast_math, unsafe_math, compiler, custom }`
+
+I also think runtime activation must be handled integrand-wide, not separately
+per `GenericEvaluator`. Otherwise a partial `.so` load failure could leave one
+integrand in a mixed runtime state, which would make the requested single
+"active f64 backend" display ambiguous. The cleaner rule is:
+- frozen metadata is stored per integrand
+- backend activation/fallback runs across all `GenericEvaluator`s under that
+  integrand
+- each integrand ends up with one active f64 flavor
+- if any external artifact load fails and startup globals authorize symjit, the
+  whole integrand falls back to symjit and one `info!` is emitted for that
+  integrand
+
+One other refinement is that Symbolica's newer `CompiledCode<T>` type is a
+better persisted external-artifact representation than a home-grown path/function
+pair, because it already serializes lazily and loads only when GammaLoop asks.
+
+At this point I do not see another blocking clarification. The only non-blocking
+implementation assumption I will use is that "the first table" means the detail
+summary table rendered by `display integrands -p ... -i ...`, not the top-level
+integrand list table.
+
+## Interaction 8
+
+### User prompt
+
+The user instructed me to proceed with the implementation.
+
+### Assistant final answer
+
+I implemented the symjit branch changes and updated `symjit.md` to reflect the
+finished plan and validation state.
+
+Implemented:
+- bumped the patched `symbolica`, `graphica`, and `numerica` revisions to
+  `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`
+- replaced `global.generation.compile.inline_asm` with
+  `global.generation.compile.compilation_mode`
+- kept `global.generation.evaluator.compile` as the eager-vs-compiled switch
+- made `symjit` the default compiled backend
+- embedded frozen compilation metadata directly into the serialized integrand
+  data
+- switched persisted external compiled evaluators to lazy
+  `CompiledCode<Complex<f64>>` artifacts with runtime-only loaded-library caches
+- added runtime-only symjit caches and explicit active-f64-backend tracking
+- restored runtime backends after load from frozen integrand metadata
+- added the startup-gated symjit fallback for failed external `.so` loads and
+  emit one `info!` per affected integrand
+- updated `display integrands` detail metadata with generation-time compilation
+  details and the active f64 backend
+- updated non-`OLD` run cards/examples to `compilation_mode`
+- regenerated `assets/schemas/*.json`
+- updated `docs/architecture/architecture-current.md`
+
+Validation run:
+- `cargo fmt`
+- `cargo check`
+- `cargo test -p gammalooprs compile_settings_ -- --nocapture`
+- `cargo test -p gammaloop-api string_toml_supports_multiline_nested_tables -- --nocapture`
+- `GAMMALOOP_SCHEMA_PATH=assets/schemas cargo run -p gammaloop-api -- -n save schema`
+- `cargo clippy`
+
+`cargo clippy` completes successfully, but the workspace still has many
+pre-existing warnings outside this task.
+
+## Interaction 9
+
+### User prompt
+
+The user asked me to:
+- prepare a short-title / long-body commit message
+- commit the staged change
+- push branch `symjit` to `origin`
+- open a draft PR to `main` with `gh`
+- make the PR body follow `symjit.md`, with a cleaner GitHub-facing summary
+- explicitly note that validation on the `gg > hhh` 1L amplitude currently
+  fails because symjit does not reproduce the same value yet
+
+### Assistant final answer
+
+I updated `symjit.md` with the open `gg > hhh` 1L validation issue, committed
+the staged symjit work with a short title and detailed body, pushed `symjit` to
+`origin`, and opened a draft PR to `main`.
+
+The PR body summarizes:
+- the new `compilation_mode` setting replacing `inline_asm`
+- the frozen per-integrand compilation metadata
+- the runtime symjit / external backend activation model
+- the narrow symjit fallback on failed external artifact loading
+- the `display integrands` metadata updates
+- the validation commands run
+- the current known discrepancy on the `gg > hhh` 1L amplitude, so the PR is
+  clearly marked as work in progress

@@ -35,7 +35,7 @@ integral_unit = "picobarn"
 disable_threshold_subtraction = true
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O1"
 fast_math = true
 unsafe_math = true

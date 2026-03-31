@@ -18,7 +18,7 @@ use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
@@ -575,7 +575,6 @@ impl Process {
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         integrand_name: Option<String>,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
@@ -602,7 +601,7 @@ impl Process {
                         continue;
                     }
 
-                    amp.compile(&p, override_existing, settings, thread_pool)?;
+                    amp.compile(&p, override_existing, thread_pool)?;
                 }
             }
             ProcessCollection::CrossSections(cs) => {
@@ -627,7 +626,49 @@ impl Process {
                         continue;
                     }
 
-                    cs.compile(&p, override_existing, settings, thread_pool)?;
+                    cs.compile(&p, override_existing, thread_pool)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn activate_loaded_integrand_backends(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<()> {
+        match &mut self.collection {
+            ProcessCollection::Amplitudes(amplitudes) => {
+                for (integrand_name, amplitude) in amplitudes.iter_mut() {
+                    if let Some(integrand) = amplitude.integrand.as_mut()
+                        && let Some(reason) =
+                            integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
+                    {
+                        info!(
+                            "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
+                            integrand_name,
+                            self.definition.process_id,
+                            self.definition.folder_name,
+                            reason
+                        );
+                    }
+                }
+            }
+            ProcessCollection::CrossSections(cross_sections) => {
+                for (integrand_name, cross_section) in cross_sections.iter_mut() {
+                    if let Some(integrand) = cross_section.integrand.as_mut()
+                        && let Some(reason) =
+                            integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
+                    {
+                        info!(
+                            "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
+                            integrand_name,
+                            self.definition.process_id,
+                            self.definition.folder_name,
+                            reason
+                        );
+                    }
                 }
             }
         }

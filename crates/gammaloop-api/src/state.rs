@@ -1388,7 +1388,6 @@ impl State {
         self.process_list.compile(
             folder,
             override_existing,
-            global_settings,
             process_id,
             integrand_name,
             &compile_pool,
@@ -1663,6 +1662,14 @@ impl State {
         Ok(state)
     }
 
+    pub fn activate_loaded_integrand_backends(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<()> {
+        self.process_list
+            .activate_loaded_integrand_backends(allow_symjit_fallback)
+    }
+
     pub fn compile(
         &mut self,
         root_folder: &Path,
@@ -1674,14 +1681,8 @@ impl State {
         let compile_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(settings.n_cores.compile)
             .build()?;
-        self.process_list.compile(
-            root_folder,
-            override_compiled,
-            settings,
-            None,
-            None,
-            &compile_pool,
-        )?;
+        self.process_list
+            .compile(root_folder, override_compiled, None, None, &compile_pool)?;
         Ok(())
     }
 

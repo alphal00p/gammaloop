@@ -99,6 +99,10 @@ impl<T> IteratedCtCollection<T> {
         self.data.iter()
     }
 
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.data.iter_mut()
+    }
+
     pub(crate) fn num_left_thresholds(&self) -> usize {
         self.num_left_thresholds
     }
@@ -416,9 +420,13 @@ impl CrossSection {
             }
         }
 
-        let cross_section_integrand = CrossSectionIntegrand {
+        let mut cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
             data: CrossSectionIntegrandData {
+                compilation: global_settings
+                    .generation
+                    .compile
+                    .frozen_mode(&global_settings.generation.evaluator),
                 loop_cache_id: 0,
                 external_cache_id: 0,
                 base_external_cache_id: 0,
@@ -431,7 +439,9 @@ impl CrossSection {
                 graph_group_structure: self.graph_group_structure.clone(),
             },
             event_processing_runtime: Default::default(),
+            active_f64_backend: Default::default(),
         };
+        cross_section_integrand.prepare_runtime_backends_after_generation()?;
 
         self.integrand = Some(ProcessIntegrand::CrossSection(cross_section_integrand));
         Ok(())
@@ -441,7 +451,6 @@ impl CrossSection {
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
         info!("Compiling cross section {}", self.name);
@@ -459,7 +468,7 @@ impl CrossSection {
         }
 
         if let Some(integrand) = &mut self.integrand {
-            integrand.compile(&p, override_existing, settings, thread_pool)?;
+            integrand.compile(&p, override_existing, thread_pool)?;
         }
         Ok(())
     }

@@ -13,7 +13,7 @@ use crate::{
         evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
         process::{
             ChannelIndex, ParamBuilder,
-            evaluators::{EvaluatorStack, evaluate_evaluator_single},
+            evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             param_builder::LUParams,
         },
     },
@@ -24,7 +24,9 @@ use crate::{
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId},
-    settings::{GlobalSettings, RuntimeSettings, runtime::IntegralUnit},
+    settings::{
+        GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
+    },
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
         F, FloatLike, Length, h, h_dual,
@@ -93,11 +95,13 @@ pub struct CrossSectionIntegrand {
     pub settings: RuntimeSettings,
     pub data: CrossSectionIntegrandData,
     pub(crate) event_processing_runtime: RuntimeCache<EventProcessingRuntime>,
+    pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
 }
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrandData {
     pub name: String,
+    pub compilation: FrozenCompilationMode,
     pub loop_cache_id: usize,
     pub external_cache_id: usize,
     /// Cache ID for the base (unrotated) external momentum configuration
@@ -112,6 +116,91 @@ pub struct CrossSectionIntegrandData {
 }
 
 impl CrossSectionIntegrand {
+    pub(crate) fn frozen_compilation(&self) -> &FrozenCompilationMode {
+        &self.data.compilation
+    }
+
+    pub(crate) fn active_f64_backend(&self) -> ActiveF64Backend {
+        self.active_f64_backend
+            .as_ref()
+            .copied()
+            .unwrap_or(ActiveF64Backend::Eager)
+    }
+
+    fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
+    ) -> Result<()> {
+        for graph_term in &mut self.data.graph_terms {
+            graph_term.for_each_generic_evaluator_mut(&mut f)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn prepare_runtime_backends_after_generation(&mut self) -> Result<()> {
+        match self.data.compilation {
+            FrozenCompilationMode::Symjit => {
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                self.active_f64_backend.set(ActiveF64Backend::Symjit);
+            }
+            FrozenCompilationMode::Eager
+            | FrozenCompilationMode::Cpp(_)
+            | FrozenCompilationMode::Assembly(_) => {
+                self.for_each_generic_evaluator_mut(|evaluator| {
+                    evaluator.activate_eager();
+                    Ok(())
+                })?;
+                self.active_f64_backend.set(ActiveF64Backend::Eager);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn activate_runtime_backends_after_load(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<Option<String>> {
+        match self.data.compilation.clone() {
+            FrozenCompilationMode::Eager => {
+                self.prepare_runtime_backends_after_generation()?;
+                Ok(None)
+            }
+            FrozenCompilationMode::Symjit => {
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                self.active_f64_backend.set(ActiveF64Backend::Symjit);
+                Ok(None)
+            }
+            FrozenCompilationMode::Cpp(_) => {
+                self.activate_external_after_load(ActiveF64Backend::Cpp, allow_symjit_fallback)
+            }
+            FrozenCompilationMode::Assembly(_) => {
+                self.activate_external_after_load(ActiveF64Backend::Assembly, allow_symjit_fallback)
+            }
+        }
+    }
+
+    fn activate_external_after_load(
+        &mut self,
+        backend: ActiveF64Backend,
+        allow_symjit_fallback: bool,
+    ) -> Result<Option<String>> {
+        match self.for_each_generic_evaluator_mut(|evaluator| {
+            evaluator.activate_external_from_artifact(backend)
+        }) {
+            Ok(()) => {
+                self.active_f64_backend.set(backend);
+                Ok(None)
+            }
+            Err(err) if allow_symjit_fallback => {
+                let error_message = err.to_string();
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                self.active_f64_backend.set(ActiveF64Backend::Symjit);
+                Ok(Some(error_message))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
@@ -136,6 +225,7 @@ impl CrossSectionIntegrand {
             settings,
             data,
             event_processing_runtime: RuntimeCache::default(),
+            active_f64_backend: RuntimeCache::default(),
         })
     }
 
@@ -143,16 +233,18 @@ impl CrossSectionIntegrand {
         &mut self,
         path: impl AsRef<Path> + Sync,
         override_existing: bool,
-        settings: &GlobalSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
+        let frozen_mode = self.data.compilation.clone();
         thread_pool.install(|| {
             self.data
                 .graph_terms
                 .par_iter_mut()
-                .try_for_each(|term| term.compile(path.as_ref(), override_existing, settings))
+                .try_for_each(|term| term.compile(path.as_ref(), override_existing, &frozen_mode))
         })?;
 
+        self.active_f64_backend
+            .set(ActiveF64Backend::from_frozen_mode(&self.data.compilation));
         Ok(())
     }
 
@@ -449,7 +541,7 @@ impl CrossSectionGraphTerm {
         &mut self,
         path: impl AsRef<Path>,
         _override_existing: bool,
-        settings: &GlobalSettings,
+        frozen_mode: &FrozenCompilationMode,
     ) -> Result<()> {
         let graph_path = path.as_ref().join(&self.graph.name);
 
@@ -469,9 +561,43 @@ impl CrossSectionGraphTerm {
                         raised_cut_id, n_derivatives
                     ),
                     graph_path.clone(),
-                    settings,
+                    frozen_mode,
                 )?;
             }
+        }
+
+        self.counterterm.compile(&graph_path, frozen_mode)?;
+
+        for (index, evaluator) in self.raised_data.pass_two_evaluators.iter_mut().enumerate() {
+            evaluator.compile_external(
+                graph_path
+                    .join(format!("pass_two_{index}"))
+                    .with_extension("cpp"),
+                format!("pass_two_{index}"),
+                graph_path
+                    .join(format!("pass_two_{index}"))
+                    .with_extension("so"),
+                frozen_mode,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
+    ) -> Result<()> {
+        for raised_cut_integrands in self.integrand.iter_mut() {
+            for evaluator_stack in raised_cut_integrands.iter_mut() {
+                evaluator_stack.for_each_generic_evaluator_mut(&mut f)?;
+            }
+        }
+
+        self.counterterm.for_each_generic_evaluator_mut(&mut f)?;
+
+        for evaluator in self.raised_data.pass_two_evaluators.iter_mut() {
+            f(evaluator)?;
         }
 
         Ok(())

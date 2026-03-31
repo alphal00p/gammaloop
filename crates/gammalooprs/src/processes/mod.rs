@@ -265,7 +265,6 @@ impl ProcessList {
         &mut self,
         folder: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         process_id: Option<usize>,
         integrand_name: Option<String>,
         thread_pool: &ThreadPool,
@@ -286,12 +285,21 @@ impl ProcessList {
             p.compile(
                 &path,
                 override_existing,
-                settings,
                 integrand_name.clone(),
                 thread_pool,
             )?;
         }
 
+        Ok(())
+    }
+
+    pub fn activate_loaded_integrand_backends(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<()> {
+        for process in &mut self.processes {
+            process.activate_loaded_integrand_backends(allow_symjit_fallback)?;
+        }
         Ok(())
     }
 
@@ -428,8 +436,8 @@ mod tests {
         settings::{
             RuntimeSettings,
             global::{
-                CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
-                TropicalSubgraphTableSettings,
+                CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
+                GenerationSettings, TropicalSubgraphTableSettings,
             },
             runtime::LockedRuntimeSettings,
         },
@@ -480,7 +488,7 @@ mod tests {
                 &model,
                 &GenerationSettings {
                     compile: GammaloopCompileOptions {
-                        inline_asm: false,
+                        compilation_mode: CompilationMode::Cpp,
                         fast_math: false,
                         optimization_level: CompilationOptimizationLevel::O0,
                         unsafe_math: false,

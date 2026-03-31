@@ -16,7 +16,6 @@ use crate::observables::{
     ObservableSnapshotBundle,
 };
 use crate::processes::StandaloneExportSettings;
-use crate::settings::GlobalSettings;
 use crate::utils::{
     ArbPrec, F, FloatLike, f128, format_for_compare_digits, get_n_dim_for_n_loop_momenta,
 };
@@ -55,6 +54,7 @@ use crate::{
 use color_eyre::Result;
 
 pub mod evaluators;
+pub use evaluators::ActiveF64Backend;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
 pub mod param_builder;
@@ -70,7 +70,7 @@ pub struct MomentumSpaceEvaluationInput {
     pub channel_id: Option<ChannelIndex>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct RuntimeCache<T>(Option<T>);
 
 impl<T> Default for RuntimeCache<T> {
@@ -305,6 +305,30 @@ impl ProcessIntegrand {
         }
     }
 
+    pub fn frozen_compilation(&self) -> &crate::settings::global::FrozenCompilationMode {
+        match self {
+            Self::Amplitude(a) => a.frozen_compilation(),
+            Self::CrossSection(a) => a.frozen_compilation(),
+        }
+    }
+
+    pub fn active_f64_backend(&self) -> ActiveF64Backend {
+        match self {
+            Self::Amplitude(a) => a.active_f64_backend(),
+            Self::CrossSection(a) => a.active_f64_backend(),
+        }
+    }
+
+    pub(crate) fn activate_runtime_backends_after_load(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<Option<String>> {
+        match self {
+            Self::Amplitude(a) => a.activate_runtime_backends_after_load(allow_symjit_fallback),
+            Self::CrossSection(a) => a.activate_runtime_backends_after_load(allow_symjit_fallback),
+        }
+    }
+
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let path = path.as_ref().join("integrand");
 
@@ -327,7 +351,6 @@ impl ProcessIntegrand {
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         thread_pool: &rayon::ThreadPool,
     ) -> Result<()> {
         let path = path.as_ref().join("integrand");
@@ -343,10 +366,10 @@ impl ProcessIntegrand {
         }
         match self {
             ProcessIntegrand::Amplitude(integrand) => {
-                integrand.compile(path, override_existing, settings, thread_pool)
+                integrand.compile(path, override_existing, thread_pool)
             }
             ProcessIntegrand::CrossSection(integrand) => {
-                integrand.compile(path, override_existing, settings, thread_pool)
+                integrand.compile(path, override_existing, thread_pool)
             }
         }
     }

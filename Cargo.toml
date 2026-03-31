@@ -56,9 +56,9 @@ vergen-gitcl = { version = "9", default-features = false }
 #graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 #numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 #symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-numerica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
-symbolica = { git = "https://github.com/benruijl/symbolica", rev = "650ba97bf3da7cf2ff5ada92875f92d5f71e7a31" }
+graphica = { git = "https://github.com/benruijl/symbolica", rev = "26e0b19f50135bc6bb66d70eebbe20033d49b9d1" }
+numerica = { git = "https://github.com/benruijl/symbolica", rev = "26e0b19f50135bc6bb66d70eebbe20033d49b9d1" }
+symbolica = { git = "https://github.com/benruijl/symbolica", rev = "26e0b19f50135bc6bb66d70eebbe20033d49b9d1" }
 
 [profile.bench]
 opt-level = 3
@@ -80,4 +80,3 @@ inherits = "release"
 opt-level = 3
 debug = true
 lto = "fat"
-

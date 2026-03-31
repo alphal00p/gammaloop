@@ -29,8 +29,8 @@ use symbolica::{
         rational::{Fraction, Rational},
     },
     evaluate::{
-        CompileOptions, CompiledComplexEvaluator, Dualizer, ExportSettings, ExpressionEvaluator,
-        FunctionMap, OptimizationSettings,
+        CompiledCode, Dualizer, ExpressionEvaluator, FunctionMap, JITCompiledEvaluator,
+        OptimizationSettings,
     },
 };
 use tracing::{debug, instrument};
@@ -50,7 +50,7 @@ use crate::{
     momentum::{Helicity, sample::MomentumSample},
     numerator::symbolica_ext::AtomCoreExt,
     processes::EvaluatorSettings,
-    settings::{GlobalSettings, RuntimeSettings},
+    settings::{RuntimeSettings, global::FrozenCompilationMode},
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
@@ -59,7 +59,7 @@ use crate::{
 };
 
 use super::{
-    ParamBuilder,
+    ParamBuilder, RuntimeCache,
     param_builder::{ThresholdParams, UpdateAndGetParams},
 };
 
@@ -173,10 +173,51 @@ where
     }
 }
 
-#[derive(Clone, Debug, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-pub struct CompiledComplexEvaluatorGL(CompiledComplexEvaluator);
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ActiveF64Backend {
+    Eager,
+    Cpp,
+    Assembly,
+    Symjit,
+}
 
-impl CompiledComplexEvaluatorGL {
+impl ActiveF64Backend {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ActiveF64Backend::Eager => "eager",
+            ActiveF64Backend::Cpp => "c++",
+            ActiveF64Backend::Assembly => "assembly",
+            ActiveF64Backend::Symjit => "symjit",
+        }
+    }
+
+    pub fn from_frozen_mode(mode: &FrozenCompilationMode) -> Self {
+        match mode {
+            FrozenCompilationMode::Eager => ActiveF64Backend::Eager,
+            FrozenCompilationMode::Symjit => ActiveF64Backend::Symjit,
+            FrozenCompilationMode::Cpp(_) => ActiveF64Backend::Cpp,
+            FrozenCompilationMode::Assembly(_) => ActiveF64Backend::Assembly,
+        }
+    }
+}
+
+impl std::fmt::Display for ActiveF64Backend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone)]
+pub struct SymjitComplexEvaluatorGL(JITCompiledEvaluator<SymComplex<f64>>);
+
+impl std::fmt::Debug for SymjitComplexEvaluatorGL {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("SymjitComplexEvaluatorGL(..)")
+    }
+}
+
+impl SymjitComplexEvaluatorGL {
     pub fn evaluate(&mut self, args: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
         unsafe {
             self.0.evaluate(
@@ -758,7 +799,7 @@ impl EvaluatorStack {
     #[instrument(
           name = "compile",
           level = "info",
-          skip(self, path,name, settings),
+          skip(self, path, name, frozen_mode),
           fields(
               name = %name.as_ref(),
               path = %path.as_ref().display(),
@@ -768,18 +809,18 @@ impl EvaluatorStack {
         &mut self,
         name: impl AsRef<str>,
         path: impl AsRef<Path>,
-        settings: &GlobalSettings,
+        frozen_mode: &FrozenCompilationMode,
     ) -> Result<()> {
         let name = name.as_ref();
-        self.single_parametric.compile(
+        self.single_parametric.compile_external(
             path.as_ref().join(name).with_extension("cpp"),
             name,
             path.as_ref().join(name).with_extension("so"),
-            settings.generation.compile.export_settings(),
-        );
+            frozen_mode,
+        )?;
 
         if let Some((iterative, _)) = &mut self.iterative {
-            iterative.compile(
+            iterative.compile_external(
                 path.as_ref()
                     .join(format!("{}_iterative", name))
                     .with_extension("cpp"),
@@ -787,12 +828,12 @@ impl EvaluatorStack {
                 path.as_ref()
                     .join(format!("{}_iterative", name))
                     .with_extension("so"),
-                settings.generation.compile.export_settings(),
-            );
+                frozen_mode,
+            )?;
         }
 
         if let Some(summed_function_map) = &mut self.summed_function_map {
-            summed_function_map.compile(
+            summed_function_map.compile_external(
                 path.as_ref()
                     .join(format!("{}_summed_function_map", name))
                     .with_extension("cpp"),
@@ -800,12 +841,12 @@ impl EvaluatorStack {
                 path.as_ref()
                     .join(format!("{}_summed_function_map", name))
                     .with_extension("so"),
-                settings.generation.compile.export_settings(),
-            );
+                frozen_mode,
+            )?;
         }
 
         if let Some(summed) = &mut self.summed {
-            summed.compile(
+            summed.compile_external(
                 path.as_ref()
                     .join(format!("{}_summed", name))
                     .with_extension("cpp"),
@@ -813,9 +854,30 @@ impl EvaluatorStack {
                 path.as_ref()
                     .join(format!("{}_summed", name))
                     .with_extension("so"),
-                settings.generation.compile.export_settings(),
-            );
+                frozen_mode,
+            )?;
         }
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut GenericEvaluator) -> Result<()>,
+    ) -> Result<()> {
+        f(&mut self.single_parametric)?;
+
+        if let Some((iterative, _)) = &mut self.iterative {
+            f(iterative)?;
+        }
+
+        if let Some(summed_function_map) = &mut self.summed_function_map {
+            f(summed_function_map)?;
+        }
+
+        if let Some(summed) = &mut self.summed {
+            f(summed)?;
+        }
+
         Ok(())
     }
 }
@@ -827,11 +889,14 @@ pub struct GenericEvaluator {
     pub fn_map_entries: Vec<FnMapEntry>,
     pub exprs_len: usize,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
-    pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
+    pub f64_compiled: Option<CompiledCode<Complex<f64>>>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
     pub dual_shape: Option<Vec<Vec<usize>>>,
     pub arb: ExpressionEvaluator<Complex<F<ArbPrec>>>,
+    pub(crate) loaded_f64_compiled: RuntimeCache<CompiledComplexEvaluatorSpenso>,
+    pub(crate) symjit_f64: RuntimeCache<SymjitComplexEvaluatorGL>,
+    pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
 }
 
 impl GenericEvaluator {
@@ -845,23 +910,76 @@ impl GenericEvaluator {
         number_type_size * self.exprs_len
     }
 
-    pub(crate) fn compile(
+    pub(crate) fn compile_external(
         &mut self,
         cpp_path: impl AsRef<Path>,
         function_name: impl AsRef<str>,
         lib_path: impl AsRef<Path>,
-        settings: ExportSettings,
-    ) {
-        let compile = self
+        frozen_mode: &FrozenCompilationMode,
+    ) -> Result<()> {
+        let compile_options = frozen_mode
+            .to_symbolica_compile_options()
+            .ok_or_else(|| eyre!("Frozen mode {frozen_mode} is not externally compiled"))?;
+        let compiled = self
             .f64_eager
-            .export_cpp::<Complex<f64>>(cpp_path.as_ref(), function_name.as_ref(), settings)
-            .unwrap()
-            .compile(lib_path.as_ref(), CompileOptions::default())
-            .unwrap()
-            .load()
-            .unwrap();
+            .export_cpp::<Complex<f64>>(
+                cpp_path.as_ref(),
+                function_name.as_ref(),
+                frozen_mode.export_settings(),
+            )
+            .map_err(|err| eyre!(err))?
+            .compile(lib_path.as_ref(), compile_options)
+            .map_err(|err| eyre!(err))?;
+        let loaded = compiled.load().map_err(|err| eyre!(err))?;
 
-        self.f64_compiled = Some(compile);
+        self.f64_compiled = Some(compiled);
+        self.loaded_f64_compiled.set(loaded);
+        self.symjit_f64.invalidate();
+        self.active_f64_backend
+            .set(ActiveF64Backend::from_frozen_mode(frozen_mode));
+        Ok(())
+    }
+
+    pub(crate) fn activate_eager(&mut self) {
+        self.loaded_f64_compiled.invalidate();
+        self.symjit_f64.invalidate();
+        self.active_f64_backend.set(ActiveF64Backend::Eager);
+    }
+
+    pub(crate) fn activate_symjit(&mut self) -> Result<()> {
+        let rational = self
+            .rational
+            .as_ref()
+            .ok_or_else(|| eyre!("Cannot build symjit backend without the rational evaluator"))?;
+        let evaluator = rational
+            .jit_compile::<SymComplex<f64>>()
+            .map_err(|err| eyre!(err))?;
+        self.loaded_f64_compiled.invalidate();
+        self.symjit_f64.set(SymjitComplexEvaluatorGL(evaluator));
+        self.active_f64_backend.set(ActiveF64Backend::Symjit);
+        Ok(())
+    }
+
+    pub(crate) fn activate_external_from_artifact(
+        &mut self,
+        backend: ActiveF64Backend,
+    ) -> Result<()> {
+        let compiled = self
+            .f64_compiled
+            .as_ref()
+            .ok_or_else(|| eyre!("No external compiled artifact is stored for this evaluator"))?;
+        let loaded = compiled.load().map_err(|err| eyre!(err))?;
+        self.symjit_f64.invalidate();
+        self.loaded_f64_compiled.set(loaded);
+        self.active_f64_backend.set(backend);
+        Ok(())
+    }
+
+    pub(crate) fn active_f64_backend(&self) -> ActiveF64Backend {
+        self.active_f64_backend
+            .as_ref()
+            .copied()
+            .unwrap_or(ActiveF64Backend::Eager)
     }
 
     pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
@@ -983,8 +1101,13 @@ impl GenericEvaluator {
             f128,
             dual_shape,
             arb,
+            loaded_f64_compiled: RuntimeCache::default(),
+            symjit_f64: RuntimeCache::default(),
+            active_f64_backend: RuntimeCache::default(),
         };
 
+        let mut evaluator = evaluator;
+        evaluator.activate_eager();
         Ok(evaluator)
     }
 }
@@ -1106,9 +1229,13 @@ impl GenericEvaluatorFloat for f64 {
         generic_evaluator: &mut GenericEvaluator,
     ) -> impl FnMut(&[Complex<F<f64>>]) -> Complex<F<f64>> {
         #[inline(always)]
-        |params: &[Complex<F<f64>>]| {
-            if let Some(compiled) = &mut generic_evaluator.f64_compiled {
-                // info!("USING COMPILED F64 SINGLE");
+        |params: &[Complex<F<f64>>]| match generic_evaluator.active_f64_backend() {
+            ActiveF64Backend::Eager => generic_evaluator.f64_eager.evaluate_single(params),
+            ActiveF64Backend::Cpp | ActiveF64Backend::Assembly => {
+                let compiled = generic_evaluator
+                    .loaded_f64_compiled
+                    .as_mut()
+                    .expect("compiled f64 backend should be activated before evaluation");
                 let mut out = [Complex::default()];
 
                 unsafe {
@@ -1118,9 +1245,15 @@ impl GenericEvaluatorFloat for f64 {
                     );
                 }
                 out[0]
-            } else {
-                // info!("USING EAGER F64 SINGLE");
-                generic_evaluator.f64_eager.evaluate_single(params)
+            }
+            ActiveF64Backend::Symjit => {
+                let compiled = generic_evaluator
+                    .symjit_f64
+                    .as_mut()
+                    .expect("symjit f64 backend should be activated before evaluation");
+                let mut out = [Complex::default()];
+                compiled.evaluate(params, &mut out);
+                out[0]
             }
         }
     }
@@ -1130,40 +1263,40 @@ impl GenericEvaluatorFloat for f64 {
     ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<DualOrNot<Complex<F<Self>>>> {
         |params: &[Complex<F<f64>>]| {
             let mut out = vec![Complex::default(); generic_evaluator.compute_out_size()];
-            if let Some(compiled) = &mut generic_evaluator.f64_compiled {
-                // info!("USING COMPILED COMPLEX SINGLE");
-                //
-                unsafe {
-                    compiled.evaluate(
-                        transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
-                        transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
-                    );
+            match generic_evaluator.active_f64_backend() {
+                ActiveF64Backend::Eager => {
+                    generic_evaluator.f64_eager.evaluate(params, &mut out);
                 }
-
-                if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                    let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
-                    let dual_size = dual_builder.values.len();
-
-                    out.chunks(dual_size)
-                        .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
-                        .collect()
-                } else {
-                    out.into_iter().map(DualOrNot::NonDual).collect()
+                ActiveF64Backend::Cpp | ActiveF64Backend::Assembly => {
+                    let compiled = generic_evaluator
+                        .loaded_f64_compiled
+                        .as_mut()
+                        .expect("compiled f64 backend should be activated before evaluation");
+                    unsafe {
+                        compiled.evaluate(
+                            transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
+                            transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
+                        );
+                    }
                 }
+                ActiveF64Backend::Symjit => {
+                    let compiled = generic_evaluator
+                        .symjit_f64
+                        .as_mut()
+                        .expect("symjit f64 backend should be activated before evaluation");
+                    compiled.evaluate(params, &mut out);
+                }
+            }
+
+            if let Some(dual_shape) = &generic_evaluator.dual_shape {
+                let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
+                let dual_size = dual_builder.values.len();
+
+                out.chunks(dual_size)
+                    .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
+                    .collect()
             } else {
-                // info!("USING EAGER COMPLEX SINGLE");
-                generic_evaluator.f64_eager.evaluate(params, &mut out);
-
-                if let Some(dual_shape) = &generic_evaluator.dual_shape {
-                    let dual_builder = HyperDual::<Complex<F<f64>>>::new(dual_shape.clone());
-                    let dual_size = dual_builder.values.len();
-
-                    out.chunks(dual_size)
-                        .map(|chunk| DualOrNot::Dual(new_from_values(&dual_builder, chunk)))
-                        .collect()
-                } else {
-                    out.into_iter().map(DualOrNot::NonDual).collect()
-                }
+                out.into_iter().map(DualOrNot::NonDual).collect()
             }
         }
     }

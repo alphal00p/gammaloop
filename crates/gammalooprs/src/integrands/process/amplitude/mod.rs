@@ -39,14 +39,17 @@ use crate::{
     },
     integrands::HasIntegrand,
     integrands::evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
-    integrands::process::{ChannelIndex, ParamBuilder, evaluators::EvaluatorStack},
+    integrands::process::{
+        ChannelIndex, ParamBuilder,
+        evaluators::{ActiveF64Backend, EvaluatorStack},
+    },
     model::Model,
     momentum::sample::{ExternalIndex, MomentumSample},
     momentum::signature::SignatureLike,
     momentum::{Rotation, RotationMethod, SignOrZero},
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
     processes::{AmplitudeGraph, GroupDerivedData},
-    settings::{GlobalSettings, RuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
         amplitude_counterterm::{
             AmplitudeCountertermAtom, AmplitudeCountertermData, AmplitudeCountertermEvaluation,
@@ -167,7 +170,7 @@ impl AmplitudeGraphTerm {
     #[instrument(
           name = "compile",
           level = "info",
-          skip(self, path, override_existing, settings),
+          skip(self, path, override_existing, frozen_mode),
           fields(
               graph.name = %self.graph.name,
               path = %path.as_ref().display(),
@@ -177,7 +180,7 @@ impl AmplitudeGraphTerm {
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
+        frozen_mode: &FrozenCompilationMode,
     ) -> Result<()> {
         let graph_path = path.as_ref().join(&self.graph.name);
 
@@ -191,12 +194,23 @@ impl AmplitudeGraphTerm {
         self.original_integrand.compile(
             "orientation_parametric_integrand",
             &graph_path,
-            settings,
+            frozen_mode,
         )?;
 
         self.threshold_counterterm
-            .compile(&graph_path, override_existing, settings)?;
+            .compile(&graph_path, override_existing, frozen_mode)?;
 
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
+    ) -> Result<()> {
+        self.original_integrand
+            .for_each_generic_evaluator_mut(&mut f)?;
+        self.threshold_counterterm
+            .for_each_generic_evaluator_mut(&mut f)?;
         Ok(())
     }
 
@@ -542,6 +556,7 @@ pub struct AmplitudeIntegrand {
     pub settings: RuntimeSettings,
     pub data: AmplitudeIntegrandData,
     pub(crate) event_processing_runtime: RuntimeCache<EventProcessingRuntime>,
+    pub(crate) active_f64_backend: RuntimeCache<ActiveF64Backend>,
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -549,6 +564,7 @@ pub struct AmplitudeIntegrand {
 pub struct AmplitudeIntegrandData {
     pub rotations: Option<Vec<Rotation>>,
     pub name: String,
+    pub compilation: FrozenCompilationMode,
     pub loop_cache_id: usize,
     pub external_cache_id: usize,
     /// Cache ID for the base (unrotated) external momentum configuration
@@ -563,20 +579,107 @@ pub mod export;
 pub mod load;
 
 impl AmplitudeIntegrand {
+    pub(crate) fn frozen_compilation(&self) -> &FrozenCompilationMode {
+        &self.data.compilation
+    }
+
+    pub(crate) fn active_f64_backend(&self) -> ActiveF64Backend {
+        self.active_f64_backend
+            .as_ref()
+            .copied()
+            .unwrap_or(ActiveF64Backend::Eager)
+    }
+
+    fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut crate::integrands::process::GenericEvaluator) -> Result<()>,
+    ) -> Result<()> {
+        for graph_term in &mut self.data.graph_terms {
+            graph_term.for_each_generic_evaluator_mut(&mut f)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn prepare_runtime_backends_after_generation(&mut self) -> Result<()> {
+        match self.data.compilation {
+            FrozenCompilationMode::Symjit => {
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                self.active_f64_backend.set(ActiveF64Backend::Symjit);
+            }
+            FrozenCompilationMode::Eager
+            | FrozenCompilationMode::Cpp(_)
+            | FrozenCompilationMode::Assembly(_) => {
+                self.for_each_generic_evaluator_mut(|evaluator| {
+                    evaluator.activate_eager();
+                    Ok(())
+                })?;
+                self.active_f64_backend.set(ActiveF64Backend::Eager);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn activate_runtime_backends_after_load(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<Option<String>> {
+        match self.data.compilation.clone() {
+            FrozenCompilationMode::Eager => {
+                self.prepare_runtime_backends_after_generation()?;
+                Ok(None)
+            }
+            FrozenCompilationMode::Symjit => {
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                self.active_f64_backend.set(ActiveF64Backend::Symjit);
+                Ok(None)
+            }
+            FrozenCompilationMode::Cpp(_) => {
+                self.activate_external_after_load(ActiveF64Backend::Cpp, allow_symjit_fallback)
+            }
+            FrozenCompilationMode::Assembly(_) => {
+                self.activate_external_after_load(ActiveF64Backend::Assembly, allow_symjit_fallback)
+            }
+        }
+    }
+
+    fn activate_external_after_load(
+        &mut self,
+        backend: ActiveF64Backend,
+        allow_symjit_fallback: bool,
+    ) -> Result<Option<String>> {
+        match self.for_each_generic_evaluator_mut(|evaluator| {
+            evaluator.activate_external_from_artifact(backend)
+        }) {
+            Ok(()) => {
+                self.active_f64_backend.set(backend);
+                Ok(None)
+            }
+            Err(err) if allow_symjit_fallback => {
+                let error_message = err.to_string();
+                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                self.active_f64_backend.set(ActiveF64Backend::Symjit);
+                Ok(Some(error_message))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
     pub(crate) fn compile(
         &mut self,
         path: impl AsRef<Path> + Sync,
         override_existing: bool,
-        settings: &GlobalSettings,
         thread_pool: &rayon::ThreadPool,
     ) -> Result<()> {
+        let frozen_mode = self.data.compilation.clone();
         thread_pool.install(|| {
             self.data
                 .graph_terms
                 .par_iter_mut()
-                .try_for_each(|a| a.compile(path.as_ref(), override_existing, settings))
+                .try_for_each(|a| a.compile(path.as_ref(), override_existing, &frozen_mode))
         })?;
 
+        self.active_f64_backend
+            .set(ActiveF64Backend::from_frozen_mode(&self.data.compilation));
         Ok(())
     }
 
@@ -608,6 +711,7 @@ impl AmplitudeIntegrand {
             settings,
             data,
             event_processing_runtime: RuntimeCache::default(),
+            active_f64_backend: RuntimeCache::default(),
         })
     }
 

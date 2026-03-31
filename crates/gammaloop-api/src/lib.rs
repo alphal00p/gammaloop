@@ -880,7 +880,7 @@ impl OneShot {
             match state_folder_kind {
                 StateFolderKind::Saved => {
                     let load_started = Instant::now();
-                    let state = State::load(
+                    let mut state = State::load(
                         self.state_folder.clone(),
                         self.model_file.clone(),
                         self.trace_logs_filename.clone(),
@@ -891,6 +891,17 @@ impl OneShot {
                             self.state_folder.display()
                         )
                     })?;
+                    let allow_symjit_fallback =
+                        startup_cli_settings.global.generation.evaluator.compile
+                            && matches!(
+                                startup_cli_settings
+                                    .global
+                                    .generation
+                                    .compile
+                                    .compilation_mode,
+                                gammalooprs::settings::global::CompilationMode::Symjit
+                            );
+                    state.activate_loaded_integrand_backends(allow_symjit_fallback)?;
 
                     let default_runtime = match RuntimeSettings::from_file_typed(
                         self.state_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),

@@ -80,7 +80,7 @@ iterative_orientation_optimization = true
 compile = true
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true

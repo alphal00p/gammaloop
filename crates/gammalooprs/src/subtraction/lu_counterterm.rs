@@ -1,4 +1,5 @@
 use core::f64;
+use std::path::Path;
 
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
@@ -26,7 +27,7 @@ use crate::{
     processes::{
         CutId, IteratedCtCollection, LUCounterTermData, LeftThresholdId, RightThresholdId,
     },
-    settings::{GlobalSettings, RuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
@@ -185,6 +186,181 @@ impl LUCounterTermEvaluators {
             iterative_iterated_evaluator,
         }
     }
+
+    pub(crate) fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        cut_id: CutId,
+        frozen_mode: &FrozenCompilationMode,
+    ) -> color_eyre::Result<()> {
+        for (threshold_id, evaluator) in self
+            .parametric_left_thresholds_evaluator
+            .iter_mut_enumerated()
+        {
+            evaluator.compile_external(
+                path.as_ref()
+                    .join(format!(
+                        "cut_{}_left_threshold_{}",
+                        cut_id.0, threshold_id.0
+                    ))
+                    .with_extension("cpp"),
+                format!("cut_{}_left_threshold_{}", cut_id.0, threshold_id.0),
+                path.as_ref()
+                    .join(format!(
+                        "cut_{}_left_threshold_{}",
+                        cut_id.0, threshold_id.0
+                    ))
+                    .with_extension("so"),
+                frozen_mode,
+            )?;
+        }
+
+        for (threshold_id, evaluator) in self
+            .parametric_right_threshold_evaluator
+            .iter_mut_enumerated()
+        {
+            evaluator.compile_external(
+                path.as_ref()
+                    .join(format!(
+                        "cut_{}_right_threshold_{}",
+                        cut_id.0, threshold_id.0
+                    ))
+                    .with_extension("cpp"),
+                format!("cut_{}_right_threshold_{}", cut_id.0, threshold_id.0),
+                path.as_ref()
+                    .join(format!(
+                        "cut_{}_right_threshold_{}",
+                        cut_id.0, threshold_id.0
+                    ))
+                    .with_extension("so"),
+                frozen_mode,
+            )?;
+        }
+
+        for (iterated_index, evaluator) in self.parametric_iterated_evaluator.iter_mut().enumerate()
+        {
+            evaluator.compile_external(
+                path.as_ref()
+                    .join(format!(
+                        "cut_{}_iterated_parametric_{}",
+                        cut_id.0, iterated_index
+                    ))
+                    .with_extension("cpp"),
+                format!("cut_{}_iterated_parametric_{}", cut_id.0, iterated_index),
+                path.as_ref()
+                    .join(format!(
+                        "cut_{}_iterated_parametric_{}",
+                        cut_id.0, iterated_index
+                    ))
+                    .with_extension("so"),
+                frozen_mode,
+            )?;
+        }
+
+        if let Some(iterative_left) = self.iterative_left_thresholds_evaluator.as_mut() {
+            for (threshold_id, evaluator) in iterative_left.iter_mut_enumerated() {
+                evaluator.compile_external(
+                    path.as_ref()
+                        .join(format!(
+                            "cut_{}_left_threshold_iterative_{}",
+                            cut_id.0, threshold_id.0
+                        ))
+                        .with_extension("cpp"),
+                    format!(
+                        "cut_{}_left_threshold_iterative_{}",
+                        cut_id.0, threshold_id.0
+                    ),
+                    path.as_ref()
+                        .join(format!(
+                            "cut_{}_left_threshold_iterative_{}",
+                            cut_id.0, threshold_id.0
+                        ))
+                        .with_extension("so"),
+                    frozen_mode,
+                )?;
+            }
+        }
+
+        if let Some(iterative_right) = self.iterative_right_threshold_evaluator.as_mut() {
+            for (threshold_id, evaluator) in iterative_right.iter_mut_enumerated() {
+                evaluator.compile_external(
+                    path.as_ref()
+                        .join(format!(
+                            "cut_{}_right_threshold_iterative_{}",
+                            cut_id.0, threshold_id.0
+                        ))
+                        .with_extension("cpp"),
+                    format!(
+                        "cut_{}_right_threshold_iterative_{}",
+                        cut_id.0, threshold_id.0
+                    ),
+                    path.as_ref()
+                        .join(format!(
+                            "cut_{}_right_threshold_iterative_{}",
+                            cut_id.0, threshold_id.0
+                        ))
+                        .with_extension("so"),
+                    frozen_mode,
+                )?;
+            }
+        }
+
+        if let Some(iterative_iterated) = self.iterative_iterated_evaluator.as_mut() {
+            for (iterated_index, evaluator) in iterative_iterated.iter_mut().enumerate() {
+                evaluator.compile_external(
+                    path.as_ref()
+                        .join(format!(
+                            "cut_{}_iterated_iterative_{}",
+                            cut_id.0, iterated_index
+                        ))
+                        .with_extension("cpp"),
+                    format!("cut_{}_iterated_iterative_{}", cut_id.0, iterated_index),
+                    path.as_ref()
+                        .join(format!(
+                            "cut_{}_iterated_iterative_{}",
+                            cut_id.0, iterated_index
+                        ))
+                        .with_extension("so"),
+                    frozen_mode,
+                )?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
+    ) -> color_eyre::Result<()> {
+        for evaluator in self.parametric_left_thresholds_evaluator.iter_mut() {
+            f(evaluator)?;
+        }
+        for evaluator in self.parametric_right_threshold_evaluator.iter_mut() {
+            f(evaluator)?;
+        }
+        for evaluator in self.parametric_iterated_evaluator.iter_mut() {
+            f(evaluator)?;
+        }
+
+        if let Some(iterative_left) = self.iterative_left_thresholds_evaluator.as_mut() {
+            for evaluator in iterative_left.iter_mut() {
+                f(evaluator)?;
+            }
+        }
+        if let Some(iterative_right) = self.iterative_right_threshold_evaluator.as_mut() {
+            for evaluator in iterative_right.iter_mut() {
+                f(evaluator)?;
+            }
+        }
+        if let Some(iterative_iterated) = self.iterative_iterated_evaluator.as_mut() {
+            for evaluator in iterative_iterated.iter_mut() {
+                f(evaluator)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 type CutThresholds = (
@@ -201,6 +377,27 @@ pub(crate) struct LUCounterTerm {
 }
 
 impl LUCounterTerm {
+    pub(crate) fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        frozen_mode: &FrozenCompilationMode,
+    ) -> color_eyre::Result<()> {
+        for (cut_id, evaluators) in self.evaluators.iter_mut_enumerated() {
+            evaluators.compile(path.as_ref(), cut_id, frozen_mode)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
+    ) -> color_eyre::Result<()> {
+        for evaluators in self.evaluators.iter_mut() {
+            evaluators.for_each_generic_evaluator_mut(&mut f)?;
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn evaluate<T: FloatLike>(
         &mut self,
