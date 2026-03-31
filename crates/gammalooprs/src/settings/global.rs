@@ -50,6 +50,8 @@ pub struct GenerationSettings {
     pub uv: UVgenerationSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_cuts: Vec<Vec<String>>,
+    #[serde(skip_serializing_if = "is_false")]
+    pub override_lmb_heuristics: bool,
 }
 
 #[cfg_attr(

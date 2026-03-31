@@ -759,7 +759,7 @@ impl CrossSectionGraph {
         debug!("building multi channeling channels");
 
         if self.graph.is_group_master {
-            self.build_multi_channeling_channels();
+            self.build_multi_channeling_channels(settings.override_lmb_heuristics);
         }
 
         let vk = crate::utils::vakint()?;
@@ -1236,10 +1236,11 @@ impl CrossSectionGraph {
         self.derived_data.lmbs = Some(lmbs)
     }
 
-    fn build_multi_channeling_channels(&mut self) {
-        let channels = self
-            .graph
-            .build_multi_channeling_channels(self.derived_data.lmbs.as_ref().unwrap());
+    fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) {
+        let channels = self.graph.build_multi_channeling_channels(
+            self.derived_data.lmbs.as_ref().unwrap(),
+            override_lmb_heuristics,
+        );
 
         self.derived_data.multi_channeling_setup = Some(channels)
     }

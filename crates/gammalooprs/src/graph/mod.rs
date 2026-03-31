@@ -29,7 +29,10 @@ use crate::{
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
-    settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
+    settings::{
+        GlobalSettings,
+        runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
+    },
     utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
 };
 
@@ -140,8 +143,19 @@ impl Graph {
     pub(crate) fn build_multi_channeling_channels(
         &self,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        override_lmb_heuristics: bool,
     ) -> LmbMultiChannelingSetup {
         let mut channels: Vec<LmbIndex> = Vec::new();
+
+        if override_lmb_heuristics {
+            channels.extend(lmbs.iter_enumerated().map(|(lmb_index, _)| lmb_index));
+
+            return LmbMultiChannelingSetup {
+                channels: channels.into_iter().sorted().collect(),
+                graph: self.clone(),
+                all_bases: lmbs.clone(),
+            };
+        }
 
         // Filter out channels that are non-singular, or have the same singularities as another channel already included
         for (lmb_index, lmb) in lmbs.iter_enumerated() {
