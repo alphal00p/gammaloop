@@ -1,55 +1,55 @@
 use figment::{providers::Serialized, Figment, Profile};
-use linnet::parser::{set::DotGraphSet, DotGraph, DotGraphBytesSet};
-use serde::{Deserialize, Serialize};
+use linnet::parser::{set::DotGraphSet, DotGraph};
 
-use crate::{CBORTypstGraph, TypstGraph};
+use crate::{
+    graph_api::{decode_graph_bytes_list, encode_cbor},
+    TypstGraph,
+};
 
+#[cfg(target_arch = "wasm32")]
+use crate::{__ToResult, __send_result_to_host, __write_args_to_buffer};
 #[cfg(target_arch = "wasm32")]
 use wasm_minimal_protocol::*;
 
 fn decode_cbor_map(arg: &[u8]) -> Result<ciborium::Value, String> {
-    ciborium::de::from_reader(arg).map_err(|e| format!("Failed to deserialize CBOR value: {}", e))
+    ciborium::de::from_reader(arg).map_err(|e| format!("Failed to deserialize CBOR value: {e}"))
 }
 
 fn decode_dot_string(arg: &[u8]) -> Result<&str, String> {
-    let dot_string = match std::str::from_utf8(arg) {
-        Ok(s) => s,
-        Err(_) => return Err("Invalid UTF-8".to_string()),
-    };
-    Ok(dot_string)
+    std::str::from_utf8(arg).map_err(|_| "Invalid UTF-8".to_string())
 }
 
 pub fn parse_dot_graphs_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
     let dot_string = decode_dot_string(arg)?;
-    let dots = DotGraphSet::from_string(dot_string).map_err(|a| a.to_string())?;
-    dots.into_graph_bytes_set::<4096>()?
+    let dots = DotGraphSet::from_string(dot_string).map_err(|err| err.to_string())?;
+    let graph_bytes = dots.into_graph_bytes_set::<4096>()?.graphs;
+    encode_cbor(&graph_bytes)
+}
+
+pub fn layout_parsed_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    let cbor_map = decode_cbor_map(arg2)?;
+    let figment = Figment::from(Serialized::from(cbor_map, Profile::Default));
+
+    let mut graph = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(arg) }
+        .map_err(|err| format!("Failed to deserialize archived dot graph: {err}"))?;
+    graph.global_data.set_figment(figment);
+
+    let mut typst_graph = TypstGraph::from_dot(graph, &Figment::new());
+    typst_graph.layout();
+    typst_graph
+        .to_dot_graph()
         .to_rkyv_bytes::<4096>()
         .map(|bytes| bytes.to_vec())
 }
 
 pub fn layout_parsed_graphs_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    let cbor_map = decode_cbor_map(arg2)?;
-    let figment = Figment::from(Serialized::from(cbor_map.clone(), Profile::Default));
-    let dots = DotGraphBytesSet::archived_view(arg);
-
-    let mut graphs = Vec::new();
-    for graph_bytes in dots.iter_bytes() {
-        let mut g = unsafe { rkyv::from_bytes_unchecked::<DotGraph>(graph_bytes) }
-            .map_err(|e| format!("Failed to deserialize archived dot graph: {}", e))?;
-        g.global_data.set_figment(figment.clone());
-        let mut typst_graph = TypstGraph::from_dot(g, &Figment::new());
-
-        typst_graph.layout();
-        graphs.push((
-            typst_graph.to_cbor(),
-            typst_graph.to_dot_graph().debug_dot(),
-        ));
+    let graph_bytes = decode_graph_bytes_list(arg)?;
+    let mut graphs = Vec::with_capacity(graph_bytes.len());
+    for graph_bytes in graph_bytes {
+        graphs.push(layout_parsed_graph_bytes(&graph_bytes, arg2)?);
     }
 
-    let mut buffer = Vec::new();
-    ciborium::ser::into_writer(&TypstOutput { graphs, cbor_map }, &mut buffer)
-        .map_err(|a| a.to_string())?;
-    Ok(buffer)
+    encode_cbor(&graphs)
 }
 
 pub fn layout_graph_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -66,7 +66,7 @@ pub fn parse_graph(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[cfg(target_arch = "wasm32")]
 #[wasm_func]
 pub fn layout_parsed_graph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
-    layout_parsed_graphs_bytes(arg, arg2)
+    layout_parsed_graph_bytes(arg, arg2)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -75,8 +75,44 @@ pub fn layout_graph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
     layout_graph_bytes(arg, arg2)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TypstOutput {
-    pub(crate) graphs: Vec<(CBORTypstGraph, String)>,
-    pub(crate) cbor_map: ciborium::Value,
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_info(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_info_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_nodes(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_nodes_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_nodes_of(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_nodes_of_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_edges(arg: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_edges_bytes(arg)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_edges_of(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_edges_of_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_subgraph_bytes(arg, arg2)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_func]
+pub fn graph_compass_subgraph(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
+    crate::graph_api::graph_compass_subgraph_bytes(arg, arg2)
 }
