@@ -439,7 +439,10 @@ mod tests {
         );
         let deserialized_without_ecm: KinematicsSettings =
             toml::from_str(&toml_without_ecm).unwrap();
-        assert_eq!(deserialized_without_ecm.externals, kinematics_settings.externals);
+        assert_eq!(
+            deserialized_without_ecm.externals,
+            kinematics_settings.externals
+        );
         assert_eq!(deserialized_without_ecm.e_cm, 2.5);
     }
 

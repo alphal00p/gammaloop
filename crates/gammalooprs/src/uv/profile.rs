@@ -19,7 +19,10 @@ use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::RuntimeSettings;
 use crate::utils::{F, f128};
 use crate::uv::UltravioletGraph;
-use crate::{graph::LoopMomentumBasis, integrands::HasIntegrand};
+use crate::{
+    graph::LoopMomentumBasis,
+    integrands::process::{MomentumSpaceEvaluationInput, ProcessIntegrand},
+};
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
 use eyre::eyre;
@@ -32,7 +35,6 @@ use linnet::half_edge::tree::SimpleTraversalTree;
 use rand::Rng;
 use rayon::prelude::*;
 use serde::Serialize;
-use spenso::algebra::complex::Complex;
 use symbolica::domains::atom::AtomField;
 use symbolica::numerical_integration::MonteCarloRng;
 use symbolica::poly::series::Series;
@@ -90,8 +92,8 @@ fn lmb_seed(base_seed: u64, graph_id: usize, lmb_index: usize) -> u64 {
         .wrapping_add(lmb_index as u64)
 }
 
-struct UVProfileRunner<'a, I> {
-    integrand: &'a Arc<Mutex<I>>,
+struct UVProfileRunner<'a> {
+    integrand: &'a Arc<Mutex<ProcessIntegrand>>,
     scales: &'a [f64],
     externals: &'a ExternalMomenta,
     model: &'a Model,
@@ -620,10 +622,7 @@ pub struct UVSamplingResult {
     pub per_lmb: Vec<LMBResult>,
 }
 
-impl<'a, I> UVProfileRunner<'a, I>
-where
-    I: HasIntegrand + Clone + Send,
-{
+impl<'a> UVProfileRunner<'a> {
     fn sample_graph(&self, graph_id: usize, g: &AmplitudeGraph) -> Result<UVSamplingResult> {
         let lmbs = g.derived_data.lmbs.as_ref().unwrap();
         let integrand_expr = &g.derived_data.all_mighty_integrand;
@@ -704,10 +703,7 @@ pub struct LMBResult {
     pub(crate) per_subsets: BTreeMap<SubSet<LoopIndex>, SubSetResult>,
 }
 
-impl<'a, I> UVProfileRunner<'a, I>
-where
-    I: HasIntegrand + Clone + Send,
-{
+impl<'a> UVProfileRunner<'a> {
     fn sample_lmb(
         &self,
         graph_id: usize,
@@ -784,13 +780,10 @@ pub struct SubSetResult {
     pub(crate) analytic: Option<AnalyticResult>,
 }
 
-impl<'a, I> UVProfileRunner<'a, I>
-where
-    I: HasIntegrand + Clone + Send,
-{
+impl<'a> UVProfileRunner<'a> {
     fn sample_subset(
         &self,
-        integrand: &mut I,
+        integrand: &mut ProcessIntegrand,
         graph_id: usize,
         graph: &Graph,
         subset: &SubSet<LoopIndex>,
@@ -841,7 +834,7 @@ where
                     self.settings,
                     self.model,
                     pt,
-                    &[graph_id],
+                    graph_id,
                     self.profile_settings.use_f128,
                 )?;
 
@@ -989,17 +982,22 @@ impl SubSetResult {
         })
     }
 }
-fn evaluate_momentum_space_point<I: HasIntegrand>(
-    integrand: &mut I,
+fn evaluate_momentum_space_point(
+    integrand: &mut ProcessIntegrand,
     settings: &RuntimeSettings,
     model: &Model,
-    mut pt: Vec<F<f64>>,
-    discrete_dimensions: &[usize],
+    pt: Vec<F<f64>>,
+    graph_id: usize,
     use_arb_prec: bool,
 ) -> Result<(Option<f64>, EvaluationResult)> {
-    let (xs, inv_jac) = crate::utils::global_inv_parameterize::<f128>(
-        &pt.chunks_exact_mut(3)
-            .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
+    let loop_momenta = pt
+        .chunks_exact(3)
+        .map(|x| ThreeMomentum::new(x[0], x[1], x[2]))
+        .collect::<Vec<_>>();
+    let (_, inv_jac) = crate::utils::global_inv_parameterize::<f128>(
+        &loop_momenta
+            .iter()
+            .map(|momentum| momentum.higher())
             .collect::<Vec<_>>(),
         F(settings.kinematics.e_cm).higher(),
         &settings
@@ -1007,15 +1005,17 @@ fn evaluate_momentum_space_point<I: HasIntegrand>(
             .get_parameterization_settings()
             .ok_or_else(|| eyre!("Invalid sampling method for momentum-space inspect."))?,
     );
-    let xs = xs.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>();
-    let mut sample = symbolica::numerical_integration::Sample::Continuous(F(1.0), xs);
-    for &d in discrete_dimensions.iter().rev() {
-        sample =
-            symbolica::numerical_integration::Sample::Discrete(F(1.0), d, Some(Box::new(sample)));
-    }
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta,
+        integrator_weight: F(1.0),
+        graph_id: Some(graph_id),
+        group_id: None,
+        orientation: None,
+        channel_id: None,
+    };
     Ok((
         Some(inv_jac.inv().0.to_f64()),
-        integrand.evaluate_sample(&sample, model, F(0.), 1, use_arb_prec, Complex::new_zero())?,
+        integrand.evaluate_momentum_configuration(model, &input, use_arb_prec)?,
     ))
 }
 
