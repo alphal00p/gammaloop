@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use crate::utils::{
     GS,
     serde_utils::{
@@ -10,6 +12,79 @@ use bincode_trait_derive::{Decode, Encode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use vakint::{AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions};
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    PartialEq,
+    Eq,
+    Hash,
+    JsonSchema,
+    Default,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(deny_unknown_fields)]
+pub enum RenormalizationScheme {
+    #[default]
+    #[serde(rename = "MSbar", alias = "msbar")]
+    MSbar,
+    #[serde(rename = "OS", alias = "os")]
+    OS,
+    #[serde(rename = "Unsubtracted", alias = "unsubtracted")]
+    Unsubtracted,
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    JsonSchema,
+)]
+#[serde(default, deny_unknown_fields)]
+pub struct CTIdentifier {
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub external_pdg_set: BTreeSet<isize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub internal_pdg_set: Option<BTreeSet<isize>>,
+}
+
+impl CTIdentifier {
+    pub fn new(
+        external_pdg_set: BTreeSet<isize>,
+        internal_pdg_set: Option<BTreeSet<isize>>,
+    ) -> Self {
+        Self {
+            external_pdg_set,
+            internal_pdg_set,
+        }
+    }
+
+    pub fn matches(&self, candidate: &Self) -> bool {
+        self.external_pdg_set == candidate.external_pdg_set
+            && self
+                .internal_pdg_set
+                .as_ref()
+                .is_none_or(|internal| candidate.internal_pdg_set.as_ref() == Some(internal))
+    }
+}
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
