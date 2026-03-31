@@ -61,7 +61,7 @@
   let graphs = cbor(parsed)
   let diags = ()
   for graph in graphs {
-    let graph = p.layout_parsed_graph(graph, config)
+    let graph = p.layout_parsed_graph(bytes(graph), config)
     let g = graph-info(graph)
     let nodes = graph-nodes(graph)
     let edges = graph-edges(graph)
