@@ -286,7 +286,7 @@ impl Wood {
         }
     }
 
-    pub fn unfold(self) -> Forests {
+    fn unfold_with_cached_node_label_atoms(self, cache_node_label_atoms: bool) -> Forests {
         let unfolded = self.trace_unfold::<NodeStorageVec<_>>(self.root);
         let graph = unfolded.map(|_, _, key| OperationNode { key });
 
@@ -302,14 +302,28 @@ impl Wood {
             }
             cuts.push((compatible, c.clone()));
         }
-        Forests {
+        let forests = Forests {
             graph,
             cuts,
             root: self.root,
+            cached_node_label_atoms: cache_node_label_atoms,
             compute_store: ComputeStore::default(),
             wood: self,
+        };
+
+        if cache_node_label_atoms {
+            forests.with_cached_node_label_atoms()
+        } else {
+            forests
         }
-        .with_cached_node_label_atoms()
+    }
+
+    pub fn unfold(self) -> Forests {
+        self.unfold_with_cached_node_label_atoms(true)
+    }
+
+    pub fn unfold_uncached(self) -> Forests {
+        self.unfold_with_cached_node_label_atoms(false)
     }
 }
 
@@ -361,6 +375,7 @@ pub struct Forests {
     pub root: NodeIndex,
     /// Wood subgraph that has compatible
     cuts: Vec<(SuBitGraph, CutSet)>,
+    cached_node_label_atoms: bool,
     pub compute_store: ComputeStore,
     wood: Wood,
 }
@@ -617,18 +632,20 @@ impl Default for ComputeNode {
 }
 
 impl Forests {
+    fn cached_node_label_atom(&self, node: NodeIndex) -> Option<Atom> {
+        self.compute_store
+            .get(&self.graph[node])
+            .and_then(|computed| computed.node_label_atom.as_ref())
+            .cloned()
+    }
+
     fn node_label_atom_factor(
         &self,
         frontier: NodeIndex,
         op: &HiddenData<SuBitGraph, EdgeIndex>,
     ) -> Atom {
         let approx = FunctionBuilder::new(symbol!("T"));
-        let frontier_atom = self
-            .compute_store
-            .get(&self.graph[frontier])
-            .and_then(|computed| computed.node_label_atom.as_ref())
-            .cloned()
-            .unwrap_or_else(Atom::one);
+        let frontier_atom = self.node_label_atom(frontier);
 
         let current = function!(
             symbol!(format!("S_{}", op.order.string_label())),
@@ -652,6 +669,12 @@ impl Forests {
     fn node_label_atom(&self, node: NodeIndex) -> Atom {
         if self.graph[node].key.is_empty() {
             return Atom::one();
+        }
+
+        if self.cached_node_label_atoms
+            && let Some(cached) = self.cached_node_label_atom(node)
+        {
+            return cached;
         }
 
         self.graph
@@ -687,11 +710,7 @@ impl Forests {
         key.key
             .write_foata_like(&mut foata, |op| op.string_label())
             .expect("writing a trace key into a string must succeed");
-        let atom = self
-            .compute_store
-            .get(key)
-            .and_then(|computed| computed.node_label_atom.as_ref())
-            .expect("node label atoms must be cached during forest construction");
+        let atom = self.node_label_atom(node);
         format!("{foata}: {}", atom.to_ordered_simple())
     }
 
@@ -1070,6 +1089,22 @@ mod tests {
         insta::assert_snapshot!(
             f.graph.n_nodes(),
             @"12");
+
+        let f = Wood::new(
+            CutStructure::empty(&dumbell),
+            &dumbell,
+            &VakintSettings::default(),
+        )
+        .unfold_uncached();
+        assert!(f.compute_store.entries.is_empty());
+        insta::assert_snapshot!(
+            f.node_label(NodeIndex(10)),
+            @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
+        );
+        insta::assert_snapshot!(
+            f.node_label(NodeIndex(11)),
+            @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+        );
 
         Ok(())
     }
