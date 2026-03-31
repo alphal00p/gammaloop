@@ -33,15 +33,8 @@ impl CutWoods {
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
-            let spinneys: Vec<_> = if settings.subtract_uv {
-                graph
-                    .spinneys(&subgraph)
-                    .into_iter()
-                    .map(|spinney| Spinney::new(spinney, graph, &graph.loop_momentum_basis))
-                    .collect()
-            } else {
-                vec![Spinney::empty(&graph)]
-            };
+            let spinneys =
+                graph.classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis);
             let wood = Wood::from_spinneys(spinneys, graph);
 
             let mut lvk_settings = settings.vakint.true_settings();

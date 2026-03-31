@@ -25,7 +25,7 @@ impl Spinney {
         !self.subgraph.filter.intersects(&cut.union)
     }
 
-    pub fn empty<E, V, H, G: AsRef<HedgeGraph<E, V, H>> + LMBext>(g: &G) -> Self {
+    pub fn empty<E, V, H, G: AsRef<HedgeGraph<E, V, H>> + LMBext + ?Sized>(g: &G) -> Self {
         Self {
             subgraph: InternalSubGraph::empty(g.as_ref().n_hedges()),
             components: vec![],
