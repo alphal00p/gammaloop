@@ -28,16 +28,24 @@
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
 
+      rustToolchain = fenix.packages.${system}.combine [
+        fenix.packages.${system}.stable.toolchain
+        fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
+      ];
+
       craneLib =
         (crane.mkLib pkgs).overrideToolchain
-        fenix.packages.${system}.stable.toolchain;
+        rustToolchain;
 
       craneLibLLvmTools =
         craneLib.overrideToolchain
-        (fenix.packages.${system}.stable.withComponents [
-          "cargo"
-          "llvm-tools"
-          "rustc"
+        (fenix.packages.${system}.combine [
+          (fenix.packages.${system}.stable.withComponents [
+            "cargo"
+            "llvm-tools"
+            "rustc"
+          ])
+          fenix.packages.${system}.targets.wasm32-unknown-unknown.stable.rust-std
         ]);
 
       workspaceSrc = lib.fileset.toSource {
@@ -63,10 +71,12 @@
 
       # Env var name Cargo uses to pick the linker for this target
       cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
+      wasmCargoLinkerVar = "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER";
 
       # Force GCC as both C/C++ compiler and Rust linker.
       nixCc = "${pkgs.gcc}/bin/gcc";
       nixCxx = "${pkgs.gcc}/bin/g++";
+      wasmLinker = "${rustToolchain}/lib/rustlib/${rustTarget}/bin/rust-lld";
 
       # Runtime library search path for locally-built binaries and for maturin/auditwheel
       runtimeLibPath = lib.makeLibraryPath [
@@ -114,7 +124,7 @@
         CC = nixCc;
         CXX = nixCxx;
         "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
+        "${wasmCargoLinkerVar}" = wasmLinker;
 
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
@@ -385,7 +395,7 @@
         CC = nixCc;
         CXX = nixCxx;
         "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
+        "${wasmCargoLinkerVar}" = wasmLinker;
 
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;

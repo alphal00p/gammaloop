@@ -1,7 +1,7 @@
 use rkyv::Archived;
 
 use crate::half_edge::{
-    involution::{EdgeIndex, Hedge, Orientation},
+    involution::{ArchivedFlow, EdgeIndex, Hedge, Orientation},
     nodestore::DefaultNodeStore,
     subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
     HedgeGraph,
@@ -46,6 +46,19 @@ pub struct ArchivedDotEdgeView<'a> {
     pub pair: &'a Archived<crate::half_edge::involution::HedgePair>,
     pub data: &'a Archived<DotEdgeData>,
     pub orientation: &'a Archived<Orientation>,
+}
+
+#[derive(Clone, Copy)]
+pub struct ArchivedDotEndpointView<'a> {
+    pub node: crate::half_edge::NodeIndex,
+    pub hedge: Hedge,
+    pub data: &'a Archived<DotHedgeData>,
+}
+
+#[derive(Clone, Copy)]
+pub struct ArchivedDotEdgeEndpointsView<'a> {
+    pub source: Option<ArchivedDotEndpointView<'a>>,
+    pub sink: Option<ArchivedDotEndpointView<'a>>,
 }
 
 impl DotGraphSet {
@@ -207,6 +220,13 @@ impl<'a> ArchivedDotGraphView<'a> {
             .filter(move |edge| edge.pair.intersects(subgraph))
     }
 
+    pub fn endpoints_of_edge(
+        &self,
+        edge: &ArchivedDotEdgeView<'a>,
+    ) -> ArchivedDotEdgeEndpointsView<'a> {
+        self.endpoints_of_pair(edge.pair)
+    }
+
     pub fn subgraph_from_bools(
         &self,
         values: impl IntoIterator<Item = bool>,
@@ -247,6 +267,47 @@ impl<'a> ArchivedDotGraphView<'a> {
         pair: &'a Archived<crate::half_edge::involution::HedgePair>,
     ) -> &'a Archived<Orientation> {
         self.orientation_of_hedge(pair.any_hedge())
+    }
+
+    fn endpoints_of_pair(
+        &self,
+        pair: &'a Archived<crate::half_edge::involution::HedgePair>,
+    ) -> ArchivedDotEdgeEndpointsView<'a> {
+        match pair {
+            crate::half_edge::involution::ArchivedHedgePair::Paired { source, sink }
+            | crate::half_edge::involution::ArchivedHedgePair::Split { source, sink, .. } => {
+                ArchivedDotEdgeEndpointsView {
+                    source: Some(self.endpoint_of_hedge(Hedge(source.0.try_into().unwrap()))),
+                    sink: Some(self.endpoint_of_hedge(Hedge(sink.0.try_into().unwrap()))),
+                }
+            }
+            crate::half_edge::involution::ArchivedHedgePair::Unpaired { hedge, flow } => {
+                let endpoint = self.endpoint_of_hedge(Hedge(hedge.0.try_into().unwrap()));
+                match flow {
+                    ArchivedFlow::Source => ArchivedDotEdgeEndpointsView {
+                        source: Some(endpoint),
+                        sink: None,
+                    },
+                    ArchivedFlow::Sink => ArchivedDotEdgeEndpointsView {
+                        source: None,
+                        sink: Some(endpoint),
+                    },
+                }
+            }
+        }
+    }
+
+    fn endpoint_of_hedge(&self, hedge: Hedge) -> ArchivedDotEndpointView<'a> {
+        ArchivedDotEndpointView {
+            node: self.node_of_hedge(hedge),
+            hedge,
+            data: &self.graph.hedge_data.0.as_slice()[hedge.0],
+        }
+    }
+
+    fn node_of_hedge(&self, hedge: Hedge) -> crate::half_edge::NodeIndex {
+        let node = &self.graph.node_store.hedge_data.0.as_slice()[hedge.0];
+        crate::half_edge::NodeIndex(node.0.try_into().unwrap())
     }
 
     fn orientation_of_hedge(&self, hedge: Hedge) -> &'a Archived<Orientation> {
