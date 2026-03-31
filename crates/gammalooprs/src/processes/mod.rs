@@ -18,6 +18,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
 
+mod generation_report;
+pub use generation_report::{
+    GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats, NamedGraphGenerationReport,
+    merge_generated_graph_reports,
+};
+
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
@@ -268,7 +274,7 @@ impl ProcessList {
         process_id: Option<usize>,
         integrand_name: Option<String>,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
         let path = folder.as_ref().join("processes");
 
         let r = fs::create_dir_all(&path);
@@ -276,21 +282,22 @@ impl ProcessList {
             r?;
         }
 
+        let mut reports = Vec::new();
         for p in self.processes.iter_mut() {
             if let Some(id) = process_id
                 && p.definition.process_id != id
             {
                 continue;
             }
-            p.compile(
+            reports.extend(p.compile(
                 &path,
                 override_existing,
                 integrand_name.clone(),
                 thread_pool,
-            )?;
+            )?);
         }
 
-        Ok(())
+        Ok(reports)
     }
 
     pub fn activate_loaded_integrand_backends(
@@ -356,11 +363,17 @@ impl ProcessList {
         settings: &GlobalSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let mut reports = Vec::new();
         for process in self.processes.iter_mut() {
-            process.preprocess(model, settings, locked_runtime_settings, thread_pool)?;
+            reports.extend(process.preprocess(
+                model,
+                settings,
+                locked_runtime_settings,
+                thread_pool,
+            )?);
         }
-        Ok(())
+        Ok(reports)
     }
 
     pub fn generate_integrands(
@@ -369,11 +382,17 @@ impl ProcessList {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let mut reports = Vec::new();
         for process in &mut self.processes {
-            process.generate_integrands(model, global_settings, runtime_default, thread_pool)?;
+            reports.extend(process.generate_integrands(
+                model,
+                global_settings,
+                runtime_default,
+                thread_pool,
+            )?);
         }
-        Ok(())
+        Ok(reports)
     }
 
     pub fn find_process(&self, process_id: Option<usize>) -> Result<usize> {

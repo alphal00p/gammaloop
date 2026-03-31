@@ -111,6 +111,21 @@ pub struct AmplitudeCountertermEvaluation<T: FloatLike> {
 }
 
 impl AmplitudeCountertermData {
+    pub(crate) fn generic_evaluator_count(&self) -> usize {
+        let stack_count = self
+            .evaluators
+            .iter()
+            .map(|evaluator| evaluator.evaluator_stack.borrow().generic_evaluator_count())
+            .sum::<usize>();
+        let overlap_count = self
+            .overlap
+            .overlap_groups
+            .iter()
+            .filter(|group| group.prefactor_evaluator.is_some())
+            .count();
+        stack_count + overlap_count
+    }
+
     pub fn new_empty(own_group_position: GraphGroupPosition) -> Self {
         Self {
             overlap: OverlapStructure::new_empty(),

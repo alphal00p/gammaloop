@@ -257,6 +257,20 @@ pub struct EvaluatorStack {
 }
 
 impl EvaluatorStack {
+    pub(crate) fn generic_evaluator_count(&self) -> usize {
+        let mut count = 1;
+        if self.iterative.is_some() {
+            count += 1;
+        }
+        if self.summed_function_map.is_some() {
+            count += 1;
+        }
+        if self.summed.is_some() {
+            count += 1;
+        }
+        count
+    }
+
     #[instrument(
         skip_all,
           fields(

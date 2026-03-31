@@ -464,3 +464,268 @@ The PR body summarizes:
 - the validation commands run
 - the current known discrepancy on the `gg > hhh` 1L amplitude, so the PR is
   clearly marked as work in progress
+
+## Interaction 10
+
+### User prompt
+
+The user asked me to debug the symjit discrepancy on the `gg > hhh` 1L process
+by comparing the rich `inspect` output for one fixed sample between:
+- `global.generation.compile.compilation_mode=assembly`
+- `global.generation.compile.compilation_mode=symjit`
+
+They pointed out that the mismatch is isolated to the `original` contribution,
+while the threshold counterterms match, and asked me to add temporary debug
+instrumentation to narrow down the origin of that difference.
+
+### Assistant final answer
+
+I added temporary local-only debug instrumentation in
+`crates/gammalooprs/src/integrands/process/amplitude/mod.rs` to compare the
+original bare-integrand evaluator under eager, assembly, and symjit for the
+same inspected sample and orientations.
+
+The narrowing result is:
+- the discrepancy is not in the threshold counterterms; they still match
+- the discrepancy is not in the summed-function-map aggregation logic
+- the discrepancy is already present in the original single-parametric bare
+  evaluator
+- eager and assembly match each other exactly for that evaluator
+- symjit differs by an almost exact global multiplicative factor across all
+  tested orientations
+
+For the inspected sample, the symjit/eager ratio for the original contribution
+is consistently about `97.4090910340024`, which strongly suggests one missing or
+extra global multiplicative factor in the original symjit evaluator path.
+
+So the current narrowed conclusion is:
+- the bug is in symjit evaluation of the original single-parametric bare
+  integrand for `gg > hhh` 1L
+- it is not caused by backend restoration, load-time activation, threshold
+  counterterms, or summed-function-map accumulation
+
+The temporary debug changes are intentionally not for commit/push.
+
+## Interaction 11
+
+### User prompt
+
+The user asked me to:
+- keep track of the temporary debugging changes so they can be undone later
+- improve `save standalone --json` so the generated standalone script can switch
+  cleanly between Symbolica assembly compilation and symjit
+- verify whether the discrepancy persists in standalone form
+- use that improved standalone path to make future minimization easier, since
+  the JSON payload can then be simplified into a small backend-divergent example
+
+### Assistant final answer
+
+I updated the amplitude standalone rust-script loader used by
+`save standalone --rust --json` so it now supports:
+- `--backend <eager|c++|assembly|symjit>`
+- `--compare-backends <backend[,backend...]>`
+- `--method <single_parametric|iterative|summed_function_map|summed>`
+- `--graph-index` / `--graph-name`
+- `--stack <original|ct:N>`
+- `--input-json <path>` for an explicit evaluator input vector stored as JSON
+  `[[re, im], ...]`
+
+I also changed the generated rust-script cargo snippet to use
+`symbolica` with `default-features = false`, so the standalone script no longer
+pulls in `mimalloc`; this avoids the macOS linker failure that was blocking the
+standalone execution path.
+
+For the temporary local debugging state, I kept and documented two env-gated
+hooks in `crates/gammalooprs/src/integrands/process/amplitude/mod.rs`:
+- `GL_SYMJIT_DEBUG_ORIGINAL`
+- `GL_SYMJIT_DEBUG_INPUT_DUMP=<path>`
+
+Using those hooks, I dumped the exact live original-evaluator input vector for
+the failing `inspect -x 0.1 0.2 0.3 -d 0 0` sample into
+`/tmp/gg_hhh_inspect_input.json`.
+
+Standalone verification result:
+- on the archive's built-in representative input, assembly and symjit agree to
+  rounding noise, so that input is not a useful reproducer
+- on the exact dumped inspect input, the standalone JSON reproducer does show a
+  backend discrepancy for `GL15` on the original `summed_function_map`
+  evaluator
+- in that standalone reproducer, eager and assembly match the inspect value,
+  while symjit returns zero
+
+So the standalone path is now useful for minimization: simplify the JSON
+expression payload and rerun the standalone script until the smallest backend-
+divergent expression is isolated.
+
+## Interaction 12
+
+### User prompt
+
+The user clarified that the zero from the standalone reproducer was expected
+because it already used a reduced path, then asked me to:
+- keep track of the temporary debug edits so they can be reverted later
+- create a top-level standalone reproducer in `MRE_symjit_vs_symbolica/`
+- reduce the expression as aggressively as possible
+- keep everything in one Rust script except for the separate input expression
+  file
+- add a short `README.md` explaining how to run it
+
+### Assistant final answer
+
+I reduced the standalone reproducer down to a dead-else `if` expression with no
+GammaLoop-specific function-map dependency:
+
+- expression: `if(o,0,s)`
+- evaluation point: `o = 1`, `s = 1`
+
+That is the current smallest expression I found that still reproduces the
+symjit mismatch clearly:
+- eager Symbolica returns `0`
+- assembly also returns `0`
+- symjit returns a large non-zero garbage value
+
+I added a dedicated top-level reproducer in `MRE_symjit_vs_symbolica/`:
+- `MRE_symjit_vs_symbolica/run.rs`
+- `MRE_symjit_vs_symbolica/expression.txt`
+- `MRE_symjit_vs_symbolica/README.md`
+
+The script is self-contained apart from the expression file, reads the
+expression from disk, evaluates it with eager and symjit, optionally compares
+against Symbolica's compiled assembly backend via `--assembly`, prints the
+results and diff, and exits with status `1` when the mismatch is reproduced.
+
+I verified the reproducer with:
+- `cd MRE_symjit_vs_symbolica && rust-script run.rs expression.txt`
+- `cd MRE_symjit_vs_symbolica && rust-script run.rs expression.txt --assembly`
+
+I also kept the existing temporary debug hooks in
+`crates/gammalooprs/src/integrands/process/amplitude/mod.rs` documented for
+later rollback:
+- `GL_SYMJIT_DEBUG_ORIGINAL`
+- `GL_SYMJIT_DEBUG_INPUT_DUMP=<path>`
+
+## Interaction 13
+
+### User prompt
+
+The user asked me to continue after a pause and clarified that, for now, the
+`epem_a_tth` assembly-regression reproducer does not need a smallest possible
+expression. Using the full integrand expression from `save standalone --json`
+is good enough.
+
+### Assistant final answer
+
+I continued from the existing regression-debugging state.
+
+Current state:
+- I had already reproduced the `epem_a_tth` eager-vs-assembly mismatch and the
+  saved-state reload crash.
+- I had narrowed the assembly regression to the pass-one original contribution
+  of graph `GL08` and dumped the exact pass-one input.
+- I was about to turn that into a top-level standalone reproducer and then fix
+  the reload bug.
+
+Planned next actions:
+1. Build `MRE_symbolica_regression/` from the exported standalone payload and
+   the dumped inspect input.
+2. Fix the reload bug by making process loading ignore non-persisted compile
+   artifact directories.
+3. Update `symjit.md` / `symjit_human_codex_interactions.md` and rerun
+   formatting and checks.
+
+## Interaction 14
+
+### User prompt
+
+The user asked me to continue.
+
+### Assistant final answer
+
+I continued the implementation and validation.
+
+What I added:
+- A new top-level regression reproducer in `MRE_symbolica_regression/`:
+  - `payload.json`
+  - `generated_assembly.cpp`
+  - `run.rs`
+  - `README.md`
+- The reproducer uses the pass-one
+  `raised_cut[0].derivative[0].summed_function_map` evaluator extracted from
+  `save standalone --json`, with the exact inspect input baked in.
+- `run.rs` rebuilds the eager evaluator from `payload.json`, compiles the
+  exact `generated_assembly.cpp` emitted by GammaLoop, and compares the two.
+- Verified result:
+  - eager evaluation is finite and non-zero
+  - the generated assembly source evaluates to `NaN`
+- `run.rs --fresh-compile` also shows that a fresh assembly build from the
+  payload itself stays finite, so the regression is already present in the
+  generated assembly source that GammaLoop writes.
+
+I also fixed the unrelated saved-state reload bug:
+- `crates/gammalooprs/src/processes/process.rs` now skips subdirectories that
+  do not contain the persisted manifest file (`amp.bin` or `cs.bin`) when
+  loading amplitudes / cross sections.
+- This prevents compile-artifact directories such as `cs_NLO/` from being
+  misidentified as persisted cross sections.
+
+Validation performed:
+- `cd MRE_symbolica_regression && rust-script run.rs`
+- `cd MRE_symbolica_regression && rust-script run.rs --fresh-compile`
+- `cargo fmt`
+- `cargo check`
+- reproduced the reload flow with:
+  - create state: `cargo run -p gammaloop-api --bin gammaloop -- -s <tmp> --clean-state ./examples/cli/epem_a_ttxh/NLO/epem_a_tth_NLO.toml run -c "run generate_diagrams generate_integrands; quit -o;"`
+  - reopen state: `cargo run -p gammaloop-api --bin gammaloop -- -s <tmp> ./examples/cli/epem_a_ttxh/NLO/epem_a_tth_NLO.toml run -c "quit -n"`
+- The original `No such file or directory (os error 2)` crash no longer occurs.
+
+## Interaction 15
+
+### User prompt
+
+The user asked me to enhance the closing message after integrand generation by
+printing a colorized `tabled` summary with columns for:
+- integrand
+- graph
+- total evaluator count
+- cumulative input-expression build time with percentage of total graph time
+- cumulative Symbolica evaluator-build time with percentage
+- cumulative evaluator compile time with percentage
+
+### Assistant final answer
+
+I implemented the generation summary table and verified it.
+
+What changed:
+- Added generation-report plumbing in
+  `crates/gammalooprs/src/processes/generation_report.rs` and threaded it
+  through `State`, `ProcessList`, `Process`, and the amplitude/cross-section
+  generation paths.
+- The table is rendered from
+  `crates/gammaloop-api/src/commands/generate.rs` using `tabled` with the
+  existing CLI colors.
+- The reported timing breakdown is:
+  - expression build: total graph generation time minus evaluator build and
+    compile time
+  - evaluator build: Symbolica evaluator construction only
+  - compile: symjit JIT activation or external `assembly` / `c++` compilation
+- Evaluator counts are accumulated per generated graph across the relevant
+  stacks for amplitudes and cross sections.
+
+Validation performed:
+- `cargo fmt`
+- `cargo check`
+- Verified the table on the `gg_hhh` 1L amplitude with:
+  - eager mode:
+    `cargo run -p gammaloop-api --bin gammaloop -- --clean-state ./examples/cli/gg_hhh/1L/gg_hhh_1L.toml run -c "set global kv global.generation.evaluator.compile=false; run generate; generate existing -p 0 -i 1L; quit -n"`
+  - symjit mode:
+    `target/debug/gammaloop --clean-state ./examples/cli/gg_hhh/1L/gg_hhh_1L.toml run -c "set global kv global.generation.evaluator.compile=true; set global kv global.generation.compile.compilation_mode=symjit; run generate; generate existing -p 0 -i 1L; quit -n"`
+- The summary table appears as requested, and symjit mode shows a non-zero
+  compile column.
+
+## User prompt
+
+Add all the changes that are *not* temporary debugging changes, commit them with a nice commit messages detailing the changes since last commit, and push them to the remote current active branch "symjit".
+
+## Assistant final answer
+
+I prepared a clean commit scope by removing the temporary debug instrumentation from the tracked source files, leaving only the permanent generation-summary and state-reload changes staged for commit. The debug-only local artifacts and MRE directories remain uncommitted.

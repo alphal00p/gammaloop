@@ -51,6 +51,24 @@ pub struct LUCounterTermEvaluators {
 }
 
 impl LUCounterTermEvaluators {
+    pub(crate) fn generic_evaluator_count(&self) -> usize {
+        let mut count = self.parametric_left_thresholds_evaluator.len()
+            + self.parametric_right_threshold_evaluator.len()
+            + self.parametric_iterated_evaluator.iter().count();
+
+        if let Some(iterative_left) = &self.iterative_left_thresholds_evaluator {
+            count += iterative_left.len();
+        }
+        if let Some(iterative_right) = &self.iterative_right_threshold_evaluator {
+            count += iterative_right.len();
+        }
+        if let Some(iterative_iterated) = &self.iterative_iterated_evaluator {
+            count += iterative_iterated.iter().count();
+        }
+
+        count
+    }
+
     pub fn from_atoms(
         counterterm_data: &LUCounterTermData,
         param_builder: &ParamBuilder,

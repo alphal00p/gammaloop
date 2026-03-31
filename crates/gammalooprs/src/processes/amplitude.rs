@@ -38,7 +38,10 @@ use crate::{
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
-    processes::{DotExportSettings, StandaloneExportSettings},
+    processes::{
+        DotExportSettings, GraphGenerationStats, NamedGraphGenerationReport,
+        StandaloneExportSettings,
+    },
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
@@ -159,7 +162,7 @@ impl Amplitude {
         path: impl AsRef<Path>,
         override_existing: bool,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
         info!("Compiling amplitude {}", self.name);
         let p = path.as_ref().join(&self.name);
 
@@ -173,9 +176,21 @@ impl Amplitude {
             r?;
         }
         if let Some(integrand) = &mut self.integrand {
-            integrand.compile(&p, override_existing, thread_pool)?;
+            let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
+            return Ok(compile_times
+                .into_iter()
+                .map(|(graph_name, duration)| NamedGraphGenerationReport {
+                    integrand_name: self.name.clone(),
+                    graph_name,
+                    stats: GraphGenerationStats {
+                        total_time: duration,
+                        evaluator_compile_time: duration,
+                        ..GraphGenerationStats::default()
+                    },
+                })
+                .collect());
         };
-        Ok(())
+        Ok(Vec::new())
     }
 
     #[instrument(
@@ -227,8 +242,9 @@ impl Amplitude {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
         // preprocess each graph individually
+        let integrand_name = self.name.clone();
 
         let preprocess_span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
         preprocess_span.pb_set_style(&ProgressStyle::with_template(
@@ -239,15 +255,23 @@ impl Amplitude {
 
         let preprocess_span_enter = preprocess_span.enter();
 
-        thread_pool.install(|| {
+        let preprocess_reports = thread_pool.install(|| {
             let parent = preprocess_span.clone();
-            self.graphs.par_iter_mut().try_for_each(|amplitude_graph| {
-                let _guard = parent.enter();
-                let ok = amplitude_graph.preprocess(model, settings, locked_runtime_settings);
-                preprocess_span.pb_inc(1);
+            self.graphs
+                .par_iter_mut()
+                .map(|amplitude_graph| {
+                    let _guard = parent.enter();
+                    let stats =
+                        amplitude_graph.preprocess(model, settings, locked_runtime_settings);
+                    preprocess_span.pb_inc(1);
 
-                ok
-            })
+                    stats.map(|stats| NamedGraphGenerationReport {
+                        integrand_name: integrand_name.clone(),
+                        graph_name: amplitude_graph.graph.name.clone(),
+                        stats,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
         })?;
 
         drop(preprocess_span_enter);
@@ -255,7 +279,7 @@ impl Amplitude {
 
         self.generate_grouped_derived_data()?;
 
-        Ok(())
+        Ok(preprocess_reports)
     }
 
     #[instrument(
@@ -270,27 +294,44 @@ impl Amplitude {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
-        let mut terms: Vec<_> = thread_pool.install(|| {
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        let integrand_name = self.name.clone();
+        let mut graph_reports = Vec::new();
+        let terms: Vec<_> = thread_pool.install(|| {
             self.graphs
                 .par_iter_mut()
                 .enumerate()
                 .map(|(graph_id, graph)| {
+                    let graph_started = std::time::Instant::now();
                     let group_id = graph.graph.group_id.unwrap(); // should always be set
                     let esurface_map = &self.group_derived_data[group_id].esurface_map;
                     let group_pos = self.graph_group_structure[group_id]
                         .find_position(graph_id)
                         .unwrap();
 
-                    graph.generate_term_for_graph(
+                    let (term, mut stats) = graph.generate_term_for_graph(
                         model,
                         group_pos,
                         esurface_map.clone(),
                         global_settings,
-                    )
+                    )?;
+                    stats.evaluator_count = term.generic_evaluator_count();
+                    stats.total_time += graph_started.elapsed();
+                    Ok((
+                        term,
+                        NamedGraphGenerationReport {
+                            integrand_name: integrand_name.clone(),
+                            graph_name: graph.graph.name.clone(),
+                            stats,
+                        },
+                    ))
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
+        for (_, report) in &terms {
+            graph_reports.push(report.clone());
+        }
+        let mut terms = terms.into_iter().map(|(term, _)| term).collect::<Vec<_>>();
 
         for group in self.graph_group_structure.iter() {
             let master_graph_id = group.master();
@@ -337,9 +378,14 @@ impl Amplitude {
             event_processing_runtime: Default::default(),
             active_f64_backend: Default::default(),
         };
-        amplitude_integrand.prepare_runtime_backends_after_generation()?;
+        let compile_times =
+            amplitude_integrand.prepare_runtime_backends_after_generation_with_compile_times()?;
+        for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
+            report.stats.evaluator_compile_time += compile_time;
+            report.stats.total_time += compile_time;
+        }
         self.integrand = Some(ProcessIntegrand::Amplitude(amplitude_integrand));
-        Ok(())
+        Ok(graph_reports)
     }
 
     #[instrument(
@@ -503,7 +549,8 @@ impl AmplitudeGraph {
         model: &Model,
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
-    ) -> Result<()> {
+    ) -> Result<GraphGenerationStats> {
+        let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
         self.generate_cff()?;
@@ -530,7 +577,10 @@ impl AmplitudeGraph {
                 )?;
         }
 
-        Ok(())
+        Ok(GraphGenerationStats {
+            total_time: preprocess_started.elapsed(),
+            ..GraphGenerationStats::default()
+        })
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Multi-Channeling Channels"))]
@@ -1070,7 +1120,7 @@ impl AmplitudeGraph {
         own_group_position: GraphGroupPosition,
         esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
         global_settings: &GlobalSettings,
-    ) -> Result<AmplitudeGraphTerm> {
+    ) -> Result<(AmplitudeGraphTerm, GraphGenerationStats)> {
         AmplitudeGraphTerm::from_amplitude_graph(
             self,
             own_group_position,

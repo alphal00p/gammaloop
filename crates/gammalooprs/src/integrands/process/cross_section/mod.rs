@@ -23,7 +23,9 @@ use crate::{
         sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
-    processes::{CrossSectionCut, CrossSectionGraph, CutId, RaisedCutData, RaisedCutId},
+    processes::{
+        CrossSectionCut, CrossSectionGraph, CutId, GraphGenerationStats, RaisedCutData, RaisedCutId,
+    },
     settings::{
         GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
     },
@@ -137,11 +139,20 @@ impl CrossSectionIntegrand {
         Ok(())
     }
 
-    pub(crate) fn prepare_runtime_backends_after_generation(&mut self) -> Result<()> {
+    pub(crate) fn prepare_runtime_backends_after_generation_with_compile_times(
+        &mut self,
+    ) -> Result<Vec<Duration>> {
         match self.data.compilation {
             FrozenCompilationMode::Symjit => {
-                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                let mut compile_times = Vec::with_capacity(self.data.graph_terms.len());
+                for graph_term in &mut self.data.graph_terms {
+                    let compile_started = Instant::now();
+                    graph_term
+                        .for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                    compile_times.push(compile_started.elapsed());
+                }
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
+                Ok(compile_times)
             }
             FrozenCompilationMode::Eager
             | FrozenCompilationMode::Cpp(_)
@@ -151,8 +162,13 @@ impl CrossSectionIntegrand {
                     Ok(())
                 })?;
                 self.active_f64_backend.set(ActiveF64Backend::Eager);
+                Ok(vec![Duration::ZERO; self.data.graph_terms.len()])
             }
         }
+    }
+
+    pub(crate) fn prepare_runtime_backends_after_generation(&mut self) -> Result<()> {
+        let _ = self.prepare_runtime_backends_after_generation_with_compile_times()?;
         Ok(())
     }
 
@@ -234,18 +250,22 @@ impl CrossSectionIntegrand {
         path: impl AsRef<Path> + Sync,
         override_existing: bool,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<(String, Duration)>> {
         let frozen_mode = self.data.compilation.clone();
-        thread_pool.install(|| {
+        let compile_times = thread_pool.install(|| {
             self.data
                 .graph_terms
                 .par_iter_mut()
-                .try_for_each(|term| term.compile(path.as_ref(), override_existing, &frozen_mode))
+                .map(|term| {
+                    term.compile(path.as_ref(), override_existing, &frozen_mode)
+                        .map(|duration| (term.graph.name.clone(), duration))
+                })
+                .collect::<Result<Vec<_>>>()
         })?;
 
         self.active_f64_backend
             .set(ActiveF64Backend::from_frozen_mode(&self.data.compilation));
-        Ok(())
+        Ok(compile_times)
     }
 
     pub(crate) fn invalidate_event_processing_runtime(&mut self) {
@@ -406,7 +426,8 @@ impl CrossSectionGraphTerm {
     pub fn from_cross_section_graph(
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
-    ) -> Result<Self> {
+    ) -> Result<(Self, GraphGenerationStats)> {
+        let mut stats = GraphGenerationStats::default();
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
             .derived_data
             .global_cff_expression
@@ -443,7 +464,8 @@ impl CrossSectionGraphTerm {
                             None
                         };
 
-                        EvaluatorStack::new(
+                        let evaluator_started = Instant::now();
+                        let evaluator_stack = EvaluatorStack::new(
                             slice::from_ref(integrand_for_subset),
                             &graph.graph.param_builder,
                             &orientations.raw,
@@ -455,24 +477,30 @@ impl CrossSectionGraphTerm {
                                 "Failed to create evaluator for graph{}",
                                 graph.graph.debug_dot()
                             )
-                        })
-                        .unwrap()
+                        })?;
+                        stats.evaluator_build_time += evaluator_started.elapsed();
+                        stats.evaluator_count += evaluator_stack.generic_evaluator_count();
+                        Ok(evaluator_stack)
                     })
-                    .collect()
+                    .collect::<Result<_>>()
             })
-            .collect::<TiVec<RaisedCutId, Vec<EvaluatorStack>>>();
+            .collect::<Result<TiVec<RaisedCutId, Vec<EvaluatorStack>>>>()?;
 
         let ct_evaluators = graph
             .derived_data
             .threshold_counterterms
             .iter()
             .map(|ct_data| {
-                LUCounterTermEvaluators::from_atoms(
+                let evaluator_started = Instant::now();
+                let evaluators = LUCounterTermEvaluators::from_atoms(
                     ct_data,
                     &graph.graph.param_builder,
                     settings,
                     &orientations,
-                )
+                );
+                stats.evaluator_build_time += evaluator_started.elapsed();
+                stats.evaluator_count += evaluators.generic_evaluator_count();
+                evaluators
             })
             .collect();
 
@@ -516,25 +544,28 @@ impl CrossSectionGraphTerm {
             })
             .collect();
 
-        Ok(Self {
-            integrand,
-            graph: graph.graph.clone(),
-            cut_esurface: graph.cut_esurface.clone(),
-            cuts: graph.cuts.clone(),
-            multi_channeling_setup: LmbMultiChannelingSetup {
-                channels: TiVec::new(),
-                graph: graph.graph.clone(), // will be overwritten later,
-                all_bases: TiVec::new(),
+        Ok((
+            Self {
+                integrand,
+                graph: graph.graph.clone(),
+                cut_esurface: graph.cut_esurface.clone(),
+                cuts: graph.cuts.clone(),
+                multi_channeling_setup: LmbMultiChannelingSetup {
+                    channels: TiVec::new(),
+                    graph: graph.graph.clone(), // will be overwritten later,
+                    all_bases: TiVec::new(),
+                },
+                lmbs: graph.derived_data.lmbs.as_ref().unwrap().clone(),
+                estimated_scale: None,
+                param_builder: graph.graph.param_builder.clone(),
+                orientation_filter: SubSet::full(orientations.len()),
+                orientations,
+                counterterm,
+                reversed_edges,
+                raised_data: graph.derived_data.raised_data.clone(),
             },
-            lmbs: graph.derived_data.lmbs.as_ref().unwrap().clone(),
-            estimated_scale: None,
-            param_builder: graph.graph.param_builder.clone(),
-            orientation_filter: SubSet::full(orientations.len()),
-            orientations,
-            counterterm,
-            reversed_edges,
-            raised_data: graph.derived_data.raised_data.clone(),
-        })
+            stats,
+        ))
     }
 
     pub fn compile(
@@ -542,7 +573,8 @@ impl CrossSectionGraphTerm {
         path: impl AsRef<Path>,
         _override_existing: bool,
         frozen_mode: &FrozenCompilationMode,
-    ) -> Result<()> {
+    ) -> Result<Duration> {
+        let compile_started = Instant::now();
         let graph_path = path.as_ref().join(&self.graph.name);
 
         fs::create_dir_all(&graph_path).with_context(|| {
@@ -581,7 +613,7 @@ impl CrossSectionGraphTerm {
             )?;
         }
 
-        Ok(())
+        Ok(compile_started.elapsed())
     }
 
     pub(crate) fn for_each_generic_evaluator_mut(

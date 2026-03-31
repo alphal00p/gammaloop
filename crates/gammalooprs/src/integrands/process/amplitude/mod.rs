@@ -48,7 +48,7 @@ use crate::{
     momentum::signature::SignatureLike,
     momentum::{Rotation, RotationMethod, SignOrZero},
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
-    processes::{AmplitudeGraph, GroupDerivedData},
+    processes::{AmplitudeGraph, GraphGenerationStats, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
         amplitude_counterterm::{
@@ -91,7 +91,8 @@ impl AmplitudeGraphTerm {
         esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
         _model: &Model,
         settings: &GlobalSettings,
-    ) -> Result<Self> {
+    ) -> Result<(Self, GraphGenerationStats)> {
+        let mut stats = GraphGenerationStats::default();
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
             .derived_data
             .cff_expression
@@ -104,6 +105,7 @@ impl AmplitudeGraphTerm {
 
         debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
 
+        let evaluator_started = std::time::Instant::now();
         let original_integrand = EvaluatorStack::new(
             &[&graph.derived_data.all_mighty_integrand],
             &graph.graph.param_builder,
@@ -111,6 +113,8 @@ impl AmplitudeGraphTerm {
             None,
             &settings.generation.evaluator,
         )?;
+        stats.evaluator_build_time += evaluator_started.elapsed();
+        stats.evaluator_count += original_integrand.generic_evaluator_count();
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
 
@@ -118,7 +122,15 @@ impl AmplitudeGraphTerm {
             .derived_data
             .threshold_counterterms
             .iter()
-            .map(|ct| ct.to_evaluator(&graph.graph.param_builder, &orientations, settings))
+            .map(|ct| {
+                let evaluator_started = std::time::Instant::now();
+                let evaluator =
+                    ct.to_evaluator(&graph.graph.param_builder, &orientations, settings);
+                stats.evaluator_build_time += evaluator_started.elapsed();
+                stats.evaluator_count +=
+                    evaluator.evaluator_stack.borrow().generic_evaluator_count();
+                evaluator
+            })
             .collect();
         threshold_counterterm.generated_mask = graph
             .derived_data
@@ -129,42 +141,45 @@ impl AmplitudeGraphTerm {
 
         threshold_counterterm.esurface_map = esurface_map;
 
-        Ok(AmplitudeGraphTerm {
-            orientation_filter: SubSet::full(orientations.len()),
-            orientations,
-            original_integrand,
-            tropical_sampler: graph.derived_data.tropical_sampler.clone(),
-            graph: graph.graph.clone(),
-            multi_channeling_setup: LmbMultiChannelingSetup {
-                channels: TiVec::new(),
-                graph: graph.graph.clone(), // will be overwritten later,
-                all_bases: TiVec::new(),
-            }, // to be taken from froup master
-            lmbs: graph
-                .derived_data
-                .lmbs
-                .clone()
-                .expect("lmbs should have been created"),
-            threshold_counterterm,
-            estimated_scale: None,
-            esurfaces: graph
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .expect("cff_expression should have been created")
-                .surfaces
-                .esurface_cache
-                .clone(),
-            param_builder: graph.graph.param_builder.clone(),
-            real_mass_vec: None,
-            master_external_signature: graph.graph.get_external_signature(),
-            master_external_pdgs: graph
-                .graph
-                .get_external_partcles()
-                .into_iter()
-                .map(|particle| particle.pdg_code)
-                .collect(),
-        })
+        Ok((
+            AmplitudeGraphTerm {
+                orientation_filter: SubSet::full(orientations.len()),
+                orientations,
+                original_integrand,
+                tropical_sampler: graph.derived_data.tropical_sampler.clone(),
+                graph: graph.graph.clone(),
+                multi_channeling_setup: LmbMultiChannelingSetup {
+                    channels: TiVec::new(),
+                    graph: graph.graph.clone(), // will be overwritten later,
+                    all_bases: TiVec::new(),
+                }, // to be taken from froup master
+                lmbs: graph
+                    .derived_data
+                    .lmbs
+                    .clone()
+                    .expect("lmbs should have been created"),
+                threshold_counterterm,
+                estimated_scale: None,
+                esurfaces: graph
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .expect("cff_expression should have been created")
+                    .surfaces
+                    .esurface_cache
+                    .clone(),
+                param_builder: graph.graph.param_builder.clone(),
+                real_mass_vec: None,
+                master_external_signature: graph.graph.get_external_signature(),
+                master_external_pdgs: graph
+                    .graph
+                    .get_external_partcles()
+                    .into_iter()
+                    .map(|particle| particle.pdg_code)
+                    .collect(),
+            },
+            stats,
+        ))
     }
 
     #[instrument(
@@ -181,7 +196,8 @@ impl AmplitudeGraphTerm {
         path: impl AsRef<Path>,
         override_existing: bool,
         frozen_mode: &FrozenCompilationMode,
-    ) -> Result<()> {
+    ) -> Result<std::time::Duration> {
+        let compile_started = std::time::Instant::now();
         let graph_path = path.as_ref().join(&self.graph.name);
 
         fs::create_dir_all(&graph_path).with_context(|| {
@@ -200,7 +216,7 @@ impl AmplitudeGraphTerm {
         self.threshold_counterterm
             .compile(&graph_path, override_existing, frozen_mode)?;
 
-        Ok(())
+        Ok(compile_started.elapsed())
     }
 
     pub(crate) fn for_each_generic_evaluator_mut(
@@ -212,6 +228,11 @@ impl AmplitudeGraphTerm {
         self.threshold_counterterm
             .for_each_generic_evaluator_mut(&mut f)?;
         Ok(())
+    }
+
+    pub(crate) fn generic_evaluator_count(&self) -> usize {
+        self.original_integrand.generic_evaluator_count()
+            + self.threshold_counterterm.generic_evaluator_count()
     }
 
     #[instrument(
@@ -322,7 +343,6 @@ impl AmplitudeGraphTerm {
             None,
             None,
         );
-
         let result = self
             .original_integrand
             .evaluate(
@@ -600,11 +620,20 @@ impl AmplitudeIntegrand {
         Ok(())
     }
 
-    pub(crate) fn prepare_runtime_backends_after_generation(&mut self) -> Result<()> {
+    pub(crate) fn prepare_runtime_backends_after_generation_with_compile_times(
+        &mut self,
+    ) -> Result<Vec<std::time::Duration>> {
         match self.data.compilation {
             FrozenCompilationMode::Symjit => {
-                self.for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                let mut compile_times = Vec::with_capacity(self.data.graph_terms.len());
+                for graph_term in &mut self.data.graph_terms {
+                    let compile_started = std::time::Instant::now();
+                    graph_term
+                        .for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                    compile_times.push(compile_started.elapsed());
+                }
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
+                Ok(compile_times)
             }
             FrozenCompilationMode::Eager
             | FrozenCompilationMode::Cpp(_)
@@ -614,8 +643,13 @@ impl AmplitudeIntegrand {
                     Ok(())
                 })?;
                 self.active_f64_backend.set(ActiveF64Backend::Eager);
+                Ok(vec![std::time::Duration::ZERO; self.data.graph_terms.len()])
             }
         }
+    }
+
+    pub(crate) fn prepare_runtime_backends_after_generation(&mut self) -> Result<()> {
+        let _ = self.prepare_runtime_backends_after_generation_with_compile_times()?;
         Ok(())
     }
 
@@ -669,18 +703,22 @@ impl AmplitudeIntegrand {
         path: impl AsRef<Path> + Sync,
         override_existing: bool,
         thread_pool: &rayon::ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<(String, std::time::Duration)>> {
         let frozen_mode = self.data.compilation.clone();
-        thread_pool.install(|| {
+        let compile_times = thread_pool.install(|| {
             self.data
                 .graph_terms
                 .par_iter_mut()
-                .try_for_each(|a| a.compile(path.as_ref(), override_existing, &frozen_mode))
+                .map(|a| {
+                    a.compile(path.as_ref(), override_existing, &frozen_mode)
+                        .map(|duration| (a.graph.name.clone(), duration))
+                })
+                .collect::<Result<Vec<_>>>()
         })?;
 
         self.active_f64_backend
             .set(ActiveF64Backend::from_frozen_mode(&self.data.compilation));
-        Ok(())
+        Ok(compile_times)
     }
 
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {

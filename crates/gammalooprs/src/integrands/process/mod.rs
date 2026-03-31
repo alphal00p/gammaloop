@@ -352,7 +352,7 @@ impl ProcessIntegrand {
         path: impl AsRef<Path>,
         override_existing: bool,
         thread_pool: &rayon::ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<(String, std::time::Duration)>> {
         let path = path.as_ref().join("integrand");
 
         let r = fs::create_dir_all(&path).with_context(|| {

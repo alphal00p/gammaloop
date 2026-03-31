@@ -32,7 +32,10 @@ use gammalooprs::{
     initialisation::initialise,
     integrands::HasIntegrand,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
-    processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
+    processes::{
+        merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
+        NamedGraphGenerationReport, Process, ProcessCollection, ProcessDefinition, ProcessList,
+    },
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     utils::{
         serde_utils::{get_schema_folder, SmartSerde},
@@ -1276,24 +1279,42 @@ impl State {
         &mut self,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
         let generation_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(global_settings.n_cores.generate)
             .build()?;
 
-        self.process_list.preprocess(
+        let mut reports = self.process_list.preprocess(
             &self.model,
             global_settings,
             &runtime_default,
             &generation_pool,
         )?;
-        self.process_list.generate_integrands(
-            &self.model,
-            global_settings,
-            runtime_default,
-            &generation_pool,
-        )?;
-        Ok(())
+        merge_generated_graph_reports(
+            &mut reports,
+            self.process_list.generate_integrands(
+                &self.model,
+                global_settings,
+                runtime_default,
+                &generation_pool,
+            )?,
+        );
+        Ok(reports)
+    }
+
+    fn attach_process_id_to_named_reports(
+        process_id: usize,
+        reports: Vec<NamedGraphGenerationReport>,
+    ) -> Vec<GeneratedGraphReport> {
+        reports
+            .into_iter()
+            .map(|report| GeneratedGraphReport {
+                process_id,
+                integrand_name: report.integrand_name,
+                graph_name: report.graph_name,
+                stats: report.stats,
+            })
+            .collect()
     }
 
     pub fn generate_integrand(
@@ -1302,28 +1323,41 @@ impl State {
         runtime_default: LockedRuntimeSettings,
         process_id: usize,
         integrand_name: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
         let generation_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(global_settings.n_cores.generate)
             .build()?;
 
         let p = &mut self.process_list.processes[process_id];
         if let Some(name) = &integrand_name {
+            let mut reports = Vec::new();
             match &mut p.collection {
                 ProcessCollection::Amplitudes(a) => {
                     if let Some(a) = a.get_mut(name) {
-                        a.preprocess(
-                            &self.model,
-                            &global_settings.generation,
-                            &runtime_default,
-                            &generation_pool,
-                        )?;
-                        a.build_integrand(
-                            &self.model,
-                            global_settings,
-                            runtime_default,
-                            &generation_pool,
-                        )?;
+                        merge_generated_graph_reports(
+                            &mut reports,
+                            Self::attach_process_id_to_named_reports(
+                                process_id,
+                                a.preprocess(
+                                    &self.model,
+                                    &global_settings.generation,
+                                    &runtime_default,
+                                    &generation_pool,
+                                )?,
+                            ),
+                        );
+                        merge_generated_graph_reports(
+                            &mut reports,
+                            Self::attach_process_id_to_named_reports(
+                                process_id,
+                                a.build_integrand(
+                                    &self.model,
+                                    global_settings,
+                                    runtime_default,
+                                    &generation_pool,
+                                )?,
+                            ),
+                        );
                     } else {
                         return Err(eyre!(
                             "No amplitude named '{}' in process id {}",
@@ -1334,19 +1368,31 @@ impl State {
                 }
                 ProcessCollection::CrossSections(cs) => {
                     if let Some(cs) = cs.get_mut(name) {
-                        cs.preprocess(
-                            &self.model,
-                            &p.definition,
-                            &global_settings.generation,
-                            runtime_default,
-                            &generation_pool,
-                        )?;
-                        cs.build_integrand(
-                            &self.model,
-                            global_settings,
-                            runtime_default,
-                            &generation_pool,
-                        )?;
+                        merge_generated_graph_reports(
+                            &mut reports,
+                            Self::attach_process_id_to_named_reports(
+                                process_id,
+                                cs.preprocess(
+                                    &self.model,
+                                    &p.definition,
+                                    &global_settings.generation,
+                                    runtime_default,
+                                    &generation_pool,
+                                )?,
+                            ),
+                        );
+                        merge_generated_graph_reports(
+                            &mut reports,
+                            Self::attach_process_id_to_named_reports(
+                                process_id,
+                                cs.build_integrand(
+                                    &self.model,
+                                    global_settings,
+                                    runtime_default,
+                                    &generation_pool,
+                                )?,
+                            ),
+                        );
                     } else {
                         return Err(eyre!(
                             "No cross section named '{}' in process id {}",
@@ -1356,22 +1402,25 @@ impl State {
                     }
                 }
             }
+            Ok(reports)
         } else {
-            p.preprocess(
+            let mut reports = p.preprocess(
                 &self.model,
                 global_settings,
                 &runtime_default,
                 &generation_pool,
             )?;
-            p.generate_integrands(
-                &self.model,
-                global_settings,
-                runtime_default,
-                &generation_pool,
-            )?;
+            merge_generated_graph_reports(
+                &mut reports,
+                p.generate_integrands(
+                    &self.model,
+                    global_settings,
+                    runtime_default,
+                    &generation_pool,
+                )?,
+            );
+            Ok(reports)
         }
-
-        Ok(())
     }
 
     pub fn compile_integrands(
@@ -1381,7 +1430,7 @@ impl State {
         global_settings: &GlobalSettings,
         process_id: Option<usize>,
         integrand_name: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
         let compile_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(global_settings.n_cores.compile)
             .build()?;
@@ -1391,8 +1440,7 @@ impl State {
             process_id,
             integrand_name,
             &compile_pool,
-        )?;
-        Ok(())
+        )
     }
 
     pub fn export_dots(
