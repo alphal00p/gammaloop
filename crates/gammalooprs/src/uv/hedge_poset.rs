@@ -28,7 +28,7 @@ use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
     utils::{W_, symbolica_ext::LogPrint},
     uv::{
-        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
             ApproximationKernel, CutStructure, ForestNodeLike, UVCtx, integrated::Integrated,
             local_3d::Local3DApproximation,
@@ -37,86 +37,6 @@ use crate::{
     },
 };
 use color_eyre::Result;
-
-#[allow(clippy::derived_hash_with_manual_eq)]
-#[derive(Clone, Debug, Hash, Eq)]
-pub struct Spinney {
-    pub subgraph: SuBitGraph,
-    components: Vec<SuBitGraph>,
-    pub dod: i32,
-    pub lmb: LoopMomentumBasis,
-    /// The maximum number of loops in any component of this spinney.
-    max_comp_loop_count: usize,
-    // pub topo_order: Option<usize>,
-}
-
-impl Spinney {
-    pub fn compatible_with(&self, cut: &CutSet) -> bool {
-        !self.subgraph.intersects(&cut.union)
-    }
-
-    pub fn empty<E, V, H, G: AsRef<HedgeGraph<E, V, H>> + LMBext>(g: &G) -> Self {
-        Spinney {
-            components: vec![],
-            dod: 0,
-
-            subgraph: g.as_ref().empty_subgraph(),
-            lmb: g.empty_lmb(),
-            max_comp_loop_count: 0,
-        }
-    }
-
-    pub fn forest_node<'a>(&'a self, topo_order: usize) -> ForestNode<'a> {
-        ForestNode {
-            spinney: self,
-            topo_order,
-        }
-    }
-    pub fn new<E, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
-        subgraph: SuBitGraph,
-        g: &G,
-        lmb: &LoopMomentumBasis,
-    ) -> Self {
-        let components = g.as_ref().connected_components(&subgraph);
-        let max_comp_loop_count = components
-            .iter()
-            .map(|c| g.as_ref().cyclotomatic_number(c))
-            .max()
-            .unwrap_or(0);
-
-        Spinney {
-            components: g.as_ref().connected_components(&subgraph),
-            dod: g.dod(&subgraph),
-            lmb: g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb),
-            subgraph,
-            max_comp_loop_count,
-        }
-    }
-}
-
-impl PartialEq for Spinney {
-    fn eq(&self, other: &Self) -> bool {
-        self.subgraph == other.subgraph
-    }
-}
-
-impl PartialOrd for Spinney {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        if self.subgraph.includes(&other.subgraph) {
-            Some(std::cmp::Ordering::Greater)
-        } else if other.subgraph.includes(&self.subgraph) {
-            Some(std::cmp::Ordering::Less)
-        } else {
-            None
-        }
-    }
-}
-
-impl Ord for Spinney {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.subgraph.cmp(&other.subgraph)
-    }
-}
 
 pub struct Wood {
     pub graph: HedgeGraph<SuBitGraph, Spinney>,
@@ -163,13 +83,19 @@ impl Wood {
         };
 
         // get this hedge's forest node from the self. This is the node that has already been computed (as it is a parent to this edge)
-        let given = self.graph[self.graph.node_id(source)].forest_node(order);
+        let given = ForestNode {
+            spinney: &self.graph[self.graph.node_id(source)],
+            topo_order: order,
+        };
 
         // this is the current node, which should be the same for all union edges (since they all have the same sink)
         let current_for_h = self.graph.node_id(sink);
 
         // this is the current node, which we want to compute with
-        let current = self.graph[current_for_h].forest_node(order);
+        let current = ForestNode {
+            spinney: &self.graph[current_for_h],
+            topo_order: order,
+        };
 
         (current, given)
     }
@@ -189,7 +115,7 @@ impl Wood {
         Self::from_spinneys(
             spinneys
                 .into_iter()
-                .map(|a| Spinney::new(a.filter, graph, &graph.loop_momentum_basis)),
+                .map(|a| Spinney::new(a, graph, &graph.loop_momentum_basis)),
             graph,
             cuts,
             vakint_settings,
@@ -205,7 +131,7 @@ impl Wood {
         let mut spinneyset: BTreeSet<_> = s
             .into_iter()
             .inspect(|a| {
-                max_loops = max_loops.max(a.max_comp_loop_count);
+                max_loops = max_loops.max(a.max_comp_loop_count());
             })
             .collect();
 
@@ -227,7 +153,7 @@ impl Wood {
 
                 let source_subgraph = &n.get_node_data(nsource).subgraph;
                 let sink_subgraph = &n.get_node_data(nsink).subgraph;
-                let reduced_subgraph = sink_subgraph.subtract(source_subgraph);
+                let reduced_subgraph = sink_subgraph.subtract(source_subgraph).filter;
                 let hairy_source = graph.as_ref().full_crown(source_subgraph);
 
                 if graph.as_ref().bridges_of(&reduced_subgraph).is_empty()
@@ -240,7 +166,7 @@ impl Wood {
                     }
                     e.map(|_| reduced_subgraph)
                 } else {
-                    e.map(|_| sink_subgraph.clone())
+                    e.map(|_| sink_subgraph.filter.clone())
                 }
             },
             |_, d| d,
@@ -432,10 +358,13 @@ impl ForestNodeLike for ForestNode<'_> {
         &self.spinney.lmb
     }
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph {
-        self.spinney.subgraph.subtract(&given.spinney.subgraph)
+        self.spinney
+            .subgraph
+            .subtract(&given.spinney.subgraph)
+            .filter
     }
     fn subgraph(&self) -> &SuBitGraph {
-        &self.spinney.subgraph
+        self.spinney.filter()
     }
     fn topo_order(&self) -> usize {
         self.topo_order
@@ -952,7 +881,11 @@ mod tests {
             },"scalars"
         )?;
 
-        let spinneys = dumbell.spinneys(&dumbell.full_filter());
+        let spinneys: Vec<_> = dumbell
+            .spinneys(&dumbell.full_filter())
+            .into_iter()
+            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
@@ -1001,7 +934,11 @@ mod tests {
             },"scalars"
         )?;
 
-        let spinneys = dumbell.spinneys(&dumbell.full_filter());
+        let spinneys: Vec<_> = dumbell
+            .spinneys(&dumbell.full_filter())
+            .into_iter()
+            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
@@ -1049,7 +986,11 @@ mod tests {
             },"scalars"
         )?;
 
-        let spinneys = dumbell.spinneys(&dumbell.full_filter());
+        let spinneys: Vec<_> = dumbell
+            .spinneys(&dumbell.full_filter())
+            .into_iter()
+            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
@@ -1121,7 +1062,11 @@ mod tests {
             },"scalars"
         )?;
 
-        let spinneys = dumbell.spinneys(&dumbell.full_filter());
+        let spinneys: Vec<_> = dumbell
+            .spinneys(&dumbell.full_filter())
+            .into_iter()
+            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+            .collect();
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
@@ -1175,7 +1120,11 @@ mod tests {
         ) {
             Ok(g) => {
                 let g: Graph = g;
-                let spinneys = g.spinneys(&g.full_filter());
+                let spinneys: Vec<_> = g
+                    .spinneys(&g.full_filter())
+                    .into_iter()
+                    .map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
+                    .collect();
                 let f = Wood::new(CutStructure::empty(&g), &g, &VakintSettings::default());
 
                 println!("{}", f);

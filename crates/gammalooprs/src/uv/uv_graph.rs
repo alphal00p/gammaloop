@@ -27,7 +27,7 @@ use crate::{
     uv::settings::CTIdentifier,
 };
 
-use super::{Wood, spenso_lor_atom};
+use super::{Spinney, Wood, spenso_lor_atom};
 
 pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize
@@ -185,7 +185,16 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        Wood::from_spinneys(self.spinneys(subgraph), self)
+        Wood::from_spinneys(
+            self.spinneys(subgraph).into_iter().map(|spinney| {
+                Spinney::new(
+                    spinney,
+                    self,
+                    &self.as_ref().lmb_of(&self.as_ref().full_filter()),
+                )
+            }),
+            self,
+        )
     }
 
     fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;

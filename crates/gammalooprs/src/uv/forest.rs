@@ -115,7 +115,8 @@ impl Forest {
                     let Some(a) = &parent.data.simple_approx else {
                         panic!("Should have computed the simple approx");
                     };
-                    current.data.simple_approx = Some(a.dependent(current.data.subgraph.clone()));
+                    current.data.simple_approx =
+                        Some(a.dependent(current.data.spinney.subgraph.clone()));
 
                     current.data.topo_order = i;
                     if settings.generate_integrated {
