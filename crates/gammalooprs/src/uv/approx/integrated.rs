@@ -32,7 +32,7 @@ use crate::{
         symbolica_ext::{CallSymbol, LogPrint},
     },
     uv::{
-        UltravioletGraph,
+        RenormalizationScheme, UltravioletGraph,
         approx::{ApproximationKernel, ForestNodeLike, UVCtx},
         settings::VakintSettings,
         uv_graph::UVE,
@@ -123,8 +123,8 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
                 .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
         }
-        // TODO: only enable soft CT if doing OS renormalization
-        let soft_ct = graph.full_crown(current.subgraph()).n_included() == 2
+        let soft_ct = current.renormalization_scheme() == RenormalizationScheme::OS
+            && graph.full_crown(current.subgraph()).n_included() == 2
             && current.dod() > 0
             && settings.softct;
 

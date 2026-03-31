@@ -376,6 +376,9 @@ impl ForestNodeLike for ForestNode<'_> {
     fn dod(&self) -> i32 {
         self.spinney.dod
     }
+    fn renormalization_scheme(&self) -> crate::uv::RenormalizationScheme {
+        self.spinney.renormalization_scheme
+    }
     fn lmb(&self) -> &LoopMomentumBasis {
         &self.spinney.lmb
     }
