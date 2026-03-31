@@ -30,6 +30,7 @@ use crate::{
         IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo,
     },
     session::{CliSession, CliSessionState},
+    settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
     state::{ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
 };
@@ -38,6 +39,8 @@ use clap::ValueEnum;
 
 use color_eyre::Result;
 use eyre::eyre;
+use serde::Serialize;
+use serde_json::Value as JsonValue;
 
 /*
 use gammalooprs::feyngen::{
@@ -48,7 +51,6 @@ use gammalooprs::feyngen::{
 
 // use git_version::git_version;
 use itertools::{self, Itertools};
-use pyo3::types::PyFloat;
 use std::{path::PathBuf, str::FromStr};
 
 use symbolica::{atom::AtomCore, parse};
@@ -61,7 +63,7 @@ use pyo3::{
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
-    types::{PyComplex, PyComplexMethods, PyDict, PyModule, PyTuple, PyType},
+    types::{PyAny, PyComplex, PyComplexMethods, PyDict, PyList, PyModule, PyTuple, PyType},
     wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
@@ -115,6 +117,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PySlotIntegrationResult>()?;
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
+    m.add_class::<PySettingsValue>()?;
     /*
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
@@ -131,6 +134,292 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
+}
+
+#[pyclass(name = "SettingsValue", skip_from_py_object)]
+#[derive(Clone)]
+pub struct PySettingsValue {
+    value: JsonValue,
+    path: String,
+}
+
+#[pymethods]
+impl PySettingsValue {
+    #[getter]
+    fn path(&self) -> String {
+        self.path.clone()
+    }
+
+    #[getter]
+    fn kind(&self) -> &'static str {
+        json_type_name(&self.value)
+    }
+
+    fn is_object(&self) -> bool {
+        self.value.is_object()
+    }
+
+    fn is_array(&self) -> bool {
+        self.value.is_array()
+    }
+
+    fn is_scalar(&self) -> bool {
+        !self.value.is_object() && !self.value.is_array()
+    }
+
+    fn keys(&self) -> PyResult<Vec<String>> {
+        match &self.value {
+            JsonValue::Object(map) => {
+                let mut keys = map.keys().cloned().collect::<Vec<_>>();
+                keys.sort();
+                Ok(keys)
+            }
+            _ => Err(exceptions::PyTypeError::new_err(format!(
+                "Cannot list keys for {} at '{}'",
+                json_type_name(&self.value),
+                self.path
+            ))),
+        }
+    }
+
+    fn get<'py>(&self, py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyAny>> {
+        let value = if path.is_empty() {
+            &self.value
+        } else {
+            value_at_path(&self.value, path).map_err(|e| {
+                exceptions::PyKeyError::new_err(format!(
+                    "Could not access '{}': {}",
+                    self.extend_path(path),
+                    e
+                ))
+            })?
+        };
+        py_object_from_settings_value(py, value, &self.extend_path(path))
+    }
+
+    fn to_dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        py_builtin_from_settings_value(py, &self.value)
+    }
+
+    fn __getitem__<'py>(
+        &self,
+        py: Python<'py>,
+        key: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if let Ok(path) = key.extract::<String>() {
+            return self.get(py, &path);
+        }
+        if let Ok(index) = key.extract::<usize>() {
+            let items = self.value.as_array().ok_or_else(|| {
+                exceptions::PyTypeError::new_err(format!(
+                    "Cannot use an integer index on {} at '{}'",
+                    json_type_name(&self.value),
+                    self.path
+                ))
+            })?;
+            let value = items.get(index).ok_or_else(|| {
+                exceptions::PyIndexError::new_err(format!(
+                    "Index {} out of bounds for '{}' with len={}",
+                    index,
+                    self.path,
+                    items.len()
+                ))
+            })?;
+            return py_object_from_settings_value(py, value, &child_index_path(&self.path, index));
+        }
+        Err(exceptions::PyTypeError::new_err(
+            "Settings values can only be indexed with a string path or integer index",
+        ))
+    }
+
+    fn __getattr__<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
+        match &self.value {
+            JsonValue::Object(map) => map.get(name).map_or_else(
+                || {
+                    Err(exceptions::PyAttributeError::new_err(format!(
+                        "No attribute '{}' under '{}'",
+                        name, self.path
+                    )))
+                },
+                |value| {
+                    py_object_from_settings_value(py, value, &child_field_path(&self.path, name))
+                },
+            ),
+            _ => Err(exceptions::PyAttributeError::new_err(format!(
+                "Cannot access attribute '{}' on {} at '{}'",
+                name,
+                json_type_name(&self.value),
+                self.path
+            ))),
+        }
+    }
+
+    fn __dir__(&self) -> Vec<String> {
+        match &self.value {
+            JsonValue::Object(map) => {
+                let mut keys = map.keys().cloned().collect::<Vec<_>>();
+                keys.sort();
+                keys
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn __len__(&self) -> PyResult<usize> {
+        match &self.value {
+            JsonValue::Object(map) => Ok(map.len()),
+            JsonValue::Array(items) => Ok(items.len()),
+            _ => Err(exceptions::PyTypeError::new_err(format!(
+                "Cannot take len() of {} at '{}'",
+                json_type_name(&self.value),
+                self.path
+            ))),
+        }
+    }
+
+    fn __str__(&self) -> PyResult<String> {
+        serde_json::to_string_pretty(&self.value).map_err(|e| {
+            exceptions::PyException::new_err(format!("Could not format settings: {}", e))
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "SettingsValue(path='{}', kind='{}')",
+            self.path,
+            json_type_name(&self.value)
+        )
+    }
+}
+
+impl PySettingsValue {
+    fn from_settings<T: Serialize>(settings: &T, context: &str, path: &str) -> PyResult<Self> {
+        let value = serialize_settings_with_defaults(settings, context).map_err(|e| {
+            exceptions::PyException::new_err(format!("Could not serialize {}: {}", context, e))
+        })?;
+        Ok(Self {
+            value,
+            path: path.to_string(),
+        })
+    }
+
+    fn extend_path(&self, relative_path: &str) -> String {
+        if relative_path.is_empty() {
+            self.path.clone()
+        } else {
+            format!("{}.{}", self.path, relative_path)
+        }
+    }
+}
+
+fn child_field_path(parent: &str, field: &str) -> String {
+    format!("{}.{}", parent, field)
+}
+
+fn child_index_path(parent: &str, index: usize) -> String {
+    format!("{}[{}]", parent, index)
+}
+
+fn py_object_from_settings_value<'py>(
+    py: Python<'py>,
+    value: &JsonValue,
+    path: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        JsonValue::Object(_) | JsonValue::Array(_) => {
+            let value = Py::new(
+                py,
+                PySettingsValue {
+                    value: value.clone(),
+                    path: path.to_string(),
+                },
+            )?;
+            Ok(value.into_bound(py).into_any())
+        }
+        _ => py_builtin_from_settings_value(py, value),
+    }
+}
+
+fn py_builtin_from_settings_value<'py>(
+    py: Python<'py>,
+    value: &JsonValue,
+) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        JsonValue::Null => Ok(py.None().into_bound(py)),
+        JsonValue::Bool(value) => Ok(pyo3::types::PyBool::new(py, *value).to_owned().into_any()),
+        JsonValue::Number(number) => py_builtin_from_json_number(py, number),
+        JsonValue::String(value) => Ok(value.clone().into_pyobject(py)?.into_any()),
+        JsonValue::Array(items) => {
+            let list = PyList::empty(py);
+            for item in items {
+                list.append(py_builtin_from_settings_value(py, item)?)?;
+            }
+            Ok(list.into_any())
+        }
+        JsonValue::Object(map) => {
+            let dict = PyDict::new(py);
+            for (key, value) in map {
+                dict.set_item(key, py_builtin_from_settings_value(py, value)?)?;
+            }
+            Ok(dict.into_any())
+        }
+    }
+}
+
+fn py_builtin_from_json_number<'py>(
+    py: Python<'py>,
+    number: &serde_json::Number,
+) -> PyResult<Bound<'py, PyAny>> {
+    if let Some(value) = number.as_i64() {
+        return Ok(value.into_pyobject(py)?.into_any());
+    }
+    if let Some(value) = number.as_u64() {
+        return Ok(value.into_pyobject(py)?.into_any());
+    }
+    if let Some(value) = number.as_f64() {
+        return Ok(value.into_pyobject(py)?.into_any());
+    }
+    Err(exceptions::PyException::new_err(format!(
+        "Unsupported numeric settings value: {}",
+        number
+    )))
+}
+
+#[cfg(test)]
+mod settings_wrapper_tests {
+    use super::*;
+    use pyo3::types::PyAnyMethods;
+
+    #[test]
+    fn runtime_settings_wrapper_exposes_nested_values() {
+        Python::initialize();
+
+        let mut settings = RuntimeSettings::default();
+        settings.general.generate_events = true;
+        settings.subtraction.disable_threshold_subtraction = true;
+
+        let wrapped =
+            PySettingsValue::from_settings(&settings, "runtime settings", "runtime_settings")
+                .unwrap();
+        assert!(wrapped.keys().unwrap().contains(&"subtraction".to_string()));
+
+        Python::attach(|py| {
+            let subtraction = wrapped.get(py, "subtraction").unwrap();
+            assert!(subtraction
+                .getattr("disable_threshold_subtraction")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
+
+            let settings_dict = wrapped.to_dict(py).unwrap();
+            let general = settings_dict.get_item("general").unwrap();
+            assert!(general
+                .get_item("generate_events")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
+        });
+    }
 }
 
 #[pyclass(from_py_object, name = "ComplexValue", get_all)]
@@ -2065,7 +2354,7 @@ impl GammaLoopAPI {
         &mut self,
         process_id: Option<usize>,
         integrand_name: Option<String>,
-    ) -> PyResult<RuntimeSettings> {
+    ) -> PyResult<PySettingsValue> {
         let (pid, name) = self
             .gammaloop_state
             .process_list
@@ -2076,7 +2365,11 @@ impl GammaLoopAPI {
         match &self.gammaloop_state.process_list.processes[pid].collection {
             ProcessCollection::Amplitudes(amplitudes) => {
                 match &amplitudes.get(&name).unwrap().integrand {
-                    Some(integrand) => Ok::<_, PyErr>(integrand.get_settings().clone()),
+                    Some(integrand) => PySettingsValue::from_settings(
+                        integrand.get_settings(),
+                        "integrand settings",
+                        "integrand_settings",
+                    ),
                     None => Err(exceptions::PyException::new_err(
                         "Integrand for selected amplitude not yet generated",
                     )),
@@ -2084,13 +2377,35 @@ impl GammaLoopAPI {
             }
             ProcessCollection::CrossSections(cross_sections) => {
                 match &cross_sections.get(&name).unwrap().integrand {
-                    Some(integrand) => Ok::<_, PyErr>(integrand.get_settings().clone()),
+                    Some(integrand) => PySettingsValue::from_settings(
+                        integrand.get_settings(),
+                        "integrand settings",
+                        "integrand_settings",
+                    ),
                     None => Err(exceptions::PyException::new_err(
                         "Integrand for selected cross-section not yet generated",
                     )),
                 }
             }
         }
+    }
+
+    #[pyo3(name = "get_global_settings", signature = ())]
+    pub(crate) fn get_global_settings(&self) -> PyResult<PySettingsValue> {
+        PySettingsValue::from_settings(
+            &self.cli_settings.global,
+            "global settings",
+            "global_settings",
+        )
+    }
+
+    #[pyo3(name = "get_default_runtime_settings", signature = ())]
+    pub(crate) fn get_default_runtime_settings(&self) -> PyResult<PySettingsValue> {
+        PySettingsValue::from_settings(
+            &self.default_runtime_settings,
+            "default runtime settings",
+            "default_runtime_settings",
+        )
     }
 
     #[pyo3(name="get_dot_files", signature = (process_id=None, integrand_name=None,settings=DotExportSettings::default()))]

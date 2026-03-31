@@ -178,6 +178,130 @@ fn default_momentum_space_point() -> &'static str {
 
 #[test]
 #[serial]
+fn python_settings_wrappers_expose_nested_runtime_and_global_settings() -> Result<()> {
+    let mut commands = base_setup_commands();
+    commands.push(
+        "set global kv global.display_directive=warn global.generation.threshold_subtraction.enable_thresholds=false"
+            .to_string(),
+    );
+
+    let full_payload = run_python_case(
+        "python_api_settings_wrapper",
+        &commands,
+        r#"
+integrand_settings = api.get_integrand_settings()
+global_settings = api.get_global_settings()
+default_runtime_settings = api.get_default_runtime_settings()
+
+payload = {
+    "integrand_disable_threshold_subtraction": integrand_settings.subtraction.disable_threshold_subtraction,
+    "integrand_external_type": integrand_settings.get("kinematics.externals.type"),
+    "integrand_to_dict_disable_threshold_subtraction": (
+        integrand_settings.to_dict()["subtraction"]["disable_threshold_subtraction"]
+    ),
+    "integrand_keys": integrand_settings.keys(),
+    "global_display_directive": global_settings.display_directive,
+    "global_thresholds_enabled": global_settings.generation.threshold_subtraction.enable_thresholds,
+    "default_runtime_disable_threshold_subtraction": (
+        default_runtime_settings.subtraction.disable_threshold_subtraction
+    ),
+    "integrand_repr": repr(integrand_settings),
+}
+"#,
+    );
+
+    match full_payload {
+        Ok(payload) => {
+            assert_eq!(
+                payload["integrand_disable_threshold_subtraction"].as_bool(),
+                Some(true)
+            );
+            assert_eq!(
+                payload["integrand_external_type"].as_str(),
+                Some("constant")
+            );
+            assert_eq!(
+                payload["integrand_to_dict_disable_threshold_subtraction"].as_bool(),
+                Some(true)
+            );
+            assert!(
+                payload["integrand_keys"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|value| value.as_str() == Some("subtraction"))
+            );
+            assert_eq!(payload["global_display_directive"].as_str(), Some("warn"));
+            assert_eq!(payload["global_thresholds_enabled"].as_bool(), Some(false));
+            assert_eq!(
+                payload["default_runtime_disable_threshold_subtraction"].as_bool(),
+                Some(true)
+            );
+            assert!(
+                payload["integrand_repr"]
+                    .as_str()
+                    .unwrap()
+                    .contains("SettingsValue(")
+            );
+        }
+        Err(err)
+            if err
+                .to_string()
+                .contains("Cannot start new unlicensed Symbolica instance") =>
+        {
+            let fallback_commands = vec![
+                "set global kv global.display_directive=warn global.generation.threshold_subtraction.enable_thresholds=false"
+                    .to_string(),
+                "set default-runtime kv subtraction.disable_threshold_subtraction=true"
+                    .to_string(),
+            ];
+            let payload = run_python_case(
+                "python_api_settings_wrapper_fallback",
+                &fallback_commands,
+                r#"
+global_settings = api.get_global_settings()
+default_runtime_settings = api.get_default_runtime_settings()
+
+payload = {
+    "global_display_directive": global_settings.display_directive,
+    "global_thresholds_enabled": global_settings.generation.threshold_subtraction.enable_thresholds,
+    "default_runtime_disable_threshold_subtraction": (
+        default_runtime_settings.subtraction.disable_threshold_subtraction
+    ),
+    "default_runtime_keys": default_runtime_settings.keys(),
+    "default_runtime_to_dict_disable_threshold_subtraction": (
+        default_runtime_settings.to_dict()["subtraction"]["disable_threshold_subtraction"]
+    ),
+}
+"#,
+            )?;
+
+            assert_eq!(payload["global_display_directive"].as_str(), Some("warn"));
+            assert_eq!(payload["global_thresholds_enabled"].as_bool(), Some(false));
+            assert_eq!(
+                payload["default_runtime_disable_threshold_subtraction"].as_bool(),
+                Some(true)
+            );
+            assert_eq!(
+                payload["default_runtime_to_dict_disable_threshold_subtraction"].as_bool(),
+                Some(true)
+            );
+            assert!(
+                payload["default_runtime_keys"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|value| value.as_str() == Some("subtraction"))
+            );
+        }
+        Err(err) => return Err(err),
+    }
+
+    Ok(())
+}
+
+#[test]
+#[serial]
 fn python_evaluate_sample_preserves_graph_grouping_and_incoming_pdgs() -> Result<()> {
     let mut commands = base_setup_commands();
     commands.push(
