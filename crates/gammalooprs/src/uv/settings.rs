@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::utils::{
     GS,
@@ -83,6 +83,26 @@ impl CTIdentifier {
                 .internal_pdg_set
                 .as_ref()
                 .is_none_or(|internal| candidate.internal_pdg_set.as_ref() == Some(internal))
+    }
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CTRenormalizationRule {
+    pub ct_identifier: CTIdentifier,
+    pub renormalization_scheme: RenormalizationScheme,
+}
+
+impl CTRenormalizationRule {
+    pub fn new(ct_identifier: CTIdentifier, renormalization_scheme: RenormalizationScheme) -> Self {
+        Self {
+            ct_identifier,
+            renormalization_scheme,
+        }
     }
 }
 
@@ -309,6 +329,13 @@ pub struct UVgenerationSettings {
     pub use_legacy: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub cached_integrated: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "IsDefault::is_default",
+        with = "ct_renormalization_map_serde"
+    )]
+    #[schemars(with = "Vec<CTRenormalizationRule>")]
+    pub renormalization_schemes: BTreeMap<CTIdentifier, RenormalizationScheme>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
 }
@@ -325,7 +352,71 @@ impl Default for UVgenerationSettings {
             use_legacy: true,
             cached_integrated: true,
             add_sigma: false,
+            renormalization_schemes: BTreeMap::default(),
             vakint: VakintSettings::default(),
         }
+    }
+}
+
+impl UVgenerationSettings {
+    pub fn renormalization_scheme_for(
+        &self,
+        ct_identifier: &CTIdentifier,
+    ) -> RenormalizationScheme {
+        if let Some(scheme) = self.renormalization_schemes.get(ct_identifier) {
+            return *scheme;
+        }
+
+        self.renormalization_schemes
+            .iter()
+            .find_map(|(rule, scheme)| {
+                (rule.internal_pdg_set.is_none() && rule.matches(ct_identifier)).then_some(*scheme)
+            })
+            .unwrap_or_default()
+    }
+}
+
+mod ct_renormalization_map_serde {
+    use super::{CTIdentifier, CTRenormalizationRule, RenormalizationScheme};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
+    use std::collections::BTreeMap;
+
+    pub fn serialize<S>(
+        map: &BTreeMap<CTIdentifier, RenormalizationScheme>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        map.iter()
+            .map(|(ct_identifier, renormalization_scheme)| {
+                CTRenormalizationRule::new(ct_identifier.clone(), *renormalization_scheme)
+            })
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<BTreeMap<CTIdentifier, RenormalizationScheme>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let rules = Vec::<CTRenormalizationRule>::deserialize(deserializer)?;
+        let mut map = BTreeMap::new();
+
+        for rule in rules {
+            if map
+                .insert(rule.ct_identifier.clone(), rule.renormalization_scheme)
+                .is_some()
+            {
+                return Err(D::Error::custom(format!(
+                    "duplicate CTIdentifier in renormalization_schemes: {:?}",
+                    rule.ct_identifier
+                )));
+            }
+        }
+
+        Ok(map)
     }
 }
