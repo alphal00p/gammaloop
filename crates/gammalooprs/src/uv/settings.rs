@@ -420,3 +420,78 @@ mod ct_renormalization_map_serde {
         Ok(map)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{CTIdentifier, RenormalizationScheme, UVgenerationSettings};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
+        values.into_iter().collect()
+    }
+
+    #[test]
+    fn renormalization_scheme_prefers_exact_internal_match_over_wildcard() {
+        let exact_identifier = CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])));
+        let wildcard_identifier = CTIdentifier::new(pdg_set([1]), None);
+        let settings = UVgenerationSettings {
+            renormalization_schemes: BTreeMap::from([
+                (wildcard_identifier, RenormalizationScheme::Unsubtracted),
+                (exact_identifier.clone(), RenormalizationScheme::OS),
+            ]),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&exact_identifier),
+            RenormalizationScheme::OS
+        );
+    }
+
+    #[test]
+    fn renormalization_scheme_matches_wildcard_internal_rule() {
+        let candidate_identifier = CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])));
+        let settings = UVgenerationSettings {
+            renormalization_schemes: BTreeMap::from([(
+                CTIdentifier::new(pdg_set([1]), None),
+                RenormalizationScheme::OS,
+            )]),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&candidate_identifier),
+            RenormalizationScheme::OS
+        );
+    }
+
+    #[test]
+    fn renormalization_scheme_can_select_unsubtracted() {
+        let candidate_identifier = CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])));
+        let settings = UVgenerationSettings {
+            renormalization_schemes: BTreeMap::from([(
+                CTIdentifier::new(pdg_set([1]), None),
+                RenormalizationScheme::Unsubtracted,
+            )]),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&candidate_identifier),
+            RenormalizationScheme::Unsubtracted
+        );
+    }
+
+    #[test]
+    fn renormalization_scheme_defaults_to_msbar() {
+        let settings = UVgenerationSettings::default();
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&CTIdentifier::new(
+                pdg_set([1]),
+                Some(pdg_set([1, 22]))
+            )),
+            RenormalizationScheme::MSbar
+        );
+    }
+}
