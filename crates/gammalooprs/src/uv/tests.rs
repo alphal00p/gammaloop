@@ -16,7 +16,6 @@ use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
-use crate::utils::symbolica_ext::TypstFormat;
 use crate::utils::{GS, W_};
 use crate::uv::UVgenerationSettings;
 use crate::uv::approx::CutStructure;
