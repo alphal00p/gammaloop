@@ -7,7 +7,7 @@ use crate::{
         symbolica_ext::{LOGPRINTOPTS, LogPrint},
     },
     uv::{
-        UVgenerationSettings,
+        Spinney, UVgenerationSettings,
         approx::{integrated::Integrated, local_3d::Local3DApproximation},
     },
 };
@@ -23,10 +23,7 @@ use symbolica::{
     function, parse_lit, symbol,
 };
 
-use linnet::half_edge::{
-    HedgeGraph,
-    subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
-};
+use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 
 use tracing::instrument;
 use vakint::{Vakint, vakint_symbol};
@@ -134,10 +131,7 @@ impl SimpleApprox {
 
 #[derive(Clone)]
 pub struct Approximation {
-    // The union of all spinneys, remaining graph is full graph minus subgraph
-    pub subgraph: InternalSubGraph,
-    pub dod: i32,
-    pub lmb: LoopMomentumBasis,
+    pub spinney: Spinney,
     pub local_3d: CFFapprox, //3d denoms
     pub final_integrand: Option<Vec<Atom>>,
     pub integrated_4d: ApproxOp,
@@ -147,19 +141,22 @@ pub struct Approximation {
 
 impl ForestNodeLike for Approximation {
     fn dod(&self) -> i32 {
-        self.dod
+        self.spinney.dod
     }
 
     fn lmb(&self) -> &LoopMomentumBasis {
-        &self.lmb
+        &self.spinney.lmb
     }
 
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph {
-        self.subgraph.subtract(&given.subgraph).filter
+        self.spinney
+            .subgraph
+            .subtract(&given.spinney.subgraph)
+            .filter
     }
 
     fn subgraph(&self) -> &SuBitGraph {
-        &self.subgraph.filter
+        self.spinney.filter()
     }
 
     fn topo_order(&self) -> usize {
@@ -237,7 +234,7 @@ impl Approximation {
         cuts: &CutSet,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
+        self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
         if settings.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
@@ -249,20 +246,9 @@ impl Approximation {
         Ok(())
     }
 
-    pub(crate) fn new<G, E, V, H>(
-        spinney: InternalSubGraph,
-        graph: &G,
-        lmb: &LoopMomentumBasis,
-    ) -> Approximation
-    where
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-    {
-        let lmb = graph.compatible_sub_lmb(&spinney, graph.dummy_less_full_crown(&spinney), lmb);
-        // println!("//lmb for spinney \n{}", graph.dot_lmb(&spinney, &lmb));
+    pub(crate) fn new(spinney: Spinney) -> Approximation {
         Approximation {
-            dod: graph.dod(&spinney),
-            subgraph: spinney,
-            lmb,
+            spinney,
             topo_order: 0,
             final_integrand: None,
             simple_approx: None,
@@ -345,7 +331,7 @@ impl Approximation {
         );
 
         let CFFapprox::Dependent { t_arg, .. } =
-            CFFapprox::dependent(graph, &dependent.subgraph.filter, cuts, settings)?
+            CFFapprox::dependent(graph, dependent.spinney.filter(), cuts, settings)?
         else {
             unreachable!()
         };
@@ -410,14 +396,14 @@ impl Approximation {
         );
 
         let CFFapprox::Dependent { t_arg, .. } =
-            CFFapprox::dependent(graph, &self.subgraph.filter, cutset, settings)?
+            CFFapprox::dependent(graph, self.spinney.filter(), cutset, settings)?
         else {
             unreachable!()
         };
 
         let reduced = graph
             .full_filter()
-            .subtract(self.subgraph.included())
+            .subtract(self.spinney.subgraph.included())
             .subtract(&graph.initial_state_cut);
 
         let mut integrands = vec![];
@@ -437,7 +423,7 @@ impl Approximation {
             cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
 
             let mut resnum = graph
-                .numerator(&reduced, self.subgraph.included())
+                .numerator(&reduced, self.spinney.subgraph.included())
                 .get_single_atom()
                 .unwrap();
 
@@ -474,7 +460,7 @@ impl Approximation {
                     .as_ref()
                     .unwrap()
                     .expr(&graph.full_filter()),
-                self.dod,
+                self.spinney.dod,
                 // orientations
                 //     .first()
                 //     .unwrap()

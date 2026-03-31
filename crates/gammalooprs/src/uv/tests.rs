@@ -17,13 +17,13 @@ use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
 use crate::utils::{GS, W_};
-use crate::uv::UVgenerationSettings;
 use crate::uv::approx::CutStructure;
 use crate::uv::profile::{ProfileSettings, UVProfileable};
 use crate::uv::wood::CutWoods;
+use crate::uv::{Spinney, UVgenerationSettings};
 use linnet::half_edge::involution::EdgeIndex;
 
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
 use symbolica::atom::Symbol;
@@ -256,6 +256,31 @@ fn scalars_profile() {
         "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
         scalar_profile_tables(&analysis, -0.9)
     );
+}
+
+#[test]
+fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
+    let (amp, _model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        ..Default::default()
+    });
+    let graph = &amp.graphs[0].graph;
+
+    let mut uv_subgraph = graph.full_filter();
+    uv_subgraph.subtract_with(&graph.initial_state_cut.left);
+
+    let subgraph = graph
+        .spinneys(&uv_subgraph)
+        .into_iter()
+        .next()
+        .expect("expected at least one UV spinney");
+    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis);
+    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis);
+
+    assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
 }
 
 #[test]

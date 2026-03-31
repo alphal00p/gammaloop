@@ -49,6 +49,9 @@ pub use settings::{
 pub mod uv_graph;
 pub use uv_graph::UltravioletGraph;
 
+pub mod spinney;
+pub use spinney::Spinney;
+
 pub mod poset;
 pub use poset::Poset;
 

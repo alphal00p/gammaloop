@@ -1,6 +1,6 @@
 use crate::{
     graph::{Graph, LoopMomentumBasis},
-    uv::{UVgenerationSettings, approx::CutStructure, forest::CutForests},
+    uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
 };
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
@@ -34,9 +34,13 @@ impl CutWoods {
             subgraph.subtract_with(&cut.union);
 
             let spinneys: Vec<_> = if settings.subtract_uv {
-                graph.spinneys(&subgraph).into_iter().collect()
+                graph
+                    .spinneys(&subgraph)
+                    .into_iter()
+                    .map(|spinney| Spinney::new(spinney, graph, &graph.loop_momentum_basis))
+                    .collect()
             } else {
-                vec![graph.empty_subgraph()]
+                vec![Spinney::empty(&graph)]
             };
             let wood = Wood::from_spinneys(spinneys, graph);
 
@@ -66,13 +70,13 @@ impl CutWoods {
 }
 
 pub struct Wood {
-    poset: Poset<InternalSubGraph, ()>,
+    poset: Poset<Spinney, ()>,
     pub max_loops: usize,
     additional_unions: SecondaryMap<PosetNode, Vec<PosetNode>>,
 }
 
 impl Wood {
-    pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = InternalSubGraph>>(
+    pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: impl AsRef<HedgeGraph<E, V, H>>,
     ) -> Self {
@@ -86,13 +90,8 @@ impl Wood {
         let mut unions = SecondaryMap::new();
 
         for (i, sg) in poset.nodes.iter() {
-            let cs = ref_graph.connected_components(&sg.data);
-            let nloop = cs.iter().map(|c| ref_graph.cyclotomatic_number(c)).max();
-            if let Some(nloop) = nloop
-                && nloop > max_loops
-            {
-                max_loops = nloop;
-            }
+            let cs = ref_graph.connected_components(sg.data.filter());
+            max_loops = max_loops.max(sg.data.max_comp_loop_count());
 
             if cs.len() > 1 {
                 // sg is a disjoint union of spinneys (at the level of half-edges) (strongly disjoint)
@@ -103,7 +102,7 @@ impl Wood {
                     for comp in &cs {
                         let comp =
                             InternalSubGraph::cleaned_filter_optimist(comp.clone(), ref_graph);
-                        if comp == poset.nodes[c].data {
+                        if comp == poset.nodes[c].data.subgraph {
                             // find the components in the wood that this union is made of
                             union.push(c);
                             is_in += 1;
@@ -131,8 +130,8 @@ impl Wood {
     #[allow(clippy::type_complexity)]
     fn unfold_bfs<E, V, H, G>(
         &self,
-        graph: &G,
-        lmb: &LoopMomentumBasis,
+        _graph: &G,
+        _lmb: &LoopMomentumBasis,
         dag: &mut DAG<Approximation, DagNode, ()>,
         unions: &mut SecondaryMap<PosetNode, Option<Vec<(PosetNode, Option<DagNode>)>>>,
         root: PosetNode,
@@ -143,11 +142,7 @@ impl Wood {
         // let graph = graph.as_ref();
         let mut search_front = VecDeque::new();
 
-        let tree_root = dag.add_node(Approximation::new(
-            self.poset.data(root).clone(),
-            graph,
-            lmb,
-        ));
+        let tree_root = dag.add_node(Approximation::new(self.poset.data(root).clone()));
         search_front.push_front((root, tree_root));
 
         while let Some((node, parent)) = search_front.pop_front() {
@@ -165,11 +160,8 @@ impl Wood {
                             }
                         }
                         if all_supplied {
-                            let child = dag.add_node(Approximation::new(
-                                self.poset.data(*c).clone(),
-                                graph,
-                                lmb,
-                            ));
+                            let child =
+                                dag.add_node(Approximation::new(self.poset.data(*c).clone()));
                             for (_, d) in union {
                                 dag.add_edge(d.unwrap(), child);
                             }
@@ -179,8 +171,7 @@ impl Wood {
                         }
                     }
                 } else {
-                    let child =
-                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph, lmb));
+                    let child = dag.add_node(Approximation::new(self.poset.data(*c).clone()));
                     dag.add_edge(parent, child);
                     search_front.push_front((*c, child));
                 }
