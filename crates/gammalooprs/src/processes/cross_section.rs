@@ -1046,7 +1046,7 @@ impl CrossSectionGraph {
 
         let cut_structure = CutStructure { cuts };
 
-        let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv.vakint);
+        let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
 
         let lu_prefactor = self.lu_prefactor_helper_new();
         let cutkosky_corrections = self

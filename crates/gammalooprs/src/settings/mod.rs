@@ -391,6 +391,12 @@ mod tests {
     }
 
     #[test]
+    fn test_uv_generation_settings_serialize_deserialize() {
+        use crate::uv::UVgenerationSettings;
+        generic_test_settings::<UVgenerationSettings>();
+    }
+
+    #[test]
     fn test_overlap_settings_serialize_deserialize() {
         use crate::settings::runtime::OverlapSettings;
         generic_test_settings::<OverlapSettings>();

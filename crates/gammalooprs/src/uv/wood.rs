@@ -1,6 +1,6 @@
 use crate::{
     graph::{Graph, LoopMomentumBasis},
-    uv::{approx::CutStructure, forest::CutForests, settings::VakintSettings},
+    uv::{UVgenerationSettings, approx::CutStructure, forest::CutForests},
 };
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
@@ -25,25 +25,30 @@ pub struct CutWoods {
 }
 
 impl CutWoods {
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, vakint_settings: &VakintSettings) -> Self {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
         let mut woods = vec![];
-        let mut settings = vec![];
+        let mut vakint_settings = vec![];
         for cut in cuts.cuts.iter() {
             let mut subgraph = graph.full_filter();
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
-            let wood = Wood::from_spinneys(graph.spinneys(&subgraph).iter().cloned(), graph);
+            let spinneys: Vec<_> = if settings.subtract_uv {
+                graph.spinneys(&subgraph).into_iter().collect()
+            } else {
+                vec![graph.empty_subgraph()]
+            };
+            let wood = Wood::from_spinneys(spinneys, graph);
 
-            let mut lvk_settings = vakint_settings.true_settings();
+            let mut lvk_settings = settings.vakint.true_settings();
             lvk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
-            settings.push(lvk_settings);
+            vakint_settings.push(lvk_settings);
             woods.push(wood);
         }
         CutWoods {
             cuts,
             woods,
-            settings,
+            settings: vakint_settings,
         }
     }
 

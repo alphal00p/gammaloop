@@ -17,7 +17,7 @@ use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{ExternalIndex, LoopIndex};
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::RuntimeSettings;
-use crate::utils::{F, f128};
+use crate::utils::F;
 use crate::uv::UltravioletGraph;
 use crate::{
     graph::LoopMomentumBasis,
@@ -333,6 +333,19 @@ pub struct UVProfileSubsetAnalysis {
     // pub subset_label: String,
     pub analysis: Analysis,
     pub analytic_entries: Option<Vec<UVProfileAnalyticEntry>>,
+}
+
+impl UVProfileSubsetAnalysis {
+    pub fn estimated_dod(&self) -> Option<i64> {
+        self.analysis
+            .inspect_level
+            .as_ref()
+            .map(|analysis| analysis.estimated_dod)
+    }
+
+    pub fn bare_dod_matches_estimate(&self) -> bool {
+        self.estimated_dod() == Some(i64::from(self.initial_dod))
+    }
 }
 
 // #[derive(Debug, Clone, Serialize)]
@@ -829,9 +842,8 @@ impl<'a> UVProfileRunner<'a> {
                     })
                     .collect();
 
-                let (inspect_res_jac, inspect_res_eval) = evaluate_momentum_space_point(
+                let inspect_res_eval = evaluate_momentum_space_point(
                     integrand,
-                    self.settings,
                     self.model,
                     pt,
                     graph_id,
@@ -841,7 +853,6 @@ impl<'a> UVProfileRunner<'a> {
                 Ok(InspectResult {
                     result: inspect_res_eval,
                     prefactor,
-                    jacobian: inspect_res_jac.expect("missing inspect jacobian"),
                 })
             })
             .collect::<Result<Vec<_>>>()?;
@@ -984,27 +995,15 @@ impl SubSetResult {
 }
 fn evaluate_momentum_space_point(
     integrand: &mut ProcessIntegrand,
-    settings: &RuntimeSettings,
     model: &Model,
     pt: Vec<F<f64>>,
     graph_id: usize,
     use_arb_prec: bool,
-) -> Result<(Option<f64>, EvaluationResult)> {
+) -> Result<EvaluationResult> {
     let loop_momenta = pt
         .chunks_exact(3)
         .map(|x| ThreeMomentum::new(x[0], x[1], x[2]))
         .collect::<Vec<_>>();
-    let (_, inv_jac) = crate::utils::global_inv_parameterize::<f128>(
-        &loop_momenta
-            .iter()
-            .map(|momentum| momentum.higher())
-            .collect::<Vec<_>>(),
-        F(settings.kinematics.e_cm).higher(),
-        &settings
-            .sampling
-            .get_parameterization_settings()
-            .ok_or_else(|| eyre!("Invalid sampling method for momentum-space inspect."))?,
-    );
     let input = MomentumSpaceEvaluationInput {
         loop_momenta,
         integrator_weight: F(1.0),
@@ -1013,21 +1012,17 @@ fn evaluate_momentum_space_point(
         orientation: None,
         channel_id: None,
     };
-    Ok((
-        Some(inv_jac.inv().0.to_f64()),
-        integrand.evaluate_momentum_configuration(model, &input, use_arb_prec)?,
-    ))
+    integrand.evaluate_momentum_configuration(model, &input, use_arb_prec)
 }
 
 pub struct InspectResult {
     pub(crate) result: EvaluationResult,
     pub(crate) prefactor: f64,
-    pub(crate) jacobian: f64,
 }
 
 impl InspectResult {
     fn magnitude(&self) -> f64 {
-        self.result.integrand_result.norm_squared().sqrt().0 * self.prefactor / self.jacobian
+        self.result.integrand_result.norm_squared().sqrt().0 * self.prefactor
     }
 }
 

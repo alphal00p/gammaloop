@@ -793,7 +793,7 @@ impl AmplitudeGraph {
         let cutstructure = CutStructure {
             cuts: vec![CutSet::empty(self.graph.n_hedges())],
         };
-        let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv.vakint);
+        let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
         forests.compute(&mut self.graph, vakint, &settings.uv)?;
         let exprs: Vec<_> = forests
@@ -882,7 +882,7 @@ impl AmplitudeGraph {
 
         let cut_structure = CutStructure { cuts };
 
-        let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv.vakint);
+        let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
         forests.compute(&mut self.graph, vakint, &settings.uv)?;
 
