@@ -138,6 +138,20 @@ fn build_uv_scalars_amplitude(subtract_uv: bool) -> (Amplitude, Model) {
     test_initialise().unwrap();
 
     let g: Vec<Graph> = dot!(
+
+        digraph banana{
+            edge [particle=scalar_1]
+            node [num=1]
+            e        [style=invis]
+            // params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            e -> A:0   [ id=5]
+            B:1 -> e   [ id=4]
+            A -> B    [ id=1]
+            A -> B    [ id=2]
+            A -> B    [ id=3]
+            A -> B    [ id=0]
+        }
+
         digraph sunrise{
             edge [particle=scalar_1]
             node [num=1]
@@ -203,32 +217,53 @@ fn build_uv_scalars_amplitude(subtract_uv: bool) -> (Amplitude, Model) {
     (amp, model)
 }
 
+fn scalar_uv_profile_settings() -> ProfileSettings {
+    ProfileSettings {
+        n_points: 17,
+        min_scale_exponent: 4.0,
+        max_scale_exponent: 8.0,
+        ..ProfileSettings::default()
+    }
+}
+
+fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_dod: f64) -> String {
+    let mut sections = analysis
+        .tables_per_graph(max_dod)
+        .into_iter()
+        .map(|table| table.to_string())
+        .collect::<Vec<_>>();
+    sections.extend(
+        analysis
+            .analytic_tables_per_graph()
+            .into_iter()
+            .flatten()
+            .map(|table| table.to_string()),
+    );
+    sections.join("\n\n")
+}
+
 #[test]
 fn scalars_profile() {
     let (mut amp, model) = build_uv_scalars_amplitude(true);
 
-    let profile_settings = ProfileSettings::default();
+    let profile_settings = scalar_uv_profile_settings();
     let res = amp.profile(&model, &profile_settings).unwrap();
-
-    assert_eq!(res.pass_fail(-0.9, &profile_settings).failed, 0);
     let analysis = res.analyse();
-    for t in analysis.tables_per_graph(-0.9) {
-        println!("{}", t);
-    }
-
-    for t in analysis.analytic_tables_per_graph() {
-        let Some(t) = t else {
-            continue;
-        };
-        println!("{}", t);
-    }
+    let pass_fail = res.pass_fail(-0.9, &profile_settings);
+    assert_eq!(
+        pass_fail.failed,
+        0,
+        "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
+        scalar_profile_tables(&analysis, -0.9)
+    );
 }
+
 #[test]
 fn unsubtracted_scalars() {
     test_initialise().unwrap();
     let (mut amp, model) = build_uv_scalars_amplitude(false);
 
-    let profile_settings = ProfileSettings::default();
+    let profile_settings = scalar_uv_profile_settings();
     let res = amp.profile(&model, &profile_settings).unwrap();
 
     let analysis = res.analyse();
