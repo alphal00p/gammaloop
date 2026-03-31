@@ -9,7 +9,7 @@ use crate::{
     graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_},
     uv::{
-        UltravioletGraph,
+        RenormalizationScheme, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
         uv_graph::UVE,
     },
@@ -136,56 +136,56 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
         //     atomarg, current.dod(), current.lmb().ext_edges
         // );
 
-        let soft_ct = graph.full_crown(current.subgraph()).n_included() == 2
+        let soft_ct = current.renormalization_scheme() == RenormalizationScheme::OS
+            && graph.full_crown(current.subgraph()).n_included() == 2
             && current.dod() > 0
             && settings.softct;
+
+        if soft_ct {
+            info!(
+                subgraph = %current.subgraph().string_label(),
+                "OS local soft counterterm path is not implemented yet; using the standard UV expansion"
+            );
+        }
 
         // (re-)expand OSEs from the subgraph only
         for (_, eid, _) in graph.iter_edges_of(current.subgraph()) {
             let eid = usize::from(eid) as i64;
-            if soft_ct {
-                info!("DOing soft ct{}", graph.dot(current.subgraph()));
-                // TODO: rescale the masses in OSEs
-                // TODO: also scale masses in the numerator _only_ for the subgraph
-                // expand the OSEs around an OSE with a UV mass
-                todo!()
-            } else {
-                // rescale the whole OSE so that the function itself has no poles during the expansion
-                atomarg = atomarg
-                    .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_))
-                    .with(
-                        function!(
-                            GS.ose,
-                            eid,
-                            W_.mom_,
-                            GS.m_uv * GS.m_uv,
-                            (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
-                                - GS.m_uv * GS.m_uv)
-                                / GS.rescale
-                                / GS.rescale
-                        ) * GS.rescale
-                            * GS.rescale,
-                    )
-                    .replace(function!(GS.ose, eid, W_.mom_, W_.a___)) //rescale the momenta for the same reason
-                    .with_map(move |m| {
-                        let mut f = FunctionBuilder::new(GS.ose);
-                        f = f.add_arg(eid);
-                        f = f.add_arg(
-                            (m.get(W_.mom_)
-                                .unwrap()
-                                .to_atom()
-                                .replace(GS.rescale)
-                                .with(Atom::num(1) / GS.rescale)
-                                * GS.rescale)
-                                .expand()
-                                .replace(GS.rescale)
-                                .with(Atom::Zero),
-                        );
-                        f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
+            // rescale the whole OSE so that the function itself has no poles during the expansion
+            atomarg = atomarg
+                .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_))
+                .with(
+                    function!(
+                        GS.ose,
+                        eid,
+                        W_.mom_,
+                        GS.m_uv * GS.m_uv,
+                        (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
+                            - GS.m_uv * GS.m_uv)
+                            / GS.rescale
+                            / GS.rescale
+                    ) * GS.rescale
+                        * GS.rescale,
+                )
+                .replace(function!(GS.ose, eid, W_.mom_, W_.a___)) //rescale the momenta for the same reason
+                .with_map(move |m| {
+                    let mut f = FunctionBuilder::new(GS.ose);
+                    f = f.add_arg(eid);
+                    f = f.add_arg(
+                        (m.get(W_.mom_)
+                            .unwrap()
+                            .to_atom()
+                            .replace(GS.rescale)
+                            .with(Atom::num(1) / GS.rescale)
+                            * GS.rescale)
+                            .expand()
+                            .replace(GS.rescale)
+                            .with(Atom::Zero),
+                    );
+                    f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
 
-                        f.finish()
-                    });
-            }
+                    f.finish()
+                });
         }
 
         // atomarg = atomarg
