@@ -1,5 +1,7 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
+use std::collections::BTreeSet;
+
 use crate::cff::expression::OrientationID;
 
 use crate::graph::cuts::CutSet;
@@ -20,7 +22,8 @@ use crate::utils::{GS, W_};
 use crate::uv::approx::CutStructure;
 use crate::uv::profile::{ProfileSettings, UVProfileable};
 use crate::uv::wood::CutWoods;
-use crate::uv::{Spinney, UVgenerationSettings};
+use crate::uv::{Spinney, UVgenerationSettings, UltravioletGraph};
+
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
@@ -220,6 +223,25 @@ fn scalar_uv_profile_settings() -> ProfileSettings {
     }
 }
 
+fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
+    values.into_iter().collect()
+}
+
+fn build_tta_uv_graph() -> Graph {
+    dot!(
+        digraph G {
+            e [style=invis];
+            e -> A:0 [id=0 particle="t"];
+            B:1 -> e [id=1 particle="t"];
+            e -> C:2 [id=2 particle="a"];
+            A -> B [particle="g" lmb_index=0];
+            C -> B [particle="t"];
+            A -> C [particle="t"];
+        }
+    )
+    .unwrap()
+}
+
 fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_dod: f64) -> String {
     let mut sections = analysis
         .tables_per_graph(max_dod)
@@ -234,6 +256,22 @@ fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_d
             .map(|table| table.to_string()),
     );
     sections.join("\n\n")
+}
+
+#[test]
+fn ct_identifier_flips_outgoing_boundary_pdgs() {
+    test_initialise().unwrap();
+
+    let graph = build_tta_uv_graph();
+    let spinney = graph
+        .spinneys(&graph.full_filter())
+        .into_iter()
+        .next()
+        .expect("tta triangle should have a UV spinney");
+    let identifier = graph.ct_identifier(&spinney.filter);
+
+    assert_eq!(identifier.internal_pdg_set, Some(pdg_set([6, 21])));
+    assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
 }
 
 #[test]

@@ -397,6 +397,36 @@ mod tests {
     }
 
     #[test]
+    fn test_uv_generation_settings_serializes_renormalization_rules() {
+        use crate::uv::{CTIdentifier, RenormalizationScheme, UVgenerationSettings};
+        use std::collections::{BTreeMap, BTreeSet};
+
+        let settings = UVgenerationSettings {
+            renormalization_schemes: BTreeMap::from([
+                (
+                    CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
+                    RenormalizationScheme::OS,
+                ),
+                (
+                    CTIdentifier::new(BTreeSet::from([6]), None),
+                    RenormalizationScheme::Unsubtracted,
+                ),
+            ]),
+            ..Default::default()
+        };
+
+        let toml = toml::to_string_pretty(&settings).unwrap();
+        assert!(toml.contains("[[renormalization_schemes]]"));
+
+        let deserialized_from_toml: UVgenerationSettings = toml::from_str(&toml).unwrap();
+        assert_eq!(settings, deserialized_from_toml);
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let deserialized_from_json: UVgenerationSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(settings, deserialized_from_json);
+    }
+
+    #[test]
     fn test_overlap_settings_serialize_deserialize() {
         use crate::settings::runtime::OverlapSettings;
         generic_test_settings::<OverlapSettings>();
