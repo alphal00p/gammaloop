@@ -9,10 +9,7 @@ use linnet::half_edge::{
 };
 use spenso::{
     network::{library::symbolic::ETS, parsing::SPENSO_TAG},
-    structure::{
-        representation::{Minkowski, RepName},
-        slot::{DummyAind, IsAbstractSlot, Slot},
-    },
+    structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -26,7 +23,6 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     graph::LMBext,
-    numerator::aind::Aind,
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
@@ -348,13 +344,13 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
 
                 res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
 
-                let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+                let spatial_norm_sq = Minkowski {}
+                    .new_rep(4)
+                    .inner_product(GS.emr_vec(*l), GS.emr_vec(*l));
 
                 // multiply CFF triangle
-                res *= Atom::num((3, 16))
-                    / (GS.emr_vec_index(*l, mink.to_atom()) * GS.emr_vec_index(*l, mink.to_atom())
-                        + GS.m_uv_int * GS.m_uv_int)
-                        .pow((5, 2));
+                res *=
+                    Atom::num((3, 16)) / (spatial_norm_sq + GS.m_uv_int * GS.m_uv_int).pow((5, 2));
             }
         }
 

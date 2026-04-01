@@ -56,7 +56,7 @@ fn scalar_pole_part() {
 }
 
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
-    (model
+    ((model
         .apply_parameter_replacement_rules(
             &model.apply_coupling_replacement_rules(&atom.simplify_color().expand()),
         )
@@ -71,6 +71,8 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
         / -8)
         .expand_num()
+        * Atom::i())
+    .expand_num()
 }
 
 #[test]
@@ -844,7 +846,7 @@ fn finite_part_ghost_2loop() {
 
     let new_settings = UVgenerationSettings {
         use_legacy: false,
-        cached_integrated: false,
+        cached: false,
         ..settings.clone()
     };
 
@@ -884,7 +886,7 @@ fn finite_part_ghost_2loop() {
         );
 
         let mut cached_settings = new_settings.clone();
-        cached_settings.cached_integrated = true;
+        cached_settings.cached = true;
 
         let new_cached_part = amp.renormalization_part(&cached_settings).unwrap();
         let cached_kernel_hits = new_cached_part.stats.kernel_hits;
