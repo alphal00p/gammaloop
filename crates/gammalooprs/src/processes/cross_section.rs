@@ -47,7 +47,7 @@ use crate::{
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Orientation},
+    involution::{EdgeVec, Orientation},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
@@ -69,7 +69,6 @@ use crate::{
         cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
     model::Model,
-    numerator::ParsingNet,
 };
 
 use crate::processes::ProcessDefinition;
@@ -860,7 +859,7 @@ impl CrossSectionGraph {
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
 
-        let lu_prefactor = self.lu_prefactor_helper_new();
+        let lu_prefactor = self.lu_prefactor_helper();
         let cutkosky_corrections = self
             .derived_data
             .raised_data
@@ -898,7 +897,7 @@ impl CrossSectionGraph {
         Ok(parametric_integrands
             .into_iter()
             .zip(cutkosky_corrections)
-            .map(|(integrand, cutkosky_correction)| {
+            .map(|(integrand, _cutkosky_correction)| {
                 integrand.map(|a| a * &lu_prefactor /* * &cutkosky_correction */)
             })
             .collect())
@@ -915,19 +914,6 @@ impl CrossSectionGraph {
     }
 
     fn lu_prefactor_helper(&self) -> Atom {
-        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
-            - self.graph.initial_state_cut.nedges(&self.graph);
-
-        let loop_3 = loop_number as i64 * 3;
-        let grad_eta = Atom::var(GS.deta_lu_cut);
-        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3 - 1); // multiply with 2pi from energy conservation delta
-
-        let tstar = Atom::var(GS.rescale_star);
-        let tsrat_pow = tstar.pow(loop_3);
-        let hfunction = Atom::var(GS.hfunction_lu_cut);
-        tsrat_pow * hfunction / factors_of_pi / grad_eta
-    }
-    fn lu_prefactor_helper_new(&self) -> Atom {
         let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
             - self.graph.initial_state_cut.nedges(&self.graph);
 
@@ -1197,7 +1183,7 @@ impl CrossSectionGraph {
                 .dedup()
                 .collect();
 
-            right_thresholds.retain(|esurface_id| left_thresholds.contains(esurface_id));
+            right_thresholds.retain(|esurface_id| !left_thresholds.contains(esurface_id));
 
             left_raised_cut_threshold_data.push(left_thresholds.into());
             right_raised_cut_threshold_data.push(right_thresholds.into());
@@ -1325,7 +1311,7 @@ impl CrossSectionGraph {
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
             .into_iter();
 
-        let lu_prefactor = self.lu_prefactor_helper_new();
+        let lu_prefactor = self.lu_prefactor_helper();
 
         let mut result = TiVec::<RaisedCutId, LUCounterTermData>::new();
         for (raised_cut_id, _raised_cut_group) in self
@@ -1391,8 +1377,8 @@ impl CrossSectionGraph {
             let counterterm_data = LUCounterTermData {
                 left_thresholds: left_raised_cut_threshold_data[raised_cut_id].clone(),
                 right_thresholds: right_raised_cut_threshold_data[raised_cut_id].clone(),
-                left_atoms: left_atoms,
-                right_atoms: right_atoms,
+                left_atoms,
+                right_atoms,
                 iterated: iterated_collection,
             };
             result.push(counterterm_data);

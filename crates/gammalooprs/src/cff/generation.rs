@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use crate::{
     cff::{
-        cff_graph::{CFFEdge, CFFEdgeType, CFFVertex},
-        esurface::remove_zeros_duplicates,
         expression::OrientationData,
         hsurface::{Hsurface, HsurfaceID},
         surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
@@ -16,7 +14,6 @@ use ahash::HashSet;
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
-use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
@@ -144,125 +141,7 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-pub(crate) fn generate_supergraph_cff(graph: &Graph) -> Result<CFFExpression<OrientationID>> {
-    // lots of gymnastics to handle the is cut
-
-    let graph_without_is_cut = graph.underlying.full_filter().subtract(
-        &graph
-            .initial_state_cut
-            .left
-            .union(&graph.initial_state_cut.right),
-    );
-
-    let mut orientations =
-        get_orientations_from_subgraph(&graph.underlying, &graph_without_is_cut, &[]);
-
-    let representative_cff_graph = orientations.first().ok_or(eyre!("no orientations"))?;
-
-    let incoming_nodes_pairs = graph
-        .iter_edges_of(&graph.initial_state_cut.right)
-        .map(|(pair, edge_id, _)| match pair {
-            HedgePair::Split { sink, .. } => {
-                let node_id = graph.node_id(sink);
-
-                println!("node id: {:?}", node_id);
-                let cff_vertex = CFFVertex::new(node_id.0);
-                println!("cff vertex: {:?}", cff_vertex);
-                let index = representative_cff_graph
-                    .vertices
-                    .iter()
-                    .position(|v| v.vertex_set == cff_vertex.vertex_set)
-                    .unwrap();
-
-                (index, edge_id)
-            }
-            _ => {
-                unreachable!()
-            }
-        })
-        .collect_vec();
-
-    let dummy_id_for_base_for_outgoing = graph.n_edges();
-    let mut dummy_id_map = HashMap::<EdgeIndex, EdgeIndex>::new();
-
-    let outgoing_node_pairs = graph
-        .iter_edges_of(&graph.initial_state_cut.left)
-        .map(|(pair, edge_id, _)| match pair {
-            HedgePair::Split { source, .. } => {
-                let node_id = graph.node_id(source);
-                let cff_vertex = CFFVertex::new(node_id.0);
-                let index = representative_cff_graph
-                    .vertices
-                    .iter()
-                    .position(|v| v.vertex_set == cff_vertex.vertex_set)
-                    .unwrap();
-
-                let dummy_edge_id = EdgeIndex::from(dummy_id_for_base_for_outgoing + edge_id.0);
-                dummy_id_map.insert(dummy_edge_id, edge_id);
-
-                (index, dummy_edge_id)
-            }
-            _ => {
-                unreachable!()
-            }
-        })
-        .collect_vec();
-
-    //drop(representative_cff_graph);
-    for orientation in orientations.iter_mut() {
-        for &(node_id, edge_id) in incoming_nodes_pairs.iter() {
-            orientation.vertices[node_id].incoming_edges.push(CFFEdge {
-                edge_id,
-                edge_type: CFFEdgeType::External,
-            });
-        }
-
-        for &(node_id, edge_id) in outgoing_node_pairs.iter() {
-            orientation.vertices[node_id].outgoing_edges.push(CFFEdge {
-                edge_id,
-                edge_type: CFFEdgeType::External,
-            });
-        }
-    }
-
-    let mut surface_cache = SurfaceCache {
-        esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
-        hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
-    };
-
-    // here we can provide the emptry list for initial state cut, because the graphs are already patched to give the correct result
-    let mut result = generate_cff_from_orientations(orientations, &mut surface_cache, &[], &None)?;
-    result.surfaces.esurface_cache.clear(); // we need to clean it
-
-    if !surface_cache.hsurface_cache.is_empty() {
-        Err(eyre!(
-            "Supergraph CFF generation should not produce Hsurfaces"
-        ))
-    } else {
-        for mut esurface in surface_cache.esurface_cache.drain(..) {
-            for external_shift_entry in esurface.external_shift.iter_mut() {
-                if let Some(original_edge_id) = dummy_id_map.get(&external_shift_entry.0) {
-                    external_shift_entry.0 = *original_edge_id;
-                }
-            }
-
-            remove_zeros_duplicates(&mut esurface.external_shift);
-
-            if result
-                .surfaces
-                .esurface_cache
-                .position(|val| *val == esurface)
-                .is_some()
-            {
-                // already present
-            } else {
-                result.surfaces.esurface_cache.push(esurface);
-            }
-        }
-        Ok(result)
-    }
-}
-
+#[cfg(test)]
 fn get_orientations<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     dummy_edges: &[EdgeIndex],

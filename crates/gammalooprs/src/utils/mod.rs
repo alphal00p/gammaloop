@@ -69,7 +69,7 @@ use vakint::Vakint;
 use crate::MAX_LOOP;
 use ::tracing::debug;
 use symbolica::atom::{Atom, AtomCore};
-use typed_index_collections::{TiSlice, TiVec};
+use typed_index_collections::TiVec;
 
 use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!(fallback = "unavailable");
