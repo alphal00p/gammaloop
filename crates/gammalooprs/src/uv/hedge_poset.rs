@@ -475,7 +475,7 @@ impl OperationNode {
 
         let mut order = 0;
         let mut levels = self.key.view();
-        if settings.cached_integrated
+        if settings.cached
             && let Some((prefix, leaf_level)) = self.key.split_last_level()
         {
             let prefix_key = OperationNode {
@@ -521,7 +521,7 @@ impl OperationNode {
 
         let mut order = 0;
         let mut levels = self.key.view();
-        if settings.cached_integrated
+        if settings.cached
             && let Some((prefix, leaf_level)) = self.key.split_last_level()
         {
             let prefix_key = OperationNode {
@@ -675,7 +675,7 @@ impl Forests {
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         for (order, nidx) in self.graph.topo_sort_kahn().unwrap().iter().enumerate() {
-            debug!(order=%order,cache=%settings.cached_integrated,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
+            debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
             let integrand = self.graph[*nidx].integrated(
                 graph,
                 &mut self.compute_store,
@@ -708,7 +708,7 @@ impl Forests {
                 .iter()
                 .enumerate()
             {
-                debug!(order=%order,cache=%settings.cached_integrated,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
+                debug!(order=%order,cache=%settings.cached,nidx=%nidx,key=%self.graph[*nidx],"One integrated step");
                 let integrands = if first {
                     first = false;
                     Local3DApproximation::root(graph, cuts)

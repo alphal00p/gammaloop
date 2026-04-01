@@ -1,13 +1,20 @@
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::{
+    involution::HedgePair,
+    subgraph::{SuBitGraph, SubSetLike, SubSetOps},
+};
+use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
-    function, parse,
+    domains::atom,
+    function,
+    id::Replacement,
+    parse,
 };
 use tracing::{info, instrument};
 
 use crate::{
     graph::{Graph, LMBext, cuts::CutSet},
-    utils::{GS, W_},
+    utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
         RenormalizationScheme, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
@@ -43,11 +50,8 @@ impl Local3DApproximation {
     pub(crate) fn root(graph: &mut Graph, cuts: &CutSet) -> Result<Vec<Atom>> {
         Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts)
     }
-}
 
-impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
-    #[instrument(skip(self, ctx, current, given, cff))]
-    fn kernel<S: super::ForestNodeLike>(
+    pub(crate) fn t_tilde<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
         current: &S,
@@ -57,71 +61,65 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
         let graph = ctx.graph;
         let settings = ctx.settings;
         let reduced = current.reduced_subgraph(given);
-        let mut cff = cff.clone();
+        // only apply replacements for edges in the reduced graph
+        //
+        //
+        let mom_reps = graph.replacement_impl(
+            |e, a, b| {
+                Replacement::new(
+                    GS.emr_vec
+                        .f(([Atom::num(usize::from(e)), Atom::var(W_.x___)]))
+                        .to_pattern(),
+                    (a.replace(function!(GS.emr_vec, W_.x_))
+                        .allow_new_wildcards_on_rhs(true)
+                        .with(
+                            FunctionBuilder::new(GS.emr_vec)
+                                .add_arg(W_.x_)
+                                .add_args(&[W_.x___])
+                                .finish(),
+                        )
+                        + b * GS.rescale)
+                        .to_pattern(),
+                )
+            },
+            &reduced,
+            current.lmb(),
+            GS.emr_vec,
+            GS.emr_vec,
+            &[],
+            &[W_.x___],
+            HedgePair::is_paired,
+            true,
+        );
 
-        // println!("CFF: {}", cff);
+        let mut atomarg = cff.replace_multiple(&mom_reps);
+        let a = cff
+            .series(GS.rescale, Atom::Zero, (-1).into(), true)
+            .unwrap();
 
-        // add data for OSE computation and add an explicit sqrt
-        for (p, ei, e) in graph.iter_edges_of(current.subgraph()) {
-            let eid = usize::from(ei) as i64;
-            if p.is_paired() {
-                // set energies from inner_t on-shell
-                cff = cff.replace(function!(GS.energy, eid)).with(GS.ose(ei));
+        let mut a = a
+            .to_atom()
+            .replace(parse!("der(0,0,0,1, OSE(y__))"))
+            .with(Atom::num(1))
+            .replace(parse!("der(x__, OSE(y__))"))
+            .with(Atom::num(0));
+        a = a.replace(GS.rescale).with(Atom::num(1));
+        Ok(a)
+    }
 
-                let e_mass = e.data.mass_atom();
-                cff = cff.replace(GS.ose(ei)).with(GS.ose_full(
-                    ei,
-                    e_mass,
-                    None,
-                    settings.inner_products,
-                ));
-            }
-        }
-
-        let mut atomarg = cff
-            * graph
-                .numerator(&reduced, given.subgraph())
-                .get_single_atom()
-                .unwrap();
-
-        // println!(
-        //     "Expand-prerep {} with dod={} in {:?}",
-        //     atomarg, current.dod(), current.lmb().ext_edges
-        // );
-
-        // split numerator momenta into OSEs and spatial parts
-        let mut reps = Vec::new();
-        for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
-            if p.is_paired() {
-                let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
-            }
-        }
-
-        // println!("Split reps:");
-        // for r in &reps {
-        //     println!("{r}");
-        // }
-
-        atomarg = atomarg.replace_multiple(&reps);
-
+    pub(crate) fn t<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        cff: &Atom,
+    ) -> Result<Atom> {
+        let graph = ctx.graph;
+        let reduced = current.reduced_subgraph(given);
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
 
-        // println!(
-        //     "Mom Reps : for {}",
-        //     self.simple_approx
-        //         .as_ref()
-        //         .unwrap()
-        //         .expr(&graph.full_filter())
-        // );
-        // for r in &mom_reps {
-        //     println!("{r}");
-        // }
-
-        atomarg = atomarg.replace_multiple(&mom_reps);
-
-        // debug!("Before rescaling loop momenta {}",);
+        let mut atomarg = cff.replace_multiple(&mom_reps);
 
         // rescale the loop momenta in the whole subgraph, including previously expanded cycles
         for e in &current.lmb().loop_edges {
@@ -129,23 +127,6 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
             atomarg = atomarg
                 .replace(GS.emr_vec_index(*e, W_.x___))
                 .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
-        }
-
-        // println!(
-        //     "Expand {} with dod={} in {:?}",
-        //     atomarg, current.dod(), current.lmb().ext_edges
-        // );
-
-        let soft_ct = current.renormalization_scheme() == RenormalizationScheme::OS
-            && graph.full_crown(current.subgraph()).n_included() == 2
-            && current.dod() > 0
-            && settings.softct;
-
-        if soft_ct {
-            info!(
-                subgraph = %current.subgraph().string_label(),
-                "OS local soft counterterm path is not implemented yet; using the standard UV expansion"
-            );
         }
 
         // (re-)expand OSEs from the subgraph only
@@ -188,40 +169,13 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
                 });
         }
 
-        // atomarg = atomarg
-        //     .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
-        //     .repeat()
-        //     .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
-
         atomarg = (atomarg
             * Atom::var(GS.rescale).pow(3 * graph.n_loops(current.subgraph()) as i64))
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
-        // .replace(Atom::var(GS.rescale).pow(2).sqrt()) //.pow((1, 2)))
-        // .with(GS.rescale)
-        // .replace((Atom::var(GS.rescale).pow(-2) * W_.a___).pow((1, 2))) //.pow((1, 2)))
-        // .repeat()
-        // .with((Atom::var(W_.a___)).sqrt() / GS.rescale)
-        // .replace((Atom::var(GS.rescale).pow(2) * W_.a___).pow((-1, 2))) //.pow((1, 2)))
-        // .repeat()
-        // .with((Atom::var(W_.a___)).pow((-1, 2)) / GS.rescale)
-        // .replace((Atom::var(GS.rescale).pow(-2) * W_.a___).pow((-1, 2))) //.pow((1, 2)))
-        // .repeat()
-        // .with((Atom::var(W_.a___)).pow((-1, 2)) * GS.rescale)
-        // .replace((Atom::var(GS.rescale).pow(2) * W_.a___).pow((1, 2))) //.pow((1, 2)))
-        // .repeat()
-        // .with((Atom::var(W_.a___)).pow((1, 2)) * GS.rescale);
-
-        // println!("atomarg:{:>}", atomarg.expand());
-
-        // println!("Series expanding {atomarg}");
-        //
-
         let a = atomarg
             .series(GS.rescale, Atom::Zero, 0.into(), true)
             .unwrap();
-
-        // debug!("Series: {}", a);
 
         let mut a = a
             .to_atom()
@@ -229,36 +183,86 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
             .with(Atom::num(1))
             .replace(parse!("der(x__, OSE(y__))"))
             .with(Atom::num(0));
+        a = a.replace(GS.rescale).with(Atom::num(1));
+        Ok(a)
+    }
 
-        if soft_ct {
-            let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
-            let mut b = Atom::Zero;
-            let dod_pow = Atom::var(GS.rescale).pow(current.dod());
-            for (pow, mut i) in coeffs {
-                if pow == dod_pow {
-                    // FIXME: how to do this _only_ for the subgraph masses? the numerator is still
-                    // only that of the subgraph
-                    // set the masses in the t=dod term to 0
-                    // UV rearrange the denominators
-                    /*for m in &masses {
-                        i = i.replace(m.clone()).with(Atom::Zero);
-                    }*/
+    pub(crate) fn start<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        cff: &Atom,
+    ) -> Result<Atom> {
+        let graph = ctx.graph;
+        let settings = ctx.settings;
+        let reduced = current.reduced_subgraph(given);
+        let mut atomarg = cff
+            * graph
+                .numerator(&reduced, given.subgraph())
+                .get_single_atom()
+                .unwrap();
+        // println!("CFF: {}", cff);
 
-                    i = i
-                        .replace(parse!("OSE(n_,q_,mass_,prop_, x___)"))
-                        .with(parse!("OSE(n_,q_,mUV^2,prop_+mUV^2,x___)"));
-                }
+        // add data for OSE computation and add an explicit sqrt
+        for (p, ei, e) in graph.iter_edges_of(current.subgraph()) {
+            let eid = usize::from(ei) as i64;
+            if p.is_paired() {
+                // set energies from inner_t on-shell
+                atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-                b += i;
+                let e_mass = e.data.mass_atom();
+                atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
+                    ei,
+                    e_mass,
+                    None,
+                    settings.inner_products,
+                ));
             }
-
-            a = b;
-        } else {
-            a = a.replace(GS.rescale).with(Atom::num(1));
         }
 
-        // println!("Expanded: {:>}", a.expand());
+        // split numerator momenta into OSEs and spatial parts
+        let mut reps = Vec::new();
+        for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
+            if p.is_paired() {
+                let e_mass = e.data.mass_atom();
+                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+            }
+        }
+        Ok(atomarg.replace_multiple(&reps))
+    }
+}
 
-        Ok(a)
+impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
+    #[instrument(skip(self, ctx, current, given, cff))]
+    fn kernel<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        cff: &Atom,
+    ) -> Result<Atom> {
+        let start = self.start(ctx, current, given, cff)?;
+        let graph = ctx.graph;
+        let settings = ctx.settings;
+        let soft_ct = graph.full_crown(current.subgraph()).n_included() == 2
+            && settings.softct
+            && current.dod() > 0;
+
+        if soft_ct {
+            info!("DOING SOFTCT:{}", graph.dot(current.subgraph()));
+
+            Ok(
+                self.t(ctx, current, given, &start)? + self.t_tilde(ctx, current, given, &start)?
+                    - self.t(
+                        ctx,
+                        current,
+                        given,
+                        &self.t_tilde(ctx, current, given, &start)?,
+                    )?,
+            )
+        } else {
+            self.t(ctx, current, given, &start)
+        }
     }
 }

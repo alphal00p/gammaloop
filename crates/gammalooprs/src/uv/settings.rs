@@ -328,7 +328,7 @@ pub struct UVgenerationSettings {
     #[serde(skip_serializing_if = "is_true")]
     pub use_legacy: bool,
     #[serde(skip_serializing_if = "is_true")]
-    pub cached_integrated: bool,
+    pub cached: bool,
     #[serde(
         default,
         skip_serializing_if = "IsDefault::is_default",
@@ -350,7 +350,7 @@ impl Default for UVgenerationSettings {
             only_integrated: false,
             inner_products: true,
             use_legacy: true,
-            cached_integrated: true,
+            cached: true,
             add_sigma: false,
             renormalization_schemes: BTreeMap::default(),
             vakint: VakintSettings::default(),

@@ -1,11 +1,28 @@
 #:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/hedge_numerator/assets/schemas/runhistory.json
 
+commands = []
+
+[[command_blocks]]
+name = "import_graph"
 commands = [
   "import model scalars-default.json",
-  "import graphs ./tests/resources/graphs/scalar_bubble.dot",
-  "generate",
-  # "inspect -p 0 -i box -m -x 0.1 0.2 0.3",
+  "import graphs ./tests/resources/graphs/scalar_bubble.dot"
 ]
+
+[[command_blocks]]
+name = "no_integrated"
+commands = [
+  "set global kv  global.generation.uv.generate_integrated=false",
+]
+
+[[command_blocks]]
+name = "integrated"
+commands = [
+  "set global kv  global.generation.uv.generate_integrated=true",
+]
+
+[cli_settings.global.generation.uv]
+softct = true
 
 [default_runtime_settings.kinematics.externals]
 type = "constant"
@@ -51,9 +68,6 @@ n_max = 100000
 discrete_dim_learning_rate = 1.5
 continuous_dim_learning_rate = 1.5
 max_prob_ratio = 0.01
-
-[cli_settings.global.generation.uv]
-generate_integrated = false
 
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true

@@ -459,6 +459,16 @@ impl Approximation {
 
             resnum = resnum.expand_dots()?;
 
+            let debug_preview = resnum
+                .replace(function!(GS.theta, W_.a_))
+                .with(Atom::one())
+                .replace(GS.m_uv)
+                .with(Atom::var(symbol!("gammalooprs::m_uv_preview")))
+                .replace(parse_lit!(UFO::mass_scalar_1))
+                .with(Atom::var(symbol!("gammalooprs::mass_scalar_1_preview")))
+                .collect_factors()
+                .collect_num();
+
             debug!(
                 "Integrand before parsing for {} for dod{}:{}",
                 self.simple_approx
@@ -470,16 +480,7 @@ impl Approximation {
                 //     .first()
                 //     .unwrap()
                 //     .select(&
-                resnum
-                    .replace(function!(GS.theta, W_.a_))
-                    .with(Atom::one())
-                    .replace(GS.m_uv)
-                    .with(Atom::Zero)
-                    .replace(parse_lit!(UFO::mass_scalar_1))
-                    .with(Atom::Zero)
-                    .collect_factors()
-                    .collect_num()
-                    .log_print(None) // printer(LOGPRINTOPTS)
+                debug_preview.log_print(None) // printer(LOGPRINTOPTS)
             );
 
             integrands.push(resnum.replace_multiple(&reps))

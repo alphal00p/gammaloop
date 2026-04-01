@@ -122,7 +122,18 @@ impl LoopMomentumBasis {
     // }
 }
 
+/// Helpers for constructing loop-momentum bases and turning them into Symbolica
+/// replacement rules.
+///
+/// The replacement methods decompose an edge momentum into its loop-dependent
+/// and external-flow parts using a [`LoopMomentumBasis`]. The basis-building
+/// methods pick those signatures from spanning forests of a graph or subgraph.
 pub trait LMBext {
+    /// Enumerate all loop-momentum bases induced by spanning forests of
+    /// `subgraph`.
+    ///
+    /// Each spanning forest covering the same nodes as `subgraph` produces one
+    /// basis. Empty subgraphs return an empty list.
     fn generate_loop_momentum_bases_of<S: SubGraphLike>(
         &self,
         subgraph: &S,
@@ -134,7 +145,14 @@ pub trait LMBext {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>;
 
+    /// Enumerate all loop-momentum bases for the full graph.
     fn generate_loop_momentum_bases(&self) -> TiVec<LmbIndex, LoopMomentumBasis>;
+
+    /// Replace `EMRmom(edge, ..)` by a UV-recursion-friendly decomposition.
+    ///
+    /// The loop-dependent part stays wrapped in `EMRmom(...)`, but its index is
+    /// rewritten from the concrete edge id to the loop-basis edge selected by
+    /// `lmb`. The external-flow contribution is added explicitly.
     fn uv_wrapped_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
@@ -171,6 +189,10 @@ pub trait LMBext {
         )
     }
 
+    /// Spatial-vector variant of [`Self::uv_wrapped_replacement`].
+    ///
+    /// This uses `EMRvec` for both the matched pattern and the wrapped loop
+    /// contribution.
     fn uv_spatial_wrapped_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
@@ -207,6 +229,12 @@ pub trait LMBext {
         )
     }
 
+    /// Replace `EMRmom(edge, ..)` by the explicit loop-plus-external momentum
+    /// carried by that edge.
+    ///
+    /// `filter_pair` can restrict which edge kinds are rewritten, for example to
+    /// skip split or unpaired half-edge pairs in contexts that only want full
+    /// propagators.
     fn normal_emr_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
@@ -235,6 +263,12 @@ pub trait LMBext {
         )
     }
 
+    /// Replace `EMRmom(edge, ..)` by the integrand momentum variables
+    /// `K(...) + P(...)`, i.e. `GS.loop_mom(...) + GS.external_mom(...)`.
+    ///
+    /// Unlike the UV-wrapped replacements, the generated terms are expressed in
+    /// the loop/external variable families used in the integrand rather than in
+    /// `EMRmom`.
     fn integrand_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
@@ -262,6 +296,21 @@ pub trait LMBext {
         )
     }
 
+    /// Core implementation shared by the public replacement constructors.
+    ///
+    /// For each edge of `subgraph` whose [`HedgePair`] passes `filter_pair`, this
+    /// computes the loop-dependent and external-flow atoms from `lmb` and passes
+    /// them to `rep`.
+    ///
+    /// `rep` is the final replacement builder: it receives the original edge id,
+    /// the loop-dependent atom, and the external-flow atom, and returns the
+    /// `Replacement` inserted into the result vector.
+    ///
+    /// `loop_symbol` and `ext_symbol` select the function symbol used for the
+    /// generated loop and external terms, while `loop_args` and `ext_args` are
+    /// appended to those function calls. When `emr_id` is `true`, the generated
+    /// loop/external indices are the concrete edge ids stored in the basis;
+    /// otherwise they are the compact loop/external basis positions.
     #[allow(clippy::too_many_arguments)]
     fn replacement_impl<'a, S: SubSetLike, I>(
         &self,
@@ -278,6 +327,13 @@ pub trait LMBext {
     where
         &'a I: Into<AtomOrView<'a>>;
 
+    /// Build a loop-momentum basis for `subgraph` using `tree` as the spanning
+    /// forest guide and `externals` as the external-flow carriers.
+    ///
+    /// `tree` must cover the same nodes as `subgraph`. `externals` must only
+    /// contain nodes from `subgraph`; it chooses which external edges are treated
+    /// as true external flows and which one in each connected component becomes
+    /// the dependent external.
     fn lmb_impl<S: SubGraphLike + SubSetOps + ModifySubSet<HedgePair> + ModifySubSet<Hedge>>(
         &self,
         subgraph: &S,
@@ -287,10 +343,20 @@ pub trait LMBext {
     where
         S::Base: ModifySubSet<Hedge> + SubGraphLike;
 
+    /// Construct one canonical loop-momentum basis for `subgraph`.
+    ///
+    /// This uses `subgraph` itself as the forest guide and the full crown of the
+    /// subgraph as its external carriers.
     fn lmb_of<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> LoopMomentumBasis;
 
+    /// Construct the canonical loop-momentum basis for the full graph.
     fn lmb(&self) -> LoopMomentumBasis;
 
+    /// Construct a basis for `subgraph` that reuses loop edges from `lmb`
+    /// whenever the induced cut still spans the same connected components.
+    ///
+    /// This is used when descending into a subgraph while keeping its loop
+    /// variables compatible with a parent basis.
     fn compatible_sub_lmb<S: SubGraphLike>(
         &self,
         subgraph: &S,
@@ -304,6 +370,10 @@ pub trait LMBext {
             + ModifySubSet<HedgePair>
             + ModifySubSet<Hedge>;
 
+    /// Construct a basis from a chosen cotree of `subgraph`.
+    ///
+    /// The cotree is converted into the corresponding tree by subtracting it
+    /// from `subgraph`, then forwarded to [`Self::lmb_impl`].
     fn cotree_lmb<
         S: SubGraphLike + SubSetOps + SubGraphOps + ModifySubSet<HedgePair> + ModifySubSet<Hedge>,
     >(
@@ -319,8 +389,11 @@ pub trait LMBext {
         self.lmb_impl(subgraph, &tree, externals)
     }
 
+    /// Return the empty basis with no loop or external generators.
     fn empty_lmb(&self) -> LoopMomentumBasis;
 
+    /// Render a DOT graph whose edge labels show the explicit momentum carried by
+    /// each edge according to `lmb`.
     fn dot_lmb_of<S: SubGraphLike>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String;
 }
 
