@@ -1,3 +1,5 @@
+use core::num;
+
 use linnet::half_edge::{
     involution::HedgePair,
     subgraph::{SuBitGraph, SubSetLike, SubSetOps},
@@ -61,16 +63,60 @@ impl Local3DApproximation {
         let graph = ctx.graph;
         let settings = ctx.settings;
         let reduced = current.reduced_subgraph(given);
-        // only apply replacements for edges in the reduced graph
-        //
-        //
+
+        // split numerator momenta into OSEs and spatial parts
+        let mut reps = Vec::new();
+        for (p, eid, e) in graph.iter_edges_of(current.subgraph()) {
+            if p.is_paired() {
+                let e_mass = e.data.mass_atom();
+                reps.push(GS.split_mom_pattern(eid, e_mass, settings.inner_products));
+            }
+        }
+
+        let mut numerator = graph
+            .numerator(&reduced, given.subgraph())
+            .get_single_atom()
+            .unwrap()
+            .replace_multiple(&reps);
+
+        // rescale the external momenta in the added numerator subgraph
+        for e in &current.lmb().ext_edges {
+            // println!("Rescale {}", e);
+            numerator = numerator
+                .replace(GS.emr_vec_index(*e, W_.x___))
+                .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
+        }
+
+        let mut atomarg = cff * numerator;
+        // println!("CFF: {}", cff);
+
+        // add data for OSE computation and add an explicit sqrt
+        for (p, ei, e) in graph.iter_edges_of(current.subgraph()) {
+            let eid = usize::from(ei) as i64;
+            if p.is_paired() {
+                // set energies from inner_t on-shell
+                atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
+
+                let e_mass = e.data.mass_atom();
+                atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
+                    ei,
+                    e_mass,
+                    None,
+                    settings.inner_products,
+                ));
+            }
+        }
+
+        atomarg = atomarg.replace_multiple(&reps);
+
         let mom_reps = graph.replacement_impl(
-            |e, a, b| {
+            |e, loops, externals| {
                 Replacement::new(
                     GS.emr_vec
                         .f(([Atom::num(usize::from(e)), Atom::var(W_.x___)]))
                         .to_pattern(),
-                    (a.replace(function!(GS.emr_vec, W_.x_))
+                    (loops
+                        .replace(function!(GS.emr_vec, W_.x_))
                         .allow_new_wildcards_on_rhs(true)
                         .with(
                             FunctionBuilder::new(GS.emr_vec)
@@ -78,7 +124,7 @@ impl Local3DApproximation {
                                 .add_args(&[W_.x___])
                                 .finish(),
                         )
-                        + b * GS.rescale)
+                        + externals * GS.rescale)
                         .to_pattern(),
                 )
             },
@@ -92,8 +138,8 @@ impl Local3DApproximation {
             true,
         );
 
-        let mut atomarg = cff.replace_multiple(&mom_reps);
-        let a = cff
+        atomarg = atomarg.replace_multiple(&mom_reps);
+        let a = atomarg
             .series(GS.rescale, Atom::Zero, (-1).into(), true)
             .unwrap();
 
@@ -242,7 +288,6 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
         given: &S,
         cff: &Atom,
     ) -> Result<Atom> {
-        let start = self.start(ctx, current, given, cff)?;
         let graph = ctx.graph;
         let settings = ctx.settings;
         let soft_ct = graph.full_crown(current.subgraph()).n_included() == 2
@@ -253,16 +298,17 @@ impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
             info!("DOING SOFTCT:{}", graph.dot(current.subgraph()));
 
             Ok(
-                self.t(ctx, current, given, &start)? + self.t_tilde(ctx, current, given, &start)?
+                self.t(ctx, current, given, &self.start(ctx, current, given, cff)?)?
+                    + self.t_tilde(ctx, current, given, &cff)?
                     - self.t(
                         ctx,
                         current,
                         given,
-                        &self.t_tilde(ctx, current, given, &start)?,
+                        &self.t_tilde(ctx, current, given, &cff)?,
                     )?,
             )
         } else {
-            self.t(ctx, current, given, &start)
+            self.t(ctx, current, given, &self.start(ctx, current, given, cff)?)
         }
     }
 }
