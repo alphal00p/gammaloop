@@ -1,14 +1,14 @@
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::float::Real,
-    function, parse, solve, symbol,
+    function, parse, symbol,
 };
 
 use crate::{
     settings::runtime::{
         IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
     },
-    utils::{self, F, FloatLike, GS},
+    utils::{self, F, FloatLike},
 };
 
 pub mod amplitude_counterterm;
@@ -59,6 +59,7 @@ fn evaluate_integrated_ct_normalisation<T: FloatLike>(
     }
 }
 
+#[allow(dead_code)]
 fn generate_rstar_t_dependence(num_t_derivatives: usize) -> Vec<Atom> {
     let t = symbol!("t");
 
@@ -124,14 +125,4 @@ fn generate_rstar_t_dependence(num_t_derivatives: usize) -> Vec<Atom> {
     }
 
     solutions
-}
-
-#[test]
-fn test_generate_dependence() {
-    let dependence = generate_rstar_t_dependence(3);
-    for (i, atom) in dependence.iter().enumerate() {
-        println!("derivative order {}: {}", i + 1, atom);
-    }
-    let rstar = parse!("η(r_star(t), t)");
-    println!("r_star: {}", rstar);
 }

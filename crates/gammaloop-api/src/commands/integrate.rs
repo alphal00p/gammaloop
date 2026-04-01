@@ -1754,7 +1754,7 @@ impl Integrate {
             stream_renderer_kind,
             stream_updates,
             stream_iterations,
-            tabled_options.clone(),
+            tabled_options,
         );
         let slots = izip!(
             selected_slots.iter().map(|slot| slot.slot_meta.clone()),

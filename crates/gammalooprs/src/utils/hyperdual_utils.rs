@@ -128,7 +128,7 @@ where
 }
 
 impl<T: Clone> DualOrNot<T> {
-    pub(crate) fn new_from_slice(shape: &Option<HyperDual<T>>, values: &[T]) -> Self {
+    pub fn new_from_slice(shape: &Option<HyperDual<T>>, values: &[T]) -> Self {
         match shape {
             Some(dual_shape) => {
                 let hyperdual = new_from_values(dual_shape, values);

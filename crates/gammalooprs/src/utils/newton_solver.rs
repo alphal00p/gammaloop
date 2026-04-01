@@ -31,6 +31,7 @@ pub(crate) fn newton_iteration_and_derivative<T: FloatLike>(
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn newton_iteration_and_derivative_dual<T: FloatLike>(
     guess: &HyperDual<F<T>>,
     f_x_and_df_x: impl Fn(&HyperDual<F<T>>) -> (HyperDual<F<T>>, HyperDual<F<T>>),
@@ -68,6 +69,7 @@ pub(crate) struct NewtonIterationResult<T: FloatLike> {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub(crate) struct NewtonIterationResultDual<T: FloatLike> {
     pub solution: HyperDual<F<T>>,
     pub derivative_at_solution: HyperDual<F<T>>,

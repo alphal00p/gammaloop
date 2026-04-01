@@ -1792,28 +1792,6 @@ impl HistogramAccumulatorState {
         self.underflow_bin.update_iter();
         self.overflow_bin.update_iter();
         self.statistics.update_iter();
-
-        for (i, bin) in self.bins.iter().enumerate() {
-            let c1 = (self.x_max - self.x_min) * i as f64 / self.bins.len() as f64 + self.x_min;
-            let c2 = (self.x_max - self.x_min) * (i + 1) as f64 / self.bins.len() as f64;
-            // info!(
-            //     "{}={}: {} +/- {}",
-            //     c1,
-            //     c2,
-            //     bin.average(self.sample_count),
-            //     bin.error(self.sample_count)
-            // );
-        }
-
-        // info!(
-        //     "{} stats: entries={}, underflow={}, overflow={}, nan_values={}, mitigated_pairs={}",
-        //     self.title,
-        //     self.statistics.in_range_entry_count,
-        //     self.underflow_bin.total_entry_count(),
-        //     self.overflow_bin.total_entry_count(),
-        //     self.statistics.nan_value_count,
-        //     self.statistics.mitigated_pair_count,
-        // );
     }
 
     fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {

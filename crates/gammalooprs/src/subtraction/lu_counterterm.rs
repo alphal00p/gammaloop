@@ -4,22 +4,21 @@ use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
-use symbolica::{domains::float::RealLike, evaluate::OptimizationSettings};
+use symbolica::domains::float::RealLike;
 use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
     cff::{
-        esurface::{self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
-        expression::{GraphOrientation, OrientationID},
+        esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
+        expression::OrientationID,
     },
-    disable,
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     integrands::{
         evaluation::EvaluationMetaData,
         process::{
-            GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
+            GenericEvaluator, ParamBuilder, ThresholdParams,
             evaluators::{EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator_single},
             param_builder::LUParams,
         },
@@ -29,17 +28,17 @@ use crate::{
         sample::{LoopMomenta, MomentumSample, SubspaceData},
     },
     processes::{
-        CutId, IteratedCtCollection, LUCounterTermData, LeftThresholdId, RaisedCutId,
-        RightThresholdId, build_derivative_structure,
+        IteratedCtCollection, LUCounterTermData, LeftThresholdId, RaisedCutId, RightThresholdId,
+        build_derivative_structure,
     },
-    settings::{GlobalSettings, RuntimeSettings, runtime::kinematic},
+    settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
     utils::{
         F, FloatLike,
-        hyperdual_utils::{DualOrNot, shape_for_t_derivatives},
+        hyperdual_utils::shape_for_t_derivatives,
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };

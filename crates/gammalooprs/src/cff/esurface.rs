@@ -6,9 +6,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation};
-use linnet::half_edge::subgraph::{
-    ModifySubSet, OrientedCut, SuBitGraph, SubGraphOps, SubSetLike, SubSetOps,
-};
+use linnet::half_edge::subgraph::{OrientedCut, SuBitGraph, SubSetLike, SubSetOps};
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 
@@ -490,25 +488,6 @@ impl Esurface {
         (energy_sum + shift, derivative)
     }
 
-    pub(crate) fn get_subgraph_components<E, V, H>(
-        &self,
-        graph: &HedgeGraph<E, V, H>,
-    ) -> (SuBitGraph, SuBitGraph) {
-        let vertex_subgraph = self.vertex_set.subgraph(graph);
-        let complement = vertex_subgraph.complement(graph);
-        (vertex_subgraph, complement)
-    }
-
-    pub(crate) fn bitvec<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> SuBitGraph {
-        let mut result: SuBitGraph = graph.empty_subgraph();
-        for edge_id in self.energies.iter() {
-            let (_, pair) = graph[edge_id];
-            result.add(pair);
-        }
-
-        result
-    }
-
     // #[inline]
     /// the "loops_unit_in_subspace" means that the loop momenta that are part of the subspace are jointly normalized to unit length
     pub(crate) fn get_radius_guess_subspace<T: FloatLike>(
@@ -894,39 +873,6 @@ pub(crate) fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> E
     res.retain(|(_index, sign)| *sign != 0);
     res.sort_by(|(index_1, _), (index_2, _)| index_1.cmp(index_2));
     res
-}
-
-pub(crate) fn remove_zeros_duplicates(external_shift: &mut ExternalShift) {
-    while remove_zeros_impl(external_shift) {}
-}
-
-fn remove_zeros_impl(external_shift: &mut ExternalShift) -> bool {
-    let pair = external_shift.iter().enumerate().find_map(
-        |(index_in_external_shift, (edge_index, sign))| {
-            let other_index_in_external_shift = external_shift.iter().enumerate().find(
-                |(other_index_in_external_shift, (other_edge_index, _))| {
-                    index_in_external_shift != *other_index_in_external_shift
-                        && edge_index == other_edge_index
-                },
-            );
-
-            other_index_in_external_shift.map(|(other_index_in_external_shift, (_, other_sign))| {
-                assert!(sign + other_sign == 0);
-                (index_in_external_shift, other_index_in_external_shift)
-            })
-        },
-    );
-
-    if let Some((first_index_to_remove, other_index_to_remove)) = pair {
-        let max_index = first_index_to_remove.max(other_index_to_remove);
-        let min_index = first_index_to_remove.min(other_index_to_remove);
-
-        external_shift.remove(max_index);
-        external_shift.remove(min_index);
-        true
-    } else {
-        false
-    }
 }
 
 impl From<EsurfaceID> for Atom {

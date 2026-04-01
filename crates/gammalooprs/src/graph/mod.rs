@@ -29,10 +29,7 @@ use crate::{
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
-    settings::{
-        GlobalSettings,
-        runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    },
+    settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
 };
 
