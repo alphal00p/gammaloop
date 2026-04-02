@@ -7,7 +7,7 @@ use linnet::half_edge::{
 
 use crate::{
     graph::{LMBext, LoopMomentumBasis, cuts::CutSet},
-    uv::{RenormalizationScheme, UltravioletGraph},
+    uv::{ApproximationType, UltravioletGraph},
 };
 
 #[derive(Clone, Debug, Eq)]
@@ -16,7 +16,7 @@ pub struct Spinney {
     components: Vec<SuBitGraph>,
     pub dod: i32,
     pub lmb: LoopMomentumBasis,
-    pub renormalization_scheme: RenormalizationScheme,
+    pub renormalization_scheme: ApproximationType,
     max_comp_loop_count: usize,
 }
 
@@ -31,7 +31,7 @@ impl Spinney {
             components: vec![],
             dod: 0,
             lmb: g.empty_lmb(),
-            renormalization_scheme: RenormalizationScheme::MSbar,
+            renormalization_scheme: ApproximationType::MUV,
             max_comp_loop_count: 0,
         }
     }
@@ -41,14 +41,14 @@ impl Spinney {
         g: &G,
         lmb: &LoopMomentumBasis,
     ) -> Self {
-        Self::with_scheme(subgraph, g, lmb, RenormalizationScheme::MSbar)
+        Self::with_scheme(subgraph, g, lmb, ApproximationType::MUV)
     }
 
     pub fn with_scheme<E, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>> + ?Sized>(
         subgraph: InternalSubGraph,
         g: &G,
         lmb: &LoopMomentumBasis,
-        renormalization_scheme: RenormalizationScheme,
+        renormalization_scheme: ApproximationType,
     ) -> Self {
         let components = g.as_ref().connected_components(&subgraph);
         let max_comp_loop_count = components

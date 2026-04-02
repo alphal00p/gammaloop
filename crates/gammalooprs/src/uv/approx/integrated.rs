@@ -28,7 +28,7 @@ use crate::{
         symbolica_ext::{CallSymbol, LogPrint},
     },
     uv::{
-        RenormalizationScheme, UltravioletGraph,
+        ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, ForestNodeLike, UVCtx},
         settings::VakintSettings,
         uv_graph::UVE,
@@ -119,7 +119,7 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
                 .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
         }
-        let soft_ct = current.renormalization_scheme() == RenormalizationScheme::OS
+        let soft_ct = current.renormalization_scheme() == ApproximationType::OS
             && graph.full_crown(current.subgraph()).n_included() == 2
             && current.dod() > 0
             && settings.softct;

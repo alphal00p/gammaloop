@@ -29,14 +29,18 @@ use vakint::{AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySe
 )]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
-pub enum RenormalizationScheme {
+pub enum ApproximationType {
     #[default]
-    #[serde(rename = "MSbar", alias = "msbar")]
-    MSbar,
+    #[serde(rename = "MUV", alias = "muv")]
+    MUV,
     #[serde(rename = "OS", alias = "os")]
     OS,
+    #[serde(rename = "IR", alias = "ir")]
+    IR,
     #[serde(rename = "Unsubtracted", alias = "unsubtracted")]
     Unsubtracted,
+    #[serde(rename = "VaccuumLimit", alias = "vaccuum_limit")]
+    VaccuumLimit,
 }
 
 #[cfg_attr(
@@ -94,11 +98,11 @@ impl CTIdentifier {
 #[serde(deny_unknown_fields)]
 pub struct CTRenormalizationRule {
     pub ct_identifier: CTIdentifier,
-    pub renormalization_scheme: RenormalizationScheme,
+    pub renormalization_scheme: ApproximationType,
 }
 
 impl CTRenormalizationRule {
-    pub fn new(ct_identifier: CTIdentifier, renormalization_scheme: RenormalizationScheme) -> Self {
+    pub fn new(ct_identifier: CTIdentifier, renormalization_scheme: ApproximationType) -> Self {
         Self {
             ct_identifier,
             renormalization_scheme,
@@ -335,7 +339,7 @@ pub struct UVgenerationSettings {
         with = "ct_renormalization_map_serde"
     )]
     #[schemars(with = "Vec<CTRenormalizationRule>")]
-    pub renormalization_schemes: BTreeMap<CTIdentifier, RenormalizationScheme>,
+    pub renormalization_schemes: BTreeMap<CTIdentifier, ApproximationType>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
 }
@@ -359,10 +363,7 @@ impl Default for UVgenerationSettings {
 }
 
 impl UVgenerationSettings {
-    pub fn renormalization_scheme_for(
-        &self,
-        ct_identifier: &CTIdentifier,
-    ) -> RenormalizationScheme {
+    pub fn renormalization_scheme_for(&self, ct_identifier: &CTIdentifier) -> ApproximationType {
         if let Some(scheme) = self.renormalization_schemes.get(ct_identifier) {
             return *scheme;
         }
@@ -377,12 +378,12 @@ impl UVgenerationSettings {
 }
 
 mod ct_renormalization_map_serde {
-    use super::{CTIdentifier, CTRenormalizationRule, RenormalizationScheme};
+    use super::{ApproximationType, CTIdentifier, CTRenormalizationRule};
     use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
     use std::collections::BTreeMap;
 
     pub fn serialize<S>(
-        map: &BTreeMap<CTIdentifier, RenormalizationScheme>,
+        map: &BTreeMap<CTIdentifier, ApproximationType>,
         serializer: S,
     ) -> Result<S::Ok, S::Error>
     where
@@ -398,7 +399,7 @@ mod ct_renormalization_map_serde {
 
     pub fn deserialize<'de, D>(
         deserializer: D,
-    ) -> Result<BTreeMap<CTIdentifier, RenormalizationScheme>, D::Error>
+    ) -> Result<BTreeMap<CTIdentifier, ApproximationType>, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -423,7 +424,7 @@ mod ct_renormalization_map_serde {
 
 #[cfg(test)]
 mod tests {
-    use super::{CTIdentifier, RenormalizationScheme, UVgenerationSettings};
+    use super::{ApproximationType, CTIdentifier, UVgenerationSettings};
     use std::collections::{BTreeMap, BTreeSet};
 
     fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
@@ -436,15 +437,15 @@ mod tests {
         let wildcard_identifier = CTIdentifier::new(pdg_set([1]), None);
         let settings = UVgenerationSettings {
             renormalization_schemes: BTreeMap::from([
-                (wildcard_identifier, RenormalizationScheme::Unsubtracted),
-                (exact_identifier.clone(), RenormalizationScheme::OS),
+                (wildcard_identifier, ApproximationType::Unsubtracted),
+                (exact_identifier.clone(), ApproximationType::OS),
             ]),
             ..Default::default()
         };
 
         assert_eq!(
             settings.renormalization_scheme_for(&exact_identifier),
-            RenormalizationScheme::OS
+            ApproximationType::OS
         );
     }
 
@@ -454,14 +455,14 @@ mod tests {
         let settings = UVgenerationSettings {
             renormalization_schemes: BTreeMap::from([(
                 CTIdentifier::new(pdg_set([1]), None),
-                RenormalizationScheme::OS,
+                ApproximationType::OS,
             )]),
             ..Default::default()
         };
 
         assert_eq!(
             settings.renormalization_scheme_for(&candidate_identifier),
-            RenormalizationScheme::OS
+            ApproximationType::OS
         );
     }
 
@@ -471,14 +472,14 @@ mod tests {
         let settings = UVgenerationSettings {
             renormalization_schemes: BTreeMap::from([(
                 CTIdentifier::new(pdg_set([1]), None),
-                RenormalizationScheme::Unsubtracted,
+                ApproximationType::Unsubtracted,
             )]),
             ..Default::default()
         };
 
         assert_eq!(
             settings.renormalization_scheme_for(&candidate_identifier),
-            RenormalizationScheme::Unsubtracted
+            ApproximationType::Unsubtracted
         );
     }
 
@@ -491,7 +492,7 @@ mod tests {
                 pdg_set([1]),
                 Some(pdg_set([1, 22]))
             )),
-            RenormalizationScheme::MSbar
+            ApproximationType::MUV
         );
     }
 }

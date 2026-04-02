@@ -7,7 +7,7 @@ use crate::{
         symbolica_ext::{LOGPRINTOPTS, LogPrint},
     },
     uv::{
-        RenormalizationScheme, Spinney, UVgenerationSettings,
+        ApproximationType, Spinney, UVgenerationSettings,
         approx::{integrated::Integrated, local_3d::Local3DApproximation},
     },
 };
@@ -37,7 +37,7 @@ pub trait ForestNodeLike {
     fn subgraph(&self) -> &SuBitGraph;
     fn lmb(&self) -> &LoopMomentumBasis;
     fn dod(&self) -> i32;
-    fn renormalization_scheme(&self) -> RenormalizationScheme;
+    fn renormalization_scheme(&self) -> ApproximationType;
     fn topo_order(&self) -> usize;
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph;
 }
@@ -145,7 +145,7 @@ impl ForestNodeLike for Approximation {
         self.spinney.dod
     }
 
-    fn renormalization_scheme(&self) -> RenormalizationScheme {
+    fn renormalization_scheme(&self) -> ApproximationType {
         self.spinney.renormalization_scheme
     }
 
