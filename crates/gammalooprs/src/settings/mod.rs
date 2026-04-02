@@ -398,18 +398,18 @@ mod tests {
 
     #[test]
     fn test_uv_generation_settings_serializes_renormalization_rules() {
-        use crate::uv::{CTIdentifier, RenormalizationScheme, UVgenerationSettings};
+        use crate::uv::{ApproximationType, CTIdentifier, UVgenerationSettings};
         use std::collections::{BTreeMap, BTreeSet};
 
         let settings = UVgenerationSettings {
             renormalization_schemes: BTreeMap::from([
                 (
                     CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
-                    RenormalizationScheme::OS,
+                    ApproximationType::OS,
                 ),
                 (
                     CTIdentifier::new(BTreeSet::from([6]), None),
-                    RenormalizationScheme::Unsubtracted,
+                    ApproximationType::Unsubtracted,
                 ),
             ]),
             ..Default::default()

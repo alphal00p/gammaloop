@@ -1,24 +1,21 @@
-use core::num;
-
+use eyre::eyre;
 use linnet::half_edge::{
     involution::HedgePair,
-    subgraph::{SuBitGraph, SubSetLike, SubSetOps},
+    subgraph::{SuBitGraph, SubSetOps},
 };
-use spenso::network::library::TensorLibraryData;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
-    domains::atom,
     function,
     id::Replacement,
     parse,
 };
-use tracing::{info, instrument};
+use tracing::instrument;
 
 use crate::{
     graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_, symbolica_ext::CallSymbol},
     uv::{
-        RenormalizationScheme, UltravioletGraph,
+        ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
         uv_graph::UVE,
     },
@@ -113,7 +110,7 @@ impl Local3DApproximation {
             |e, loops, externals| {
                 Replacement::new(
                     GS.emr_vec
-                        .f(([Atom::num(usize::from(e)), Atom::var(W_.x___)]))
+                        .f([Atom::num(usize::from(e)), Atom::var(W_.x___)])
                         .to_pattern(),
                     (loops
                         .replace(function!(GS.emr_vec, W_.x_))
@@ -158,14 +155,15 @@ impl Local3DApproximation {
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
-        cff: &Atom,
+        integrand: &Atom,
     ) -> Result<Atom> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
+
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
 
-        let mut atomarg = cff.replace_multiple(&mom_reps);
+        let mut atomarg = integrand.replace_multiple(&mom_reps);
 
         // rescale the loop momenta in the whole subgraph, including previously expanded cycles
         for e in &current.lmb().loop_edges {
@@ -280,35 +278,38 @@ impl Local3DApproximation {
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Local3DApproximation {
-    #[instrument(skip(self, ctx, current, given, cff))]
+    #[instrument(skip(self, ctx, current, given, integrand))]
     fn kernel<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
-        cff: &Atom,
+        integrand: &Atom,
     ) -> Result<Atom> {
-        let graph = ctx.graph;
-        let settings = ctx.settings;
-        let soft_ct = graph.full_crown(current.subgraph()).n_included() == 2
-            && settings.softct
-            && current.dod() > 0;
-
-        if soft_ct {
-            info!("DOING SOFTCT:{}", graph.dot(current.subgraph()));
-
-            Ok(
-                self.t(ctx, current, given, &self.start(ctx, current, given, cff)?)?
-                    + self.t_tilde(ctx, current, given, &cff)?
-                    - self.t(
-                        ctx,
-                        current,
-                        given,
-                        &self.t_tilde(ctx, current, given, &cff)?,
-                    )?,
-            )
-        } else {
-            self.t(ctx, current, given, &self.start(ctx, current, given, cff)?)
+        match current.renormalization_scheme() {
+            ApproximationType::MUV => self.t(
+                ctx,
+                current,
+                given,
+                &self.start(ctx, current, given, integrand)?,
+            ),
+            ApproximationType::IR => Ok(self.t(
+                ctx,
+                current,
+                given,
+                &self.start(ctx, current, given, integrand)?,
+            )? + self.t_tilde(ctx, current, given, integrand)?
+                - self.t(
+                    ctx,
+                    current,
+                    given,
+                    &self.t_tilde(ctx, current, given, integrand)?,
+                )?),
+            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
+            ApproximationType::Unsubtracted => {
+                panic!("should have been kept out of the wood");
+            }
         }
     }
 }

@@ -24,7 +24,7 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     utils::{GS, W_, symbolica_ext::CallSymbol},
-    uv::{RenormalizationScheme, UVgenerationSettings, settings::CTIdentifier},
+    uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
 use super::{Spinney, Wood, spenso_lor_atom};
@@ -111,7 +111,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         &self,
         subgraph: &S,
         settings: &UVgenerationSettings,
-    ) -> RenormalizationScheme
+    ) -> ApproximationType
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
@@ -129,7 +129,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     {
         let renormalization_scheme = self.renormalization_scheme(&spinney.filter, settings);
 
-        (renormalization_scheme != RenormalizationScheme::Unsubtracted)
+        (renormalization_scheme != ApproximationType::Unsubtracted)
             .then(|| Spinney::with_scheme(spinney, self, lmb, renormalization_scheme))
     }
 
