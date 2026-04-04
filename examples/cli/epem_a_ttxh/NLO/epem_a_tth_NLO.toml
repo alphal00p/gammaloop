@@ -80,7 +80,7 @@ mu_r = 91.188
 m_uv = 91.188
 
 [default_runtime_settings.integrator.observables_output]
-format="hwu"
+format = ["hwu"]
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false

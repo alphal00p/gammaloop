@@ -11,7 +11,6 @@ use std::{
 use color_eyre::Result;
 use gammaloop_api::{
     CLISettings, OneShot, StateLoadOption,
-    commands::Commands,
     state::{CommandHistory, CommandsBlock, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
@@ -175,8 +174,8 @@ fn run_without_arguments_is_a_noop() -> Result<()> {
     Ok(())
 }
 
-fn run_records_only_the_wrapper_command() -> Result<()> {
-    let mut cli = new_cli("run_records_only_the_wrapper_command")?;
+fn run_records_executed_commands() -> Result<()> {
+    let mut cli = new_cli("run_records_executed_commands")?;
     cli.run_history.command_blocks = vec![
         block(
             "set_display",
@@ -192,11 +191,14 @@ fn run_records_only_the_wrapper_command() -> Result<()> {
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
     assert_eq!(cli.default_runtime_settings.general.mu_r, 12.0);
     assert_eq!(cli.cli_settings.global.logfile_directive, "error");
-    assert_eq!(cli.run_history.commands.len(), 1);
-    assert!(matches!(
-        cli.run_history.commands[0].command,
-        Commands::Run(_)
-    ));
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec![
+            "set global kv global.display_directive=warn",
+            "set default-runtime kv general.mu_r=12.0",
+            "set global kv global.logfile_directive=error",
+        ]
+    );
     Ok(())
 }
 
@@ -233,8 +235,8 @@ fn run_prevalidation_is_all_or_nothing_for_nested_block_failures() -> Result<()>
     Ok(())
 }
 
-fn nested_run_records_only_the_top_level_run() -> Result<()> {
-    let mut cli = new_cli("nested_run_records_only_the_top_level_run")?;
+fn nested_run_records_executed_commands_once() -> Result<()> {
+    let mut cli = new_cli("nested_run_records_executed_commands_once")?;
     cli.run_history.command_blocks = vec![
         block("inner", &["set global kv global.display_directive=warn"]),
         block("outer", &["run inner"]),
@@ -243,7 +245,10 @@ fn nested_run_records_only_the_top_level_run() -> Result<()> {
     cli.run_command("run outer")?;
 
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
-    assert_eq!(history_strings(&cli.run_history), vec!["run outer"]);
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["set global kv global.display_directive=warn"]
+    );
     Ok(())
 }
 
@@ -278,7 +283,13 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
     assert_eq!(cli.default_runtime_settings.general.mu_r, 24.0);
     assert_eq!(cli.run_history.command_blocks.len(), 1);
-    assert_eq!(history_strings(&cli.run_history).len(), 2);
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec![
+            "set global kv global.display_directive=warn",
+            "set default-runtime kv general.mu_r=24.0",
+        ]
+    );
 
     cli.save_state()?;
 
@@ -524,7 +535,10 @@ fn command_block_definition_mode_defers_execution_and_omits_history() -> Result<
     cli.run_command("run demo")?;
 
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
-    assert_eq!(history_strings(&cli.run_history), vec!["run demo"]);
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["set global kv global.display_directive=warn"]
+    );
     Ok(())
 }
 
@@ -541,7 +555,10 @@ fn run_command_block_then_inline_quit_preserves_override_flag() -> Result<()> {
     };
 
     assert_eq!(save_state.override_state, Some(true));
-    assert_eq!(history_strings(&cli.run_history), Vec::<String>::new());
+    assert_eq!(
+        history_strings(&cli.run_history),
+        vec!["set global kv global.display_directive=warn"]
+    );
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
     Ok(())
 }
@@ -791,10 +808,10 @@ fn remove_processes_rejects_integrand_without_process() -> Result<()> {
 #[serial]
 fn cli_stateful_workflow_behaviors() -> Result<()> {
     run_without_arguments_is_a_noop()?;
-    run_records_only_the_wrapper_command()?;
+    run_records_executed_commands()?;
     run_prevalidation_is_all_or_nothing_for_inline_commands()?;
     run_prevalidation_is_all_or_nothing_for_nested_block_failures()?;
-    nested_run_records_only_the_top_level_run()?;
+    nested_run_records_executed_commands_once()?;
     boot_run_history_merges_blocks_and_persists_commands_once()?;
     boot_run_history_rejects_conflicting_block_redefinitions()?;
     boot_run_history_allows_conflicting_redefinitions_after_confirmation()?;

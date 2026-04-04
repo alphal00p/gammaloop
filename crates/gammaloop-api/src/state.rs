@@ -47,6 +47,7 @@ use crate::{
     commands::{save::SaveState, Commands},
     integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
+    render_smart_toml,
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
 };
@@ -341,6 +342,24 @@ pub fn set_serialize_commands_as_strings(value: bool) {
 /// Get the current setting for CommandHistory serialization behavior
 pub fn get_serialize_commands_as_strings() -> bool {
     SERIALIZE_COMMANDS_AS_STRINGS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub struct SerializeCommandsAsStringsGuard {
+    previous: bool,
+}
+
+impl SerializeCommandsAsStringsGuard {
+    pub fn new(value: bool) -> Self {
+        let previous = get_serialize_commands_as_strings();
+        set_serialize_commands_as_strings(value);
+        Self { previous }
+    }
+}
+
+impl Drop for SerializeCommandsAsStringsGuard {
+    fn drop(&mut self) {
+        set_serialize_commands_as_strings(self.previous);
+    }
 }
 
 /// Represents a command with optional raw string representation
@@ -695,12 +714,18 @@ impl RunHistory {
         session.replay_run_history()
     }
 
-    fn filtered_for_save(&self) -> Self {
+    pub(crate) fn filtered_for_save(&self) -> Self {
         let mut filtered = self.clone();
         filtered
             .commands
             .retain(|command_history| should_persist_command(&command_history.command));
         filtered
+    }
+
+    pub(crate) fn to_toml_string(&self, serialize_commands_as_strings: bool) -> Result<String> {
+        let _serialize_commands_guard =
+            SerializeCommandsAsStringsGuard::new(serialize_commands_as_strings);
+        render_smart_toml(&self.filtered_for_save())
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {

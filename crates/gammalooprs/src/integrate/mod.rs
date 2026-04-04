@@ -2288,7 +2288,7 @@ where
     let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
 
     let mut n_samples_evaluated = 0;
-    let mut emitted_latest_observable_paths = vec![None; n_slots];
+    let mut emitted_latest_observable_paths = vec![Vec::new(); n_slots];
     clear_iteration_abort_request();
     'integrateLoop: while integration_state.num_points < n_max {
         // ensure we do not overshoot
@@ -2828,30 +2828,35 @@ fn archived_observable_output_path(
     workspace.join(format!("observables_final_iter_{iter:04}.{extension}"))
 }
 
-fn user_facing_observables_output_formats(
-    integrand: &Integrand,
-) -> &'static [ObservableFileFormat] {
+fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<ObservableFileFormat> {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return &[];
+        return Vec::new();
     };
     if !integrand.has_observables() {
-        return &[];
+        return Vec::new();
     }
 
-    match process_integrand
+    process_integrand
         .get_settings()
         .integrator
         .observables_output
-        .format
-    {
-        ObservableFileFormat::None => &[],
-        ObservableFileFormat::Json => &[ObservableFileFormat::Json],
-        ObservableFileFormat::Hwu => &[ObservableFileFormat::Json, ObservableFileFormat::Hwu],
-    }
+        .resolved_formats()
 }
 
 fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
-    !user_facing_observables_output_formats(integrand).is_empty()
+    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
+        return false;
+    };
+    if !integrand.has_observables() {
+        return false;
+    }
+
+    !process_integrand
+        .get_settings()
+        .integrator
+        .observables_output
+        .resolved_formats()
+        .is_empty()
 }
 
 fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -2913,8 +2918,8 @@ fn write_observable_snapshot_archive(
     };
 
     for format in user_facing_observables_output_formats(integrand) {
-        let path = archived_observable_output_path(workspace, *format, iter);
-        integrand.write_observable_snapshots(&path, *format)?;
+        let path = archived_observable_output_path(workspace, format, iter);
+        integrand.write_observable_snapshots(&path, format)?;
     }
 
     Ok(())
@@ -2923,24 +2928,22 @@ fn write_observable_snapshot_archive(
 fn write_latest_observables_output(
     integrand: &Integrand,
     workspace: Option<&Path>,
-) -> Result<Option<PathBuf>> {
+) -> Result<Vec<PathBuf>> {
     if !user_facing_observables_output_enabled(integrand) {
-        return Ok(None);
+        return Ok(Vec::new());
     }
     let Some(workspace) = workspace else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
 
-    let mut primary_path = None;
+    let mut emitted_paths = Vec::new();
     for format in user_facing_observables_output_formats(integrand) {
-        let path = latest_observable_output_path(workspace, *format);
-        integrand.write_observable_snapshots(&path, *format)?;
-        if primary_path.is_none() {
-            primary_path = Some(path);
-        }
+        let path = latest_observable_output_path(workspace, format);
+        integrand.write_observable_snapshots(&path, format)?;
+        emitted_paths.push(path);
     }
 
-    Ok(primary_path)
+    Ok(emitted_paths)
 }
 
 fn write_integration_state_to_workspace(
@@ -2982,7 +2985,7 @@ fn workspace_relative_display_path(root: &Path, path: &Path) -> String {
 fn emit_results_output_summary(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
-    emitted_paths: &[Option<PathBuf>],
+    emitted_paths: &[Vec<PathBuf>],
 ) {
     let rendered = render_results_output_summary_table(workspace, slots, emitted_paths);
     let Some(rendered) = rendered else {
@@ -2995,7 +2998,7 @@ fn emit_results_output_summary(
 fn render_results_output_summary_table(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
-    emitted_paths: &[Option<PathBuf>],
+    emitted_paths: &[Vec<PathBuf>],
 ) -> Option<String> {
     let mut summary_rows = Vec::new();
     if let Some(workspace) = workspace {
@@ -3009,20 +3012,25 @@ fn render_results_output_summary_table(
         ));
     }
 
-    for (slot, emitted_path) in slots.iter().zip(emitted_paths.iter()) {
-        let Some(final_path) = emitted_path else {
-            continue;
-        };
-        if !final_path.exists() {
-            continue;
+    for (slot, slot_emitted_paths) in slots.iter().zip(emitted_paths.iter()) {
+        for final_path in slot_emitted_paths {
+            if !final_path.exists() {
+                continue;
+            }
+            let display_path = workspace
+                .map(|root| workspace_relative_display_path(root, final_path))
+                .unwrap_or_else(|| final_path.display().to_string());
+            let row_label = if slot_emitted_paths.len() > 1 {
+                let format_label = final_path
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .unwrap_or("output");
+                format!("{} ({format_label})", slot_key_label(&slot.meta))
+            } else {
+                slot_key_label(&slot.meta)
+            };
+            summary_rows.push((row_label, display_path));
         }
-        let Integrand::ProcessIntegrand(_) = &slot.integrand else {
-            continue;
-        };
-        let display_path = workspace
-            .map(|root| workspace_relative_display_path(root, final_path))
-            .unwrap_or_else(|| final_path.display().to_string());
-        summary_rows.push((slot_key_label(&slot.meta), display_path));
     }
 
     if summary_rows.is_empty() {
@@ -3597,6 +3605,7 @@ mod tests {
     use crate::{UnitVolumeIntegrand, UnitVolumeSettings};
     use colored::control;
     use ratatui::{Terminal, backend::TestBackend};
+    use std::fs;
     use symbolica::numerical_integration::ContinuousGrid;
 
     fn make_accumulator(
@@ -4503,12 +4512,59 @@ mod tests {
         let rendered = render_results_output_summary_table(
             None,
             &[slot],
-            &[Some(PathBuf::from(
+            &[vec![PathBuf::from(
                 "/tmp/definitely_missing_observables_final.json",
-            ))],
+            )]],
         );
 
         assert!(rendered.is_none(), "{rendered:?}");
+    }
+
+    #[test]
+    fn results_output_summary_lists_all_emitted_observable_files() {
+        let base = std::env::temp_dir().join(format!(
+            "gammaloop_results_output_summary_{}",
+            std::process::id()
+        ));
+        if base.exists() {
+            let _ = fs::remove_dir_all(&base);
+        }
+        let workspace = base.join("workspace");
+        let slot_dir = workspace.join("integrands").join("proc@default");
+        fs::create_dir_all(&slot_dir).unwrap();
+        fs::write(workspace_result_snapshot_path(&workspace), b"{}").unwrap();
+        let json_path = slot_dir.join("observables_final.json");
+        let hwu_path = slot_dir.join("observables_final.hwu");
+        fs::write(&json_path, b"{}").unwrap();
+        fs::write(&hwu_path, b"# hwu\n").unwrap();
+
+        let settings = RuntimeSettings::default();
+        let slot = IntegrationSlot::new(
+            SlotMeta {
+                process_name: "proc".to_string(),
+                integrand_name: "default".to_string(),
+            },
+            settings.clone(),
+            Model::default(),
+            Integrand::UnitVolume(UnitVolumeIntegrand::new(
+                settings,
+                UnitVolumeSettings { n_3d_momenta: 1 },
+            )),
+            None,
+        );
+        let rendered = render_results_output_summary_table(
+            Some(&workspace),
+            &[slot],
+            &[vec![hwu_path.clone(), json_path.clone()]],
+        )
+        .expect("summary should render");
+
+        assert!(rendered.contains("proc@default (hwu)"), "{rendered}");
+        assert!(rendered.contains("proc@default (json)"), "{rendered}");
+        assert!(rendered.contains("observables_final.hwu"), "{rendered}");
+        assert!(rendered.contains("observables_final.json"), "{rendered}");
+
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

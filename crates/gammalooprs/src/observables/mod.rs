@@ -893,7 +893,6 @@ pub enum DiscreteBinOrdering {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum DiscreteBinDomainSettings {
     ExplicitRange { min: isize, max: isize },
     SingleBin,
@@ -906,7 +905,6 @@ pub enum DiscreteBinDomainSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum DiscreteBinLabelsSettings {
     Custom { labels: Vec<String> },
     BinId,

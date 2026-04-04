@@ -352,6 +352,37 @@ mod tests {
     }
 
     #[test]
+    fn observables_output_settings_accept_single_entry_format_lists() {
+        use crate::{
+            observables::ObservableFileFormat, settings::runtime::ObservablesOutputSettings,
+        };
+
+        let parsed: ObservablesOutputSettings = toml::from_str("format = [\"hwu\"]").unwrap();
+        assert_eq!(parsed.format, vec![ObservableFileFormat::Hwu]);
+
+        let serialized = toml::to_string_pretty(&parsed).unwrap();
+        assert_eq!(serialized, "format = [\"hwu\"]\n");
+    }
+
+    #[test]
+    fn observables_output_settings_accept_multiple_formats() {
+        use crate::{
+            observables::ObservableFileFormat, settings::runtime::ObservablesOutputSettings,
+        };
+
+        let parsed: ObservablesOutputSettings =
+            toml::from_str("format = [\"hwu\", \"json\"]").unwrap();
+        assert_eq!(
+            parsed.format,
+            vec![ObservableFileFormat::Hwu, ObservableFileFormat::Json]
+        );
+
+        let serialized = toml::to_string_pretty(&parsed).unwrap();
+        let reparsed: ObservablesOutputSettings = toml::from_str(&serialized).unwrap();
+        assert_eq!(parsed, reparsed);
+    }
+
+    #[test]
     fn test_parameterization_settings_serialize_deserialize() {
         use crate::settings::runtime::ParameterizationSettings;
         generic_test_settings::<ParameterizationSettings>();

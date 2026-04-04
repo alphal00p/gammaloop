@@ -128,4 +128,4 @@ helicities = [1, 1]
 disable_threshold_subtraction = true
 
 [default_runtime_settings.integrator.observables_output]
-format = "json"
+format = ["json"]

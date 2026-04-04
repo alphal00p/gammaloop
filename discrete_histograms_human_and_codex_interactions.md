@@ -431,7 +431,153 @@ Root cause and fix:
   - `crates/gammalooprs/src/integrands/process/cross_section/mod.rs`
 - rebuilt the CLI and verified:
   - with a reduced `20k`-sample run and `--show-phase both`, the LO result moved from the imaginary component to the real component
-  - with the exact user command, the real-phase results became
-    - `epem_a_tth@LO = +1.547(21)e-3`
-    - `epem_a_tth@LO_semi_inclusive = +5.330(72)e-4`
+- with the exact user command, the real-phase results became
+  - `epem_a_tth@LO = +1.547(21)e-3`
+  - `epem_a_tth@LO_semi_inclusive = +5.330(72)e-4`
   - which are both within about `1σ` of the card targets
+
+## 2026-04-04 User
+
+Reported that with
+
+```toml
+[default_runtime_settings.integrator.observables_output]
+format = "hwu"
+```
+
+the final emitted-results summary still listed only the JSON observable file, and requested that:
+
+- the observable output mode support a list such as `["hwu", "json"]`
+- a scalar like `"hwu"` become exclusive, not implicitly `"json"` as well
+- the end-of-run emitted-files summary list all observable files when several are emitted
+
+## 2026-04-04 Codex
+
+Implemented the observable-output-format update:
+
+- changed `ObservablesOutputSettings.format` from a single format to a list of formats
+- initially accepted both scalar and list TOML forms
+- updated the integration summary plumbing so each emitted observable file gets its own row in the final "Integration results emitted" table
+- added tests covering:
+  - scalar-or-list parsing
+  - list parsing and round-tripping
+  - summary rendering of multiple emitted observable files
+- rebuilt the CLI and verified end to end:
+  - with a temporary copy of the LO card using `format = ["hwu"]`, the final summary listed only
+    - `integrands/epem_a_tth@LO/observables_final.hwu`
+  - with a temporary copy of that card using `format = ["hwu", "json"]`, the final summary lists both
+    - `integrands/epem_a_tth@LO/observables_final.hwu`
+    - `integrands/epem_a_tth@LO/observables_final.json`
+
+## 2026-04-04 User
+
+Requested a follow-up simplification:
+
+- remove support for the scalar form entirely
+- only support list syntax, even for a single output format
+- remove tests that try to verify support for a string value
+
+## 2026-04-04 Codex
+
+Applied the list-only follow-up:
+
+- removed the custom scalar-or-list serde/schema compatibility layer from `ObservablesOutputSettings`
+- the setting now accepts only list syntax such as:
+  - `format = ["hwu"]`
+  - `format = ["hwu", "json"]`
+- replaced the old scalar-support unit test with a single-entry-list round-trip test
+- migrated checked-in TOML files and example cards that still used scalar observable-output formats to list syntax
+- updated the differential integration tests to pass list syntax through `set process kv`
+- verified:
+  - `cargo fmt`
+  - `cargo test -p gammalooprs test_observables_output_settings_serialize_deserialize -- --nocapture`
+  - `cargo test -p gammalooprs observables_output_settings_accept_single_entry_format_lists -- --nocapture`
+  - `cargo test -p gammalooprs observables_output_settings_accept_multiple_formats -- --nocapture`
+  - `cargo test -p gammalooprs results_output_summary_lists_all_emitted_observable_files -- --nocapture`
+  - `cargo check -p gammaloop-api --features ufo_support`
+- attempted to run the broader `gammaloop-integration-tests` differential target as well, but that target currently fails earlier due to an unrelated pre-existing compile error in `tests/tests/test_runs/events.rs` from a missing `force_generate_events` field in an `EvaluateSamples` initializer
+
+## 2026-04-04 User
+
+Requested three follow-up changes:
+
+- verify that `--read-only-state` never lets the CLI write into the active state folder, and make such attempts fail cleanly
+- in `--read-only-state`, move the default integration workspace out of the state and into the current working directory as `integration_workspace_<STATENAME>` or `integration_workspace`
+- fix `run.toml` so it records all actually executed commands from boot-card commands, `run ...` command blocks, and inline `-c "..."`
+- add Python API getters on a loaded session:
+  - `get_run_history()`
+  - `get_global_settings()`
+  - `get_active_command_blocks()`
+
+## 2026-04-04 Codex
+
+Implemented the read-only-state and run-history follow-up:
+
+- added a shared path-based write guard for the active state folder in `crates/gammaloop-api/src/lib.rs`
+- applied it to:
+  - `--clean-state`
+  - integration workspace creation and updates
+  - `save state`
+  - `save dot`
+  - `save standalone`
+  - evaluator compilation triggered by `generate` when that would write under the active state
+- changed the default read-only integration workspace location to:
+  - `./integration_workspace_<state_name>`
+- flattened run-history recording so the persisted `run.toml` captures the commands that actually executed rather than the wrapper `run ...` command itself
+- added session-side string/dictionary getters and exposed them through the Python API as:
+  - `get_run_history()`
+  - `get_global_settings()`
+  - `get_active_command_blocks()`
+- verified with targeted Rust tests and the CLI integration test:
+  - `cargo fmt`
+  - `cargo check`
+  - `cargo test -p gammaloop-api clean_state_rejects_read_only_state_mode -- --nocapture`
+  - `cargo test -p gammaloop-api one_shot_run_history_persists_all_executed_commands -- --nocapture`
+  - `cargo test -p gammaloop-api read_only_state_rejects_workspace_inside_active_state -- --nocapture`
+  - `cargo test -p gammaloop-api generate_rejects_compilation_into_active_state_in_read_only_mode -- --nocapture`
+  - `cargo test -p gammaloop-api save_state_rejects_paths_inside_active_state_in_read_only_mode -- --nocapture`
+  - `cargo test -p gammaloop-api save_dot_rejects_default_target_in_read_only_mode -- --nocapture`
+  - `cargo test -p gammaloop-api save_standalone_rejects_paths_inside_active_state_in_read_only_mode -- --nocapture`
+  - `cargo test -p gammaloop-api read_only_state_uses_cwd_workspace_default -- --nocapture`
+  - `cargo test -p gammaloop-integration-tests --test test_cli cli_stateful_workflow_behaviors -- --nocapture`
+- initially the Python runtime validation was blocked because the editable extension in `.venv` was stale even though `cargo check -p gammaloop-api --features ufo_support,python_api` was already passing
+
+## 2026-04-04 User
+
+Commented that the Python rebuild should be achievable directly through the `just build-api` workflow, and that it appeared to have been figured out.
+
+## 2026-04-04 Codex
+
+Completed the Python runtime validation using the standard build path:
+
+- cleared stale `maturin` / `cargo` build processes that were holding the target lock from earlier interrupted attempts
+- reran `just build-api` successfully
+- confirmed from `.venv` that the live module exposes:
+  - `get_run_history`
+  - `get_global_settings`
+  - `get_active_command_blocks`
+- ran the targeted Python API integration test successfully:
+  - `PYTHON=/Users/vjhirsch/Documents/Work/gammaloop_main/.venv/bin/python cargo test -p gammaloop-integration-tests --features python-api-tests --test test_python_api python_session_getters_return_live_toml_and_command_blocks -- --nocapture`
+
+## 2026-04-05 User
+
+Requested a small CLI display adjustment:
+
+- when the CLI prints `Running command <cmd>`
+- if `<cmd>` is multiline and has more than 5 lines
+- truncate the remainder and show `[...]` instead
+
+## 2026-04-05 Codex
+
+Implemented the command-display truncation in `crates/gammaloop-api/src/session.rs`:
+
+- kept the change local to the shared `display_command(...)` path used by the `Running command` log lines
+- multiline commands with more than 5 lines now display only the first 5 lines, followed by `[...]`
+- single-line commands and multiline commands up to 5 lines are unchanged
+- added unit tests covering both:
+  - the exact 5-line boundary
+  - truncation for commands with 6 lines
+- verified with:
+  - `cargo test -p gammaloop-api display_command_ -- --nocapture`
+  - `cargo fmt`
+  - `cargo check -p gammaloop-api`

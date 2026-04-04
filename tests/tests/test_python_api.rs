@@ -190,7 +190,8 @@ fn python_settings_wrappers_expose_nested_runtime_and_global_settings() -> Resul
         &commands,
         r#"
 integrand_settings = api.get_integrand_settings()
-global_settings = api.get_global_settings()
+import tomllib
+global_settings = tomllib.loads(api.get_global_settings())
 default_runtime_settings = api.get_default_runtime_settings()
 
 payload = {
@@ -200,8 +201,8 @@ payload = {
         integrand_settings.to_dict()["subtraction"]["disable_threshold_subtraction"]
     ),
     "integrand_keys": integrand_settings.keys(),
-    "global_display_directive": global_settings.display_directive,
-    "global_thresholds_enabled": global_settings.generation.threshold_subtraction.enable_thresholds,
+    "global_display_directive": global_settings["global"]["display_directive"],
+    "global_thresholds_enabled": global_settings["global"]["generation"]["threshold_subtraction"]["enable_thresholds"],
     "default_runtime_disable_threshold_subtraction": (
         default_runtime_settings.subtraction.disable_threshold_subtraction
     ),
@@ -259,12 +260,13 @@ payload = {
                 "python_api_settings_wrapper_fallback",
                 &fallback_commands,
                 r#"
-global_settings = api.get_global_settings()
+import tomllib
+global_settings = tomllib.loads(api.get_global_settings())
 default_runtime_settings = api.get_default_runtime_settings()
 
 payload = {
-    "global_display_directive": global_settings.display_directive,
-    "global_thresholds_enabled": global_settings.generation.threshold_subtraction.enable_thresholds,
+    "global_display_directive": global_settings["global"]["display_directive"],
+    "global_thresholds_enabled": global_settings["global"]["generation"]["threshold_subtraction"]["enable_thresholds"],
     "default_runtime_disable_threshold_subtraction": (
         default_runtime_settings.subtraction.disable_threshold_subtraction
     ),
@@ -366,6 +368,55 @@ payload = {{
     assert!(formatted.contains("PDG"));
     assert!(formatted.contains("state"));
     assert!(!formatted.contains("incoming PDGs"));
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn python_session_getters_return_live_toml_and_command_blocks() -> Result<()> {
+    let commands = vec!["set global kv global.display_directive=warn".to_string()];
+
+    let payload = run_python_case(
+        "python_session_getters_return_live_toml_and_command_blocks",
+        &commands,
+        r#"
+import tomllib
+
+api.run("start_commands_block demo")
+api.run("set global kv global.logfile_directive=error")
+api.run("finish_commands_block")
+api.run("run demo -c 'set default-runtime kv general.mu_r=3.0'")
+
+run_history = tomllib.loads(api.get_run_history())
+global_settings = tomllib.loads(api.get_global_settings())
+command_blocks = api.get_active_command_blocks()
+
+payload = {
+    "history_commands": run_history["commands"],
+    "global_display_directive": global_settings["global"]["display_directive"],
+    "global_logfile_directive": global_settings["global"]["logfile_directive"],
+    "command_blocks": command_blocks,
+}
+"#,
+    )?;
+
+    assert_eq!(
+        payload["history_commands"],
+        serde_json::json!([
+            "set global kv global.display_directive=warn",
+            "set global kv global.logfile_directive=error",
+            "set default-runtime kv general.mu_r=3.0",
+        ])
+    );
+    assert_eq!(payload["global_display_directive"].as_str(), Some("warn"));
+    assert_eq!(payload["global_logfile_directive"].as_str(), Some("error"));
+    assert_eq!(
+        payload["command_blocks"],
+        serde_json::json!({
+            "demo": ["set global kv global.logfile_directive=error"]
+        })
+    );
 
     Ok(())
 }

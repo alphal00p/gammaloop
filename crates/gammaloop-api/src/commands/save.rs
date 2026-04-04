@@ -15,8 +15,7 @@ use tracing::{info, warn};
 
 use crate::{
     state::{
-        classify_state_folder, set_serialize_commands_as_strings, RunHistory, State,
-        StateFolderKind,
+        classify_state_folder, RunHistory, SerializeCommandsAsStringsGuard, State, StateFolderKind,
     },
     templates::Assets,
     write_schemas, CLISettings, DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME,
@@ -78,6 +77,8 @@ impl Save {
             } => {
                 // Use original default location (state folder) or custom path if provided
                 let target_dir = path.unwrap_or(global_settings.state.folder.clone());
+                global_settings
+                    .ensure_write_target_outside_active_state(&target_dir, "save dot files")?;
                 info!("Saving dot files to {}", target_dir.display());
 
                 // Extract embedded templates to drawings/templates relative to target directory
@@ -131,6 +132,10 @@ impl Save {
                 binary,
             } => {
                 let target_dir = path.unwrap_or(global_settings.state.folder.clone());
+                global_settings.ensure_write_target_outside_active_state(
+                    &target_dir,
+                    "export standalone files",
+                )?;
                 let mode = match (python, rust) {
                     (true, false) => StandaloneExportMode::Python,
                     (false, true) | (false, false) => StandaloneExportMode::Rust,
@@ -198,14 +203,8 @@ impl SaveState {
             .path
             .clone()
             .unwrap_or(global_settings.state.folder.clone());
-        if global_settings.session.read_only_state
-            && selected_root_folder == global_settings.state.folder
-        {
-            return Err(eyre!(
-                "Cannot save to the active state folder '{}' because this session was started with --read-only-state. Use `save state -p <other_path>` or restart without `--read-only-state`.",
-                global_settings.state.folder.display()
-            ));
-        }
+        global_settings
+            .ensure_write_target_outside_active_state(&selected_root_folder, "save state")?;
         let state_folder_kind = classify_state_folder(&selected_root_folder)?;
         if matches!(state_folder_kind, StateFolderKind::Missing) {
             fs::create_dir_all(&selected_root_folder)?;
@@ -254,11 +253,15 @@ impl SaveState {
             }
         }
 
+        global_settings
+            .ensure_write_target_outside_active_state(&selected_root_folder, "save state")?;
+
         state.save(&selected_root_folder, true, false)?;
 
-        set_serialize_commands_as_strings(self.try_strings.unwrap_or(global_settings.try_strings));
+        let _serialize_commands_guard = SerializeCommandsAsStringsGuard::new(
+            self.try_strings.unwrap_or(global_settings.try_strings),
+        );
         run_history.save_toml(&selected_root_folder, true, false)?;
-        set_serialize_commands_as_strings(false);
 
         let _show_defaults_guard = ShowDefaultsGuard::new(true);
         default_runtime_settings.to_file(
@@ -273,8 +276,11 @@ impl SaveState {
 
 #[cfg(test)]
 mod tests {
-    use super::SaveState;
-    use crate::{state::RunHistory, CLISettings};
+    use super::{Save, SaveState};
+    use crate::{
+        state::{RunHistory, State},
+        CLISettings,
+    };
     use gammalooprs::settings::RuntimeSettings;
     use std::path::PathBuf;
 
@@ -293,6 +299,79 @@ mod tests {
                 &cli_settings,
             )
             .unwrap_err();
+
+        assert!(format!("{err:?}").contains("--read-only-state"));
+    }
+
+    #[test]
+    fn save_state_rejects_paths_inside_active_state_in_read_only_mode() {
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = SaveState {
+            path: Some(PathBuf::from("/tmp/read_only_state/nested/export")),
+            ..SaveState::default()
+        }
+        .save(
+            &mut state,
+            &RunHistory::default(),
+            &RuntimeSettings::default(),
+            &cli_settings,
+        )
+        .unwrap_err();
+
+        assert!(format!("{err:?}").contains("--read-only-state"));
+    }
+
+    #[test]
+    fn save_dot_rejects_default_target_in_read_only_mode() {
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Save::Dot {
+            path: None,
+            combine_diagrams: false,
+            with_uv: None,
+            output_full_numerator: None,
+            do_gamma_algebra: None,
+            do_color_algebra: None,
+        }
+        .run(
+            &mut state,
+            &RunHistory::default(),
+            &RuntimeSettings::default(),
+            &cli_settings,
+        )
+        .unwrap_err();
+
+        assert!(format!("{err:?}").contains("--read-only-state"));
+    }
+
+    #[test]
+    fn save_standalone_rejects_paths_inside_active_state_in_read_only_mode() {
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Save::Standalone {
+            path: Some(PathBuf::from("/tmp/read_only_state/standalone")),
+            python: false,
+            rust: true,
+            binary: false,
+            json: false,
+        }
+        .run(
+            &mut state,
+            &RunHistory::default(),
+            &RuntimeSettings::default(),
+            &cli_settings,
+        )
+        .unwrap_err();
 
         assert!(format!("{err:?}").contains("--read-only-state"));
     }

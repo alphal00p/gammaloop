@@ -29,7 +29,8 @@ use crate::{
         IntegrandCutInfo, IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo,
         IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
     },
-    session::{CliSession, CliSessionState},
+    render_smart_toml,
+    session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
     state::{ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
@@ -552,15 +553,15 @@ pub struct PyHistogramAccumulator {
 #[pymethods]
 impl PyHistogramAccumulator {
     #[staticmethod]
-    #[pyo3(signature = (title, type_description="AL".to_string(), phase="real".to_string(), value_transform="identity".to_string(), x_min, x_max, n_bins, log_x_axis=false, log_y_axis=true))]
+    #[pyo3(signature = (title, x_min, x_max, n_bins, type_description="AL".to_string(), phase="real".to_string(), value_transform="identity".to_string(), log_x_axis=false, log_y_axis=true))]
     fn continuous(
         title: String,
-        type_description: String,
-        phase: String,
-        value_transform: String,
         x_min: f64,
         x_max: f64,
         n_bins: usize,
+        type_description: String,
+        phase: String,
+        value_transform: String,
         log_x_axis: bool,
         log_y_axis: bool,
     ) -> PyResult<Self> {
@@ -2099,7 +2100,6 @@ impl PyNumeratorAwareGroupingOption {
 struct GammaLoopAPI {
     gammaloop_state: State,
     cli_settings: CLISettings,
-    #[allow(unused)]
     run_history: RunHistory,
     default_runtime_settings: RuntimeSettings,
     session_state: CliSessionState,
@@ -2613,13 +2613,41 @@ impl GammaLoopAPI {
         }
     }
 
+    #[pyo3(name = "get_run_history", signature = ())]
+    pub(crate) fn get_run_history(&self) -> PyResult<String> {
+        self.run_history
+            .to_toml_string(self.cli_settings.try_strings)
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Could not render the current run history as TOML: {e}"
+                ))
+            })
+    }
+
     #[pyo3(name = "get_global_settings", signature = ())]
-    pub(crate) fn get_global_settings(&self) -> PyResult<PySettingsValue> {
-        PySettingsValue::from_settings(
-            &self.cli_settings.global,
-            "global settings",
-            "global_settings",
-        )
+    pub(crate) fn get_global_settings(&self) -> PyResult<String> {
+        render_smart_toml(&self.cli_settings).map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not render the current global settings as TOML: {e}"
+            ))
+        })
+    }
+
+    #[pyo3(name = "get_active_command_blocks", signature = ())]
+    pub(crate) fn get_active_command_blocks(
+        &self,
+    ) -> PyResult<std::collections::BTreeMap<String, Vec<String>>> {
+        Ok(self
+            .run_history
+            .command_blocks
+            .iter()
+            .map(|block| {
+                (
+                    block.name.clone(),
+                    block.commands.iter().map(display_command).collect(),
+                )
+            })
+            .collect())
     }
 
     #[pyo3(name = "get_default_runtime_settings", signature = ())]
