@@ -12,8 +12,8 @@ use crate::model::Model;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::observables::{
-    AdditionalWeightKey, EventProcessingRuntime, ObservableAccumulatorBundle, ObservableFileFormat,
-    ObservableSnapshotBundle,
+    AdditionalWeightKey, EventProcessingRuntime, HistogramProcessInfo, ObservableAccumulatorBundle,
+    ObservableFileFormat, ObservableSnapshotBundle,
 };
 use crate::processes::StandaloneExportSettings;
 use crate::settings::GlobalSettings;
@@ -29,6 +29,7 @@ use eyre::{Context, eyre};
 use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
+use linnet::half_edge::involution::Orientation;
 use momtrop::SampleGenerator;
 use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
@@ -914,6 +915,89 @@ impl ProcessIntegrand {
     }
 }
 
+fn format_orientation_label(signature: &EdgeVec<Orientation>) -> String {
+    signature
+        .iter()
+        .map(|(_, orientation)| match *orientation {
+            Orientation::Default => '+',
+            Orientation::Reversed => '-',
+            Orientation::Undirected => '0',
+        })
+        .collect()
+}
+
+fn format_lmb_channel_label(edge_ids: &[usize]) -> String {
+    let mut sorted = edge_ids.to_vec();
+    sorted.sort_unstable();
+    format!(
+        "({})",
+        sorted
+            .iter()
+            .map(|edge_id| edge_id.to_string())
+            .collect_vec()
+            .join(",")
+    )
+}
+
+pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
+    integrand: &I,
+) -> HistogramProcessInfo {
+    let graph_names = (0..integrand.graph_count())
+        .map(|graph_id| integrand.get_graph(graph_id).name())
+        .collect_vec();
+    let graph_to_group_id = integrand
+        .get_group_structure()
+        .iter_enumerated()
+        .flat_map(|(group_id, group)| {
+            group
+                .into_iter()
+                .map(move |graph_id| (graph_id, group_id.0))
+        })
+        .sorted_by_key(|(graph_id, _)| *graph_id)
+        .map(|(_, group_id)| group_id)
+        .collect_vec();
+    let graph_group_master_names = integrand
+        .get_group_structure()
+        .iter_enumerated()
+        .map(|(group_id, _)| integrand.get_master_graph(group_id).name())
+        .collect_vec();
+    let orientation_labels_by_group = integrand
+        .get_group_structure()
+        .iter_enumerated()
+        .map(|(group_id, _)| {
+            let master = integrand.get_master_graph(group_id);
+            (0..master.get_num_orientations())
+                .map(|orientation_id| {
+                    master
+                        .orientation_label(orientation_id)
+                        .unwrap_or_else(|| format!("#{}", orientation_id))
+                })
+                .collect_vec()
+        })
+        .collect_vec();
+    let lmb_channel_labels_by_group = integrand
+        .get_group_structure()
+        .iter_enumerated()
+        .map(|(group_id, _)| {
+            let master = integrand.get_master_graph(group_id);
+            (0..master.get_num_channels())
+                .map(|channel_id| {
+                    master
+                        .lmb_channel_label(ChannelIndex::from(channel_id))
+                        .unwrap_or_else(|| format!("#{}", channel_id))
+                })
+                .collect_vec()
+        })
+        .collect_vec();
+    HistogramProcessInfo {
+        graph_names,
+        graph_to_group_id,
+        graph_group_master_names,
+        orientation_labels_by_group,
+        lmb_channel_labels_by_group,
+    }
+}
+
 fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     result: &EvaluationResult,
@@ -1704,6 +1788,7 @@ pub trait ProcessIntegrandImpl {
     fn graph_count(&self) -> usize;
     fn get_settings(&self) -> &RuntimeSettings;
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G;
+    fn get_graph(&self, graph_id: usize) -> &Self::G;
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
     fn get_group(&self, group_id: GroupId) -> &GraphGroup;
     fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup>;
@@ -1758,6 +1843,8 @@ pub trait GraphTerm {
     ) -> Result<GraphEvaluationResult<T>>;
 
     fn name(&self) -> String;
+    fn orientation_label(&self, orientation_id: usize) -> Option<String>;
+    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String>;
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()>;
     fn get_graph(&self) -> &Graph;
@@ -1792,9 +1879,14 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     );
     integrand.restore_event_processing_runtime(event_processing_runtime);
     let mut result = result?;
+    let graph_group_id = integrand
+        .get_group_structure()
+        .iter_enumerated()
+        .find_map(|(group_id, group)| group.into_iter().contains(&graph_id).then_some(group_id.0));
     for event_group in result.event_groups.iter_mut() {
         for event in event_group.iter_mut() {
             event.cut_info.graph_id = graph_id;
+            event.cut_info.graph_group_id = graph_group_id;
         }
     }
     Ok(result)
@@ -2724,7 +2816,13 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
 ) -> Result<EvaluationResult> {
     let start_eval = std::time::Instant::now();
     let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
-    if escalate_if_exact_zero && !integrand.get_settings().selectors.is_empty() {
+    if escalate_if_exact_zero
+        && integrand
+            .get_settings()
+            .selectors
+            .values()
+            .any(|selector| selector.active)
+    {
         warn_selectors_disable_zero_once();
         escalate_if_exact_zero = false;
     }
@@ -2984,7 +3082,13 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
         .unwrap_or(Precision::Double);
     let base_metadata = base_result.evaluation_metadata.clone();
     let mut escalate_if_exact_zero = integrand.get_settings().stability.escalate_if_exact_zero;
-    if escalate_if_exact_zero && !integrand.get_settings().selectors.is_empty() {
+    if escalate_if_exact_zero
+        && integrand
+            .get_settings()
+            .selectors
+            .values()
+            .any(|selector| selector.active)
+    {
         escalate_if_exact_zero = false;
     }
 

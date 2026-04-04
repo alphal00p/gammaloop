@@ -376,9 +376,9 @@ title = "xs"
 type_description = "AL,NLO"
 quantity = "cross_section"
 phase = "real"
-x_min = 0.0
-x_max = 1.0
-n_bins = 1
+kind = "discrete"
+domain = { type = "single_bin" }
+labels = { type = "custom", labels = ["total cross-section"] }
 
 # Higgs observables
 
@@ -558,9 +558,8 @@ n_bins = 60
 quantity = "jet_count"
 entry_selection = "all"
 phase = "real"
-x_min = 0.0
-x_max = 2.0
-n_bins = 2
+kind = "discrete"
+domain = { type = "explicit_range", min = 0, max = 1 }
 
 '"""
 ]

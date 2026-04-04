@@ -83,7 +83,9 @@ impl RuntimeSettings {
     }
 
     pub(crate) fn should_generate_events(&self) -> bool {
-        self.general.generate_events || !self.selectors.is_empty() || !self.observables.is_empty()
+        self.general.generate_events
+            || self.selectors.values().any(|selector| selector.active)
+            || !self.observables.is_empty()
     }
 
     pub(crate) fn should_buffer_generated_events(&self) -> bool {
@@ -260,20 +262,23 @@ mod tests {
             "observable".to_string(),
             crate::observables::ObservableSettings {
                 quantity: "pt".to_string(),
+                selections: Vec::new(),
                 entry_selection: crate::observables::EntrySelection::All,
                 entry_index: 0,
                 value_transform: crate::observables::ObservableValueTransform::Identity,
                 phase: crate::observables::ObservablePhase::Real,
                 misbinning_max_normalized_distance: None,
-                histogram: crate::observables::HistogramSettings {
-                    x_min: 0.0,
-                    x_max: 1.0,
-                    n_bins: 1,
-                    log_x_axis: false,
-                    log_y_axis: true,
-                    title: None,
-                    type_description: "AL".to_string(),
-                },
+                histogram: crate::observables::HistogramSettings::Continuous(
+                    crate::observables::ContinuousHistogramSettings {
+                        x_min: 0.0,
+                        x_max: 1.0,
+                        n_bins: 1,
+                        log_x_axis: false,
+                        log_y_axis: true,
+                        title: None,
+                        type_description: "AL".to_string(),
+                    },
+                ),
             },
         );
         assert!(settings.should_generate_events());
@@ -286,6 +291,7 @@ mod tests {
             "selector".to_string(),
             crate::observables::SelectorSettings {
                 quantity: "pt".to_string(),
+                active: true,
                 entry_selection: crate::observables::EntrySelection::All,
                 entry_index: 0,
                 selector: crate::observables::SelectorDefinitionSettings::CountRange(
@@ -304,20 +310,23 @@ mod tests {
             "observable".to_string(),
             crate::observables::ObservableSettings {
                 quantity: "pt".to_string(),
+                selections: Vec::new(),
                 entry_selection: crate::observables::EntrySelection::All,
                 entry_index: 0,
                 value_transform: crate::observables::ObservableValueTransform::Identity,
                 phase: crate::observables::ObservablePhase::Real,
                 misbinning_max_normalized_distance: None,
-                histogram: crate::observables::HistogramSettings {
-                    x_min: 0.0,
-                    x_max: 1.0,
-                    n_bins: 1,
-                    log_x_axis: false,
-                    log_y_axis: true,
-                    title: None,
-                    type_description: "AL".to_string(),
-                },
+                histogram: crate::observables::HistogramSettings::Continuous(
+                    crate::observables::ContinuousHistogramSettings {
+                        x_min: 0.0,
+                        x_max: 1.0,
+                        n_bins: 1,
+                        log_x_axis: false,
+                        log_y_axis: true,
+                        title: None,
+                        type_description: "AL".to_string(),
+                    },
+                ),
             },
         );
         assert!(settings.should_generate_events());

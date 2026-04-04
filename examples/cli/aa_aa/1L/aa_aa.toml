@@ -7,8 +7,9 @@ name = "generate"
 commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
-
-    "remove processes -p aa_aa",
+	#"set global kv global.generation.uv.use_legacy=true",
+    
+	"remove processes -p aa_aa",
     """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]
         --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
         -p aa_aa -i 1L""",

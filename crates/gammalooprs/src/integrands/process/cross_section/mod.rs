@@ -71,7 +71,8 @@ use typed_index_collections::TiVec;
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample,
+    evaluate_sample, format_lmb_channel_label, format_orientation_label,
+    histogram_process_info_for_integrand,
 };
 
 pub mod export;
@@ -224,11 +225,13 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
         for a in self.data.graph_terms.iter_mut() {
             a.warm_up(&self.settings, model)?;
         }
-        self.event_processing_runtime
-            .set(EventProcessingRuntime::from_settings_with_model(
+        self.event_processing_runtime.set(
+            EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
                 model,
-            )?);
+                &histogram_process_info_for_integrand(self),
+            )?,
+        );
         Ok(())
     }
 
@@ -253,6 +256,10 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
+    }
+
+    fn get_graph(&self, graph_id: usize) -> &Self::G {
+        &self.data.graph_terms[graph_id]
     }
 
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
@@ -535,6 +542,8 @@ impl CrossSectionGraphTerm {
 
         let mut new_event = GenericEvent::<T>::default();
         new_event.cut_info.cut_id = cut_id.0;
+        new_event.cut_info.orientation_id = momentum_sample.sample.orientation;
+        new_event.cut_info.lmb_channel_id = channel_id.map(usize::from);
         new_event.cut_info.lmb_channel_edge_ids =
             channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
         // Set initial momenta and PDGs for the event
@@ -645,6 +654,18 @@ impl GraphTerm for CrossSectionGraphTerm {
 
     fn get_num_channels(&self) -> usize {
         self.multi_channeling_setup.channels.len()
+    }
+
+    fn orientation_label(&self, orientation_id: usize) -> Option<String> {
+        self.orientations
+            .get(OrientationID::from(orientation_id))
+            .map(format_orientation_label)
+    }
+
+    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String> {
+        Some(format_lmb_channel_label(
+            &self.multi_channeling_setup.channel_edge_ids(channel_id),
+        ))
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {

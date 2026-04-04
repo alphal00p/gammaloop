@@ -25,6 +25,7 @@ pub struct EvaluateSamples<'a> {
     pub integrand_name: Option<String>,
     pub use_arb_prec: bool,
     pub minimal_output: bool,
+    pub force_generate_events: bool,
     pub momentum_space: bool,
     pub points: ArrayView2<'a, f64>,
     pub integrator_weights: Option<ArrayView1<'a, f64>>,
@@ -43,68 +44,87 @@ impl<'a> EvaluateSamples<'a> {
         let integrand = state
             .process_list
             .get_integrand_mut(process_id, &integrand_name)?;
-        integrand.warm_up(&model)?;
-
-        let batch_len = self.points.nrows();
-        let integrator_weights =
-            normalize_integrator_weights(self.integrator_weights.as_ref(), batch_len)?;
-        let graph_names =
-            normalize_optional_per_sample(self.graph_names.as_ref(), batch_len, "graph_names")?;
-        let orientations =
-            normalize_optional_per_sample(self.orientations.as_ref(), batch_len, "orientations")?;
-
-        if !self.momentum_space
-            && (graph_names.iter().any(Option::is_some) || orientations.iter().any(Option::is_some))
-        {
-            return Err(eyre!(
-                "Graph and orientation selection are only supported in momentum-space evaluation."
-            ));
+        let previous_generate_events = integrand.get_settings().general.generate_events;
+        if self.force_generate_events && !previous_generate_events {
+            integrand.get_mut_settings().general.generate_events = true;
         }
 
-        if let Some(discrete_dims) = &self.discrete_dims {
-            if discrete_dims.nrows() != batch_len {
+        let run_result = (|| {
+            integrand.warm_up(&model)?;
+
+            let batch_len = self.points.nrows();
+            let integrator_weights =
+                normalize_integrator_weights(self.integrator_weights.as_ref(), batch_len)?;
+            let graph_names =
+                normalize_optional_per_sample(self.graph_names.as_ref(), batch_len, "graph_names")?;
+            let orientations = normalize_optional_per_sample(
+                self.orientations.as_ref(),
+                batch_len,
+                "orientations",
+            )?;
+
+            if !self.momentum_space
+                && (graph_names.iter().any(Option::is_some)
+                    || orientations.iter().any(Option::is_some))
+            {
                 return Err(eyre!(
-                    "Expected {} rows in discrete_dims, got {}.",
-                    batch_len,
-                    discrete_dims.nrows()
+                    "Graph and orientation selection are only supported in momentum-space evaluation."
                 ));
             }
+
+            if let Some(discrete_dims) = &self.discrete_dims {
+                if discrete_dims.nrows() != batch_len {
+                    return Err(eyre!(
+                        "Expected {} rows in discrete_dims, got {}.",
+                        batch_len,
+                        discrete_dims.nrows()
+                    ));
+                }
+            }
+
+            let samples = if self.momentum_space {
+                let inputs = build_momentum_inputs(
+                    integrand,
+                    &self.points,
+                    &integrator_weights,
+                    self.discrete_dims.as_ref(),
+                    &graph_names,
+                    &orientations,
+                )?;
+                integrand
+                    .evaluate_momentum_configurations_raw(&model, &inputs, self.use_arb_prec)?
+                    .samples
+            } else {
+                let samples = build_havana_samples(
+                    integrand,
+                    &self.points,
+                    &integrator_weights,
+                    self.discrete_dims.as_ref(),
+                )?;
+                integrand
+                    .evaluate_samples_raw(
+                        &model,
+                        &samples,
+                        1,
+                        self.use_arb_prec,
+                        false,
+                        Complex::new_zero(),
+                    )?
+                    .samples
+            };
+
+            let observables = integrand
+                .observable_snapshot_bundle()
+                .unwrap_or_else(ObservableSnapshotBundle::default);
+
+            Ok((samples, observables))
+        })();
+
+        if self.force_generate_events && !previous_generate_events {
+            integrand.get_mut_settings().general.generate_events = previous_generate_events;
         }
 
-        let samples = if self.momentum_space {
-            let inputs = build_momentum_inputs(
-                integrand,
-                &self.points,
-                &integrator_weights,
-                self.discrete_dims.as_ref(),
-                &graph_names,
-                &orientations,
-            )?;
-            integrand
-                .evaluate_momentum_configurations_raw(&model, &inputs, self.use_arb_prec)?
-                .samples
-        } else {
-            let samples = build_havana_samples(
-                integrand,
-                &self.points,
-                &integrator_weights,
-                self.discrete_dims.as_ref(),
-            )?;
-            integrand
-                .evaluate_samples_raw(
-                    &model,
-                    &samples,
-                    1,
-                    self.use_arb_prec,
-                    false,
-                    Complex::new_zero(),
-                )?
-                .samples
-        };
-
-        let observables = integrand
-            .observable_snapshot_bundle()
-            .unwrap_or_else(ObservableSnapshotBundle::default);
+        let (samples, observables) = run_result?;
 
         Ok(BatchSampleEvaluationResult {
             samples: samples

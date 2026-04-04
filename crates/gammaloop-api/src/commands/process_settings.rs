@@ -3,12 +3,12 @@ use std::{collections::BTreeMap, sync::OnceLock};
 use color_eyre::Result;
 use gammalooprs::{
     observables::{
-        CountRangeSelectorSettings, EntrySelection, FilterQuantity, HistogramSettings,
-        JetClusteringSettings, JetQuantitySettings, ObservablePhase, ObservableSettings,
-        ObservableValueTransform, PairQuantity, ParticleQuantitySettings, QuantityComputation,
-        QuantityComputationSettings, QuantityOrdering, QuantitySettings,
-        SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
-        ValueRangeSelectorSettings,
+        ContinuousHistogramSettings, CountRangeSelectorSettings, DiscreteRangeSelectorSettings,
+        EntrySelection, FilterQuantity, HistogramSettings, JetClusteringSettings,
+        JetQuantitySettings, ObservablePhase, ObservableSettings, ObservableValueTransform,
+        PairQuantity, ParticleQuantitySettings, QuantityComputation, QuantityComputationSettings,
+        QuantityOrdering, QuantitySettings, SelectorDefinitionSettings, SelectorReduction,
+        SelectorSettings, ValueRangeSelectorSettings,
     },
     settings::RuntimeSettings,
 };
@@ -110,6 +110,26 @@ fn quantity_templates() -> &'static [KindedTemplate<QuantitySettings>] {
                 "type",
                 "cross-section quantity template",
             ),
+            build_kinded_template(
+                QuantitySettings::GraphId {},
+                "type",
+                "graph-id quantity template",
+            ),
+            build_kinded_template(
+                QuantitySettings::GraphGroupId {},
+                "type",
+                "graph-group-id quantity template",
+            ),
+            build_kinded_template(
+                QuantitySettings::OrientationId {},
+                "type",
+                "orientation-id quantity template",
+            ),
+            build_kinded_template(
+                QuantitySettings::LmbChannelId {},
+                "type",
+                "lmb-channel-id quantity template",
+            ),
         ]
     })
 }
@@ -121,6 +141,7 @@ fn selector_templates() -> &'static [KindedTemplate<SelectorSettings>] {
             build_kinded_template(
                 SelectorSettings {
                     quantity: String::new(),
+                    active: true,
                     entry_selection: EntrySelection::All,
                     entry_index: 0,
                     selector: SelectorDefinitionSettings::ValueRange(ValueRangeSelectorSettings {
@@ -135,6 +156,23 @@ fn selector_templates() -> &'static [KindedTemplate<SelectorSettings>] {
             build_kinded_template(
                 SelectorSettings {
                     quantity: String::new(),
+                    active: true,
+                    entry_selection: EntrySelection::All,
+                    entry_index: 0,
+                    selector: SelectorDefinitionSettings::DiscreteRange(
+                        DiscreteRangeSelectorSettings {
+                            min: None,
+                            max: None,
+                        },
+                    ),
+                },
+                "selector",
+                "discrete-range selector template",
+            ),
+            build_kinded_template(
+                SelectorSettings {
+                    quantity: String::new(),
+                    active: true,
                     entry_selection: EntrySelection::All,
                     entry_index: 0,
                     selector: SelectorDefinitionSettings::CountRange(CountRangeSelectorSettings {
@@ -152,12 +190,13 @@ fn selector_templates() -> &'static [KindedTemplate<SelectorSettings>] {
 pub(crate) fn observable_template() -> ObservableSettings {
     ObservableSettings {
         quantity: String::new(),
+        selections: Vec::new(),
         entry_selection: EntrySelection::All,
         entry_index: 0,
         value_transform: ObservableValueTransform::Identity,
         phase: ObservablePhase::Real,
         misbinning_max_normalized_distance: None,
-        histogram: HistogramSettings::default(),
+        histogram: HistogramSettings::Continuous(ContinuousHistogramSettings::default()),
     }
 }
 
@@ -287,12 +326,17 @@ pub(crate) fn quantity_kind(settings: &QuantitySettings) -> &'static str {
         QuantitySettings::Jet(_) => "jet",
         QuantitySettings::AFB {} => "afb",
         QuantitySettings::CrossSection {} => "cross_section",
+        QuantitySettings::GraphId {} => "graph_id",
+        QuantitySettings::GraphGroupId {} => "graph_group_id",
+        QuantitySettings::OrientationId {} => "orientation_id",
+        QuantitySettings::LmbChannelId {} => "lmb_channel_id",
     }
 }
 
 pub(crate) fn selector_kind(settings: &SelectorSettings) -> &'static str {
     match &settings.selector {
         SelectorDefinitionSettings::ValueRange(_) => "value_range",
+        SelectorDefinitionSettings::DiscreteRange(_) => "discrete_range",
         SelectorDefinitionSettings::CountRange(_) => "count_range",
     }
 }
@@ -307,6 +351,10 @@ pub(crate) fn summarize_quantity(settings: &QuantitySettings) -> String {
         QuantitySettings::Jet(settings) => summarize_jet_quantity(settings),
         QuantitySettings::AFB {} => "forward/backward asymmetry".to_string(),
         QuantitySettings::CrossSection {} => "cross section weight".to_string(),
+        QuantitySettings::GraphId {} => "graph id metadata".to_string(),
+        QuantitySettings::GraphGroupId {} => "graph-group id metadata".to_string(),
+        QuantitySettings::OrientationId {} => "orientation id metadata".to_string(),
+        QuantitySettings::LmbChannelId {} => "LMB channel id metadata".to_string(),
     }
 }
 
@@ -363,21 +411,44 @@ fn summarize_quantity_computation(settings: &QuantityComputationSettings) -> Str
 }
 
 pub(crate) fn summarize_observable(settings: &ObservableSettings) -> String {
+    let selection_summary = if settings.selections.is_empty() {
+        "observable_selections=[]".to_string()
+    } else {
+        format!("observable_selections={:?}", settings.selections)
+    };
+    let histogram_summary = match &settings.histogram {
+        HistogramSettings::Continuous(histogram) => format!(
+            "continuous bins={} range=[{}, {}] log_x_axis={} title={} type_description={}",
+            histogram.n_bins,
+            histogram.x_min,
+            histogram.x_max,
+            histogram.log_x_axis,
+            histogram
+                .title
+                .clone()
+                .unwrap_or_else(|| "<observable name>".to_string()),
+            histogram.type_description,
+        ),
+        HistogramSettings::Discrete(histogram) => format!(
+            "discrete domain={:?} ordering={:?} labels={:?} title={} type_description={}",
+            histogram.domain,
+            histogram.ordering,
+            histogram.labels,
+            histogram
+                .title
+                .clone()
+                .unwrap_or_else(|| "<observable name>".to_string()),
+            histogram.type_description,
+        ),
+    };
     format!(
-        "quantity={} selection={} transform={:?} phase={:?} bins={} range=[{}, {}] title={} type_description={}",
+        "quantity={} selection={} {} transform={:?} phase={:?} {}",
         format_reference(&settings.quantity),
         format_entry_selection(settings.entry_selection, settings.entry_index),
+        selection_summary,
         settings.value_transform,
         settings.phase,
-        settings.histogram.n_bins,
-        settings.histogram.x_min,
-        settings.histogram.x_max,
-        settings
-            .histogram
-            .title
-            .clone()
-            .unwrap_or_else(|| "<observable name>".to_string()),
-        settings.histogram.type_description,
+        histogram_summary,
     )
 }
 
@@ -395,6 +466,17 @@ pub(crate) fn summarize_selector(settings: &SelectorSettings) -> String {
                 .unwrap_or_else(|| "inf".to_string()),
             selector.reduction
         ),
+        SelectorDefinitionSettings::DiscreteRange(selector) => format!(
+            "discrete_range=[{}, {}]",
+            selector
+                .min
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "-inf".to_string()),
+            selector
+                .max
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "inf".to_string()),
+        ),
         SelectorDefinitionSettings::CountRange(selector) => format!(
             "count=[{}, {}]",
             selector.min_count,
@@ -406,8 +488,9 @@ pub(crate) fn summarize_selector(settings: &SelectorSettings) -> String {
     };
 
     format!(
-        "quantity={} selection={} {selector_summary}",
+        "quantity={} active={} selection={} {selector_summary}",
         format_reference(&settings.quantity),
+        settings.active,
         format_entry_selection(settings.entry_selection, settings.entry_index),
     )
 }

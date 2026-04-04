@@ -58,7 +58,8 @@ use crate::{
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample,
+    evaluate_sample, format_lmb_channel_label, format_orientation_label,
+    histogram_process_info_for_integrand,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -210,6 +211,7 @@ impl AmplitudeGraphTerm {
     fn generate_event<T: FloatLike>(
         &self,
         settings: &RuntimeSettings,
+        orientation_id: Option<usize>,
         channel_id: Option<ChannelIndex>,
     ) -> Result<GenericEvent<T>> {
         let externals = settings
@@ -236,6 +238,8 @@ impl AmplitudeGraphTerm {
 
         let mut event = GenericEvent::default();
         event.cut_info.cut_id = 0;
+        event.cut_info.orientation_id = orientation_id;
+        event.cut_info.lmb_channel_id = channel_id.map(usize::from);
         event.cut_info.lmb_channel_edge_ids =
             channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
 
@@ -445,6 +449,18 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph.name.clone()
     }
 
+    fn orientation_label(&self, orientation_id: usize) -> Option<String> {
+        self.orientations
+            .get(OrientationID::from(orientation_id))
+            .map(format_orientation_label)
+    }
+
+    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String> {
+        Some(format_lmb_channel_label(
+            &self.multi_channeling_setup.channel_edge_ids(channel_id),
+        ))
+    }
+
     fn get_graph(&self) -> &Graph {
         &self.graph
     }
@@ -479,7 +495,11 @@ impl GraphTerm for AmplitudeGraphTerm {
         let mut generated_event_count = 0;
         let mut accepted_event_count = 0;
         if settings.should_return_generated_events() {
-            let mut event = self.generate_event(settings, event_channel_id)?;
+            let mut event = self.generate_event(
+                settings,
+                momentum_sample.sample.orientation,
+                event_channel_id,
+            )?;
             event.weight = integrand_result.clone();
 
             if settings.general.store_additional_weights_in_event {
@@ -939,11 +959,13 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             }
         }
 
-        self.event_processing_runtime
-            .set(EventProcessingRuntime::from_settings_with_model(
+        self.event_processing_runtime.set(
+            EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
                 model,
-            )?);
+                &histogram_process_info_for_integrand(self),
+            )?,
+        );
 
         Ok(())
     }
@@ -978,6 +1000,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
+    }
+
+    fn get_graph(&self, graph_id: usize) -> &Self::G {
+        &self.data.graph_terms[graph_id]
     }
 
     fn get_group(&self, group_id: GroupId) -> &GraphGroup {
