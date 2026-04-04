@@ -552,3 +552,50 @@
   - shared event-predicate compilation usable by both global selectors and observable selections
   - internal sample-context plumbing for `graph_group_id` / `orientation_id` / `lmb_channel_id`
 - While doing that, introduce the discrete sort model and the new stable `bin_id` representation immediately, because later retrofitting that separation would be expensive.
+
+## 2026-04-04 Debugging Status
+
+### LO cross-section regression after the discrete-histogram work
+
+- User reported that
+  - `./gammaloop --clean-state ./examples/cli/epem_a_ttxh/LO/epem_a_tth_LO.toml run generate generate integrate -c "quit -o"`
+    returned essentially zero on the real phase
+  - while the card targets are `1.563e-3` and `5.329e-4`
+- First investigation result:
+  - this is not caused by observable filling, selector gating, or the new discrete histogram machinery
+  - the exact same phase placement already existed on the parent revision right before the discrete-histogram commit
+- Reproduced on the parent revision:
+  - first iteration already gave `re ~ 1e-23`
+  - and `im ~ -1.56e-3` / `-5.22e-4`
+- Conclusion:
+  - the physical LO result was already being accumulated into the imaginary component before the discrete-histogram branch
+
+### Root cause found
+
+- The LO path has threshold subtraction disabled, so the returned cross section is driven by the bare cut contribution.
+- In `crates/gammalooprs/src/integrands/process/cross_section/mod.rs`, the bare contribution assembled from `pass_two_result` had lost the subset-dependent complex phase.
+- Restoring that phase at the bare contribution point fixes the LO phase placement:
+  - from effectively pure imaginary
+  - to effectively pure real
+
+### Implemented fix
+
+- Reintroduced the subset-dependent factor
+  - `Complex::new_im(momentum_sample.one()).pow(num_esurfaces as u64)`
+  - when converting `pass_two_result` into `bare_contribution`
+- This is intentionally local to the cross-section bare-cut assembly, not to the general integrator or histogram accumulation logic.
+
+### Verification
+
+- Reduced check with `20k` samples and `--show-phase both`:
+  - `epem_a_tth@LO`: `re ~ +1.59e-3`, `im ~ 0`
+  - `epem_a_tth@LO_semi_inclusive`: `re ~ +5.17e-4`, `im ~ 0`
+- Exact user command after the fix:
+  - `epem_a_tth@LO`: `+1.547(21)e-3`
+  - `epem_a_tth@LO_semi_inclusive`: `+5.330(72)e-4`
+  - both within about `1σ` of the card targets
+
+### Remaining follow-up
+
+- The fix is verified on the LO `epem_a_ttxh` example and on the exact user command.
+- Broader cross-section coverage outside this LO example should still be checked separately, but the immediate regression is resolved and is not related to the discrete histogram infrastructure itself.

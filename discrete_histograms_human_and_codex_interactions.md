@@ -394,3 +394,44 @@ Bugfix:
 - Identified that the flat selector deserializer was using an untagged helper enum where `discrete_range` still structurally matched the `value_range` helper before the manual tag check ran.
 - Tightened the flat selector serde helpers so each helper struct accepts only its own selector tag.
 - Added an explicit deserialization test for flat `discrete_range` selectors.
+
+## 2026-04-04 User
+
+Reported that the `epem_a_ttxh/LO` example no longer integrated to the published targets and asked for deep debugging, with an explicit request to:
+
+- first commit and push the current discrete-histogram work on a new `discrete_histograms` branch
+- then verify whether the issue already existed before the discrete-histogram changes
+- and if not, debug the new changes
+
+## 2026-04-04 Codex
+
+Saved and started the regression investigation:
+
+- committed the discrete-histogram work locally with a dedicated commit
+- pushed `discrete_histograms` to the remote and set upstream tracking
+- reproduced the reported near-zero real-phase LO result on the current branch
+- verified that the same issue already exists on the parent revision immediately before the discrete-histogram commit
+- established that the physical LO value was living in the imaginary component before the discrete-histogram work
+
+## 2026-04-04 User
+
+Requested further investigation after confirming that the exact command
+
+- `./gammaloop --clean-state ./examples/cli/epem_a_ttxh/LO/epem_a_tth_LO.toml run generate generate integrate -c "quit -o"`
+
+returned near-zero real results instead of the published LO targets.
+
+## 2026-04-04 Codex
+
+Root cause and fix:
+
+- narrowed the problem to the LO cross-section bare-cut assembly, not to selectors, observables, histogram filling, or the integration accumulator
+- identified that the bare contribution built from `pass_two_result` was missing the subset-dependent complex phase
+- restored that phase in
+  - `crates/gammalooprs/src/integrands/process/cross_section/mod.rs`
+- rebuilt the CLI and verified:
+  - with a reduced `20k`-sample run and `--show-phase both`, the LO result moved from the imaginary component to the real component
+  - with the exact user command, the real-phase results became
+    - `epem_a_tth@LO = +1.547(21)e-3`
+    - `epem_a_tth@LO_semi_inclusive = +5.330(72)e-4`
+  - which are both within about `1σ` of the card targets

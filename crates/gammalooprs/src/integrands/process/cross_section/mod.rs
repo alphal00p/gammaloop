@@ -1053,7 +1053,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                 debug!("pass_two_result: {:+16e}", pass_two_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                let bare_contribution = pass_two_result * prefactor; //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
+                let bare_contribution = pass_two_result
+                    * prefactor
+                    * Complex::new_im(momentum_sample.one()).pow(num_esurfaces as u64);
                 bare_cut_total += bare_contribution.clone();
                 cut_results.push(bare_contribution);
             }
