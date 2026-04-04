@@ -33,7 +33,7 @@ use crate::{
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
-        cross_section::CrossSectionIntegrandData,
+        cross_section::CrossSectionIntegrandData, graph_to_group_id_for_group_structure,
     },
     model::ArcParticle,
     momentum::{
@@ -300,6 +300,9 @@ impl CrossSection {
                 // polarizations,
                 graph_terms: terms,
                 graph_group_structure: self.graph_group_structure.clone(),
+                graph_to_group_id: graph_to_group_id_for_group_structure(
+                    &self.graph_group_structure,
+                ),
             },
             event_processing_runtime: Default::default(),
         };

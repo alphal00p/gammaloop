@@ -581,3 +581,34 @@ Implemented the command-display truncation in `crates/gammaloop-api/src/session.
   - `cargo test -p gammaloop-api display_command_ -- --nocapture`
   - `cargo fmt`
   - `cargo check -p gammaloop-api`
+
+## 2026-04-05 User
+
+Requested a PR-review follow-up workflow:
+
+- pull all comments from PR `#57` using `gh`
+- address the relevant ones locally
+- commit and push the fixes
+- update the PR and reply briefly to each comment with the resolution
+
+## 2026-04-05 Codex
+
+Pulled the PR review threads with `gh` and addressed the actionable comments:
+
+- fixed the discrete selector matching branch to match on a reference explicitly
+- added explicit invalid-range checks on the Rust and Python discrete histogram constructors before allocation
+- changed graph-group-context resolution to use the referenced quantity type instead of literal quantity names
+- validated negative and out-of-range singleton graph/group selector values during graph-group-context resolution
+- replaced unchecked label-resolution indexing with checked access and clear configuration errors
+- added `DiscreteBinOrdering::as_str()` and used it in Python snapshot serialization so ordering strings stay in accepted snake_case form
+- replaced the hot-path per-event graph-group scan with a cached graph-to-group mapping stored on the concrete process integrands
+- cleaned the reviewed example-card nits in:
+  - `examples/cli/gg_hhh/1L/gg_hhh_1L.toml`
+  - `examples/cli/aa_aa/1L/aa_aa.toml`
+- verified with:
+  - `cargo fmt`
+  - `cargo check`
+  - `cargo test -p gammaloop-api display_command_ -- --nocapture`
+  - `cargo test -p gammalooprs discrete_histogram_ -- --nocapture`
+  - `cargo test -p gammalooprs resolve_graph_group_context_uses_selector_quantity_type -- --nocapture`
+  - `cargo test -p gammalooprs resolve_graph_group_context_rejects_negative_singleton_values -- --nocapture`

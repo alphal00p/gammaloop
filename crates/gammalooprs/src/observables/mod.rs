@@ -890,6 +890,16 @@ pub enum DiscreteBinOrdering {
     AbsValueDescending,
 }
 
+impl DiscreteBinOrdering {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::AscendingBinId => "ascending_bin_id",
+            Self::ValueDescending => "value_descending",
+            Self::AbsValueDescending => "abs_value_descending",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -1341,9 +1351,9 @@ impl SelectorCriterion {
                 }
                 selected.iter().all(|entry| {
                     matches!(
-                        entry.coordinate,
+                        &entry.coordinate,
                         ObservableCoordinate::Discrete(value)
-                            if discrete_value_in_range(value, *min, *max)
+                            if discrete_value_in_range(*value, *min, *max)
                     )
                 })
             }
@@ -2262,7 +2272,7 @@ impl HistogramAccumulatorState {
         ordering: DiscreteBinOrdering,
         log_y_axis: bool,
         bin_labels: Vec<Option<String>>,
-    ) -> Self {
+    ) -> Result<Self> {
         Self::new_discrete(
             title,
             type_description,
@@ -2323,9 +2333,14 @@ impl HistogramAccumulatorState {
         ordering: DiscreteBinOrdering,
         log_y_axis: bool,
         bin_labels: Vec<Option<String>>,
-    ) -> Self {
+    ) -> Result<Self> {
+        if max_bin_id < min_bin_id {
+            return Err(eyre!(
+                "invalid discrete histogram range: max_bin_id ({max_bin_id}) must be >= min_bin_id ({min_bin_id})"
+            ));
+        }
         let n_bins = max_bin_id.saturating_sub(min_bin_id) as usize + 1;
-        Self {
+        Ok(Self {
             kind: HistogramSnapshotKind::Discrete,
             title,
             type_description,
@@ -2345,7 +2360,7 @@ impl HistogramAccumulatorState {
             underflow_bin: ObservableBinAccumulator::default(),
             overflow_bin: ObservableBinAccumulator::default(),
             statistics: ObservableHistogramStatistics::default(),
-        }
+        })
     }
 
     fn cleared_clone(&self) -> Self {
@@ -2377,7 +2392,8 @@ impl HistogramAccumulatorState {
                     .expect("discrete histogram missing ordering"),
                 self.log_y_axis,
                 self.bin_labels.clone(),
-            ),
+            )
+            .expect("cleared_clone should preserve a valid discrete histogram range"),
         }
     }
 
@@ -3244,6 +3260,7 @@ impl HistogramObservable {
     fn new(
         definition: ObservableDefinition,
         selections: Vec<ConfiguredSelector>,
+        quantities: &QuantitiesSettings,
         quantity_settings: &QuantitySettings,
         observable_name: &str,
         settings: &ObservableSettings,
@@ -3291,6 +3308,7 @@ impl HistogramObservable {
                     ));
                 }
                 let (min_bin_id, max_bin_id, bin_labels) = resolve_discrete_histogram_layout(
+                    quantities,
                     quantity_settings,
                     observable_name,
                     histogram,
@@ -3311,7 +3329,7 @@ impl HistogramObservable {
                     histogram.ordering,
                     histogram.log_y_axis,
                     bin_labels,
-                )
+                )?
             }
             (HistogramSettings::Continuous(_), ObservableCoordinateKind::Discrete) => {
                 return Err(eyre!(
@@ -3595,6 +3613,7 @@ impl HistogramObservable {
 }
 
 fn resolve_discrete_histogram_layout(
+    quantities: &QuantitiesSettings,
     quantity_settings: &QuantitySettings,
     observable_name: &str,
     histogram: &DiscreteHistogramSettings,
@@ -3606,6 +3625,7 @@ fn resolve_discrete_histogram_layout(
         observable_name,
         selection_names,
         selector_settings,
+        quantities,
         process_info,
     )?;
     let (min_bin_id, max_bin_id) = match histogram.domain {
@@ -3770,7 +3790,16 @@ fn resolve_discrete_histogram_layout(
                     observable_name
                 )
             })?;
-            info.orientation_labels_by_group[group_id]
+            info.orientation_labels_by_group
+                .get(group_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Observable '{}' resolved graph group {} for Orientation labels, but the process only exposes {} graph groups.",
+                        observable_name,
+                        group_id,
+                        info.orientation_labels_by_group.len()
+                    )
+                })?
                 .iter()
                 .cloned()
                 .map(Some)
@@ -3795,7 +3824,16 @@ fn resolve_discrete_histogram_layout(
                     observable_name
                 )
             })?;
-            info.lmb_channel_labels_by_group[group_id]
+            info.lmb_channel_labels_by_group
+                .get(group_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Observable '{}' resolved graph group {} for LmbChannelEdgeIds labels, but the process only exposes {} graph groups.",
+                        observable_name,
+                        group_id,
+                        info.lmb_channel_labels_by_group.len()
+                    )
+                })?
                 .iter()
                 .cloned()
                 .map(Some)
@@ -3817,6 +3855,7 @@ fn resolve_graph_group_context(
     observable_name: &str,
     selection_names: &[String],
     selector_settings: &SelectorsSettings,
+    quantities: &QuantitiesSettings,
     process_info: Option<&HistogramProcessInfo>,
 ) -> Result<Option<usize>> {
     let mut resolved = None;
@@ -3828,33 +3867,21 @@ fn resolve_graph_group_context(
                 selection_name
             ));
         };
-        let candidate = match (&selector.quantity[..], &selector.selector) {
-            (
-                "graph_group_id",
-                SelectorDefinitionSettings::DiscreteRange(DiscreteRangeSelectorSettings {
-                    min: Some(min),
-                    max: Some(max),
-                }),
-            ) if min == max => Some(*min as usize),
-            (
-                "graph_id",
-                SelectorDefinitionSettings::DiscreteRange(DiscreteRangeSelectorSettings {
-                    min: Some(min),
-                    max: Some(max),
-                }),
-            ) if min == max => {
-                let info = process_info.ok_or_else(|| {
-                    eyre!(
-                        "Observable '{}' needs process information to map selector '{}' graph_id={} to a graph group.",
-                        observable_name,
-                        selection_name,
-                        min
-                    )
-                })?;
-                info.graph_to_group_id.get(*min as usize).copied()
-            }
-            _ => None,
-        };
+        let quantity = quantities.get(&selector.quantity).ok_or_else(|| {
+            eyre!(
+                "Observable '{}' selection '{}' references unknown quantity '{}'",
+                observable_name,
+                selection_name,
+                selector.quantity
+            )
+        })?;
+        let candidate = graph_group_context_candidate(
+            observable_name,
+            selection_name,
+            selector,
+            quantity,
+            process_info,
+        )?;
         if let Some(candidate) = candidate {
             if let Some(existing) = resolved
                 && existing != candidate
@@ -3878,6 +3905,88 @@ fn resolve_graph_group_context(
     }
 
     Ok(resolved)
+}
+
+fn graph_group_context_candidate(
+    observable_name: &str,
+    selection_name: &str,
+    selector: &SelectorSettings,
+    quantity: &QuantitySettings,
+    process_info: Option<&HistogramProcessInfo>,
+) -> Result<Option<usize>> {
+    let SelectorDefinitionSettings::DiscreteRange(DiscreteRangeSelectorSettings {
+        min: Some(min),
+        max: Some(max),
+    }) = &selector.selector
+    else {
+        return Ok(None);
+    };
+    if min != max {
+        return Ok(None);
+    }
+
+    match quantity {
+        QuantitySettings::GraphGroupId {} => {
+            let group_id = singleton_selector_index(
+                observable_name,
+                selection_name,
+                "graph_group_id",
+                *min,
+                process_info.map(|info| info.graph_group_master_names.len()),
+            )?;
+            Ok(Some(group_id))
+        }
+        QuantitySettings::GraphId {} => {
+            let info = process_info.ok_or_else(|| {
+                eyre!(
+                    "Observable '{}' needs process information to map selector '{}' graph_id={} to a graph group.",
+                    observable_name,
+                    selection_name,
+                    min
+                )
+            })?;
+            let graph_id = singleton_selector_index(
+                observable_name,
+                selection_name,
+                "graph_id",
+                *min,
+                Some(info.graph_to_group_id.len()),
+            )?;
+            Ok(info.graph_to_group_id.get(graph_id).copied())
+        }
+        _ => Ok(None),
+    }
+}
+
+fn singleton_selector_index(
+    observable_name: &str,
+    selection_name: &str,
+    quantity_label: &str,
+    value: isize,
+    upper_bound: Option<usize>,
+) -> Result<usize> {
+    let index = usize::try_from(value).map_err(|_| {
+        eyre!(
+            "Observable '{}' resolves selector '{}' {}={} as graph-group context, but the value must be non-negative.",
+            observable_name,
+            selection_name,
+            quantity_label,
+            value
+        )
+    })?;
+    if let Some(upper_bound) = upper_bound
+        && index >= upper_bound
+    {
+        return Err(eyre!(
+            "Observable '{}' resolves selector '{}' {}={} as graph-group context, but the process only exposes {} valid values.",
+            observable_name,
+            selection_name,
+            quantity_label,
+            value,
+            upper_bound
+        ));
+    }
+    Ok(index)
 }
 
 impl Observable for HistogramObservable {
@@ -3966,6 +4075,7 @@ impl Observables {
         Ok(Observables::Histogram(HistogramObservable::new(
             ObservableDefinition::from_settings(quantity, clustering_registry, model)?,
             selections,
+            quantities,
             quantity,
             name,
             settings,
@@ -4220,13 +4330,15 @@ impl ObservablePhase {
 mod tests {
     use super::{
         ContinuousHistogramSettings, DiscreteBinDomainSettings, DiscreteBinOrdering,
-        DiscreteRangeSelectorSettings, HistogramAccumulatorState, HistogramBinSnapshot,
-        HistogramSettings, HistogramSnapshot, HistogramSnapshotKind, HistogramStatisticsSnapshot,
-        JetClusteringSettings, ObservablePhase, ObservableSettings, ObservableValueTransform,
-        SelectorDefinitionSettings, SelectorSettings,
+        DiscreteRangeSelectorSettings, EntrySelection, HistogramAccumulatorState,
+        HistogramBinSnapshot, HistogramProcessInfo, HistogramSettings, HistogramSnapshot,
+        HistogramSnapshotKind, HistogramStatisticsSnapshot, JetClusteringSettings, ObservablePhase,
+        ObservableSettings, ObservableValueTransform, QuantitySettings, SelectorDefinitionSettings,
+        SelectorSettings, resolve_graph_group_context,
     };
     use schemars::schema_for;
     use serde_json::Value as JsonValue;
+    use std::collections::BTreeMap;
     use std::fs;
 
     fn sample_histogram_snapshot() -> HistogramSnapshot {
@@ -4486,7 +4598,8 @@ max = 0
             DiscreteBinOrdering::AscendingBinId,
             true,
             vec![Some("zero".to_string()), Some("one".to_string())],
-        );
+        )
+        .unwrap();
         histogram
             .fill_discrete_sample(&[(0, 1.0), (1, 3.0)])
             .unwrap();
@@ -4506,5 +4619,103 @@ max = 0
         assert_eq!(reordered.bins[0].label.as_deref(), Some("one"));
         assert_eq!(reordered.bins[1].label.as_deref(), Some("zero"));
         assert_eq!(reordered.rebin(99).unwrap(), reordered);
+    }
+
+    #[test]
+    fn discrete_histogram_constructor_rejects_invalid_range() {
+        let err = HistogramAccumulatorState::discrete(
+            "bad_range".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            3,
+            1,
+            DiscreteBinOrdering::AscendingBinId,
+            true,
+            Vec::new(),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("invalid discrete histogram range"));
+    }
+
+    #[test]
+    fn resolve_graph_group_context_uses_selector_quantity_type() {
+        let quantities = BTreeMap::from([("my_graph".to_string(), QuantitySettings::GraphId {})]);
+        let selectors = BTreeMap::from([(
+            "graph_only".to_string(),
+            SelectorSettings {
+                quantity: "my_graph".to_string(),
+                active: false,
+                entry_selection: EntrySelection::All,
+                entry_index: 0,
+                selector: SelectorDefinitionSettings::DiscreteRange(
+                    DiscreteRangeSelectorSettings {
+                        min: Some(1),
+                        max: Some(1),
+                    },
+                ),
+            },
+        )]);
+        let process_info = HistogramProcessInfo {
+            graph_names: vec!["g0".to_string(), "g1".to_string()],
+            graph_to_group_id: vec![0, 2],
+            graph_group_master_names: vec![
+                "group0".to_string(),
+                "group1".to_string(),
+                "group2".to_string(),
+            ],
+            orientation_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
+            lmb_channel_labels_by_group: vec![Vec::new(), Vec::new(), Vec::new()],
+        };
+
+        let resolved = resolve_graph_group_context(
+            "obs",
+            &["graph_only".to_string()],
+            &selectors,
+            &quantities,
+            Some(&process_info),
+        )
+        .unwrap();
+
+        assert_eq!(resolved, Some(2));
+    }
+
+    #[test]
+    fn resolve_graph_group_context_rejects_negative_singleton_values() {
+        let quantities =
+            BTreeMap::from([("my_group".to_string(), QuantitySettings::GraphGroupId {})]);
+        let selectors = BTreeMap::from([(
+            "negative_group".to_string(),
+            SelectorSettings {
+                quantity: "my_group".to_string(),
+                active: false,
+                entry_selection: EntrySelection::All,
+                entry_index: 0,
+                selector: SelectorDefinitionSettings::DiscreteRange(
+                    DiscreteRangeSelectorSettings {
+                        min: Some(-1),
+                        max: Some(-1),
+                    },
+                ),
+            },
+        )]);
+        let process_info = HistogramProcessInfo {
+            graph_names: Vec::new(),
+            graph_to_group_id: Vec::new(),
+            graph_group_master_names: vec!["group0".to_string()],
+            orientation_labels_by_group: vec![Vec::new()],
+            lmb_channel_labels_by_group: vec![Vec::new()],
+        };
+
+        let err = resolve_graph_group_context(
+            "obs",
+            &["negative_group".to_string()],
+            &selectors,
+            &quantities,
+            Some(&process_info),
+        )
+        .unwrap_err();
+
+        assert!(err.to_string().contains("must be non-negative"));
     }
 }

@@ -592,6 +592,11 @@ impl PyHistogramAccumulator {
         phase: String,
         log_y_axis: bool,
     ) -> PyResult<Self> {
+        if max_bin_id < min_bin_id {
+            return Err(exceptions::PyValueError::new_err(format!(
+                "invalid discrete bin range: max_bin_id ({max_bin_id}) must be >= min_bin_id ({min_bin_id})"
+            )));
+        }
         let n_bins = max_bin_id
             .checked_sub(min_bin_id)
             .and_then(|delta| delta.checked_add(1))
@@ -620,7 +625,8 @@ impl PyHistogramAccumulator {
                 py_discrete_ordering(&ordering)?,
                 log_y_axis,
                 labels,
-            ),
+            )
+            .map_err(map_observable_error)?,
         })
     }
 
@@ -1376,7 +1382,7 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
         discrete_min_bin_id: snapshot.discrete_min_bin_id,
         discrete_ordering: snapshot
             .discrete_ordering
-            .map(|ordering| format!("{:?}", ordering).to_lowercase()),
+            .map(|ordering| ordering.as_str().to_string()),
         bins: snapshot
             .bins
             .into_iter()

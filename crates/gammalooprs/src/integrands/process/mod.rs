@@ -945,16 +945,17 @@ pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
     let graph_names = (0..integrand.graph_count())
         .map(|graph_id| integrand.get_graph(graph_id).name())
         .collect_vec();
-    let graph_to_group_id = integrand
-        .get_group_structure()
-        .iter_enumerated()
-        .flat_map(|(group_id, group)| {
-            group
-                .into_iter()
-                .map(move |graph_id| (graph_id, group_id.0))
+    let graph_to_group_id = (0..integrand.graph_count())
+        .map(|graph_id| {
+            integrand
+                .graph_group_id_for_graph(graph_id)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "graph {} is missing a graph-group mapping for histogram process info",
+                        graph_id
+                    )
+                })
         })
-        .sorted_by_key(|(graph_id, _)| *graph_id)
-        .map(|(_, group_id)| group_id)
         .collect_vec();
     let graph_group_master_names = integrand
         .get_group_structure()
@@ -996,6 +997,21 @@ pub(crate) fn histogram_process_info_for_integrand<I: ProcessIntegrandImpl>(
         orientation_labels_by_group,
         lmb_channel_labels_by_group,
     }
+}
+
+pub(crate) fn graph_to_group_id_for_group_structure(
+    group_structure: &TiVec<GroupId, GraphGroup>,
+) -> Vec<usize> {
+    group_structure
+        .iter_enumerated()
+        .flat_map(|(group_id, group)| {
+            group
+                .into_iter()
+                .map(move |graph_id| (graph_id, group_id.0))
+        })
+        .sorted_by_key(|(graph_id, _)| *graph_id)
+        .map(|(_, group_id)| group_id)
+        .collect_vec()
 }
 
 fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(
@@ -1790,6 +1806,7 @@ pub trait ProcessIntegrandImpl {
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G;
     fn get_graph(&self, graph_id: usize) -> &Self::G;
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
+    fn graph_group_id_for_graph(&self, graph_id: usize) -> Option<usize>;
     fn get_group(&self, group_id: GroupId) -> &GraphGroup;
     fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup>;
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor<'_>;
@@ -1879,10 +1896,7 @@ fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     );
     integrand.restore_event_processing_runtime(event_processing_runtime);
     let mut result = result?;
-    let graph_group_id = integrand
-        .get_group_structure()
-        .iter_enumerated()
-        .find_map(|(group_id, group)| group.into_iter().contains(&graph_id).then_some(group_id.0));
+    let graph_group_id = integrand.graph_group_id_for_graph(graph_id);
     for event_group in result.event_groups.iter_mut() {
         for event in event_group.iter_mut() {
             event.cut_info.graph_id = graph_id;

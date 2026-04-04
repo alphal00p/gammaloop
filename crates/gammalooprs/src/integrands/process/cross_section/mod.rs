@@ -110,6 +110,7 @@ pub struct CrossSectionIntegrandData {
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
+    pub graph_to_group_id: Vec<usize>,
     // pub builder_cache: ParamBuilder<f64>,
 }
 
@@ -256,6 +257,10 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
+    }
+
+    fn graph_group_id_for_graph(&self, graph_id: usize) -> Option<usize> {
+        self.data.graph_to_group_id.get(graph_id).copied()
     }
 
     fn get_graph(&self, graph_id: usize) -> &Self::G {

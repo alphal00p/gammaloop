@@ -48,7 +48,6 @@ commands = [
   "set global kv global.n_cores.feyngen=10",
 
   "remove processes",
-  "remove processes",
 
   """generate amp g g > h h h / u d c s b QED==3 [{1}]
            --only-diagrams
@@ -97,7 +96,7 @@ commands = [
   """integrate --process gg_hhh -i 1L --n-cores 10
         --target 6.56089133881216768e-4 -4.17078968913725420e-6
         --no-show-integration-statistics
-		--restart
+        --restart
     """,
 ]
 

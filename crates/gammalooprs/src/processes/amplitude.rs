@@ -36,6 +36,7 @@ use crate::{
     integrands::process::{
         LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
+        graph_to_group_id_for_group_structure,
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
@@ -331,6 +332,9 @@ impl Amplitude {
                 graph_terms: terms,
                 external_signature: self.external_signature.clone(),
                 graph_group_structure: self.graph_group_structure.clone(),
+                graph_to_group_id: graph_to_group_id_for_group_structure(
+                    &self.graph_group_structure,
+                ),
                 group_derived_data: self.group_derived_data.clone(),
             },
             event_processing_runtime: Default::default(),

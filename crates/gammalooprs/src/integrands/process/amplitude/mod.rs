@@ -576,6 +576,7 @@ pub struct AmplitudeIntegrandData {
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
+    pub graph_to_group_id: Vec<usize>,
     pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
 }
 
@@ -1000,6 +1001,10 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
+    }
+
+    fn graph_group_id_for_graph(&self, graph_id: usize) -> Option<usize> {
+        self.data.graph_to_group_id.get(graph_id).copied()
     }
 
     fn get_graph(&self, graph_id: usize) -> &Self::G {

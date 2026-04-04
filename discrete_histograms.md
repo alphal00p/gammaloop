@@ -717,3 +717,29 @@
 - `cargo test -p gammaloop-api display_command_ -- --nocapture`
 - `cargo fmt`
 - `cargo check -p gammaloop-api`
+
+## 2026-04-05 PR Review Follow-Up
+
+### Review feedback addressed
+
+- Validated discrete histogram ranges explicitly before allocation on both the Rust and Python histogram-construction paths.
+- Fixed graph-group-context resolution for auto orientation/LMB domains and labels so it:
+  - resolves by quantity type instead of literal selector quantity names
+  - rejects negative singleton selector values
+  - rejects out-of-range singleton graph/group ids when process info is available
+  - avoids unchecked group indexing during label resolution
+- Added a snake_case string helper for `DiscreteBinOrdering` and used it in Python snapshot serialization so ordering metadata round-trips correctly.
+- Replaced the hot-path graph-group lookup-by-scan during graph evaluation with a cached graph-to-group mapping stored on the concrete process integrands.
+- Cleaned the reviewed example-card nits:
+  - removed the duplicated `remove processes` entry in `examples/cli/gg_hhh/1L/gg_hhh_1L.toml`
+  - fixed the indentation issues that were introduced in the reviewed sections of `examples/cli/gg_hhh/1L/gg_hhh_1L.toml` and `examples/cli/aa_aa/1L/aa_aa.toml`
+- Also changed the discrete selector matching branch to match by reference explicitly for consistency with the continuous selector path.
+
+### Verification
+
+- `cargo fmt`
+- `cargo check`
+- `cargo test -p gammaloop-api display_command_ -- --nocapture`
+- `cargo test -p gammalooprs discrete_histogram_ -- --nocapture`
+- `cargo test -p gammalooprs resolve_graph_group_context_uses_selector_quantity_type -- --nocapture`
+- `cargo test -p gammalooprs resolve_graph_group_context_rejects_negative_singleton_values -- --nocapture`

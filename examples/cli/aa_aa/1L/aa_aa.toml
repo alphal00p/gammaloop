@@ -7,9 +7,9 @@ name = "generate"
 commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
-	#"set global kv global.generation.uv.use_legacy=true",
-    
-	"remove processes -p aa_aa",
+    #"set global kv global.generation.uv.use_legacy=true",
+
+    "remove processes -p aa_aa",
     """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]
         --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
         -p aa_aa -i 1L""",
@@ -34,10 +34,10 @@ commands = [
     "remove processes -p aa_aa_no_UV",
     "import graphs ./aa_aa_1L.dot -p aa_aa_no_UV -i 1L_ppmm",
     #"import graphs /Users/vjhirsch/Documents/Work/gammaloop_main/examples/cli/aa_aa/1L/aa_aa_1L.dot -p aa_aa_no_UV -i 1L_ppmm",
-	"save dot",
-	"generate",
-	"set process -p aa_aa_no_UV -i 1L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
-	"duplicate integrand -p aa_aa_no_UV -i 1L_ppmm --output_process_name aa_aa_no_UV --output_integrand_name 1L_mpmm",
+    "save dot",
+    "generate",
+    "set process -p aa_aa_no_UV -i 1L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa_no_UV -i 1L_ppmm --output_process_name aa_aa_no_UV --output_integrand_name 1L_mpmm",
     "set process -p aa_aa_no_UV -i 1L_mpmm kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
     "duplicate integrand -p aa_aa_no_UV -i 1L_ppmm --output_process_name aa_aa_no_UV --output_integrand_name 1L_mmmm",
     "set process -p aa_aa_no_UV -i 1L_mmmm kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
