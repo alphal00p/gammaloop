@@ -1670,9 +1670,7 @@ mod tests {
             commands,
             vec![
                 "set global kv global.display_directive=warn",
-                "set global kv global.logfile_directive=error",
-                "set default-runtime kv general.mu_r=12.0",
-                "set default-runtime kv general.m_uv=7.0",
+                "run cmdBlockA cmdBlockB -c 'set default-runtime kv general.m_uv=7.0'",
             ]
         );
     }

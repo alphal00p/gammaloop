@@ -612,3 +612,84 @@ Pulled the PR review threads with `gh` and addressed the actionable comments:
   - `cargo test -p gammalooprs discrete_histogram_ -- --nocapture`
   - `cargo test -p gammalooprs resolve_graph_group_context_uses_selector_quantity_type -- --nocapture`
   - `cargo test -p gammalooprs resolve_graph_group_context_rejects_negative_singleton_values -- --nocapture`
+
+## 2026-04-05 User
+
+Noted that the saved `run.toml` now correctly includes commands executed while booting from a TOML file, but asked for an assessment before implementation of a follow-up behavior change:
+
+- for
+  - `./gammaloop --clean-state ./examples/cli/epem_a_ttxh/LO/epem_a_tth_LO.toml run generate -c "quit -o"`
+- the resulting `run.toml` currently stores the unfolded contents of the `generate` command block
+- the requested behavior would be to keep a higher-level `run generate` entry instead
+
+## 2026-04-05 Codex
+
+Assessed the difficulty and identified the real source of the behavior:
+
+- this is not primarily a boot-card issue
+- the LO card has no top-level `commands`; it only defines command blocks
+- the unfolding comes from the generic `run ...` command-history behavior in `CliSession::execute_run(...)`
+
+Assessment:
+
+- the simple implementation is moderate and localized if we are willing to change the audit semantics
+- the real tricky point is semantic, not mechanical:
+  - today flattening stores the concrete executed commands and makes replay independent of later block-name meaning
+  - storing only `run generate` would make replay depend more directly on the saved command-block definitions
+- so the change is easy-to-moderate if preserving the literal top-level invocation is the main goal, but more invasive if we also want to preserve the current strongest replay/audit guarantees
+
+## 2026-04-05 User
+
+Approved the higher-level invocation model and requested implementation:
+
+- command-block definitions are safeguarded from changing, so it is acceptable for `run.toml` to preserve wrapper commands such as `run generate`
+- noted that this was already the intended behavior for CLI-entered `run blockNameA`
+- requested proceeding with the implementation
+
+## 2026-04-05 Codex
+
+Implemented the run-history recording change:
+
+- changed `CliSession::execute_run(...)` so child commands executed inside a `run ...` always use suppressed history recording
+- when the outer history mode is `Record`, the wrapper `run ...` command itself is recorded once after successful execution
+- the same wrapper recording now also applies when the run exits through `quit -o`
+- this restores higher-level run-history entries consistently for:
+  - direct CLI `run ...`
+  - one-shot startup `run ...`
+  - boot-run-history replay of stored `run ...` entries
+  - command blocks defined interactively and then executed with `run <name>`
+- updated the affected expectations in:
+  - `tests/tests/test_cli.rs`
+  - `crates/gammaloop-api/src/lib.rs`
+- verified with:
+  - `cargo fmt`
+  - `cargo test -p gammaloop-api one_shot_run_history_persists_all_executed_commands -- --nocapture`
+  - `cargo test -p gammaloop-integration-tests --test test_cli cli_stateful_workflow_behaviors -- --nocapture`
+  - `cargo check`
+
+## 2026-04-06 User
+
+Reported a follow-up issue with the new wrapper-style run-history entries:
+
+- persisted history now contained entries such as `run generate -c 'quit -o'`
+- reiterated that `quit` commands should never be added to history
+- requested that boot-time submitted commands emulate the normal CLI-session history behavior
+
+## 2026-04-06 Codex
+
+Adjusted persisted `run ...` history normalization so non-persistable inline commands are removed before wrapper commands are saved:
+
+- added shared persisted-history sanitization in `crates/gammaloop-api/src/session.rs`
+- `run ... -c ...` entries now drop inline `quit`, `start_commands_block`, and `finish_commands_block` before recording
+- if that removal empties the inline command list, the persisted entry falls back to the plain wrapper, e.g.:
+  - `run demo -c 'quit -o'` becomes `run demo`
+- this now also fixes one-shot startup history, for example:
+  - `run cmdBlockA cmdBlockB -c "set default-runtime kv general.m_uv=7.0; quit -o"`
+  - persists as `run cmdBlockA cmdBlockB -c 'set default-runtime kv general.m_uv=7.0'`
+- updated the affected tests in:
+  - `tests/tests/test_cli.rs`
+  - `crates/gammaloop-api/src/lib.rs`
+- verified with:
+  - `cargo test -p gammaloop-api one_shot_run_history_persists_all_executed_commands -- --nocapture`
+  - `cargo test -p gammaloop-integration-tests --test test_cli cli_stateful_workflow_behaviors -- --nocapture`
+  - `cargo check`

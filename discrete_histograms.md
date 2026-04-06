@@ -740,6 +740,90 @@
 - `cargo fmt`
 - `cargo check`
 - `cargo test -p gammaloop-api display_command_ -- --nocapture`
+
+## 2026-04-05 Run Command Audit Assessment
+
+### User-requested assessment
+
+- The current saved `run.toml` records the unfolded commands executed by:
+  - `./gammaloop --clean-state ./examples/cli/epem_a_ttxh/LO/epem_a_tth_LO.toml run generate -c "quit -o"`
+- The requested behavior is to keep the literal top-level command:
+  - `run generate`
+  rather than expanding the `generate` block contents into `commands = [...]`
+
+### Assessment
+
+- This is not actually specific to boot-card startup.
+- The LO card does not define top-level `commands`; it only defines command blocks.
+- The unfolding therefore comes from the generic `run ...` command-history behavior in `CliSession::execute_run(...)`, not from `apply_boot_run_history(...)`.
+
+### Difficulty
+
+- If the goal is only cosmetic or UX-oriented, and we accept a change in the audit model, then the implementation is moderate and localized:
+  - introduce a distinction between:
+    - externally entered top-level `run ...` commands
+    - nested/internal `run ...` expansion
+  - record the wrapper form for the top-level case
+  - keep nested runs flattened
+  - update the existing run-history tests accordingly
+- If the goal is to keep the current “faithful replay/audit” property in the presence of later command-block redefinitions, then it becomes more invasive.
+  - Today the flattening guarantees that replay does not depend on the later meaning of a block name.
+  - Recording only `run generate` would make replay depend on the stored `command_blocks` definitions for `generate`.
+  - That is acceptable only if we are comfortable with that semantic shift, or if we add a stronger snapshotting/versioning model for command-block definitions at execution time.
+
+### Recommendation
+
+- I would classify the simple behavior change as moderate, not hard.
+- The tricky point is not implementation complexity but semantics:
+  - whether we still want `run.toml` to be an execution transcript of concrete commands
+  - or whether we want it to preserve higher-level `run <block>` invocations even though that makes replay depend more directly on block definitions
 - `cargo test -p gammalooprs discrete_histogram_ -- --nocapture`
 - `cargo test -p gammalooprs resolve_graph_group_context_uses_selector_quantity_type -- --nocapture`
 - `cargo test -p gammalooprs resolve_graph_group_context_rejects_negative_singleton_values -- --nocapture`
+
+## 2026-04-05 Run Command Audit Implementation
+
+### User-approved direction
+
+- The higher-level invocation form is acceptable.
+- Command-block definitions are treated as stable enough that `run.toml` can preserve:
+  - `run generate`
+  instead of unfolding the block contents.
+- The user also noted this was already the intended behavior for CLI-entered `run blockName...` commands, so the implementation should restore that wrapper-level recording model consistently.
+
+### Implemented changes
+
+- Changed `CliSession::execute_run(...)` in `crates/gammaloop-api/src/session.rs` so that:
+  - child commands inside a `run ...` execution are always evaluated with `HistoryMode::Suppress`
+  - the wrapper `run ...` command itself is what gets recorded when the outer history mode is `Record`
+  - this also applies when the run plan exits through `quit -o` / `ControlFlow::Break(...)`
+- Added persisted-history sanitization for wrapper `run ...` commands:
+  - non-persistable inline commands are removed before the wrapper is saved
+  - in practice this means `quit`, `start_commands_block`, and `finish_commands_block` never appear inside a persisted `run ... -c ...`
+  - if sanitization removes the entire inline `-c` payload, the history entry falls back to the plain wrapper such as `run generate`
+- This restores a higher-level audit script for:
+  - direct CLI `run ...`
+  - one-shot `... run ...`
+  - boot-run-history replay of saved `run ...` entries
+  - interactively defined blocks later executed through `run <name>`
+- Nested runs are no longer flattened into their child commands in the saved history; the top-level recorded wrapper remains the single audit entry.
+
+### Tests updated
+
+- Updated the run-history expectations in:
+  - `tests/tests/test_cli.rs`
+  - `crates/gammaloop-api/src/lib.rs`
+- Specifically, the following now expect wrapper-form history entries:
+  - `run set_display set_runtime -c "..."`
+  - `run outer`
+  - `run boot_block`
+  - `run demo`
+  - `run demo -c 'quit -o'` now persists as `run demo`
+  - one-shot `run cmdBlockA cmdBlockB -c "...; quit -o"` now persists without the trailing `quit`
+
+### Verification
+
+- `cargo fmt`
+- `cargo test -p gammaloop-api one_shot_run_history_persists_all_executed_commands -- --nocapture`
+- `cargo test -p gammaloop-integration-tests --test test_cli cli_stateful_workflow_behaviors -- --nocapture`
+- `cargo check`

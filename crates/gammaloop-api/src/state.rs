@@ -824,7 +824,6 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 )]
 #[derive(Clone)]
 pub struct State {
-    active_state_path: PathBuf,
     pub model: Model,
     pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
@@ -1587,7 +1586,6 @@ impl State {
         super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
 
         Self {
-            active_state_path: log_dir.as_ref().to_path_buf(),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1598,7 +1596,6 @@ impl State {
         let _ = init_test_tracing();
 
         Self {
-            active_state_path: PathBuf::from("./gammaloop_state"),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1609,7 +1606,6 @@ impl State {
         let _ = init_bench_tracing();
 
         Self {
-            active_state_path: PathBuf::from("./gammaloop_state"),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),

@@ -193,11 +193,7 @@ fn run_records_executed_commands() -> Result<()> {
     assert_eq!(cli.cli_settings.global.logfile_directive, "error");
     assert_eq!(
         history_strings(&cli.run_history),
-        vec![
-            "set global kv global.display_directive=warn",
-            "set default-runtime kv general.mu_r=12.0",
-            "set global kv global.logfile_directive=error",
-        ]
+        vec!["run set_display set_runtime -c \"set global kv global.logfile_directive=error\""]
     );
     Ok(())
 }
@@ -245,10 +241,7 @@ fn nested_run_records_executed_commands_once() -> Result<()> {
     cli.run_command("run outer")?;
 
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
-    assert_eq!(
-        history_strings(&cli.run_history),
-        vec!["set global kv global.display_directive=warn"]
-    );
+    assert_eq!(history_strings(&cli.run_history), vec!["run outer"]);
     Ok(())
 }
 
@@ -285,10 +278,7 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
     assert_eq!(cli.run_history.command_blocks.len(), 1);
     assert_eq!(
         history_strings(&cli.run_history),
-        vec![
-            "set global kv global.display_directive=warn",
-            "set default-runtime kv general.mu_r=24.0",
-        ]
+        vec!["run boot_block", "set default-runtime kv general.mu_r=24.0",]
     );
 
     cli.save_state()?;
@@ -535,10 +525,7 @@ fn command_block_definition_mode_defers_execution_and_omits_history() -> Result<
     cli.run_command("run demo")?;
 
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
-    assert_eq!(
-        history_strings(&cli.run_history),
-        vec!["set global kv global.display_directive=warn"]
-    );
+    assert_eq!(history_strings(&cli.run_history), vec!["run demo"]);
     Ok(())
 }
 
@@ -555,10 +542,7 @@ fn run_command_block_then_inline_quit_preserves_override_flag() -> Result<()> {
     };
 
     assert_eq!(save_state.override_state, Some(true));
-    assert_eq!(
-        history_strings(&cli.run_history),
-        vec!["set global kv global.display_directive=warn"]
-    );
+    assert_eq!(history_strings(&cli.run_history), vec!["run demo"]);
     assert_eq!(cli.cli_settings.global.display_directive, "warn");
     Ok(())
 }

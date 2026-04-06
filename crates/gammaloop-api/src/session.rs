@@ -610,8 +610,11 @@ impl<'a> CliSession<'a> {
         for block in plan.blocks {
             info!("{} {}", "Starting command block".blue(), block.name.green());
             if let ControlFlow::Break(save_state) =
-                self.execute_prepared_commands(block.commands, history_mode)?
+                self.execute_prepared_commands(block.commands, HistoryMode::Suppress)?
             {
+                if history_mode == HistoryMode::Record {
+                    self.record_command(&command);
+                }
                 return Ok(CommandExecution::break_with(save_state));
             }
         }
@@ -625,9 +628,16 @@ impl<'a> CliSession<'a> {
         }
 
         if let ControlFlow::Break(save_state) =
-            self.execute_prepared_commands(plan.commands, history_mode)?
+            self.execute_prepared_commands(plan.commands, HistoryMode::Suppress)?
         {
+            if history_mode == HistoryMode::Record {
+                self.record_command(&command);
+            }
             return Ok(CommandExecution::break_with(save_state));
+        }
+
+        if history_mode == HistoryMode::Record {
+            self.record_command(&command);
         }
 
         Ok(CommandExecution::continue_without_output())
@@ -715,10 +725,63 @@ impl<'a> CliSession<'a> {
     }
 
     fn record_command(&mut self, command: &CommandHistory) {
-        let normalized = normalize_command_history(command);
-        self.run_history
-            .push_with_raw(normalized.command, normalized.raw_string);
+        if let Some(normalized) = normalize_persisted_command_history(command) {
+            self.run_history
+                .push_with_raw(normalized.command, normalized.raw_string);
+        }
     }
+}
+
+fn normalize_persisted_command_history(command: &CommandHistory) -> Option<CommandHistory> {
+    match &command.command {
+        Commands::Quit(_) | Commands::StartCommandsBlock(_) | Commands::FinishCommandsBlock => None,
+        Commands::Run(run) => normalize_persisted_run_history(command, run),
+        _ => Some(normalize_command_history(command)),
+    }
+}
+
+fn normalize_persisted_run_history(
+    command: &CommandHistory,
+    run: &crate::commands::Run,
+) -> Option<CommandHistory> {
+    let inline_commands = run
+        .parse_inline_commands()
+        .expect("persisted run commands should always have parseable inline commands");
+    let persisted_inline_commands = inline_commands
+        .iter()
+        .filter_map(normalize_persisted_command_history)
+        .collect::<Vec<_>>();
+
+    let persisted_run = crate::commands::Run {
+        block_names: run.block_names.clone(),
+        commands: (!persisted_inline_commands.is_empty()).then(|| {
+            persisted_inline_commands
+                .iter()
+                .map(persisted_command_raw_string)
+                .collect::<Vec<_>>()
+                .join("; ")
+        }),
+    };
+
+    if persisted_run.is_noop() {
+        return None;
+    }
+
+    if persisted_run == *run {
+        return Some(normalize_command_history(command));
+    }
+
+    let raw_string = persisted_run.canonical_raw_string();
+    Some(CommandHistory::new_with_raw(
+        Commands::Run(persisted_run),
+        raw_string,
+    ))
+}
+
+fn persisted_command_raw_string(command: &CommandHistory) -> String {
+    normalize_command_history(command)
+        .raw_string
+        .expect("persisted inline commands should remain representable as raw strings")
 }
 
 fn normalize_command_history(command: &CommandHistory) -> CommandHistory {
