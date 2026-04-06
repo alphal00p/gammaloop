@@ -693,3 +693,153 @@ Adjusted persisted `run ...` history normalization so non-persistable inline com
   - `cargo test -p gammaloop-api one_shot_run_history_persists_all_executed_commands -- --nocapture`
   - `cargo test -p gammaloop-integration-tests --test test_cli cli_stateful_workflow_behaviors -- --nocapture`
   - `cargo check`
+
+## 2026-04-06 User
+
+Requested a deep-dive assessment of supporting observables in the amplitude evaluation stack:
+
+- discrete observables such as total contribution, per graph, per orientation, and per LMB channel should also make sense for amplitudes
+- `evaluate_sample(s)` should be able to return histogram bundles for amplitudes too
+- particle-related quantities may be interpreted from the fixed external state of the amplitude process, even if they are mostly constant
+- asked for a plan and identification of likely short-comings rather than immediate implementation
+
+## 2026-04-06 Codex
+
+Deep-dive conclusion:
+
+- this is smaller than a new histogram feature and likely moderate in scope
+- the bundle/result plumbing is already generic over amplitudes and cross sections
+- the main missing functionality is amplitude-side event generation policy and selector handling
+
+Key findings:
+
+- `AmplitudeIntegrand::warm_up(...)` already creates an `EventProcessingRuntime` with selectors, observables, and process info for auto labels/ranges
+- amplitude graph terms already generate events carrying:
+  - particle PDGs
+  - external momenta
+  - `orientation_id`
+  - `lmb_channel_id`
+  - `lmb_channel_edge_ids`
+- process-level code already injects `graph_id` and `graph_group_id` into returned event groups for amplitudes too
+- observable quantity extraction and histogram snapshots are already generic enough
+
+Main blocker:
+
+- `AmplitudeGraphTerm::evaluate(...)` ignores `event_processing_runtime` and only generates events when `general.generate_events` is explicitly enabled
+- this does not follow the existing runtime policy where selectors or observables should force event generation/buffering
+- as a result:
+  - amplitude observables do not naturally work in integration runs with observables but no explicit event output
+  - active selectors are not really enforced on amplitudes
+
+Recommended plan:
+
+- mirror the cross-section event-generation logic in the amplitude graph evaluation path
+- build amplitude events when selectors or observables require them
+- run active selectors through `EventProcessingRuntime`
+- zero the graph contribution when a selector rejects the amplitude event
+- buffer only identity-rotation events for observable accumulation / returned event groups to avoid double counting
+- add amplitude-specific tests for:
+  - metadata discrete histograms
+  - selector rejection
+  - fixed-external-state particle quantities
+  - non-empty observable bundles from `evaluate_sample(s)`
+
+Short-comings noted:
+
+- particle/jet quantities on amplitudes will often be constant across samples because they are derived from fixed external kinematics
+- `cross_section` remains a somewhat misleading quantity name on amplitudes, even if the resulting “total contribution” histogram is still useful
+- precise evaluation APIs would need a small follow-up if they should also expose observables reliably under the same conditions
+
+## 2026-04-06 User
+
+Agreed in principle to adding amplitude observables, but added several clarifications:
+
+- amplitudes must have no event-generation overhead when:
+  - `generate_events = false`
+  - no selectors are active
+  - no observables are configured
+- if selectors or observables exist, internal event generation must happen regardless of `generate_events`, exactly as for cross sections
+- avoid code duplication aggressively; shared event-handling logic should be refactored rather than copied
+- rename the observable quantity `CrossSection` to `Integral` and update TOML cards accordingly
+- re-check the status of `evaluate_sample(s)`:
+  - if the user does not want returned event groups, that should remain possible
+  - selectors/observables may still require internal event generation without surfacing those events to the API caller
+- requested a revised plan after another thorough code review
+
+## 2026-04-06 Codex
+
+Revised conclusion after re-reading the control flow:
+
+- the low-level process runtime already has the right conceptual split:
+  - `should_generate_events()` for internal event creation
+  - `should_buffer_generated_events()` for retaining accepted identity-rotation events long enough for observables / caller-facing use
+  - `should_return_generated_events()` for whether event groups survive into returned API results
+- cross sections already follow this model
+- amplitudes currently do not:
+  - they only generate events when `should_return_generated_events()` is true
+  - they ignore `event_processing_runtime` during graph evaluation
+- the Python and inspect `evaluate_sample(s)` helpers currently blur the distinction by temporarily forcing `general.generate_events = true`
+  - this forces both internal generation and caller-visible returned events
+
+Revised implementation plan:
+
+- refactor the shared event-policy logic into common helpers in `integrands/process/mod.rs`
+  - event creation decision
+  - selector processing
+  - buffering decision
+  - generated/accepted counters
+  - dropping rejected or non-buffered events
+- make amplitudes use that shared event-policy flow, matching cross sections
+- rename the observable quantity `CrossSection` to `Integral`
+  - update quantity settings, serialization, completions, tests, and example cards
+- refine the API helper layer so it distinguishes:
+  - forcing internal event generation
+  - returning event groups to the caller
+  instead of using the current single blunt `force_generate_events` flag
+- add amplitude tests for:
+  - metadata discrete histograms
+  - active selectors
+  - constant external-state particle quantities
+  - non-empty observable bundles from `evaluate_sample(s)`
+
+Additional note from the review:
+
+- this remains moderate in scope
+- the main new complexity is not amplitude observables themselves, but cleaning up the API helper layer so internal generation and caller-visible event return are no longer conflated
+
+## 2026-04-06 User
+
+Added one last clarification about amplitude kinematics:
+
+- although particle/jet/continuous observables on amplitudes are mostly trivial today because external kinematics are effectively constant
+- this should not be baked into the design
+- amplitudes may later support sample-dependent external kinematics
+- therefore those observables should remain fully supported
+- but there is no need to add any cross-sample caching or special optimization based on current constant externals
+
+## 2026-04-06 Codex
+
+Final plan revision after that clarification:
+
+- keep particle, jet, and continuous observables fully supported for amplitudes
+- do not introduce any amplitude-specific caching of observable inputs across samples
+- keep the implementation purely event-driven:
+  - generate the event when runtime policy requires it
+  - let selectors and observables read directly from event kinematics and metadata
+  - avoid assuming amplitude externals are constant across samples
+- this keeps the design compatible with future sample-dependent amplitude kinematics without adding extra machinery now
+
+## 2026-04-06 User
+
+Confirmed that for amplitudes selectors should indeed accept or reject the whole sample, since there is no cut concept there, and requested implementation to proceed.
+
+## 2026-04-06 Codex
+
+Implemented the amplitude observable support and the related event-policy cleanup:
+
+- refactored the shared event-generation / selector / buffering policy into a common prepared-event helper used by both amplitudes and cross sections
+- amplitudes now generate internal events whenever selectors or observables require them, even if returned events are disabled
+- amplitudes keep the event-less fast path when no selectors and no observables are active and `generate_events = false`
+- separated internal event generation from caller-visible returned events in the API helper layer via `return_generated_events: Option<bool>` / Python `return_events`
+- renamed the observable quantity `CrossSection` to `Integral`
+- updated tests, examples, architecture docs, and differential-LU notes accordingly

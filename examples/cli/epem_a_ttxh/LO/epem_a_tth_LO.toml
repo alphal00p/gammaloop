@@ -139,8 +139,8 @@ commands = [
 name = "set_differential_quantities"
 commands = ["""set process -p epem_a_tth -i LO string '
 
-[quantities.cross_section]
-type = "cross_section"
+[quantities.integral]
+type = "integral"
 
 [quantities.graph_id]
 type = "graph_id"
@@ -333,14 +333,14 @@ max = 0.6
 name = "set_differential_observables"
 commands = ["""set process -p epem_a_tth -i LO string '
 
-[observables.cross_section]
+[observables.integral]
 title = "xs"
 type_description = "AL,LO"
-quantity = "cross_section"
+quantity = "integral"
 phase = "real"
 kind = "discrete"
 domain = { type = "single_bin" }
-labels = { type = "custom", labels = ["total cross-section"] }
+labels = { type = "custom", labels = ["total integral"] }
 
 [observables.graph_id]
 title = "graph"

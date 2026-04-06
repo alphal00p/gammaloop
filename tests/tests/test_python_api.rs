@@ -453,9 +453,8 @@ n_bins = 8
 [observables.jet_count_hist]
 quantity = "jet_count"
 entry_selection = "all"
-x_min = 0.0
-x_max = 6.0
-n_bins = 6
+kind = "discrete"
+domain = { type = "explicit_range", min = 0, max = 5 }
 '"#
         .to_string(),
     );
@@ -581,9 +580,8 @@ n_bins = 8
 [observables.jet_count_hist]
 quantity = "jet_count"
 entry_selection = "all"
-x_min = 0.0
-x_max = 6.0
-n_bins = 6
+kind = "discrete"
+domain = { type = "explicit_range", min = 0, max = 5 }
 '"#
         .to_string(),
     );

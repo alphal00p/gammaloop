@@ -148,7 +148,7 @@ impl Inspect {
                 integrand_name: Some(integrand_name.clone()),
                 use_arb_prec: self.use_arb_prec,
                 minimal_output: false,
-                force_generate_events: true,
+                return_generated_events: Some(true),
                 momentum_space: self.momentum_space,
                 points: points.view(),
                 integrator_weights: None,

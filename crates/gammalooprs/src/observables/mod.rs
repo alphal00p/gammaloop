@@ -570,7 +570,7 @@ pub enum QuantitySettings {
     Particle(ParticleQuantitySettings),
     Jet(JetQuantitySettings),
     AFB {},
-    CrossSection {},
+    Integral {},
     GraphId {},
     GraphGroupId {},
     OrientationId {},
@@ -587,7 +587,7 @@ impl QuantitySettings {
                 Ok(QuantitySettings::Jet(settings.try_normalized()?))
             }
             QuantitySettings::AFB {} => Ok(QuantitySettings::AFB {}),
-            QuantitySettings::CrossSection {} => Ok(QuantitySettings::CrossSection {}),
+            QuantitySettings::Integral {} => Ok(QuantitySettings::Integral {}),
             QuantitySettings::GraphId {} => Ok(QuantitySettings::GraphId {}),
             QuantitySettings::GraphGroupId {} => Ok(QuantitySettings::GraphGroupId {}),
             QuantitySettings::OrientationId {} => Ok(QuantitySettings::OrientationId {}),
@@ -1371,9 +1371,9 @@ impl SelectorCriterion {
 }
 
 #[derive(Debug, Clone, Default)]
-struct CrossSectionDefinition;
+struct IntegralDefinition;
 
-impl CrossSectionDefinition {
+impl IntegralDefinition {
     fn process_event<T: FloatLike>(&self, event: &GenericEvent<T>) -> ObservableEntries<T> {
         let reference = event.weight.re.clone();
         smallvec![ObservableEntry::unit_discrete(0, &reference)]
@@ -1628,7 +1628,7 @@ impl ForwardBackwardDefinition {
 
 #[derive(Debug, Clone)]
 enum ObservableDefinition {
-    CrossSection(CrossSectionDefinition),
+    Integral(IntegralDefinition),
     ObjectQuantity(ObjectQuantityDefinition),
     Metadata(MetadataQuantityDefinition),
     ForwardBackward(ForwardBackwardDefinition),
@@ -1650,9 +1650,7 @@ impl ObservableDefinition {
             QuantitySettings::AFB {} => {
                 ObservableDefinition::ForwardBackward(ForwardBackwardDefinition)
             }
-            QuantitySettings::CrossSection {} => {
-                ObservableDefinition::CrossSection(CrossSectionDefinition)
-            }
+            QuantitySettings::Integral {} => ObservableDefinition::Integral(IntegralDefinition),
             QuantitySettings::GraphId {} => {
                 ObservableDefinition::Metadata(MetadataQuantityDefinition {
                     kind: MetadataQuantityKind::GraphId,
@@ -1678,7 +1676,7 @@ impl ObservableDefinition {
 
     fn process_event<T: FloatLike>(&self, event: &GenericEvent<T>) -> ObservableEntries<T> {
         match self {
-            ObservableDefinition::CrossSection(definition) => definition.process_event(event),
+            ObservableDefinition::Integral(definition) => definition.process_event(event),
             ObservableDefinition::ObjectQuantity(definition) => definition.process_event(event),
             ObservableDefinition::Metadata(definition) => definition.process_event(event),
             ObservableDefinition::ForwardBackward(definition) => definition.process_event(event),
@@ -1699,14 +1697,14 @@ impl ObservableDefinition {
             ObservableDefinition::ObjectQuantity(definition) => {
                 definition.supports_misbinning_mitigation()
             }
-            ObservableDefinition::CrossSection(_) | ObservableDefinition::Metadata(_) => false,
+            ObservableDefinition::Integral(_) | ObservableDefinition::Metadata(_) => false,
             ObservableDefinition::ForwardBackward(_) => true,
         }
     }
 
     fn coordinate_kind(&self) -> ObservableCoordinateKind {
         match self {
-            ObservableDefinition::CrossSection(_) | ObservableDefinition::Metadata(_) => {
+            ObservableDefinition::Integral(_) | ObservableDefinition::Metadata(_) => {
                 ObservableCoordinateKind::Discrete
             }
             ObservableDefinition::ObjectQuantity(definition) => definition.coordinate_kind(),
@@ -3717,8 +3715,8 @@ fn resolve_discrete_histogram_layout(
     let n_bins = max_bin_id.saturating_sub(min_bin_id) as usize + 1;
     let bin_labels = match histogram.labels.as_ref() {
         None => {
-            if matches!(quantity_settings, QuantitySettings::CrossSection {}) && n_bins == 1 {
-                vec![Some("total cross-section".to_string())]
+            if matches!(quantity_settings, QuantitySettings::Integral {}) && n_bins == 1 {
+                vec![Some("total integral".to_string())]
             } else {
                 vec![None; n_bins]
             }
@@ -4482,7 +4480,7 @@ mod tests {
     fn observable_settings_infer_discrete_histogram_from_domain() {
         let settings: ObservableSettings = toml::from_str(
             r#"
-quantity = "cross_section"
+quantity = "integral"
 domain = { type = "single_bin" }
 "#,
         )
@@ -4497,7 +4495,7 @@ domain = { type = "single_bin" }
     #[test]
     fn observable_settings_serialize_flat_histogram_fields() {
         let settings = ObservableSettings {
-            quantity: "cross_section".to_string(),
+            quantity: "integral".to_string(),
             selections: vec!["graph_cut".to_string()],
             entry_selection: super::EntrySelection::All,
             entry_index: 0,
@@ -4517,7 +4515,7 @@ domain = { type = "single_bin" }
 
         let serialized = toml::to_string(&settings).unwrap();
         assert!(serialized.contains("kind = \"continuous\""));
-        assert!(serialized.contains("quantity = \"cross_section\""));
+        assert!(serialized.contains("quantity = \"integral\""));
         assert!(serialized.contains("n_bins = 1"));
         assert!(!serialized.contains("histogram"));
     }

@@ -196,8 +196,8 @@ name = "set_differential_quantities"
 commands = [
   """set process -p epem_a_tth -i NLO string '
 
-[quantities.cross_section]
-type = "cross_section"
+[quantities.integral]
+type = "integral"
 
 [quantities.jet_pt]
 type = "jet"
@@ -371,14 +371,14 @@ name = "set_differential_observables"
 commands = [
   """set process -p epem_a_tth -i NLO string '
 
-[observables.cross_section]
+[observables.integral]
 title = "xs"
 type_description = "AL,NLO"
-quantity = "cross_section"
+quantity = "integral"
 phase = "real"
 kind = "discrete"
 domain = { type = "single_bin" }
-labels = { type = "custom", labels = ["total cross-section"] }
+labels = { type = "custom", labels = ["total integral"] }
 
 # Higgs observables
 

@@ -52,9 +52,8 @@ n_bins = 8
 [observables.jet_count_hist]
 quantity = "jet_count"
 entry_selection = "all"
-x_min = 0.0
-x_max = 6.0
-n_bins = 6
+kind = "discrete"
+domain = { type = "explicit_range", min = 0, max = 5 }
 '"#,
     )
 }
@@ -122,6 +121,7 @@ fn evaluate_x_samples_with_weights_and_discrete_dims(
         integrand_name: None,
         use_arb_prec: false,
         minimal_output: false,
+        return_generated_events: None,
         momentum_space: false,
         points: array.view(),
         integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
@@ -151,6 +151,7 @@ fn evaluate_momentum_sample_with_weight(
         integrand_name: None,
         use_arb_prec: false,
         minimal_output: false,
+        return_generated_events: None,
         momentum_space: true,
         points: array.view(),
         integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
@@ -183,6 +184,7 @@ fn evaluate_x_samples_minimal(
         integrand_name: None,
         use_arb_prec: false,
         minimal_output: true,
+        return_generated_events: None,
         momentum_space: false,
         points: array.view(),
         integrator_weights: None,
@@ -208,6 +210,7 @@ fn evaluate_x_samples_precise(
         integrand_name: None,
         use_arb_prec: true,
         minimal_output: false,
+        return_generated_events: None,
         momentum_space: false,
         points: array.view(),
         integrator_weights: None,
@@ -566,6 +569,68 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
     assert_eq!(jet_count_histogram.bins.len(), 6);
     assert_eq!(jet_count_histogram.sample_count, 2);
     assert!(!jet_count_histogram.supports_misbinning_mitigation);
+
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn lu_rust_evaluate_samples_can_override_returned_events_without_forcing_internal_generation()
+-> Result<()> {
+    let mut cli = setup_sm_differential_lu_cli(
+        "lu_rust_evaluate_samples_can_override_returned_events_without_forcing_internal_generation",
+    )?;
+    let point = default_xspace_point(&cli)?;
+    let array = Array2::from_shape_vec((1, point.len()), point.clone())?;
+
+    cli.run_command("set process kv general.generate_events=false")?;
+    let mut results = EvaluateSamples {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: false,
+        minimal_output: false,
+        return_generated_events: Some(true),
+        momentum_space: false,
+        points: array.view(),
+        integrator_weights: None,
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut cli.state)?;
+    let result = results.samples.remove(0);
+    assert!(
+        !result.evaluation.event_groups.is_empty(),
+        "return_generated_events=Some(true) should surface events even when the stored setting is false",
+    );
+    assert!(metadata(&result).generated_event_count > 0);
+    assert_eq!(
+        metadata(&result).accepted_event_count,
+        metadata(&result).generated_event_count
+    );
+
+    cli.run_command("set process kv general.generate_events=true")?;
+    let mut results = EvaluateSamples {
+        process_id: None,
+        integrand_name: None,
+        use_arb_prec: false,
+        minimal_output: false,
+        return_generated_events: Some(false),
+        momentum_space: false,
+        points: array.view(),
+        integrator_weights: None,
+        discrete_dims: None,
+        graph_names: None,
+        orientations: None,
+    }
+    .run(&mut cli.state)?;
+    let result = results.samples.remove(0);
+    assert!(
+        result.evaluation.event_groups.is_empty(),
+        "return_generated_events=Some(false) should suppress surfaced events for this call",
+    );
+    assert_eq!(metadata(&result).generated_event_count, 0);
+    assert_eq!(metadata(&result).accepted_event_count, 0);
 
     Ok(())
 }

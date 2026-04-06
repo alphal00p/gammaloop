@@ -12,8 +12,8 @@ use crate::model::Model;
 use crate::momentum::sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::observables::{
-    AdditionalWeightKey, EventProcessingRuntime, HistogramProcessInfo, ObservableAccumulatorBundle,
-    ObservableFileFormat, ObservableSnapshotBundle,
+    AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
+    ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
 };
 use crate::processes::StandaloneExportSettings;
 use crate::settings::GlobalSettings;
@@ -1012,6 +1012,78 @@ pub(crate) fn graph_to_group_id_for_group_structure(
         .sorted_by_key(|(graph_id, _)| *graph_id)
         .map(|(_, group_id)| group_id)
         .collect_vec()
+}
+
+pub(crate) struct PreparedBufferedEvent<T: FloatLike> {
+    pub(crate) buffered_event: Option<GenericEvent<T>>,
+    pub(crate) selectors_pass: bool,
+    pub(crate) event_processing_time: Duration,
+    pub(crate) generated_event_count: usize,
+    pub(crate) accepted_event_count: usize,
+}
+
+impl<T: FloatLike> Default for PreparedBufferedEvent<T> {
+    fn default() -> Self {
+        Self {
+            buffered_event: None,
+            selectors_pass: true,
+            event_processing_time: Duration::ZERO,
+            generated_event_count: 0,
+            accepted_event_count: 0,
+        }
+    }
+}
+
+pub(crate) fn prepare_buffered_event<T: FloatLike>(
+    settings: &RuntimeSettings,
+    rotation: &Rotation,
+    event_processing_runtime: Option<&mut EventProcessingRuntime>,
+    build_event: impl FnOnce() -> Result<GenericEvent<T>>,
+) -> Result<PreparedBufferedEvent<T>> {
+    let needs_selector_events = event_processing_runtime
+        .as_ref()
+        .is_some_and(|runtime| runtime.has_selectors());
+    let should_buffer_event = rotation.is_identity() && settings.should_buffer_generated_events();
+    let should_build_event = if rotation.is_identity() {
+        settings.should_generate_events()
+    } else {
+        needs_selector_events
+    };
+
+    if !should_build_event {
+        return Ok(PreparedBufferedEvent::default());
+    }
+
+    let build_start = Instant::now();
+    let mut event = build_event()?;
+    let mut event_processing_time = build_start.elapsed();
+    let generated_event_count = usize::from(rotation.is_identity());
+
+    let selector_start = Instant::now();
+    let selectors_pass = if let Some(runtime) = event_processing_runtime {
+        if rotation.is_identity() {
+            runtime.process_event(&mut event)
+        } else {
+            runtime.process_event_for_selectors(&mut event)
+        }
+    } else {
+        true
+    };
+    event_processing_time += selector_start.elapsed();
+
+    let buffered_event = if selectors_pass && should_buffer_event {
+        Some(event)
+    } else {
+        None
+    };
+
+    Ok(PreparedBufferedEvent {
+        accepted_event_count: usize::from(buffered_event.is_some()),
+        buffered_event,
+        selectors_pass,
+        event_processing_time,
+        generated_event_count,
+    })
 }
 
 fn process_evaluation_result_runtime<I: ProcessIntegrandImpl>(

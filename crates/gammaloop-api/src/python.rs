@@ -626,7 +626,7 @@ impl PyHistogramAccumulator {
                 log_y_axis,
                 labels,
             )
-            .map_err(map_observable_error)?,
+            .map_err(to_py_value_error)?,
         })
     }
 
@@ -2179,7 +2179,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_sample",
-        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
+        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
     )]
     pub fn evaluate_sample<'py>(
         &mut self,
@@ -2189,6 +2189,7 @@ impl GammaLoopAPI {
         integrand_name: Option<String>,
         use_arb_prec: bool,
         minimal_output: bool,
+        return_events: Option<bool>,
         momentum_space: bool,
         integrator_weight: Option<f64>,
         discrete_dim: Option<Vec<usize>>,
@@ -2211,7 +2212,7 @@ impl GammaLoopAPI {
             integrand_name,
             use_arb_prec,
             minimal_output,
-            force_generate_events: true,
+            return_generated_events: return_events,
             momentum_space,
             points: points.view(),
             integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
@@ -2237,7 +2238,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_samples",
-        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, integrator_weights=None, discrete_dims=None, graph_names=None, orientations=None)
+        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weights=None, discrete_dims=None, graph_names=None, orientations=None)
     )]
     pub fn evaluate_samples<'py>(
         &mut self,
@@ -2247,6 +2248,7 @@ impl GammaLoopAPI {
         integrand_name: Option<String>,
         use_arb_prec: bool,
         minimal_output: bool,
+        return_events: Option<bool>,
         momentum_space: bool,
         integrator_weights: Option<PyReadonlyArray1<'py, f64>>,
         discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
@@ -2260,7 +2262,7 @@ impl GammaLoopAPI {
             integrand_name,
             use_arb_prec,
             minimal_output,
-            force_generate_events: true,
+            return_generated_events: return_events,
             momentum_space,
             points: points_rust,
             integrator_weights: integrator_weights.as_ref().map(PyReadonlyArray1::as_array),

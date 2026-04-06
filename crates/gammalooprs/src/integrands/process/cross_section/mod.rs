@@ -15,6 +15,7 @@ use crate::{
             ChannelIndex, ParamBuilder,
             evaluators::{EvaluatorStack, evaluate_evaluator_single},
             param_builder::LUParams,
+            prepare_buffered_event,
         },
     },
     model::Model,
@@ -41,11 +42,7 @@ use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
-use std::{
-    collections::HashSet,
-    slice,
-    time::{Duration, Instant},
-};
+use std::{collections::HashSet, slice};
 
 use itertools::Itertools;
 use linnet::half_edge::{
@@ -775,11 +772,6 @@ impl GraphTerm for CrossSectionGraphTerm {
         let mut cut_threshold_counterterms = TiVec::<CutId, Complex<F<T>>>::new();
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
-        let should_buffer_events_for_rotation =
-            rotation.is_identity() && settings.should_buffer_generated_events();
-        let needs_selector_events = event_processing_runtime
-            .as_deref()
-            .is_some_and(EventProcessingRuntime::has_selectors);
 
         let momentum_sample = if let Some((channel_id, _alpha)) = &channel_id {
             MomentumSample {
@@ -834,51 +826,28 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             debug!("solution: {:?}", solution);
 
-            let mut event_timing = Duration::ZERO;
-            let should_build_event = if rotation.is_identity() {
-                settings.should_generate_events()
-            } else {
-                needs_selector_events
-            };
-            let event = if should_build_event {
-                let start = Instant::now();
-                let mut generated = self.generate_event_for_cut::<T>(
-                    model,
-                    &solution,
-                    &momentum_sample,
-                    self.raised_data.raised_cut_groups[raised_cut].cuts[0],
-                    &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
-                    channel_id.as_ref().map(|(channel_id, _)| *channel_id),
-                )?;
-                generated.inverse_rotate(rotation);
-                event_timing += start.elapsed();
-                Some(generated)
-            } else {
-                None
-            };
+            let prepared_event = prepare_buffered_event(
+                settings,
+                rotation,
+                event_processing_runtime.as_deref_mut(),
+                || {
+                    let mut generated = self.generate_event_for_cut::<T>(
+                        model,
+                        &solution,
+                        &momentum_sample,
+                        self.raised_data.raised_cut_groups[raised_cut].cuts[0],
+                        &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
+                        channel_id.as_ref().map(|(channel_id, _)| *channel_id),
+                    )?;
+                    generated.inverse_rotate(rotation);
+                    Ok(generated)
+                },
+            )?;
+            differential_result.generated_event_count += prepared_event.generated_event_count;
+            differential_result.accepted_event_count += prepared_event.accepted_event_count;
+            differential_result.event_processing_time += prepared_event.event_processing_time;
 
-            let mut accepted_event = event;
-            let mut selectors_pass = true;
-            if let Some(evt) = accepted_event.as_mut() {
-                if rotation.is_identity() {
-                    differential_result.generated_event_count += 1;
-                }
-                let start = Instant::now();
-                if let Some(runtime) = event_processing_runtime.as_deref_mut() {
-                    selectors_pass = if rotation.is_identity() {
-                        runtime.process_event(evt)
-                    } else {
-                        runtime.process_event_for_selectors(evt)
-                    };
-                }
-                event_timing += start.elapsed();
-                if !selectors_pass || !should_buffer_events_for_rotation {
-                    accepted_event = None;
-                }
-            }
-            differential_result.event_processing_time += event_timing;
-
-            if !selectors_pass {
+            if !prepared_event.selectors_pass {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurance {
                     cut_threshold_counterterms.push(zero.clone());
@@ -887,6 +856,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 continue;
             }
 
+            let accepted_event = prepared_event.buffered_event;
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
             let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
             let mut kinematic_point = LUCTKinematicPoint::new();
@@ -1110,10 +1080,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     }
                 }
 
-                differential_result.accepted_event_count += 1;
-                if should_buffer_events_for_rotation {
-                    accepted_event_group.push(event);
-                }
+                accepted_event_group.push(event);
             }
         }
 
