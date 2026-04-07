@@ -333,6 +333,8 @@ pub struct UVgenerationSettings {
     pub use_legacy: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub cached: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generate_only_integrated_uv_with_n_loops: Option<usize>,
     #[serde(
         default,
         skip_serializing_if = "IsDefault::is_default",
@@ -355,6 +357,7 @@ impl Default for UVgenerationSettings {
             inner_products: true,
             use_legacy: true,
             cached: true,
+            generate_only_integrated_uv_with_n_loops: None,
             add_sigma: false,
             renormalization_schemes: BTreeMap::default(),
             vakint: VakintSettings::default(),
@@ -363,6 +366,10 @@ impl Default for UVgenerationSettings {
 }
 
 impl UVgenerationSettings {
+    pub fn filtered_integrated_uv_loop_count(&self) -> Option<usize> {
+        self.generate_only_integrated_uv_with_n_loops
+    }
+
     pub fn renormalization_scheme_for(&self, ct_identifier: &CTIdentifier) -> ApproximationType {
         if let Some(scheme) = self.renormalization_schemes.get(ct_identifier) {
             return *scheme;

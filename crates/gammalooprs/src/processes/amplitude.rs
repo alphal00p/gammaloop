@@ -459,6 +459,19 @@ impl AmplitudeGraph {
         &mut self,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
+        if self.derived_data.cff_expression.is_none() {
+            self.generate_cff()?;
+        }
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
+
         if settings.use_legacy {
             let mut vk_settings = settings.vakint.true_settings();
             let wood = self.graph.wood_with_settings(
@@ -473,7 +486,7 @@ impl AmplitudeGraph {
 
             let vk = (crate::utils::vakint()?, &vk_settings);
             let cuts = CutSet::empty(self.graph.n_hedges());
-            forest.compute(&mut self.graph, vk, &cuts, settings)?;
+            forest.compute(&mut self.graph, vk, &cuts, &valid_orientations, settings)?;
 
             forest.pole_part_of_ends(&self.graph)
         } else {
@@ -812,10 +825,19 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
         let cutstructure = CutStructure::empty(&self.graph);
         let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
         let exprs: Vec<_> = forests
             .orientation_parametric_exprs(&self.graph, false)?
             .into_iter()
@@ -842,6 +864,15 @@ impl AmplitudeGraph {
             AmplitudeCountertermAtom::new();
             self.graph.surface_cache.esurface_cache.len()
         ];
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .expect("cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
 
         let (local_prefactor, integrated_prefactor) = self.th_counterterm_prefactor_helpter();
 
@@ -908,7 +939,7 @@ impl AmplitudeGraph {
 
         let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
-        forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
         let exprs: Vec<_> = forests.orientation_parametric_exprs(&self.graph, false)?;
 

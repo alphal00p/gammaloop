@@ -23,6 +23,7 @@ use symbolica::{
     function, parse_lit, symbol,
 };
 
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 
 use tracing::instrument;
@@ -32,6 +33,9 @@ use super::{IntegrandExpr, UltravioletGraph};
 
 pub mod integrated;
 pub mod local_3d;
+pub mod orientation_localization;
+
+use orientation_localization::localize_reduced_orientation_term;
 
 pub trait ForestNodeLike {
     fn subgraph(&self) -> &SuBitGraph;
@@ -138,6 +142,7 @@ pub struct Approximation {
     pub integrated_4d: ApproxOp,
     pub topo_order: usize,
     pub simple_approx: Option<SimpleApprox>,
+    pub generate_only_integrated_uv_chain_matches: bool,
 }
 
 impl ForestNodeLike for Approximation {
@@ -214,8 +219,6 @@ impl CFFapprox {
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
         );
 
-        // println!("Fourddenoms:{}", fourddenoms.log_print(None));
-
         Ok(CFFapprox::Dependent {
             sign: Sign::Positive,
             t_arg: IntegrandExpr {
@@ -232,20 +235,126 @@ impl CFFapprox {
         Self::dependent(graph, &graph.empty_subgraph::<SuBitGraph>(), cuts, settings)
     }
 }
+
+fn internal_paired_edges_of_subgraph(graph: &Graph, subgraph: &SuBitGraph) -> Vec<EdgeIndex> {
+    let mut edge_ids: Vec<_> = graph
+        .as_ref()
+        .iter_edges_of(subgraph)
+        .filter_map(|(pair, edge_id, _)| pair.is_paired().then_some(edge_id))
+        .collect();
+    edge_ids.sort_by_key(|edge| usize::from(*edge));
+    edge_ids
+}
+
+fn localized_integrated_reduced_factor(
+    graph: &mut Graph,
+    to_contract: &SuBitGraph,
+    cuts: &CutSet,
+    valid_orientations: &[EdgeVec<Orientation>],
+) -> Result<IntegrandExpr> {
+    let cff = graph.cff(
+        &to_contract
+            .union(&graph.tree_edges)
+            .subtract(&graph.initial_state_cut),
+        cuts,
+    )?;
+
+    let fourddenoms = GS.wrap_tree_denoms(
+        graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
+    );
+
+    let internal_edges = internal_paired_edges_of_subgraph(graph, to_contract);
+
+    let integrands = cff
+        .terms
+        .into_iter()
+        .map(|term| {
+            let mut localized = Atom::Zero;
+            for (expr, orientation) in term
+                .expression
+                .into_iter()
+                .zip(term.orientations.into_iter())
+            {
+                localized += localize_reduced_orientation_term(
+                    &(expr * &fourddenoms),
+                    &orientation,
+                    valid_orientations,
+                    &internal_edges,
+                )?;
+            }
+            Ok(localized)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(IntegrandExpr { integrands })
+}
+
 impl Approximation {
+    fn filtered_integrated_uv_mode_is_active(settings: &UVgenerationSettings) -> bool {
+        settings.generate_integrated && settings.filtered_integrated_uv_loop_count().is_some()
+    }
+
+    fn initialize_filtered_integrated_uv_root(&mut self, settings: &UVgenerationSettings) {
+        self.generate_only_integrated_uv_chain_matches =
+            Self::filtered_integrated_uv_mode_is_active(settings);
+    }
+
+    pub(crate) fn update_filtered_integrated_uv_chain_state(
+        &mut self,
+        graph: &Graph,
+        dependent: &Self,
+        settings: &UVgenerationSettings,
+    ) {
+        self.generate_only_integrated_uv_chain_matches = settings
+            .filtered_integrated_uv_loop_count()
+            .is_some_and(|target_loop_count| {
+                dependent.generate_only_integrated_uv_chain_matches
+                    && graph.n_loops(self.spinney.filter()) == target_loop_count
+            });
+    }
+
+    fn zero_terms(n_terms: usize) -> Vec<Atom> {
+        vec![Atom::Zero; n_terms]
+    }
+
+    fn set_zero_local_3d(&mut self, sign: Sign, n_terms: usize) {
+        self.local_3d = CFFapprox::Dependent {
+            sign,
+            t_arg: IntegrandExpr {
+                integrands: Self::zero_terms(n_terms),
+            },
+        };
+    }
+
+    fn should_keep_only_integrated_uv_terms(&self, settings: &UVgenerationSettings) -> bool {
+        Self::filtered_integrated_uv_mode_is_active(settings)
+            && self.generate_only_integrated_uv_chain_matches
+    }
+
     pub(crate) fn root(
         &mut self,
         graph: &mut Graph,
         cuts: &CutSet,
+        valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
     ) -> Result<()> {
+        self.initialize_filtered_integrated_uv_root(settings);
         self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
         if settings.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
             self.integrated_4d = ApproxOp::Root;
             self.local_3d = CFFapprox::root(graph, cuts, settings)?;
-            self.final_integrand = Some(self.final_integrand(graph, cuts, settings)?);
+            if Self::filtered_integrated_uv_mode_is_active(settings) {
+                let (integrands, _) = self
+                    .local_3d
+                    .expr()
+                    .expect("root local CFF should have been computed");
+                self.final_integrand = Some(Self::zero_terms(integrands.len()));
+            } else {
+                self.final_integrand =
+                    Some(self.final_integrand(graph, cuts, valid_orientations, settings)?);
+            }
         }
 
         Ok(())
@@ -259,6 +368,7 @@ impl Approximation {
             simple_approx: None,
             local_3d: CFFapprox::NotComputed,
             integrated_4d: ApproxOp::NotComputed,
+            generate_only_integrated_uv_chain_matches: false,
         }
     }
 
@@ -270,6 +380,21 @@ impl Approximation {
         dependent: &Self,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
+        if Self::filtered_integrated_uv_mode_is_active(settings)
+            && !self.generate_only_integrated_uv_chain_matches
+        {
+            self.integrated_4d = ApproxOp::Dependent {
+                t_arg: IntegrandExpr {
+                    integrands: vec![Atom::Zero],
+                },
+                sign: Sign::Positive,
+                subgraph: unsafe {
+                    InternalSubGraph::new_unchecked(self.reduced_subgraph(dependent))
+                },
+            };
+            return Ok(());
+        }
+
         let ctx = UVCtx { graph, settings };
 
         let Some((current, sign)) = &dependent.integrated_4d.expr() else {
@@ -305,6 +430,7 @@ impl Approximation {
         graph: &mut Graph,
         cuts: &CutSet,
         dependent: &Self,
+        valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
@@ -336,13 +462,24 @@ impl Approximation {
             finite.printer(LOGPRINTOPTS)
         );
 
-        let CFFapprox::Dependent { t_arg, .. } =
-            CFFapprox::dependent(graph, dependent.spinney.filter(), cuts, settings)?
-        else {
-            unreachable!()
-        };
+        let t_arg = localized_integrated_reduced_factor(
+            graph,
+            dependent.spinney.filter(),
+            cuts,
+            valid_orientations,
+        )?;
 
         let ctx = UVCtx { graph, settings };
+
+        if Self::filtered_integrated_uv_mode_is_active(settings) {
+            self.set_zero_local_3d(-sign, cff.len());
+            self.final_integrand = Some(if self.should_keep_only_integrated_uv_terms(settings) {
+                self.final_integrand(graph, cuts, valid_orientations, settings)?
+            } else {
+                Self::zero_terms(cff.len())
+            });
+            return Ok(());
+        }
 
         let mut integrands = vec![];
         for (local, t_arg) in cff.into_iter().zip(t_arg.integrands) {
@@ -358,7 +495,8 @@ impl Approximation {
             t_arg: IntegrandExpr { integrands },
         };
 
-        self.final_integrand = Some(self.final_integrand(graph, cuts, settings)?);
+        self.final_integrand =
+            Some(self.final_integrand(graph, cuts, valid_orientations, settings)?);
         Ok(())
     }
 
@@ -367,7 +505,8 @@ impl Approximation {
         &self,
         graph: &mut Graph,
         cutset: &CutSet,
-        settings: &UVgenerationSettings,
+        valid_orientations: &[EdgeVec<Orientation>],
+        _settings: &UVgenerationSettings,
     ) -> Result<Vec<Atom>> {
         let global_num = graph.global_atom();
         let (t, s) = self
@@ -402,11 +541,12 @@ impl Approximation {
             finite.printer(LOGPRINTOPTS)
         );
 
-        let CFFapprox::Dependent { t_arg, .. } =
-            CFFapprox::dependent(graph, self.spinney.filter(), cutset, settings)?
-        else {
-            unreachable!()
-        };
+        let t_arg = localized_integrated_reduced_factor(
+            graph,
+            self.spinney.filter(),
+            cutset,
+            valid_orientations,
+        )?;
 
         let reduced = graph
             .full_filter()

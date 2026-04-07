@@ -861,6 +861,15 @@ impl CrossSectionGraph {
         let cut_structure = CutStructure { cuts };
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global_cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
 
         let lu_prefactor = self.lu_prefactor_helper();
         let cutkosky_corrections = self
@@ -885,7 +894,7 @@ impl CrossSectionGraph {
             .collect_vec();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        cut_forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?;
@@ -1307,8 +1316,17 @@ impl CrossSectionGraph {
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut cut_forests = cut_woods.unfold(&self.graph);
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global_cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
 
-        cut_forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
         let mut threshold_counterterms = cut_forests
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
