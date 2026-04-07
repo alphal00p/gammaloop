@@ -66,6 +66,7 @@ impl Renormalize {
 
         settings.only_integrated = true;
         settings.generate_integrated = true;
+        settings.pole_part = true;
 
         let mut renormalization_part: Vec<Atom> = Vec::new();
         let output_dir = if let Some(path) = self.result_path.clone() {

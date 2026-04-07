@@ -16,12 +16,12 @@ commands = [
     "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble_below_thres",
     "duplicate integrand -p bubble -i scalar_bubble_below_thres --output_process_name bubble --output_integrand_name scalar_bubble_above_thres",
     "save dot",
-	
+
 	"set global kv global.generation.uv.generate_integrated=false",
     "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble_no_integrated_UV -i scalar_bubble_below_thres",
     "duplicate integrand -p bubble_no_integrated_UV -i scalar_bubble_below_thres --output_process_name bubble_no_integrated_UV --output_integrand_name scalar_bubble_above_thres",
-	
-	"save standalone",
+
+	"save standalone --json",
 
     "set model mass_scalar_2=2.0",
 
@@ -102,10 +102,10 @@ commands = [
 name = "integrate_bubble_below_threshold"
 commands = [
 
-    """set process kv 
-		integrator.target_relative_accuracy=0.00001 
-		integrator.n_increase=0 integrator.n_start=1000000 
-		integrator.n_max=200000000000 
+    """set process kv
+		integrator.target_relative_accuracy=0.00001
+		integrator.n_increase=0 integrator.n_start=1000000
+		integrator.n_max=200000000000
 		integrator.seed=1337
 	""",
 
@@ -119,10 +119,10 @@ commands = [
 name = "integrate_bubble_above_threshold"
 commands = [
 
-    """set process kv 
-		integrator.target_relative_accuracy=0.00001 
-		integrator.n_increase=0 integrator.n_start=1000000 
-		integrator.n_max=200000000000 
+    """set process kv
+		integrator.target_relative_accuracy=0.00001
+		integrator.n_increase=0 integrator.n_start=1000000
+		integrator.n_max=200000000000
 		integrator.seed=1337
 	""",
 
@@ -131,6 +131,9 @@ commands = [
                  --restart
     """,
 ]
+
+[cli_settings.global.log_style]
+include_fields = true
 
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"

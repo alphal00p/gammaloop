@@ -310,7 +310,7 @@ impl Approximation {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
         };
-        let (mut t4, _) = if let ApproxOp::Root = dependent.integrated_4d {
+        let (mut t4, t4_sign) = if let ApproxOp::Root = dependent.integrated_4d {
             (vec![Atom::Zero], Sign::Positive)
         } else {
             dependent
@@ -323,6 +323,7 @@ impl Approximation {
         }
         let finite = t4
             .pop()
+            .map(|t4| t4_sign * t4)
             .unwrap()
             .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
             .unwrap()
@@ -373,7 +374,7 @@ impl Approximation {
             .local_3d
             .expr()
             .ok_or(eyre!("Local3d not yet computed"))?;
-        let (mut t4, _) = if let ApproxOp::Root = self.integrated_4d {
+        let (mut t4, t4_sign) = if let ApproxOp::Root = self.integrated_4d {
             (vec![Atom::Zero], Sign::Positive)
         } else {
             self.integrated_4d
@@ -385,6 +386,7 @@ impl Approximation {
         }
         let finite = t4
             .pop()
+            .map(|t4| t4_sign * t4)
             .unwrap()
             .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
             .unwrap()

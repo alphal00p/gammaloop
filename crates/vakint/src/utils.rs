@@ -194,7 +194,7 @@ pub fn simplify_real(input: AtomView) -> Atom {
     res = replace_until_stable(
         res.as_view(),
         &vk_parse!("exp(x_)*exp(y_)").unwrap().to_pattern(),
-        &vk_parse!("exp(x_*y_)").unwrap().to_pattern(),
+        &vk_parse!("exp(x_+y_)").unwrap().to_pattern(),
         None,
         None,
     );
