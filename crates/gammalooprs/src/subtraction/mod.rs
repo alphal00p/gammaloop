@@ -1,3 +1,4 @@
+use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
@@ -11,6 +12,7 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
+    GammaLoopContext,
     cff::esurface::Esurface,
     graph::{LmbIndex, LoopMomentumBasis},
     integrands::process::GenericEvaluator,
@@ -76,75 +78,9 @@ fn evaluate_integrated_ct_normalisation<T: FloatLike>(
     }
 }
 
-#[allow(dead_code)]
-fn generate_rstar_t_dependence(num_t_derivatives: usize) -> Vec<Atom> {
-    let t = symbol!("t");
-
-    let e_surface = parse!("η(r_star(t), t)");
-    let rstar = parse!("r_star(t)");
-
-    let mut rstar_derivatives = vec![];
-    for i in 0..num_t_derivatives {
-        if i == 0 {
-            rstar_derivatives.push(rstar.derivative(t));
-        } else {
-            rstar_derivatives.push(rstar_derivatives.last().unwrap().derivative(t));
-        }
-    }
-
-    let mut equations = vec![];
-    for i in 0..num_t_derivatives {
-        if i == 0 {
-            equations.push(e_surface.derivative(t));
-        } else {
-            equations.push(equations.last().unwrap().derivative(t));
-        }
-    }
-
-    let solutions = equations
-        .iter()
-        .zip(&rstar_derivatives)
-        .map(|(eq, variable)| {
-            Atom::solve_linear_system::<u8, _, _>(&[eq], &[variable])
-                .unwrap()
-                .pop()
-                .unwrap()
-        })
-        .collect();
-
-    for i in 1..=num_t_derivatives {
-        let mut params = vec![];
-
-        let mut current_r_derivative_counter = 0;
-        let mut current_t_derivative_counter = i;
-
-        loop {
-            let eta_derivative = function!(
-                symbolica::atom::Symbol::DERIVATIVE,
-                current_r_derivative_counter,
-                current_t_derivative_counter,
-                e_surface.clone()
-            );
-
-            params.push(eta_derivative);
-
-            if current_t_derivative_counter == 0 {
-                break;
-            }
-            current_r_derivative_counter += 1;
-            current_t_derivative_counter -= 1;
-        }
-
-        println!("params for derivative order {}", i);
-        for param in params {
-            println!("  {}", param);
-        }
-    }
-
-    solutions
-}
-
-struct RstarTDependenceEvaluator {
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub(crate) struct RstarTDependenceEvaluator {
     dual_shape: Vec<Vec<usize>>,
     implicit_function_theorem: GenericEvaluator,
 }
@@ -216,7 +152,7 @@ impl RstarTDependenceEvaluator {
 }
 
 // use the chain rule to express the t-derivatives of r_star in terms of the t and r derivatives of η(r_star(t), t)
-fn generate_rstar_t_dependence_evaluator(
+pub(crate) fn generate_rstar_t_dependence_evaluator(
     num_t_derivatives: usize,
 ) -> Result<RstarTDependenceEvaluator> {
     let t = symbol!("t");

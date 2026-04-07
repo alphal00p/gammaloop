@@ -36,7 +36,7 @@ use crate::{
     },
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
-        evaluate_integrated_ct_normalisation, evaluate_uv_damper,
+        RstarTDependenceEvaluator, evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
     utils::{
@@ -281,6 +281,7 @@ pub(crate) struct LUCounterTerm {
     pub active_left_thresholds: TiVec<RaisedCutId, TiVec<LeftThresholdId, bool>>,
     pub active_right_thresholds: TiVec<RaisedCutId, TiVec<RightThresholdId, bool>>,
     pub active_iterated_thresholds: TiVec<RaisedCutId, IteratedCtCollection<bool>>,
+    pub rstar_dependence_calculator: Vec<RstarTDependenceEvaluator>,
 }
 
 pub struct LUCTKinematicPoint<T: FloatLike> {

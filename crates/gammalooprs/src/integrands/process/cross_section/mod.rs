@@ -30,7 +30,10 @@ use crate::{
     settings::{
         GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
     },
-    subtraction::lu_counterterm::{LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators},
+    subtraction::{
+        generate_rstar_t_dependence_evaluator,
+        lu_counterterm::{LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators},
+    },
     utils::{
         F, FloatLike, Length, h, h_dual,
         hyperdual_utils::{
@@ -710,10 +713,19 @@ impl CrossSectionGraphTerm {
             ));
         }
 
+        let rstar_dependence_calculator = (1..=graph.derived_data.raised_data.dual_shapes.len())
+            .map(|i| generate_rstar_t_dependence_evaluator(i))
+            .collect::<Result<Vec<_>>>()?;
+
+        let rstar_dependence_calculator = (1..=graph.derived_data.raised_data.dual_shapes.len())
+            .map(|i| generate_rstar_t_dependence_evaluator(i))
+            .collect::<Result<Vec<_>>>()?;
+
         let counterterm = LUCounterTerm {
             evaluators: ct_evaluators,
             thresholds,
             subspaces: graph.derived_data.subspace_data.clone(),
+            rstar_dependence_calculator,
             active_cuts,
             active_left_thresholds,
             active_right_thresholds,
