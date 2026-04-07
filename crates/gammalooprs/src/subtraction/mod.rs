@@ -1,14 +1,31 @@
+use eyre::Result;
+use itertools::Itertools;
+use linnet::half_edge::involution::EdgeVec;
+use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::float::Real,
+    domains::{dual::HyperDual, float::Real},
+    evaluate::{FunctionMap, OptimizationSettings},
     function, parse, symbol,
 };
+use typed_index_collections::TiVec;
 
 use crate::{
+    cff::esurface::Esurface,
+    graph::{LmbIndex, LoopMomentumBasis},
+    integrands::process::GenericEvaluator,
+    momentum::{
+        Energy, FourMomentum,
+        sample::{MomentumSample, SubspaceData},
+    },
+    processes::EvaluatorSettings,
     settings::runtime::{
         IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
     },
-    utils::{self, F, FloatLike},
+    utils::{
+        self, F, FloatLike,
+        hyperdual_utils::{self, DualOrNot, new_constant},
+    },
 };
 
 pub mod amplitude_counterterm;
@@ -125,4 +142,188 @@ fn generate_rstar_t_dependence(num_t_derivatives: usize) -> Vec<Atom> {
     }
 
     solutions
+}
+
+struct RstarTDependenceEvaluator {
+    dual_shape: Vec<Vec<usize>>,
+    implicit_function_theorem: GenericEvaluator,
+}
+
+impl RstarTDependenceEvaluator {
+    fn evaluate<T: FloatLike>(
+        &mut self,
+        t_star: &F<T>,
+        radius_star: &F<T>,
+        subspace: &SubspaceData,
+        unrescaled_momentum_sample: &MomentumSample<T>,
+        masses: &EdgeVec<F<T>>,
+        e_surface: &Esurface,
+        lmb: &LoopMomentumBasis,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Vec<Complex<F<T>>> {
+        let dual = HyperDual::new(self.dual_shape.clone());
+        let dual_rstar = dual.variable(0, radius_star.clone());
+        let dual_t = dual.variable(1, t_star.clone());
+
+        let rescale_tstar = unrescaled_momentum_sample
+            .loop_moms()
+            .rescale_with_hyper_dual(&dual_t, None);
+
+        let dualized_externals_three_momenta = unrescaled_momentum_sample
+            .external_moms()
+            .iter()
+            .map(|fm: &FourMomentum<F<T>>| fm.spatial.map_ref(&|x| new_constant(&dual, x)))
+            .collect();
+
+        let lmb_transform = rescale_tstar.lmb_transform(
+            lmb,
+            subspace.get_lmb(all_lmbs),
+            &dualized_externals_three_momenta,
+        );
+
+        let dualized_external_fourmomenta = dualized_externals_three_momenta
+            .into_iter()
+            .zip(unrescaled_momentum_sample.external_moms())
+            .map(|(spatial, fm)| FourMomentum {
+                spatial,
+                temporal: Energy {
+                    value: new_constant(&dual, &fm.temporal.value),
+                },
+            })
+            .collect();
+
+        let rescale_rstar = lmb_transform.rescale(&dual_rstar, subspace.as_subspace_simple());
+
+        let dual_esurface = e_surface.compute_from_dual_momenta(
+            lmb,
+            masses,
+            &rescale_rstar,
+            &dualized_external_fourmomenta,
+        );
+
+        let params = dual_esurface.values[1..]
+            .iter()
+            .map(|x| Complex::new_re(x.clone()))
+            .collect_vec();
+
+        let result = T::get_evaluator(&mut self.implicit_function_theorem)(&params)
+            .into_iter()
+            .map(DualOrNot::unwrap_real)
+            .collect_vec();
+
+        result
+    }
+}
+
+// use the chain rule to express the t-derivatives of r_star in terms of the t and r derivatives of η(r_star(t), t)
+fn generate_rstar_t_dependence_evaluator(
+    num_t_derivatives: usize,
+) -> Result<RstarTDependenceEvaluator> {
+    let t = symbol!("t");
+
+    let e_surface = parse!("η(r_star(t), t)");
+    let rstar = parse!("r_star(t)");
+
+    let mut rstar_derivatives = vec![];
+    for i in 0..num_t_derivatives {
+        if i == 0 {
+            rstar_derivatives.push(rstar.derivative(t));
+        } else {
+            rstar_derivatives.push(rstar_derivatives.last().unwrap().derivative(t));
+        }
+    }
+
+    let mut equations = vec![];
+    for i in 0..num_t_derivatives {
+        if i == 0 {
+            equations.push(e_surface.derivative(t));
+        } else {
+            equations.push(equations.last().unwrap().derivative(t));
+        }
+    }
+
+    let mut solutions = equations
+        .iter()
+        .zip(&rstar_derivatives)
+        .map(|(eq, variable)| {
+            Atom::solve_linear_system::<u8, _, _>(&[eq], &[variable])
+                .unwrap()
+                .pop()
+                .unwrap()
+        })
+        .collect_vec();
+
+    for i in 1..solutions.len() {
+        for j in 0..i {
+            solutions[i] = solutions[i]
+                .replace(rstar_derivatives[j].clone())
+                .with(solutions[j].clone());
+        }
+    }
+
+    for (solution, rstar_derivative) in solutions.iter().zip(&rstar_derivatives) {
+        println!("{} = {}", rstar_derivative, solution);
+    }
+
+    // dual shape is for e-surface derivatives, implict function theorem should NOT be dualized with this
+    let mut dual_shape = vec![];
+    let mut params = vec![];
+    for i in 1..=num_t_derivatives {
+        let mut eta_derivatives_at_this_order = vec![];
+
+        let mut current_r_derivative_counter = 0;
+        let mut current_t_derivative_counter = i;
+
+        loop {
+            dual_shape.push(vec![
+                current_r_derivative_counter,
+                current_t_derivative_counter,
+            ]);
+            let eta_derivative = function!(
+                symbolica::atom::Symbol::DERIVATIVE,
+                current_r_derivative_counter,
+                current_t_derivative_counter,
+                e_surface.clone()
+            );
+
+            eta_derivatives_at_this_order.push(eta_derivative);
+
+            if current_t_derivative_counter == 0 {
+                break;
+            }
+            current_r_derivative_counter += 1;
+            current_t_derivative_counter -= 1;
+        }
+
+        println!("eta derivatives for order {}", i);
+        for param in &eta_derivatives_at_this_order {
+            println!("  {}", param);
+        }
+
+        params.extend(eta_derivatives_at_this_order);
+    }
+
+    println!("Dual shape: {:#?}", dual_shape);
+
+    let fn_map = FunctionMap::new();
+    let fn_map_entries = vec![];
+    let implict_function_theorem = GenericEvaluator::new_from_raw_params(
+        solutions,
+        &params,
+        &fn_map,
+        fn_map_entries,
+        OptimizationSettings::default(),
+        None,
+        &EvaluatorSettings::default(),
+    )?;
+
+    Ok(RstarTDependenceEvaluator {
+        dual_shape,
+        implicit_function_theorem: implict_function_theorem,
+    })
+}
+
+#[test]
+fn test_rstar_t_dependence_evaluator() {
+    generate_rstar_t_dependence_evaluator(3).unwrap();
 }
