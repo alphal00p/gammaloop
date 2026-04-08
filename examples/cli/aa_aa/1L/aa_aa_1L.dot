@@ -6,8 +6,8 @@ digraph GL0{
 	group_id=0
     is_group_master=true
 
-    edge [dod=-100]
-    node [dod=-100]
+    //edge [dod=-100]
+    //node [dod=-100]
 
 	0 [int_id="V_134" num="UFO::GC_2*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(7)),spenso::mink(4,hedge(2)))"];
 	1 [int_id="V_134" num="UFO::GC_2*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(1)))"];
@@ -35,8 +35,8 @@ digraph GL2{
 	group_id=0
     is_group_master=false
 
-    edge [dod=-100]
-    node [dod=-100]
+    //edge [dod=-100]
+    //node [dod=-100]
 
 	0 [int_id="V_134" num="UFO::GC_2*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(7)),spenso::mink(4,hedge(3)))"];
 	1 [int_id="V_134" num="UFO::GC_2*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(1)))"];
@@ -64,8 +64,8 @@ digraph GL4{
 	group_id=0
     is_group_master=false
 
-    edge [dod=-100]
-    node [dod=-100]
+    //edge [dod=-100]
+    //node [dod=-100]
 
 	0 [int_id="V_134" num="UFO::GC_2*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(7)),spenso::mink(4,hedge(3)))"];
 	1 [int_id="V_134" num="UFO::GC_2*spenso::g(spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(10))))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(2)))"];
