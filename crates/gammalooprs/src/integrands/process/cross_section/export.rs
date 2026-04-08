@@ -139,7 +139,11 @@ fn export_counterterm<T: ExportAtomTo>(
                 .map(export_evaluator_stack)
                 .collect::<Result<Vec<_>>>()
         })?,
-        pass_two_evaluator: export_generic_evaluator(&evaluators.pass_two_evaluator)?,
+        pass_two_evaluator: evaluators
+            .pass_two_evaluator
+            .iter()
+            .map(export_generic_evaluator)
+            .collect::<Result<Vec<_>>>()?,
     })
 }
 

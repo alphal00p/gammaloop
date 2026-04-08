@@ -717,9 +717,17 @@ impl CrossSectionGraphTerm {
             .map(|i| generate_rstar_t_dependence_evaluator(i))
             .collect::<Result<Vec<_>>>()?;
 
-        let rstar_dependence_calculator = (1..=graph.derived_data.raised_data.dual_shapes.len())
-            .map(|i| generate_rstar_t_dependence_evaluator(i))
-            .collect::<Result<Vec<_>>>()?;
+        let rstar_dependence_calculator = graph
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .map(|raised_cut_group| {
+                generate_rstar_t_dependence_evaluator(
+                    raised_cut_group.related_esurface_group.max_occurence - 1,
+                )
+            })
+            .collect::<Result<TiVec<RaisedCutId, _>>>()?;
 
         let counterterm = LUCounterTerm {
             evaluators: ct_evaluators,
@@ -1205,7 +1213,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             let accepted_event = prepared_event.buffered_event;
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
             let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
-            let mut kinematic_point = LUCTKinematicPoint::new();
+            let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
             for num_esurfaces in 1..=max_occurance {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
@@ -1294,7 +1302,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .push(lu_params.clone());
                     kinematic_point
                         .lu_cut_esurface_values
-                        .push(esurface_derivatives.clone().unwrap_real());
+                        .push(esurface_derivatives.clone());
                 }
 
                 let prefactor =

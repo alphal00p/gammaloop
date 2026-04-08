@@ -505,19 +505,36 @@ impl GammaLoopPairs {
         threshold_params: &ThresholdParams<T>,
         values: &mut [Complex<F<T>>],
     ) {
-        values[self.radius_left.value_range.start] =
-            Complex::new_re(threshold_params.radius.clone());
-        values[self.radius_star_left.value_range.start] =
-            Complex::new_re(threshold_params.radius_star.clone());
-        values[self.esurface_derivative_left_th.value_range.start] =
-            Complex::new_re(threshold_params.esurface_derivative.clone());
-
-        values[self.uv_damp_plus_left.value_range.start] =
-            Complex::new_re(threshold_params.uv_damp_plus.clone());
-        values[self.uv_damp_minus_left.value_range.start] =
-            Complex::new_re(threshold_params.uv_damp_minus.clone());
-        values[self.h_function_left_th.value_range.start] =
-            Complex::new_re(threshold_params.h_function.clone());
+        self.write_dual_or_not_param(
+            &threshold_params.radius,
+            self.radius_left.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.radius_star,
+            self.radius_star_left.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.esurface_derivative,
+            self.esurface_derivative_left_th.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.uv_damp_plus,
+            self.uv_damp_plus_left.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.uv_damp_minus,
+            self.uv_damp_minus_left.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.h_function,
+            self.h_function_left_th.value_range.start,
+            values,
+        );
     }
 
     pub(crate) fn right_threshold_params<T: FloatLike>(
@@ -525,19 +542,56 @@ impl GammaLoopPairs {
         threshold_params: &ThresholdParams<T>,
         values: &mut [Complex<F<T>>],
     ) {
-        values[self.radius_right.value_range.start] =
-            Complex::new_re(threshold_params.radius.clone());
-        values[self.radius_star_right.value_range.start] =
-            Complex::new_re(threshold_params.radius_star.clone());
-        values[self.esurface_derivative_right_th.value_range.start] =
-            Complex::new_re(threshold_params.esurface_derivative.clone());
+        self.write_dual_or_not_param(
+            &threshold_params.radius,
+            self.radius_right.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.radius_star,
+            self.radius_star_right.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.esurface_derivative,
+            self.esurface_derivative_right_th.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.uv_damp_plus,
+            self.uv_damp_plus_right.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.uv_damp_minus,
+            self.uv_damp_minus_right.value_range.start,
+            values,
+        );
+        self.write_dual_or_not_param(
+            &threshold_params.h_function,
+            self.h_function_right_th.value_range.start,
+            values,
+        );
+    }
 
-        values[self.uv_damp_plus_right.value_range.start] =
-            Complex::new_re(threshold_params.uv_damp_plus.clone());
-        values[self.uv_damp_minus_right.value_range.start] =
-            Complex::new_re(threshold_params.uv_damp_minus.clone());
-        values[self.h_function_right_th.value_range.start] =
-            Complex::new_re(threshold_params.h_function.clone());
+    fn write_dual_or_not_param<T: FloatLike>(
+        &self,
+        value: &DualOrNot<F<T>>,
+        start: usize,
+        values: &mut [Complex<F<T>>],
+    ) {
+        match value {
+            DualOrNot::Dual(dual) => {
+                let multiplicative_offset = dual.values.len();
+                values[start * multiplicative_offset..]
+                    .iter_mut()
+                    .zip(dual.values.iter())
+                    .for_each(|(slot, dual_value)| *slot = Complex::new_re(dual_value.clone()));
+            }
+            DualOrNot::NonDual(non_dual) => {
+                values[start] = Complex::new_re(non_dual.clone());
+            }
+        }
     }
 
     pub(crate) fn lu_params<T: FloatLike>(
@@ -686,13 +740,14 @@ impl<T: FloatLike> Default for ParamBuilder<T> {
     }
 }
 
+#[derive(Clone)]
 pub struct ThresholdParams<T: FloatLike> {
-    pub radius: F<T>,
-    pub radius_star: F<T>,
-    pub esurface_derivative: F<T>,
-    pub uv_damp_plus: F<T>,
-    pub uv_damp_minus: F<T>,
-    pub h_function: F<T>,
+    pub radius: DualOrNot<F<T>>,
+    pub radius_star: DualOrNot<F<T>>,
+    pub esurface_derivative: DualOrNot<F<T>>,
+    pub uv_damp_plus: DualOrNot<F<T>>,
+    pub uv_damp_minus: DualOrNot<F<T>>,
+    pub h_function: DualOrNot<F<T>>,
 }
 
 #[derive(Clone)]

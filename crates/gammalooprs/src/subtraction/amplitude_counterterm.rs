@@ -540,13 +540,14 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             evaluate_integrated_ct_normalisation(&radius, &radius_star, e_cm, integrated_settings);
 
         let threshold_params = ThresholdParams {
-            radius,
-            radius_star,
-            esurface_derivative: self.rstar_solution.solution.derivative_at_solution,
-
-            uv_damp_plus,
-            uv_damp_minus,
-            h_function,
+            radius: DualOrNot::NonDual(radius),
+            radius_star: DualOrNot::NonDual(radius_star),
+            esurface_derivative: DualOrNot::NonDual(
+                self.rstar_solution.solution.derivative_at_solution,
+            ),
+            uv_damp_plus: DualOrNot::NonDual(uv_damp_plus),
+            uv_damp_minus: DualOrNot::NonDual(uv_damp_minus),
+            h_function: DualOrNot::NonDual(h_function),
         };
 
         let params = T::get_parameters(

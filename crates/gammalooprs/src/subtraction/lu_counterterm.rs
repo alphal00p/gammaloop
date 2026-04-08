@@ -7,7 +7,10 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::RealLike;
+use symbolica::domains::{
+    dual::HyperDual,
+    float::{Real, RealLike},
+};
 use tracing::debug;
 use typed_index_collections::TiVec;
 
@@ -27,8 +30,12 @@ use crate::{
         },
     },
     momentum::{
-        Rotation,
-        sample::{LoopMomenta, MomentumSample, SubspaceData},
+        Rotation, SignOrZero, ThreeMomentum,
+        sample::{
+            ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample,
+            SubspaceData,
+        },
+        signature::LoopSignature,
     },
     processes::{
         EvaluatorBuildTimings, IteratedCtCollection, LUCounterTermData, LeftThresholdId,
@@ -36,15 +43,239 @@ use crate::{
     },
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
-        RstarTDependenceEvaluator, evaluate_integrated_ct_normalisation, evaluate_uv_damper,
+        RstarTDependenceEvaluator, evaluate_integrated_ct_normalisation,
+        evaluate_integrated_ct_normalisation_dual, evaluate_uv_damper, evaluate_uv_damper_dual,
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
     utils::{
         F, FloatLike,
-        hyperdual_utils::shape_for_t_derivatives,
+        hyperdual_utils::{
+            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
+            shape_for_t_derivatives,
+        },
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };
+
+fn zero_dual_or_not_complex<T: FloatLike>(order: usize, zero: &F<T>) -> DualOrNot<Complex<F<T>>> {
+    if order == 0 {
+        DualOrNot::NonDual(Complex::new_re(zero.clone()))
+    } else {
+        DualOrNot::Dual(HyperDual::new(shape_for_t_derivatives(order)))
+    }
+}
+
+fn negate_dual_or_not_complex<T: FloatLike>(
+    value: DualOrNot<Complex<F<T>>>,
+) -> DualOrNot<Complex<F<T>>> {
+    match value {
+        DualOrNot::Dual(dual) => DualOrNot::Dual(-dual),
+        DualOrNot::NonDual(non_dual) => DualOrNot::NonDual(-non_dual),
+    }
+}
+
+fn multiply_dual_or_not_complex<T: FloatLike>(
+    lhs: DualOrNot<Complex<F<T>>>,
+    rhs: &DualOrNot<Complex<F<T>>>,
+) -> DualOrNot<Complex<F<T>>> {
+    match (lhs, rhs) {
+        (DualOrNot::NonDual(lhs), DualOrNot::NonDual(rhs)) => DualOrNot::NonDual(lhs * rhs),
+        (DualOrNot::Dual(lhs), DualOrNot::Dual(rhs)) => DualOrNot::Dual(lhs * rhs.clone()),
+        (DualOrNot::Dual(lhs), DualOrNot::NonDual(rhs)) => {
+            let rhs_dual = new_constant(&lhs, rhs);
+            DualOrNot::Dual(lhs * rhs_dual)
+        }
+        (DualOrNot::NonDual(lhs), DualOrNot::Dual(rhs)) => {
+            let lhs_dual = new_constant(rhs, &lhs);
+            DualOrNot::Dual(lhs_dual * rhs.clone())
+        }
+    }
+}
+
+fn real_dual_to_complex<T: FloatLike>(dual: HyperDual<F<T>>) -> HyperDual<Complex<F<T>>> {
+    let values = dual.values.into_iter().map(Complex::new_re).collect_vec();
+    HyperDual::from_values(shape_for_t_derivatives(values.len() - 1), values)
+}
+
+fn dualize_external_momenta<T: FloatLike>(
+    shape: &HyperDual<F<T>>,
+    external_moms: &ExternalFourMomenta<F<T>>,
+) -> ExternalFourMomenta<HyperDual<F<T>>> {
+    external_moms
+        .iter()
+        .map(|momentum| momentum.map_ref(&|component| new_constant(shape, component)))
+        .collect()
+}
+
+fn dualize_loop_momenta<T: FloatLike>(
+    shape: &HyperDual<F<T>>,
+    loop_moms: &LoopMomenta<F<T>>,
+) -> LoopMomenta<HyperDual<F<T>>> {
+    loop_moms
+        .iter()
+        .map(|momentum| momentum.map_ref(&|component| new_constant(shape, component)))
+        .collect()
+}
+
+fn dual_shifted_radius<T: FloatLike>(
+    shifted_momenta: &LoopMomenta<HyperDual<F<T>>>,
+    subspace: &SubspaceData,
+) -> HyperDual<F<T>> {
+    let zero = new_constant(
+        &shifted_momenta[LoopIndex(0)].px,
+        &shifted_momenta[LoopIndex(0)].px.values[0].zero(),
+    );
+
+    subspace
+        .iter_lmb_indices()
+        .fold(zero, |acc, loop_index| {
+            acc + shifted_momenta[loop_index].norm_squared()
+        })
+        .sqrt()
+}
+
+fn compute_shift_part_from_dual_momenta_in_subspace<T: FloatLike>(
+    esurface: &Esurface,
+    loop_moms: &LoopMomenta<HyperDual<F<T>>>,
+    external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
+    subspace: &SubspaceData,
+    all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    graph: &Graph,
+    masses: &EdgeVec<F<T>>,
+) -> HyperDual<F<T>> {
+    let lmb = subspace.get_lmb(all_lmbs);
+    let zero = new_constant(
+        &external_moms[ExternalIndex(0)].temporal.value,
+        &external_moms[ExternalIndex(0)].temporal.value.values[0].zero(),
+    );
+
+    let full_external_shift = esurface
+        .external_shift
+        .iter()
+        .map(|(index, sign)| {
+            let external_signature = &lmb.edge_signatures[*index].external;
+            let sign = new_constant(&zero, &F::from_f64(*sign as f64));
+            let external_energy = external_signature
+                .try_apply(&external_moms.raw)
+                .map(|momentum| momentum.temporal.value)
+                .unwrap_or_else(|| zero.clone());
+
+            sign * external_energy
+        })
+        .reduce(|acc, value| acc + value)
+        .unwrap_or_else(|| zero.clone());
+
+    let spatial_externals = external_moms
+        .iter()
+        .map(|momentum| momentum.spatial.clone())
+        .collect::<TiVec<ExternalIndex, _>>();
+
+    let remaining_shift = subspace
+        .does_not_contain(&esurface.energies, graph)
+        .map(|index| {
+            let signature = &lmb.edge_signatures[index];
+            let momentum = signature
+                .try_compute_momentum(&loop_moms.0, &spatial_externals.raw)
+                .unwrap_or_else(|| unreachable!());
+            let mass = &masses[index];
+            let lifted_mass = new_constant(&momentum.px, mass);
+
+            (momentum.norm_squared() + lifted_mass.clone() * lifted_mass).sqrt()
+        })
+        .reduce(|acc, value| acc + value)
+        .unwrap_or_else(|| zero.clone());
+
+    full_external_shift + remaining_shift
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_self_and_r_derivative_subspace_dual<T: FloatLike>(
+    esurface: &Esurface,
+    radius: &HyperDual<F<T>>,
+    shifted_unit_loops_in_subspace: &LoopMomenta<HyperDual<F<T>>>,
+    center_in_subspace: &LoopMomenta<HyperDual<F<T>>>,
+    external_moms: &ExternalFourMomenta<HyperDual<F<T>>>,
+    real_mass_vector: &EdgeVec<F<T>>,
+    subspace: &SubspaceData,
+    all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    graph: &Graph,
+) -> (HyperDual<F<T>>, HyperDual<F<T>>) {
+    let spatial_part_of_externals = external_moms
+        .iter()
+        .map(|momentum| momentum.spatial.clone())
+        .collect::<TiVec<ExternalIndex, _>>();
+
+    let loops: LoopMomenta<HyperDual<F<T>>> = shifted_unit_loops_in_subspace
+        .iter_enumerated()
+        .map(|(loop_index, shifted_unit_momenta)| {
+            if subspace.contains_loop_index(loop_index) {
+                shifted_unit_momenta * radius + &center_in_subspace[loop_index]
+            } else {
+                shifted_unit_momenta.clone()
+            }
+        })
+        .collect();
+
+    let shift = compute_shift_part_from_dual_momenta_in_subspace(
+        esurface,
+        shifted_unit_loops_in_subspace,
+        external_moms,
+        subspace,
+        all_lmbs,
+        graph,
+        real_mass_vector,
+    );
+
+    let lmb = subspace.get_lmb(all_lmbs);
+    let zero = new_constant(radius, &radius.values[0].zero());
+    let (derivative, energy_sum) = subspace
+        .contains(&esurface.energies, graph)
+        .map(|index| {
+            let signature = &lmb.edge_signatures[index];
+            let momentum = signature
+                .try_compute_momentum(&loops.0, &spatial_part_of_externals.raw)
+                .unwrap_or_else(|| unreachable!());
+            let unit_loop_part = compute_loop_part_subspace_dual(
+                &signature.internal,
+                shifted_unit_loops_in_subspace,
+                subspace,
+            );
+            let mass = &real_mass_vector[index];
+            let lifted_mass = new_constant(&momentum.px, mass);
+            let energy = (momentum.norm_squared() + lifted_mass.clone() * lifted_mass).sqrt();
+            let numerator = momentum * &unit_loop_part;
+
+            (numerator / &energy, energy)
+        })
+        .fold((zero.clone(), zero), |(der_sum, en_sum), (der, en)| {
+            (der_sum + der, en_sum + en)
+        });
+
+    (energy_sum + shift, derivative)
+}
+
+fn compute_loop_part_subspace_dual<T: FloatLike>(
+    loop_signature: &LoopSignature,
+    loop_moms: &LoopMomenta<HyperDual<F<T>>>,
+    subspace: &SubspaceData,
+) -> ThreeMomentum<HyperDual<F<T>>> {
+    let projected: LoopSignature = subspace.project_loop_signature(loop_signature).collect();
+    let zero = new_constant(
+        &loop_moms[LoopIndex(0)].px,
+        &loop_moms[LoopIndex(0)].px.values[0].zero(),
+    );
+    let mut result = ThreeMomentum::new(zero.clone(), zero.clone(), zero);
+
+    for (loop_index, sign) in projected.iter_enumerated() {
+        match sign {
+            SignOrZero::Zero => {}
+            SignOrZero::Plus => result += &loop_moms[loop_index],
+            SignOrZero::Minus => result -= &loop_moms[loop_index],
+        }
+    }
+
+    result
+}
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -52,7 +283,7 @@ pub struct LUCounterTermEvaluators {
     pub left_thresholds_evaluator: TiVec<LeftThresholdId, Vec<EvaluatorStack>>,
     pub right_thresholds_evaluator: TiVec<RightThresholdId, Vec<EvaluatorStack>>,
     pub iterated_evaluator: IteratedCtCollection<Vec<EvaluatorStack>>,
-    pub pass_two_evaluator: GenericEvaluator,
+    pub pass_two_evaluator: Vec<GenericEvaluator>,
 }
 
 impl LUCounterTermEvaluators {
@@ -177,7 +408,28 @@ impl LUCounterTermEvaluators {
         timings += iterated_timings.get();
 
         let symbolica_started = std::time::Instant::now();
-        let pass_two_evaluator = build_derivative_structure(1, &settings.generation.evaluator);
+        let max_num_esurfaces = counterterm_data
+            .left_atoms
+            .iter()
+            .map(|integrands| integrands.integrands.len())
+            .chain(
+                counterterm_data
+                    .right_atoms
+                    .iter()
+                    .map(|integrands| integrands.integrands.len()),
+            )
+            .chain(
+                counterterm_data
+                    .iterated
+                    .iter()
+                    .map(|integrands| integrands.integrands.len()),
+            )
+            .max()
+            .unwrap_or(1);
+
+        let pass_two_evaluator = (1..=max_num_esurfaces)
+            .map(|order| build_derivative_structure(order as u8))
+            .collect(, &settings.generation.evaluator);
         timings.symbolica_time += symbolica_started.elapsed();
 
         (
@@ -281,18 +533,27 @@ pub(crate) struct LUCounterTerm {
     pub active_left_thresholds: TiVec<RaisedCutId, TiVec<LeftThresholdId, bool>>,
     pub active_right_thresholds: TiVec<RaisedCutId, TiVec<RightThresholdId, bool>>,
     pub active_iterated_thresholds: TiVec<RaisedCutId, IteratedCtCollection<bool>>,
-    pub rstar_dependence_calculator: Vec<RstarTDependenceEvaluator>,
+    pub rstar_dependence_calculator: TiVec<RaisedCutId, RstarTDependenceEvaluator>,
 }
 
 pub struct LUCTKinematicPoint<T: FloatLike> {
+    pub unrescaled_sample: MomentumSample<T>,
     pub dualized_momentum_sample_cache: Vec<MomentumSample<T>>,
     pub lu_cut_parameter_cache: Vec<LUParams<T>>,
-    pub lu_cut_esurface_values: Vec<F<T>>,
+    pub lu_cut_esurface_values: Vec<DualOrNot<F<T>>>,
 }
 
 impl<T: FloatLike> LUCTKinematicPoint<T> {
+    pub fn unrescaled_sample(&self) -> &MomentumSample<T> {
+        &self.unrescaled_sample
+    }
+
     pub fn representative_sample(&self) -> &MomentumSample<T> {
         &self.dualized_momentum_sample_cache[0]
+    }
+
+    pub fn sample_for_order(&self, order: usize) -> &MomentumSample<T> {
+        &self.dualized_momentum_sample_cache[order]
     }
 
     pub fn lmb_transform(&self, from: &LoopMomentumBasis, to: &LoopMomentumBasis) -> Self {
@@ -303,6 +564,7 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
             .collect();
 
         Self {
+            unrescaled_sample: self.unrescaled_sample.clone(),
             dualized_momentum_sample_cache: transformed_samples,
             lu_cut_parameter_cache: self.lu_cut_parameter_cache.clone(),
             lu_cut_esurface_values: self.lu_cut_esurface_values.clone(),
@@ -313,8 +575,26 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
         self.lu_cut_parameter_cache[0].clone()
     }
 
-    pub fn new() -> Self {
+    pub fn cut_params_for_order(&self, order: usize) -> &LUParams<T> {
+        &self.lu_cut_parameter_cache[order]
+    }
+
+    pub fn cut_esurface_for_order(&self, order: usize) -> &DualOrNot<F<T>> {
+        &self.lu_cut_esurface_values[order]
+    }
+
+    pub fn non_dual_cut_esurface_value(&self) -> F<T> {
+        match self.cut_esurface_for_order(0) {
+            DualOrNot::NonDual(value) => value.clone(),
+            DualOrNot::Dual(_) => {
+                unreachable!("representative LU cut e-surface value must be non-dual")
+            }
+        }
+    }
+
+    pub fn new(unrescaled_sample: MomentumSample<T>) -> Self {
         Self {
+            unrescaled_sample,
             dualized_momentum_sample_cache: Vec::new(),
             lu_cut_parameter_cache: Vec::new(),
             lu_cut_esurface_values: Vec::new(),
@@ -595,7 +875,7 @@ impl LUCounterTerm {
             .map(|overlap_group| left_counterterm_builder.new_overlap_builder(overlap_group))
             .collect_vec();
 
-        let left_overlap_samples = left_overlap_builders
+        let left_overlap_solutions = left_overlap_builders
             .iter()
             .map(|overlap_builder| {
                 overlap_builder
@@ -605,8 +885,7 @@ impl LUCounterTerm {
                     .map(|esurface| {
                         overlap_builder
                             .new_esurface_builder(*esurface)
-                            .solve_rstar()
-                            .rstar_sample()
+                            .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
                     })
                     .collect_vec()
             })
@@ -630,7 +909,7 @@ impl LUCounterTerm {
             .map(|overlap_group| right_counterterm_builder.new_overlap_builder(overlap_group))
             .collect_vec();
 
-        let right_overlap_samples = right_overlap_builders
+        let right_overlap_solutions = right_overlap_builders
             .iter()
             .map(|overlap_builder| {
                 overlap_builder
@@ -640,183 +919,203 @@ impl LUCounterTerm {
                     .map(|esurface| {
                         overlap_builder
                             .new_esurface_builder(*esurface)
-                            .solve_rstar()
-                            .rstar_sample()
+                            .solve_rstar(&mut self.rstar_dependence_calculator[cut_id])
                     })
                     .collect_vec()
             })
             .collect_vec();
 
-        let mut left_evaluations = Complex::new_re(kinematic_point.representative_sample().zero());
+        let zero = kinematic_point.representative_sample().zero();
+        let mut total_result = Complex::new_re(zero.clone());
 
-        let non_dual_lu_cut_params = kinematic_point.non_dual_cut_params();
+        for order in 0..kinematic_point.lu_cut_parameter_cache.len() {
+            let mut left_evaluations = zero_dual_or_not_complex(order, &zero);
+            let lu_cut_params = kinematic_point.cut_params_for_order(order).clone();
 
-        for samples_group in left_overlap_samples.iter() {
-            for sample in samples_group {
-                debug!("left threshold parameters");
+            for solutions_group in left_overlap_solutions.iter() {
+                for solution in solutions_group {
+                    let sample = solution.rstar_sample_for_order(order);
+                    debug!("left threshold parameters");
 
-                let left_threshold_params: ThresholdParams<T> =
-                    sample.extract_threshold_parameters(true);
-                let inverse_transformed_sample = sample.get_inverse_transformed_sample();
-                let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
+                    let left_threshold_params: ThresholdParams<T> =
+                        sample.extract_threshold_parameters(true);
+                    let inverse_transformed_sample = sample.get_inverse_transformed_sample();
+                    let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
                 self.ensure_active_left_threshold(cut_id, left_threshold_id)?;
 
-                let params = T::get_parameters(
-                    param_builder,
-                    (false, false),
-                    graph,
-                    &inverse_transformed_sample,
-                    settings.kinematics.externals.get_helicities(),
-                    &settings.additional_params(),
-                    Some(&left_threshold_params),
-                    None,
-                    Some(&non_dual_lu_cut_params),
-                );
+                    let params = T::get_parameters(
+                        param_builder,
+                        (false, false),
+                        graph,
+                        &inverse_transformed_sample,
+                        settings.kinematics.externals.get_helicities(),
+                        &settings.additional_params(),
+                        Some(&left_threshold_params),
+                        None,
+                        Some(&lu_cut_params),
+                    );
 
-                let mut result_of_this_ct = self.evaluators[cut_id].left_thresholds_evaluator
-                    [left_threshold_id][0]
-                    .evaluate(
-                        params,
-                        orientations,
-                        settings,
-                        evaluation_meta_data,
-                        record_primary_timing,
-                    )
-                    .unwrap()
-                    .pop()
-                    .unwrap()
-                    .unwrap_real();
+                    let result_of_this_ct = self.evaluators[cut_id].left_thresholds_evaluator
+                        [left_threshold_id][order]
+                        .evaluate(
+                            params,
+                            orientations,
+                            settings,
+                            evaluation_meta_data,
+                            record_primary_timing,
+                        )
+                        .unwrap()
+                        .pop()
+                        .unwrap();
 
-                result_of_this_ct *= &sample.value_of_multi_channeling_factor;
-                left_evaluations += result_of_this_ct;
+                    left_evaluations += multiply_dual_or_not_complex(
+                        result_of_this_ct,
+                        &sample.value_of_multi_channeling_factor,
+                    );
+                }
             }
-        }
 
-        let mut right_evaluations = Complex::new_re(kinematic_point.representative_sample().zero());
+            let mut right_evaluations = zero_dual_or_not_complex(order, &zero);
 
-        for samples_group in right_overlap_samples.iter() {
-            for sample in samples_group {
-                debug!("right threshold parameters");
-                let right_threshold_params: ThresholdParams<T> =
-                    sample.extract_threshold_parameters(true);
-                let inverse_transformed_sample = sample.get_inverse_transformed_sample();
-                let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
+            for solutions_group in right_overlap_solutions.iter() {
+                for solution in solutions_group {
+                    let sample = solution.rstar_sample_for_order(order);
+                    debug!("right threshold parameters");
+                    let right_threshold_params: ThresholdParams<T> =
+                        sample.extract_threshold_parameters(true);
+                    let inverse_transformed_sample = sample.get_inverse_transformed_sample();
+                    let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
                 self.ensure_active_right_threshold(cut_id, right_threshold_id)?;
 
-                let params = T::get_parameters(
-                    param_builder,
-                    (false, false),
-                    graph,
-                    &inverse_transformed_sample,
-                    settings.kinematics.externals.get_helicities(),
-                    &settings.additional_params(),
-                    None,
-                    Some(&right_threshold_params),
-                    Some(&non_dual_lu_cut_params),
-                );
+                    let params = T::get_parameters(
+                        param_builder,
+                        (false, false),
+                        graph,
+                        &inverse_transformed_sample,
+                        settings.kinematics.externals.get_helicities(),
+                        &settings.additional_params(),
+                        None,
+                        Some(&right_threshold_params),
+                        Some(&lu_cut_params),
+                    );
 
-                let mut result_of_this_ct = self.evaluators[cut_id].right_thresholds_evaluator
-                    [right_threshold_id][0]
-                    .evaluate(
-                        params,
-                        orientations,
-                        settings,
-                        evaluation_meta_data,
-                        record_primary_timing,
-                    )
-                    .unwrap()
-                    .pop()
-                    .unwrap()
-                    .unwrap_real();
-                result_of_this_ct *= &sample.value_of_multi_channeling_factor;
+                    let result_of_this_ct = self.evaluators[cut_id].right_thresholds_evaluator
+                        [right_threshold_id][order]
+                        .evaluate(
+                            params,
+                            orientations,
+                            settings,
+                            evaluation_meta_data,
+                            record_primary_timing,
+                        )
+                        .unwrap()
+                        .pop()
+                        .unwrap();
 
-                debug!(
-                    "evaluation of ct for esurface id {}: {:+16e}",
-                    sample.get_esurface_id().0,
-                    result_of_this_ct,
-                );
-
-                right_evaluations += result_of_this_ct;
+                    right_evaluations += multiply_dual_or_not_complex(
+                        result_of_this_ct,
+                        &sample.value_of_multi_channeling_factor,
+                    );
+                }
             }
-        }
 
-        let flattened_left_iter = left_overlap_samples.iter().flatten();
-        let flattened_right_iter = right_overlap_samples.iter().flatten();
-        let cartesian_product_iter = flattened_left_iter.cartesian_product(flattened_right_iter);
+            let mut cartesian_product_result = zero_dual_or_not_complex(order, &zero);
 
-        let mut cartesian_product_result =
-            Complex::new_re(kinematic_point.representative_sample().zero());
+            for left_solutions_group in left_overlap_solutions.iter() {
+                for left_solution in left_solutions_group {
+                    let sample_left = left_solution.rstar_sample_for_order(order);
+                    for right_solutions_group in right_overlap_solutions.iter() {
+                        for right_solution in right_solutions_group {
+                            let sample_right = right_solution.rstar_sample_for_order(order);
 
-        for (sample_left, sample_right) in cartesian_product_iter {
-            let left_threshold_params: ThresholdParams<T> =
-                sample_left.extract_threshold_parameters(false);
-            let right_threshold_params: ThresholdParams<T> =
-                sample_right.extract_threshold_parameters(false);
-            let multi_channeling_factor = &sample_left.value_of_multi_channeling_factor
-                * &sample_right.value_of_multi_channeling_factor;
-            let iterated_index = (
-                LeftThresholdId::from(sample_left.get_esurface_id().0),
-                RightThresholdId::from(sample_right.get_esurface_id().0),
-            );
-            self.ensure_active_iterated_threshold(cut_id, iterated_index)?;
+                            let left_threshold_params: ThresholdParams<T> =
+                                sample_left.extract_threshold_parameters(false);
+                            let right_threshold_params: ThresholdParams<T> =
+                                sample_right.extract_threshold_parameters(false);
+                            let multi_channeling_factor = multiply_dual_or_not_complex(
+                                sample_left.value_of_multi_channeling_factor.clone(),
+                                &sample_right.value_of_multi_channeling_factor,
+                            );
+                            let iterated_index = (
+                                LeftThresholdId::from(sample_left.get_esurface_id().0),
+                                RightThresholdId::from(sample_right.get_esurface_id().0),
+                            );
+                            self.ensure_active_iterated_threshold(cut_id, iterated_index)?;
             let inverse_transformed_momentum_sample =
-                merge_and_inverse_transform(sample_left, sample_right);
+                                merge_and_inverse_transform(&sample_left, &sample_right);
 
-            let params = T::get_parameters(
-                param_builder,
-                (false, false),
-                graph,
-                &inverse_transformed_momentum_sample,
-                settings.kinematics.externals.get_helicities(),
-                &settings.additional_params(),
-                Some(&left_threshold_params),
-                Some(&right_threshold_params),
-                Some(&non_dual_lu_cut_params),
-            );
+                            let params = T::get_parameters(
+                                param_builder,
+                                (false, false),
+                                graph,
+                                &inverse_transformed_momentum_sample,
+                                settings.kinematics.externals.get_helicities(),
+                                &settings.additional_params(),
+                                Some(&left_threshold_params),
+                                Some(&right_threshold_params),
+                                Some(&lu_cut_params),
+                            );
 
-            let mut result_of_this_ct = self.evaluators[cut_id].iterated_evaluator[iterated_index]
-                [0]
-            .evaluate(
-                params,
-                orientations,
-                settings,
+                            let result_of_this_ct = self.evaluators[cut_id].iterated_evaluator
+                                [iterated_index][order]
+                                .evaluate(
+                                    params,
+                                    orientations,
+                                    settings,
+                                    evaluation_meta_data,
+                                    record_primary_timing,
+                                )
+                                .unwrap()
+                                .pop()
+                                .unwrap();
+
+                            cartesian_product_result += multiply_dual_or_not_complex(
+                                result_of_this_ct,
+                                &multi_channeling_factor,
+                            );
+                        }
+                    }
+                }
+            }
+
+            let mut pass_one_result = left_evaluations.clone();
+            pass_one_result += right_evaluations;
+            pass_one_result += negate_dual_or_not_complex(cartesian_product_result);
+            let pass_one_result = negate_dual_or_not_complex(pass_one_result);
+
+            let mut params_for_pass_two = vec![];
+            match pass_one_result {
+                DualOrNot::Dual(dual_result) => {
+                    params_for_pass_two
+                        .extend_from_slice(&extract_t_derivatives_complex(dual_result));
+                }
+                DualOrNot::NonDual(non_dual_result) => {
+                    params_for_pass_two.push(non_dual_result);
+                }
+            }
+
+            match kinematic_point.cut_esurface_for_order(order).clone() {
+                DualOrNot::Dual(dual_e_surface) => {
+                    extract_t_derivatives(dual_e_surface)[1..]
+                        .iter()
+                        .for_each(|value| params_for_pass_two.push(Complex::new_re(value.clone())));
+                }
+                DualOrNot::NonDual(non_dual_e_surface) => {
+                    params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
+                }
+            }
+
+            let pass_two_result = evaluate_evaluator_single(
+                &mut self.evaluators[cut_id].pass_two_evaluator[order],
+                &params_for_pass_two,
                 evaluation_meta_data,
                 record_primary_timing,
-            )
-            .unwrap()
-            .pop()
-            .unwrap()
-            .unwrap_real();
-
-            result_of_this_ct *= multi_channeling_factor;
-            debug!(
-                "evaluation of ct for esurfaces {}, {}: {:+16e}",
-                sample_left.get_esurface_id().0,
-                sample_right.get_esurface_id().0,
-                result_of_this_ct,
             );
-            cartesian_product_result += result_of_this_ct;
+
+            total_result += pass_two_result;
         }
 
-        debug!("left ct evaluation: {:+16e}", left_evaluations);
-        debug!("right ct evaluation: {:+16e}", right_evaluations);
-        debug!(
-            "cartesian product ct evaluation: {:+16e}",
-            cartesian_product_result
-        );
-
-        let pass_one_result = -(left_evaluations + right_evaluations - cartesian_product_result);
-
-        let params_for_pass_two = [
-            pass_one_result,
-            Complex::new_re(kinematic_point.lu_cut_esurface_values[0].clone()),
-        ];
-        Ok(evaluate_evaluator_single(
-            &mut self.evaluators[cut_id].pass_two_evaluator,
-            &params_for_pass_two,
-            evaluation_meta_data,
-            record_primary_timing,
-        ))
+        total_result
     }
 }
 
@@ -930,7 +1229,10 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
-    fn solve_rstar(self) -> RstarSolution<'a, T> {
+    fn solve_rstar(
+        self,
+        rstar_t_dependence_evaluator: &mut RstarTDependenceEvaluator,
+    ) -> RstarSolution<'a, T> {
         let subspace = self.overlap_builder.counterterm_builder.subspace;
         let graph = self.overlap_builder.counterterm_builder.graph;
         let lmbs = self.overlap_builder.counterterm_builder.all_lmbs;
@@ -974,10 +1276,72 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             &self.overlap_builder.counterterm_builder.e_cm,
         );
 
+        let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
+            let t_star = match &self
+                .overlap_builder
+                .counterterm_builder
+                .transformed_kinematic_point
+                .non_dual_cut_params()
+                .tstar
+            {
+                DualOrNot::NonDual(t_star) => t_star.clone(),
+                DualOrNot::Dual(_) => {
+                    unreachable!("representative LU cut parameters must stay non-dual")
+                }
+            };
+
+            Some(
+                rstar_t_dependence_evaluator.evaluate(
+                    &t_star,
+                    &solution.solution,
+                    &self.overlap_builder.rotated_center,
+                    subspace,
+                    self.overlap_builder
+                        .counterterm_builder
+                        .transformed_kinematic_point
+                        .unrescaled_sample(),
+                    masses,
+                    self.esurface,
+                    &self
+                        .overlap_builder
+                        .counterterm_builder
+                        .graph
+                        .loop_momentum_basis,
+                    lmbs,
+                ),
+            )
+        } else {
+            None
+        };
+
         RstarSolution {
             esurface_ct_builder: self,
             solution,
+            t_dependent_solution,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LUCounterTerm;
+    use crate::processes::RaisedCutId;
+    use typed_index_collections::{TiVec, ti_vec};
+
+    #[test]
+    fn inactive_cut_guard_reports_runtime_access() {
+        let counterterm = LUCounterTerm {
+            evaluators: TiVec::new(),
+            thresholds: TiVec::new(),
+            subspaces: TiVec::new(),
+            active_cuts: ti_vec![false],
+            active_left_thresholds: ti_vec![TiVec::new()],
+            active_right_thresholds: ti_vec![TiVec::new()],
+            active_iterated_thresholds: TiVec::new(),
+        };
+
+        let error = counterterm.ensure_active_cut(RaisedCutId(0)).unwrap_err();
+        assert!(error.to_string().contains("generation marked it inactive"));
     }
 }
 
@@ -1007,35 +1371,148 @@ mod tests {
 struct RstarSolution<'a, T: FloatLike> {
     esurface_ct_builder: EsurfaceCTBuilder<'a, T>,
     solution: NewtonIterationResult<T>,
+    t_dependent_solution: Option<HyperDual<F<T>>>,
+}
+
+struct DualRstarGeometry<T: FloatLike> {
+    radius: HyperDual<F<T>>,
+    radius_star: HyperDual<F<T>>,
+    esurface_derivative: HyperDual<F<T>>,
+    rstar_loop_momenta: LoopMomenta<HyperDual<F<T>>>,
+    external_moms: ExternalFourMomenta<HyperDual<F<T>>>,
 }
 
 impl<'a, T: FloatLike> RstarSolution<'a, T> {
-    fn rstar_sample(self) -> RstarSample<'a, T> {
+    fn max_supported_order(&self) -> usize {
+        self.t_dependent_solution
+            .as_ref()
+            .map(|dual| dual.values.len().saturating_sub(1))
+            .unwrap_or(0)
+    }
+
+    fn base_rstar_loop_momenta(&self) -> LoopMomenta<F<T>> {
         let subspace = self
             .esurface_ct_builder
             .overlap_builder
             .counterterm_builder
             .subspace;
 
-        let rstar_loop_momenta = &self
+        &self
             .esurface_ct_builder
             .overlap_builder
             .unit_shifted_momenta
-            .rescale(
-                &self.solution.solution,
-                Some(&subspace.iter_lmb_indices().collect_vec()),
-            )
-            + &self.esurface_ct_builder.overlap_builder.rotated_center;
+            .rescale(&self.solution.solution, subspace.as_subspace_simple())
+            + &self.esurface_ct_builder.overlap_builder.rotated_center
+    }
 
-        let mut rstar_sample = self
+    fn truncated_rstar_solution(&self, order: usize) -> HyperDual<F<T>> {
+        let dual_solution = self
+            .t_dependent_solution
+            .as_ref()
+            .expect("higher-order LU threshold evaluation requires cached r_star(t)");
+        HyperDual::from_values(
+            shape_for_t_derivatives(order),
+            dual_solution.values[..=order].to_vec(),
+        )
+    }
+
+    fn dual_geometry_for_order(&self, order: usize) -> DualRstarGeometry<T> {
+        let source_sample = self
             .esurface_ct_builder
             .overlap_builder
             .counterterm_builder
             .transformed_kinematic_point
-            .representative_sample()
+            .sample_for_order(order);
+        let dual_loop_momenta = source_sample
+            .sample
+            .dual_loop_moms
+            .as_ref()
+            .expect("higher-order LU threshold evaluation requires dual loop momenta")
             .clone();
 
-        rstar_sample.sample.loop_moms = rstar_loop_momenta;
+        let radius_star = self.truncated_rstar_solution(order);
+        let center = dualize_loop_momenta(
+            &radius_star,
+            &self.esurface_ct_builder.overlap_builder.rotated_center,
+        );
+        let external_moms = dualize_external_momenta(&radius_star, source_sample.external_moms());
+
+        let shifted_momenta = dual_loop_momenta
+            .iter()
+            .zip(center.iter())
+            .map(|(momentum, center)| momentum.clone() - center.clone())
+            .collect::<LoopMomenta<_>>();
+
+        let radius = dual_shifted_radius(
+            &shifted_momenta,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
+        );
+        let inverse_radius = new_constant(&radius, &radius.values[0].one()) / radius.clone();
+        let unit_shifted_momenta = shifted_momenta.rescale(
+            &inverse_radius,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace
+                .as_subspace_simple(),
+        );
+
+        let rstar_loop_momenta = unit_shifted_momenta
+            .rescale(
+                &radius_star,
+                self.esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .subspace
+                    .as_subspace_simple(),
+            )
+            .iter()
+            .zip(center.iter())
+            .map(|(momentum, center)| momentum.clone() + center.clone())
+            .collect();
+
+        let (_, esurface_derivative) = compute_self_and_r_derivative_subspace_dual(
+            self.esurface_ct_builder.esurface,
+            &radius_star,
+            &unit_shifted_momenta,
+            &center,
+            &external_moms,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .real_mass_vector,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .subspace,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .all_lmbs,
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .graph,
+        );
+
+        DualRstarGeometry {
+            radius,
+            radius_star,
+            esurface_derivative,
+            rstar_loop_momenta,
+            external_moms,
+        }
+    }
+
+    fn non_dual_multichanneling_factor(&self, rstar_sample: &MomentumSample<T>) -> Complex<F<T>> {
+        let subspace = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .subspace;
 
         let multi_channeling_denominator = self
             .esurface_ct_builder
@@ -1055,13 +1532,11 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                             .counterterm_builder
                             .overlap_structure
                             .existing_esurfaces[*existing_esurface_id];
-
                         let esurface = &self
                             .esurface_ct_builder
                             .overlap_builder
                             .counterterm_builder
                             .esurface_collection[esurface_id];
-
                         let esurface_value = esurface.compute_from_momenta(
                             subspace.get_lmb(
                                 self.esurface_ct_builder
@@ -1079,9 +1554,9 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
 
                         &esurface_value * &esurface_value
                     })
-                    .fold(rstar_sample.one(), |acc, val| acc * val)
+                    .fold(rstar_sample.one(), |acc, value| acc * value)
             })
-            .fold(rstar_sample.zero(), |acc, val| acc + val);
+            .fold(rstar_sample.zero(), |acc, value| acc + value);
 
         let multichanneling_numerator = self
             .esurface_ct_builder
@@ -1096,13 +1571,11 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
                     .counterterm_builder
                     .overlap_structure
                     .existing_esurfaces[*existing_esurface_id];
-
                 let esurface = &self
                     .esurface_ct_builder
                     .overlap_builder
                     .counterterm_builder
                     .esurface_collection[esurface_id];
-
                 let esurface_value = esurface.compute_from_momenta(
                     subspace.get_lmb(
                         self.esurface_ct_builder
@@ -1120,48 +1593,199 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
 
                 &esurface_value * &esurface_value
             })
-            .fold(rstar_sample.one(), |acc, val| acc * val);
+            .fold(rstar_sample.one(), |acc, value| acc * value);
 
-        let value_of_multi_channeling_factor =
-            Complex::new_re(multichanneling_numerator / multi_channeling_denominator);
-
-        debug!(
-            "value of multi-channeling factor: {}",
-            value_of_multi_channeling_factor
-        );
-
-        RstarSample {
-            rstar_solution: self,
-            rstar_sample,
-            value_of_multi_channeling_factor,
-        }
+        Complex::new_re(multichanneling_numerator / multi_channeling_denominator)
     }
-}
 
-struct RstarSample<'a, T: FloatLike> {
-    rstar_solution: RstarSolution<'a, T>,
-    rstar_sample: MomentumSample<T>,
-    // this can already be computed here because of non-crossing cuts
-    value_of_multi_channeling_factor: Complex<F<T>>,
-}
-
-impl<'a, T: FloatLike> RstarSample<'a, T> {
-    fn extract_threshold_parameters(&self, is_first_call: bool) -> ThresholdParams<T> {
-        let radius = &self
-            .rstar_solution
+    fn dual_multichanneling_factor(&self, geometry: &DualRstarGeometry<T>) -> HyperDual<F<T>> {
+        let subspace = self
             .esurface_ct_builder
             .overlap_builder
-            .radius;
+            .counterterm_builder
+            .subspace;
+        let lmb = subspace.get_lmb(
+            self.esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .all_lmbs,
+        );
+        let zero = new_constant(&geometry.radius, &geometry.radius.values[0].zero());
+        let one = new_constant(&geometry.radius, &geometry.radius.values[0].one());
+
+        let multi_channeling_denominator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .overlap_structure
+            .overlap_groups
+            .iter()
+            .map(|group| {
+                group
+                    .complement
+                    .iter()
+                    .map(|existing_esurface_id| {
+                        let esurface_id = self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .overlap_structure
+                            .existing_esurfaces[*existing_esurface_id];
+                        let esurface = &self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .esurface_collection[esurface_id];
+                        let esurface_value = esurface.compute_from_dual_momenta(
+                            lmb,
+                            self.esurface_ct_builder
+                                .overlap_builder
+                                .counterterm_builder
+                                .real_mass_vector,
+                            &geometry.rstar_loop_momenta,
+                            &geometry.external_moms,
+                        );
+
+                        esurface_value.clone() * esurface_value
+                    })
+                    .fold(one.clone(), |acc, value| acc * value)
+            })
+            .fold(zero.clone(), |acc, value| acc + value);
+
+        let multi_channeling_numerator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .overlap_group
+            .complement
+            .iter()
+            .map(|existing_esurface_id| {
+                let esurface_id = self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .overlap_structure
+                    .existing_esurfaces[*existing_esurface_id];
+                let esurface = &self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .esurface_collection[esurface_id];
+                let esurface_value = esurface.compute_from_dual_momenta(
+                    lmb,
+                    self.esurface_ct_builder
+                        .overlap_builder
+                        .counterterm_builder
+                        .real_mass_vector,
+                    &geometry.rstar_loop_momenta,
+                    &geometry.external_moms,
+                );
+
+                esurface_value.clone() * esurface_value
+            })
+            .fold(one, |acc, value| acc * value);
+
+        multi_channeling_numerator / multi_channeling_denominator
+    }
+
+    fn rstar_sample_for_order<'solution>(
+        &'solution self,
+        order: usize,
+    ) -> RstarSample<'solution, 'a, T> {
+        let base_rstar_loop_momenta = self.base_rstar_loop_momenta();
+
+        if order == 0 {
+            let mut rstar_sample = self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .transformed_kinematic_point
+                .representative_sample()
+                .clone();
+            rstar_sample.sample.loop_moms = base_rstar_loop_momenta;
+            rstar_sample.sample.dual_loop_moms = None;
+
+            let radius = self.esurface_ct_builder.overlap_builder.radius.clone();
+            let radius_star = self.solution.solution.clone();
+            let esurface_derivative = self.solution.derivative_at_solution.clone();
+            let e_cm = &self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .e_cm;
+            let uv_localisation_settings = &self
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .settings
+                .subtraction
+                .local_ct_settings
+                .uv_localisation;
+
+            let threshold_params = ThresholdParams {
+                radius: DualOrNot::NonDual(radius.clone()),
+                radius_star: DualOrNot::NonDual(radius_star.clone()),
+                esurface_derivative: DualOrNot::NonDual(esurface_derivative.clone()),
+                uv_damp_plus: DualOrNot::NonDual(evaluate_uv_damper(
+                    &radius,
+                    &radius_star,
+                    e_cm,
+                    uv_localisation_settings,
+                )),
+                uv_damp_minus: DualOrNot::NonDual(evaluate_uv_damper(
+                    &-radius.clone(),
+                    &radius_star,
+                    e_cm,
+                    uv_localisation_settings,
+                )),
+                h_function: DualOrNot::NonDual(evaluate_integrated_ct_normalisation(
+                    &radius,
+                    &radius_star,
+                    e_cm,
+                    &self
+                        .esurface_ct_builder
+                        .overlap_builder
+                        .counterterm_builder
+                        .settings
+                        .subtraction
+                        .integrated_ct_settings,
+                )),
+            };
+
+            let value_of_multi_channeling_factor =
+                DualOrNot::NonDual(self.non_dual_multichanneling_factor(&rstar_sample));
+
+            return RstarSample {
+                rstar_solution: self,
+                rstar_sample,
+                threshold_params,
+                value_of_multi_channeling_factor,
+            };
+        }
+
+        assert!(
+            order <= self.max_supported_order(),
+            "requested LU threshold derivative order {} but only {} orders are cached",
+            order,
+            self.max_supported_order()
+        );
+
+        let geometry = self.dual_geometry_for_order(order);
+        let mut rstar_sample = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .transformed_kinematic_point
+            .sample_for_order(order)
+            .clone();
+        rstar_sample.sample.loop_moms = base_rstar_loop_momenta;
+        rstar_sample.sample.dual_loop_moms = Some(geometry.rstar_loop_momenta.clone());
 
         let e_cm = &self
-            .rstar_solution
             .esurface_ct_builder
             .overlap_builder
             .counterterm_builder
             .e_cm;
-
         let uv_localisation_settings = &self
-            .rstar_solution
             .esurface_ct_builder
             .overlap_builder
             .counterterm_builder
@@ -1170,26 +1794,58 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .local_ct_settings
             .uv_localisation;
 
-        let radius_star = &self.rstar_solution.solution.solution;
-        let esurface_derivative = &self.rstar_solution.solution.derivative_at_solution;
-        let uv_damp_plus = evaluate_uv_damper(radius, radius_star, e_cm, uv_localisation_settings);
-        let uv_damp_minus =
-            evaluate_uv_damper(&-radius, radius_star, e_cm, uv_localisation_settings);
+        let threshold_params = ThresholdParams {
+            radius: DualOrNot::Dual(geometry.radius.clone()),
+            radius_star: DualOrNot::Dual(geometry.radius_star.clone()),
+            esurface_derivative: DualOrNot::Dual(geometry.esurface_derivative.clone()),
+            uv_damp_plus: DualOrNot::Dual(evaluate_uv_damper_dual(
+                &geometry.radius,
+                &geometry.radius_star,
+                e_cm,
+                uv_localisation_settings,
+            )),
+            uv_damp_minus: DualOrNot::Dual(evaluate_uv_damper_dual(
+                &-geometry.radius.clone(),
+                &geometry.radius_star,
+                e_cm,
+                uv_localisation_settings,
+            )),
+            h_function: DualOrNot::Dual(evaluate_integrated_ct_normalisation_dual(
+                &geometry.radius,
+                &geometry.radius_star,
+                e_cm,
+                &self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .settings
+                    .subtraction
+                    .integrated_ct_settings,
+            )),
+        };
 
-        let h_function = evaluate_integrated_ct_normalisation(
-            radius,
-            radius_star,
-            e_cm,
-            &self
-                .rstar_solution
-                .esurface_ct_builder
-                .overlap_builder
-                .counterterm_builder
-                .settings
-                .subtraction
-                .integrated_ct_settings,
-        );
+        let value_of_multi_channeling_factor = DualOrNot::Dual(real_dual_to_complex(
+            self.dual_multichanneling_factor(&geometry),
+        ));
 
+        RstarSample {
+            rstar_solution: self,
+            rstar_sample,
+            threshold_params,
+            value_of_multi_channeling_factor,
+        }
+    }
+}
+
+struct RstarSample<'solution, 'a, T: FloatLike> {
+    rstar_solution: &'solution RstarSolution<'a, T>,
+    rstar_sample: MomentumSample<T>,
+    threshold_params: ThresholdParams<T>,
+    value_of_multi_channeling_factor: DualOrNot<Complex<F<T>>>,
+}
+
+impl<'solution, 'a, T: FloatLike> RstarSample<'solution, 'a, T> {
+    fn extract_threshold_parameters(&self, is_first_call: bool) -> ThresholdParams<T> {
         if is_first_call {
             let edges_in_esurface = self
                 .rstar_solution
@@ -1211,22 +1867,22 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
             debug!("esurface_id: {}", self.get_esurface_id().0);
             debug!("edges in esurface: {:?}", edges_in_esurface);
-            debug!("radius: {}", radius);
-            debug!("radius_star: {}", radius_star);
-            debug!("esurface_derivative: {}", esurface_derivative);
-            debug!("uv_damp_plus: {}", uv_damp_plus);
-            debug!("uv_damp_minus: {}", uv_damp_minus);
-            debug!("h_function: {}", h_function);
+            debug!("radius: {}", self.threshold_params.radius);
+            debug!("radius_star: {}", self.threshold_params.radius_star);
+            debug!(
+                "esurface_derivative: {}",
+                self.threshold_params.esurface_derivative
+            );
+            debug!("uv_damp_plus: {}", self.threshold_params.uv_damp_plus);
+            debug!("uv_damp_minus: {}", self.threshold_params.uv_damp_minus);
+            debug!("h_function: {}", self.threshold_params.h_function);
+            debug!(
+                "value of multi-channeling factor: {}",
+                self.value_of_multi_channeling_factor
+            );
         }
 
-        ThresholdParams {
-            radius: radius.clone(),
-            radius_star: radius_star.clone(),
-            esurface_derivative: esurface_derivative.clone(),
-            uv_damp_plus,
-            uv_damp_minus,
-            h_function,
-        }
+        self.threshold_params.clone()
     }
 
     fn get_inverse_transformed_sample(&self) -> MomentumSample<T> {
@@ -1260,8 +1916,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 }
 
 fn merge_and_inverse_transform<T: FloatLike>(
-    left_sample: &RstarSample<'_, T>,
-    right_sample: &RstarSample<'_, T>,
+    left_sample: &RstarSample<'_, '_, T>,
+    right_sample: &RstarSample<'_, '_, T>,
 ) -> MomentumSample<T> {
     let left_subspace = left_sample
         .rstar_solution
@@ -1286,6 +1942,21 @@ fn merge_and_inverse_transform<T: FloatLike>(
     for lmb_index in right_subspace.iter_lmb_indices() {
         let right_momentum = right_sample.rstar_sample.loop_moms()[lmb_index].clone();
         merged_sample.sample.loop_moms[lmb_index] = right_momentum;
+    }
+
+    match (
+        merged_sample.sample.dual_loop_moms.as_mut(),
+        right_sample.rstar_sample.sample.dual_loop_moms.as_ref(),
+    ) {
+        (Some(merged_dual_loop_moms), Some(right_dual_loop_moms)) => {
+            for lmb_index in right_subspace.iter_lmb_indices() {
+                merged_dual_loop_moms[lmb_index] = right_dual_loop_moms[lmb_index].clone();
+            }
+        }
+        (None, None) => {}
+        _ => {
+            unreachable!("iterated LU samples must either both carry dual loop momenta or neither")
+        }
     }
 
     let current_lmb = left_subspace.get_lmb(
