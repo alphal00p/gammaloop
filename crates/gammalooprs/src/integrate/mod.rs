@@ -5327,6 +5327,47 @@ mod tests {
         assert!(rendered.contains("Per integrand details"), "{rendered}");
         assert!(rendered.contains("# samples"), "{rendered}");
     }
+
+    #[test]
+    fn ratatui_max_weight_tab_preserves_full_scientific_exponent() {
+        let mut state = make_discrete_integration_state();
+        let max_eval = 3.8477312059601813_f64;
+        let expected = format!("{:+.16e}", max_eval);
+        state.all_integrals[0].re.max_eval_positive = F(max_eval);
+        state.all_integrals[0].re.max_eval_positive_xs = Some(Sample::Discrete(
+            F(1.0),
+            0,
+            Some(Box::new(Sample::Continuous(
+                F(1.0),
+                vec![F(0.4502578156709256)],
+            ))),
+        ));
+
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(12),
+                Duration::from_secs(12),
+                110_000,
+                210_000,
+                210_000,
+            ),
+            |dashboard| dashboard.select_tab(2),
+        );
+
+        assert!(rendered.contains(&expected), "{rendered}");
+        assert!(rendered.contains("graph: 0, xs: ["), "{rendered}");
+    }
 }
 
 #[test]
