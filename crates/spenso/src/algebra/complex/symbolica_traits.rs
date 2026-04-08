@@ -207,6 +207,12 @@ where
         + for<'a> RefSub<&'a T, Output = T>
         + for<'a> RefDiv<&'a T, Output = T>,
 {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.re.set_from(&other.re);
+        self.im.set_from(&other.im);
+    }
+
     #[inline(always)]
     fn is_fully_zero(&self) -> bool {
         self.re.is_fully_zero() && self.im.is_fully_zero()

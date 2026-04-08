@@ -21,9 +21,9 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::Float;
 use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
+use rug::{Assign, Float};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::algebra::algebraic_traits::RefOne;
@@ -437,6 +437,11 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.float.assign(&other.float);
+    }
+
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         (&self.float * &a.float + &b.float).complete(N).into()
     }
@@ -1196,6 +1201,11 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 }
 
 impl<T: FloatLike> SymFloatLike for F<T> {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.0.set_from(&other.0);
+    }
+
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         F(self.0.mul_add(&a.0, &b.0))
     }
