@@ -1507,18 +1507,23 @@ fn build_iteration_status_header_tail(
     elapsed_time: Duration,
     n_samples_evaluated: usize,
 ) -> String {
-    let average_sample_time = if n_samples_evaluated == 0 {
-        "N/A".red().to_string()
+    let sample_core_time = if n_samples_evaluated == 0 {
+        "N/A /sample/core".red().to_string()
     } else {
-        utils::format_evaluation_time_from_f64(
-            elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
+        format!(
+            "{} /sample/core",
+            utils::format_evaluation_time_from_f64(
+                elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
+            )
+            .bold()
+            .green()
         )
-        .bold()
-        .blue()
-        .to_string()
     };
 
-    format!("{average_sample_time} /sample/core")
+    format!(
+        "{sample_core_time} {}",
+        format!("({cores} cores)").bold().blue()
+    )
 }
 
 fn max_weight_row_descriptors(
@@ -3716,6 +3721,74 @@ mod tests {
         state
     }
 
+    fn make_preview_test_slots(slot_metas: &[SlotMeta]) -> Vec<IntegrationSlot> {
+        slot_metas
+            .iter()
+            .cloned()
+            .map(|meta| {
+                let settings = RuntimeSettings::default();
+                IntegrationSlot::new(
+                    meta,
+                    settings.clone(),
+                    Model::default(),
+                    Integrand::UnitVolume(UnitVolumeIntegrand::new(
+                        settings,
+                        UnitVolumeSettings { n_3d_momenta: 1 },
+                    )),
+                    None,
+                )
+            })
+            .collect()
+    }
+
+    fn make_preview_test_core_state(state: &IntegrationState) -> CoreIterationState {
+        let slot_stats = vec![
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Arb,
+                total_time: Duration::from_millis(8),
+                integrand_time: Duration::from_millis(7),
+                evaluator_time: Duration::from_millis(3),
+                parameterization_time: Duration::from_micros(150),
+                event_time: Duration::from_micros(500),
+                generated_event_count: 40,
+                accepted_event_count: 30,
+            }),
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Arb,
+                total_time: Duration::from_millis(12),
+                integrand_time: Duration::from_millis(10),
+                evaluator_time: Duration::from_millis(2),
+                parameterization_time: Duration::from_micros(300),
+                event_time: Duration::from_millis(1),
+                generated_event_count: 60,
+                accepted_event_count: 45,
+            }),
+        ];
+        let grid_template = state
+            .sampling_state_for_slot(0)
+            .grid
+            .clone_without_samples();
+        CoreIterationState {
+            slot_integrands: Vec::new(),
+            stats: slot_stats[0].merged(&slot_stats[1]),
+            slot_stats,
+            integrals: vec![ComplexAccumulator::new(); state.slot_metas.len()],
+            sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+            sampling_states: vec![CoreSamplingSlotState {
+                sampling_grid: grid_template.clone(),
+                rng: MonteCarloRng::new(7, 0),
+            }],
+            slot_re_grids: (0..state.slot_metas.len())
+                .map(|_| grid_template.clone())
+                .collect(),
+            slot_im_grids: (0..state.slot_metas.len())
+                .map(|_| grid_template.clone())
+                .collect(),
+            remaining_points: 0,
+            completed_points: 12,
+        }
+    }
+
     fn make_discrete_integration_state() -> IntegrationState {
         let make_continuous_grid =
             || Grid::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
@@ -4045,7 +4118,7 @@ mod tests {
             rendered.contains("# samples per iteration = 100.00K # samples total = 100.00K"),
             "{rendered}"
         );
-        assert!(rendered.contains("/sample/core"), "{rendered}");
+        assert!(rendered.contains("/sample/core (4 cores)"), "{rendered}");
         assert!(rendered.contains("Contribution"), "{rendered}");
         assert!(rendered.contains("proc_a@itg_a"), "{rendered}");
         assert!(rendered.contains("proc_b@itg_b"), "{rendered}");
@@ -4602,6 +4675,7 @@ mod tests {
         assert!(rendered.contains("25.00K / 100.00K (25.0%)"), "{rendered}");
         assert!(rendered.contains("# samples total 125.00K"), "{rendered}");
         assert!(rendered.contains("#samples/s"), "{rendered}");
+        assert!(rendered.contains("/sample/core (4 cores)"), "{rendered}");
         assert!(rendered.contains("Integrands"), "{rendered}");
         assert!(rendered.contains("Focused integrand"), "{rendered}");
         assert!(rendered.contains("Results summary"), "{rendered}");
@@ -4617,6 +4691,149 @@ mod tests {
             "{rendered}"
         );
         assert!(rendered.contains("Precision mix [global]"), "{rendered}");
+    }
+
+    #[test]
+    fn live_status_updates_use_current_batch_statistics_in_bottom_panels() {
+        let state = make_integration_state();
+        let slots = make_preview_test_slots(&state.slot_metas);
+        let core_state = make_preview_test_core_state(&state);
+        let preview_state = build_preview_integration_state(
+            &state,
+            &slots,
+            4,
+            core_state.completed_points,
+            1.5,
+            &[core_state],
+        );
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: true,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+
+        let initial_update = build_status_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(1),
+                Duration::from_millis(400),
+                0,
+                state.num_points,
+                state.num_points,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 0,
+                target_points: 100,
+            })),
+        );
+        let preview_update = build_status_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &preview_state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_millis(1500),
+                Duration::from_millis(900),
+                12,
+                preview_state.num_points,
+                preview_state.num_points,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 12,
+                target_points: 100,
+            })),
+        );
+
+        let initial_statistics = initial_update
+            .statistics
+            .as_ref()
+            .expect("statistics should be present");
+        let preview_statistics = preview_update
+            .statistics
+            .as_ref()
+            .expect("statistics should be present");
+        let initial_snapshot = initial_statistics.global_snapshot();
+        let preview_snapshot = preview_statistics.global_snapshot();
+
+        assert!(preview_snapshot.num_evals > initial_snapshot.num_evals);
+        assert!(preview_snapshot.generated_event_count > initial_snapshot.generated_event_count);
+        assert!(preview_snapshot.accepted_event_count > initial_snapshot.accepted_event_count);
+
+        let initial_timing_mix = initial_statistics
+            .timing_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        let preview_timing_mix = preview_statistics
+            .timing_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        assert_ne!(preview_timing_mix, initial_timing_mix);
+
+        let initial_precision_mix = initial_statistics
+            .precision_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        let preview_precision_mix = preview_statistics
+            .precision_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        assert_ne!(preview_precision_mix, initial_precision_mix);
+        assert!(
+            preview_precision_mix
+                .iter()
+                .any(|percentage| (*percentage - 50.0).abs() < f64::EPSILON),
+            "{preview_precision_mix:?}"
+        );
+
+        let preview_render = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &preview_state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_millis(1500),
+                Duration::from_millis(900),
+                12,
+                preview_state.num_points,
+                preview_state.num_points,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 12,
+                target_points: 100,
+            })),
+            |_| {},
+        );
+        let preview_total_time = crate::utils::format_evaluation_time_from_f64(
+            preview_snapshot.average_total_time_seconds,
+        );
+        assert!(
+            preview_render.contains(&preview_total_time),
+            "{preview_render}"
+        );
+        assert!(
+            preview_render.contains("Precision mix [global]"),
+            "{preview_render}"
+        );
+        assert!(
+            preview_render.contains("Timing composition [global]"),
+            "{preview_render}"
+        );
     }
 
     #[test]

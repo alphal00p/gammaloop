@@ -30,6 +30,7 @@ commands = [
       --symmetrize-left-right-states true
       -p epem_a_tth -i NLO
       --select-graphs GL08
+      --global-prefactor-num "2𝑖"
       --only-diagrams""",
     "save dot",
 ]
@@ -80,7 +81,7 @@ mu_r = 91.188
 m_uv = 91.188
 
 [default_runtime_settings.integrator.observables_output]
-format = ["hwu"]
+format = ["hwu","json"]
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
@@ -128,20 +129,10 @@ commands = [
     "run set_differential_observables",
     "run set_differential_selectors",
 
-    """set process -p epem_a_tth -i NLO string '
+    """set process -p epem_a_tth string '
     [sampling]
     graphs = "monte_carlo"
-    orientations = "summed"
-    lmb_multichanneling = true
-    # For importance-sampling over channels, use the quantity below
-    # lmb_channels = "monte_carlo"
-    lmb_channels = "summed"
-    '""",
-
-    """set process -p epem_a_tth -i NLO_semi_inclusive string '
-    [sampling]
-    graphs = "monte_carlo"
-    orientations = "summed"
+    orientations = "monte_carlo"
     lmb_multichanneling = true
     # For importance-sampling over channels, use the quantity below
     # lmb_channels = "monte_carlo"

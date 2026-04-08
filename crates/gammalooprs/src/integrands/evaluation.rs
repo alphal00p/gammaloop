@@ -1209,6 +1209,37 @@ mod tests {
     }
 
     #[test]
+    fn statistics_snapshot_reports_selection_efficiency_from_event_counts() {
+        let stats = StatisticsCounter {
+            num_evals: 2,
+            num_sample_points: 2,
+            sum_integrand_evaluation_time: Duration::ZERO,
+            sum_evaluator_evaluation_time: Duration::ZERO,
+            sum_parameterization_time: Duration::ZERO,
+            sum_event_time: Duration::ZERO,
+            sum_integrator_overhead_time: Duration::ZERO,
+            sum_total_evaluation_time: Duration::ZERO,
+            sum_relative_instability_error: (0.0.into(), 0.0.into()),
+            num_double_precision_evals: 2,
+            num_quadruple_precision_evals: 0,
+            num_arb_precision_evals: 0,
+            num_nan_evals: 0,
+            num_nan_or_unstable_evals: 0,
+            sum_generated_event_count: 10,
+            sum_accepted_event_count: 4,
+        };
+
+        let snapshot = stats.snapshot();
+
+        assert_eq!(snapshot.generated_event_count, 10);
+        assert_eq!(snapshot.accepted_event_count, 4);
+        assert_eq!(snapshot.selection_efficiency_percentage, Some(40.0));
+
+        let rendered = stats.render_status_table();
+        assert!(rendered.contains("sel. % :     40.0%"), "{rendered}");
+    }
+
+    #[test]
     fn evaluation_metadata_renders_stability_status_with_sample_counts() {
         let metadata = EvaluationMetaData {
             stability_results: vec![

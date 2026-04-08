@@ -536,8 +536,25 @@ fn lu_rust_evaluate_samples_respect_event_generation_and_observables() -> Result
     );
     assert_eq!(metadata(&result).accepted_event_count, 0);
 
-    add_jet_observables(&mut cli)?;
     update_leading_jet_selector(&mut cli, 0.0)?;
+    let mut results = evaluate_x_samples(&mut cli, std::slice::from_ref(&point))?;
+    let result = results.samples.remove(0);
+    assert!(result.evaluation.event_groups.is_empty());
+    assert!(results.observables.histograms.is_empty());
+    assert!(
+        metadata(&result).generated_event_count > 0,
+        "selector-only mode should still generate temporary events"
+    );
+    assert!(
+        metadata(&result).accepted_event_count > 0,
+        "accepted selector-only events should be counted even when not buffered"
+    );
+    assert_eq!(
+        metadata(&result).accepted_event_count,
+        metadata(&result).generated_event_count
+    );
+
+    add_jet_observables(&mut cli)?;
     let batch = vec![point.clone(), point];
     let results = evaluate_x_samples(&mut cli, &batch)?;
     assert_eq!(results.samples.len(), 2);

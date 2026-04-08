@@ -747,11 +747,18 @@ impl RatatuiDashboardState {
         right.push_text("#samples/s", TextStyle::green().bold());
         right.push_text(" | ", TextStyle::PLAIN);
         if let Some(sample_core_time) = update.meta.sample_core_time() {
-            right.push_text(sample_core_time, TextStyle::PLAIN.bold());
+            right.push_text(
+                format!("{sample_core_time} /sample/core"),
+                TextStyle::green().bold(),
+            );
         } else {
-            right.push_text("N/A", TextStyle::red());
+            right.push_text("N/A /sample/core", TextStyle::red());
         }
-        right.push_text(" /sample/core", TextStyle::green().bold());
+        right.push_text(" ", TextStyle::PLAIN);
+        right.push_text(
+            format!("({} cores)", update.meta.cores),
+            TextStyle::blue().bold(),
+        );
         right.push_text(" ", TextStyle::PLAIN);
 
         let header = Layout::default()

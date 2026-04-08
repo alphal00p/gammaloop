@@ -1077,8 +1077,12 @@ pub(crate) fn prepare_buffered_event<T: FloatLike>(
         None
     };
 
+    // Count selector-accepted physical events even when they are processed only
+    // transiently for selectors and are not retained in the returned event buffer.
+    let accepted_event_count = usize::from(rotation.is_identity() && selectors_pass);
+
     Ok(PreparedBufferedEvent {
-        accepted_event_count: usize::from(buffered_event.is_some()),
+        accepted_event_count,
         buffered_event,
         selectors_pass,
         event_processing_time,
