@@ -834,11 +834,13 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         self.polarizations_values(cache, graph, sample, helicities, multiplicative_offset);
 
         if let Some(threshold_params) = left_threshold_params {
-            self.left_threshold_params(threshold_params);
+            self.pairs
+                .left_threshold_params(threshold_params, &mut self.values[value_index]);
         }
 
         if let Some(threshold_params) = right_threshold_params {
-            self.right_threshold_params(threshold_params);
+            self.pairs
+                .right_threshold_params(threshold_params, &mut self.values[value_index]);
         }
 
         if let Some(lu_params) = lu_params {
@@ -1599,16 +1601,6 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
 
         analysis
-    }
-
-    pub(crate) fn left_threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
-        self.pairs
-            .left_threshold_params(threshold_params, &mut self.values[0]);
-    }
-
-    pub(crate) fn right_threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
-        self.pairs
-            .right_threshold_params(threshold_params, &mut self.values[0]);
     }
 
     pub fn table(&self) -> Table {

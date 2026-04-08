@@ -325,7 +325,8 @@ impl LUCounterTermEvaluators {
                     .integrands
                     .iter()
                     .enumerate()
-                    .map(|(num_esurface, atom)| {
+                    .map(|(i, atom)| {
+                        let num_esurface = i + 1;
                         let dual_shape = if num_esurface > 1 {
                             Some(shape_for_t_derivatives(num_esurface - 1))
                         } else {
@@ -355,7 +356,8 @@ impl LUCounterTermEvaluators {
                     .integrands
                     .iter()
                     .enumerate()
-                    .map(|(num_esurface, atom)| {
+                    .map(|(i, atom)| {
+                        let num_esurface = i + 1;
                         let dual_shape = if num_esurface > 1 {
                             Some(shape_for_t_derivatives(num_esurface - 1))
                         } else {
@@ -383,7 +385,8 @@ impl LUCounterTermEvaluators {
                 .integrands
                 .iter()
                 .enumerate()
-                .map(|(num_esurface, atom)| {
+                .map(|(i, atom)| {
+                    let num_esurface = i + 1;
                     let dual_shape = if num_esurface > 1 {
                         Some(shape_for_t_derivatives(num_esurface - 1))
                     } else {
