@@ -27,7 +27,7 @@ implementation evolves.
 7. That fallback is allowed only when startup globals still say compiled mode
    with backend `symjit`.
 8. For every integrand that actually falls back from external compiled loading
-   to symjit, GammaLoop must emit one `info!`.
+   to symjit, GammaLoop must emit one `warn!`.
 9. `display integrands` detail metadata must show:
    - the generation-time compilation mode/options stored with the integrand
    - the currently active f64 backend flavor (`eager`, `c++`, `assembly`, or
@@ -52,7 +52,7 @@ frozen backend still has to come from both settings together.
 
 ### 2. The Symbolica bump is mandatory and gives a cleaner external-artifact type
 
-At `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`, Symbolica exposes both:
+At `aa51532f4b6be0aefec8658bbda9719333d88f6f`, Symbolica exposes both:
 - `ExpressionEvaluator::jit_compile(...)`
 - `CompiledCode<T>`
 
@@ -173,7 +173,7 @@ Files:
 
 Work:
 - bump all three patched revs to
-  `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`
+  `aa51532f4b6be0aefec8658bbda9719333d88f6f`
 - validate the new Symbolica API surface used here:
   - `jit_compile`
   - `CompiledCode<T>`
@@ -295,7 +295,7 @@ Post-load runtime behavior:
 - frozen `Cpp` / `Assembly` -> try loading all external artifacts
 - if any external artifact load fails and startup globals authorize symjit:
   - rebuild symjit across that integrand
-  - emit one `info!` naming the integrand and the reason for fallback
+  - emit one `warn!` naming the integrand and the reason for fallback
 - otherwise fail load
 
 ### Step 8: Update `display integrands` metadata
@@ -370,7 +370,7 @@ Coverage to add:
 
 Implemented:
 - bumped the patched `symbolica`, `graphica`, and `numerica` revisions to
-  `26e0b19f50135bc6bb66d70eebbe20033d49b9d1`
+  `aa51532f4b6be0aefec8658bbda9719333d88f6f`
 - replaced `global.generation.compile.inline_asm` with
   `global.generation.compile.compilation_mode`
 - kept `global.generation.evaluator.compile` as the eager-vs-compiled switch
@@ -382,7 +382,7 @@ Implemented:
 - added runtime-only symjit caches and explicit active-f64-backend tracking
 - restored integrand runtime backends after load from frozen metadata
 - added the narrow startup-driven symjit fallback for failed external `.so`
-  loads and log one `info!` per affected integrand
+  loads and log one `warn!` per affected integrand
 - updated `display integrands` detail metadata with:
   - generation-time compile enabled/backend/options
   - actual active f64 backend
