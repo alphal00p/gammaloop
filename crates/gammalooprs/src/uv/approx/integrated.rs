@@ -9,10 +9,7 @@ use linnet::half_edge::{
 };
 use spenso::{
     network::{library::symbolic::ETS, parsing::SPENSO_TAG},
-    structure::{
-        representation::{Minkowski, RepName},
-        slot::{DummyAind, IsAbstractSlot, Slot},
-    },
+    structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -26,13 +23,12 @@ use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
     graph::LMBext,
-    numerator::aind::Aind,
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
     },
     uv::{
-        UltravioletGraph,
+        ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, ForestNodeLike, UVCtx},
         settings::VakintSettings,
         uv_graph::UVE,
@@ -123,8 +119,8 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
                 .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
                 .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
         }
-        // TODO: only enable soft CT if doing OS renormalization
-        let soft_ct = graph.full_crown(current.subgraph()).n_included() == 2
+        let soft_ct = current.renormalization_scheme() == ApproximationType::OS
+            && graph.full_crown(current.subgraph()).n_included() == 2
             && current.dod() > 0
             && settings.softct;
 
@@ -348,13 +344,13 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
 
                 res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
 
-                let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+                let spatial_norm_sq = Minkowski {}
+                    .new_rep(4)
+                    .inner_product(GS.emr_vec(*l), GS.emr_vec(*l));
 
                 // multiply CFF triangle
-                res *= Atom::num((3, 16))
-                    / (GS.emr_vec_index(*l, mink.to_atom()) * GS.emr_vec_index(*l, mink.to_atom())
-                        + GS.m_uv_int * GS.m_uv_int)
-                        .pow((5, 2));
+                res *=
+                    Atom::num((3, 16)) / (spatial_norm_sq + GS.m_uv_int * GS.m_uv_int).pow((5, 2));
             }
         }
 

@@ -1,24 +1,32 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
+use std::collections::BTreeSet;
+
 use crate::cff::expression::OrientationID;
 
+use crate::graph::cuts::CutSet;
 use crate::graph::edge::ParseEdge;
+use crate::graph::feynman_graph::FeynmanGraph;
 use crate::graph::global::ParseData;
 use crate::graph::hedge_data::ParseHedge;
 use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
+use crate::model::Model;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
-use crate::utils::W_;
-use crate::utils::symbolica_ext::TypstFormat;
+use crate::utils::{GS, W_};
+use crate::uv::approx::CutStructure;
 use crate::uv::profile::{ProfileSettings, UVProfileable};
+use crate::uv::wood::CutWoods;
+use crate::uv::{Spinney, UVgenerationSettings, UltravioletGraph};
+
 use linnet::half_edge::involution::EdgeIndex;
 
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
 use symbolica::atom::Symbol;
@@ -34,7 +42,10 @@ use crate::{
     utils::load_generic_model,
 };
 use spenso::network::library::TensorLibraryData;
-use symbolica::{atom::AtomCore, function, parse};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function, parse,
+};
 
 #[test]
 fn four_photon_one_loop_amp() {
@@ -90,25 +101,78 @@ fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
         .collect()
 }
 
-#[test]
-fn scalar_bubble() {
+fn scalar_bubble_root_integrand_reference(
+    amplitude_graph: &mut AmplitudeGraph,
+    generation_settings: &GenerationSettings,
+) -> Atom {
+    let mut reference_settings = generation_settings.clone();
+    reference_settings.uv.subtract_uv = true;
+    let cutstructure = CutStructure {
+        cuts: vec![CutSet::empty(amplitude_graph.graph.n_hedges())],
+    };
+    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
+    let mut forests = woods.unfold(&amplitude_graph.graph);
+    let vakint = crate::utils::vakint().unwrap();
+    forests
+        .compute(&mut amplitude_graph.graph, vakint, &reference_settings.uv)
+        .unwrap();
+
+    let root_integrand = forests.forests[0]
+        .dag
+        .nodes
+        .iter()
+        .find_map(|(_, node)| {
+            node.parents.is_empty().then(|| {
+                node.data
+                    .final_integrand
+                    .as_ref()
+                    .and_then(|integrands| integrands.first())
+                    .cloned()
+            })?
+        })
+        .expect("root UV-forest integrand should exist");
+
+    let factors_of_pi =
+        (Atom::var(GS.pi) * 2).pow(3 * amplitude_graph.graph.get_loop_number() as i64);
+    root_integrand / factors_of_pi
+}
+
+fn build_uv_scalars_amplitude(uv: UVgenerationSettings) -> (Amplitude, Model) {
     test_initialise().unwrap();
 
     let g: Vec<Graph> = dot!(
-        digraph sunrise{
-            edge [particle=scalar_1]//  dod=-100]
-            node [num=1]// dod=-100]
+
+        digraph banana{
+            edge [particle=scalar_1]
+            node [num=1]
             e        [style=invis]
-            params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
-            // params="if_sigma(S_F⊛F*Top(S_F⊛0));if_sigma(S_F⊛0)"
+            // params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            e -> A:0   [ id=5]
+            B:1 -> e   [ id=4]
+            A -> B    [ id=1]
+            A -> B    [ id=2]
+            A -> B    [ id=3]
+            A -> B    [ id=0]
+        }
+
+        digraph sunrise{
+            edge [particle=scalar_1]
+            node [num=1]
+            e        [style=invis]
+            // params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
             e -> A:0   [ id=3]
             B:1 -> e   [ id=4]
-
-            // A -> C    [ id=0]
-            // // C -> e
-            // C -> B
-            // A -> B
-            A -> B
+            A -> B    [ id=1]
+            A -> B    [ id=2]
+            A -> B    [ id=0]
+        }
+        digraph bub{
+            edge [particle=scalar_1]
+            node [num=1]
+            e        [style=invis]
+            // params = "if_sigma(S_11⊛y*Top(S_y⊛0));if_sigma(S_11⊛F*Top(S_F⊛0));if_sigma(S_11⊛p*Top(S_p⊛0));if_sigma(S_11⊛0);if_sigma(S_11⊛11*Top(S_11⊛0));if_sigma(S_11⊛11*Top(S_11⊛y*Top(S_y⊛0)));if_sigma(S_11⊛11*Top(S_11⊛F*Top(S_F⊛0)));if_sigma(S_11⊛11*Top(S_11⊛p*Top(S_p⊛0)));"
+            e -> A:0   [ id=3]
+            B:1 -> e   [ id=2]
             A -> B    [ id=1]
             A -> B    [ id=0]
         },"scalars"
@@ -116,7 +180,6 @@ fn scalar_bubble() {
     .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
-
     let model = load_generic_model("scalars");
 
     let theadpool = rayon::ThreadPoolBuilder::new()
@@ -125,21 +188,12 @@ fn scalar_bubble() {
         .unwrap();
 
     let runtime = RuntimeSettings::default();
-    amp.preprocess(
-        &model,
-        &GenerationSettings {
-            uv: UVgenerationSettings {
-                generate_integrated: false,
-                softct: false,
-                add_sigma: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-        &(&runtime).into(),
-        &theadpool,
-    )
-    .unwrap();
+    let generation_settings = GenerationSettings {
+        uv,
+        ..Default::default()
+    };
+    amp.preprocess(&model, &generation_settings, &(&runtime).into(), &theadpool)
+        .unwrap();
 
     amp.build_integrand(
         &model,
@@ -151,26 +205,173 @@ fn scalar_bubble() {
     )
     .unwrap();
 
-    println!(
-        "{}",
-        amp.graphs[0]
-            .derived_data
-            .all_mighty_integrand
-            .typst_string()
-    );
-    println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
     {
         let integrand = amp.integrand.as_mut().unwrap();
-
-        integrand.get_mut_settings().general.additional_param_values = vec![1.; 8];
+        // integrand.get_mut_settings().general.additional_param_values = vec![1.; 8];
         integrand.warm_up(&model).unwrap();
     };
 
-    let profile_settings = ProfileSettings::default();
+    (amp, model)
+}
+
+fn scalar_uv_profile_settings() -> ProfileSettings {
+    ProfileSettings {
+        n_points: 17,
+        min_scale_exponent: 4.0,
+        max_scale_exponent: 8.0,
+        ..ProfileSettings::default()
+    }
+}
+
+fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
+    values.into_iter().collect()
+}
+
+fn build_tta_uv_graph() -> Graph {
+    dot!(
+        digraph G {
+            e [style=invis];
+            e -> A:0 [id=0 particle="t"];
+            B:1 -> e [id=1 particle="t"];
+            e -> C:2 [id=2 particle="a"];
+            A -> B [particle="g" lmb_index=0];
+            C -> B [particle="t"];
+            A -> C [particle="t"];
+        }
+    )
+    .unwrap()
+}
+
+fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_dod: f64) -> String {
+    let mut sections = analysis
+        .tables_per_graph(max_dod)
+        .into_iter()
+        .map(|table| table.to_string())
+        .collect::<Vec<_>>();
+    sections.extend(
+        analysis
+            .analytic_tables_per_graph()
+            .into_iter()
+            .flatten()
+            .map(|table| table.to_string()),
+    );
+    sections.join("\n\n")
+}
+
+#[test]
+fn ct_identifier_flips_outgoing_boundary_pdgs() {
+    test_initialise().unwrap();
+
+    let graph = build_tta_uv_graph();
+    let spinney = graph
+        .spinneys(&graph.full_filter())
+        .into_iter()
+        .next()
+        .expect("tta triangle should have a UV spinney");
+    let identifier = graph.ct_identifier(&spinney.filter);
+
+    assert_eq!(identifier.internal_pdg_set, Some(pdg_set([6, 21])));
+    assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
+}
+
+#[test]
+fn scalars_profile() {
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        ..Default::default()
+    });
+
+    let profile_settings = scalar_uv_profile_settings();
+    let res = amp.profile(&model, &profile_settings).unwrap();
+    let analysis = res.analyse();
+    let pass_fail = res.pass_fail(-0.9, &profile_settings);
+    assert_eq!(
+        pass_fail.failed,
+        0,
+        "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
+        scalar_profile_tables(&analysis, -0.9)
+    );
+}
+
+#[test]
+fn spinney_partial_cmp_is_equal_for_identical_subgraphs() {
+    let (amp, _model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        ..Default::default()
+    });
+    let graph = &amp.graphs[0].graph;
+
+    let mut uv_subgraph = graph.full_filter();
+    uv_subgraph.subtract_with(&graph.initial_state_cut.left);
+
+    let subgraph = graph
+        .spinneys(&uv_subgraph)
+        .into_iter()
+        .next()
+        .expect("expected at least one UV spinney");
+    let lhs = Spinney::new(subgraph.clone(), graph, &graph.loop_momentum_basis);
+    let rhs = Spinney::new(subgraph, graph, &graph.loop_momentum_basis);
+
+    assert_eq!(lhs.partial_cmp(&rhs), Some(std::cmp::Ordering::Equal));
+}
+
+#[test]
+fn scalars_profile_new() {
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        use_legacy: false,
+        ..Default::default()
+    });
+
+    let profile_settings = scalar_uv_profile_settings();
+    let res = amp.profile(&model, &profile_settings).unwrap();
+    let analysis = res.analyse();
+    let pass_fail = res.pass_fail(-0.9, &profile_settings);
+    assert_eq!(
+        pass_fail.failed,
+        0,
+        "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
+        scalar_profile_tables(&analysis, -0.9)
+    );
+}
+
+#[test]
+fn unsubtracted_scalars() {
+    test_initialise().unwrap();
+    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+        generate_integrated: false,
+        softct: false,
+        add_sigma: true,
+        subtract_uv: true,
+        ..Default::default()
+    });
+
+    let profile_settings = scalar_uv_profile_settings();
     let res = amp.profile(&model, &profile_settings).unwrap();
 
-    assert_eq!(res.pass_fail(-0.9, &profile_settings).failed, 0);
     let analysis = res.analyse();
+    assert!(res.pass_fail(-0.9, &profile_settings).failed > 0);
+    for graph in &analysis.graphs {
+        for lmb in &graph.lmbs {
+            for subset in &lmb.subsets {
+                assert!(
+                    subset.bare_dod_matches_estimate(),
+                    "bare DOD mismatch for fixed {:?}, free {:?}",
+                    subset.fixed,
+                    subset.free
+                );
+            }
+        }
+    }
     for t in analysis.tables_per_graph(-0.9) {
         println!("{}", t);
     }

@@ -34,16 +34,16 @@ fn exterior_prod_simple() {
       2	 [label= "L:g()"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
-      ext1	 [style=invis];
-      2:8:s	-> ext1	 [id=1 dir=back color="red" label="cof🠓3|_hedge_2"];
-      ext2	 [style=invis];
-      1:5:s	-> ext2	 [id=2 dir=back color="red" label="cof🠓3|_hedge_4"];
+      2:6:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
+      1:3:s	-> 0:2:s	 [id=2  color="red:blue;0.5"];
       ext3	 [style=invis];
-      1:4:s	-> ext3	 [id=3 color="red" label="cof🠑3|^hedge_3"];
-      1:3:s	-> 0:2:s	 [id=4  color="red:blue;0.5"];
+      1:5:s	-> ext3	 [id=3 dir=back color="red" label="cof🠓3|_hedge_4"];
+      ext4	 [style=invis];
+      1:4:s	-> ext4	 [id=4 color="red" label="cof🠑3|^hedge_3"];
       ext5	 [style=invis];
-      2:7:s	-> ext5	 [id=5 color="red" label="cof🠑3|^hedge_1"];
-      2:6:s	-> 0:1:s	 [id=6  color="red:blue;0.5"];
+      2:8:s	-> ext5	 [id=5 dir=back color="red" label="cof🠓3|_hedge_2"];
+      ext6	 [style=invis];
+      2:7:s	-> ext6	 [id=6 color="red" label="cof🠑3|^hedge_1"];
     }
     "#);
 

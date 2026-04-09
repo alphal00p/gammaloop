@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::utils::{
     GS,
     serde_utils::{
@@ -10,6 +12,103 @@ use bincode_trait_derive::{Decode, Encode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use vakint::{AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions};
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    PartialEq,
+    Eq,
+    Hash,
+    JsonSchema,
+    Default,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(deny_unknown_fields)]
+pub enum ApproximationType {
+    #[default]
+    #[serde(rename = "MUV", alias = "muv")]
+    MUV,
+    #[serde(rename = "OS", alias = "os")]
+    OS,
+    #[serde(rename = "IR", alias = "ir")]
+    IR,
+    #[serde(rename = "Unsubtracted", alias = "unsubtracted")]
+    Unsubtracted,
+    #[serde(rename = "VaccuumLimit", alias = "vaccuum_limit")]
+    VaccuumLimit,
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    Default,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    JsonSchema,
+)]
+#[serde(default, deny_unknown_fields)]
+pub struct CTIdentifier {
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub external_pdg_set: BTreeSet<isize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub internal_pdg_set: Option<BTreeSet<isize>>,
+}
+
+impl CTIdentifier {
+    pub fn new(
+        external_pdg_set: BTreeSet<isize>,
+        internal_pdg_set: Option<BTreeSet<isize>>,
+    ) -> Self {
+        Self {
+            external_pdg_set,
+            internal_pdg_set,
+        }
+    }
+
+    pub fn matches(&self, candidate: &Self) -> bool {
+        self.external_pdg_set == candidate.external_pdg_set
+            && self
+                .internal_pdg_set
+                .as_ref()
+                .is_none_or(|internal| candidate.internal_pdg_set.as_ref() == Some(internal))
+    }
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CTRenormalizationRule {
+    pub ct_identifier: CTIdentifier,
+    pub renormalization_scheme: ApproximationType,
+}
+
+impl CTRenormalizationRule {
+    pub fn new(ct_identifier: CTIdentifier, renormalization_scheme: ApproximationType) -> Self {
+        Self {
+            ct_identifier,
+            renormalization_scheme,
+        }
+    }
+}
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -220,6 +319,8 @@ pub struct UVgenerationSettings {
     pub softct: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub generate_integrated: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub subtract_uv: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub only_integrated: bool,
     #[serde(skip_serializing_if = "is_false")]
@@ -228,6 +329,17 @@ pub struct UVgenerationSettings {
     pub add_sigma: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub inner_products: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub use_legacy: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub cached: bool,
+    #[serde(
+        default,
+        skip_serializing_if = "IsDefault::is_default",
+        with = "ct_renormalization_map_serde"
+    )]
+    #[schemars(with = "Vec<CTRenormalizationRule>")]
+    pub renormalization_schemes: BTreeMap<CTIdentifier, ApproximationType>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
 }
@@ -237,11 +349,150 @@ impl Default for UVgenerationSettings {
         UVgenerationSettings {
             softct: true,
             generate_integrated: true,
+            subtract_uv: true,
             pole_part: false,
             only_integrated: false,
             inner_products: true,
+            use_legacy: true,
+            cached: true,
             add_sigma: false,
+            renormalization_schemes: BTreeMap::default(),
             vakint: VakintSettings::default(),
         }
+    }
+}
+
+impl UVgenerationSettings {
+    pub fn renormalization_scheme_for(&self, ct_identifier: &CTIdentifier) -> ApproximationType {
+        if let Some(scheme) = self.renormalization_schemes.get(ct_identifier) {
+            return *scheme;
+        }
+
+        self.renormalization_schemes
+            .iter()
+            .find_map(|(rule, scheme)| {
+                (rule.internal_pdg_set.is_none() && rule.matches(ct_identifier)).then_some(*scheme)
+            })
+            .unwrap_or_default()
+    }
+}
+
+mod ct_renormalization_map_serde {
+    use super::{ApproximationType, CTIdentifier, CTRenormalizationRule};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error};
+    use std::collections::BTreeMap;
+
+    pub fn serialize<S>(
+        map: &BTreeMap<CTIdentifier, ApproximationType>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        map.iter()
+            .map(|(ct_identifier, renormalization_scheme)| {
+                CTRenormalizationRule::new(ct_identifier.clone(), *renormalization_scheme)
+            })
+            .collect::<Vec<_>>()
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<BTreeMap<CTIdentifier, ApproximationType>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let rules = Vec::<CTRenormalizationRule>::deserialize(deserializer)?;
+        let mut map = BTreeMap::new();
+
+        for rule in rules {
+            if map
+                .insert(rule.ct_identifier.clone(), rule.renormalization_scheme)
+                .is_some()
+            {
+                return Err(D::Error::custom(format!(
+                    "duplicate CTIdentifier in renormalization_schemes: {:?}",
+                    rule.ct_identifier
+                )));
+            }
+        }
+
+        Ok(map)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ApproximationType, CTIdentifier, UVgenerationSettings};
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
+        values.into_iter().collect()
+    }
+
+    #[test]
+    fn renormalization_scheme_prefers_exact_internal_match_over_wildcard() {
+        let exact_identifier = CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])));
+        let wildcard_identifier = CTIdentifier::new(pdg_set([1]), None);
+        let settings = UVgenerationSettings {
+            renormalization_schemes: BTreeMap::from([
+                (wildcard_identifier, ApproximationType::Unsubtracted),
+                (exact_identifier.clone(), ApproximationType::OS),
+            ]),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&exact_identifier),
+            ApproximationType::OS
+        );
+    }
+
+    #[test]
+    fn renormalization_scheme_matches_wildcard_internal_rule() {
+        let candidate_identifier = CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])));
+        let settings = UVgenerationSettings {
+            renormalization_schemes: BTreeMap::from([(
+                CTIdentifier::new(pdg_set([1]), None),
+                ApproximationType::OS,
+            )]),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&candidate_identifier),
+            ApproximationType::OS
+        );
+    }
+
+    #[test]
+    fn renormalization_scheme_can_select_unsubtracted() {
+        let candidate_identifier = CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])));
+        let settings = UVgenerationSettings {
+            renormalization_schemes: BTreeMap::from([(
+                CTIdentifier::new(pdg_set([1]), None),
+                ApproximationType::Unsubtracted,
+            )]),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&candidate_identifier),
+            ApproximationType::Unsubtracted
+        );
+    }
+
+    #[test]
+    fn renormalization_scheme_defaults_to_msbar() {
+        let settings = UVgenerationSettings::default();
+
+        assert_eq!(
+            settings.renormalization_scheme_for(&CTIdentifier::new(
+                pdg_set([1]),
+                Some(pdg_set([1, 22]))
+            )),
+            ApproximationType::MUV
+        );
     }
 }

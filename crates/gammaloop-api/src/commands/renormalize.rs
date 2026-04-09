@@ -90,7 +90,7 @@ impl Renormalize {
         };
 
         for (index, graph_term) in amplitude.graphs.iter_mut().enumerate() {
-            let mut part = graph_term.renormalization_part(&settings)?;
+            let mut part = graph_term.renormalization_part(&settings)?.expression;
 
             part = state
                 .model

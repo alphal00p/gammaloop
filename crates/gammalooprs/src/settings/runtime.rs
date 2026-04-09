@@ -1287,14 +1287,6 @@ impl SamplingSettings {
         }
     }
 
-    pub(crate) fn sample_orientations(&self) -> bool {
-        match self {
-            SamplingSettings::Default(_) => false,
-            SamplingSettings::MultiChanneling(_) => false,
-            SamplingSettings::DiscreteGraphs(settings) => settings.sample_orientations,
-        }
-    }
-
     pub(crate) fn discrete_depth(&self) -> usize {
         match self {
             SamplingSettings::Default(_) => 0,

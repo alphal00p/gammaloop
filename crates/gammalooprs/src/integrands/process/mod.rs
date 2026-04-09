@@ -2559,11 +2559,34 @@ fn build_direct_gamma_sample<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     input: &MomentumSpaceEvaluationInput,
 ) -> Result<GammaLoopSample<T>> {
-    let expected_loop_count = integrand
-        .get_group_masters()
-        .next()
-        .map(|graph| graph.get_graph().get_loop_number())
-        .ok_or_else(|| eyre!("Cannot evaluate an integrand with no graph terms."))?;
+    let expected_loop_count = if let Some(graph_id) = input.graph_id {
+        let group_id = integrand
+            .get_group_structure()
+            .iter_enumerated()
+            .find_map(|(group_id, group)| group.into_iter().contains(&graph_id).then_some(group_id))
+            .ok_or_else(|| eyre!("Unknown graph '{}' in momentum-space evaluation.", graph_id))?;
+        integrand
+            .get_master_graph(group_id)
+            .get_graph()
+            .get_loop_number()
+    } else if let Some(group_id) = input.group_id {
+        if group_id.0 >= integrand.get_group_structure().len() {
+            return Err(eyre!(
+                "Unknown graph group '{}' in momentum-space evaluation.",
+                group_id.0
+            ));
+        }
+        integrand
+            .get_master_graph(group_id)
+            .get_graph()
+            .get_loop_number()
+    } else {
+        integrand
+            .get_group_masters()
+            .next()
+            .map(|graph| graph.get_graph().get_loop_number())
+            .ok_or_else(|| eyre!("Cannot evaluate an integrand with no graph terms."))?
+    };
 
     if input.loop_momenta.len() != expected_loop_count {
         return Err(eyre!(

@@ -7,7 +7,7 @@ use crate::{
         symbolica_ext::{LOGPRINTOPTS, LogPrint},
     },
     uv::{
-        UVgenerationSettings,
+        ApproximationType, Spinney, UVgenerationSettings,
         approx::{integrated::Integrated, local_3d::Local3DApproximation},
     },
 };
@@ -23,10 +23,7 @@ use symbolica::{
     function, parse_lit, symbol,
 };
 
-use linnet::half_edge::{
-    HedgeGraph,
-    subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps},
-};
+use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 
 use tracing::instrument;
 use vakint::{Vakint, vakint_symbol};
@@ -40,6 +37,7 @@ pub trait ForestNodeLike {
     fn subgraph(&self) -> &SuBitGraph;
     fn lmb(&self) -> &LoopMomentumBasis;
     fn dod(&self) -> i32;
+    fn renormalization_scheme(&self) -> ApproximationType;
     fn topo_order(&self) -> usize;
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph;
 }
@@ -134,10 +132,7 @@ impl SimpleApprox {
 
 #[derive(Clone)]
 pub struct Approximation {
-    // The union of all spinneys, remaining graph is full graph minus subgraph
-    pub subgraph: InternalSubGraph,
-    pub dod: i32,
-    pub lmb: LoopMomentumBasis,
+    pub spinney: Spinney,
     pub local_3d: CFFapprox, //3d denoms
     pub final_integrand: Option<Vec<Atom>>,
     pub integrated_4d: ApproxOp,
@@ -147,19 +142,26 @@ pub struct Approximation {
 
 impl ForestNodeLike for Approximation {
     fn dod(&self) -> i32 {
-        self.dod
+        self.spinney.dod
+    }
+
+    fn renormalization_scheme(&self) -> ApproximationType {
+        self.spinney.renormalization_scheme
     }
 
     fn lmb(&self) -> &LoopMomentumBasis {
-        &self.lmb
+        &self.spinney.lmb
     }
 
     fn reduced_subgraph(&self, given: &Self) -> SuBitGraph {
-        self.subgraph.subtract(&given.subgraph).filter
+        self.spinney
+            .subgraph
+            .subtract(&given.spinney.subgraph)
+            .filter
     }
 
     fn subgraph(&self) -> &SuBitGraph {
-        &self.subgraph.filter
+        self.spinney.filter()
     }
 
     fn topo_order(&self) -> usize {
@@ -237,7 +239,7 @@ impl Approximation {
         cuts: &CutSet,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        self.simple_approx = Some(SimpleApprox::root(graph.as_ref().empty_subgraph()));
+        self.simple_approx = Some(SimpleApprox::root(self.spinney.subgraph.clone()));
         if settings.only_integrated {
             self.integrated_4d = ApproxOp::Root;
         } else {
@@ -249,20 +251,9 @@ impl Approximation {
         Ok(())
     }
 
-    pub(crate) fn new<G, E, V, H>(
-        spinney: InternalSubGraph,
-        graph: &G,
-        lmb: &LoopMomentumBasis,
-    ) -> Approximation
-    where
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-    {
-        let lmb = graph.compatible_sub_lmb(&spinney, graph.dummy_less_full_crown(&spinney), lmb);
-        // println!("//lmb for spinney \n{}", graph.dot_lmb(&spinney, &lmb));
+    pub(crate) fn new(spinney: Spinney) -> Approximation {
         Approximation {
-            dod: graph.dod(&spinney),
-            subgraph: spinney,
-            lmb,
+            spinney,
             topo_order: 0,
             final_integrand: None,
             simple_approx: None,
@@ -345,15 +336,12 @@ impl Approximation {
         );
 
         let CFFapprox::Dependent { t_arg, .. } =
-            CFFapprox::dependent(graph, &dependent.subgraph.filter, cuts, settings)?
+            CFFapprox::dependent(graph, dependent.spinney.filter(), cuts, settings)?
         else {
             unreachable!()
         };
 
-        let ctx = UVCtx {
-            graph: &*graph,
-            settings,
-        };
+        let ctx = UVCtx { graph, settings };
 
         let mut integrands = vec![];
         for (local, t_arg) in cff.into_iter().zip(t_arg.integrands) {
@@ -413,14 +401,14 @@ impl Approximation {
         );
 
         let CFFapprox::Dependent { t_arg, .. } =
-            CFFapprox::dependent(graph, &self.subgraph.filter, cutset, settings)?
+            CFFapprox::dependent(graph, self.spinney.filter(), cutset, settings)?
         else {
             unreachable!()
         };
 
         let reduced = graph
             .full_filter()
-            .subtract(self.subgraph.included())
+            .subtract(self.spinney.subgraph.included())
             .subtract(&graph.initial_state_cut);
 
         let mut integrands = vec![];
@@ -440,7 +428,7 @@ impl Approximation {
             cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
 
             let mut resnum = graph
-                .numerator(&reduced, self.subgraph.included())
+                .numerator(&reduced, self.spinney.subgraph.included())
                 .get_single_atom()
                 .unwrap();
 
@@ -471,27 +459,28 @@ impl Approximation {
 
             resnum = resnum.expand_dots()?;
 
+            let debug_preview = resnum
+                .replace(function!(GS.theta, W_.a_))
+                .with(Atom::one())
+                .replace(GS.m_uv)
+                .with(Atom::var(symbol!("gammalooprs::m_uv_preview")))
+                .replace(parse_lit!(UFO::mass_scalar_1))
+                .with(Atom::var(symbol!("gammalooprs::mass_scalar_1_preview")))
+                .collect_factors()
+                .collect_num();
+
             debug!(
                 "Integrand before parsing for {} for dod{}:{}",
                 self.simple_approx
                     .as_ref()
                     .unwrap()
                     .expr(&graph.full_filter()),
-                self.dod,
+                self.spinney.dod,
                 // orientations
                 //     .first()
                 //     .unwrap()
                 //     .select(&
-                resnum
-                    .replace(function!(GS.theta, W_.a_))
-                    .with(Atom::one())
-                    .replace(GS.m_uv)
-                    .with(Atom::Zero)
-                    .replace(parse_lit!(UFO::mass_scalar_1))
-                    .with(Atom::Zero)
-                    .collect_factors()
-                    .collect_num()
-                    .log_print(None) // printer(LOGPRINTOPTS)
+                debug_preview.log_print(None) // printer(LOGPRINTOPTS)
             );
 
             integrands.push(resnum.replace_multiple(&reps))

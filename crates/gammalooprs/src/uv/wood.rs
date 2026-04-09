@@ -1,6 +1,6 @@
 use crate::{
     graph::{Graph, LoopMomentumBasis},
-    uv::{approx::CutStructure, forest::CutForests, settings::VakintSettings},
+    uv::{Spinney, UVgenerationSettings, approx::CutStructure, forest::CutForests},
 };
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
@@ -25,25 +25,30 @@ pub struct CutWoods {
 }
 
 impl CutWoods {
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, vakint_settings: &VakintSettings) -> Self {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
         let mut woods = vec![];
-        let mut settings = vec![];
+        let mut vakint_settings = vec![];
         for cut in cuts.cuts.iter() {
             let mut subgraph = graph.full_filter();
             subgraph.subtract_with(&graph.initial_state_cut.left);
             subgraph.subtract_with(&cut.union);
 
-            let wood = Wood::from_spinneys(graph.spinneys(&subgraph).iter().cloned(), graph);
+            let spinneys =
+                graph.classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis);
+            let wood = Wood::from_spinneys(spinneys, graph);
 
-            let mut lvk_settings = vakint_settings.true_settings();
-            lvk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
-            settings.push(lvk_settings);
+            let mut lvk_settings = settings.vakint.true_settings();
+            // Keep the legacy wood path aligned with the hedge-poset path:
+            // the downstream integrand builder extracts the epsilon^0 term, so
+            // Vakint must provide one term beyond the maximal pole order.
+            lvk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64 + 1;
+            vakint_settings.push(lvk_settings);
             woods.push(wood);
         }
         CutWoods {
             cuts,
             woods,
-            settings,
+            settings: vakint_settings,
         }
     }
 
@@ -61,13 +66,13 @@ impl CutWoods {
 }
 
 pub struct Wood {
-    poset: Poset<InternalSubGraph, ()>,
+    poset: Poset<Spinney, ()>,
     pub max_loops: usize,
     additional_unions: SecondaryMap<PosetNode, Vec<PosetNode>>,
 }
 
 impl Wood {
-    pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = InternalSubGraph>>(
+    pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = Spinney>>(
         s: I,
         graph: impl AsRef<HedgeGraph<E, V, H>>,
     ) -> Self {
@@ -81,13 +86,8 @@ impl Wood {
         let mut unions = SecondaryMap::new();
 
         for (i, sg) in poset.nodes.iter() {
-            let cs = ref_graph.connected_components(&sg.data);
-            let nloop = cs.iter().map(|c| ref_graph.cyclotomatic_number(c)).max();
-            if let Some(nloop) = nloop
-                && nloop > max_loops
-            {
-                max_loops = nloop;
-            }
+            let cs = ref_graph.connected_components(sg.data.filter());
+            max_loops = max_loops.max(sg.data.max_comp_loop_count());
 
             if cs.len() > 1 {
                 // sg is a disjoint union of spinneys (at the level of half-edges) (strongly disjoint)
@@ -98,7 +98,7 @@ impl Wood {
                     for comp in &cs {
                         let comp =
                             InternalSubGraph::cleaned_filter_optimist(comp.clone(), ref_graph);
-                        if comp == poset.nodes[c].data {
+                        if comp == poset.nodes[c].data.subgraph {
                             // find the components in the wood that this union is made of
                             union.push(c);
                             is_in += 1;
@@ -126,8 +126,8 @@ impl Wood {
     #[allow(clippy::type_complexity)]
     fn unfold_bfs<E, V, H, G>(
         &self,
-        graph: &G,
-        lmb: &LoopMomentumBasis,
+        _graph: &G,
+        _lmb: &LoopMomentumBasis,
         dag: &mut DAG<Approximation, DagNode, ()>,
         unions: &mut SecondaryMap<PosetNode, Option<Vec<(PosetNode, Option<DagNode>)>>>,
         root: PosetNode,
@@ -138,11 +138,7 @@ impl Wood {
         // let graph = graph.as_ref();
         let mut search_front = VecDeque::new();
 
-        let tree_root = dag.add_node(Approximation::new(
-            self.poset.data(root).clone(),
-            graph,
-            lmb,
-        ));
+        let tree_root = dag.add_node(Approximation::new(self.poset.data(root).clone()));
         search_front.push_front((root, tree_root));
 
         while let Some((node, parent)) = search_front.pop_front() {
@@ -160,11 +156,8 @@ impl Wood {
                             }
                         }
                         if all_supplied {
-                            let child = dag.add_node(Approximation::new(
-                                self.poset.data(*c).clone(),
-                                graph,
-                                lmb,
-                            ));
+                            let child =
+                                dag.add_node(Approximation::new(self.poset.data(*c).clone()));
                             for (_, d) in union {
                                 dag.add_edge(d.unwrap(), child);
                             }
@@ -174,8 +167,7 @@ impl Wood {
                         }
                     }
                 } else {
-                    let child =
-                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph, lmb));
+                    let child = dag.add_node(Approximation::new(self.poset.data(*c).clone()));
                     dag.add_edge(parent, child);
                     search_front.push_front((*c, child));
                 }

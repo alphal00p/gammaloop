@@ -30,7 +30,8 @@ use crate::{
         expression::{CFFExpression, OrientationID},
     },
     graph::{
-        GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis, cuts::CutSet,
+        GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+        cuts::{CutSet, ResidueSelector},
     },
     integrands::process::{
         LmbMultiChannelingSetup,
@@ -46,8 +47,9 @@ use crate::{
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, integrated::to_vakint_integrand},
+        hedge_poset::Wood as NewWood,
         settings::VakintSettings,
         wood::CutWoods,
     },
@@ -500,19 +502,35 @@ impl AmplitudeGraph {
 }
 
 impl AmplitudeGraph {
-    pub fn renormalization_part(&mut self, settings: &UVgenerationSettings) -> Result<Atom> {
-        let mut vk_settings = settings.vakint.true_settings();
-        let wood = self.graph.wood(&self.graph.no_dummy());
-        //  it needs to be the max number of loops across all divergent spinneys of that graph
-        vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
+    pub fn renormalization_part(
+        &mut self,
+        settings: &UVgenerationSettings,
+    ) -> Result<RenormalizationPart> {
+        if settings.use_legacy {
+            let mut vk_settings = settings.vakint.true_settings();
+            let wood = self.graph.wood_with_settings(
+                &self.graph.no_dummy(),
+                settings,
+                &self.graph.loop_momentum_basis,
+            );
+            //  it needs to be the max number of loops across all divergent spinneys of that graph
+            vk_settings.number_of_terms_in_epsilon_expansion = wood.max_loops as i64;
 
-        let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+            let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-        let vk = (crate::utils::vakint()?, &vk_settings);
-        let cuts = CutSet::empty(self.graph.n_hedges());
-        forest.compute(&mut self.graph, vk, &cuts, settings)?;
+            let vk = (crate::utils::vakint()?, &vk_settings);
+            let cuts = CutSet::empty(self.graph.n_hedges());
+            forest.compute(&mut self.graph, vk, &cuts, settings)?;
 
-        forest.pole_part_of_ends(&self.graph)
+            forest.pole_part_of_ends(&self.graph)
+        } else {
+            let cuts = CutStructure::empty(&self.graph);
+            let wood = NewWood::new(cuts, &self.graph, settings);
+            let mut forest = wood.unfold();
+            forest.integrate(&self.graph, crate::utils::vakint()?, settings)?;
+
+            forest.pole_part_of_ends(&self.graph)
+        }
     }
 
     #[allow(dead_code)]
@@ -564,7 +582,7 @@ impl AmplitudeGraph {
         self.build_lmbs();
 
         if self.graph.is_group_master {
-            self.build_multi_channeling_channels();
+            self.build_multi_channeling_channels(settings.override_lmb_heuristics);
         }
 
         if settings.threshold_subtraction.enable_thresholds {
@@ -584,10 +602,11 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "Building Multi-Channeling Channels"))]
-    fn build_multi_channeling_channels(&mut self) {
-        let channels = self
-            .graph
-            .build_multi_channeling_channels(self.derived_data.lmbs.as_ref().unwrap());
+    fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) {
+        let channels = self.graph.build_multi_channeling_channels(
+            self.derived_data.lmbs.as_ref().unwrap(),
+            override_lmb_heuristics,
+        );
 
         self.derived_data.multi_channeling_setup = Some(channels)
     }
@@ -844,10 +863,8 @@ impl AmplitudeGraph {
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
-        let cutstructure = CutStructure {
-            cuts: vec![CutSet::empty(self.graph.n_hedges())],
-        };
-        let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv.vakint);
+        let cutstructure = CutStructure::empty(&self.graph);
+        let woods = CutWoods::new(cutstructure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
         forests.compute(&mut self.graph, vakint, &settings.uv)?;
         let exprs: Vec<_> = forests
@@ -927,7 +944,11 @@ impl AmplitudeGraph {
             }
 
             let cutset = CutSet {
-                esurfaces: Some(raised_data.clone()),
+                residue_selector: ResidueSelector {
+                    lu_cut: None,
+                    left_th_cut: Some(raised_data.clone()),
+                    right_th_cut: None,
+                },
                 union: cut_union,
             };
 
@@ -936,7 +957,7 @@ impl AmplitudeGraph {
 
         let cut_structure = CutStructure { cuts };
 
-        let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv.vakint);
+        let woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut forests = woods.unfold(&self.graph);
         forests.compute(&mut self.graph, vakint, &settings.uv)?;
 
@@ -955,7 +976,7 @@ impl AmplitudeGraph {
                 parametric_local: local,
                 parametric_integrated: integrated,
             };
-            let esurfaces = expr.cuts.esurfaces.unwrap();
+            let esurfaces = expr.cuts.residue_selector.left_th_cut.unwrap();
             let esurface_id = esurfaces.esurface_ids[0];
 
             counterterms[esurface_id] = counterterm_atom;

@@ -1,8 +1,10 @@
+use std::collections::BTreeSet;
+
 use ahash::AHashSet;
 use idenso::metric::MetricSimplifier;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
-    involution::{Hedge, HedgePair},
+    involution::{Flow, Hedge, HedgePair},
     subgraph::{
         Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
         SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
@@ -22,9 +24,10 @@ use crate::{
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     utils::{GS, W_, symbolica_ext::CallSymbol},
+    uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
-use super::{Wood, spenso_lor_atom};
+use super::{Spinney, Wood, spenso_lor_atom};
 
 pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize
@@ -52,6 +55,103 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         subgraph: &S,
         edge_powers: T,
     ) -> Atom;
+
+    fn boundary_pdg_set<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+    ) -> BTreeSet<isize>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        let graph = self.as_ref();
+        graph
+            .full_crown(subgraph)
+            .included_iter()
+            .filter_map(|hedge| {
+                let edge_id = graph[&hedge];
+                graph[edge_id].particle_pdg_code().map(|pdg| {
+                    if graph.flow(hedge) == Flow::Source {
+                        -pdg
+                    } else {
+                        pdg
+                    }
+                })
+            })
+            .collect()
+    }
+
+    fn internal_pdg_set<E: UVE, V, H, S: SubGraphLike>(&self, subgraph: &S) -> BTreeSet<isize>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        self.as_ref()
+            .iter_edges_of(subgraph)
+            .filter_map(|(pair, edge_id, _)| {
+                pair.is_paired()
+                    .then(|| self.as_ref()[edge_id].particle_pdg_code())
+                    .flatten()
+            })
+            .collect()
+    }
+
+    fn ct_identifier<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+    ) -> CTIdentifier
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        CTIdentifier::new(
+            self.boundary_pdg_set(subgraph),
+            Some(self.internal_pdg_set(subgraph)),
+        )
+    }
+
+    fn renormalization_scheme<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+        settings: &UVgenerationSettings,
+    ) -> ApproximationType
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        settings.renormalization_scheme_for(&self.ct_identifier(subgraph))
+    }
+
+    fn classify_spinney<E: UVE, V, H>(
+        &self,
+        spinney: InternalSubGraph,
+        settings: &UVgenerationSettings,
+        lmb: &LoopMomentumBasis,
+    ) -> Option<Spinney>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        let renormalization_scheme = self.renormalization_scheme(&spinney.filter, settings);
+
+        (renormalization_scheme != ApproximationType::Unsubtracted)
+            .then(|| Spinney::with_scheme(spinney, self, lmb, renormalization_scheme))
+    }
+
+    fn classified_spinneys<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+        settings: &UVgenerationSettings,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<Spinney>
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        if !settings.subtract_uv {
+            return vec![Spinney::empty(self)];
+        }
+
+        self.spinneys(subgraph)
+            .into_iter()
+            .filter_map(|spinney| self.classify_spinney(spinney, settings, lmb))
+            .collect()
+    }
+
     fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
@@ -126,11 +226,27 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         limits
     }
 
-    fn wood<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Wood
+    fn wood<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Wood
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        Wood::from_spinneys(self.spinneys(subgraph), self)
+        self.wood_with_settings(
+            subgraph,
+            &UVgenerationSettings::default(),
+            &self.as_ref().lmb_of(&self.as_ref().full_filter()),
+        )
+    }
+
+    fn wood_with_settings<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+        settings: &UVgenerationSettings,
+        lmb: &LoopMomentumBasis,
+    ) -> Wood
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+    {
+        Wood::from_spinneys(self.classified_spinneys(subgraph, settings, lmb), self)
     }
 
     fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
@@ -287,4 +403,5 @@ impl UltravioletGraph for Graph {
 
 pub trait UVE {
     fn mass_atom(&self) -> Atom;
+    fn particle_pdg_code(&self) -> Option<isize>;
 }

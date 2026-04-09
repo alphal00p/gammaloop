@@ -401,6 +401,13 @@ impl CrossSectionIntegrand {
                     ));
                 }
 
+                if ir_limits.iter().any(|limit| !limit.is_valid(self.data.graph_terms.iter().find(|term| term.graph.name == graph_name).unwrap().graph.loop_momentum_basis.loop_edges.len()).is_ok()) {
+                    return Err(eyre!(
+                        "One or more IR limits specified for graph '{}' in select_limits_and_graphs are not valid",
+                        graph_name
+                    ));
+                }
+
                 Ok((graph_name, ir_limits))
             })
             .collect::<Result<Vec<_>, _>>()

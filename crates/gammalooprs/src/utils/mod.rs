@@ -21,9 +21,9 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::Float;
 use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
+use rug::{Assign, Float};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::algebra::algebraic_traits::RefOne;
@@ -69,7 +69,7 @@ use vakint::Vakint;
 use crate::MAX_LOOP;
 use ::tracing::debug;
 use symbolica::atom::{Atom, AtomCore};
-use typed_index_collections::{TiSlice, TiVec};
+use typed_index_collections::TiVec;
 
 use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!(fallback = "unavailable");
@@ -437,6 +437,11 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.float.assign(&other.float);
+    }
+
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         (&self.float * &a.float + &b.float).complete(N).into()
     }
@@ -1196,6 +1201,11 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 }
 
 impl<T: FloatLike> SymFloatLike for F<T> {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.0.set_from(&other.0);
+    }
+
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         F(self.0.mul_add(&a.0, &b.0))
     }
@@ -3660,27 +3670,6 @@ fn strip_ansi_escape_codes(line: &str) -> String {
     }
 
     stripped
-}
-
-pub(crate) fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
-    vec1: &TiSlice<K, T>,
-    vec2: &TiSlice<K, T>,
-) -> String {
-    let mut result = String::new();
-
-    result.push_str("elements of vec1 that are not in vec2:\n");
-
-    vec1.iter()
-        .filter(|vec1_element| !vec2.contains(vec1_element))
-        .for_each(|vec1_element| result.push_str(&format!("{:#?}\n", vec1_element)));
-
-    result.push_str("elements of vec2 that are not in vec1:\n");
-
-    vec2.iter()
-        .filter(|vec2_element| !vec1.contains(vec2_element))
-        .for_each(|vec2_element| result.push_str(&format!("{:#?}", vec2_element)));
-
-    result
 }
 
 pub(crate) fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {

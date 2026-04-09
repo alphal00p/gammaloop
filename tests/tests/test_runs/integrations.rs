@@ -80,6 +80,12 @@ fn scalar_bubble() -> Result<()> {
         false,
     )?;
 
+    cli.run_command("run import_graph")?;
+
+    cli.run_command("run no_integrated")?;
+
+    cli.run_command("generate")?;
+
     let integrate_command = Integrate {
         ..default_integrate_for("scalar_bubble")
     };
@@ -96,15 +102,66 @@ fn scalar_bubble() -> Result<()> {
         .unwrap_uv();
     assert_eq!(res.pass_fail(-0.9).failed, 0);
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(2.03838e-02)), 1));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.03838e-02)), 1));
 
     cli.run_command("set model mass_scalar_1=2.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(1.16050e-02)), 1));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-1.16050e-02)), 1));
 
     cli.run_command("set model mass_scalar_1=3.0")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(6.46968e-03)), 1));
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-6.46968e-03)), 1));
+    let renorm_command = Renormalize::default();
+
+    let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;
+
+    println!("{}", res[0]);
+
+    clean_test(&cli.cli_settings.state.folder);
+
+    Ok(())
+}
+
+#[test]
+fn vakint_compare_scalar_bubble() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_bubble.toml".into()),
+        get_tests_workspace_path().join("scalar_bubble"),
+        Some("scalar_bubble".to_string()),
+        false,
+    )?;
+
+    cli.run_command("run import_graph")?;
+
+    cli.run_command("run integrated")?;
+
+    cli.run_command("generate")?;
+
+    let integrate_command = Integrate {
+        ..default_integrate_for("scalar_bubble")
+    };
+
+    let profile_cmd = Profile::UltraViolet(UltraVioletProfile {
+        ..Default::default()
+    });
+
+    // from Kaapo: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
+
+    cli.run_command("set model mass_scalar_1=1.0")?;
+    let res = profile_cmd
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
+    assert_eq!(res.pass_fail(-0.9).failed, 0);
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-2.03838e-02)), 1));
+
+    cli.run_command("set model mass_scalar_1=2.0")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-1.16050e-02)), 1));
+
+    cli.run_command("set model mass_scalar_1=3.0")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert!(integral_no_cache.is_compatible_with_target(Complex::new_re(F(-6.46968e-03)), 1));
     let renorm_command = Renormalize::default();
 
     let res = renorm_command.run(&mut cli.state, &cli.cli_settings)?;

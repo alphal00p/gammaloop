@@ -2,15 +2,99 @@ use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::slice;
 
 use indexmap::set::MutableValues;
 use indexmap::IndexSet;
 
 use crate::half_edge::builder::HedgeGraphBuilder;
 use crate::half_edge::involution::{EdgeIndex, Flow};
-use crate::half_edge::nodestore::NodeStorageOps;
+use crate::half_edge::nodestore::{NodeStorageOps, NodeStorageVec};
 use crate::half_edge::subgraph::SubSetLike;
-use crate::half_edge::{HedgeGraph, NoData, NodeIndex};
+use crate::half_edge::{HedgeGraph, NoData, NodeIndex, NodeVec};
+
+/// An owned trace-unfolded DAG together with the source-graph node each unfolded node came from.
+///
+/// The wrapper keeps the structural graph and the `source_nodes` mapping together across
+/// structure-preserving transformations such as [`UnfoldedTraceGraph::map`]. It also provides
+/// traversal helpers that are meaningful only for trace-unfolded graphs.
+pub struct UnfoldedTraceGraph<G, V, N: NodeStorageOps<NodeData = V> = NodeStorageVec<V>> {
+    graph: HedgeGraph<EdgeIndex, V, NoData, N>,
+    source_nodes: NodeVec<NodeIndex>,
+    source_ty: PhantomData<fn() -> G>,
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+    /// Creates a wrapper from an already-built unfolded graph and its source-node mapping.
+    pub fn new(
+        graph: HedgeGraph<EdgeIndex, V, NoData, N>,
+        source_nodes: NodeVec<NodeIndex>,
+    ) -> Self {
+        Self {
+            graph,
+            source_nodes,
+            source_ty: PhantomData,
+        }
+    }
+
+    /// Maps node data while preserving the unfolded graph structure and source-node mapping.
+    pub fn map<V2>(
+        self,
+        f: impl FnMut(&crate::half_edge::involution::Involution, NodeIndex, V) -> V2,
+    ) -> UnfoldedTraceGraph<G, V2, N::OpStorage<V2>> {
+        UnfoldedTraceGraph {
+            graph: self.graph.map(f, |_, _, _, _, e| e, |_, h| h),
+            source_nodes: self.source_nodes,
+            source_ty: PhantomData,
+        }
+    }
+
+    /// Returns the source-graph node from which an unfolded node originated.
+    pub fn source_node(&self, node: NodeIndex) -> NodeIndex {
+        self.source_nodes[node]
+    }
+
+    /// Iterates over the leaf operations of `node` together with their dependency frontiers.
+    ///
+    /// The frontier is reconstructed structurally from the unfolded graph:
+    /// follow the unique branch that still contains the target operation, handle disjoint unions
+    /// via their relevant incoming branches, and then strip any independent prefix.
+    pub fn leaf_op_dependency_frontiers<'b, K>(
+        &'b self,
+        node: NodeIndex,
+        indep: &'b impl Independence<HiddenData<K, EdgeIndex>>,
+    ) -> impl Iterator<Item = (&'b HiddenData<K, EdgeIndex>, NodeIndex)> + 'b
+    where
+        K: Eq + Hash + Clone + Ord + 'b,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        self.graph[node].as_ref().iter_leaf_ops().map(move |op| {
+            (
+                op,
+                self.walk_op_dependency_frontier(node, op, indep)
+                    .expect("dependency frontier must exist for leaf op"),
+            )
+        })
+    }
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> AsRef<HedgeGraph<EdgeIndex, V, NoData, N>>
+    for UnfoldedTraceGraph<G, V, N>
+{
+    fn as_ref(&self) -> &HedgeGraph<EdgeIndex, V, NoData, N> {
+        &self.graph
+    }
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> Deref for UnfoldedTraceGraph<G, V, N> {
+    type Target = HedgeGraph<EdgeIndex, V, NoData, N>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.graph
+    }
+}
 
 /// Ops must be owned, hashable, and totally ordered for canonicalization.
 pub trait Op: Clone + Eq + Ord {}
@@ -214,12 +298,11 @@ where
         &self,
         subgraph: &S,
         start: NodeIndex,
-    ) -> HedgeGraph<
-        EdgeIndex,
-        TraceKey<Key, EdgeIndex>,
-        NoData,
-        M::OpStorage<TraceKey<Key, EdgeIndex>>,
-    > {
+    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
+    {
+        // `traces` is the canonical dedup table. Each unfolded node is identified by the pair
+        // `(source_graph_node, canonical_trace_key)`, so paths that differ only by commuting
+        // independent operations collapse to the same unfolded node.
         let root = (start, TraceKey::empty());
         let mut q = VecDeque::new();
         let mut traces: IndexSet<(NodeIndex, TraceKey<Key, EdgeIndex>)> = IndexSet::new();
@@ -255,29 +338,285 @@ where
             }
         }
 
-        builder.build::<M>().map(
-            |_, _, v| {
-                let mut trace: TraceKey<Key, EdgeIndex> = TraceKey::empty();
-                let v = &mut traces.get_index_mut2(v).unwrap().1;
-                std::mem::swap(v, &mut trace);
-                trace
-            },
-            |_, _, _, _, a| a,
-            |_, h| h,
-        )
+        let source_nodes = traces.iter().map(|(source_node, _)| *source_node).collect();
+        let unfolded = UnfoldedTraceGraph::new(
+            builder.build::<M>().map(
+                |_, _, v| {
+                    let mut trace: TraceKey<Key, EdgeIndex> = TraceKey::empty();
+                    let v = &mut traces.get_index_mut2(v).unwrap().1;
+                    std::mem::swap(v, &mut trace);
+                    trace
+                },
+                |_, _, _, _, a| a,
+                |_, h| h,
+            ),
+            source_nodes,
+        );
+        unfolded
+            .validate_invariant()
+            .expect("trace-unfolded graph violates non-union unique-parent invariant");
+        unfolded
     }
 
     #[allow(clippy::type_complexity)]
     fn trace_unfold<M: NodeStorageOps<NodeData = usize>>(
         &self,
         start: NodeIndex,
-    ) -> HedgeGraph<
-        EdgeIndex,
-        TraceKey<Key, EdgeIndex>,
-        NoData,
-        M::OpStorage<TraceKey<Key, EdgeIndex>>,
-    > {
+    ) -> UnfoldedTraceGraph<Self, TraceKey<Key, EdgeIndex>, M::OpStorage<TraceKey<Key, EdgeIndex>>>
+    {
         self.trace_unfold_of::<M, _>(&self.graph().full_filter(), start)
+    }
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+    /// Returns all unfolded parents of `node` together with the source-graph edge realized by
+    /// that branch.
+    pub fn parents(&self, node: NodeIndex) -> impl Iterator<Item = (NodeIndex, EdgeIndex)> + '_ {
+        self.graph
+            .iter_crown(node)
+            .filter(|hedge| self.graph.flow(*hedge) == Flow::Sink)
+            .filter_map(|hedge| {
+                let parent = self.graph.involved_node_id(hedge)?;
+                let unfolded_edge = self.graph[&hedge];
+                Some((parent, self.graph[unfolded_edge]))
+            })
+    }
+
+    fn all_ops<'b, K>(
+        &'b self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = &'b HiddenData<K, EdgeIndex>> + 'b
+    where
+        K: Eq + Hash + Clone + Ord + 'b,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        self.graph[node]
+            .as_ref()
+            .iter_levels_top_down()
+            .flat_map(|level| level.iter_leaf_ops())
+    }
+
+    fn node_contains_op<K>(&self, node: NodeIndex, target: &HiddenData<K, EdgeIndex>) -> bool
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        self.all_ops(node).any(|op| op == target)
+    }
+
+    fn introduced_ops<K>(
+        &self,
+        parent: NodeIndex,
+        child: NodeIndex,
+    ) -> Vec<HiddenData<K, EdgeIndex>>
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        let mut parent_ops: Vec<_> = self.all_ops(parent).cloned().collect();
+        let mut introduced = Vec::new();
+        for op in self.all_ops(child) {
+            // `child` is the canonicalized extension of `parent`, so the multiset difference
+            // between their operations is exactly the set of newly introduced operations on that
+            // step.
+            if let Some(index) = parent_ops.iter().position(|parent_op| parent_op == op) {
+                parent_ops.swap_remove(index);
+            } else {
+                introduced.push(op.clone());
+            }
+        }
+        introduced
+    }
+
+    pub fn closest_common_ancestor(&self, nodes: &[NodeIndex]) -> Option<NodeIndex> {
+        let first = *nodes.first()?;
+        // `path_to_root` follows the unique-parent spine to the empty trace, so intersecting
+        // those spines is enough to recover the closest shared prefix of the given nodes.
+        std::iter::once(first)
+            .chain(self.path_to_root(first).map(|(parent, _)| parent))
+            .find(|candidate| {
+                nodes.iter().skip(1).all(|node| {
+                    std::iter::once(*node)
+                        .chain(self.path_to_root(*node).map(|(parent, _)| parent))
+                        .any(|ancestor| ancestor == *candidate)
+                })
+            })
+    }
+
+    fn strip_independent_prefix<K>(
+        &self,
+        start: NodeIndex,
+        target: &HiddenData<K, EdgeIndex>,
+        indep: &impl Independence<HiddenData<K, EdgeIndex>>,
+    ) -> NodeIndex
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        let mut current = start;
+
+        loop {
+            if self.is_disjoint_union(current) {
+                let leaf_ops: Vec<_> = self.leaf_ops(current).cloned().collect();
+                // If every operation introduced by this union is independent of `target`, the
+                // relevant reusable prefix is shared by all incoming branches, so we can replace
+                // the union by their closest common ancestor.
+                if leaf_ops.iter().all(|op| indep.independent(op, target)) {
+                    let parents = self
+                        .parents(current)
+                        .map(|(parent, _)| parent)
+                        .collect::<Vec<_>>();
+                    if let Some(prefix) = self.closest_common_ancestor(&parents) {
+                        current = prefix;
+                        continue;
+                    }
+                }
+                return current;
+            }
+
+            let Some((parent, _)) = self.unique_parent(current) else {
+                return current;
+            };
+            let introduced = self.introduced_ops(parent, current);
+            // As long as the whole step from `parent -> current` is independent of `target`, that
+            // step can be factored out of the reusable prefix and we continue with `parent`.
+            if introduced.iter().all(|op| indep.independent(op, target)) {
+                current = parent;
+            } else {
+                return current;
+            }
+        }
+    }
+
+    pub fn leaf_ops<'b, K>(
+        &'b self,
+        node: NodeIndex,
+    ) -> impl DoubleEndedIterator<Item = &'b HiddenData<K, EdgeIndex>> + 'b
+    where
+        K: Eq + Hash + Clone + Ord + 'b,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        self.graph[node].as_ref().iter_leaf_ops()
+    }
+
+    /// Returns whether `node` represents a disjoint-union step in the unfolded graph.
+    pub fn is_disjoint_union(&self, node: NodeIndex) -> bool {
+        self.parents(node).nth(1).is_some()
+    }
+
+    /// Returns the unique parent of `node` when the node is not a disjoint union.
+    ///
+    /// The accompanying [`EdgeIndex`] is the original source-graph edge carried by that branch.
+    pub fn unique_parent(&self, node: NodeIndex) -> Option<(NodeIndex, EdgeIndex)> {
+        let mut parents = self.parents(node);
+        let parent = parents.next()?;
+        (parents.next().is_none()).then_some(parent)
+    }
+
+    /// Walks the unique-parent chain from `node` to the root.
+    ///
+    /// The iterator stops before a disjoint union, because such a node no longer has a single
+    /// canonical parent chain.
+    pub fn path_to_root(
+        &self,
+        node: NodeIndex,
+    ) -> impl Iterator<Item = (NodeIndex, EdgeIndex)> + '_ {
+        let mut current = Some(node);
+        std::iter::from_fn(move || {
+            let node = current?;
+            let parent = self.unique_parent(node)?;
+            current = Some(parent.0);
+            Some(parent)
+        })
+    }
+}
+
+impl<G, V, N: NodeStorageOps<NodeData = V>> UnfoldedTraceGraph<G, V, N> {
+    /// Returns the closest reusable prefix node for the contribution of `target` at `node`.
+    ///
+    /// The traversal is specific to trace-unfolded graphs:
+    ///
+    /// - it follows the unique branch that still contains `target`
+    /// - across a disjoint union, it continues with the branch containing `target`
+    /// - once `target` disappears, it strips off any prefix whose newly introduced operations are
+    ///   all independent of `target`
+    ///
+    /// This private walk is the structural core behind
+    /// [`leaf_op_dependency_frontiers`](Self::leaf_op_dependency_frontiers).
+    fn walk_op_dependency_frontier<K>(
+        &self,
+        node: NodeIndex,
+        target: &HiddenData<K, EdgeIndex>,
+        indep: &impl Independence<HiddenData<K, EdgeIndex>>,
+    ) -> Option<NodeIndex>
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        let mut current = node;
+        loop {
+            if self.is_disjoint_union(current) {
+                let parents = self.parents(current).collect::<Vec<_>>();
+                if let Some((parent, _)) = parents
+                    .iter()
+                    .copied()
+                    .find(|(parent, _)| self.node_contains_op(*parent, target))
+                {
+                    // The target operation is still present on exactly one incoming branch, so
+                    // that branch remains the relevant prefix chain.
+                    current = parent;
+                    continue;
+                }
+                // The target no longer appears on any incoming branch, so the reusable prefix is
+                // the closest common ancestor of all incoming branches rather than any particular
+                // parent.
+                return self.closest_common_ancestor(
+                    &parents
+                        .iter()
+                        .map(|(parent, _)| *parent)
+                        .collect::<Vec<_>>(),
+                );
+            }
+
+            let Some((parent, _)) = self.unique_parent(current) else {
+                return Some(current);
+            };
+            if self.node_contains_op(parent, target) {
+                // We have not yet reached the step at which `target` was introduced.
+                current = parent;
+                continue;
+            }
+
+            return Some(self.strip_independent_prefix(parent, target, indep));
+        }
+    }
+
+    /// Checks the structural invariant used by the traversal helpers above.
+    ///
+    /// Distinct incoming branches of the same disjoint union must carry distinct source-graph
+    /// edges; otherwise helpers such as [`unique_parent`](Self::unique_parent) and
+    /// [`leaf_op_dependency_frontiers`](Self::leaf_op_dependency_frontiers) become ambiguous.
+    pub fn validate_invariant<K>(&self) -> Result<(), String>
+    where
+        K: Eq + Hash + Clone + Ord,
+        V: AsRef<TraceKey<K, EdgeIndex>>,
+    {
+        for (node, _, _) in self.graph.iter_nodes() {
+            let incoming = self.parents(node).collect::<Vec<_>>();
+            for (i, (_, edge)) in incoming.iter().enumerate() {
+                if incoming
+                    .iter()
+                    .skip(i + 1)
+                    .any(|(_, other_edge)| other_edge == edge)
+                {
+                    return Err(format!(
+                        "node {node} has duplicate incoming branches for edge {edge}"
+                    ));
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -331,8 +670,10 @@ where
 
 #[derive(Clone, Debug)]
 pub struct HiddenData<O, D> {
-    pub order: O, // the semantic label used for identity + ordering
-    pub data: D,  // extra context used only for independence tests
+    /// the semantic label used for identity + ordering
+    pub order: O,
+    /// extra context used only for independence tests
+    pub data: D,
 }
 
 // Equality/hash only by `order` so merging works.
@@ -361,16 +702,416 @@ impl<O: PartialOrd, D> PartialOrd for HiddenData<O, D> {
     }
 }
 
+/// A borrowed view over a trace key's Foata levels.
+///
+/// # Examples
+///
+/// ```
+/// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+///
+/// let trace = TraceKey::from_levels(vec![
+///     vec![HiddenData { order: "A", data: () }],
+///     vec![HiddenData { order: "B", data: () }],
+/// ]);
+/// let levels: Vec<_> = trace
+///     .view()
+///     .iter_levels_top_down()
+///     .map(|level| level.to_string())
+///     .collect();
+///
+/// assert_eq!(levels, vec!["{A}", "{B}"]);
+/// ```
+#[derive(Clone, Copy, Debug)]
+pub struct TraceKeyView<'a, O, D> {
+    levels: &'a [Vec<HiddenData<O, D>>],
+}
+
+impl<'a, O, D> TraceKeyView<'a, O, D> {
+    /// Returns whether the viewed trace has no levels.
+    pub fn is_empty(&self) -> bool {
+        self.levels.is_empty()
+    }
+
+    /// Returns the total number of operations across all viewed levels.
+    pub fn op_count(&self) -> usize {
+        self.levels.iter().map(Vec::len).sum()
+    }
+
+    /// Iterates over the Foata levels in their stored order.
+    ///
+    /// Each item is itself a [`TraceKeyView`] over exactly one level.
+    pub fn iter_levels_top_down(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'a, O, D>> + ExactSizeIterator + 'a {
+        self.levels.iter().map(|level| TraceKeyView {
+            levels: slice::from_ref(level),
+        })
+    }
+
+    /// Iterates over the Foata levels in reverse order.
+    ///
+    /// Each item is itself a [`TraceKeyView`] over exactly one level.
+    pub fn iter_levels_bottom_up(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'a, O, D>> + ExactSizeIterator + 'a {
+        self.levels.iter().rev().map(|level| TraceKeyView {
+            levels: slice::from_ref(level),
+        })
+    }
+
+    /// Iterates over the operations in the leaf level of the viewed trace.
+    pub fn iter_leaf_ops(&self) -> impl DoubleEndedIterator<Item = &'a HiddenData<O, D>> + 'a {
+        self.levels
+            .last()
+            .into_iter()
+            .flat_map(|level| level.iter())
+    }
+
+    /// Splits the viewed trace into its strict prefix and its leaf level.
+    pub fn split_last_level(&self) -> Option<(TraceKeyView<'a, O, D>, TraceKeyView<'a, O, D>)> {
+        let (leaf, prefix) = self.levels.split_last()?;
+        Some((
+            TraceKeyView { levels: prefix },
+            TraceKeyView {
+                levels: slice::from_ref(leaf),
+            },
+        ))
+    }
+
+    /// Writes the viewed trace using explicit Foata levels and a custom label mapping.
+    pub fn write_foata_like<W: fmt::Write>(
+        &self,
+        f: &mut W,
+        mut map: impl FnMut(&O) -> String,
+    ) -> fmt::Result
+    where
+        O: Op,
+    {
+        if self.is_empty() {
+            return write!(f, "∅");
+        }
+
+        for (i, level) in self.iter_levels_top_down().enumerate() {
+            if i > 0 {
+                write!(f, " · ")?;
+            }
+            write!(f, "{{")?;
+            for (j, op) in level.iter_leaf_ops().enumerate() {
+                if j > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{}", map(&op.order))?;
+            }
+            write!(f, "}}")?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a, O: Clone, D: Clone> TraceKeyView<'a, O, D> {
+    /// Clones the viewed levels into an owned [`TraceKey`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![HiddenData { order: "B", data: () }],
+    /// ]);
+    ///
+    /// let cloned = trace.view().to_owned();
+    ///
+    /// assert_eq!(cloned, trace);
+    /// ```
+    pub fn to_owned(&self) -> TraceKey<O, D> {
+        TraceKey::from_levels(self.levels.to_vec())
+    }
+}
+
+impl<'a, O: Clone, D: Clone> From<TraceKeyView<'a, O, D>> for TraceKey<O, D> {
+    fn from(value: TraceKeyView<'a, O, D>) -> Self {
+        value.to_owned()
+    }
+}
+
+impl<O, D> Display for TraceKeyView<'_, O, D>
+where
+    O: Op + Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.write_foata_like(f, |o| o.to_string())
+    }
+}
+
+/// A canonical Foata-style trace normal form.
+///
+/// `TraceKey` stores a trace as a list of levels, where each inner vector contains operations
+/// that are pairwise independent and therefore commute. The levels are ordered, so operations in
+/// later levels could not be moved further left without breaking the independence relation used
+/// when the key was constructed.
+///
+/// `TraceKey` is the owning form. Use [`TraceKey::view`] when you only need borrowed access to
+/// the levels, and [`TraceKey::from_levels`] when you already have an explicit canonical level
+/// structure and want to build an owned key directly.
+///
+/// The intended split is:
+///
+/// - [`TraceKey`] owns a canonical trace.
+/// - [`TraceKeyView`] borrows the same trace without exposing the private storage.
+///
+/// # Examples
+///
+/// ```
+/// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, Independence, TraceKey};
+///
+/// struct CommutesOnlyAandC;
+///
+/// impl Independence<HiddenData<&'static str, ()>> for CommutesOnlyAandC {
+///     fn independent(
+///         &self,
+///         a: &HiddenData<&'static str, ()>,
+///         b: &HiddenData<&'static str, ()>,
+///     ) -> bool {
+///         matches!(
+///             (a.order, b.order),
+///             ("A", "C") | ("C", "A")
+///         )
+///     }
+/// }
+///
+/// let trace = TraceKey::empty()
+///     .push(&CommutesOnlyAandC, HiddenData { order: "A", data: () })
+///     .push(&CommutesOnlyAandC, HiddenData { order: "B", data: () })
+///     .push(&CommutesOnlyAandC, HiddenData { order: "C", data: () });
+///
+/// assert_eq!(trace.to_string(), "{A,C} · {B}");
+/// assert_eq!(trace.view().to_owned(), trace);
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct TraceKey<O, D> {
-    pub levels: Vec<Vec<HiddenData<O, D>>>,
+    levels: Vec<Vec<HiddenData<O, D>>>,
+}
+
+impl<O, D> AsRef<TraceKey<O, D>> for TraceKey<O, D> {
+    fn as_ref(&self) -> &TraceKey<O, D> {
+        self
+    }
 }
 
 impl<O, D> TraceKey<O, D> {
+    /// Returns the empty trace.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::TraceKey;
+    ///
+    /// let empty = TraceKey::<&'static str, ()>::empty();
+    /// assert!(empty.is_empty());
+    /// assert_eq!(empty.to_string(), "∅");
+    /// ```
     pub fn empty() -> Self {
         Self { levels: Vec::new() }
     }
 
+    /// Builds a trace key from explicit Foata levels.
+    ///
+    /// This does not validate that the levels satisfy any independence relation; it assumes the
+    /// caller is providing an already-canonical arrangement.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![
+    ///         HiddenData { order: "B", data: () },
+    ///         HiddenData { order: "C", data: () },
+    ///     ],
+    /// ]);
+    ///
+    /// assert_eq!(trace.to_string(), "{A} · {B,C}");
+    /// ```
+    pub fn from_levels(levels: Vec<Vec<HiddenData<O, D>>>) -> Self {
+        Self { levels }
+    }
+
+    /// Borrows the trace as a lightweight view over its levels.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![HiddenData { order: "B", data: () }],
+    /// ]);
+    ///
+    /// assert!(!trace.view().is_empty());
+    /// let levels: Vec<_> = trace
+    ///     .view()
+    ///     .iter_levels_bottom_up()
+    ///     .map(|level| level.to_string())
+    ///     .collect();
+    /// assert_eq!(levels, vec!["{B}", "{A}"]);
+    /// ```
+    pub fn view(&self) -> TraceKeyView<'_, O, D> {
+        TraceKeyView {
+            levels: &self.levels,
+        }
+    }
+
+    /// Returns whether the trace has no levels.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let empty = TraceKey::<&'static str, ()>::empty();
+    /// let non_empty = TraceKey::from_levels(vec![vec![HiddenData {
+    ///     order: "A",
+    ///     data: (),
+    /// }]]);
+    ///
+    /// assert!(empty.is_empty());
+    /// assert!(!non_empty.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.levels.is_empty()
+    }
+
+    /// Returns the total number of operations across all levels.
+    pub fn op_count(&self) -> usize {
+        self.view().op_count()
+    }
+
+    /// Iterates over the Foata levels in their stored order.
+    ///
+    /// This is the same top-down order used by [`Display`] and [`TraceKey::write_foata_like`]:
+    /// earlier levels are yielded first, later levels last.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///         vec![HiddenData { order: "A", data: () }],
+    ///         vec![
+    ///             HiddenData { order: "B", data: () },
+    ///             HiddenData { order: "C", data: () },
+    ///         ],
+    ///     ]);
+    ///
+    /// let levels: Vec<_> = trace
+    ///     .iter_levels_top_down()
+    ///     .map(|level| level.to_string())
+    ///     .collect();
+    ///
+    /// assert_eq!(levels, vec!["{A}", "{B,C}"]);
+    /// ```
+    pub fn iter_levels_top_down(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'_, O, D>> + ExactSizeIterator + '_ {
+        self.view().iter_levels_top_down()
+    }
+
+    /// Iterates over the Foata levels in reverse order.
+    ///
+    /// This yields the last level first and works entirely by reference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///         vec![HiddenData { order: "A", data: () }],
+    ///         vec![
+    ///             HiddenData { order: "B", data: () },
+    ///             HiddenData { order: "C", data: () },
+    ///         ],
+    ///     ]);
+    ///
+    /// let levels: Vec<_> = trace
+    ///     .iter_levels_bottom_up()
+    ///     .map(|level| level.to_string())
+    ///     .collect();
+    ///
+    /// assert_eq!(levels, vec!["{B,C}", "{A}"]);
+    /// ```
+    pub fn iter_levels_bottom_up(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = TraceKeyView<'_, O, D>> + ExactSizeIterator + '_ {
+        self.view().iter_levels_bottom_up()
+    }
+
+    /// Iterates over the operations in the leaf level of the trace.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///     vec![HiddenData { order: "A", data: () }],
+    ///     vec![
+    ///         HiddenData { order: "B", data: () },
+    ///         HiddenData { order: "C", data: () },
+    ///     ],
+    /// ]);
+    ///
+    /// let leaf: Vec<_> = trace.iter_leaf_ops().map(|op| op.order).collect();
+    ///
+    /// assert_eq!(leaf, vec!["B", "C"]);
+    /// ```
+    pub fn iter_leaf_ops(&self) -> impl DoubleEndedIterator<Item = &HiddenData<O, D>> + '_ {
+        self.view().iter_leaf_ops()
+    }
+
+    /// Splits the trace into its strict prefix and its leaf level.
+    pub fn split_last_level(&self) -> Option<(TraceKeyView<'_, O, D>, TraceKeyView<'_, O, D>)> {
+        self.view().split_last_level()
+    }
+
+    /// Inserts one operation into the trace, placing it as late as possible.
+    ///
+    /// The new operation is appended to the latest level whose members are all independent of it.
+    /// If no existing level is compatible, a new level is created at the end.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, Independence, TraceKey};
+    ///
+    /// struct CommutesOnlyAandC;
+    ///
+    /// impl Independence<HiddenData<&'static str, ()>> for CommutesOnlyAandC {
+    ///     fn independent(
+    ///         &self,
+    ///         a: &HiddenData<&'static str, ()>,
+    ///         b: &HiddenData<&'static str, ()>,
+    ///     ) -> bool {
+    ///         matches!(
+    ///             (a.order, b.order),
+    ///             ("A", "C") | ("C", "A")
+    ///         )
+    ///     }
+    /// }
+    ///
+    /// let trace = TraceKey::empty()
+    ///     .push(&CommutesOnlyAandC, HiddenData { order: "A", data: () })
+    ///     .push(&CommutesOnlyAandC, HiddenData { order: "B", data: () })
+    ///     .push(&CommutesOnlyAandC, HiddenData { order: "C", data: () });
+    ///
+    /// assert_eq!(trace.to_string(), "{A,C} · {B}");
+    /// ```
     pub fn push<I>(&self, indep: &I, op: HiddenData<O, D>) -> Self
     where
         I: Independence<HiddenData<O, D>>,
@@ -392,6 +1133,28 @@ impl<O, D> TraceKey<O, D> {
         Self { levels }
     }
 
+    /// Writes the trace using explicit Foata levels and a custom label mapping.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::half_edge::algorithms::trace_unfold::{HiddenData, TraceKey};
+    ///
+    /// let trace = TraceKey::from_levels(vec![
+    ///         vec![HiddenData { order: 1_u8, data: () }],
+    ///         vec![
+    ///             HiddenData { order: 2_u8, data: () },
+    ///             HiddenData { order: 3_u8, data: () },
+    ///         ],
+    ///     ]);
+    ///
+    /// let mut rendered = String::new();
+    /// trace
+    ///     .write_foata_like(&mut rendered, |order| format!("op{order}"))
+    ///     .unwrap();
+    ///
+    /// assert_eq!(rendered, "{op1} · {op2,op3}");
+    /// ```
     pub fn write_foata_like<W: fmt::Write>(
         &self,
         f: &mut W,
@@ -400,24 +1163,7 @@ impl<O, D> TraceKey<O, D> {
     where
         O: Op,
     {
-        if self.levels.is_empty() {
-            return write!(f, "∅");
-        }
-
-        for (i, level) in self.levels.iter().enumerate() {
-            if i > 0 {
-                write!(f, " · ")?;
-            }
-            write!(f, "{{")?;
-            for (j, op) in level.iter().enumerate() {
-                if j > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", map(&op.order))?;
-            }
-            write!(f, "}}")?;
-        }
-        Ok(())
+        self.view().write_foata_like(f, &mut map)
     }
 }
 
@@ -437,7 +1183,9 @@ mod tests {
 
     use crate::{
         dot,
-        half_edge::{involution::HedgePair, nodestore::DefaultNodeStore},
+        half_edge::{
+            builder::HedgeGraphBuilder, involution::HedgePair, nodestore::DefaultNodeStore, NoData,
+        },
         parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
     };
 
@@ -453,6 +1201,45 @@ mod tests {
     fn remove_chars(source: &str, remove: &str) -> String {
         let to_remove: HashSet<char> = remove.chars().collect();
         source.chars().filter(|c| !to_remove.contains(c)).collect()
+    }
+
+    struct FrontierGraph {
+        graph: HedgeGraph<&'static str, &'static str, NoData, DefaultNodeStore<&'static str>>,
+        extra_independent_pairs: &'static [(&'static str, &'static str)],
+    }
+
+    impl Key<&'static str> for FrontierGraph {
+        fn key(&self, e: EdgeIndex) -> &'static str {
+            self.graph[e]
+        }
+    }
+
+    impl Independence<HiddenData<&'static str, EdgeIndex>> for FrontierGraph {
+        fn independent(
+            &self,
+            a: &HiddenData<&'static str, EdgeIndex>,
+            b: &HiddenData<&'static str, EdgeIndex>,
+        ) -> bool {
+            self.extra_independent_pairs.contains(&(a.order, b.order))
+        }
+    }
+
+    impl TraceUnfold<&'static str> for FrontierGraph {
+        type EdgeData = &'static str;
+        type NodeData = &'static str;
+        type NodeStorage = DefaultNodeStore<&'static str>;
+        type HedgeData = NoData;
+
+        fn graph(
+            &self,
+        ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage>
+        {
+            &self.graph
+        }
+
+        fn key(&self, e: EdgeIndex) -> &'static str {
+            self.graph[e]
+        }
     }
 
     impl Key<String> for HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> {
@@ -628,6 +1415,123 @@ mod tests {
           10:34:s	-> 17:35:s	 [id=17  color="red:blue;0.5" label="e7"];
         }
         "#);
+    }
+
+    #[test]
+    fn dependency_frontier_walkthrough() {
+        let mut builder = HedgeGraphBuilder::<&'static str, &'static str>::new();
+        let empty = builder.add_node("empty");
+        let a = builder.add_node("A");
+        let b = builder.add_node("B");
+        let ab = builder.add_node("AB");
+        let bd = builder.add_node("BD");
+        let abd = builder.add_node("ABD");
+
+        builder.add_edge(empty, a, "A", true);
+        builder.add_edge(empty, b, "B", true);
+        builder.add_edge(a, ab, "B", true);
+        builder.add_edge(b, ab, "A", true);
+        builder.add_edge(b, bd, "D", true);
+        builder.add_edge(ab, abd, "D", true);
+        builder.add_edge(bd, abd, "A", true);
+
+        let graph = FrontierGraph {
+            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            extra_independent_pairs: &[("A", "B"), ("B", "A"), ("A", "D"), ("D", "A")],
+        };
+        println!("{}", graph.graph.dot_display(&graph.graph.full_filter()));
+        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        let unfolded = unfolded.map(|_, _, key| key);
+        println!(
+            "{}",
+            unfolded.graph.dot_label(&unfolded.graph.full_filter())
+        );
+
+        let mut lines = unfolded
+            .iter_nodes()
+            .map(|(node, _, key)| {
+                let mut entry = key.to_string();
+                let frontiers = unfolded
+                    .leaf_op_dependency_frontiers(node, &graph)
+                    .map(|(op, frontier)| format!("{} -> {}", op.order, unfolded[frontier]))
+                    .collect::<Vec<_>>();
+                // frontiers.sort();
+                if !frontiers.is_empty() {
+                    entry.push_str(" | ");
+                    entry.push_str(&frontiers.join(", "));
+                }
+                entry
+            })
+            .collect::<Vec<_>>();
+        lines.sort();
+
+        insta::assert_snapshot!(lines.join("\n"), @r#"
+        {A,B} | A -> ∅, B -> ∅
+        {A,B} · {D} | D -> {A,B}
+        {A} | A -> ∅
+        {B} | B -> ∅
+        {B} · {A,D} | A -> ∅, D -> {B}
+        {B} · {D} | D -> {B}
+        ∅
+        "#);
+    }
+
+    #[test]
+    fn multi_parent_node_need_not_have_matching_leaf_count() {
+        let mut builder = HedgeGraphBuilder::<&'static str, &'static str>::new();
+        let empty = builder.add_node("empty");
+        let a = builder.add_node("A");
+        let b = builder.add_node("B");
+        let ab = builder.add_node("AB");
+        let bd = builder.add_node("BD");
+        let abd = builder.add_node("ABD");
+
+        builder.add_edge(empty, a, "A", true);
+        builder.add_edge(empty, b, "B", true);
+        builder.add_edge(a, ab, "B", true);
+        builder.add_edge(b, ab, "A", true);
+        builder.add_edge(b, bd, "D", true);
+        builder.add_edge(ab, abd, "D", true);
+        builder.add_edge(bd, abd, "A", true);
+
+        let graph = FrontierGraph {
+            graph: builder.build::<DefaultNodeStore<&'static str>>(),
+            extra_independent_pairs: &[("A", "B"), ("B", "A")],
+        };
+        println!("{}", graph.graph.dot_label(&graph.graph.full_filter()));
+        let unfolded = graph.trace_unfold::<DefaultNodeStore<usize>>(empty);
+        println!(
+            "{}",
+            unfolded.graph.dot_label(&unfolded.graph.full_filter())
+        );
+        let node = unfolded
+            .iter_nodes()
+            .find_map(|(node, _, key)| (key.to_string() == "{A,B} · {D}").then_some(node))
+            .expect("expected canonical node {A,B} · {D}");
+
+        let parent_labels = unfolded
+            .parents(node)
+            .map(|(parent, _)| unfolded[parent].to_string())
+            .collect::<BTreeSet<_>>();
+        let leaf_labels = unfolded
+            .leaf_ops(node)
+            .map(|op| op.order)
+            .collect::<Vec<_>>();
+
+        insta::assert_snapshot!(
+            format!(
+                "node={}\nparents={:?}\nleaf_ops={:?}",
+                unfolded[node], parent_labels, leaf_labels
+            ),
+            @r#"
+        node={A,B} · {D}
+        parents={"{A,B}", "{B} · {D}"}
+        leaf_ops=["D"]
+        "#
+        );
+
+        assert_eq!(unfolded.parents(node).count(), 2);
+        assert_eq!(unfolded.leaf_ops(node).count(), 1);
     }
 
     // #[test]

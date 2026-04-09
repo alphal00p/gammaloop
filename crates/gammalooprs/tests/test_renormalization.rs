@@ -3,10 +3,10 @@ use gammalooprs::{
     graph::{Graph, parse::IntoGraph},
     initialisation::test_initialise,
     model::Model,
-    processes::Amplitude,
-    utils::load_generic_model,
+    processes::{Amplitude, AmplitudeGraph},
+    utils::{load_generic_model, symbolica_ext::LogPrint},
     uv::{
-        UVgenerationSettings,
+        RenormalizationPart, UVgenerationSettings,
         settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
     },
 };
@@ -56,7 +56,7 @@ fn scalar_pole_part() {
 }
 
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
-    (model
+    ((model
         .apply_parameter_replacement_rules(
             &model.apply_coupling_replacement_rules(&atom.simplify_color().expand()),
         )
@@ -71,6 +71,8 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
         / -8)
         .expand_num()
+        * Atom::i())
+    .expand_num()
 }
 
 #[test]
@@ -841,43 +843,144 @@ fn finite_part_ghost_2loop() {
         },
         ..Default::default()
     };
+
+    let new_settings = UVgenerationSettings {
+        use_legacy: false,
+        cached: false,
+        ..settings.clone()
+    };
+
     let model = load_generic_model("sm");
+
+    #[derive(Debug)]
+    struct KernelStatsSnapshot {
+        cached_kernel_hits: usize,
+        uncached_kernel_hits: usize,
+        forest_size: usize,
+    }
+
+    impl std::fmt::Display for KernelStatsSnapshot {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "cached_kernel_hits={}, uncached_kernel_hits={}, forest_size={}",
+                self.cached_kernel_hits, self.uncached_kernel_hits, self.forest_size
+            )
+        }
+    }
+
+    fn assert_new_paths_match_legacy(
+        amp: &mut AmplitudeGraph,
+        a: RenormalizationPart,
+        new_settings: &UVgenerationSettings,
+    ) -> KernelStatsSnapshot {
+        let new_part = amp.renormalization_part(new_settings).unwrap();
+        let uncached_kernel_hits = new_part.stats.kernel_hits;
+        assert_eq!(
+            new_part.expression,
+            a.expression.clone(),
+            "New renormalization for graph {} gives:\n{}\n vs old\n{}",
+            amp.graph.name,
+            new_part.log_print(Some(120)),
+            a.log_print(Some(120))
+        );
+
+        let mut cached_settings = new_settings.clone();
+        cached_settings.cached = true;
+
+        let new_cached_part = amp.renormalization_part(&cached_settings).unwrap();
+        let cached_kernel_hits = new_cached_part.stats.kernel_hits;
+        assert_eq!(
+            new_cached_part.expression,
+            a.expression.clone(),
+            "New cached renormalization for graph {} gives:\n{}\n vs old\n{}",
+            amp.graph.name,
+            new_cached_part.log_print(Some(120)),
+            a.log_print(Some(120))
+        );
+
+        let cached_stats = new_cached_part.stats;
+        let forest_size = cached_stats.forest_node_count;
+        assert!(
+            cached_kernel_hits < uncached_kernel_hits,
+            "Cached path for graph {} did not reduce kernel hits: cached={}, uncached={}",
+            amp.graph.name,
+            cached_kernel_hits,
+            uncached_kernel_hits
+        );
+
+        KernelStatsSnapshot {
+            cached_kernel_hits,
+            uncached_kernel_hits,
+            forest_size,
+        }
+    }
 
     let a = amp.graphs[0].renormalization_part(&settings).unwrap();
     //p1.p1*i_*gs^4*ca^2*rat( - 3/16*ep^-2 + 5/32*ep^-1)
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3/16+5/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
     );
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], a, &new_settings);
+    insta::assert_snapshot!(
+        stats.to_string(),
+        @"cached_kernel_hits=7, uncached_kernel_hits=10, forest_size=8"
+    );
 
-    // //p1.p1*i_*gs^4*ca^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
-    // let a = amp.graphs[1].renormalization_part(&settings).unwrap();
-    // insta::assert_snapshot!(
-    //    align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1/16+1/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
-    // ); //-1 * target
+    //p1.p1*i_*gs^4*ca^2*rat( - 1/16*ep^-2 + 1/32*ep^-1)
+    let a = amp.graphs[1].renormalization_part(&settings).unwrap();
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1/16+1/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+    ); //-1 * target
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], a, &new_settings);
+    insta::assert_snapshot!(
+        stats.to_string(),
+        @"cached_kernel_hits=7, uncached_kernel_hits=10, forest_size=8"
+    );
 
-    // //p1.p1*i_*gs^4*ca^2*rat( - 1/8*ep^-2 + 1/16*ep^-1)
-    // let a = amp.graphs[2].renormalization_part(&settings).unwrap();
-    // insta::assert_snapshot!(
-    //    align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1/8+1/16*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
-    // ); //-1 * target
+    //p1.p1*i_*gs^4*ca^2*rat( - 1/8*ep^-2 + 1/16*ep^-1)
+    let a = amp.graphs[2].renormalization_part(&settings).unwrap();
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1/8+1/16*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+    ); //-1 * target
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], a, &new_settings);
+    insta::assert_snapshot!(
+        stats.to_string(),
+        @"cached_kernel_hits=7, uncached_kernel_hits=10, forest_size=8"
+    );
 
-    // //p1.p1*i_*gs^4*ca*nf*rat(1/4*ep^-2 - 5/24*ep^-1)
-    // let a = amp.graphs[3].renormalization_part(&settings).unwrap();
-    // insta::assert_snapshot!(
-    //    align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5/8*ε+3/4)*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
-    // );
+    //p1.p1*i_*gs^4*ca*nf*rat(1/4*ep^-2 - 5/24*ep^-1)
+    let a = amp.graphs[3].renormalization_part(&settings).unwrap();
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5/8*ε+3/4)*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+    );
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], a, &new_settings);
+    insta::assert_snapshot!(
+        stats.to_string(),
+        @"cached_kernel_hits=3, uncached_kernel_hits=4, forest_size=4"
+    );
 
-    // //p1.p1*i_*gs^4*ca^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
-    // let a = amp.graphs[4].renormalization_part(&settings).unwrap();
-    // insta::assert_snapshot!(
-    //    align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5/8+35/48*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
-    // ); //-1/2 * target
+    //p1.p1*i_*gs^4*ca^2*rat( - 5/8*ep^-2 + 35/48*ep^-1)
+    let a = amp.graphs[4].renormalization_part(&settings).unwrap();
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-5/8+35/48*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)"
+    ); //-1/2 * target
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], a, &new_settings);
+    insta::assert_snapshot!(
+        stats.to_string(),
+        @"cached_kernel_hits=7, uncached_kernel_hits=10, forest_size=8"
+    );
 
-    // //p1.p1*i_*gs^4*ca^2*rat(1/24*ep^-1)
-    // let a = amp.graphs[5].renormalization_part(&settings).unwrap();
-    // insta::assert_snapshot!(
-    //    align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
-    // );
+    //p1.p1*i_*gs^4*ca^2*rat(1/24*ep^-1)
+    let a = amp.graphs[5].renormalization_part(&settings).unwrap();
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"1/24*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-1)"
+    );
+    let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], a, &new_settings);
+    insta::assert_snapshot!(
+        stats.to_string(),
+        @"cached_kernel_hits=7, uncached_kernel_hits=10, forest_size=8"
+    );
 }
 
 #[test]
