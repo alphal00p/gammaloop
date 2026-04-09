@@ -185,10 +185,10 @@ momenta = [
 helicities = [1, 1, 0, 0, 0]
 
 [sampling]
-type = "discrete_graph_sampling"
-sample_orientations = true
-[sampling.sampling_type]
-subtype = "discrete_multi_channeling"
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
 
 [stability]
 rotation_axis = []

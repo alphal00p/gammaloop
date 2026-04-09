@@ -5,18 +5,18 @@ folder = "./examples/cli/epem_a_ttxh/LO/state"
 [[command_blocks]]
 name = "generate"
 commands = [
-    "import model sm-default.json",
-    "set global kv global.n_cores.feyngen=10",
+  "import model sm-default.json",
+  "set global kv global.n_cores.feyngen=10",
 
-    "remove processes",
-    """generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0]
+  "remove processes",
+  """generate xs e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==0 QED^2==6 [{{2}} QCD=0]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_tth -i LO""",
-    "save dot",
-    "duplicate integrand -p epem_a_tth -i LO --output_process_name epem_a_tth --output_integrand_name LO_semi_inclusive",
+  "save dot",
+  "duplicate integrand -p epem_a_tth -i LO --output_process_name epem_a_tth --output_integrand_name LO_semi_inclusive",
 
-    "save state -o"
+  "save state -o",
 ]
 [default_runtime_settings.kinematics]
 e_cm = 1000.0
@@ -25,24 +25,8 @@ e_cm = 1000.0
 type = "constant"
 
 [default_runtime_settings.kinematics.externals.data]
-momenta = [
-   	[
-    	 500.0,
-    	 0.0,
-    	 0.0,
-    	 500.0,
-	],
-   	[
-    	 500.0,
-    	 0.0,
-    	 0.0,
-    	-500.0,
-	],
-]
-helicities = [
-    "summed_averaged",
-	"summed_averaged",
-]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
 
 [default_runtime_settings.general]
 evaluator_method = "SummedFunctionMap"
@@ -55,7 +39,7 @@ mu_r = 91.188
 m_uv = 91.188
 
 [default_runtime_settings.integrator.observables_output]
-format="hwu"
+format = ["hwu", "json"]
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
@@ -94,50 +78,38 @@ disable_tropical_generation = false
 [[command_blocks]]
 name = "integrate"
 commands = [
-    "run set_model_parameters",
-    "run set_differential_quantities",
-    "run set_differential_observables",
-    "run set_differential_selectors",
+  "run set_model_parameters",
+  "run set_differential_quantities",
+  "run set_differential_observables",
+  "run set_differential_selectors",
 
-    """set process -p epem_a_tth -i LO string '
+  """set process string '
     [sampling]
     graphs = "monte_carlo"
-    orientations = "summed"
+    orientations = "monte_carlo"
     lmb_multichanneling = true
-    # For importance-sampling over channels, use the quantity below
-    # lmb_channels = "monte_carlo"
-    lmb_channels = "summed"
+    lmb_channels = "monte_carlo"
     '""",
 
-    """set process -p epem_a_tth -i LO_semi_inclusive string '
-    [sampling]
-    graphs = "monte_carlo"
-    orientations = "summed"
-    lmb_multichanneling = true
-    # For importance-sampling over channels, use the quantity below
-    # lmb_channels = "monte_carlo"
-    lmb_channels = "summed"
-    '""",
-
-    """set process -p epem_a_tth -i LO kv
+  """set process -p epem_a_tth -i LO kv
         integrator.n_increase=0
-        integrator.n_start=1000000
-        integrator.n_max=10000000000
+        integrator.n_start=50000
+        integrator.n_max=300000
         integrator.seed=1337
 
     """,
-    # --show-max-weight-info-for-discrete-bins
-	# --batch-size 100000
-	# --no-stream-iterations
-	# --show-max-weight-info-for-discrete-bins
-	# --no-stream-iterations
-	#			 --show-phase both
-	#			 --show-top-discrete-grid
-	#			 --show-discrete-contributions-sum
-	#			 --sort-contributions integral
-	#			 --show-max-weight-info
-	#			 --renderer tabled
-	"""integrate -p epem_a_tth -i LO -p epem_a_tth -i LO_semi_inclusive --n-cores 5
+  # --show-max-weight-info-for-discrete-bins
+  # --batch-size 100000
+  # --no-stream-iterations
+  # --show-max-weight-info-for-discrete-bins
+  # --no-stream-iterations
+  #			 --show-phase both
+  #			 --show-top-discrete-grid
+  #			 --show-discrete-contributions-sum
+  #			 --sort-contributions integral
+  #			 --show-max-weight-info
+  #			 --renderer tabled
+  """integrate -p epem_a_tth -i LO -p epem_a_tth -i LO_semi_inclusive --n-cores 5
                  --target epem_a_tth@LO=1.563e-3,0.0 epem_a_tth@LO_semi_inclusive=5.329e-4,0.0
 				 --renderer ratatui
 				 --batch-size 10000
@@ -147,29 +119,37 @@ commands = [
 				 --show-discrete-contributions-sum
 				 --write-results-for-each-iteration
                  --restart
-    """
+    """,
 ]
 
 [[command_blocks]]
 name = "set_model_parameters"
 commands = [
-    "set model MT=173.0",
-    "set model WT=0.0",
-    "set model ymt=173.0",
-    "set model aS=0.118",
-    "set model aEWM1=132.507",
-    "set model Gf=1.166390e-05",
-    "set model MZ=91.188",
+  "set model MT=173.0",
+  "set model WT=0.0",
+  "set model ymt=173.0",
+  "set model aS=0.118",
+  "set model aEWM1=132.507",
+  "set model Gf=1.166390e-05",
+  "set model MZ=91.188",
 
 ]
 
 [[command_blocks]]
 name = "set_differential_quantities"
-commands = [
-  """set process -p epem_a_tth -i LO string '
+commands = ["""set process -p epem_a_tth -i LO string '
 
-[quantities.cross_section]
-type = "cross_section"
+[quantities.integral]
+type = "integral"
+
+[quantities.graph_id]
+type = "graph_id"
+
+[quantities.orientation_id]
+type = "orientation_id"
+
+[quantities.lmb_channel_id]
+type = "lmb_channel_id"
 
 [quantities.jet_pt]
 type = "jet"
@@ -297,9 +277,7 @@ type = "particle"
 computation = "scalar"
 pdgs = [25,]
 quantity = "CosTheta"
-'""",
-
-"""set process -p epem_a_tth -i LO_semi_inclusive string '
+'""", """set process -p epem_a_tth -i LO_semi_inclusive string '
 
 [quantities.higgs_cos_theta]
 type = "particle"
@@ -313,13 +291,27 @@ computation = "scalar"
 pdgs = [25,]
 quantity = "E"
 
-'"""
-]
+'"""]
 
 [[command_blocks]]
 name = "set_differential_selectors"
-commands = [
-  """set process -p epem_a_tth -i LO_semi_inclusive string '
+commands = ["""set process -p epem_a_tth -i LO string '
+
+[selectors.graph_0_only]
+quantity = "graph_id"
+active = false
+selector = "discrete_range"
+min = 0
+max = 0
+
+[selectors.graph_1_only]
+quantity = "graph_id"
+active = false
+selector = "discrete_range"
+min = 1
+max = 1
+
+'""", """set process -p epem_a_tth -i LO_semi_inclusive string '
 
 [selectors.higgs_energy_cut]
 quantity = "higgs_energy"
@@ -335,22 +327,69 @@ entry_selection = "leading_only"
 min = -0.6
 max = 0.6
 
-'"""
-]
+'"""]
 
 [[command_blocks]]
 name = "set_differential_observables"
-commands = [
-  """set process -p epem_a_tth -i LO string '
+commands = ["""set process -p epem_a_tth -i LO string '
 
-[observables.cross_section]
+[observables.integral]
 title = "xs"
 type_description = "AL,LO"
-quantity = "cross_section"
+quantity = "integral"
 phase = "real"
-x_min = 0.0
-x_max = 1.0
-n_bins = 1
+kind = "discrete"
+domain = { type = "single_bin" }
+labels = { type = "custom", labels = ["total integral"] }
+
+[observables.graph_id]
+title = "graph"
+type_description = "AL,LO"
+quantity = "graph_id"
+phase = "real"
+kind = "discrete"
+domain = { type = "graph_ids" }
+labels = { type = "graph_name" }
+
+[observables.graph_0_orientation_id]
+title = "graph 0 orientation"
+type_description = "AL,LO"
+quantity = "orientation_id"
+selections = ["graph_0_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "orientation_ids" }
+labels = { type = "orientation" }
+
+[observables.graph_1_orientation_id]
+title = "graph 1 orientation"
+type_description = "AL,LO"
+quantity = "orientation_id"
+selections = ["graph_1_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "orientation_ids" }
+labels = { type = "orientation" }
+
+[observables.graph_0_lmb_channel_id]
+title = "graph 0 lmb channel"
+type_description = "AL,LO"
+quantity = "lmb_channel_id"
+selections = ["graph_0_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "lmb_channel_ids" }
+labels = { type = "lmb_channel_edge_ids" }
+
+[observables.graph_1_lmb_channel_id]
+title = "graph 1 lmb channel"
+type_description = "AL,LO"
+quantity = "lmb_channel_id"
+selections = ["graph_1_only"]
+phase = "real"
+kind = "discrete"
+domain = { type = "lmb_channel_ids" }
+labels = { type = "lmb_channel_edge_ids" }
 
 # Higgs observables
 
@@ -530,9 +569,7 @@ n_bins = 60
 quantity = "jet_count"
 entry_selection = "all"
 phase = "real"
-x_min = 0.0
-x_max = 2.0
-n_bins = 2
+kind = "discrete"
+domain = { type = "explicit_range", min = 0, max = 1 }
 
-'"""
-]
+'"""]

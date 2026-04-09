@@ -1005,7 +1005,7 @@ impl Integrate {
                 .as_deref()
                 .map(str::trim)
                 .filter(|name| !name.is_empty())
-                .map(|name| format!("{name}_integration_workspace"))
+                .map(|name| format!("integration_workspace_{name}"))
                 .unwrap_or_else(|| "integration_workspace".to_string());
             PathBuf::from(".").join(workspace_name)
         } else {
@@ -1687,6 +1687,11 @@ impl Integrate {
             });
         }
 
+        global_cli_settings.ensure_write_target_outside_active_state(
+            &workspace_path,
+            "create or update the integration workspace",
+        )?;
+
         let selected_slots = self.resolve_selected_slots(state)?;
 
         if self.restart && workspace_path.exists() {
@@ -1809,7 +1814,7 @@ mod tests {
     use super::ResolvedIntegrandSlot;
     use super::{ContributionSortOption, DashboardKeyAction, ShowPhaseOption, TabledKeyAction};
     use crate::{
-        state::{CommandHistory, ProcessRef},
+        state::{CommandHistory, ProcessRef, State},
         CLISettings, Commands, SessionSettings, StateSettings,
     };
     use clap::Parser;
@@ -1858,7 +1863,7 @@ mod tests {
 
         assert_eq!(
             integrate.default_workspace_path(&settings),
-            PathBuf::from("./gg_hhh_1l_integration_workspace")
+            PathBuf::from("./integration_workspace_gg_hhh_1l")
         );
 
         settings.state.name = None;
@@ -1866,6 +1871,29 @@ mod tests {
             integrate.default_workspace_path(&settings),
             PathBuf::from("./integration_workspace")
         );
+    }
+
+    #[test]
+    fn read_only_state_rejects_workspace_inside_active_state() {
+        let integrate = Integrate {
+            workspace_path: Some(PathBuf::from("/tmp/saved_state/integration_workspace")),
+            ..Integrate::default()
+        };
+        let settings = CLISettings {
+            state: StateSettings {
+                folder: PathBuf::from("/tmp/saved_state"),
+                ..StateSettings::default()
+            },
+            session: SessionSettings {
+                read_only_state: true,
+                ..SessionSettings::default()
+            },
+            ..Default::default()
+        };
+        let err = integrate
+            .run(&mut State::new_test(), &settings)
+            .unwrap_err();
+        assert!(format!("{err:?}").contains("--read-only-state"));
     }
 
     #[test]

@@ -132,6 +132,36 @@ fn load_settings_history(path: &Path) -> Result<Option<GlobalSettings>> {
     Ok(None)
 }
 
+fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Vec<PathBuf>> {
+    let mut saved_dirs = Vec::new();
+
+    for entry in fs::read_dir(root).with_context(|| format!("Error reading {}", root.display()))? {
+        let Ok(entry) = entry else {
+            debug!("Error reading entry");
+            continue;
+        };
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let path = entry.path();
+        if !path.join(expected_binary).is_file() {
+            debug!(
+                "Skipping helper directory {} while loading {}s because '{}' is missing",
+                path.display(),
+                kind,
+                expected_binary
+            );
+            continue;
+        }
+
+        saved_dirs.push(path);
+    }
+
+    saved_dirs.sort();
+    Ok(saved_dirs)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ProcessDefinition {
@@ -464,25 +494,7 @@ impl Process {
                 .context("Error decoding process definition")?;
 
         let mut collection = ProcessCollection::new_amplitude();
-
-        for entry in fs::read_dir(path.as_ref())
-            .context(format!("Error reading {}", path.as_ref().display()))?
-        {
-            let Ok(entry) = entry else {
-                debug!("Error reading entry");
-                continue;
-            };
-            if entry.file_type()?.is_file() {
-                continue; //skip def.bin, amplitudes are in folders
-            }
-            let path = entry.path();
-            if !path.join("amp.bin").is_file() {
-                debug!(
-                    "skipping non-amplitude directory while loading process: {}",
-                    path.display()
-                );
-                continue;
-            }
+        for path in saved_child_dirs(path.as_ref(), "amp.bin", "amplitude")? {
             debug!("loading amplitude at {}", path.display());
             let amp = Amplitude::load(path, context).context("Error loading amplitude")?;
 
@@ -506,25 +518,7 @@ impl Process {
 
         let mut collection = ProcessCollection::new_cross_section();
         let settings_history = load_settings_history(path.as_ref())?;
-
-        for entry in fs::read_dir(path.as_ref())
-            .context(format!("error reading {}", path.as_ref().display()))?
-        {
-            let Ok(entry) = entry else {
-                debug!("Error reading entry");
-                continue;
-            };
-            if entry.file_type()?.is_file() {
-                continue; //skip def.bin, cross sections are in folders
-            }
-            let path = entry.path();
-            if !path.join("cs.bin").is_file() {
-                debug!(
-                    "skipping non-cross-section directory while loading process: {}",
-                    path.display()
-                );
-                continue;
-            }
+        for path in saved_child_dirs(path.as_ref(), "cs.bin", "cross section")? {
             debug!("loading cross section at {}", path.display());
             let cs = CrossSection::load(path, context).context("Error loading cross section")?;
 
@@ -1148,7 +1142,26 @@ impl ProcessCollection {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
     use crate::{GammaLoopContextContainer, utils::load_generic_model};
+
+    fn fresh_temp_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "gammalooprs-{name}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
 
     #[test]
     fn test_proc_definition_encode() {
@@ -1169,5 +1182,21 @@ mod tests {
             bincode::decode_from_slice_with_context(&encoded, bincode::config::standard(), context)
                 .unwrap();
         assert_eq!(def, decoded);
+    }
+
+    #[test]
+    fn saved_child_dirs_skip_cross_section_compile_artifact_folders() {
+        let temp = fresh_temp_dir("saved-child-dirs");
+        let saved_dir = temp.join("NLO");
+        let compiled_dir = temp.join("cs_NLO");
+
+        fs::create_dir_all(&saved_dir).unwrap();
+        fs::write(saved_dir.join("cs.bin"), []).unwrap();
+        fs::create_dir_all(compiled_dir.join("integrand").join("GL08")).unwrap();
+
+        let dirs = super::saved_child_dirs(&temp, "cs.bin", "cross section").unwrap();
+
+        assert_eq!(dirs, vec![saved_dir]);
+        fs::remove_dir_all(temp).unwrap();
     }
 }

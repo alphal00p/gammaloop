@@ -43,7 +43,7 @@ result/
 examples/amplitude_computation/GL_*
 gammaloop_state/
 examples/cli/epem_a_ttxh/NNLO
-examples/**/state/
+examples/**/*state/
 examples/**/OLD_*
 examples/**/gammaloop_state/
 integration-tests/workspace/

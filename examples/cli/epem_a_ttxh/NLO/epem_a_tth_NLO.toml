@@ -20,6 +20,9 @@ name = "generate_diagrams"
 # GL30 -> F.7 ->  -1.18480e-04
 # Total: -1.3205e-04
 # --select-graphs GL00 GL02 GL06 GL08 GL10 GL12 GL18 GL20 GL22 GL26 GL30
+# --select-graphs GL08
+# --select-graphs GL26
+# --loop-momentum-bases GL26=2,4,11
 commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
@@ -29,7 +32,8 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_tth -i NLO
-      --select-graphs GL08
+      --global-prefactor-num "1𝑖"
+	  --select-graphs GL08 
       --only-diagrams""",
     "save dot",
 ]
@@ -80,7 +84,7 @@ mu_r = 91.188
 m_uv = 91.188
 
 [default_runtime_settings.integrator.observables_output]
-format="hwu"
+format = ["hwu","json"]
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
@@ -128,20 +132,10 @@ commands = [
     "run set_differential_observables",
     "run set_differential_selectors",
 
-    """set process -p epem_a_tth -i NLO string '
+    """set process -p epem_a_tth string '
     [sampling]
     graphs = "monte_carlo"
-    orientations = "summed"
-    lmb_multichanneling = true
-    # For importance-sampling over channels, use the quantity below
-    # lmb_channels = "monte_carlo"
-    lmb_channels = "summed"
-    '""",
-
-    """set process -p epem_a_tth -i NLO_semi_inclusive string '
-    [sampling]
-    graphs = "monte_carlo"
-    orientations = "summed"
+    orientations = "monte_carlo"
     lmb_multichanneling = true
     # For importance-sampling over channels, use the quantity below
     # lmb_channels = "monte_carlo"
@@ -196,8 +190,8 @@ name = "set_differential_quantities"
 commands = [
   """set process -p epem_a_tth -i NLO string '
 
-[quantities.cross_section]
-type = "cross_section"
+[quantities.integral]
+type = "integral"
 
 [quantities.jet_pt]
 type = "jet"
@@ -371,14 +365,14 @@ name = "set_differential_observables"
 commands = [
   """set process -p epem_a_tth -i NLO string '
 
-[observables.cross_section]
+[observables.integral]
 title = "xs"
 type_description = "AL,NLO"
-quantity = "cross_section"
+quantity = "integral"
 phase = "real"
-x_min = 0.0
-x_max = 1.0
-n_bins = 1
+kind = "discrete"
+domain = { type = "single_bin" }
+labels = { type = "custom", labels = ["total integral"] }
 
 # Higgs observables
 
@@ -558,9 +552,8 @@ n_bins = 60
 quantity = "jet_count"
 entry_selection = "all"
 phase = "real"
-x_min = 0.0
-x_max = 2.0
-n_bins = 2
+kind = "discrete"
+domain = { type = "explicit_range", min = 0, max = 1 }
 
 '"""
 ]

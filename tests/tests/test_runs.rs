@@ -55,5 +55,7 @@ mod photonic;
 mod smoke;
 #[path = "test_runs/spin_sums.rs"]
 mod spin_sums;
+#[path = "test_runs/test_integrated_uv_cts.rs"]
+mod test_integrated_uv_cts;
 #[path = "test_runs/utils.rs"]
 mod utils;

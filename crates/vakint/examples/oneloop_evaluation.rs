@@ -8,9 +8,12 @@ fn main() {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
         integral_normalization_factor: vakint::LoopNormalizationFactor::MSbar,
+        //integral_normalization_factor: vakint::LoopNormalizationFactor::Custom("1".into()),
         run_time_decimal_precision: 16,
         mu_r_sq_symbol: "test::mu_r_sq".to_string(),
-        evaluation_order: EvaluationOrder::alphaloop_only(),
+        //evaluation_order: EvaluationOrder::alphaloop_only(),
+        number_of_terms_in_epsilon_expansion: 2,
+        evaluation_order: EvaluationOrder::matad_only(None),
         ..VakintSettings::default()
     };
     let vakint = Vakint::new().unwrap();
@@ -38,6 +41,7 @@ fn main() {
     // )
     // .unwrap();
 
+    /*
     let mut integral = symbolica::try_parse!(
         "(
              (3+1𝑖)*test::myMUVI*test::myMUV*((vakint::k(3,mink4(4,11))+vakint::p(1,mink4(4,11)))*(vakint::k(3,mink4(4,22))+vakint::p(2,mink4(4,22))))^2
@@ -46,6 +50,13 @@ fn main() {
     )"
     )
     .unwrap();
+    */
+
+    let mut integral = symbolica::try_parse!(
+        "vakint::topo(vakint::prop(1,vakint::edge(0,0),vakint::k(0),oneloop_evaluation::mUVI^2,2))"
+    )
+    .unwrap();
+
     /*
         let mut integral = symbolica::try_parse!(
             "(
@@ -84,11 +95,14 @@ fn main() {
 
     let mut params = HashMap::default();
     params.insert(
-        "oneloop_evaluation::MUVsq".into(),
+        "oneloop_evaluation::mUVI".into(),
         settings.real_to_prec("1.0"),
     );
     params.insert("test::myMUV".into(), settings.real_to_prec("1.0"));
-    params.insert("test::myMUVI".into(), settings.real_to_prec("1.0"));
+    params.insert(
+        "oneloop_evaluation::mUVI".into(),
+        settings.real_to_prec("1.0"),
+    );
     params.insert("test::mu_r_sq".into(), settings.real_to_prec("1.0"));
     let numerical_partial_eval = Vakint::partial_numerical_evaluation(
         &settings,

@@ -1488,19 +1488,23 @@ fn header_middle(
 }
 
 fn header_tail(cores: usize, elapsed_time: Duration, n_samples_evaluated: usize) -> StyledText {
+    let mut text = StyledText::new();
     if n_samples_evaluated == 0 {
-        return styled_colored("N/A /sample/core", TextStyle::red());
+        text.push_text("N/A /sample/core", TextStyle::red());
+    } else {
+        text.push_text(
+            format!(
+                "{} /sample/core",
+                utils::format_evaluation_time_from_f64(
+                    elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
+                )
+            ),
+            TextStyle::green().bold(),
+        );
     }
-
-    styled_colored(
-        format!(
-            "{} /sample/core",
-            utils::format_evaluation_time_from_f64(
-                elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
-            )
-        ),
-        TextStyle::blue().bold(),
-    )
+    text.push_text(" ", TextStyle::PLAIN);
+    text.push_text(format!("({cores} cores)"), TextStyle::blue().bold());
+    text
 }
 
 fn main_results_row(

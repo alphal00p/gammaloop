@@ -18,6 +18,9 @@ pub struct CutInfo {
     pub particle_pdgs: (SmallVec<[isize; 2]>, SmallVec<[isize; 4]>),
     pub cut_id: usize,
     pub graph_id: usize,
+    pub graph_group_id: Option<usize>,
+    pub orientation_id: Option<usize>,
+    pub lmb_channel_id: Option<usize>,
     pub lmb_channel_edge_ids: Option<SmallVec<[usize; 4]>>,
 }
 
@@ -485,8 +488,29 @@ impl fmt::Display for CutInfo {
                 value: self.graph_id.to_string(),
             },
             EventSummaryRow {
+                field: "graph group".to_string(),
+                value: self
+                    .graph_group_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "None".to_string()),
+            },
+            EventSummaryRow {
+                field: "orientation".to_string(),
+                value: self
+                    .orientation_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "None".to_string()),
+            },
+            EventSummaryRow {
                 field: "cut".to_string(),
                 value: self.cut_id.to_string(),
+            },
+            EventSummaryRow {
+                field: "lmb channel id".to_string(),
+                value: self
+                    .lmb_channel_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "None".to_string()),
             },
             EventSummaryRow {
                 field: "lmb channel".to_string(),
@@ -505,8 +529,32 @@ impl<T: FloatLike> fmt::Display for GenericEvent<T> {
                 value: self.cut_info.graph_id.to_string(),
             },
             EventSummaryRow {
+                field: "graph group".to_string(),
+                value: self
+                    .cut_info
+                    .graph_group_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "None".to_string()),
+            },
+            EventSummaryRow {
+                field: "orientation".to_string(),
+                value: self
+                    .cut_info
+                    .orientation_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "None".to_string()),
+            },
+            EventSummaryRow {
                 field: "cut".to_string(),
                 value: self.cut_info.cut_id.to_string(),
+            },
+            EventSummaryRow {
+                field: "lmb channel id".to_string(),
+                value: self
+                    .cut_info
+                    .lmb_channel_id
+                    .map(|value| value.to_string())
+                    .unwrap_or_else(|| "None".to_string()),
             },
             EventSummaryRow {
                 field: "lmb channel".to_string(),

@@ -15,6 +15,7 @@ use crate::{
             ChannelIndex, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             param_builder::LUParams,
+            prepare_buffered_event,
         },
     },
     model::Model,
@@ -75,7 +76,8 @@ use typed_index_collections::TiVec;
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample,
+    evaluate_sample, format_lmb_channel_label, format_orientation_label,
+    histogram_process_info_for_integrand,
 };
 
 pub mod export;
@@ -115,6 +117,7 @@ pub struct CrossSectionIntegrandData {
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
+    pub graph_to_group_id: Vec<usize>,
     // pub builder_cache: ParamBuilder<f64>,
 }
 
@@ -336,11 +339,13 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
         for a in self.data.graph_terms.iter_mut() {
             a.warm_up(&self.settings, model)?;
         }
-        self.event_processing_runtime
-            .set(EventProcessingRuntime::from_settings_with_model(
+        self.event_processing_runtime.set(
+            EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
                 model,
-            )?);
+                &histogram_process_info_for_integrand(self),
+            )?,
+        );
         Ok(())
     }
 
@@ -365,6 +370,14 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
+    }
+
+    fn graph_group_id_for_graph(&self, graph_id: usize) -> Option<usize> {
+        self.data.graph_to_group_id.get(graph_id).copied()
+    }
+
+    fn get_graph(&self, graph_id: usize) -> &Self::G {
+        &self.data.graph_terms[graph_id]
     }
 
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
@@ -693,6 +706,8 @@ impl CrossSectionGraphTerm {
 
         let mut new_event = GenericEvent::<T>::default();
         new_event.cut_info.cut_id = cut_id.0;
+        new_event.cut_info.orientation_id = momentum_sample.sample.orientation;
+        new_event.cut_info.lmb_channel_id = channel_id.map(usize::from);
         new_event.cut_info.lmb_channel_edge_ids =
             channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
         // Set initial momenta and PDGs for the event
@@ -805,6 +820,18 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.multi_channeling_setup.channels.len()
     }
 
+    fn orientation_label(&self, orientation_id: usize) -> Option<String> {
+        self.orientations
+            .get(OrientationID::from(orientation_id))
+            .map(format_orientation_label)
+    }
+
+    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String> {
+        Some(format_lmb_channel_label(
+            &self.multi_channeling_setup.channel_edge_ids(channel_id),
+        ))
+    }
+
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         self.estimated_scale = Some(
             self.graph
@@ -907,11 +934,6 @@ impl GraphTerm for CrossSectionGraphTerm {
         let mut cut_threshold_counterterms = TiVec::<CutId, Complex<F<T>>>::new();
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
-        let should_buffer_events_for_rotation =
-            rotation.is_identity() && settings.should_buffer_generated_events();
-        let needs_selector_events = event_processing_runtime
-            .as_deref()
-            .is_some_and(EventProcessingRuntime::has_selectors);
 
         let momentum_sample = if let Some((channel_id, _alpha)) = &channel_id {
             MomentumSample {
@@ -966,51 +988,28 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             debug!("solution: {:?}", solution);
 
-            let mut event_timing = Duration::ZERO;
-            let should_build_event = if rotation.is_identity() {
-                settings.should_generate_events()
-            } else {
-                needs_selector_events
-            };
-            let event = if should_build_event {
-                let start = Instant::now();
-                let mut generated = self.generate_event_for_cut::<T>(
-                    model,
-                    &solution,
-                    &momentum_sample,
-                    self.raised_data.raised_cut_groups[raised_cut].cuts[0],
-                    &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
-                    channel_id.as_ref().map(|(channel_id, _)| *channel_id),
-                )?;
-                generated.inverse_rotate(rotation);
-                event_timing += start.elapsed();
-                Some(generated)
-            } else {
-                None
-            };
+            let prepared_event = prepare_buffered_event(
+                settings,
+                rotation,
+                event_processing_runtime.as_deref_mut(),
+                || {
+                    let mut generated = self.generate_event_for_cut::<T>(
+                        model,
+                        &solution,
+                        &momentum_sample,
+                        self.raised_data.raised_cut_groups[raised_cut].cuts[0],
+                        &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
+                        channel_id.as_ref().map(|(channel_id, _)| *channel_id),
+                    )?;
+                    generated.inverse_rotate(rotation);
+                    Ok(generated)
+                },
+            )?;
+            differential_result.generated_event_count += prepared_event.generated_event_count;
+            differential_result.accepted_event_count += prepared_event.accepted_event_count;
+            differential_result.event_processing_time += prepared_event.event_processing_time;
 
-            let mut accepted_event = event;
-            let mut selectors_pass = true;
-            if let Some(evt) = accepted_event.as_mut() {
-                if rotation.is_identity() {
-                    differential_result.generated_event_count += 1;
-                }
-                let start = Instant::now();
-                if let Some(runtime) = event_processing_runtime.as_deref_mut() {
-                    selectors_pass = if rotation.is_identity() {
-                        runtime.process_event(evt)
-                    } else {
-                        runtime.process_event_for_selectors(evt)
-                    };
-                }
-                event_timing += start.elapsed();
-                if !selectors_pass || !should_buffer_events_for_rotation {
-                    accepted_event = None;
-                }
-            }
-            differential_result.event_processing_time += event_timing;
-
-            if !selectors_pass {
+            if !prepared_event.selectors_pass {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurance {
                     cut_threshold_counterterms.push(zero.clone());
@@ -1019,6 +1018,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 continue;
             }
 
+            let accepted_event = prepared_event.buffered_event;
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
             let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
             let mut kinematic_point = LUCTKinematicPoint::new();
@@ -1190,7 +1190,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                 debug!("pass_two_result: {:+16e}", pass_two_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                let bare_contribution = pass_two_result * prefactor; //   * Complex::new_im(-momentum_sample.one()).pow(subset.len() as u64),
+                let bare_contribution = pass_two_result
+                    * prefactor
+                    * Complex::new_im(momentum_sample.one()).pow(num_esurfaces as u64);
                 bare_cut_total += bare_contribution.clone();
                 cut_results.push(bare_contribution);
             }
@@ -1240,10 +1242,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     }
                 }
 
-                differential_result.accepted_event_count += 1;
-                if should_buffer_events_for_rotation {
-                    accepted_event_group.push(event);
-                }
+                accepted_event_group.push(event);
             }
         }
 

@@ -1507,18 +1507,23 @@ fn build_iteration_status_header_tail(
     elapsed_time: Duration,
     n_samples_evaluated: usize,
 ) -> String {
-    let average_sample_time = if n_samples_evaluated == 0 {
-        "N/A".red().to_string()
+    let sample_core_time = if n_samples_evaluated == 0 {
+        "N/A /sample/core".red().to_string()
     } else {
-        utils::format_evaluation_time_from_f64(
-            elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
+        format!(
+            "{} /sample/core",
+            utils::format_evaluation_time_from_f64(
+                elapsed_time.as_secs_f64() / (n_samples_evaluated as f64) * (cores as f64),
+            )
+            .bold()
+            .green()
         )
-        .bold()
-        .blue()
-        .to_string()
     };
 
-    format!("{average_sample_time} /sample/core")
+    format!(
+        "{sample_core_time} {}",
+        format!("({cores} cores)").bold().blue()
+    )
 }
 
 fn max_weight_row_descriptors(
@@ -2288,7 +2293,7 @@ where
     let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
 
     let mut n_samples_evaluated = 0;
-    let mut emitted_latest_observable_paths = vec![None; n_slots];
+    let mut emitted_latest_observable_paths = vec![Vec::new(); n_slots];
     clear_iteration_abort_request();
     'integrateLoop: while integration_state.num_points < n_max {
         // ensure we do not overshoot
@@ -2828,30 +2833,35 @@ fn archived_observable_output_path(
     workspace.join(format!("observables_final_iter_{iter:04}.{extension}"))
 }
 
-fn user_facing_observables_output_formats(
-    integrand: &Integrand,
-) -> &'static [ObservableFileFormat] {
+fn user_facing_observables_output_formats(integrand: &Integrand) -> Vec<ObservableFileFormat> {
     let Integrand::ProcessIntegrand(process_integrand) = integrand else {
-        return &[];
+        return Vec::new();
     };
     if !integrand.has_observables() {
-        return &[];
+        return Vec::new();
     }
 
-    match process_integrand
+    process_integrand
         .get_settings()
         .integrator
         .observables_output
-        .format
-    {
-        ObservableFileFormat::None => &[],
-        ObservableFileFormat::Json => &[ObservableFileFormat::Json],
-        ObservableFileFormat::Hwu => &[ObservableFileFormat::Json, ObservableFileFormat::Hwu],
-    }
+        .resolved_formats()
 }
 
 fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
-    !user_facing_observables_output_formats(integrand).is_empty()
+    let Integrand::ProcessIntegrand(process_integrand) = integrand else {
+        return false;
+    };
+    if !integrand.has_observables() {
+        return false;
+    }
+
+    !process_integrand
+        .get_settings()
+        .integrator
+        .observables_output
+        .resolved_formats()
+        .is_empty()
 }
 
 fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
@@ -2913,8 +2923,8 @@ fn write_observable_snapshot_archive(
     };
 
     for format in user_facing_observables_output_formats(integrand) {
-        let path = archived_observable_output_path(workspace, *format, iter);
-        integrand.write_observable_snapshots(&path, *format)?;
+        let path = archived_observable_output_path(workspace, format, iter);
+        integrand.write_observable_snapshots(&path, format)?;
     }
 
     Ok(())
@@ -2923,24 +2933,22 @@ fn write_observable_snapshot_archive(
 fn write_latest_observables_output(
     integrand: &Integrand,
     workspace: Option<&Path>,
-) -> Result<Option<PathBuf>> {
+) -> Result<Vec<PathBuf>> {
     if !user_facing_observables_output_enabled(integrand) {
-        return Ok(None);
+        return Ok(Vec::new());
     }
     let Some(workspace) = workspace else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
 
-    let mut primary_path = None;
+    let mut emitted_paths = Vec::new();
     for format in user_facing_observables_output_formats(integrand) {
-        let path = latest_observable_output_path(workspace, *format);
-        integrand.write_observable_snapshots(&path, *format)?;
-        if primary_path.is_none() {
-            primary_path = Some(path);
-        }
+        let path = latest_observable_output_path(workspace, format);
+        integrand.write_observable_snapshots(&path, format)?;
+        emitted_paths.push(path);
     }
 
-    Ok(primary_path)
+    Ok(emitted_paths)
 }
 
 fn write_integration_state_to_workspace(
@@ -2982,7 +2990,7 @@ fn workspace_relative_display_path(root: &Path, path: &Path) -> String {
 fn emit_results_output_summary(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
-    emitted_paths: &[Option<PathBuf>],
+    emitted_paths: &[Vec<PathBuf>],
 ) {
     let rendered = render_results_output_summary_table(workspace, slots, emitted_paths);
     let Some(rendered) = rendered else {
@@ -2995,7 +3003,7 @@ fn emit_results_output_summary(
 fn render_results_output_summary_table(
     workspace: Option<&Path>,
     slots: &[IntegrationSlot],
-    emitted_paths: &[Option<PathBuf>],
+    emitted_paths: &[Vec<PathBuf>],
 ) -> Option<String> {
     let mut summary_rows = Vec::new();
     if let Some(workspace) = workspace {
@@ -3009,20 +3017,25 @@ fn render_results_output_summary_table(
         ));
     }
 
-    for (slot, emitted_path) in slots.iter().zip(emitted_paths.iter()) {
-        let Some(final_path) = emitted_path else {
-            continue;
-        };
-        if !final_path.exists() {
-            continue;
+    for (slot, slot_emitted_paths) in slots.iter().zip(emitted_paths.iter()) {
+        for final_path in slot_emitted_paths {
+            if !final_path.exists() {
+                continue;
+            }
+            let display_path = workspace
+                .map(|root| workspace_relative_display_path(root, final_path))
+                .unwrap_or_else(|| final_path.display().to_string());
+            let row_label = if slot_emitted_paths.len() > 1 {
+                let format_label = final_path
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .unwrap_or("output");
+                format!("{} ({format_label})", slot_key_label(&slot.meta))
+            } else {
+                slot_key_label(&slot.meta)
+            };
+            summary_rows.push((row_label, display_path));
         }
-        let Integrand::ProcessIntegrand(_) = &slot.integrand else {
-            continue;
-        };
-        let display_path = workspace
-            .map(|root| workspace_relative_display_path(root, final_path))
-            .unwrap_or_else(|| final_path.display().to_string());
-        summary_rows.push((slot_key_label(&slot.meta), display_path));
     }
 
     if summary_rows.is_empty() {
@@ -3597,6 +3610,7 @@ mod tests {
     use crate::{UnitVolumeIntegrand, UnitVolumeSettings};
     use colored::control;
     use ratatui::{Terminal, backend::TestBackend};
+    use std::fs;
     use symbolica::numerical_integration::ContinuousGrid;
 
     fn make_accumulator(
@@ -3705,6 +3719,74 @@ mod tests {
             make_accumulator(2.1e-5, 2.0e-6, 0.221, -1.7e-5, 3.0e-6, 0.187),
         ];
         state
+    }
+
+    fn make_preview_test_slots(slot_metas: &[SlotMeta]) -> Vec<IntegrationSlot> {
+        slot_metas
+            .iter()
+            .cloned()
+            .map(|meta| {
+                let settings = RuntimeSettings::default();
+                IntegrationSlot::new(
+                    meta,
+                    settings.clone(),
+                    Model::default(),
+                    Integrand::UnitVolume(UnitVolumeIntegrand::new(
+                        settings,
+                        UnitVolumeSettings { n_3d_momenta: 1 },
+                    )),
+                    None,
+                )
+            })
+            .collect()
+    }
+
+    fn make_preview_test_core_state(state: &IntegrationState) -> CoreIterationState {
+        let slot_stats = vec![
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Arb,
+                total_time: Duration::from_millis(8),
+                integrand_time: Duration::from_millis(7),
+                evaluator_time: Duration::from_millis(3),
+                parameterization_time: Duration::from_micros(150),
+                event_time: Duration::from_micros(500),
+                generated_event_count: 40,
+                accepted_event_count: 30,
+            }),
+            make_statistics_counter(StatisticsFixture {
+                precision: crate::settings::runtime::Precision::Arb,
+                total_time: Duration::from_millis(12),
+                integrand_time: Duration::from_millis(10),
+                evaluator_time: Duration::from_millis(2),
+                parameterization_time: Duration::from_micros(300),
+                event_time: Duration::from_millis(1),
+                generated_event_count: 60,
+                accepted_event_count: 45,
+            }),
+        ];
+        let grid_template = state
+            .sampling_state_for_slot(0)
+            .grid
+            .clone_without_samples();
+        CoreIterationState {
+            slot_integrands: Vec::new(),
+            stats: slot_stats[0].merged(&slot_stats[1]),
+            slot_stats,
+            integrals: vec![ComplexAccumulator::new(); state.slot_metas.len()],
+            sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+            sampling_states: vec![CoreSamplingSlotState {
+                sampling_grid: grid_template.clone(),
+                rng: MonteCarloRng::new(7, 0),
+            }],
+            slot_re_grids: (0..state.slot_metas.len())
+                .map(|_| grid_template.clone())
+                .collect(),
+            slot_im_grids: (0..state.slot_metas.len())
+                .map(|_| grid_template.clone())
+                .collect(),
+            remaining_points: 0,
+            completed_points: 12,
+        }
     }
 
     fn make_discrete_integration_state() -> IntegrationState {
@@ -4036,7 +4118,7 @@ mod tests {
             rendered.contains("# samples per iteration = 100.00K # samples total = 100.00K"),
             "{rendered}"
         );
-        assert!(rendered.contains("/sample/core"), "{rendered}");
+        assert!(rendered.contains("/sample/core (4 cores)"), "{rendered}");
         assert!(rendered.contains("Contribution"), "{rendered}");
         assert!(rendered.contains("proc_a@itg_a"), "{rendered}");
         assert!(rendered.contains("proc_b@itg_b"), "{rendered}");
@@ -4503,12 +4585,59 @@ mod tests {
         let rendered = render_results_output_summary_table(
             None,
             &[slot],
-            &[Some(PathBuf::from(
+            &[vec![PathBuf::from(
                 "/tmp/definitely_missing_observables_final.json",
-            ))],
+            )]],
         );
 
         assert!(rendered.is_none(), "{rendered:?}");
+    }
+
+    #[test]
+    fn results_output_summary_lists_all_emitted_observable_files() {
+        let base = std::env::temp_dir().join(format!(
+            "gammaloop_results_output_summary_{}",
+            std::process::id()
+        ));
+        if base.exists() {
+            let _ = fs::remove_dir_all(&base);
+        }
+        let workspace = base.join("workspace");
+        let slot_dir = workspace.join("integrands").join("proc@default");
+        fs::create_dir_all(&slot_dir).unwrap();
+        fs::write(workspace_result_snapshot_path(&workspace), b"{}").unwrap();
+        let json_path = slot_dir.join("observables_final.json");
+        let hwu_path = slot_dir.join("observables_final.hwu");
+        fs::write(&json_path, b"{}").unwrap();
+        fs::write(&hwu_path, b"# hwu\n").unwrap();
+
+        let settings = RuntimeSettings::default();
+        let slot = IntegrationSlot::new(
+            SlotMeta {
+                process_name: "proc".to_string(),
+                integrand_name: "default".to_string(),
+            },
+            settings.clone(),
+            Model::default(),
+            Integrand::UnitVolume(UnitVolumeIntegrand::new(
+                settings,
+                UnitVolumeSettings { n_3d_momenta: 1 },
+            )),
+            None,
+        );
+        let rendered = render_results_output_summary_table(
+            Some(&workspace),
+            &[slot],
+            &[vec![hwu_path.clone(), json_path.clone()]],
+        )
+        .expect("summary should render");
+
+        assert!(rendered.contains("proc@default (hwu)"), "{rendered}");
+        assert!(rendered.contains("proc@default (json)"), "{rendered}");
+        assert!(rendered.contains("observables_final.hwu"), "{rendered}");
+        assert!(rendered.contains("observables_final.json"), "{rendered}");
+
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
@@ -4546,6 +4675,7 @@ mod tests {
         assert!(rendered.contains("25.00K / 100.00K (25.0%)"), "{rendered}");
         assert!(rendered.contains("# samples total 125.00K"), "{rendered}");
         assert!(rendered.contains("#samples/s"), "{rendered}");
+        assert!(rendered.contains("/sample/core (4 cores)"), "{rendered}");
         assert!(rendered.contains("Integrands"), "{rendered}");
         assert!(rendered.contains("Focused integrand"), "{rendered}");
         assert!(rendered.contains("Results summary"), "{rendered}");
@@ -4561,6 +4691,149 @@ mod tests {
             "{rendered}"
         );
         assert!(rendered.contains("Precision mix [global]"), "{rendered}");
+    }
+
+    #[test]
+    fn live_status_updates_use_current_batch_statistics_in_bottom_panels() {
+        let state = make_integration_state();
+        let slots = make_preview_test_slots(&state.slot_metas);
+        let core_state = make_preview_test_core_state(&state);
+        let preview_state = build_preview_integration_state(
+            &state,
+            &slots,
+            4,
+            core_state.completed_points,
+            1.5,
+            &[core_state],
+        );
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: true,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+
+        let initial_update = build_status_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(1),
+                Duration::from_millis(400),
+                0,
+                state.num_points,
+                state.num_points,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 0,
+                target_points: 100,
+            })),
+        );
+        let preview_update = build_status_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &preview_state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_millis(1500),
+                Duration::from_millis(900),
+                12,
+                preview_state.num_points,
+                preview_state.num_points,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 12,
+                target_points: 100,
+            })),
+        );
+
+        let initial_statistics = initial_update
+            .statistics
+            .as_ref()
+            .expect("statistics should be present");
+        let preview_statistics = preview_update
+            .statistics
+            .as_ref()
+            .expect("statistics should be present");
+        let initial_snapshot = initial_statistics.global_snapshot();
+        let preview_snapshot = preview_statistics.global_snapshot();
+
+        assert!(preview_snapshot.num_evals > initial_snapshot.num_evals);
+        assert!(preview_snapshot.generated_event_count > initial_snapshot.generated_event_count);
+        assert!(preview_snapshot.accepted_event_count > initial_snapshot.accepted_event_count);
+
+        let initial_timing_mix = initial_statistics
+            .timing_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        let preview_timing_mix = preview_statistics
+            .timing_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        assert_ne!(preview_timing_mix, initial_timing_mix);
+
+        let initial_precision_mix = initial_statistics
+            .precision_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        let preview_precision_mix = preview_statistics
+            .precision_mix_segments(status_update::StatisticsScope::Global)
+            .iter()
+            .map(|segment| segment.percentage)
+            .collect_vec();
+        assert_ne!(preview_precision_mix, initial_precision_mix);
+        assert!(
+            preview_precision_mix
+                .iter()
+                .any(|percentage| (*percentage - 50.0).abs() < f64::EPSILON),
+            "{preview_precision_mix:?}"
+        );
+
+        let preview_render = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &preview_state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_millis(1500),
+                Duration::from_millis(900),
+                12,
+                preview_state.num_points,
+                preview_state.num_points,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 12,
+                target_points: 100,
+            })),
+            |_| {},
+        );
+        let preview_total_time = crate::utils::format_evaluation_time_from_f64(
+            preview_snapshot.average_total_time_seconds,
+        );
+        assert!(
+            preview_render.contains(&preview_total_time),
+            "{preview_render}"
+        );
+        assert!(
+            preview_render.contains("Precision mix [global]"),
+            "{preview_render}"
+        );
+        assert!(
+            preview_render.contains("Timing composition [global]"),
+            "{preview_render}"
+        );
     }
 
     #[test]
@@ -5270,6 +5543,47 @@ mod tests {
         assert!(rendered.contains("pdf"), "{rendered}");
         assert!(rendered.contains("Per integrand details"), "{rendered}");
         assert!(rendered.contains("# samples"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_max_weight_tab_preserves_full_scientific_exponent() {
+        let mut state = make_discrete_integration_state();
+        let max_eval = 3.8477312059601813_f64;
+        let expected = format!("{:+.16e}", max_eval);
+        state.all_integrals[0].re.max_eval_positive = F(max_eval);
+        state.all_integrals[0].re.max_eval_positive_xs = Some(Sample::Discrete(
+            F(1.0),
+            0,
+            Some(Box::new(Sample::Continuous(
+                F(1.0),
+                vec![F(0.4502578156709256)],
+            ))),
+        ));
+
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Iteration,
+                &state,
+                &[Some(Complex::new(F(1.0e-4), F(2.0e-5))), None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(12),
+                Duration::from_secs(12),
+                110_000,
+                210_000,
+                210_000,
+            ),
+            |dashboard| dashboard.select_tab(2),
+        );
+
+        assert!(rendered.contains(&expected), "{rendered}");
+        assert!(rendered.contains("graph: 0, xs: ["), "{rendered}");
     }
 }
 

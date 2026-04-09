@@ -12,7 +12,7 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, Symbol},
     function,
     id::{MatchSettings, Replacement},
     parse, parse_lit,
@@ -50,6 +50,14 @@ impl Integrated<'_> {
             vakint_settings,
         }
     }
+}
+
+fn integrated_triangle_spatial_norm_sq(
+    loop_edge: linnet::half_edge::involution::EdgeIndex,
+) -> Atom {
+    GS.emr_mom(loop_edge, GS.cind(1)).pow(2)
+        + GS.emr_mom(loop_edge, GS.cind(2)).pow(2)
+        + GS.emr_mom(loop_edge, GS.cind(3)).pow(2)
 }
 
 impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
@@ -332,25 +340,30 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
         res = pole_stripped;
 
         if !settings.pole_part {
-            // multiply the results with a vacuum triangle that integrates to 1
-            // 1/(k^2 - m_UV^2)^3 = -i / (4 pi)^2 * 1/2 * 1/mUV^2
-            // name the mUV mass mUVi as this one should not be expanded
+            // Multiply by the localized normalized integral \int \vec{k} 1 / (|\vec{k}|^2 + mUV^2)^2, which integrates to \pi^2/ mUV
+            let pi_atom = (Symbol::PI).to_atom();
+            let mut normalization_term_integral = (pi_atom.pow(2)) / GS.m_uv_int;
+            // However, gammaloop adds a factro 1/(2*pi)^3 per loop, and this integrated CT will be subject to it, so we must undo it.
+            normalization_term_integral /= (Atom::from(2) * pi_atom).pow(3);
+
+            // We need to correct the Wick rotation `i` per loop
+            // TODO: Understand this better: this is *not* part of the normalization really, but probably related to the fact that our
+            // UV CT is using minkowski denominators and not euclidean ones.
+            normalization_term_integral /= Atom::i();
+
             for l in &current.lmb().loop_edges {
                 if !reduced.includes(&graph[l].1) {
                     continue;
                 }
 
                 //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
+                res /= normalization_term_integral.as_view();
 
-                res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
+                let spatial_norm_sq = integrated_triangle_spatial_norm_sq(*l);
 
-                let spatial_norm_sq = Minkowski {}
-                    .new_rep(4)
-                    .inner_product(GS.emr_vec(*l), GS.emr_vec(*l));
-
-                // multiply CFF triangle
-                res *=
-                    Atom::num((3, 16)) / (spatial_norm_sq + GS.m_uv_int * GS.m_uv_int).pow((5, 2));
+                // Per-orientation CFF localizer of the normalized cubic tadpole.
+                let denominator = spatial_norm_sq + GS.m_uv_int * GS.m_uv_int;
+                res /= denominator.as_view() * denominator.as_view();
             }
         }
 
@@ -371,6 +384,30 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
 
         // println!("\nIntegrated CT:\n{}\n", res);
         Ok(res)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use linnet::half_edge::involution::EdgeIndex;
+
+    use super::*;
+
+    #[test]
+    fn integrated_triangle_norm_is_euclidean() {
+        let edge = EdgeIndex(7);
+        let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
+        let minkowski_norm = Minkowski {}
+            .new_rep(4)
+            .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
+
+        assert_eq!(
+            euclidean_norm,
+            GS.emr_mom(edge, GS.cind(1)).pow(2)
+                + GS.emr_mom(edge, GS.cind(2)).pow(2)
+                + GS.emr_mom(edge, GS.cind(3)).pow(2)
+        );
+        assert_ne!(euclidean_norm, minkowski_norm);
     }
 }
 

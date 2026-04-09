@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     io::{self, IsTerminal, Write},
     ops::ControlFlow,
 };
@@ -18,6 +19,7 @@ use crate::{
         CommandExecution, Commands, StartCommandsBlock,
     },
     integrand_info::IntegrandKind,
+    render_smart_toml,
     repl::{
         IntegrandDetailCompletionEntry, IrProfileCompletionEntry, ProcessCompletionEntry,
         ProcessKind,
@@ -25,6 +27,8 @@ use crate::{
     state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory, State},
     CLISettings,
 };
+
+const MAX_DISPLAY_COMMAND_LINES: usize = 5;
 
 fn format_command_block_conflict_message(conflicting_blocks: &[String]) -> String {
     match conflicting_blocks {
@@ -475,6 +479,28 @@ impl<'a> CliSession<'a> {
         names
     }
 
+    pub fn run_history_toml(&self) -> Result<String> {
+        self.run_history
+            .to_toml_string(self.cli_settings.try_strings)
+    }
+
+    pub fn global_settings_toml(&self) -> Result<String> {
+        render_smart_toml(self.cli_settings)
+    }
+
+    pub fn active_command_blocks(&self) -> BTreeMap<String, Vec<String>> {
+        self.run_history
+            .command_blocks
+            .iter()
+            .map(|block| {
+                (
+                    block.name.clone(),
+                    block.commands.iter().map(display_command).collect(),
+                )
+            })
+            .collect()
+    }
+
     pub fn dismiss_pending_commands_block(&mut self, trigger: &str) -> bool {
         let Some(pending) = self.session_state.pending_commands_block.take() else {
             return false;
@@ -586,6 +612,9 @@ impl<'a> CliSession<'a> {
             if let ControlFlow::Break(save_state) =
                 self.execute_prepared_commands(block.commands, HistoryMode::Suppress)?
             {
+                if history_mode == HistoryMode::Record {
+                    self.record_command(&command);
+                }
                 return Ok(CommandExecution::break_with(save_state));
             }
         }
@@ -601,6 +630,9 @@ impl<'a> CliSession<'a> {
         if let ControlFlow::Break(save_state) =
             self.execute_prepared_commands(plan.commands, HistoryMode::Suppress)?
         {
+            if history_mode == HistoryMode::Record {
+                self.record_command(&command);
+            }
             return Ok(CommandExecution::break_with(save_state));
         }
 
@@ -693,10 +725,63 @@ impl<'a> CliSession<'a> {
     }
 
     fn record_command(&mut self, command: &CommandHistory) {
-        let normalized = normalize_command_history(command);
-        self.run_history
-            .push_with_raw(normalized.command, normalized.raw_string);
+        if let Some(normalized) = normalize_persisted_command_history(command) {
+            self.run_history
+                .push_with_raw(normalized.command, normalized.raw_string);
+        }
     }
+}
+
+fn normalize_persisted_command_history(command: &CommandHistory) -> Option<CommandHistory> {
+    match &command.command {
+        Commands::Quit(_) | Commands::StartCommandsBlock(_) | Commands::FinishCommandsBlock => None,
+        Commands::Run(run) => normalize_persisted_run_history(command, run),
+        _ => Some(normalize_command_history(command)),
+    }
+}
+
+fn normalize_persisted_run_history(
+    command: &CommandHistory,
+    run: &crate::commands::Run,
+) -> Option<CommandHistory> {
+    let inline_commands = run
+        .parse_inline_commands()
+        .expect("persisted run commands should always have parseable inline commands");
+    let persisted_inline_commands = inline_commands
+        .iter()
+        .filter_map(normalize_persisted_command_history)
+        .collect::<Vec<_>>();
+
+    let persisted_run = crate::commands::Run {
+        block_names: run.block_names.clone(),
+        commands: (!persisted_inline_commands.is_empty()).then(|| {
+            persisted_inline_commands
+                .iter()
+                .map(persisted_command_raw_string)
+                .collect::<Vec<_>>()
+                .join("; ")
+        }),
+    };
+
+    if persisted_run.is_noop() {
+        return None;
+    }
+
+    if persisted_run == *run {
+        return Some(normalize_command_history(command));
+    }
+
+    let raw_string = persisted_run.canonical_raw_string();
+    Some(CommandHistory::new_with_raw(
+        Commands::Run(persisted_run),
+        raw_string,
+    ))
+}
+
+fn persisted_command_raw_string(command: &CommandHistory) -> String {
+    normalize_command_history(command)
+        .raw_string
+        .expect("persisted inline commands should remain representable as raw strings")
 }
 
 fn normalize_command_history(command: &CommandHistory) -> CommandHistory {
@@ -723,9 +808,62 @@ fn raw_round_trips(raw: &str, command: &Commands) -> bool {
 }
 
 pub(crate) fn display_command(command: &CommandHistory) -> String {
-    if let Some(raw_string) = normalize_command_history(command).raw_string {
+    let display = if let Some(raw_string) = normalize_command_history(command).raw_string {
         raw_string
     } else {
         format!("{:?}", command.command)
+    };
+
+    truncate_multiline_display_command(&display)
+}
+
+fn truncate_multiline_display_command(display: &str) -> String {
+    let lines = display.lines().collect::<Vec<_>>();
+    if lines.len() <= MAX_DISPLAY_COMMAND_LINES {
+        return display.to_string();
+    }
+
+    let mut truncated = lines[..MAX_DISPLAY_COMMAND_LINES].join("\n");
+    truncated.push_str("\n[...]");
+    truncated
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{display_command, MAX_DISPLAY_COMMAND_LINES};
+    use crate::{commands::run::Run, commands::Commands, state::CommandHistory};
+
+    #[test]
+    fn display_command_preserves_multiline_commands_up_to_line_limit() {
+        let commands = (1..=MAX_DISPLAY_COMMAND_LINES)
+            .map(|i| format!("cmd{i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let command = CommandHistory::new(Commands::Run(Run {
+            block_names: Vec::new(),
+            commands: Some(commands.clone()),
+        }));
+
+        let displayed = display_command(&command);
+
+        assert_eq!(displayed.lines().count(), MAX_DISPLAY_COMMAND_LINES);
+        assert!(displayed.contains(&commands));
+        assert!(!displayed.contains("[...]"));
+    }
+
+    #[test]
+    fn display_command_truncates_multiline_commands_beyond_line_limit() {
+        let command = CommandHistory::new(Commands::Run(Run {
+            block_names: Vec::new(),
+            commands: Some("cmd1\ncmd2\ncmd3\ncmd4\ncmd5\ncmd6".to_string()),
+        }));
+
+        let displayed = display_command(&command);
+        let displayed_lines = displayed.lines().collect::<Vec<_>>();
+
+        assert_eq!(
+            displayed_lines,
+            vec!["run -c 'cmd1", "cmd2", "cmd3", "cmd4", "cmd5", "[...]"]
+        );
     }
 }

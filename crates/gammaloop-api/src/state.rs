@@ -50,6 +50,7 @@ use crate::{
     commands::{save::SaveState, Commands},
     integrand_info::{collect_integrand_info, IntegrandInfo},
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
+    render_smart_toml,
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
 };
@@ -344,6 +345,24 @@ pub fn set_serialize_commands_as_strings(value: bool) {
 /// Get the current setting for CommandHistory serialization behavior
 pub fn get_serialize_commands_as_strings() -> bool {
     SERIALIZE_COMMANDS_AS_STRINGS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub struct SerializeCommandsAsStringsGuard {
+    previous: bool,
+}
+
+impl SerializeCommandsAsStringsGuard {
+    pub fn new(value: bool) -> Self {
+        let previous = get_serialize_commands_as_strings();
+        set_serialize_commands_as_strings(value);
+        Self { previous }
+    }
+}
+
+impl Drop for SerializeCommandsAsStringsGuard {
+    fn drop(&mut self) {
+        set_serialize_commands_as_strings(self.previous);
+    }
 }
 
 /// Represents a command with optional raw string representation
@@ -698,12 +717,18 @@ impl RunHistory {
         session.replay_run_history()
     }
 
-    fn filtered_for_save(&self) -> Self {
+    pub(crate) fn filtered_for_save(&self) -> Self {
         let mut filtered = self.clone();
         filtered
             .commands
             .retain(|command_history| should_persist_command(&command_history.command));
         filtered
+    }
+
+    pub(crate) fn to_toml_string(&self, serialize_commands_as_strings: bool) -> Result<String> {
+        let _serialize_commands_guard =
+            SerializeCommandsAsStringsGuard::new(serialize_commands_as_strings);
+        render_smart_toml(&self.filtered_for_save())
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
@@ -802,7 +827,6 @@ fn parse_toml_command_history(value: TomlValue, context: &str) -> Result<Command
 )]
 #[derive(Clone)]
 pub struct State {
-    active_state_path: PathBuf,
     pub model: Model,
     pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
@@ -873,6 +897,7 @@ fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Res
 pub enum StateFolderKind {
     Missing,
     Scratch,
+    Unmanifested,
     Saved,
     Invalid(String),
 }
@@ -912,11 +937,7 @@ pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
         return Ok(StateFolderKind::Scratch);
     }
 
-    Ok(StateFolderKind::Invalid(format!(
-        "State folder '{}' is missing required file {}",
-        save_path.display(),
-        STATE_MANIFEST_FILE
-    )))
+    Ok(StateFolderKind::Unmanifested)
 }
 
 fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
@@ -1609,7 +1630,6 @@ impl State {
         super::tracing::init_tracing(log_dir.as_ref().join("logs"), log_file_name);
 
         Self {
-            active_state_path: log_dir.as_ref().to_path_buf(),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1620,7 +1640,6 @@ impl State {
         let _ = init_test_tracing();
 
         Self {
-            active_state_path: PathBuf::from("./gammaloop_state"),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1631,7 +1650,6 @@ impl State {
         let _ = init_bench_tracing();
 
         Self {
-            active_state_path: PathBuf::from("./gammaloop_state"),
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
@@ -1698,9 +1716,8 @@ impl State {
             model: &model,
         };
 
-        let process_list = ProcessList::load(&save_path, context)
-            .context("Trying to load processList")
-            .unwrap();
+        let process_list =
+            ProcessList::load(&save_path, context).context("Trying to load processList")?;
 
         let mut state = State::new(save_path, trace_logs_filename);
 
@@ -2340,6 +2357,17 @@ commands = ["quit -n"]
         assert_eq!(
             classify_state_folder(temp.path()).unwrap(),
             StateFolderKind::Scratch
+        );
+    }
+
+    #[test]
+    fn state_folder_classifies_non_manifest_contents_as_unmanifested() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("processes").join("amplitudes")).unwrap();
+
+        assert_eq!(
+            classify_state_folder(temp.path()).unwrap(),
+            StateFolderKind::Unmanifested
         );
     }
 

@@ -10,23 +10,39 @@ build-cli-no-pyo3:
 
 # Build gammaloop Python CLI with UFO support and stable ABI (dev-optim profile)
 build-cli-abi:
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --profile dev-optim
+	cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --profile dev-optim
 
 # Build gammaloop Python CLI in release mode
 build-cli-release:
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
+	cargo build -p gammaloop-api --bin gammaloop --features ufo_support --release
 
 # Build gammaloop Python CLI in release mode with stable ABI
 build-cli-release-abi:
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --release
+	cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --release
 
 # Build gammaloop Python API with UFO support and dev-optim profile
 build-api:
-    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
+	maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi:
     maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
+
+# Build gammaloop Python API with UFO support and release profile
+build-api-release:
+	maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
+
+# Build gammaloop Python API with UFO support and stable ABI (release profile)
+build-api-abi-release:
+    maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
+
+# Build gammaloop Python API wheel with UFO support and release profile
+build-api-release-wheel:
+	maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
+
+# Build gammaloop Python API weel with UFO support and stable ABI (release profile)
+build-api-abi-release-wheel:
+    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=release
 
 # Build all workspace packages
 build-all:

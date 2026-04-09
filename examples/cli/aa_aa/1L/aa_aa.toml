@@ -7,6 +7,7 @@ name = "generate"
 commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
+    #"set global kv global.generation.uv.use_legacy=true",
 
     "remove processes -p aa_aa",
     """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]
@@ -25,25 +26,31 @@ commands = [
 ]
 
 [[command_blocks]]
-name = "generate_no_uv"
+name = "generate_all_helicities"
 commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
 
-    "remove processes -p aa_aa_no_UV",
-    "import graphs ./aa_aa_1L.dot -p aa_aa_no_UV -i 1L_ppmm",
-    #"import graphs /Users/vjhirsch/Documents/Work/gammaloop_main/examples/cli/aa_aa/1L/aa_aa_1L.dot -p aa_aa_no_UV -i 1L_ppmm",
-	"save dot",
-	"generate",
-	"set process -p aa_aa_no_UV -i 1L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
-	"duplicate integrand -p aa_aa_no_UV -i 1L_ppmm --output_process_name aa_aa_no_UV --output_integrand_name 1L_mpmm",
-    "set process -p aa_aa_no_UV -i 1L_mpmm kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
-    "duplicate integrand -p aa_aa_no_UV -i 1L_ppmm --output_process_name aa_aa_no_UV --output_integrand_name 1L_mmmm",
-    "set process -p aa_aa_no_UV -i 1L_mmmm kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
-    "duplicate integrand -p aa_aa_no_UV -i 1L_ppmm --output_process_name aa_aa_no_UV --output_integrand_name 1L_pmmp",
-    "set process -p aa_aa_no_UV -i 1L_pmmp kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
-    "duplicate integrand -p aa_aa_no_UV -i 1L_ppmm --output_process_name aa_aa_no_UV --output_integrand_name 1L_pmpm",
-    "set process -p aa_aa_no_UV -i 1L_pmpm kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+    "remove processes -p aa_aa_all_helicities",
+    """generate amp a a > a a | a t t~ g ghG ghG~ QCD==0 QED==4 [{1}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+        -p aa_aa_all_helicities -i 1L_ppmm""",
+    #"import graphs ./aa_aa_1L.dot -p aa_aa_all_helicities -i 1L_ppmm",
+    #"import graphs /Users/vjhirsch/Documents/Work/gammaloop_main/examples/cli/aa_aa/1L/aa_aa_1L.dot -p aa_aa_all_helicities -i 1L_ppmm",
+    "save dot",
+    "generate",
+    "set process -p aa_aa_all_helicities -i 1L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_mpmm",
+    "set process -p aa_aa_all_helicities -i 1L_mpmm kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_mmmm",
+    "set process -p aa_aa_all_helicities -i 1L_mmmm kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_pmmp",
+    "set process -p aa_aa_all_helicities -i 1L_pmmp kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
+    "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_pmpm",
+    "set process -p aa_aa_all_helicities -i 1L_pmpm kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+
+    "set process -p aa_aa_all_helicities kv general.m_uv=20.0",
+    "set process -p aa_aa_all_helicities kv general.mu_r=20.0",
 ]
 
 [default_runtime_settings.kinematics]
@@ -164,26 +171,26 @@ commands = [
 ]
 
 [[command_blocks]]
-name = "integrate_no_uv"
+name = "integrate_all_helicities"
 commands = [
     "run set_model_parameters",
 
-	#--target aa_aa_no_UV@1L_ppmm=-3.63182591790267920e-6,0.0
-	#--target aa_aa_no_UV@1L_mpmm=2.13069514021268017e-8,0.0
-	#--target aa_aa_no_UV@1L_mmmm=8.27161798130538633e-6,0.0
-	#--target aa_aa_no_UV@1L_pmmp=-3.69112439644513285e-6,0.0
-	#--target aa_aa_no_UV@1L_pmpm=-6.90286252249926050e-7,0.0
+	#--target aa_aa_all_helicities@1L_ppmm=-3.63182591790267920e-6,0.0
+	#--target aa_aa_all_helicities@1L_mpmm=2.13069514021268017e-8,0.0
+	#--target aa_aa_all_helicities@1L_mmmm=8.27161798130538633e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmmp=-3.69112439644513285e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmpm=-6.90286252249926050e-7,0.0
 	"run set_kinematics_a",
 
-	#--target aa_aa_no_UV@1L_ppmm=2.52544984689473894e-4,-4.51548791001815878e-7
-	#--target aa_aa_no_UV@1L_mpmm=-1.97549385954745148e-4,1.20899966147470349e-5
-	#--target aa_aa_no_UV@1L_mmmm=-1.04012005904810848e-3,9.21580084172666879e-5
-	#--target aa_aa_no_UV@1L_pmmp=1.31193940033998277e-4,-6.29399386830744299e-4
-    #--target aa_aa_no_UV@1L_pmpm=1.40294235326375406e-5,-1.73893721809192085e-4
+	#--target aa_aa_all_helicities@1L_ppmm=2.52544984689473894e-4,-4.51548791001815878e-7
+	#--target aa_aa_all_helicities@1L_mpmm=-1.97549385954745148e-4,1.20899966147470349e-5
+	#--target aa_aa_all_helicities@1L_mmmm=-1.04012005904810848e-3,9.21580084172666879e-5
+	#--target aa_aa_all_helicities@1L_pmmp=1.31193940033998277e-4,-6.29399386830744299e-4
+    #--target aa_aa_all_helicities@1L_pmpm=1.40294235326375406e-5,-1.73893721809192085e-4
 	#"run set_kinematics_f",
 
 
-    """set process -p aa_aa_no_UV kv
+    """set process -p aa_aa_all_helicities kv
         integrator.n_increase=0
         integrator.n_start=1000000
         integrator.n_max=10000000000
@@ -203,13 +210,61 @@ commands = [
 	#			 --sort-contributions integral
 	#			 --show-max-weight-info
 	#			 --renderer tabled
-	"""integrate -p aa_aa_no_UV -i 1L_ppmm -p aa_aa_no_UV -i 1L_mpmm -p aa_aa_no_UV -i 1L_mmmm -p aa_aa_no_UV -i 1L_pmmp -p aa_aa_no_UV -i 1L_pmpm
+	"""integrate -p aa_aa_all_helicities -i 1L_ppmm -p aa_aa_all_helicities -i 1L_mpmm -p aa_aa_all_helicities -i 1L_mmmm -p aa_aa_all_helicities -i 1L_pmmp -p aa_aa_all_helicities -i 1L_pmpm
 	             --n-cores 5
-				 --target aa_aa_no_UV@1L_ppmm=-3.63182591790267920e-6,0.0
-				 --target aa_aa_no_UV@1L_mpmm=2.13069514021268017e-8,0.0
-				 --target aa_aa_no_UV@1L_mmmm=8.27161798130538633e-6,0.0
-				 --target aa_aa_no_UV@1L_pmmp=-3.69112439644513285e-6,0.0
-				 --target aa_aa_no_UV@1L_pmpm=-6.90286252249926050e-7,0.0
+				 --target aa_aa_all_helicities@1L_ppmm=-3.63182591790267920e-6,0.0
+				 --target aa_aa_all_helicities@1L_mpmm=2.13069514021268017e-8,0.0
+				 --target aa_aa_all_helicities@1L_mmmm=8.27161798130538633e-6,0.0
+				 --target aa_aa_all_helicities@1L_pmmp=-3.69112439644513285e-6,0.0
+				 --target aa_aa_all_helicities@1L_pmpm=-6.90286252249926050e-7,0.0
+				 --uncorrelated
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_all_helicities_kinematics_f"
+commands = [
+    "run set_model_parameters",
+
+	#--target aa_aa_all_helicities@1L_ppmm=-3.63182591790267920e-6,0.0
+	#--target aa_aa_all_helicities@1L_mpmm=2.13069514021268017e-8,0.0
+	#--target aa_aa_all_helicities@1L_mmmm=8.27161798130538633e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmmp=-3.69112439644513285e-6,0.0
+	#--target aa_aa_all_helicities@1L_pmpm=-6.90286252249926050e-7,0.0
+	#"run set_kinematics_a",
+
+	#--target aa_aa_all_helicities@1L_ppmm=2.52544984689473894e-4,-4.51548791001815878e-7
+	#--target aa_aa_all_helicities@1L_mpmm=-1.97549385954745148e-4,1.20899966147470349e-5
+	#--target aa_aa_all_helicities@1L_mmmm=-1.04012005904810848e-3,9.21580084172666879e-5
+	#--target aa_aa_all_helicities@1L_pmmp=1.31193940033998277e-4,-6.29399386830744299e-4
+    #--target aa_aa_all_helicities@1L_pmpm=1.40294235326375406e-5,-1.73893721809192085e-4
+	"run set_kinematics_f",
+
+
+    """set process -p aa_aa_all_helicities kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+	"""integrate -p aa_aa_all_helicities -i 1L_ppmm -p aa_aa_all_helicities -i 1L_mpmm -p aa_aa_all_helicities -i 1L_mmmm -p aa_aa_all_helicities -i 1L_pmmp -p aa_aa_all_helicities -i 1L_pmpm
+	             --n-cores 5
+				 --target aa_aa_all_helicities@1L_ppmm=2.52544984689473894e-4,-4.51548791001815878e-7
+				 --target aa_aa_all_helicities@1L_mpmm=-1.97549385954745148e-4,1.20899966147470349e-5
+	 			 --target aa_aa_all_helicities@1L_mmmm=-1.04012005904810848e-3,9.21580084172666879e-5
+				 --target aa_aa_all_helicities@1L_pmmp=1.31193940033998277e-4,-6.29399386830744299e-4
+    			 --target aa_aa_all_helicities@1L_pmpm=1.40294235326375406e-5,-1.73893721809192085e-4
 				 --uncorrelated
 				 --renderer ratatui
 				 --batch-size 10000
