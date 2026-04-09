@@ -17,6 +17,7 @@ cli,no_pyo3."
 use ::tracing::debug;
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
+use ::tracing::warn;
 use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh};
@@ -761,9 +762,11 @@ impl OneShot {
     ) -> Result<CLISettings> {
         let mut cli_settings = match state_folder_kind {
             StateFolderKind::Saved => Self::load_global_settings_file(&self.state_folder)?,
-            StateFolderKind::Missing | StateFolderKind::Scratch => boot_run_history
-                .map(|run_history| run_history.cli_settings.clone())
-                .unwrap_or_else(|| self.new_cli_settings(GlobalSettings::default())),
+            StateFolderKind::Missing | StateFolderKind::Scratch | StateFolderKind::Unmanifested => {
+                boot_run_history
+                    .map(|run_history| run_history.cli_settings.clone())
+                    .unwrap_or_else(|| self.new_cli_settings(GlobalSettings::default()))
+            }
             StateFolderKind::Invalid(reason) => {
                 return Err(eyre::eyre!(reason.clone()));
             }
@@ -989,6 +992,31 @@ impl OneShot {
                     )
                 }
                 StateFolderKind::Missing | StateFolderKind::Scratch => {
+                    info!(
+                        "{} {}",
+                        "Initializing new state in".blue(),
+                        self.state_folder.display().to_string().green()
+                    );
+
+                    let mut run_history = RunHistory::default();
+                    if let Some(boot_run_history) = boot_run_history {
+                        run_history.freeze_boot_settings_from(boot_run_history);
+                    }
+
+                    (
+                        State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
+                        run_history,
+                        startup_cli_settings,
+                        RuntimeSettings::default(),
+                        None,
+                    )
+                }
+                StateFolderKind::Unmanifested => {
+                    warn!(
+                        "State folder '{}' has no {}; treating leftover contents as blank scratch state.",
+                        self.state_folder.display(),
+                        "state_manifest.toml",
+                    );
                     info!(
                         "{} {}",
                         "Initializing new state in".blue(),
@@ -2308,6 +2336,20 @@ mod tests {
         let temp = tempdir().unwrap();
         std::fs::create_dir_all(temp.path().join("logs")).unwrap();
         std::fs::write(temp.path().join("logs").join("gammalog.jsonl"), "").unwrap();
+
+        let mut cli = OneShot::new_test(temp.path().to_path_buf());
+        let (_state, run_history, cli_settings, runtime_settings, summary) = cli.load().unwrap();
+
+        assert!(summary.is_none());
+        assert!(run_history.commands.is_empty());
+        assert_eq!(cli_settings.state.folder, temp.path().to_path_buf());
+        assert_eq!(runtime_settings, RuntimeSettings::default());
+    }
+
+    #[test]
+    fn load_treats_unmanifested_state_folder_as_blank_state() {
+        let temp = tempdir().unwrap();
+        std::fs::create_dir_all(temp.path().join("processes").join("amplitudes")).unwrap();
 
         let mut cli = OneShot::new_test(temp.path().to_path_buf());
         let (_state, run_history, cli_settings, runtime_settings, summary) = cli.load().unwrap();

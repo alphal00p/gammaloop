@@ -20,6 +20,9 @@ name = "generate_diagrams"
 # GL30 -> F.7 ->  -1.18480e-04
 # Total: -1.3205e-04
 # --select-graphs GL00 GL02 GL06 GL08 GL10 GL12 GL18 GL20 GL22 GL26 GL30
+# --select-graphs GL08
+# --select-graphs GL26
+# --loop-momentum-bases GL26=2,4,11
 commands = [
     "import model sm-default.json",
     "set global kv global.n_cores.feyngen=10",
@@ -29,8 +32,8 @@ commands = [
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_tth -i NLO
-      --select-graphs GL08
-      --global-prefactor-num "2𝑖"
+      --global-prefactor-num "1𝑖"
+	  --select-graphs GL08 
       --only-diagrams""",
     "save dot",
 ]

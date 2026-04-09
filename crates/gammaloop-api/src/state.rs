@@ -894,6 +894,7 @@ fn run_state_migration_checks(manifest: &StateManifest, save_path: &Path) -> Res
 pub enum StateFolderKind {
     Missing,
     Scratch,
+    Unmanifested,
     Saved,
     Invalid(String),
 }
@@ -933,11 +934,7 @@ pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
         return Ok(StateFolderKind::Scratch);
     }
 
-    Ok(StateFolderKind::Invalid(format!(
-        "State folder '{}' is missing required file {}",
-        save_path.display(),
-        STATE_MANIFEST_FILE
-    )))
+    Ok(StateFolderKind::Unmanifested)
 }
 
 fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
@@ -1672,9 +1669,8 @@ impl State {
             model: &model,
         };
 
-        let process_list = ProcessList::load(&save_path, context)
-            .context("Trying to load processList")
-            .unwrap();
+        let process_list =
+            ProcessList::load(&save_path, context).context("Trying to load processList")?;
 
         let mut state = State::new(save_path, trace_logs_filename);
 
@@ -2312,6 +2308,17 @@ commands = ["quit -n"]
         assert_eq!(
             classify_state_folder(temp.path()).unwrap(),
             StateFolderKind::Scratch
+        );
+    }
+
+    #[test]
+    fn state_folder_classifies_non_manifest_contents_as_unmanifested() {
+        let temp = tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("processes").join("amplitudes")).unwrap();
+
+        assert_eq!(
+            classify_state_folder(temp.path()).unwrap(),
+            StateFolderKind::Unmanifested
         );
     }
 
