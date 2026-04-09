@@ -93,6 +93,9 @@ impl AmplitudeGraphTerm {
         _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         let mut stats = GraphGenerationStats::default();
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
             .derived_data
@@ -107,6 +110,9 @@ impl AmplitudeGraphTerm {
         debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
 
         let evaluator_started = std::time::Instant::now();
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         let original_integrand = EvaluatorStack::new(
             &[&graph.derived_data.all_mighty_integrand],
             &graph.graph.param_builder,
@@ -114,25 +120,29 @@ impl AmplitudeGraphTerm {
             None,
             &settings.generation.evaluator,
         )?;
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         stats.evaluator_build_time += evaluator_started.elapsed();
         stats.evaluator_count += original_integrand.generic_evaluator_count();
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
-
-        threshold_counterterm.evaluators = graph
-            .derived_data
-            .threshold_counterterms
-            .iter()
-            .map(|ct| {
-                let evaluator_started = std::time::Instant::now();
-                let evaluator =
-                    ct.to_evaluator(&graph.graph.param_builder, &orientations, settings);
-                stats.evaluator_build_time += evaluator_started.elapsed();
-                stats.evaluator_count +=
-                    evaluator.evaluator_stack.borrow().generic_evaluator_count();
-                evaluator
-            })
-            .collect();
+        let mut threshold_evaluators =
+            Vec::with_capacity(graph.derived_data.threshold_counterterms.len());
+        for ct in &graph.derived_data.threshold_counterterms {
+            if crate::is_interrupted() {
+                return Err(eyre!("Generation interrupted by user"));
+            }
+            let evaluator_started = std::time::Instant::now();
+            let evaluator = ct.to_evaluator(&graph.graph.param_builder, &orientations, settings);
+            if crate::is_interrupted() {
+                return Err(eyre!("Generation interrupted by user"));
+            }
+            stats.evaluator_build_time += evaluator_started.elapsed();
+            stats.evaluator_count += evaluator.evaluator_stack.borrow().generic_evaluator_count();
+            threshold_evaluators.push(evaluator);
+        }
+        threshold_counterterm.evaluators = threshold_evaluators.into();
         threshold_counterterm.generated_mask = graph
             .derived_data
             .threshold_counterterms
@@ -652,16 +662,34 @@ impl AmplitudeIntegrand {
         Ok(())
     }
 
+    fn has_complete_external_artifacts(&mut self) -> Result<bool> {
+        let mut has_all = true;
+        self.for_each_generic_evaluator_mut(|evaluator| {
+            has_all &= evaluator.has_external_compiled_artifact();
+            Ok(())
+        })?;
+        Ok(has_all)
+    }
+
     pub(crate) fn prepare_runtime_backends_after_generation_with_compile_times(
         &mut self,
     ) -> Result<Vec<std::time::Duration>> {
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         match self.data.compilation {
             FrozenCompilationMode::Symjit => {
                 let mut compile_times = Vec::with_capacity(self.data.graph_terms.len());
                 for graph_term in &mut self.data.graph_terms {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     let compile_started = std::time::Instant::now();
                     graph_term
                         .for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     compile_times.push(compile_started.elapsed());
                 }
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
@@ -713,6 +741,11 @@ impl AmplitudeIntegrand {
         backend: ActiveF64Backend,
         allow_symjit_fallback: bool,
     ) -> Result<Option<String>> {
+        if !self.has_complete_external_artifacts()? {
+            self.prepare_runtime_backends_after_generation()?;
+            return Ok(None);
+        }
+
         match self.for_each_generic_evaluator_mut(|evaluator| {
             evaluator.activate_external_from_artifact(backend)
         }) {

@@ -37,7 +37,7 @@ use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
 use crate::commands::set::KvPair;
 use crate::completion::CompletionArgExt;
-use crate::state::{ProcessRef, State};
+use crate::state::{GenerationResourceSummary, ProcessRef, State};
 
 // =================== CLI containers (kept close to your structure) ===================
 
@@ -347,7 +347,30 @@ fn format_generation_fraction(
     }
 }
 
-fn render_generation_summary_table(reports: &[GeneratedGraphReport]) {
+fn format_generation_memory(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+    const TIB: f64 = GIB * 1024.0;
+
+    let value = bytes as f64;
+    if value < KIB {
+        format!("{bytes} B")
+    } else if value < MIB {
+        format!("{:.2} KiB", value / KIB)
+    } else if value < GIB {
+        format!("{:.2} MiB", value / MIB)
+    } else if value < TIB {
+        format!("{:.2} GiB", value / GIB)
+    } else {
+        format!("{:.2} TiB", value / TIB)
+    }
+}
+
+fn render_generation_summary_table(
+    reports: &[GeneratedGraphReport],
+    resources: GenerationResourceSummary,
+) {
     if reports.is_empty() {
         return;
     }
@@ -413,8 +436,15 @@ fn render_generation_summary_table(reports: &[GeneratedGraphReport]) {
     let mut table = builder.build();
     table.with(Style::rounded());
     info!(
-        "\n{}\n{}",
+        "\n{}\n{}\n{}",
         "Integrand generation summary".bold().blue(),
+        format!(
+            "{} {} | {} {}",
+            "peak RAM".bold().blue(),
+            format_generation_memory(resources.peak_ram_bytes).yellow(),
+            "cores".bold().blue(),
+            resources.generation_cores.to_string().yellow(),
+        ),
         table
     );
 }
@@ -544,12 +574,13 @@ impl Generate {
                 };
                 if !args.only_diagrams {
                     let generated_integrand_name_for_compile = generated_integrand_name.clone();
-                    let mut reports = state.generate_integrand(
+                    let generation = state.generate_integrand(
                         global_settings,
                         runtime_settings.into(),
                         this_process_id,
                         Some(generated_integrand_name),
                     )?;
+                    let mut reports = generation.reports;
                     if global_settings.generation.evaluator.compile
                         && global_settings
                             .generation
@@ -567,7 +598,7 @@ impl Generate {
                             )?,
                         );
                     }
-                    render_generation_summary_table(&reports);
+                    render_generation_summary_table(&reports, generation.resources);
                     Ok(())
                 } else {
                     info!(
@@ -580,12 +611,13 @@ impl Generate {
             Some(GenerateCmd::Existing(process_args)) => {
                 let process_id = state.resolve_process_ref(process_args.process.as_ref())?;
 
-                let mut reports = state.generate_integrand(
+                let generation = state.generate_integrand(
                     global_settings,
                     runtime_settings.into(),
                     process_id,
                     process_args.integrand_name.clone(),
                 )?;
+                let mut reports = generation.reports;
                 if global_settings.generation.evaluator.compile
                     && global_settings
                         .generation
@@ -603,12 +635,13 @@ impl Generate {
                         )?,
                     );
                 }
-                render_generation_summary_table(&reports);
+                render_generation_summary_table(&reports, generation.resources);
                 Ok(())
             }
             None => {
-                let mut reports =
+                let generation =
                     state.generate_integrands(global_settings, runtime_settings.into())?;
+                let mut reports = generation.reports;
                 if global_settings.generation.evaluator.compile
                     && global_settings
                         .generation
@@ -626,7 +659,7 @@ impl Generate {
                         )?,
                     );
                 }
-                render_generation_summary_table(&reports);
+                render_generation_summary_table(&reports, generation.resources);
                 Ok(())
             }
         }

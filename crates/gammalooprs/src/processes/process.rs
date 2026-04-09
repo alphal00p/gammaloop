@@ -18,7 +18,7 @@ use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
@@ -670,7 +670,7 @@ impl Process {
                         && let Some(reason) =
                             integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
                     {
-                        info!(
+                        warn!(
                             "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
                             integrand_name,
                             self.definition.process_id,
@@ -686,7 +686,7 @@ impl Process {
                         && let Some(reason) =
                             integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
                     {
-                        info!(
+                        warn!(
                             "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
                             integrand_name,
                             self.definition.process_id,

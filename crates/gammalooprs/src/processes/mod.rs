@@ -88,7 +88,7 @@ impl EvaluatorSettings {
             n_cores: self.n_cores,
             cpe_iterations: self.cpe_iterations,
             hot_start: None,
-            abort_check: None,
+            abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
             abort_level: self.abort_level,
             max_horner_scheme_variables: self.max_horner_scheme_variables,
             max_common_pair_cache_entries: self.max_common_pair_cache_entries,

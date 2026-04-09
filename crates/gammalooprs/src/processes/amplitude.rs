@@ -263,12 +263,20 @@ impl Amplitude {
             self.graphs
                 .par_iter_mut()
                 .map(|amplitude_graph| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     let _guard = parent.enter();
                     let stats =
                         amplitude_graph.preprocess(model, settings, locked_runtime_settings);
                     preprocess_span.pb_inc(1);
 
-                    stats.map(|stats| NamedGraphGenerationReport {
+                    let stats = stats?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+
+                    Ok(NamedGraphGenerationReport {
                         integrand_name: integrand_name.clone(),
                         graph_name: amplitude_graph.graph.name.clone(),
                         stats,
@@ -298,6 +306,9 @@ impl Amplitude {
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         let integrand_name = self.name.clone();
         let mut graph_reports = Vec::new();
         let terms: Vec<_> = thread_pool.install(|| {
@@ -305,6 +316,9 @@ impl Amplitude {
                 .par_iter_mut()
                 .enumerate()
                 .map(|(graph_id, graph)| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     let graph_started = std::time::Instant::now();
                     let group_id = graph.graph.group_id.unwrap(); // should always be set
                     let esurface_map = &self.group_derived_data[group_id].esurface_map;
@@ -318,6 +332,9 @@ impl Amplitude {
                         esurface_map.clone(),
                         global_settings,
                     )?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     stats.evaluator_count = term.generic_evaluator_count();
                     stats.total_time += graph_started.elapsed();
                     Ok((
@@ -331,6 +348,9 @@ impl Amplitude {
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         for (_, report) in &terms {
             graph_reports.push(report.clone());
         }

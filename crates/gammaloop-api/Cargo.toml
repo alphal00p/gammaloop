@@ -72,6 +72,7 @@ symbolica = { workspace = true, features = [
   "bincode",
   "serde",
 ] }
+sysinfo = { workspace = true }
 tabled = { workspace = true, features = ["ansi"] }
 thiserror = "2.0.16"
 toml = { workspace = true }

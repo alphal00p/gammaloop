@@ -143,16 +143,34 @@ impl CrossSectionIntegrand {
         Ok(())
     }
 
+    fn has_complete_external_artifacts(&mut self) -> Result<bool> {
+        let mut has_all = true;
+        self.for_each_generic_evaluator_mut(|evaluator| {
+            has_all &= evaluator.has_external_compiled_artifact();
+            Ok(())
+        })?;
+        Ok(has_all)
+    }
+
     pub(crate) fn prepare_runtime_backends_after_generation_with_compile_times(
         &mut self,
     ) -> Result<Vec<Duration>> {
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         match self.data.compilation {
             FrozenCompilationMode::Symjit => {
                 let mut compile_times = Vec::with_capacity(self.data.graph_terms.len());
                 for graph_term in &mut self.data.graph_terms {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     let compile_started = Instant::now();
                     graph_term
                         .for_each_generic_evaluator_mut(|evaluator| evaluator.activate_symjit())?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     compile_times.push(compile_started.elapsed());
                 }
                 self.active_f64_backend.set(ActiveF64Backend::Symjit);
@@ -204,6 +222,11 @@ impl CrossSectionIntegrand {
         backend: ActiveF64Backend,
         allow_symjit_fallback: bool,
     ) -> Result<Option<String>> {
+        if !self.has_complete_external_artifacts()? {
+            self.prepare_runtime_backends_after_generation()?;
+            return Ok(None);
+        }
+
         match self.for_each_generic_evaluator_mut(|evaluator| {
             evaluator.activate_external_from_artifact(backend)
         }) {
@@ -466,6 +489,9 @@ impl CrossSectionGraphTerm {
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
     ) -> Result<(Self, GraphGenerationStats)> {
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         let mut stats = GraphGenerationStats::default();
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
             .derived_data
@@ -484,88 +510,90 @@ impl CrossSectionGraphTerm {
             .map(|data| data.orientation().clone())
             .collect();
 
-        let integrand = graph
-            .derived_data
-            .cut_paramatric_integrand
-            .iter()
-            .map(|integrand_for_cut| {
-                integrand_for_cut
-                    .integrands
-                    .iter()
-                    .enumerate()
-                    .map(|(num_derivatives, integrand_for_subset)| {
-                        let dual_shape = if num_derivatives > 0 {
-                            Some(
-                                graph.derived_data.raised_data.dual_shapes[num_derivatives - 1]
-                                    .clone(),
-                            )
-                        } else {
-                            None
-                        };
+        let mut integrand = TiVec::new();
+        for integrand_for_cut in &graph.derived_data.cut_paramatric_integrand {
+            if crate::is_interrupted() {
+                return Err(eyre!("Generation interrupted by user"));
+            }
+            let mut cut_integrands = Vec::with_capacity(integrand_for_cut.integrands.len());
+            for (num_derivatives, integrand_for_subset) in
+                integrand_for_cut.integrands.iter().enumerate()
+            {
+                if crate::is_interrupted() {
+                    return Err(eyre!("Generation interrupted by user"));
+                }
+                let dual_shape = if num_derivatives > 0 {
+                    Some(graph.derived_data.raised_data.dual_shapes[num_derivatives - 1].clone())
+                } else {
+                    None
+                };
 
-                        let evaluator_started = Instant::now();
-                        let evaluator_stack = EvaluatorStack::new(
-                            slice::from_ref(integrand_for_subset),
-                            &graph.graph.param_builder,
-                            &orientations.raw,
-                            dual_shape,
-                            &settings.generation.evaluator,
-                        )
-                        .with_context(|| {
-                            format!(
-                                "Failed to create evaluator for graph{}",
-                                graph.graph.debug_dot()
-                            )
-                        })?;
-                        stats.evaluator_build_time += evaluator_started.elapsed();
-                        stats.evaluator_count += evaluator_stack.generic_evaluator_count();
-                        Ok(evaluator_stack)
-                    })
-                    .collect::<Result<_>>()
-            })
-            .collect::<Result<TiVec<RaisedCutId, Vec<EvaluatorStack>>>>()?;
-
-        let ct_evaluators = graph
-            .derived_data
-            .threshold_counterterms
-            .iter()
-            .map(|ct_data| {
                 let evaluator_started = Instant::now();
-                let evaluators = LUCounterTermEvaluators::from_atoms(
-                    ct_data,
+                let evaluator_stack = EvaluatorStack::new(
+                    slice::from_ref(integrand_for_subset),
                     &graph.graph.param_builder,
-                    settings,
-                    &orientations,
-                );
-                stats.evaluator_build_time += evaluator_started.elapsed();
-                stats.evaluator_count += evaluators.generic_evaluator_count();
-                evaluators
-            })
-            .collect();
-
-        let thresholds = graph
-            .derived_data
-            .threshold_counterterms
-            .iter()
-            .map(|ct_data| {
-                (
-                    ct_data
-                        .left_thresholds
-                        .iter()
-                        .map(|esurface_id| {
-                            graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
-                        })
-                        .collect(),
-                    ct_data
-                        .right_thresholds
-                        .iter()
-                        .map(|esurface_id| {
-                            graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
-                        })
-                        .collect(),
+                    &orientations.raw,
+                    dual_shape,
+                    &settings.generation.evaluator,
                 )
-            })
-            .collect();
+                .with_context(|| {
+                    format!(
+                        "Failed to create evaluator for graph{}",
+                        graph.graph.debug_dot()
+                    )
+                })?;
+                if crate::is_interrupted() {
+                    return Err(eyre!("Generation interrupted by user"));
+                }
+                stats.evaluator_build_time += evaluator_started.elapsed();
+                stats.evaluator_count += evaluator_stack.generic_evaluator_count();
+                cut_integrands.push(evaluator_stack);
+            }
+            integrand.push(cut_integrands);
+        }
+
+        let mut ct_evaluators = TiVec::new();
+        for ct_data in &graph.derived_data.threshold_counterterms {
+            if crate::is_interrupted() {
+                return Err(eyre!("Generation interrupted by user"));
+            }
+            let evaluator_started = Instant::now();
+            let evaluators = LUCounterTermEvaluators::from_atoms(
+                ct_data,
+                &graph.graph.param_builder,
+                settings,
+                &orientations,
+            );
+            if crate::is_interrupted() {
+                return Err(eyre!("Generation interrupted by user"));
+            }
+            stats.evaluator_build_time += evaluator_started.elapsed();
+            stats.evaluator_count += evaluators.generic_evaluator_count();
+            ct_evaluators.push(evaluators);
+        }
+
+        let mut thresholds = TiVec::new();
+        for ct_data in &graph.derived_data.threshold_counterterms {
+            if crate::is_interrupted() {
+                return Err(eyre!("Generation interrupted by user"));
+            }
+            thresholds.push((
+                ct_data
+                    .left_thresholds
+                    .iter()
+                    .map(|esurface_id| {
+                        graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                    })
+                    .collect(),
+                ct_data
+                    .right_thresholds
+                    .iter()
+                    .map(|esurface_id| {
+                        graph.graph.surface_cache.esurface_cache[*esurface_id].clone()
+                    })
+                    .collect(),
+            ));
+        }
 
         let counterterm = LUCounterTerm {
             evaluators: ct_evaluators,

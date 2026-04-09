@@ -268,12 +268,18 @@ impl CrossSection {
             self.supergraphs
                 .par_iter_mut()
                 .map(|supergraph| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     let stats = supergraph.preprocess(
                         model,
                         process_definition,
                         global_settings,
                         runtime_default,
                     )?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     Ok(NamedGraphGenerationReport {
                         integrand_name: integrand_name.clone(),
                         graph_name: supergraph.graph.name.clone(),
@@ -291,14 +297,23 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         let integrand_name = self.name.clone();
         let mut graph_reports = Vec::new();
         let terms = generation_pool.install(|| {
             self.supergraphs
                 .par_iter_mut()
                 .map(|sg| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     let graph_started = std::time::Instant::now();
                     let (term, mut stats) = sg.generate_term_for_graph(model, global_settings)?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
                     stats.total_time += graph_started.elapsed();
                     Ok((
                         term,
@@ -311,6 +326,9 @@ impl CrossSection {
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
         for (_, report) in &terms {
             graph_reports.push(report.clone());
         }

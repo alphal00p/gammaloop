@@ -567,6 +567,7 @@ fn build_evaluator<A: ImportWithMap>(
     let optimization_settings = OptimizationSettings {
         horner_iterations: 10,
         n_cores: 10,
+        abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
         ..Default::default()
     };
     let exprs = payload

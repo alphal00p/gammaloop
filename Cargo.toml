@@ -41,6 +41,7 @@ spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
 symbolica = { version = "1.5", default-features = false }
+sysinfo = "0.33"
 tabled = "0.20.0"
 thiserror = "1.0.60"
 toml = "0.9.5"

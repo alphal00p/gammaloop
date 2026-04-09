@@ -748,8 +748,8 @@ impl RatatuiDashboardState {
         right.push_text(" | ", TextStyle::PLAIN);
         if let Some(sample_core_time) = update.meta.sample_core_time() {
             right.push_text(
-                format!("{sample_core_time} /sample/core"),
-                TextStyle::green().bold(),
+                format!("{} /sample/core", sample_core_time.replace(' ', "")),
+                TextStyle::PLAIN.bold(),
             );
         } else {
             right.push_text("N/A /sample/core", TextStyle::red());
@@ -757,7 +757,7 @@ impl RatatuiDashboardState {
         right.push_text(" ", TextStyle::PLAIN);
         right.push_text(
             format!("({} cores)", update.meta.cores),
-            TextStyle::blue().bold(),
+            TextStyle::PLAIN.bold(),
         );
         right.push_text(" ", TextStyle::PLAIN);
 

@@ -989,6 +989,10 @@ impl GenericEvaluator {
         Ok(())
     }
 
+    pub(crate) fn has_external_compiled_artifact(&self) -> bool {
+        self.f64_compiled.is_some()
+    }
+
     pub(crate) fn active_f64_backend(&self) -> ActiveF64Backend {
         self.active_f64_backend
             .as_ref()

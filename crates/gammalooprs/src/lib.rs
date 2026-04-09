@@ -101,8 +101,13 @@ pub fn request_iteration_abort() {
 }
 
 #[inline]
-pub(crate) fn is_interrupted() -> bool {
+pub fn is_interrupt_requested() -> bool {
     INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[inline]
+pub(crate) fn is_interrupted() -> bool {
+    is_interrupt_requested()
 }
 
 #[inline]
@@ -113,6 +118,11 @@ pub(crate) fn is_iteration_abort_requested() -> bool {
 #[inline]
 pub(crate) fn set_interrupted(flag: bool) {
     INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[inline]
+pub fn clear_interrupt_request() {
+    set_interrupted(false);
 }
 
 #[inline]

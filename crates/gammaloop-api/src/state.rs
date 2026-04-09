@@ -5,8 +5,12 @@ use std::{
     ops::ControlFlow,
     path::{Path, PathBuf},
     str::FromStr,
-    sync::atomic::AtomicBool,
-    time::Instant,
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
+    thread,
+    time::{Duration, Instant},
 };
 
 use clap::Args;
@@ -22,15 +26,18 @@ use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
+use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
 use tracing::debug;
 use tracing::info;
 
 use gammalooprs::{
+    clear_interrupt_request,
     feyngen::GenerationType,
     graph::Graph,
     initialisation::initialise,
     integrands::HasIntegrand,
+    is_interrupt_requested,
     model::{InputParamCard, Model, SerializableInputParamCard, UFOSymbol},
     processes::{
         merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
@@ -54,6 +61,79 @@ use crate::{
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
     CLISettings,
 };
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GenerationResourceSummary {
+    pub peak_ram_bytes: u64,
+    pub generation_cores: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GenerationReports {
+    pub reports: Vec<GeneratedGraphReport>,
+    pub resources: GenerationResourceSummary,
+}
+
+struct GenerationMonitor {
+    peak_ram_bytes: Arc<AtomicU64>,
+    stop_requested: Arc<AtomicBool>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl GenerationMonitor {
+    const POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+    fn start() -> Result<Self> {
+        let pid = get_current_pid().map_err(|err| eyre!("Failed to resolve current pid: {err}"))?;
+        let peak_ram_bytes = Arc::new(AtomicU64::new(0));
+        let stop_requested = Arc::new(AtomicBool::new(false));
+        let peak_ram_bytes_for_thread = Arc::clone(&peak_ram_bytes);
+        let stop_requested_for_thread = Arc::clone(&stop_requested);
+
+        let handle = thread::Builder::new()
+            .name("generation-ram-monitor".to_string())
+            .spawn(move || {
+                let mut system = System::new();
+                loop {
+                    if stop_requested_for_thread.load(Ordering::Relaxed) || is_interrupt_requested()
+                    {
+                        break;
+                    }
+
+                    system.refresh_processes_specifics(
+                        ProcessesToUpdate::Some(&[pid]),
+                        true,
+                        ProcessRefreshKind::nothing().with_memory(),
+                    );
+                    if let Some(process) = system.process(pid) {
+                        peak_ram_bytes_for_thread.fetch_max(process.memory(), Ordering::Relaxed);
+                    }
+                    thread::sleep(Self::POLL_INTERVAL);
+                }
+            })
+            .map_err(|err| eyre!("Failed to spawn generation RAM monitor: {err}"))?;
+
+        Ok(Self {
+            peak_ram_bytes,
+            stop_requested,
+            handle: Some(handle),
+        })
+    }
+
+    fn finish(&mut self) -> u64 {
+        self.stop_requested.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+        self.peak_ram_bytes.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for GenerationMonitor {
+    fn drop(&mut self) {
+        let _ = self.finish();
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 pub enum ProcessRef {
@@ -1300,27 +1380,25 @@ impl State {
         &mut self,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
-    ) -> Result<Vec<GeneratedGraphReport>> {
-        let generation_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(global_settings.n_cores.generate)
-            .build()?;
-
-        let mut reports = self.process_list.preprocess(
-            &self.model,
-            global_settings,
-            &runtime_default,
-            &generation_pool,
-        )?;
-        merge_generated_graph_reports(
-            &mut reports,
-            self.process_list.generate_integrands(
-                &self.model,
+    ) -> Result<GenerationReports> {
+        self.run_generation_with_monitor(global_settings, move |state, generation_pool| {
+            let mut reports = state.process_list.preprocess(
+                &state.model,
                 global_settings,
-                runtime_default,
-                &generation_pool,
-            )?,
-        );
-        Ok(reports)
+                &runtime_default,
+                generation_pool,
+            )?;
+            merge_generated_graph_reports(
+                &mut reports,
+                state.process_list.generate_integrands(
+                    &state.model,
+                    global_settings,
+                    runtime_default,
+                    generation_pool,
+                )?,
+            );
+            Ok(reports)
+        })
     }
 
     fn attach_process_id_to_named_reports(
@@ -1344,104 +1422,129 @@ impl State {
         runtime_default: LockedRuntimeSettings,
         process_id: usize,
         integrand_name: Option<String>,
-    ) -> Result<Vec<GeneratedGraphReport>> {
+    ) -> Result<GenerationReports> {
+        self.run_generation_with_monitor(global_settings, move |state, generation_pool| {
+            let p = &mut state.process_list.processes[process_id];
+            if let Some(name) = &integrand_name {
+                let mut reports = Vec::new();
+                match &mut p.collection {
+                    ProcessCollection::Amplitudes(a) => {
+                        if let Some(a) = a.get_mut(name) {
+                            merge_generated_graph_reports(
+                                &mut reports,
+                                Self::attach_process_id_to_named_reports(
+                                    process_id,
+                                    a.preprocess(
+                                        &state.model,
+                                        &global_settings.generation,
+                                        &runtime_default,
+                                        generation_pool,
+                                    )?,
+                                ),
+                            );
+                            merge_generated_graph_reports(
+                                &mut reports,
+                                Self::attach_process_id_to_named_reports(
+                                    process_id,
+                                    a.build_integrand(
+                                        &state.model,
+                                        global_settings,
+                                        runtime_default,
+                                        generation_pool,
+                                    )?,
+                                ),
+                            );
+                        } else {
+                            return Err(eyre!(
+                                "No amplitude named '{}' in process id {}",
+                                name,
+                                process_id
+                            ));
+                        }
+                    }
+                    ProcessCollection::CrossSections(cs) => {
+                        if let Some(cs) = cs.get_mut(name) {
+                            merge_generated_graph_reports(
+                                &mut reports,
+                                Self::attach_process_id_to_named_reports(
+                                    process_id,
+                                    cs.preprocess(
+                                        &state.model,
+                                        &p.definition,
+                                        &global_settings.generation,
+                                        runtime_default,
+                                        generation_pool,
+                                    )?,
+                                ),
+                            );
+                            merge_generated_graph_reports(
+                                &mut reports,
+                                Self::attach_process_id_to_named_reports(
+                                    process_id,
+                                    cs.build_integrand(
+                                        &state.model,
+                                        global_settings,
+                                        runtime_default,
+                                        generation_pool,
+                                    )?,
+                                ),
+                            );
+                        } else {
+                            return Err(eyre!(
+                                "No cross section named '{}' in process id {}",
+                                name,
+                                process_id
+                            ));
+                        }
+                    }
+                }
+                Ok(reports)
+            } else {
+                let mut reports = p.preprocess(
+                    &state.model,
+                    global_settings,
+                    &runtime_default,
+                    generation_pool,
+                )?;
+                merge_generated_graph_reports(
+                    &mut reports,
+                    p.generate_integrands(
+                        &state.model,
+                        global_settings,
+                        runtime_default,
+                        generation_pool,
+                    )?,
+                );
+                Ok(reports)
+            }
+        })
+    }
+
+    fn run_generation_with_monitor<F>(
+        &mut self,
+        global_settings: &GlobalSettings,
+        generation: F,
+    ) -> Result<GenerationReports>
+    where
+        F: FnOnce(&mut Self, &rayon::ThreadPool) -> Result<Vec<GeneratedGraphReport>>,
+    {
         let generation_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(global_settings.n_cores.generate)
             .build()?;
+        let generation_cores = generation_pool.current_num_threads();
+        clear_interrupt_request();
+        let mut monitor = GenerationMonitor::start()?;
+        let generation_result = generation(self, &generation_pool);
+        let peak_ram_bytes = monitor.finish();
+        clear_interrupt_request();
 
-        let p = &mut self.process_list.processes[process_id];
-        if let Some(name) = &integrand_name {
-            let mut reports = Vec::new();
-            match &mut p.collection {
-                ProcessCollection::Amplitudes(a) => {
-                    if let Some(a) = a.get_mut(name) {
-                        merge_generated_graph_reports(
-                            &mut reports,
-                            Self::attach_process_id_to_named_reports(
-                                process_id,
-                                a.preprocess(
-                                    &self.model,
-                                    &global_settings.generation,
-                                    &runtime_default,
-                                    &generation_pool,
-                                )?,
-                            ),
-                        );
-                        merge_generated_graph_reports(
-                            &mut reports,
-                            Self::attach_process_id_to_named_reports(
-                                process_id,
-                                a.build_integrand(
-                                    &self.model,
-                                    global_settings,
-                                    runtime_default,
-                                    &generation_pool,
-                                )?,
-                            ),
-                        );
-                    } else {
-                        return Err(eyre!(
-                            "No amplitude named '{}' in process id {}",
-                            name,
-                            process_id
-                        ));
-                    }
-                }
-                ProcessCollection::CrossSections(cs) => {
-                    if let Some(cs) = cs.get_mut(name) {
-                        merge_generated_graph_reports(
-                            &mut reports,
-                            Self::attach_process_id_to_named_reports(
-                                process_id,
-                                cs.preprocess(
-                                    &self.model,
-                                    &p.definition,
-                                    &global_settings.generation,
-                                    runtime_default,
-                                    &generation_pool,
-                                )?,
-                            ),
-                        );
-                        merge_generated_graph_reports(
-                            &mut reports,
-                            Self::attach_process_id_to_named_reports(
-                                process_id,
-                                cs.build_integrand(
-                                    &self.model,
-                                    global_settings,
-                                    runtime_default,
-                                    &generation_pool,
-                                )?,
-                            ),
-                        );
-                    } else {
-                        return Err(eyre!(
-                            "No cross section named '{}' in process id {}",
-                            name,
-                            process_id
-                        ));
-                    }
-                }
-            }
-            Ok(reports)
-        } else {
-            let mut reports = p.preprocess(
-                &self.model,
-                global_settings,
-                &runtime_default,
-                &generation_pool,
-            )?;
-            merge_generated_graph_reports(
-                &mut reports,
-                p.generate_integrands(
-                    &self.model,
-                    global_settings,
-                    runtime_default,
-                    &generation_pool,
-                )?,
-            );
-            Ok(reports)
-        }
+        generation_result.map(|reports| GenerationReports {
+            reports,
+            resources: GenerationResourceSummary {
+                peak_ram_bytes,
+                generation_cores,
+            },
+        })
     }
 
     pub fn compile_integrands(
@@ -1822,10 +1925,16 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
     use gammalooprs::{
+        graph::Graph,
+        initialisation::test_initialise,
+        integrands::process::ActiveF64Backend,
+        model::InputParamCard,
         momentum::{Dep, ExternalMomenta, Helicity},
+        processes::process::ProcessCollection,
+        settings::global::{CompilationMode, FrozenCompilationMode},
         settings::{
             runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
             KinematicsSettings, RuntimeSettings,
@@ -1841,6 +1950,40 @@ mod tests {
     };
 
     use super::*;
+
+    fn build_generated_scalar_bubble_state_with_external_backend() -> State {
+        test_initialise().expect("test initialisation should succeed");
+        let mut state = State::new_test();
+        state.model = load_generic_model("scalars");
+        state.model_parameters = InputParamCard::default_from_model(&state.model);
+
+        let graph_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/resources/graphs/scalar_bubble.dot");
+        let graphs = Graph::from_path(&graph_path, &state.model)
+            .expect("scalar bubble graph fixture should load");
+
+        state
+            .import_graphs(
+                graphs,
+                Some("scalar_bubble".to_string()),
+                None,
+                Some("default".to_string()),
+                false,
+                false,
+            )
+            .expect("graph import should succeed");
+
+        let mut cli_settings = CLISettings::default();
+        cli_settings.global.generation.evaluator.compile = true;
+        cli_settings.global.generation.compile.compilation_mode = CompilationMode::Assembly;
+
+        let runtime_defaults = RuntimeSettings::default();
+        state
+            .generate_integrands(&cli_settings.global, (&runtime_defaults).into())
+            .expect("integrand generation should succeed");
+
+        state
+    }
 
     #[test]
     fn test_run_history() {
@@ -2369,6 +2512,41 @@ commands = ["quit -n"]
             classify_state_folder(temp.path()).unwrap(),
             StateFolderKind::Unmanifested
         );
+    }
+
+    #[test]
+    fn activate_loaded_integrand_backends_falls_back_to_eager_when_external_artifacts_are_missing()
+    {
+        let mut state = build_generated_scalar_bubble_state_with_external_backend();
+
+        state.activate_loaded_integrand_backends(false).unwrap();
+
+        for process in &state.process_list.processes {
+            match &process.collection {
+                ProcessCollection::Amplitudes(amplitudes) => {
+                    for amplitude in amplitudes.values() {
+                        let integrand = amplitude.integrand.as_ref().unwrap();
+                        if matches!(
+                            integrand.frozen_compilation(),
+                            FrozenCompilationMode::Cpp(_) | FrozenCompilationMode::Assembly(_)
+                        ) {
+                            assert_eq!(integrand.active_f64_backend(), ActiveF64Backend::Eager);
+                        }
+                    }
+                }
+                ProcessCollection::CrossSections(cross_sections) => {
+                    for cross_section in cross_sections.values() {
+                        let integrand = cross_section.integrand.as_ref().unwrap();
+                        if matches!(
+                            integrand.frozen_compilation(),
+                            FrozenCompilationMode::Cpp(_) | FrozenCompilationMode::Assembly(_)
+                        ) {
+                            assert_eq!(integrand.active_f64_backend(), ActiveF64Backend::Eager);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]
