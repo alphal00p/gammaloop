@@ -22,6 +22,7 @@ use crate::{
         serde_utils::{
             _default_rotation_axis, _default_stability_levels, IsDefault, is_default_rotation_axis,
             is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
+            show_defaults_helper,
         },
     },
 };
@@ -253,11 +254,43 @@ pub mod kinematic;
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ObservablesOutputSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub format: ObservableFileFormat,
+    #[serde(
+        default = "default_observable_output_formats",
+        skip_serializing_if = "is_default_observable_output_formats"
+    )]
+    pub format: Vec<ObservableFileFormat>,
+}
+
+fn default_observable_output_formats() -> Vec<ObservableFileFormat> {
+    vec![ObservableFileFormat::Json]
+}
+
+fn is_default_observable_output_formats(formats: &Vec<ObservableFileFormat>) -> bool {
+    show_defaults_helper(formats.as_slice() == default_observable_output_formats().as_slice())
+}
+
+impl Default for ObservablesOutputSettings {
+    fn default() -> Self {
+        Self {
+            format: default_observable_output_formats(),
+        }
+    }
+}
+
+impl ObservablesOutputSettings {
+    pub(crate) fn resolved_formats(&self) -> Vec<ObservableFileFormat> {
+        let mut resolved_formats = Vec::new();
+        for format in &self.format {
+            if *format == ObservableFileFormat::None || resolved_formats.contains(format) {
+                continue;
+            }
+            resolved_formats.push(*format);
+        }
+        resolved_formats
+    }
 }
 
 #[cfg_attr(

@@ -17,6 +17,7 @@ cli,no_pyo3."
 use ::tracing::debug;
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
+use ::tracing::warn;
 use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser, ValueEnum};
 use clap_complete::shells::{Bash, Elvish, Fish, PowerShell, Zsh};
@@ -44,7 +45,7 @@ use color_eyre::Result;
 use colored::Colorize;
 use console::{measure_text_width, style};
 use dirs::home_dir;
-use eyre::Context;
+use eyre::{eyre, Context};
 use gammalooprs::{
     initialisation::initialise,
     processes::ProcessCollection,
@@ -97,6 +98,47 @@ const BANNER_ART: &str = r"              ██         ▄███████
    ██    ██
    ██    ██
 ";
+
+pub(crate) fn render_smart_toml<T: SmartSerde>(value: &T) -> Result<String> {
+    let mut toml_string = if let Some(schema_path) = value.has_schema_path(true) {
+        let schema_path = schema_path?;
+        format!("#:schema {}\n", schema_path.display())
+    } else {
+        String::new()
+    };
+    toml_string.push_str(&toml::to_string_pretty(value)?);
+    Ok(toml_string)
+}
+
+fn lexically_normalized_absolute_path(path: &Path) -> Result<PathBuf> {
+    let absolute_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+
+    let mut normalized = PathBuf::new();
+    for component in absolute_path.components() {
+        match component {
+            std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            std::path::Component::RootDir => normalized.push(component.as_os_str()),
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                normalized.pop();
+            }
+            std::path::Component::Normal(part) => normalized.push(part),
+        }
+    }
+
+    Ok(normalized)
+}
+
+fn path_lies_within(base: &Path, candidate: &Path) -> Result<bool> {
+    let normalized_base = lexically_normalized_absolute_path(base)?;
+    let normalized_candidate = lexically_normalized_absolute_path(candidate)?;
+    Ok(normalized_candidate == normalized_base
+        || normalized_candidate.strip_prefix(&normalized_base).is_ok())
+}
 
 #[derive(Parser, Debug)]
 #[command(name = "gammaLoop", version, about)]
@@ -321,6 +363,26 @@ impl CLISettings {
 
         self.state.folder = cli.state_folder.clone();
         self.session.read_only_state = cli.read_only_state;
+    }
+
+    pub(crate) fn ensure_write_target_outside_active_state(
+        &self,
+        target: &Path,
+        operation: &str,
+    ) -> Result<()> {
+        if !self.session.read_only_state {
+            return Ok(());
+        }
+
+        if !path_lies_within(&self.state.folder, target)? {
+            return Ok(());
+        }
+
+        Err(eyre!(
+            "Cannot {operation} at '{}' because this session was started with --read-only-state and the target lies inside the active state folder '{}'. Choose a path outside the active state folder or restart without --read-only-state.",
+            target.display(),
+            self.state.folder.display()
+        ))
     }
 }
 
@@ -653,6 +715,13 @@ impl OneShot {
             return Ok(());
         }
 
+        if self.read_only_state {
+            return Err(eyre!(
+                "Cannot remove the active state folder '{}' because this session was started with --read-only-state. Restart without --read-only-state to use --clean-state.",
+                self.state_folder.display()
+            ));
+        }
+
         let metadata = match fs::symlink_metadata(&self.state_folder) {
             Ok(metadata) => metadata,
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -693,9 +762,11 @@ impl OneShot {
     ) -> Result<CLISettings> {
         let mut cli_settings = match state_folder_kind {
             StateFolderKind::Saved => Self::load_global_settings_file(&self.state_folder)?,
-            StateFolderKind::Missing | StateFolderKind::Scratch => boot_run_history
-                .map(|run_history| run_history.cli_settings.clone())
-                .unwrap_or_else(|| self.new_cli_settings(GlobalSettings::default())),
+            StateFolderKind::Missing | StateFolderKind::Scratch | StateFolderKind::Unmanifested => {
+                boot_run_history
+                    .map(|run_history| run_history.cli_settings.clone())
+                    .unwrap_or_else(|| self.new_cli_settings(GlobalSettings::default()))
+            }
             StateFolderKind::Invalid(reason) => {
                 return Err(eyre::eyre!(reason.clone()));
             }
@@ -921,6 +992,31 @@ impl OneShot {
                     )
                 }
                 StateFolderKind::Missing | StateFolderKind::Scratch => {
+                    info!(
+                        "{} {}",
+                        "Initializing new state in".blue(),
+                        self.state_folder.display().to_string().green()
+                    );
+
+                    let mut run_history = RunHistory::default();
+                    if let Some(boot_run_history) = boot_run_history {
+                        run_history.freeze_boot_settings_from(boot_run_history);
+                    }
+
+                    (
+                        State::new(self.state_folder.clone(), self.trace_logs_filename.clone()),
+                        run_history,
+                        startup_cli_settings,
+                        RuntimeSettings::default(),
+                        None,
+                    )
+                }
+                StateFolderKind::Unmanifested => {
+                    warn!(
+                        "State folder '{}' has no {}; treating leftover contents as blank scratch state.",
+                        self.state_folder.display(),
+                        "state_manifest.toml",
+                    );
                     info!(
                         "{} {}",
                         "Initializing new state in".blue(),
@@ -1362,9 +1458,11 @@ mod tests {
     };
 
     use super::{
-        generate_completion_script, CLISettings, Commands, CompletionShell, LogFormat, LogLevel,
-        OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX,
+        generate_completion_script, CLISettings, CommandHistory, Commands, CompletionShell,
+        LogFormat, LogLevel, OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
+        LOG_TEST_MUTEX,
     };
+    use crate::state::CommandsBlock;
 
     const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
     const ENV_DISPLAY_LOG_FILTER: &str = "GL_DISPLAY_FILTER";
@@ -1509,6 +1607,100 @@ mod tests {
         assert_eq!(cli_settings.state.folder, state_path);
         assert_eq!(runtime_settings, RuntimeSettings::default());
         assert!(!cli_settings.state.folder.exists());
+    }
+
+    #[test]
+    fn clean_state_rejects_read_only_state_mode() {
+        let temp = tempdir().unwrap();
+        let state_path = temp.path().join("read_only_state");
+        fs::create_dir_all(&state_path).unwrap();
+        fs::write(state_path.join("stale.txt"), "stale").unwrap();
+
+        let mut one_shot = OneShot::try_parse_from([
+            "gammaloop",
+            "--clean-state",
+            "--read-only-state",
+            "-s",
+            state_path.to_string_lossy().as_ref(),
+        ])
+        .unwrap();
+
+        let err = match one_shot.load() {
+            Ok(_) => panic!("read-only clean-state startup should fail"),
+            Err(err) => err,
+        };
+        assert!(format!("{err:?}").contains("--read-only-state"));
+        assert!(state_path.join("stale.txt").exists());
+    }
+
+    #[test]
+    fn one_shot_run_history_persists_all_executed_commands() {
+        let temp = tempdir().unwrap();
+        let state_path = temp.path().join("state");
+        let run_path = temp.path().join("boot.toml");
+        let run_history = RunHistory {
+            cli_settings: CLISettings {
+                state: StateSettings {
+                    folder: state_path.clone(),
+                    ..StateSettings::default()
+                },
+                ..CLISettings::default()
+            },
+            command_blocks: vec![
+                CommandsBlock {
+                    name: "cmdBlockA".to_string(),
+                    commands: vec![CommandHistory::from_raw_string(
+                        "set global kv global.logfile_directive=error",
+                    )
+                    .unwrap()],
+                },
+                CommandsBlock {
+                    name: "cmdBlockB".to_string(),
+                    commands: vec![CommandHistory::from_raw_string(
+                        "set default-runtime kv general.mu_r=12.0",
+                    )
+                    .unwrap()],
+                },
+            ],
+            commands: vec![CommandHistory::from_raw_string(
+                "set global kv global.display_directive=warn",
+            )
+            .unwrap()],
+            ..RunHistory::default()
+        };
+        fs::write(&run_path, run_history.to_toml_string(true).unwrap()).unwrap();
+
+        let one_shot = OneShot::try_parse_from([
+            "gammaloop",
+            run_path.to_string_lossy().as_ref(),
+            "run",
+            "cmdBlockA",
+            "cmdBlockB",
+            "-c",
+            "set default-runtime kv general.m_uv=7.0; quit -o",
+        ])
+        .unwrap();
+
+        one_shot
+            .run(
+                "run cmdBlockA cmdBlockB -c \"set default-runtime kv general.m_uv=7.0; quit -o\""
+                    .to_string(),
+            )
+            .unwrap();
+
+        let persisted = RunHistory::load(state_path.join("run.toml")).unwrap();
+        let commands = persisted
+            .commands
+            .iter()
+            .map(crate::session::display_command)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            commands,
+            vec![
+                "set global kv global.display_directive=warn",
+                "run cmdBlockA cmdBlockB -c 'set default-runtime kv general.m_uv=7.0'",
+            ]
+        );
     }
 
     #[test]
@@ -2144,6 +2336,20 @@ mod tests {
         let temp = tempdir().unwrap();
         std::fs::create_dir_all(temp.path().join("logs")).unwrap();
         std::fs::write(temp.path().join("logs").join("gammalog.jsonl"), "").unwrap();
+
+        let mut cli = OneShot::new_test(temp.path().to_path_buf());
+        let (_state, run_history, cli_settings, runtime_settings, summary) = cli.load().unwrap();
+
+        assert!(summary.is_none());
+        assert!(run_history.commands.is_empty());
+        assert_eq!(cli_settings.state.folder, temp.path().to_path_buf());
+        assert_eq!(runtime_settings, RuntimeSettings::default());
+    }
+
+    #[test]
+    fn load_treats_unmanifested_state_folder_as_blank_state() {
+        let temp = tempdir().unwrap();
+        std::fs::create_dir_all(temp.path().join("processes").join("amplitudes")).unwrap();
 
         let mut cli = OneShot::new_test(temp.path().to_path_buf());
         let (_state, run_history, cli_settings, runtime_settings, summary) = cli.load().unwrap();

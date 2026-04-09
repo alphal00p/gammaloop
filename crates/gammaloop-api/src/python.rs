@@ -6,8 +6,8 @@ use gammalooprs::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
     observables::{
-        AdditionalWeightKey, Event, EventGroup, GenericAdditionalWeightInfo, HistogramSnapshot,
-        HistogramStatisticsSnapshot,
+        AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
+        HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
     },
     processes::{DotExportSettings, ProcessCollection},
     settings::{global::OrientationPattern, RuntimeSettings},
@@ -29,7 +29,8 @@ use crate::{
         IntegrandCutInfo, IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo,
         IntegrandLoopMomentumBasisInfo, IntegrandOrientationInfo, IntegrandThresholdEsurfaceInfo,
     },
-    session::{CliSession, CliSessionState},
+    render_smart_toml,
+    session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
     state::{ProcessRef, RunHistory, State},
     CLISettings, LoadedState, StateLoadOption,
@@ -103,6 +104,7 @@ fn python_module(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrandCutInfo>()?;
     m.add_class::<PyIntegrandThresholdEsurfaceInfo>()?;
     m.add_class::<PyAdditionalWeight>()?;
+    m.add_class::<PyHistogramAccumulator>()?;
     m.add_class::<PyHistogramSnapshot>()?;
     m.add_class::<PyHistogramBinSnapshot>()?;
     m.add_class::<PyHistogramStatisticsSnapshot>()?;
@@ -453,6 +455,9 @@ pub struct PyCutInfo {
     pub outgoing_pdgs: Vec<isize>,
     pub cut_id: usize,
     pub graph_id: usize,
+    pub graph_group_id: Option<usize>,
+    pub orientation_id: Option<usize>,
+    pub lmb_channel_id: Option<usize>,
     pub lmb_channel_edge_ids: Option<Vec<usize>>,
 }
 
@@ -539,11 +544,143 @@ pub struct PyEventGroup {
     pub events: Vec<PyEvent>,
 }
 
+#[pyclass(name = "HistogramAccumulator", skip_from_py_object)]
+#[derive(Clone)]
+pub struct PyHistogramAccumulator {
+    inner: HistogramAccumulatorState,
+}
+
+#[pymethods]
+impl PyHistogramAccumulator {
+    #[staticmethod]
+    #[pyo3(signature = (title, x_min, x_max, n_bins, type_description="AL".to_string(), phase="real".to_string(), value_transform="identity".to_string(), log_x_axis=false, log_y_axis=true))]
+    fn continuous(
+        title: String,
+        x_min: f64,
+        x_max: f64,
+        n_bins: usize,
+        type_description: String,
+        phase: String,
+        value_transform: String,
+        log_x_axis: bool,
+        log_y_axis: bool,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: HistogramAccumulatorState::continuous(
+                title,
+                type_description,
+                py_phase_to_phase(&phase)?,
+                py_value_transform_to_transform(&value_transform)?,
+                x_min,
+                x_max,
+                log_x_axis,
+                log_y_axis,
+                n_bins,
+            ),
+        })
+    }
+
+    #[staticmethod]
+    #[pyo3(signature = (title, min_bin_id, max_bin_id, ordering="ascending_bin_id".to_string(), labels=None, type_description="AL".to_string(), phase="real".to_string(), log_y_axis=true))]
+    fn discrete(
+        title: String,
+        min_bin_id: isize,
+        max_bin_id: isize,
+        ordering: String,
+        labels: Option<Vec<String>>,
+        type_description: String,
+        phase: String,
+        log_y_axis: bool,
+    ) -> PyResult<Self> {
+        if max_bin_id < min_bin_id {
+            return Err(exceptions::PyValueError::new_err(format!(
+                "invalid discrete bin range: max_bin_id ({max_bin_id}) must be >= min_bin_id ({min_bin_id})"
+            )));
+        }
+        let n_bins = max_bin_id
+            .checked_sub(min_bin_id)
+            .and_then(|delta| delta.checked_add(1))
+            .ok_or_else(|| exceptions::PyValueError::new_err("invalid discrete bin range"))?
+            as usize;
+        let labels = match labels {
+            Some(labels) if labels.len() != n_bins => {
+                return Err(exceptions::PyValueError::new_err(format!(
+                    "expected {} labels for discrete range [{}, {}], got {}",
+                    n_bins,
+                    min_bin_id,
+                    max_bin_id,
+                    labels.len()
+                )));
+            }
+            Some(labels) => labels.into_iter().map(Some).collect(),
+            None => vec![None; n_bins],
+        };
+        Ok(Self {
+            inner: HistogramAccumulatorState::discrete(
+                title,
+                type_description,
+                py_phase_to_phase(&phase)?,
+                min_bin_id,
+                max_bin_id,
+                py_discrete_ordering(&ordering)?,
+                log_y_axis,
+                labels,
+            )
+            .map_err(to_py_value_error)?,
+        })
+    }
+
+    fn snapshot(&self) -> PyHistogramSnapshot {
+        py_histogram_snapshot_from_snapshot(self.inner.snapshot())
+    }
+
+    fn merge_in_place(&mut self, other: &mut PyHistogramAccumulator) -> PyResult<()> {
+        self.inner
+            .merge_in_place(&mut other.inner)
+            .map_err(to_py_value_error)
+    }
+
+    fn rebin(&self, contiguous_bins: usize) -> PyResult<Self> {
+        self.inner
+            .rebin(contiguous_bins)
+            .map(|inner| Self { inner })
+            .map_err(to_py_value_error)
+    }
+
+    fn rescale(&mut self, factor: f64) {
+        self.inner.rescale(factor);
+    }
+
+    fn change_bin_ordering(&mut self, ordering: String) -> PyResult<()> {
+        self.inner
+            .change_bin_ordering(py_discrete_ordering(&ordering)?)
+            .map_err(to_py_value_error)
+    }
+
+    fn update_results(&mut self) {
+        self.inner.update_results();
+    }
+
+    fn fill_continuous_sample(&mut self, entries: Vec<(f64, f64)>) -> PyResult<()> {
+        self.inner
+            .fill_continuous_sample(&entries)
+            .map_err(to_py_value_error)
+    }
+
+    fn fill_discrete_sample(&mut self, entries: Vec<(isize, f64)>) -> PyResult<()> {
+        self.inner
+            .fill_discrete_sample(&entries)
+            .map_err(to_py_value_error)
+    }
+}
+
 #[pyclass(from_py_object, name = "HistogramBin", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramBinSnapshot {
     pub x_min: Option<f64>,
     pub x_max: Option<f64>,
+    pub bin_id: Option<isize>,
+    pub label: Option<String>,
     pub entry_count: usize,
     pub sum_weights: f64,
     pub sum_weights_squared: f64,
@@ -561,15 +698,19 @@ pub struct PyHistogramStatisticsSnapshot {
 #[pyclass(from_py_object, name = "HistogramSnapshot", get_all)]
 #[derive(Clone)]
 pub struct PyHistogramSnapshot {
+    pub kind: String,
     pub title: String,
+    pub type_description: String,
     pub phase: String,
     pub value_transform: String,
     pub supports_misbinning_mitigation: bool,
-    pub x_min: f64,
-    pub x_max: f64,
+    pub x_min: Option<f64>,
+    pub x_max: Option<f64>,
     pub sample_count: usize,
     pub log_x_axis: bool,
     pub log_y_axis: bool,
+    pub discrete_min_bin_id: Option<isize>,
+    pub discrete_ordering: Option<String>,
     pub bins: Vec<PyHistogramBinSnapshot>,
     pub underflow_bin: PyHistogramBinSnapshot,
     pub overflow_bin: PyHistogramBinSnapshot,
@@ -1066,6 +1207,9 @@ fn py_event_from_event(event: &Event) -> PyEvent {
             outgoing_pdgs: event.cut_info.particle_pdgs.1.iter().copied().collect(),
             cut_id: event.cut_info.cut_id,
             graph_id: event.cut_info.graph_id,
+            graph_group_id: event.cut_info.graph_group_id,
+            orientation_id: event.cut_info.orientation_id,
+            lmb_channel_id: event.cut_info.lmb_channel_id,
             lmb_channel_edge_ids: event
                 .cut_info
                 .lmb_channel_edge_ids
@@ -1139,6 +1283,9 @@ fn event_from_py_event(event: &PyEvent) -> Event {
             ),
             cut_id: event.cut_info.cut_id,
             graph_id: event.cut_info.graph_id,
+            graph_group_id: event.cut_info.graph_group_id,
+            orientation_id: event.cut_info.orientation_id,
+            lmb_channel_id: event.cut_info.lmb_channel_id,
             lmb_channel_edge_ids: event
                 .cut_info
                 .lmb_channel_edge_ids
@@ -1179,9 +1326,51 @@ fn py_observable_dict_from_bundle<'py>(
     Ok(dict)
 }
 
+fn py_phase_to_phase(phase: &str) -> PyResult<gammalooprs::observables::ObservablePhase> {
+    match phase {
+        "real" => Ok(gammalooprs::observables::ObservablePhase::Real),
+        "imag" => Ok(gammalooprs::observables::ObservablePhase::Imag),
+        _ => Err(exceptions::PyValueError::new_err(format!(
+            "unknown histogram phase '{}'",
+            phase
+        ))),
+    }
+}
+
+fn py_value_transform_to_transform(
+    value_transform: &str,
+) -> PyResult<gammalooprs::observables::ObservableValueTransform> {
+    match value_transform {
+        "identity" => Ok(gammalooprs::observables::ObservableValueTransform::Identity),
+        "log10" => Ok(gammalooprs::observables::ObservableValueTransform::Log10),
+        _ => Err(exceptions::PyValueError::new_err(format!(
+            "unknown histogram value_transform '{}'",
+            value_transform
+        ))),
+    }
+}
+
+fn py_discrete_ordering(ordering: &str) -> PyResult<DiscreteBinOrdering> {
+    match ordering {
+        "ascending_bin_id" => Ok(DiscreteBinOrdering::AscendingBinId),
+        "value_descending" => Ok(DiscreteBinOrdering::ValueDescending),
+        "abs_value_descending" => Ok(DiscreteBinOrdering::AbsValueDescending),
+        _ => Err(exceptions::PyValueError::new_err(format!(
+            "unknown discrete bin ordering '{}'",
+            ordering
+        ))),
+    }
+}
+
+fn to_py_value_error(error: eyre::Report) -> PyErr {
+    exceptions::PyValueError::new_err(error.to_string())
+}
+
 fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogramSnapshot {
     PyHistogramSnapshot {
+        kind: format!("{:?}", snapshot.kind).to_lowercase(),
         title: snapshot.title,
+        type_description: snapshot.type_description,
         phase: format!("{:?}", snapshot.phase).to_lowercase(),
         value_transform: format!("{:?}", snapshot.value_transform).to_lowercase(),
         supports_misbinning_mitigation: snapshot.supports_misbinning_mitigation,
@@ -1190,12 +1379,18 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
         sample_count: snapshot.sample_count,
         log_x_axis: snapshot.log_x_axis,
         log_y_axis: snapshot.log_y_axis,
+        discrete_min_bin_id: snapshot.discrete_min_bin_id,
+        discrete_ordering: snapshot
+            .discrete_ordering
+            .map(|ordering| ordering.as_str().to_string()),
         bins: snapshot
             .bins
             .into_iter()
             .map(|bin| PyHistogramBinSnapshot {
                 x_min: bin.x_min,
                 x_max: bin.x_max,
+                bin_id: bin.bin_id,
+                label: bin.label,
                 entry_count: bin.entry_count,
                 sum_weights: bin.sum_weights,
                 sum_weights_squared: bin.sum_weights_squared,
@@ -1205,6 +1400,8 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
         underflow_bin: PyHistogramBinSnapshot {
             x_min: snapshot.underflow_bin.x_min,
             x_max: snapshot.underflow_bin.x_max,
+            bin_id: snapshot.underflow_bin.bin_id,
+            label: snapshot.underflow_bin.label,
             entry_count: snapshot.underflow_bin.entry_count,
             sum_weights: snapshot.underflow_bin.sum_weights,
             sum_weights_squared: snapshot.underflow_bin.sum_weights_squared,
@@ -1213,6 +1410,8 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
         overflow_bin: PyHistogramBinSnapshot {
             x_min: snapshot.overflow_bin.x_min,
             x_max: snapshot.overflow_bin.x_max,
+            bin_id: snapshot.overflow_bin.bin_id,
+            label: snapshot.overflow_bin.label,
             entry_count: snapshot.overflow_bin.entry_count,
             sum_weights: snapshot.overflow_bin.sum_weights,
             sum_weights_squared: snapshot.overflow_bin.sum_weights_squared,
@@ -1907,7 +2106,6 @@ impl PyNumeratorAwareGroupingOption {
 struct GammaLoopAPI {
     gammaloop_state: State,
     cli_settings: CLISettings,
-    #[allow(unused)]
     run_history: RunHistory,
     default_runtime_settings: RuntimeSettings,
     session_state: CliSessionState,
@@ -1981,7 +2179,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_sample",
-        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
+        signature = (point, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weight=None, discrete_dim=None, graph_name=None, orientation=None)
     )]
     pub fn evaluate_sample<'py>(
         &mut self,
@@ -1991,6 +2189,7 @@ impl GammaLoopAPI {
         integrand_name: Option<String>,
         use_arb_prec: bool,
         minimal_output: bool,
+        return_events: Option<bool>,
         momentum_space: bool,
         integrator_weight: Option<f64>,
         discrete_dim: Option<Vec<usize>>,
@@ -2013,6 +2212,7 @@ impl GammaLoopAPI {
             integrand_name,
             use_arb_prec,
             minimal_output,
+            return_generated_events: return_events,
             momentum_space,
             points: points.view(),
             integrator_weights: integrator_weights.as_ref().map(|weights| weights.view()),
@@ -2038,7 +2238,7 @@ impl GammaLoopAPI {
 
     #[pyo3(
         name = "evaluate_samples",
-        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, momentum_space=false, integrator_weights=None, discrete_dims=None, graph_names=None, orientations=None)
+        signature = (points, process_id=None, integrand_name=None, use_arb_prec=false, minimal_output=false, return_events=None, momentum_space=false, integrator_weights=None, discrete_dims=None, graph_names=None, orientations=None)
     )]
     pub fn evaluate_samples<'py>(
         &mut self,
@@ -2048,6 +2248,7 @@ impl GammaLoopAPI {
         integrand_name: Option<String>,
         use_arb_prec: bool,
         minimal_output: bool,
+        return_events: Option<bool>,
         momentum_space: bool,
         integrator_weights: Option<PyReadonlyArray1<'py, f64>>,
         discrete_dims: Option<PyReadonlyArray2<'py, usize>>,
@@ -2061,6 +2262,7 @@ impl GammaLoopAPI {
             integrand_name,
             use_arb_prec,
             minimal_output,
+            return_generated_events: return_events,
             momentum_space,
             points: points_rust,
             integrator_weights: integrator_weights.as_ref().map(PyReadonlyArray1::as_array),
@@ -2419,13 +2621,41 @@ impl GammaLoopAPI {
         }
     }
 
+    #[pyo3(name = "get_run_history", signature = ())]
+    pub(crate) fn get_run_history(&self) -> PyResult<String> {
+        self.run_history
+            .to_toml_string(self.cli_settings.try_strings)
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Could not render the current run history as TOML: {e}"
+                ))
+            })
+    }
+
     #[pyo3(name = "get_global_settings", signature = ())]
-    pub(crate) fn get_global_settings(&self) -> PyResult<PySettingsValue> {
-        PySettingsValue::from_settings(
-            &self.cli_settings.global,
-            "global settings",
-            "global_settings",
-        )
+    pub(crate) fn get_global_settings(&self) -> PyResult<String> {
+        render_smart_toml(&self.cli_settings).map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not render the current global settings as TOML: {e}"
+            ))
+        })
+    }
+
+    #[pyo3(name = "get_active_command_blocks", signature = ())]
+    pub(crate) fn get_active_command_blocks(
+        &self,
+    ) -> PyResult<std::collections::BTreeMap<String, Vec<String>>> {
+        Ok(self
+            .run_history
+            .command_blocks
+            .iter()
+            .map(|block| {
+                (
+                    block.name.clone(),
+                    block.commands.iter().map(display_command).collect(),
+                )
+            })
+            .collect())
     }
 
     #[pyo3(name = "get_default_runtime_settings", signature = ())]

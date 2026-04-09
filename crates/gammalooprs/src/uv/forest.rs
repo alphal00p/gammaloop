@@ -8,6 +8,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
@@ -51,6 +52,7 @@ impl CutForests {
         &mut self,
         graph: &mut Graph,
         vakint: &Vakint,
+        valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         for ((forest, cuts), vakint_settings) in &mut self
@@ -59,7 +61,13 @@ impl CutForests {
             .zip(self.cuts.cuts.iter())
             .zip(self.settings.iter())
         {
-            forest.compute(graph, (vakint, vakint_settings), cuts, settings)?;
+            forest.compute(
+                graph,
+                (vakint, vakint_settings),
+                cuts,
+                valid_orientations,
+                settings,
+            )?;
         }
         Ok(())
     }
@@ -94,6 +102,7 @@ impl Forest {
         graph: &mut Graph,
         vakint: (&Vakint, &vakint::VakintSettings),
         cut_data: &CutSet,
+        valid_orientations: &[EdgeVec<Orientation>],
         settings: &UVgenerationSettings,
     ) -> Result<()> {
         let order = self.dag.compute_topological_order();
@@ -102,7 +111,9 @@ impl Forest {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.topo_order = i;
-                    self.dag.nodes[n].data.root(graph, cut_data, settings)?;
+                    self.dag.nodes[n]
+                        .data
+                        .root(graph, cut_data, valid_orientations, settings)?;
                 }
                 1 => {
                     // debug!("")
@@ -117,6 +128,11 @@ impl Forest {
                     };
                     current.data.simple_approx =
                         Some(a.dependent(current.data.spinney.subgraph.clone()));
+                    current.data.update_filtered_integrated_uv_chain_state(
+                        graph,
+                        &parent.data,
+                        settings,
+                    );
 
                     current.data.topo_order = i;
                     if settings.generate_integrated {
@@ -128,9 +144,13 @@ impl Forest {
                         continue;
                     }
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
-                    current
-                        .data
-                        .compute(graph, cut_data, &parent.data, settings)?;
+                    current.data.compute(
+                        graph,
+                        cut_data,
+                        &parent.data,
+                        valid_orientations,
+                        settings,
+                    )?;
                 }
                 _ => {
                     unimplemented!("Union not implemented");

@@ -204,13 +204,28 @@ impl Commands {
                 global_cli_settings,
             )?,
             Commands::Set(s) => s.run(state, global_cli_settings, default_runtime_settings)?,
-            Commands::Generate(g) => g.run(
-                state,
-                &global_cli_settings.state.folder,
-                global_cli_settings.override_state,
-                &global_cli_settings.global,
-                default_runtime_settings,
-            )?,
+            Commands::Generate(g) => {
+                let would_compile_into_active_state = global_cli_settings.session.read_only_state
+                    && global_cli_settings.global.generation.evaluator.compile
+                    && matches!(
+                        g.mode.as_ref(),
+                        None | Some(generate::GenerateCmd::Existing(_))
+                    );
+                if would_compile_into_active_state {
+                    return Err(Report::msg(format!(
+                        "Cannot compile generated integrands into '{}' because this session was started with --read-only-state. Disable `global.generation.evaluator.compile`, restart without --read-only-state, or save the state elsewhere first.",
+                        global_cli_settings.state.folder.display()
+                    )));
+                }
+
+                g.run(
+                    state,
+                    &global_cli_settings.state.folder,
+                    global_cli_settings.override_state,
+                    &global_cli_settings.global,
+                    default_runtime_settings,
+                )?
+            }
             Commands::Integrate(g) => {
                 return Ok(CommandExecution::continue_with(CommandOutput::Integrate(
                     g.run(state, global_cli_settings)?,
@@ -262,5 +277,42 @@ impl Commands {
             }
         }
         Ok(CommandExecution::continue_without_output())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Commands;
+    use crate::{
+        commands::generate::{Generate, GenerateCmd, ProcessArgs},
+        state::{RunHistory, State},
+        CLISettings,
+    };
+    use gammalooprs::settings::RuntimeSettings;
+
+    #[test]
+    fn generate_rejects_compilation_into_active_state_in_read_only_mode() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.session.read_only_state = true;
+        cli_settings.global.generation.evaluator.compile = true;
+
+        let err = Commands::Generate(Generate {
+            mode: Some(GenerateCmd::Existing(ProcessArgs {
+                process: None,
+                integrand_name: None,
+            })),
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        assert!(format!("{err:?}").contains("--read-only-state"));
     }
 }

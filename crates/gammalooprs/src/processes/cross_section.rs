@@ -3,7 +3,7 @@ use std::{
     fs::{self, File},
     io::Write,
     ops::{Index, IndexMut},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use ahash::HashMap;
@@ -33,7 +33,7 @@ use crate::{
     },
     integrands::process::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
-        cross_section::CrossSectionIntegrandData,
+        cross_section::CrossSectionIntegrandData, graph_to_group_id_for_group_structure,
     },
     model::ArcParticle,
     momentum::{
@@ -145,6 +145,10 @@ pub struct CrossSection {
 }
 
 impl CrossSection {
+    fn storage_path(&self, base: &Path) -> PathBuf {
+        base.join(&self.name)
+    }
+
     pub fn export_standalone(
         &self,
         path: impl AsRef<Path>,
@@ -300,6 +304,9 @@ impl CrossSection {
                 // polarizations,
                 graph_terms: terms,
                 graph_group_structure: self.graph_group_structure.clone(),
+                graph_to_group_id: graph_to_group_id_for_group_structure(
+                    &self.graph_group_structure,
+                ),
             },
             event_processing_runtime: Default::default(),
         };
@@ -316,7 +323,7 @@ impl CrossSection {
         thread_pool: &ThreadPool,
     ) -> Result<()> {
         info!("Compiling cross section {}", self.name);
-        let p = path.as_ref().join(format!("cs_{}", self.name));
+        let p = self.storage_path(path.as_ref());
 
         let result = fs::create_dir_all(&p).with_context(|| {
             format!(
@@ -336,7 +343,7 @@ impl CrossSection {
     }
 
     pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = path.as_ref().join(&self.name);
+        let p = self.storage_path(path.as_ref());
         let r = fs::create_dir_all(&p).with_context(|| {
             format!(
                 "Trying to create directory to save cross section {}",
@@ -858,6 +865,15 @@ impl CrossSectionGraph {
         let cut_structure = CutStructure { cuts };
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global_cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
 
         let lu_prefactor = self.lu_prefactor_helper();
         let cutkosky_corrections = self
@@ -882,7 +898,7 @@ impl CrossSectionGraph {
             .collect_vec();
 
         let mut cut_forests = cut_woods.unfold(&self.graph);
-        cut_forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
         let parametric_integrands =
             cut_forests.orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?;
@@ -1304,8 +1320,17 @@ impl CrossSectionGraph {
 
         let cut_woods = CutWoods::new(cut_structure, &self.graph, &settings.uv);
         let mut cut_forests = cut_woods.unfold(&self.graph);
+        let valid_orientations: Vec<_> = self
+            .derived_data
+            .global_cff_expression
+            .as_ref()
+            .expect("global_cff_expression should have been created")
+            .orientations
+            .iter()
+            .map(|orientation| orientation.data.orientation.clone())
+            .collect();
 
-        cut_forests.compute(&mut self.graph, vakint, &settings.uv)?;
+        cut_forests.compute(&mut self.graph, vakint, &valid_orientations, &settings.uv)?;
 
         let mut threshold_counterterms = cut_forests
             .orientation_parametric_exprs(&self.graph, settings.uv.add_sigma)?
@@ -1665,7 +1690,25 @@ fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
 #[cfg(test)]
 mod tests {
     use super::CrossSectionGraph;
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
     use symbolica::atom::{Atom, AtomCore};
+
+    fn fresh_temp_dir(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "gammalooprs-{name}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
 
     #[test]
     fn cutkosky_cut_correction_is_applied_once_per_cut_propagator() {
@@ -1677,5 +1720,14 @@ mod tests {
             CrossSectionGraph::cutkosky_cut_correction(3),
             (Atom::num(1) / Atom::i()).pow(3)
         );
+    }
+
+    #[test]
+    fn cross_section_storage_path_stays_inside_process_folder() {
+        let temp = fresh_temp_dir("cross-section-storage-path");
+        let cross_section = super::CrossSection::new("NLO".to_string());
+
+        assert_eq!(cross_section.storage_path(&temp), temp.join("NLO"));
+        fs::remove_dir_all(temp).unwrap();
     }
 }

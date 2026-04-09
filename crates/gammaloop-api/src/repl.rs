@@ -4679,7 +4679,7 @@ mod tests {
 
         assert!(values.contains(&"particle".to_string()), "{values:?}");
         assert!(values.contains(&"jet".to_string()), "{values:?}");
-        assert!(values.contains(&"cross_section".to_string()), "{values:?}");
+        assert!(values.contains(&"integral".to_string()), "{values:?}");
     }
 
     #[test]

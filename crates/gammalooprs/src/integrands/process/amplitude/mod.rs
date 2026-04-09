@@ -58,7 +58,8 @@ use crate::{
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample,
+    evaluate_sample, format_lmb_channel_label, format_orientation_label,
+    histogram_process_info_for_integrand, prepare_buffered_event,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -210,6 +211,7 @@ impl AmplitudeGraphTerm {
     fn generate_event<T: FloatLike>(
         &self,
         settings: &RuntimeSettings,
+        orientation_id: Option<usize>,
         channel_id: Option<ChannelIndex>,
     ) -> Result<GenericEvent<T>> {
         let externals = settings
@@ -236,6 +238,8 @@ impl AmplitudeGraphTerm {
 
         let mut event = GenericEvent::default();
         event.cut_info.cut_id = 0;
+        event.cut_info.orientation_id = orientation_id;
+        event.cut_info.lmb_channel_id = channel_id.map(usize::from);
         event.cut_info.lmb_channel_edge_ids =
             channel_id.map(|channel_id| self.multi_channeling_setup.channel_edge_ids(channel_id));
 
@@ -445,6 +449,18 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.graph.name.clone()
     }
 
+    fn orientation_label(&self, orientation_id: usize) -> Option<String> {
+        self.orientations
+            .get(OrientationID::from(orientation_id))
+            .map(format_orientation_label)
+    }
+
+    fn lmb_channel_label(&self, channel_id: ChannelIndex) -> Option<String> {
+        Some(format_lmb_channel_label(
+            &self.multi_channeling_setup.channel_edge_ids(channel_id),
+        ))
+    }
+
     fn get_graph(&self) -> &Graph {
         &self.graph
     }
@@ -458,13 +474,31 @@ impl GraphTerm for AmplitudeGraphTerm {
         momentum_sample: &MomentumSample<T>,
         model: &Model,
         settings: &RuntimeSettings,
-        _event_processing_runtime: Option<&mut EventProcessingRuntime>,
+        event_processing_runtime: Option<&mut EventProcessingRuntime>,
         rotation: &Rotation,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Result<GraphEvaluationResult<T>> {
         let event_channel_id = channel_id.as_ref().map(|(channel_id, _)| *channel_id);
+        let prepared_event =
+            prepare_buffered_event(settings, rotation, event_processing_runtime, || {
+                self.generate_event(
+                    settings,
+                    momentum_sample.sample.orientation,
+                    event_channel_id,
+                )
+            })?;
+        if !prepared_event.selectors_pass {
+            return Ok(GraphEvaluationResult {
+                integrand_result: Complex::new_re(momentum_sample.zero()),
+                event_groups: crate::observables::GenericEventGroupList::default(),
+                event_processing_time: prepared_event.event_processing_time,
+                generated_event_count: prepared_event.generated_event_count,
+                accepted_event_count: prepared_event.accepted_event_count,
+            });
+        }
+
         let (integrand_result, counterterm_evaluation) = self.evaluate_impl(
             momentum_sample,
             model,
@@ -476,10 +510,9 @@ impl GraphTerm for AmplitudeGraphTerm {
         )?;
 
         let mut event_groups = crate::observables::GenericEventGroupList::default();
-        let mut generated_event_count = 0;
-        let mut accepted_event_count = 0;
-        if settings.should_return_generated_events() {
-            let mut event = self.generate_event(settings, event_channel_id)?;
+        let generated_event_count = prepared_event.generated_event_count;
+        let accepted_event_count = prepared_event.accepted_event_count;
+        if let Some(mut event) = prepared_event.buffered_event {
             event.weight = integrand_result.clone();
 
             if settings.general.store_additional_weights_in_event {
@@ -501,14 +534,12 @@ impl GraphTerm for AmplitudeGraphTerm {
             }
 
             event_groups.push_singleton(event);
-            generated_event_count = 1;
-            accepted_event_count = 1;
         }
 
         Ok(GraphEvaluationResult {
             integrand_result,
             event_groups,
-            event_processing_time: std::time::Duration::ZERO,
+            event_processing_time: prepared_event.event_processing_time,
             generated_event_count,
             accepted_event_count,
         })
@@ -556,6 +587,7 @@ pub struct AmplitudeIntegrandData {
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
+    pub graph_to_group_id: Vec<usize>,
     pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
 }
 
@@ -939,11 +971,13 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             }
         }
 
-        self.event_processing_runtime
-            .set(EventProcessingRuntime::from_settings_with_model(
+        self.event_processing_runtime.set(
+            EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
                 model,
-            )?);
+                &histogram_process_info_for_integrand(self),
+            )?,
+        );
 
         Ok(())
     }
@@ -978,6 +1012,14 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
+    }
+
+    fn graph_group_id_for_graph(&self, graph_id: usize) -> Option<usize> {
+        self.data.graph_to_group_id.get(graph_id).copied()
+    }
+
+    fn get_graph(&self, graph_id: usize) -> &Self::G {
+        &self.data.graph_terms[graph_id]
     }
 
     fn get_group(&self, group_id: GroupId) -> &GraphGroup {

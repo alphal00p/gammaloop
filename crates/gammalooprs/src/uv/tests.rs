@@ -113,8 +113,22 @@ fn scalar_bubble_root_integrand_reference(
     let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
+    let valid_orientations: Vec<_> = amplitude_graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .expect("cff_expression should have been created")
+        .orientations
+        .iter()
+        .map(|orientation| orientation.data.orientation.clone())
+        .collect();
     forests
-        .compute(&mut amplitude_graph.graph, vakint, &reference_settings.uv)
+        .compute(
+            &mut amplitude_graph.graph,
+            vakint,
+            &valid_orientations,
+            &reference_settings.uv,
+        )
         .unwrap();
 
     let root_integrand = forests.forests[0]

@@ -1925,15 +1925,16 @@ mod test {
             None,
         )
         .unwrap();
-        assert_eq!(
-            settings
-                .observables
-                .get("top_pt_hist")
-                .expect("observable should have been inserted")
-                .histogram
-                .n_bins,
-            50
-        );
+        let observable = settings
+            .observables
+            .get("top_pt_hist")
+            .expect("observable should have been inserted");
+        let gammalooprs::observables::HistogramSettings::Continuous(histogram) =
+            &observable.histogram
+        else {
+            panic!("expected continuous histogram");
+        };
+        assert_eq!(histogram.n_bins, 50);
 
         apply_process_set_args(
             &ProcessSetArgs::String {
@@ -1980,15 +1981,16 @@ max = 500.0
             None,
         )
         .unwrap();
-        assert_eq!(
-            settings
-                .observables
-                .get("top_pt_hist")
-                .expect("observable should still exist")
-                .histogram
-                .n_bins,
-            80
-        );
+        let observable = settings
+            .observables
+            .get("top_pt_hist")
+            .expect("observable should still exist");
+        let gammalooprs::observables::HistogramSettings::Continuous(histogram) =
+            &observable.histogram
+        else {
+            panic!("expected continuous histogram");
+        };
+        assert_eq!(histogram.n_bins, 80);
 
         apply_process_set_args(
             &ProcessSetArgs::Update {
@@ -2255,11 +2257,13 @@ max = 250.0
         .unwrap();
 
         let observable = settings.observables.get("top_pt_hist").unwrap();
-        assert_eq!(
-            observable.histogram.title.as_deref(),
-            Some("Leading top pT")
-        );
-        assert_eq!(observable.histogram.type_description, "SB");
+        let gammalooprs::observables::HistogramSettings::Continuous(histogram) =
+            &observable.histogram
+        else {
+            panic!("expected continuous histogram");
+        };
+        assert_eq!(histogram.title.as_deref(), Some("Leading top pT"));
+        assert_eq!(histogram.type_description, "SB");
     }
 
     #[test]

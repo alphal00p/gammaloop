@@ -747,11 +747,18 @@ impl RatatuiDashboardState {
         right.push_text("#samples/s", TextStyle::green().bold());
         right.push_text(" | ", TextStyle::PLAIN);
         if let Some(sample_core_time) = update.meta.sample_core_time() {
-            right.push_text(sample_core_time, TextStyle::PLAIN.bold());
+            right.push_text(
+                format!("{sample_core_time} /sample/core"),
+                TextStyle::green().bold(),
+            );
         } else {
-            right.push_text("N/A", TextStyle::red());
+            right.push_text("N/A /sample/core", TextStyle::red());
         }
-        right.push_text(" /sample/core", TextStyle::green().bold());
+        right.push_text(" ", TextStyle::PLAIN);
+        right.push_text(
+            format!("({} cores)", update.meta.cores),
+            TextStyle::blue().bold(),
+        );
         right.push_text(" ", TextStyle::PLAIN);
 
         let header = Layout::default()
@@ -1713,6 +1720,14 @@ impl RatatuiDashboardState {
         if let Some(section) = update.max_weight_details.as_ref() {
             let headers = section.headers();
             let title = section.title();
+            let max_eval_width = max_styled_text_width(
+                std::iter::once(&headers[2]).chain(
+                    section
+                        .rows_by_slot
+                        .iter()
+                        .flat_map(|group| group.iter().map(|row| &row.max_eval.display)),
+                ),
+            );
             let mut rows = vec![blank_table_row(4)];
             rows.extend(
                 section
@@ -1736,7 +1751,7 @@ impl RatatuiDashboardState {
                 [
                     Constraint::Length(24),
                     Constraint::Length(10),
-                    Constraint::Length(20),
+                    Constraint::Length(max_eval_width),
                     Constraint::Min(24),
                 ],
             )
@@ -1788,7 +1803,25 @@ impl RatatuiDashboardState {
             );
             let summary_widths = std::iter::once(Constraint::Length(24))
                 .chain(std::iter::once(Constraint::Length(10)))
-                .chain(section.slot_headers.iter().map(|_| Constraint::Min(16)))
+                .chain(
+                    section
+                        .slot_headers
+                        .iter()
+                        .enumerate()
+                        .map(|(slot_index, header)| {
+                            Constraint::Min(
+                                max_styled_text_width(std::iter::once(header).chain(
+                                    sorted_rows.iter().filter_map(|row| {
+                                        row.slot_values
+                                            .get(slot_index)
+                                            .and_then(|value| value.as_ref())
+                                            .map(|field| &field.display)
+                                    }),
+                                ))
+                                .max(16),
+                            )
+                        }),
+                )
                 .collect::<Vec<_>>();
             let table = Table::new(summary_rows, summary_widths)
                 .header(Row::new(
@@ -2263,6 +2296,25 @@ fn styled_text_line_count(text: &StyledText) -> u16 {
         .max(1)
         .try_into()
         .unwrap_or(u16::MAX)
+}
+
+fn styled_text_max_line_width(text: &StyledText) -> u16 {
+    text.to_plain_string()
+        .lines()
+        .map(|line| line.chars().count())
+        .max()
+        .unwrap_or(0)
+        .max(1)
+        .try_into()
+        .unwrap_or(u16::MAX)
+}
+
+fn max_styled_text_width<'a>(texts: impl IntoIterator<Item = &'a StyledText>) -> u16 {
+    texts
+        .into_iter()
+        .map(styled_text_max_line_width)
+        .max()
+        .unwrap_or(1)
 }
 
 fn styled_text_line(text: &StyledText, line_index: usize) -> StyledText {

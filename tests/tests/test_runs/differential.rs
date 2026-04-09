@@ -46,7 +46,7 @@ fn lu_differential_integration_writes_json_observables() -> Result<()> {
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
     )?;
 
     let workspace = get_tests_workspace_path().join("lu_differential_integration_json/workspace");
@@ -85,7 +85,7 @@ fn lu_differential_observables_without_selectors_still_fill_histograms() -> Resu
     let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_json")?;
     configure_differential_leading_jet_observable(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
     )?;
 
     let workspace =
@@ -121,7 +121,7 @@ fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
     )?;
 
     let workspace =
@@ -160,7 +160,7 @@ fn lu_differential_integration_cli_flag_writes_iteration_observables() -> Result
 fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Result<()> {
     let mut cli = setup_sm_differential_lu_cli("lu_differential_integration_hwu")?;
     cli.run_command(
-        "set process kv integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu",
+        "set process kv integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"hwu\"]",
     )?;
 
     let workspace_without_observables =
@@ -208,8 +208,6 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
 
     let slot_workspace =
         selected_slot_workspace(&cli, &workspace_with_observables, None, Some("default"))?;
-    let json_file = slot_workspace.join("observables_final.json");
-    assert!(json_file.exists());
     let hwu_file = slot_workspace.join("observables_final.hwu");
     assert!(hwu_file.exists());
     let hwu_contents = std::fs::read_to_string(hwu_file)?;
@@ -220,6 +218,7 @@ fn lu_differential_integration_hwu_output_is_optional_and_single_file() -> Resul
             .join("observables_final_iter_0001.hwu")
             .exists()
     );
+    assert!(!slot_workspace.join("observables_final.json").exists());
     assert!(
         !slot_workspace
             .join("observables_final_iter_0001.json")
@@ -236,7 +235,7 @@ fn lu_differential_json_observables_resume_from_workspace() -> Result<()> {
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=json",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"json\"]",
     )?;
 
     let workspace =
@@ -307,7 +306,7 @@ fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
     configure_differential_leading_jet_observable(&mut cli)?;
     configure_differential_leading_jet_selector(&mut cli)?;
     cli.run_command(
-        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=hwu",
+        "set process kv general.generate_events=false integrator.n_start=12 integrator.min_samples_for_update=12 integrator.n_max=12 integrator.n_increase=0 integrator.observables_output.format=[\"hwu\"]",
     )?;
 
     let workspace =
@@ -325,9 +324,7 @@ fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
 
     let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some("default"))?;
     let final_file = slot_workspace.join("observables_final.hwu");
-    let final_json_file = slot_workspace.join("observables_final.json");
     let before_resume = std::fs::read_to_string(&final_file)?;
-    let before_resume_json = std::fs::read_to_string(&final_json_file)?;
     let (process_id, resolved_integrand_name) = cli
         .state
         .find_integrand_ref(None, Some(&"default".to_string()))?;
@@ -358,9 +355,7 @@ fn lu_differential_hwu_observables_resume_from_workspace() -> Result<()> {
     .run(&mut cli.state, &cli.cli_settings)?;
 
     let after_resume = std::fs::read_to_string(final_file)?;
-    let after_resume_json = std::fs::read_to_string(final_json_file)?;
     assert_eq!(before_resume, after_resume);
-    assert_eq!(before_resume_json, after_resume_json);
     assert_eq!(
         result_before_resume,
         std::fs::read_to_string(result_snapshot_path)?

@@ -552,7 +552,18 @@ fn summarize_observables(observables: &ObservableSnapshotBundle) -> Option<Strin
             bins: histogram.bins.len(),
             in_range_entries: format_count(histogram.statistics.in_range_entry_count),
             phase: format!("{:?}", histogram.phase).to_lowercase(),
-            range: format!("[{:+.16e}, {:+.16e}]", histogram.x_min, histogram.x_max),
+            range: match histogram.kind {
+                crate::observables::HistogramSnapshotKind::Continuous => format!(
+                    "[{:+.16e}, {:+.16e}]",
+                    histogram.x_min.unwrap_or_default(),
+                    histogram.x_max.unwrap_or_default()
+                ),
+                crate::observables::HistogramSnapshotKind::Discrete => {
+                    let min = histogram.discrete_min_bin_id.unwrap_or_default();
+                    let max = min + histogram.bins.len() as isize - 1;
+                    format!("[{}, {}]", min, max)
+                }
+            },
             underflow: format_count(histogram.underflow_bin.entry_count),
             overflow: format_count(histogram.overflow_bin.entry_count),
         })
@@ -1195,6 +1206,37 @@ mod tests {
         assert!(rendered.contains("f64 :     0.00%"), "{rendered}");
         assert!(rendered.contains("nans+unstable :     0.0%"), "{rendered}");
         assert!(rendered.contains("integrator :   0.00 ns"), "{rendered}");
+    }
+
+    #[test]
+    fn statistics_snapshot_reports_selection_efficiency_from_event_counts() {
+        let stats = StatisticsCounter {
+            num_evals: 2,
+            num_sample_points: 2,
+            sum_integrand_evaluation_time: Duration::ZERO,
+            sum_evaluator_evaluation_time: Duration::ZERO,
+            sum_parameterization_time: Duration::ZERO,
+            sum_event_time: Duration::ZERO,
+            sum_integrator_overhead_time: Duration::ZERO,
+            sum_total_evaluation_time: Duration::ZERO,
+            sum_relative_instability_error: (0.0.into(), 0.0.into()),
+            num_double_precision_evals: 2,
+            num_quadruple_precision_evals: 0,
+            num_arb_precision_evals: 0,
+            num_nan_evals: 0,
+            num_nan_or_unstable_evals: 0,
+            sum_generated_event_count: 10,
+            sum_accepted_event_count: 4,
+        };
+
+        let snapshot = stats.snapshot();
+
+        assert_eq!(snapshot.generated_event_count, 10);
+        assert_eq!(snapshot.accepted_event_count, 4);
+        assert_eq!(snapshot.selection_efficiency_percentage, Some(40.0));
+
+        let rendered = stats.render_status_table();
+        assert!(rendered.contains("sel. % :     40.0%"), "{rendered}");
     }
 
     #[test]

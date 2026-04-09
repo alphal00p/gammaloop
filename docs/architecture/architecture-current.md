@@ -109,15 +109,20 @@ The command model is stateful by design: commands mutate a long-lived `State` th
 2. Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize rotations and caches.
 3. Sampling path parameterizes points and evaluates graph terms.
 4. Stability checks may escalate precision (`f64 -> f128 -> arbitrary`) and rotate kinematics.
-5. Cross-section graph evaluation returns a rich `GraphEvaluationResult<T>` rather
+5. Process graph evaluation returns a rich `GraphEvaluationResult<T>` rather
    than only a complex weight. This carries:
    - the graph contribution
    - grouped generated events
    - event-processing timing
    - generated / accepted event counts
-6. Selectors are applied during event generation inside the cross-section graph
-   evaluation path. Failed selector events are zeroed locally and do not survive
-   into the final retained result.
+6. A shared process-layer prepared-event helper is used by both cross-section
+   and amplitude graph evaluation:
+   - it decides whether an event must be built for the current rotation
+   - runs selectors immediately on that candidate event
+   - retains only accepted identity-rotation events when buffering is needed
+   - reports generated / accepted event counts and event-processing timing
+   Failed selector events zero the local contribution and do not survive into
+   the final retained result.
 7. Stability selection still compares only the complex graph weight, but the
    retained branch also carries the final grouped event payload.
 8. The final `EvaluationResult` contains:
@@ -198,21 +203,33 @@ This is populated only when
 
 ### 3.3 Event generation policy
 
-Event generation is now governed by `settings.general.generate_events`:
+Event generation is controlled by three related runtime decisions:
 
-- `false` (default):
-  - events are generated only when selectors are present
-  - selector-only events are discarded immediately after selection
-  - selector+observable events may be generated temporarily to fill
-    observables, but are cleared from returned sample results and integration
-    event outputs afterwards
-- `true`:
-  - events are always generated
-  - returned sample results keep the generated event groups even when no
-    selector or observable is configured
+- `should_generate_events()`
+  - true when `general.generate_events = true`
+  - or active selectors exist
+  - or observables exist
+- `should_buffer_generated_events()`
+  - true when `general.generate_events = true`
+  - or observables exist
+- `should_return_generated_events()`
+  - true only when `general.generate_events = true`
 
-This policy supersedes the earlier implicit "generate events whenever selectors
-or observables are configured" rule.
+This means:
+
+- `general.generate_events = false`
+  - selector-only evaluations still build temporary events for selector checks
+  - selector+observable evaluations still build temporary events and buffer
+    accepted identity-rotation events long enough to fill observables
+  - those temporary events are cleared from returned sample results and
+    integration event outputs afterwards
+- `general.generate_events = true`
+  - events are built, buffered, and returned even when no selector or
+    observable is configured
+
+The standard Rust/Python sample-evaluation helpers may temporarily override the
+returned-event behavior per call, but internal event generation still follows
+this same policy after that override is applied.
 
 Accepted LU events are retained as grouped event lists:
 

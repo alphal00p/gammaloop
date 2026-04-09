@@ -1987,7 +1987,13 @@ impl LoopNormalizationFactor {
                 "( 𝑖*(𝜋^((4-2*eps)/2)) * (exp(-EulerGamma))^(eps) )^(-n_loops)".into()
             }
             LoopNormalizationFactor::MSbar => {
-                "(exp(log_mu_sq)/(4*𝜋*exp(-EulerGamma)))^(eps*n_loops)".into()
+                // We must include the 1/(2*𝜋)^D factor per loop which accompanies the text-book definition of MSbar
+                // "(2*𝜋)^(-n_loops)*(2*𝜋)^(2*eps*n_loops)*(exp(log_mu_sq)/(4*𝜋*exp(-EulerGamma)))^(eps*n_loops)".into()
+                // Which simplifies into the following expression
+                //"(2*𝜋)^(-4*n_loops)*(exp(log_mu_sq)*𝜋*exp(EulerGamma))^(eps*n_loops)".into()
+                // And where it is best to keep each term taken to an epsilon power separately so that after the expansion
+                // we can easily get the expected cancellation of log(4 pi) and eulerGamma.
+                "(2*𝜋)^(-4*n_loops)*exp(log_mu_sq)^(eps*n_loops)*𝜋^(eps*n_loops)*exp(EulerGamma)^(eps*n_loops)".into()
             }
             LoopNormalizationFactor::Custom(s) => s.clone(),
         }
