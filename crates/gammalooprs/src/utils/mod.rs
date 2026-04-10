@@ -851,7 +851,26 @@ impl SymFloatLike for QuadFloat {
     }
 
     fn pow(&self, e: u64) -> Self {
-        Self(self.0.pow(e))
+        // Old direct wrapper around Symbolica's DoubleFloat::pow -> Df64::powi.
+        // Keep this inactive until the upstream bug is fixed in Symbolica.
+        // Self(self.0.pow(e))
+
+        // Temporary local workaround kept active in GammaLoop for now.
+        // Equivalent explicit implementation:
+        // let mut base = *self;
+        // let mut acc = Self::one();
+        // let mut exponent = e;
+        // while exponent > 0 {
+        //     if exponent & 1 == 1 {
+        //         acc *= base;
+        //     }
+        //     exponent >>= 1;
+        //     if exponent > 0 {
+        //         base *= base;
+        //     }
+        // }
+        // acc
+        self.pow_u64_via_mul(e)
     }
 
     fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
@@ -1244,6 +1263,23 @@ impl<const N: u32> VarFloat<N> {
 }
 
 impl QuadFloat {
+    fn pow_u64_via_mul(&self, mut exponent: u64) -> Self {
+        let mut base = *self;
+        let mut acc = Self::one();
+
+        while exponent > 0 {
+            if exponent & 1 == 1 {
+                acc *= base;
+            }
+            exponent >>= 1;
+            if exponent > 0 {
+                base *= base;
+            }
+        }
+
+        acc
+    }
+
     fn machine_epsilon(&self) -> Self {
         self.from_i64(2)
             .pow((self.get_precision() - 1) as u64)
@@ -1296,6 +1332,10 @@ impl QuadFloat {
         )
         .unwrap()
         .into()
+    }
+
+    fn from_f64(x: f64) -> Self {
+        Self::from_f64_decimal(x)
     }
 
     fn floor_via_symbolica(&self) -> Self {
@@ -2338,6 +2378,11 @@ impl From<F<f64>> for Rational {
 }
 
 #[allow(non_camel_case_types)]
+// Keep this one-line fallback close to the active alias: `VarFloat<113>` is a
+// slower but safe binary128-like replacement when debugging `DoubleFloat`
+// issues, and the `f128` trait impls/effective epsilon logic are written so
+// flipping this alias remains a valid drop-in escape hatch.
+// pub type f128 = VarFloat<113>;
 pub type f128 = QuadFloat;
 pub type ArbPrec = VarFloat<1000>;
 
@@ -4331,6 +4376,22 @@ mod formatting_tests {
         assert_scientific_formatting_for_backend(F::<f64>::from_f64(1.23456789e-8));
         assert_scientific_formatting_for_backend(F::<f128>::from_f64(1.23456789e-8));
         assert_scientific_formatting_for_backend(F::<ArbPrec>::from_f64(1.23456789e-8));
+    }
+
+    #[test]
+    fn quad_square_matches_multiplication() {
+        let zero = F::<f128>::from_f64(0.0);
+        let zero_sq = zero.square();
+        assert!(!zero_sq.is_nan());
+        assert!(!zero_sq.is_infinite());
+        assert_eq!(zero_sq, zero);
+
+        let x = F::<f128>::from_f64(500.0);
+        let x_sq = x.square();
+        assert!(!x_sq.is_nan());
+        assert!(!x_sq.is_infinite());
+        assert_eq!(x_sq, &x * &x);
+        assert_eq!(x_sq.sqrt(), x);
     }
 }
 

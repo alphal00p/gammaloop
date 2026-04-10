@@ -1914,7 +1914,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
 
                     let [etwo0, etwo1, etwo2, etwo3] = self.pol_two();
 
-                    Polarization::lorentz([
+                    let components = [
                         Complex {
                             re: -lambda * eone0 * &sqrt_2_inv,
                             im: -etwo0 * &sqrt_2_inv, //using opposite convention with respect to helas to align with madgraph
@@ -1931,7 +1931,9 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
                             re: -lambda * eone3 * &sqrt_2_inv,
                             im: -etwo3 * &sqrt_2_inv,
                         },
-                    ])
+                    ];
+
+                    Polarization::lorentz(components)
                 }
             }
             _ => {

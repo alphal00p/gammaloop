@@ -5,6 +5,7 @@ use color_eyre::{eyre::eyre, owo_colors::OwoColorize, Result};
 use gammalooprs::{
     processes::{
         DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+        StandaloneNumericTarget,
     },
     settings::RuntimeSettings,
     utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
@@ -52,6 +53,10 @@ pub enum Save {
         binary: bool,
         #[arg(long, default_value_t = false, conflicts_with = "binary")]
         json: bool,
+        #[arg(long, default_value_t = false, conflicts_with = "arbprec")]
+        quadprec: bool,
+        #[arg(long, default_value_t = false, conflicts_with = "quadprec")]
+        arbprec: bool,
     },
     State(SaveState),
     /// regenerate the schema files
@@ -130,6 +135,8 @@ impl Save {
                 rust,
                 json,
                 binary,
+                quadprec,
+                arbprec,
             } => {
                 let target_dir = path.unwrap_or(global_settings.state.folder.clone());
                 global_settings.ensure_write_target_outside_active_state(
@@ -147,7 +154,17 @@ impl Save {
                     (false, true) | (false, false) => StandaloneDataFormat::Binary,
                     (true, true) => unreachable!("clap enforces mutual exclusivity"),
                 };
-                let settings = StandaloneExportSettings { mode, format };
+                let precision = match (quadprec, arbprec) {
+                    (true, false) => StandaloneNumericTarget::Quad,
+                    (false, true) => StandaloneNumericTarget::Arb,
+                    (false, false) => StandaloneNumericTarget::Double,
+                    (true, true) => unreachable!("clap enforces mutual exclusivity"),
+                };
+                let settings = StandaloneExportSettings {
+                    mode,
+                    format,
+                    precision,
+                };
                 state.process_list.export_standalone(&target_dir, &settings)
             }
 

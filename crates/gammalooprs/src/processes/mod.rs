@@ -132,6 +132,8 @@ pub struct StandaloneExportSettings {
     pub mode: StandaloneExportMode,
     #[serde(default)]
     pub format: StandaloneDataFormat,
+    #[serde(default)]
+    pub precision: StandaloneNumericTarget,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
@@ -154,6 +156,18 @@ pub enum StandaloneDataFormat {
     #[default]
     Binary,
     Json,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum StandaloneNumericTarget {
+    #[default]
+    Double,
+    Quad,
+    Arb,
 }
 
 #[cfg(feature = "python_api")]
@@ -184,6 +198,7 @@ impl Default for StandaloneExportSettings {
         Self {
             format: StandaloneDataFormat::Binary,
             mode: StandaloneExportMode::Rust,
+            precision: StandaloneNumericTarget::Double,
         }
     }
 }

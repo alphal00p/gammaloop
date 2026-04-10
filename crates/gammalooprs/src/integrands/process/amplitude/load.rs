@@ -43,14 +43,29 @@ use symbolica::{
     symbol, try_parse,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 2;
+use crate::processes::StandaloneNumericTarget;
+
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 3;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorArchive<S = Vec<u8>, T = Vec<u8>> {
     pub(crate) version: u32,
+    pub(crate) numeric_target: StandaloneNumericTarget,
     pub(crate) symbolica_state: S,
     pub(crate) graph_terms: Vec<StandaloneGraphTermArchive<T>>,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneComplexInput {
+    pub(crate) re: String,
+    pub(crate) im: String,
+}
+
+impl StandaloneComplexInput {
+    pub(crate) fn to_f64(&self) -> Result<Complex<f64>> {
+        Ok(Complex::new(self.re.parse()?, self.im.parse()?))
+    }
 }
 impl StandaloneEvaluatorArchive<(), String> {
     pub fn load(self) -> Result<LoadedStandaloneEvaluators> {
@@ -153,7 +168,12 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 orientation_start: graph.original_integrand.start,
                 override_pos: graph.original_integrand.override_pos,
                 mult_offset: graph.original_integrand.mult_offset,
-                representative_input: graph.original_integrand.representative_input,
+                representative_input: graph
+                    .original_integrand
+                    .representative_input
+                    .iter()
+                    .map(StandaloneComplexInput::to_f64)
+                    .collect::<Result<Vec<_>>>()?,
                 iterative,
                 summed,
                 summed_fnmap,
@@ -172,7 +192,11 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 let ct_evaluator = LoadedStandaloneEvaluatorStack {
                     orientation_start: ct.start,
                     mult_offset: ct.mult_offset,
-                    representative_input: ct.representative_input,
+                    representative_input: ct
+                        .representative_input
+                        .iter()
+                        .map(StandaloneComplexInput::to_f64)
+                        .collect::<Result<Vec<_>>>()?,
                     override_pos: ct.override_pos,
                     parametric,
                     iterative,
@@ -229,7 +253,7 @@ pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed: Option<StandaloneGenericEvaluatorArchive<A>>,
-    pub(crate) representative_input: Vec<Complex<f64>>,
+    pub(crate) representative_input: Vec<StandaloneComplexInput>,
     pub(crate) start: usize,
     pub(crate) override_pos: usize,
     pub(crate) mult_offset: usize,

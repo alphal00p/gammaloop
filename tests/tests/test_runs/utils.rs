@@ -3,6 +3,7 @@ use gammalooprs::{
     observables::{HistogramSnapshot, HistogramSnapshotKind},
     utils::FloatLike,
 };
+use symbolica::domains::float::Real;
 
 pub(super) fn decimal_scalar<T>(value: &str) -> Result<F<T>>
 where
@@ -27,9 +28,23 @@ pub(super) fn assert_complex_approx_eq_precise<T: FloatLike>(
     tolerance: &F<T>,
     context: &str,
 ) {
+    let distance = (actual.clone() - expected.clone()).norm().re;
+    let actual_norm = actual.norm().re;
+    let expected_norm = expected.norm().re;
+    let mut scale = if actual_norm > expected_norm {
+        actual_norm
+    } else {
+        expected_norm
+    };
+    let one = tolerance.clone() / tolerance.clone();
+    if scale < one {
+        scale = one;
+    }
+    let scaled_tolerance = tolerance.clone() * scale.clone();
     assert!(
-        actual.approx_eq(expected, tolerance),
-        "{context}: actual={actual:e}, expected={expected:e}, tolerance={tolerance:e}"
+        distance <= scaled_tolerance,
+        "{context}: actual={actual:e}, expected={expected:e}, tolerance={tolerance:e}, relative_distance={:e}",
+        distance / scale
     );
 }
 
