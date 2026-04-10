@@ -4,13 +4,14 @@ use gammalooprs::{
     integrands::evaluation::GraphEvaluationResult,
     momentum::{Energy, FourMomentum, ThreeMomentum},
     observables::{
-        AdditionalWeightKey, CutInfo, EntrySelection, Event, EventGroupList,
-        EventProcessingRuntime, FilterQuantity, GenericEventGroupList, HistogramSettings,
-        JetClusteringSettings, JetQuantitySettings, ObservablePhase, ObservableSettings,
-        ObservableSnapshotBundle, ObservableValueTransform, PairQuantity, ParticleQuantitySettings,
-        QuantitiesSettings, QuantityComputation, QuantityComputationSettings, QuantityOrder,
-        QuantityOrdering, QuantitySettings, SelectorDefinitionSettings, SelectorReduction,
-        SelectorSettings, ValueRangeSelectorSettings,
+        AdditionalWeightKey, ContinuousHistogramSettings, CutInfo, EntrySelection, Event,
+        EventGroupList, EventProcessingRuntime, FilterQuantity, GenericEventGroupList,
+        HistogramSettings, JetClusteringSettings, JetQuantitySettings, ObservablePhase,
+        ObservableSettings, ObservableSnapshotBundle, ObservableValueTransform, PairQuantity,
+        ParticleQuantitySettings, QuantitiesSettings, QuantityComputation,
+        QuantityComputationSettings, QuantityOrder, QuantityOrdering, QuantitySettings,
+        SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
+        ValueRangeSelectorSettings,
     },
     settings::RuntimeSettings,
     utils::{F, f128},
@@ -80,6 +81,9 @@ fn make_multi_event(
             ),
             cut_id: 0,
             graph_id: 0,
+            graph_group_id: None,
+            orientation_id: None,
+            lmb_channel_id: None,
             lmb_channel_edge_ids: None,
         },
         weight: Complex::new(F(weight.0), F(weight.1)),
@@ -130,20 +134,13 @@ fn runtime_settings() -> RuntimeSettings {
         "pt_real".to_string(),
         ObservableSettings {
             quantity: "pt".to_string(),
+            selections: vec![],
             entry_selection: EntrySelection::All,
             entry_index: 0,
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Real,
             misbinning_max_normalized_distance: None,
-            histogram: HistogramSettings {
-                x_min: 0.0,
-                x_max: 1.0,
-                n_bins: 2,
-                log_x_axis: false,
-                log_y_axis: true,
-                title: None,
-                type_description: "AL".to_string(),
-            },
+            histogram: continuous_histogram(0.0, 1.0, 2),
         },
     );
 
@@ -151,20 +148,13 @@ fn runtime_settings() -> RuntimeSettings {
         "pt_imag".to_string(),
         ObservableSettings {
             quantity: "pt".to_string(),
+            selections: vec![],
             entry_selection: EntrySelection::All,
             entry_index: 0,
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Imag,
             misbinning_max_normalized_distance: None,
-            histogram: HistogramSettings {
-                x_min: 0.0,
-                x_max: 1.0,
-                n_bins: 2,
-                log_x_axis: false,
-                log_y_axis: true,
-                title: None,
-                type_description: "AL".to_string(),
-            },
+            histogram: continuous_histogram(0.0, 1.0, 2),
         },
     );
 
@@ -172,6 +162,7 @@ fn runtime_settings() -> RuntimeSettings {
         "pt_window".to_string(),
         SelectorSettings {
             quantity: "pt".to_string(),
+            active: true,
             entry_selection: EntrySelection::All,
             entry_index: 0,
             selector: SelectorDefinitionSettings::ValueRange(ValueRangeSelectorSettings {
@@ -201,20 +192,13 @@ fn jet_count_runtime_settings(with_misbinning: bool) -> RuntimeSettings {
         "jet_count_hist".to_string(),
         ObservableSettings {
             quantity: "jet_count".to_string(),
+            selections: vec![],
             entry_selection: EntrySelection::All,
             entry_index: 0,
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Real,
             misbinning_max_normalized_distance: with_misbinning.then_some(0.1),
-            histogram: HistogramSettings {
-                x_min: 0.0,
-                x_max: 6.0,
-                n_bins: 6,
-                log_x_axis: false,
-                log_y_axis: true,
-                title: None,
-                type_description: "AL".to_string(),
-            },
+            histogram: continuous_histogram(0.0, 6.0, 6),
         },
     );
     settings
@@ -232,22 +216,27 @@ fn insert_histogram_observable(
         name.to_string(),
         ObservableSettings {
             quantity: quantity.to_string(),
+            selections: vec![],
             entry_selection: EntrySelection::All,
             entry_index: 0,
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Real,
             misbinning_max_normalized_distance: None,
-            histogram: HistogramSettings {
-                x_min,
-                x_max,
-                n_bins,
-                log_x_axis: false,
-                log_y_axis: true,
-                title: None,
-                type_description: "AL".to_string(),
-            },
+            histogram: continuous_histogram(x_min, x_max, n_bins),
         },
     );
+}
+
+fn continuous_histogram(x_min: f64, x_max: f64, n_bins: usize) -> HistogramSettings {
+    HistogramSettings::Continuous(ContinuousHistogramSettings {
+        x_min,
+        x_max,
+        n_bins,
+        log_x_axis: false,
+        log_y_axis: true,
+        title: None,
+        type_description: "AL".to_string(),
+    })
 }
 
 fn scalar_computation(quantity: FilterQuantity) -> QuantityComputationSettings {
@@ -449,20 +438,13 @@ fn leading_particle_quantity_runtime_settings(
         observable_name.to_string(),
         ObservableSettings {
             quantity: "ordered_particles".to_string(),
+            selections: vec![],
             entry_selection: EntrySelection::LeadingOnly,
             entry_index: 0,
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Real,
             misbinning_max_normalized_distance: None,
-            histogram: HistogramSettings {
-                x_min,
-                x_max,
-                n_bins,
-                log_x_axis: false,
-                log_y_axis: true,
-                title: None,
-                type_description: "AL".to_string(),
-            },
+            histogram: continuous_histogram(x_min, x_max, n_bins),
         },
     );
     settings
@@ -481,20 +463,13 @@ fn leading_pair_quantity_runtime_settings(order: QuantityOrder) -> RuntimeSettin
         "particle_delta_r_leading".to_string(),
         ObservableSettings {
             quantity: "particle_delta_r".to_string(),
+            selections: vec![],
             entry_selection: EntrySelection::LeadingOnly,
             entry_index: 0,
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Real,
             misbinning_max_normalized_distance: None,
-            histogram: HistogramSettings {
-                x_min: 0.0,
-                x_max: 6.0,
-                n_bins: 6,
-                log_x_axis: false,
-                log_y_axis: true,
-                title: None,
-                type_description: "AL".to_string(),
-            },
+            histogram: continuous_histogram(0.0, 6.0, 6),
         },
     );
     settings
@@ -987,20 +962,13 @@ fn leading_only_uses_pt_for_default_jet_ordering() -> Result<()> {
         "jet_energy_leading".to_string(),
         ObservableSettings {
             quantity: "jet_energy".to_string(),
+            selections: vec![],
             entry_selection: EntrySelection::LeadingOnly,
             entry_index: 0,
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Real,
             misbinning_max_normalized_distance: None,
-            histogram: HistogramSettings {
-                x_min: 0.0,
-                x_max: 3.0,
-                n_bins: 6,
-                log_x_axis: false,
-                log_y_axis: true,
-                title: None,
-                type_description: "AL".to_string(),
-            },
+            histogram: continuous_histogram(0.0, 3.0, 6),
         },
     );
 

@@ -624,7 +624,6 @@ fn add_graph_id_observable(
 
 #[test]
 #[serial]
-#[ignore = "manual aa_aa inspect regression"]
 fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
     let targets = load_inspect_targets()?;
     let mut symjit_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends_symjit")?;
@@ -780,7 +779,6 @@ fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
 
 #[test]
 #[serial]
-#[ignore = "manual aa_aa integrated regression"]
 fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
     let targets = load_integrated_targets()?;
     let mut cli = load_example_aa_aa_cli()?;

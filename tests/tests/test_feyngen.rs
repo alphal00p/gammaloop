@@ -205,6 +205,7 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         &StandaloneExportSettings {
             mode: StandaloneExportMode::Rust,
             format: StandaloneDataFormat::Json,
+            ..Default::default()
         },
     )?;
 

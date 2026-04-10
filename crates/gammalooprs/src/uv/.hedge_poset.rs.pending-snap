@@ -1,0 +1,35 @@
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1022,"new":{"module_name":"gammalooprs__uv__hedge_poset__tests","snapshot_name":"lobsided_double_dumbell-2","metadata":{"source":"crates/gammalooprs/src/uv/hedge_poset.rs","assertion_line":1022,"expression":"f.node_label(NodeIndex(10))"},"snapshot":"{C} · {36,F}: T((-1*S_C+S_F(8))*T(S_C(0)))*T(S_36(1))"},"old":{"module_name":"gammalooprs__uv__hedge_poset__tests","metadata":{},"snapshot":"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"}}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1203,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1209,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1002,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1351,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1357,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1022,"new":{"module_name":"gammalooprs__uv__hedge_poset__tests","snapshot_name":"lobsided_double_dumbell-2","metadata":{"source":"crates/gammalooprs/src/uv/hedge_poset.rs","assertion_line":1022,"expression":"f.node_label(NodeIndex(10))"},"snapshot":"{3} · {36,F}: T((-1*S_3+S_F(10))*T(S_3(2)))*T(S_36(1))"},"old":{"module_name":"gammalooprs__uv__hedge_poset__tests","metadata":{},"snapshot":"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"}}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1238,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":1244,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":897,"new":null,"old":null}
+{"run_id":"84877c48-c9da-4ef7-af11-b435a9c420c2","line":916,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1385,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1391,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1312,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1318,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1274,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1280,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1078,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1097,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1460,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1466,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1423,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1429,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1002,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1203,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1209,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1022,"new":{"module_name":"gammalooprs__uv__hedge_poset__tests","snapshot_name":"lobsided_double_dumbell-2","metadata":{"source":"crates/gammalooprs/src/uv/hedge_poset.rs","assertion_line":1022,"expression":"f.node_label(NodeIndex(10))"},"snapshot":"{3} · {36,F}: T((-1*S_3+S_F(7))*T(S_3(0)))*T(S_36(9))"},"old":{"module_name":"gammalooprs__uv__hedge_poset__tests","metadata":{},"snapshot":"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"}}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1351,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1357,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1002,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1238,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1244,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":1022,"new":{"module_name":"gammalooprs__uv__hedge_poset__tests","snapshot_name":"lobsided_double_dumbell-2","metadata":{"source":"crates/gammalooprs/src/uv/hedge_poset.rs","assertion_line":1022,"expression":"f.node_label(NodeIndex(10))"},"snapshot":"{3} · {36,F}: T((-1*S_3+S_F(7))*T(S_3(0)))*T(S_36(9))"},"old":{"module_name":"gammalooprs__uv__hedge_poset__tests","metadata":{},"snapshot":"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"}}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":897,"new":null,"old":null}
+{"run_id":"42490ec8-df86-4e96-b6dd-e51b0eb828f2","line":916,"new":null,"old":null}
