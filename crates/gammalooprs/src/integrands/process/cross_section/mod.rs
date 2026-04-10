@@ -467,6 +467,10 @@ impl CrossSectionGraphTerm {
         &self,
         raised_cut_id: RaisedCutId,
     ) -> (Vec<usize>, Vec<usize>) {
+        if self.counterterm.thresholds.is_empty() {
+            return (vec![], vec![]);
+        }
+
         let (left_thresholds, right_thresholds) = &self.counterterm.thresholds[raised_cut_id];
         let resolve_ids = |thresholds: &[Esurface]| {
             thresholds

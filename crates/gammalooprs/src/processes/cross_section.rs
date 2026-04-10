@@ -1919,3 +1919,8 @@ mod tests {
         fs::remove_dir_all(temp).unwrap();
     }
 }
+
+#[test]
+fn test_t_derivative_unit_test() {
+    let dual = shape_for_t_derivatives(1);
+}
