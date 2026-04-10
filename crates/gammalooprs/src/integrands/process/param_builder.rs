@@ -886,7 +886,6 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         if let Some(lu_params) = lu_params {
             self.pairs.lu_params(lu_params, &mut values);
         }
-
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
@@ -985,7 +984,6 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
         if let Some(lu_params) = lu_params {
             self.pairs.lu_params(lu_params, &mut values);
         }
-
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
@@ -1010,6 +1008,7 @@ where
     //     self.values.iter().map(|v| v.lower()).collect()
     // }
 }
+
 impl<T: FloatLike> ParamBuilder<T> {
     pub fn model_values(&self) -> &[Complex<F<T>>] {
         let range = self.pairs.model_parameters.value_range.clone();

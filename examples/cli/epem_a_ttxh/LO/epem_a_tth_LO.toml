@@ -59,7 +59,7 @@ check_esurface_at_generation = true
 disable_threshold_subtraction = true
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true

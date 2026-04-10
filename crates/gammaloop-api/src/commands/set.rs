@@ -2286,7 +2286,7 @@ max = 250.0
 
     #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
     struct CompileSettingsFixture {
-        inline_asm: bool,
+        compilation_mode: String,
         optimization_level: String,
         fast_math: bool,
         unsafe_math: bool,
@@ -2370,7 +2370,7 @@ max = 250.0
                 global: GlobalFixture {
                     generation: GenerationFixture {
                         compile: CompileSettingsFixture {
-                            inline_asm: false,
+                            compilation_mode: "c++".to_string(),
                             optimization_level: "O0".to_string(),
                             fast_math: false,
                             unsafe_math: false,
@@ -2389,7 +2389,7 @@ max = 250.0
 
         let multiline = r#"
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true
@@ -2411,7 +2411,15 @@ integrate = 10
         .extract()
         .unwrap();
 
-        assert!(merged.cli_settings.global.generation.compile.inline_asm);
+        assert_eq!(
+            merged
+                .cli_settings
+                .global
+                .generation
+                .compile
+                .compilation_mode,
+            "assembly"
+        );
         assert_eq!(
             merged
                 .cli_settings

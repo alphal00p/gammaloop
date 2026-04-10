@@ -1,3 +1,5 @@
+use std::fmt;
+
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
@@ -95,7 +97,7 @@ pub enum VectorPolarizationSumGauge {
     LightLikeAxial,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, Copy, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 #[derive(Default)]
@@ -118,6 +120,17 @@ impl From<CompilationOptimizationLevel> for usize {
     }
 }
 
+impl fmt::Display for CompilationOptimizationLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompilationOptimizationLevel::O0 => f.write_str("O0"),
+            CompilationOptimizationLevel::O1 => f.write_str("O1"),
+            CompilationOptimizationLevel::O2 => f.write_str("O2"),
+            CompilationOptimizationLevel::O3 => f.write_str("O3"),
+        }
+    }
+}
+
 fn _default_compiler() -> String {
     "g++".to_owned()
 }
@@ -134,6 +147,146 @@ pub fn is_gpp(compiler: &str) -> bool {
     show_defaults_helper("g++" == compiler)
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Default)]
+pub enum CompilationMode {
+    #[serde(rename = "c++", alias = "cpp")]
+    Cpp,
+    #[serde(rename = "assembly")]
+    Assembly,
+    #[default]
+    #[serde(rename = "symjit")]
+    Symjit,
+}
+
+impl fmt::Display for CompilationMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompilationMode::Cpp => f.write_str("c++"),
+            CompilationMode::Assembly => f.write_str("assembly"),
+            CompilationMode::Symjit => f.write_str("symjit"),
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
+)]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[serde(default, deny_unknown_fields)]
+pub struct ExternalCompilationOptionsSnapshot {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub optimization_level: CompilationOptimizationLevel,
+    #[serde(skip_serializing_if = "is_true")]
+    pub fast_math: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub unsafe_math: bool,
+    #[serde(skip_serializing_if = "is_gpp")]
+    pub compiler: String,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub custom: Vec<String>,
+}
+
+impl fmt::Display for ExternalCompilationOptionsSnapshot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} fast_math={} unsafe_math={} compiler={} custom={}",
+            self.optimization_level,
+            self.fast_math,
+            self.unsafe_math,
+            self.compiler,
+            if self.custom.is_empty() {
+                "[]".to_string()
+            } else {
+                format!("[{}]", self.custom.join(", "))
+            }
+        )
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+pub enum FrozenCompilationMode {
+    Eager,
+    Symjit,
+    Cpp(ExternalCompilationOptionsSnapshot),
+    Assembly(ExternalCompilationOptionsSnapshot),
+}
+
+impl FrozenCompilationMode {
+    pub fn compile_enabled(&self) -> bool {
+        !matches!(self, FrozenCompilationMode::Eager)
+    }
+
+    pub fn active_backend_name(&self) -> &'static str {
+        match self {
+            FrozenCompilationMode::Eager => "eager",
+            FrozenCompilationMode::Symjit => "symjit",
+            FrozenCompilationMode::Cpp(_) => "c++",
+            FrozenCompilationMode::Assembly(_) => "assembly",
+        }
+    }
+
+    pub fn external_options(&self) -> Option<&ExternalCompilationOptionsSnapshot> {
+        match self {
+            FrozenCompilationMode::Cpp(options) | FrozenCompilationMode::Assembly(options) => {
+                Some(options)
+            }
+            FrozenCompilationMode::Eager | FrozenCompilationMode::Symjit => None,
+        }
+    }
+
+    pub fn requires_external_compilation(&self) -> bool {
+        matches!(
+            self,
+            FrozenCompilationMode::Cpp(_) | FrozenCompilationMode::Assembly(_)
+        )
+    }
+
+    pub(crate) fn export_settings(&self) -> ExportSettings {
+        ExportSettings {
+            inline_asm: match self {
+                FrozenCompilationMode::Assembly(_) => InlineASM::default(),
+                FrozenCompilationMode::Cpp(_)
+                | FrozenCompilationMode::Symjit
+                | FrozenCompilationMode::Eager => InlineASM::None,
+            },
+            ..Default::default()
+        }
+    }
+
+    pub fn to_symbolica_compile_options(&self) -> Option<CompileOptions> {
+        let options = self.external_options()?;
+        Some(CompileOptions {
+            optimization_level: options.optimization_level.into(),
+            fast_math: options.fast_math,
+            unsafe_math: options.unsafe_math,
+            compiler: options.compiler.clone(),
+            args: options.custom.clone(),
+            ..CompileOptions::default()
+        })
+    }
+}
+
+impl fmt::Display for FrozenCompilationMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FrozenCompilationMode::Eager => f.write_str("eager"),
+            FrozenCompilationMode::Symjit => f.write_str("symjit"),
+            FrozenCompilationMode::Cpp(options) => write!(f, "c++ ({options})"),
+            FrozenCompilationMode::Assembly(options) => write!(f, "assembly ({options})"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(
     feature = "python_api",
@@ -141,8 +294,8 @@ pub fn is_gpp(compiler: &str) -> bool {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
-    #[serde(skip_serializing_if = "is_true")]
-    pub inline_asm: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub compilation_mode: CompilationMode,
 
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
@@ -162,7 +315,7 @@ pub struct GammaloopCompileOptions {
 impl Default for GammaloopCompileOptions {
     fn default() -> Self {
         Self {
-            inline_asm: true,
+            compilation_mode: CompilationMode::Symjit,
             optimization_level: CompilationOptimizationLevel::O3,
             fast_math: true,
             unsafe_math: true,
@@ -173,25 +326,44 @@ impl Default for GammaloopCompileOptions {
 }
 
 impl GammaloopCompileOptions {
-    pub(crate) fn export_settings(&self) -> ExportSettings {
-        ExportSettings {
-            inline_asm: if self.inline_asm {
-                InlineASM::default()
-            } else {
-                InlineASM::None
-            },
-            ..Default::default()
+    pub fn external_options_snapshot(&self) -> ExternalCompilationOptionsSnapshot {
+        ExternalCompilationOptionsSnapshot {
+            optimization_level: self.optimization_level,
+            fast_math: self.fast_math,
+            unsafe_math: self.unsafe_math,
+            compiler: self.compiler.clone(),
+            custom: self.custom.clone(),
         }
     }
 
-    #[allow(clippy::needless_update)]
+    pub fn requires_external_compilation(&self) -> bool {
+        matches!(
+            self.compilation_mode,
+            CompilationMode::Cpp | CompilationMode::Assembly
+        )
+    }
+
+    pub fn frozen_mode(&self, evaluator_settings: &EvaluatorSettings) -> FrozenCompilationMode {
+        if !evaluator_settings.compile {
+            return FrozenCompilationMode::Eager;
+        }
+
+        match self.compilation_mode {
+            CompilationMode::Cpp => FrozenCompilationMode::Cpp(self.external_options_snapshot()),
+            CompilationMode::Assembly => {
+                FrozenCompilationMode::Assembly(self.external_options_snapshot())
+            }
+            CompilationMode::Symjit => FrozenCompilationMode::Symjit,
+        }
+    }
+
     pub fn to_symbolica_compile_options(&self) -> CompileOptions {
         CompileOptions {
             optimization_level: self.optimization_level.into(),
             fast_math: self.fast_math,
             unsafe_math: self.unsafe_math,
             compiler: self.compiler.clone(),
-            // custom: self.custom.clone(),
+            args: self.custom.clone(),
             ..CompileOptions::default()
         }
     }

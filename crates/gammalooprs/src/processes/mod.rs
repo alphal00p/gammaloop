@@ -18,6 +18,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
 
+mod generation_report;
+pub use generation_report::{
+    GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats, NamedGraphGenerationReport,
+    merge_generated_graph_reports,
+};
+
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
@@ -82,7 +88,7 @@ impl EvaluatorSettings {
             n_cores: self.n_cores,
             cpe_iterations: self.cpe_iterations,
             hot_start: None,
-            abort_check: None,
+            abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
             abort_level: self.abort_level,
             max_horner_scheme_variables: self.max_horner_scheme_variables,
             max_common_pair_cache_entries: self.max_common_pair_cache_entries,
@@ -126,6 +132,8 @@ pub struct StandaloneExportSettings {
     pub mode: StandaloneExportMode,
     #[serde(default)]
     pub format: StandaloneDataFormat,
+    #[serde(default)]
+    pub precision: StandaloneNumericTarget,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
@@ -148,6 +156,18 @@ pub enum StandaloneDataFormat {
     #[default]
     Binary,
     Json,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum StandaloneNumericTarget {
+    #[default]
+    Double,
+    Quad,
+    Arb,
 }
 
 #[cfg(feature = "python_api")]
@@ -178,6 +198,7 @@ impl Default for StandaloneExportSettings {
         Self {
             format: StandaloneDataFormat::Binary,
             mode: StandaloneExportMode::Rust,
+            precision: StandaloneNumericTarget::Double,
         }
     }
 }
@@ -265,11 +286,10 @@ impl ProcessList {
         &mut self,
         folder: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         process_id: Option<usize>,
         integrand_name: Option<String>,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
         let path = folder.as_ref().join("processes");
 
         let r = fs::create_dir_all(&path);
@@ -277,21 +297,31 @@ impl ProcessList {
             r?;
         }
 
+        let mut reports = Vec::new();
         for p in self.processes.iter_mut() {
             if let Some(id) = process_id
                 && p.definition.process_id != id
             {
                 continue;
             }
-            p.compile(
+            reports.extend(p.compile(
                 &path,
                 override_existing,
-                settings,
                 integrand_name.clone(),
                 thread_pool,
-            )?;
+            )?);
         }
 
+        Ok(reports)
+    }
+
+    pub fn activate_loaded_integrand_backends(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<()> {
+        for process in &mut self.processes {
+            process.activate_loaded_integrand_backends(allow_symjit_fallback)?;
+        }
         Ok(())
     }
 
@@ -348,11 +378,17 @@ impl ProcessList {
         settings: &GlobalSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let mut reports = Vec::new();
         for process in self.processes.iter_mut() {
-            process.preprocess(model, settings, locked_runtime_settings, thread_pool)?;
+            reports.extend(process.preprocess(
+                model,
+                settings,
+                locked_runtime_settings,
+                thread_pool,
+            )?);
         }
-        Ok(())
+        Ok(reports)
     }
 
     pub fn generate_integrands(
@@ -361,11 +397,17 @@ impl ProcessList {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let mut reports = Vec::new();
         for process in &mut self.processes {
-            process.generate_integrands(model, global_settings, runtime_default, thread_pool)?;
+            reports.extend(process.generate_integrands(
+                model,
+                global_settings,
+                runtime_default,
+                thread_pool,
+            )?);
         }
-        Ok(())
+        Ok(reports)
     }
 
     pub fn find_process(&self, process_id: Option<usize>) -> Result<usize> {
@@ -428,8 +470,8 @@ mod tests {
         settings::{
             RuntimeSettings,
             global::{
-                CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
-                TropicalSubgraphTableSettings,
+                CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
+                GenerationSettings, TropicalSubgraphTableSettings,
             },
             runtime::LockedRuntimeSettings,
         },
@@ -480,7 +522,7 @@ mod tests {
                 &model,
                 &GenerationSettings {
                     compile: GammaloopCompileOptions {
-                        inline_asm: false,
+                        compilation_mode: CompilationMode::Cpp,
                         fast_math: false,
                         optimization_level: CompilationOptimizationLevel::O0,
                         unsafe_math: false,

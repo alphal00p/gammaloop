@@ -17,12 +17,28 @@ use crate::{
     integrands::process::{GenericEvaluator, amplitude::export::ExportAtomTo},
     processes::{
         IteratedCtCollection, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+        StandaloneNumericTarget,
     },
     subtraction::lu_counterterm::LUCounterTermEvaluators,
 };
 
 const STANDALONE_DATA_FILE: &str = "standalone_cross_section";
 const STANDALONE_RUST_SCRIPT_FILE: &str = "standalone_cross_section_rust.rs";
+
+#[cfg(unix)]
+fn make_script_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_script_executable(_: &Path) -> Result<()> {
+    Ok(())
+}
 
 fn export_generic_evaluator<T: ExportAtomTo>(
     evaluator: &GenericEvaluator,
@@ -142,6 +158,12 @@ impl CrossSectionIntegrand {
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
+        if settings.precision != StandaloneNumericTarget::Double {
+            return Err(eyre!(
+                "Cross-section standalone export currently only supports double precision",
+            ));
+        }
+
         let mut symbolica_state = Vec::new();
         State::export(&mut symbolica_state)
             .with_context(|| "Failed to export Symbolica state for standalone cross section")?;
@@ -186,6 +208,7 @@ impl CrossSectionIntegrand {
                         script_path.display()
                     )
                 })?;
+                make_script_executable(&script_path)?;
             }
         }
 

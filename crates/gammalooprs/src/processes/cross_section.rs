@@ -40,7 +40,9 @@ use crate::{
         Helicity,
         sample::{ExternalIndex, SubspaceData},
     },
-    processes::{DotExportSettings, EvaluatorSettings},
+    processes::{
+        DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
+    },
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{GS, hyperdual_utils::shape_for_t_derivatives},
     uv::{approx::CutStructure, forest::ParametricIntegrands, wood::CutWoods},
@@ -93,6 +95,10 @@ impl<T> IteratedCtCollection<T> {
 
     pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
         self.data.iter()
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.data.iter_mut()
     }
 
     pub(crate) fn num_left_thresholds(&self) -> usize {
@@ -256,11 +262,31 @@ impl CrossSection {
         global_settings: &GenerationSettings,
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        let integrand_name = self.name.clone();
         generation_pool.install(|| {
-            self.supergraphs.par_iter_mut().try_for_each(|supergraph| {
-                supergraph.preprocess(model, process_definition, global_settings, runtime_default)
-            })
+            self.supergraphs
+                .par_iter_mut()
+                .map(|supergraph| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    let stats = supergraph.preprocess(
+                        model,
+                        process_definition,
+                        global_settings,
+                        runtime_default,
+                    )?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    Ok(NamedGraphGenerationReport {
+                        integrand_name: integrand_name.clone(),
+                        graph_name: supergraph.graph.name.clone(),
+                        stats,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()
         })
     }
 
@@ -270,13 +296,43 @@ impl CrossSection {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
-    ) -> Result<()> {
-        let mut terms = generation_pool.install(|| {
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
+        let integrand_name = self.name.clone();
+        let mut graph_reports = Vec::new();
+        let terms = generation_pool.install(|| {
             self.supergraphs
                 .par_iter_mut()
-                .map(|sg| sg.generate_term_for_graph(model, global_settings))
+                .map(|sg| {
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    let graph_started = std::time::Instant::now();
+                    let (term, mut stats) = sg.generate_term_for_graph(model, global_settings)?;
+                    if crate::is_interrupted() {
+                        return Err(eyre!("Generation interrupted by user"));
+                    }
+                    stats.total_time += graph_started.elapsed();
+                    Ok((
+                        term,
+                        NamedGraphGenerationReport {
+                            integrand_name: integrand_name.clone(),
+                            graph_name: sg.graph.name.clone(),
+                            stats,
+                        },
+                    ))
+                })
                 .collect::<Result<Vec<_>>>()
         })?;
+        if crate::is_interrupted() {
+            return Err(eyre!("Generation interrupted by user"));
+        }
+        for (_, report) in &terms {
+            graph_reports.push(report.clone());
+        }
+        let mut terms = terms.into_iter().map(|(term, _)| term).collect::<Vec<_>>();
 
         for group in self.graph_group_structure.iter() {
             let master = group.master();
@@ -291,9 +347,13 @@ impl CrossSection {
             }
         }
 
-        let cross_section_integrand = CrossSectionIntegrand {
+        let mut cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
             data: CrossSectionIntegrandData {
+                compilation: global_settings
+                    .generation
+                    .compile
+                    .frozen_mode(&global_settings.generation.evaluator),
                 loop_cache_id: 0,
                 external_cache_id: 0,
                 base_external_cache_id: 0,
@@ -309,19 +369,25 @@ impl CrossSection {
                 ),
             },
             event_processing_runtime: Default::default(),
+            active_f64_backend: Default::default(),
         };
+        let compile_times = cross_section_integrand
+            .prepare_runtime_backends_after_generation_with_compile_times()?;
+        for (report, compile_time) in graph_reports.iter_mut().zip(compile_times) {
+            report.stats.evaluator_compile_time += compile_time;
+            report.stats.total_time += compile_time;
+        }
 
         self.integrand = Some(ProcessIntegrand::CrossSection(cross_section_integrand));
-        Ok(())
+        Ok(graph_reports)
     }
 
     pub fn compile(
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
         info!("Compiling cross section {}", self.name);
         let p = self.storage_path(path.as_ref());
 
@@ -337,9 +403,21 @@ impl CrossSection {
         }
 
         if let Some(integrand) = &mut self.integrand {
-            integrand.compile(&p, override_existing, settings, thread_pool)?;
+            let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
+            return Ok(compile_times
+                .into_iter()
+                .map(|(graph_name, duration)| NamedGraphGenerationReport {
+                    integrand_name: self.name.clone(),
+                    graph_name,
+                    stats: GraphGenerationStats {
+                        total_time: duration,
+                        evaluator_compile_time: duration,
+                        ..GraphGenerationStats::default()
+                    },
+                })
+                .collect());
         }
-        Ok(())
+        Ok(Vec::new())
     }
 
     pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
@@ -624,14 +702,16 @@ impl CrossSectionGraph {
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
         runtime_default: LockedRuntimeSettings,
-    ) -> Result<()> {
+    ) -> Result<GraphGenerationStats> {
+        let preprocess_started = std::time::Instant::now();
+        let mut stats = GraphGenerationStats::default();
         self.apply_spin_sum(model, settings, &runtime_default)?;
         debug!("generating cuts");
         self.generate_cuts(model, process_definition, settings)?;
         debug!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
         debug!("generating cff");
-        self.generate_cff(settings)?;
+        stats.merge_in_place(&self.generate_cff(settings)?);
         debug!("building lmbs");
         self.build_lmbs();
         debug!("building multi channeling channels");
@@ -651,7 +731,8 @@ impl CrossSectionGraph {
             self.build_threshold_counterterm(settings, vk)?;
         }
 
-        Ok(())
+        stats.total_time += preprocess_started.elapsed();
+        Ok(stats)
     }
 
     #[allow(dead_code)]
@@ -671,7 +752,7 @@ impl CrossSectionGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    fn generate_cff(&mut self, _settings: &GenerationSettings) -> Result<()> {
+    fn generate_cff(&mut self, _settings: &GenerationSettings) -> Result<GraphGenerationStats> {
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -724,13 +805,13 @@ impl CrossSectionGraph {
             .graph
             .determine_raised_esurfaces_from_expression(&global_cff);
 
-        let raised_cut_data =
+        let (raised_cut_data, raised_cut_stats) =
             RaisedCutData::new_from_esurface(&esurface_raised_data, &self.cut_esurface_id_map);
 
         self.derived_data.global_cff_expression = Some(global_cff);
         self.derived_data.raised_data = raised_cut_data;
 
-        Ok(())
+        Ok(raised_cut_stats)
     }
 
     fn generate_cuts(
@@ -1488,7 +1569,7 @@ impl CrossSectionGraph {
         &self,
         _model: &Model,
         settings: &GlobalSettings,
-    ) -> Result<CrossSectionGraphTerm> {
+    ) -> Result<(CrossSectionGraphTerm, GraphGenerationStats)> {
         CrossSectionGraphTerm::from_cross_section_graph(self, settings)
     }
 }
@@ -1539,7 +1620,8 @@ impl RaisedCutData {
     pub fn new_from_esurface(
         raised_esurface_data: &RaisedEsurfaceData,
         cut_esurface_map: &TiVec<CutId, EsurfaceID>,
-    ) -> Self {
+    ) -> (Self, GraphGenerationStats) {
+        let mut stats = GraphGenerationStats::default();
         let reversed_map = cut_esurface_map
             .iter_enumerated()
             .map(|(cut_id, &esurface_id)| (esurface_id, cut_id))
@@ -1582,14 +1664,23 @@ impl RaisedCutData {
             .collect();
 
         let pass_two_evaluators = (1..=global_max_occurence)
-            .map(|i| build_derivative_structure(i as u8))
+            .map(|i| {
+                let evaluator_started = std::time::Instant::now();
+                let evaluator = build_derivative_structure(i as u8);
+                stats.evaluator_build_time += evaluator_started.elapsed();
+                stats.evaluator_count += 1;
+                evaluator
+            })
             .collect();
 
-        Self {
-            raised_cut_groups: groups,
-            dual_shapes,
-            pass_two_evaluators,
-        }
+        (
+            Self {
+                raised_cut_groups: groups,
+                dual_shapes,
+                pass_two_evaluators,
+            },
+            stats,
+        )
     }
 }
 

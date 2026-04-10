@@ -207,6 +207,67 @@ mod tests {
     }
 
     #[test]
+    fn compile_settings_default_to_symjit_backend() {
+        use crate::settings::global::{CompilationMode, GammaloopCompileOptions};
+
+        assert_eq!(
+            GammaloopCompileOptions::default().compilation_mode,
+            CompilationMode::Symjit
+        );
+    }
+
+    #[test]
+    fn compile_settings_resolve_frozen_mode_from_compile_flag() {
+        use crate::{
+            processes::EvaluatorSettings,
+            settings::global::{CompilationMode, FrozenCompilationMode, GammaloopCompileOptions},
+        };
+
+        let options = GammaloopCompileOptions {
+            compilation_mode: CompilationMode::Assembly,
+            ..Default::default()
+        };
+
+        assert_eq!(
+            options.frozen_mode(&EvaluatorSettings {
+                compile: false,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Eager
+        );
+        assert!(matches!(
+            options.frozen_mode(&EvaluatorSettings {
+                compile: true,
+                ..Default::default()
+            }),
+            FrozenCompilationMode::Assembly(_)
+        ));
+    }
+
+    #[test]
+    fn compile_settings_map_custom_args_into_symbolica_compile_options() {
+        use crate::settings::global::{
+            CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
+        };
+
+        let options = GammaloopCompileOptions {
+            compilation_mode: CompilationMode::Cpp,
+            optimization_level: CompilationOptimizationLevel::O1,
+            fast_math: false,
+            unsafe_math: false,
+            compiler: "clang++".to_string(),
+            custom: vec!["-g".to_string(), "-Winvalid".to_string()],
+        };
+        let symbolica = options.to_symbolica_compile_options();
+
+        assert_eq!(symbolica.optimization_level, 1);
+        assert!(!symbolica.fast_math);
+        assert!(!symbolica.unsafe_math);
+        assert_eq!(symbolica.compiler, "clang++");
+        assert_eq!(symbolica.args, vec!["-g", "-Winvalid"]);
+    }
+
+    #[test]
     fn tropical_subgraph_table_test_serialize_deserialize() {
         use crate::settings::global::TropicalSubgraphTableSettings;
         generic_test_settings::<TropicalSubgraphTableSettings>();

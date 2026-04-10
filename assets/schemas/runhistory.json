@@ -167,13 +167,13 @@
         {
           "type": "object",
           "properties": {
-            "Reset": {
-              "$ref": "#/$defs/Reset"
+            "Remove": {
+              "$ref": "#/$defs/Remove"
             }
           },
           "additionalProperties": false,
           "required": [
-            "Reset"
+            "Remove"
           ]
         },
         {
@@ -367,6 +367,14 @@
       },
       "additionalProperties": false
     },
+    "CompilationMode": {
+      "type": "string",
+      "enum": [
+        "c++",
+        "assembly",
+        "symjit"
+      ]
+    },
     "CompilationOptimizationLevel": {
       "type": "string",
       "enum": [
@@ -469,6 +477,27 @@
             "Integrands": {
               "type": "object",
               "properties": {
+                "categories": {
+                  "description": "Restrict the detailed view to the selected category tables",
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/IntegrandDisplayCategory"
+                  }
+                },
+                "graphs": {
+                  "description": "Restrict the detailed view to the selected master graph names",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "integrand_name": {
+                  "description": "Integrand name inside the selected process",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "process": {
                   "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
                   "anyOf": [
@@ -480,7 +509,11 @@
                     }
                   ]
                 }
-              }
+              },
+              "required": [
+                "graphs",
+                "categories"
+              ]
             }
           },
           "additionalProperties": false,
@@ -964,6 +997,9 @@
     "GammaloopCompileOptions": {
       "type": "object",
       "properties": {
+        "compilation_mode": {
+          "$ref": "#/$defs/CompilationMode"
+        },
         "compiler": {
           "type": "string"
         },
@@ -974,9 +1010,6 @@
           }
         },
         "fast_math": {
-          "type": "boolean"
-        },
-        "inline_asm": {
           "type": "boolean"
         },
         "optimization_level": {
@@ -1131,6 +1164,9 @@
         },
         "uv": {
           "$ref": "#/$defs/UVgenerationSettings"
+        },
+        "vector_polarization_sum_gauge": {
+          "$ref": "#/$defs/VectorPolarizationSumGauge"
         }
       },
       "additionalProperties": false
@@ -1469,6 +1505,14 @@
         "attobarn",
         "millibarn",
         "none"
+      ]
+    },
+    "IntegrandDisplayCategory": {
+      "type": "string",
+      "enum": [
+        "orientation",
+        "loop_momentum_basis",
+        "cuts"
       ]
     },
     "IntegrandSettings": {
@@ -2927,6 +2971,42 @@
         }
       ]
     },
+    "Remove": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Processes": {
+              "type": "object",
+              "properties": {
+                "integrand_name": {
+                  "description": "Restrict the removal to a single integrand within the selected process",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "process": {
+                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ProcessRef"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Processes"
+          ]
+        }
+      ]
+    },
     "RendererOption": {
       "type": "string",
       "enum": [
@@ -2972,42 +3052,6 @@
       "required": [
         "align_to_rqft",
         "print_namespaces"
-      ]
-    },
-    "Reset": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "Processes": {
-              "type": "object",
-              "properties": {
-                "integrand_name": {
-                  "description": "Restrict the reset to a single integrand within the selected process",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "process": {
-                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/ProcessRef"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "additionalProperties": false,
-          "required": [
-            "Processes"
-          ]
-        }
       ]
     },
     "RotationSetting": {
@@ -4392,6 +4436,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "VectorPolarizationSumGauge": {
+      "type": "string",
+      "enum": [
+        "Feynman",
+        "LightLikeAxial"
+      ]
     }
   }
 }

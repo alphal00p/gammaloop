@@ -21,9 +21,9 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::Float;
 use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
+use rug::{Assign, Float};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::algebra::algebraic_traits::RefOne;
@@ -45,7 +45,10 @@ use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib_atom;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::dual::HyperDual;
-use symbolica::domains::float::{Constructible, FloatLike as SymFloatLike, RealLike, SingleFloat};
+use symbolica::domains::float::{
+    Constructible, DoubleFloat, Float as SymbolicaFloat, FloatLike as SymFloatLike, RealLike,
+    SingleFloat,
+};
 use symbolica::domains::integer::Integer;
 use symbolica::{function, parse};
 
@@ -168,6 +171,71 @@ impl<const N: u32> FromStr for VarFloat<N> {
     }
 }
 
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+)]
+#[repr(transparent)]
+pub struct QuadFloat(DoubleFloat);
+
+impl std::fmt::Display for QuadFloat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::fmt::LowerExp for QuadFloat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::LowerExp::fmt(&self.0, f)
+    }
+}
+
+impl From<DoubleFloat> for QuadFloat {
+    fn from(value: DoubleFloat) -> Self {
+        Self(value)
+    }
+}
+
+impl From<QuadFloat> for DoubleFloat {
+    fn from(value: QuadFloat) -> Self {
+        value.0
+    }
+}
+
+impl From<&QuadFloat> for DoubleFloat {
+    fn from(value: &QuadFloat) -> Self {
+        value.0
+    }
+}
+
+impl From<SymbolicaFloat> for QuadFloat {
+    fn from(value: SymbolicaFloat) -> Self {
+        Self(value.to_double_float())
+    }
+}
+
+impl From<Float> for QuadFloat {
+    fn from(value: Float) -> Self {
+        Self(SymbolicaFloat::from(value).to_double_float())
+    }
+}
+
+impl From<&Rational> for QuadFloat {
+    fn from(value: &Rational) -> Self {
+        Self(value.into())
+    }
+}
+
 impl<const N: u32> Rem<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
@@ -207,6 +275,92 @@ impl<const N: u32> From<&Rational> for VarFloat<N> {
         VarFloat {
             float: rug::Float::with_val(N, r),
         }
+    }
+}
+
+macro_rules! impl_quad_binary_op {
+    ($trait:ident, $fn:ident, $op:tt) => {
+        impl std::ops::$trait for QuadFloat {
+            type Output = Self;
+
+            fn $fn(self, rhs: Self) -> Self::Output {
+                Self(self.0 $op rhs.0)
+            }
+        }
+
+        impl std::ops::$trait<&QuadFloat> for QuadFloat {
+            type Output = Self;
+
+            fn $fn(self, rhs: &Self) -> Self::Output {
+                Self(self.0 $op rhs.0)
+            }
+        }
+
+        impl std::ops::$trait<QuadFloat> for &QuadFloat {
+            type Output = QuadFloat;
+
+            fn $fn(self, rhs: QuadFloat) -> Self::Output {
+                QuadFloat(self.0 $op rhs.0)
+            }
+        }
+
+        impl std::ops::$trait<&QuadFloat> for &QuadFloat {
+            type Output = QuadFloat;
+
+            fn $fn(self, rhs: &QuadFloat) -> Self::Output {
+                QuadFloat(self.0 $op rhs.0)
+            }
+        }
+    };
+}
+
+macro_rules! impl_quad_assign_op {
+    ($trait:ident, $fn:ident, $op:tt) => {
+        impl std::ops::$trait for QuadFloat {
+            fn $fn(&mut self, rhs: Self) {
+                self.0 $op rhs.0;
+            }
+        }
+
+        impl std::ops::$trait<&QuadFloat> for QuadFloat {
+            fn $fn(&mut self, rhs: &Self) {
+                self.0 $op rhs.0;
+            }
+        }
+    };
+}
+
+impl_quad_binary_op!(Add, add, +);
+impl_quad_binary_op!(Sub, sub, -);
+impl_quad_binary_op!(Mul, mul, *);
+impl_quad_binary_op!(Div, div, /);
+
+impl_quad_assign_op!(AddAssign, add_assign, +=);
+impl_quad_assign_op!(SubAssign, sub_assign, -=);
+impl_quad_assign_op!(MulAssign, mul_assign, *=);
+impl_quad_assign_op!(DivAssign, div_assign, /=);
+
+impl Neg for QuadFloat {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
+    }
+}
+
+impl Neg for &QuadFloat {
+    type Output = QuadFloat;
+
+    fn neg(self) -> Self::Output {
+        QuadFloat(-self.0)
+    }
+}
+
+impl Rem<&QuadFloat> for &QuadFloat {
+    type Output = QuadFloat;
+
+    fn rem(self, rhs: &QuadFloat) -> Self::Output {
+        self.truncating_remainder(rhs)
     }
 }
 
@@ -437,6 +591,11 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.float.assign(&other.float);
+    }
+
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         (&self.float * &a.float + &b.float).complete(N).into()
     }
@@ -603,11 +762,264 @@ impl<const N: u32> Real for VarFloat<N> {
     }
 }
 
-impl<const N: u32> From<VarFloat<N>> for symbolica::domains::float::Float {
+impl<const N: u32> From<VarFloat<N>> for SymbolicaFloat {
     fn from(value: VarFloat<N>) -> Self {
-        symbolica::domains::float::Float::from(value.float)
+        SymbolicaFloat::from(value.float)
     }
 }
+
+impl<const N: u32> From<&VarFloat<N>> for SymbolicaFloat {
+    fn from(value: &VarFloat<N>) -> Self {
+        SymbolicaFloat::from(value.float.clone())
+    }
+}
+
+impl<const N: u32> From<SymbolicaFloat> for VarFloat<N> {
+    fn from(value: SymbolicaFloat) -> Self {
+        Self {
+            float: value.into_inner(),
+        }
+    }
+}
+
+impl From<QuadFloat> for SymbolicaFloat {
+    fn from(value: QuadFloat) -> Self {
+        value.0.into()
+    }
+}
+
+impl From<&QuadFloat> for SymbolicaFloat {
+    fn from(value: &QuadFloat) -> Self {
+        value.0.into()
+    }
+}
+
+impl RefZero for QuadFloat {
+    fn ref_zero(&self) -> Self {
+        Self::new_zero()
+    }
+}
+
+impl R for QuadFloat {}
+
+impl RefOne for QuadFloat {
+    fn ref_one(&self) -> Self {
+        self.one()
+    }
+}
+
+impl SymFloatLike for QuadFloat {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.0.set_from(&other.0);
+    }
+
+    fn mul_add(&self, a: &Self, b: &Self) -> Self {
+        Self(self.0.mul_add(&a.0, &b.0))
+    }
+
+    fn is_fully_zero(&self) -> bool {
+        self.0.is_fully_zero()
+    }
+
+    fn from_i64(&self, a: i64) -> Self {
+        Self(self.0.from_i64(a))
+    }
+
+    fn from_usize(&self, a: usize) -> Self {
+        Self(self.0.from_usize(a))
+    }
+
+    fn get_precision(&self) -> u32 {
+        self.0.get_precision()
+    }
+
+    fn zero(&self) -> Self {
+        Self(self.0.zero())
+    }
+
+    fn one(&self) -> Self {
+        Self(self.0.one())
+    }
+
+    fn new_zero() -> Self {
+        Self(DoubleFloat::default().zero())
+    }
+
+    fn inv(&self) -> Self {
+        Self(self.0.inv())
+    }
+
+    fn pow(&self, e: u64) -> Self {
+        // Old direct wrapper around Symbolica's DoubleFloat::pow -> Df64::powi.
+        // Keep this inactive until the upstream bug is fixed in Symbolica.
+        // Self(self.0.pow(e))
+
+        // Temporary local workaround kept active in GammaLoop for now.
+        // Equivalent explicit implementation:
+        // let mut base = *self;
+        // let mut acc = Self::one();
+        // let mut exponent = e;
+        // while exponent > 0 {
+        //     if exponent & 1 == 1 {
+        //         acc *= base;
+        //     }
+        //     exponent >>= 1;
+        //     if exponent > 0 {
+        //         base *= base;
+        //     }
+        // }
+        // acc
+        self.pow_u64_via_mul(e)
+    }
+
+    fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
+        Self(self.0.sample_unit(rng))
+    }
+
+    fn neg(&self) -> Self {
+        Self(self.0.neg())
+    }
+
+    fn get_epsilon(&self) -> f64 {
+        self.0.get_epsilon()
+    }
+
+    fn fixed_precision(&self) -> bool {
+        self.0.fixed_precision()
+    }
+}
+
+impl SingleFloat for QuadFloat {
+    fn is_finite(&self) -> bool {
+        self.0.is_finite()
+    }
+
+    fn is_one(&self) -> bool {
+        self.0.is_one()
+    }
+
+    fn is_zero(&self) -> bool {
+        self.0.is_zero()
+    }
+
+    fn from_rational(&self, rat: &Rational) -> Self {
+        rat.into()
+    }
+}
+
+impl RealLike for QuadFloat {
+    fn to_f64(&self) -> f64 {
+        self.0.to_f64()
+    }
+
+    fn round_to_nearest_integer(&self) -> Integer {
+        self.0.round_to_nearest_integer()
+    }
+
+    fn to_usize_clamped(&self) -> usize {
+        self.0.to_usize_clamped()
+    }
+}
+
+impl Real for QuadFloat {
+    fn i(&self) -> Option<Self> {
+        None
+    }
+
+    fn conj(&self) -> Self {
+        *self
+    }
+
+    #[inline(always)]
+    fn pi(&self) -> Self {
+        Self(self.0.pi())
+    }
+
+    #[inline(always)]
+    fn e(&self) -> Self {
+        Self(self.0.e())
+    }
+
+    #[inline(always)]
+    fn euler(&self) -> Self {
+        Self(self.0.euler())
+    }
+
+    #[inline(always)]
+    fn phi(&self) -> Self {
+        Self(self.0.phi())
+    }
+
+    fn atan2(&self, x: &Self) -> Self {
+        Self(self.0.atan2(&x.0))
+    }
+
+    fn powf(&self, e: &Self) -> Self {
+        Self(self.0.powf(&e.0))
+    }
+
+    fn log(&self) -> Self {
+        Self(self.0.log())
+    }
+
+    fn norm(&self) -> Self {
+        Self(self.0.norm())
+    }
+
+    fn sqrt(&self) -> Self {
+        Self(self.0.sqrt())
+    }
+
+    fn exp(&self) -> Self {
+        Self(self.0.exp())
+    }
+
+    fn sin(&self) -> Self {
+        Self(self.0.sin())
+    }
+
+    fn cos(&self) -> Self {
+        Self(self.0.cos())
+    }
+
+    fn tan(&self) -> Self {
+        Self(self.0.tan())
+    }
+
+    fn asin(&self) -> Self {
+        Self(self.0.asin())
+    }
+
+    fn acos(&self) -> Self {
+        Self(self.0.acos())
+    }
+
+    fn sinh(&self) -> Self {
+        Self(self.0.sinh())
+    }
+
+    fn cosh(&self) -> Self {
+        Self(self.0.cosh())
+    }
+
+    fn tanh(&self) -> Self {
+        Self(self.0.tanh())
+    }
+
+    fn asinh(&self) -> Self {
+        Self(self.0.asinh())
+    }
+
+    fn acosh(&self) -> Self {
+        Self(self.0.acosh())
+    }
+
+    fn atanh(&self) -> Self {
+        Self(self.0.atanh())
+    }
+}
+
 impl FloatLike for f128 {
     fn E(&self) -> Self {
         Self::E()
@@ -643,23 +1055,31 @@ impl FloatLike for f128 {
     }
 
     fn from_f64(x: f64) -> Self {
-        VarFloat::from_f64(x)
+        // There are two reasonable f64 -> higher-precision policies:
+        // preserve the exact binary64 value or reinterpret the visible decimal
+        // spelling of the f64. GammaLoop currently chooses the decimal route here
+        // because these upcasts are overwhelmingly user-authored settings, and
+        // values like 0.1 are less surprising when they retain their decimal
+        // semantics instead of exposing the hidden binary64 tail. The exact-binary
+        // helper is kept alongside this for callers that need a faithful embedding
+        // of an already-computed f64.
+        Self::from_f64_decimal(x)
     }
 
     fn into_f64(&self) -> f64 {
-        self.to_f64()
+        self.as_f64()
     }
 
     fn is_nan(&self) -> bool {
-        self.float.is_nan()
+        self.is_nan_value()
     }
 
     fn is_infinite(&self) -> bool {
-        self.float.is_infinite()
+        self.is_infinite_value()
     }
 
     fn floor(&self) -> Self {
-        self.float.clone().floor().into()
+        self.floor_value()
     }
 
     fn try_extract_externals_from_cache(
@@ -710,6 +1130,14 @@ impl FloatLike for ArbPrec {
     }
 
     fn from_f64(x: f64) -> Self {
+        // There are two reasonable f64 -> higher-precision policies:
+        // preserve the exact binary64 value or reinterpret the visible decimal
+        // spelling of the f64. GammaLoop currently chooses the decimal route here
+        // because these upcasts are overwhelmingly user-authored settings, and
+        // values like 0.1 are less surprising when they retain their decimal
+        // semantics instead of exposing the hidden binary64 tail. The exact-binary
+        // helper is kept alongside this for callers that need a faithful embedding
+        // of an already-computed f64.
         VarFloat::from_f64(x)
     }
 
@@ -779,15 +1207,171 @@ impl<const N: u32> VarFloat<N> {
         Self::PI().inv()
     }
 
-    pub(crate) fn from_f64(x: f64) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_f64_exact_binary(x: f64) -> Self {
+        VarFloat {
+            float: rug::Float::with_val(N, x),
+        }
+    }
+
+    pub(crate) fn from_f64_decimal(x: f64) -> Self {
+        if !x.is_finite() {
+            return Self::from_f64_exact_binary(x);
+        }
+
         let valid = Float::parse(format!("{}", x)).unwrap();
         VarFloat {
             float: rug::Float::with_val(N, valid),
         }
     }
 
+    pub(crate) fn from_f64(x: f64) -> Self {
+        // There are two reasonable f64 -> higher-precision policies:
+        // preserve the exact binary64 value or reinterpret the visible decimal
+        // spelling of the f64. GammaLoop currently chooses the decimal route here
+        // because these upcasts are overwhelmingly user-authored settings, and
+        // values like 0.1 are less surprising when they retain their decimal
+        // semantics instead of exposing the hidden binary64 tail. The exact-binary
+        // helper is kept alongside this for callers that need a faithful embedding
+        // of an already-computed f64.
+        Self::from_f64_decimal(x)
+    }
+
     pub(crate) fn to_f64(&self) -> f64 {
         self.float.to_f64()
+    }
+
+    #[allow(dead_code)]
+    fn as_f64(&self) -> f64 {
+        self.float.to_f64()
+    }
+
+    #[allow(dead_code)]
+    fn is_nan_value(&self) -> bool {
+        self.float.is_nan()
+    }
+
+    #[allow(dead_code)]
+    fn is_infinite_value(&self) -> bool {
+        self.float.is_infinite()
+    }
+
+    #[allow(dead_code)]
+    fn floor_value(&self) -> Self {
+        self.float.clone().floor().into()
+    }
+}
+
+impl QuadFloat {
+    fn pow_u64_via_mul(&self, mut exponent: u64) -> Self {
+        let mut base = *self;
+        let mut acc = Self::one();
+
+        while exponent > 0 {
+            if exponent & 1 == 1 {
+                acc *= base;
+            }
+            exponent >>= 1;
+            if exponent > 0 {
+                base *= base;
+            }
+        }
+
+        acc
+    }
+
+    fn machine_epsilon(&self) -> Self {
+        self.from_i64(2)
+            .pow((self.get_precision() - 1) as u64)
+            .inv()
+    }
+
+    #[allow(dead_code)]
+    fn one() -> Self {
+        Self(DoubleFloat::from(1.0))
+    }
+
+    #[allow(non_snake_case)]
+    fn E() -> Self {
+        Self(DoubleFloat::default().e())
+    }
+
+    #[allow(non_snake_case)]
+    fn PIHALF() -> Self {
+        Self::PI() / Self::from_f64(2.0)
+    }
+
+    #[allow(non_snake_case)]
+    fn PI() -> Self {
+        Self(DoubleFloat::default().pi())
+    }
+
+    #[allow(non_snake_case)]
+    fn TAU() -> Self {
+        Self::PI() + Self::PI()
+    }
+
+    #[allow(non_snake_case)]
+    fn FRAC_1_PI() -> Self {
+        Self::PI().inv()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn from_f64_exact_binary(x: f64) -> Self {
+        Self(DoubleFloat::from(x))
+    }
+
+    pub(crate) fn from_f64_decimal(x: f64) -> Self {
+        if !x.is_finite() {
+            return Self::from_f64_exact_binary(x);
+        }
+
+        SymbolicaFloat::parse(
+            &format!("{}", x),
+            Some(DoubleFloat::default().get_precision()),
+        )
+        .unwrap()
+        .into()
+    }
+
+    fn from_f64(x: f64) -> Self {
+        Self::from_f64_decimal(x)
+    }
+
+    fn floor_via_symbolica(&self) -> Self {
+        SymbolicaFloat::from(self).into_inner().floor().into()
+    }
+
+    fn trunc_toward_zero(&self) -> Self {
+        if *self < Self::new_zero() {
+            -(-self).floor_via_symbolica()
+        } else {
+            self.floor_via_symbolica()
+        }
+    }
+
+    fn truncating_remainder(&self, rhs: &Self) -> Self {
+        if rhs.is_zero() {
+            return Self::from_f64_exact_binary(f64::NAN);
+        }
+
+        *self - ((*self / *rhs).trunc_toward_zero() * *rhs)
+    }
+
+    fn as_f64(&self) -> f64 {
+        self.0.to_f64()
+    }
+
+    fn is_nan_value(&self) -> bool {
+        self.0.to_f64().is_nan()
+    }
+
+    fn is_infinite_value(&self) -> bool {
+        self.0.to_f64().is_infinite()
+    }
+
+    fn floor_value(&self) -> Self {
+        self.floor_via_symbolica()
     }
 }
 
@@ -804,11 +1388,11 @@ impl PrecisionUpgradable for f128 {
     type Lower = f64;
 
     fn higher(&self) -> Self::Higher {
-        ArbPrec::from(self.float.clone())
+        ArbPrec::from(SymbolicaFloat::from(self))
     }
 
     fn lower(&self) -> Self::Lower {
-        self.to_f64()
+        self.as_f64()
     }
 }
 
@@ -1163,7 +1747,7 @@ impl<T: FloatLike> TrySmallestUpgrade<Complex<F<T>>> for F<T> {
 
 impl<'a, T: FloatLike> From<&'a Rational> for F<T> {
     fn from(x: &'a Rational) -> Self {
-        F(T::from_f64(x.to_f64()))
+        F(T::new_zero().from_rational(x))
     }
 }
 
@@ -1196,6 +1780,11 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 }
 
 impl<T: FloatLike> SymFloatLike for F<T> {
+    #[inline]
+    fn set_from(&mut self, other: &Self) {
+        self.0.set_from(&other.0);
+    }
+
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         F(self.0.mul_add(&a.0, &b.0))
     }
@@ -1789,7 +2378,12 @@ impl From<F<f64>> for Rational {
 }
 
 #[allow(non_camel_case_types)]
-pub type f128 = VarFloat<113>;
+// Keep this one-line fallback close to the active alias: `VarFloat<113>` is a
+// slower but safe binary128-like replacement when debugging `DoubleFloat`
+// issues, and the `f128` trait impls/effective epsilon logic are written so
+// flipping this alias remains a valid drop-in escape hatch.
+// pub type f128 = VarFloat<113>;
+pub type f128 = QuadFloat;
 pub type ArbPrec = VarFloat<1000>;
 
 /// An iterator which iterates two other iterators simultaneously
@@ -3782,6 +4376,22 @@ mod formatting_tests {
         assert_scientific_formatting_for_backend(F::<f64>::from_f64(1.23456789e-8));
         assert_scientific_formatting_for_backend(F::<f128>::from_f64(1.23456789e-8));
         assert_scientific_formatting_for_backend(F::<ArbPrec>::from_f64(1.23456789e-8));
+    }
+
+    #[test]
+    fn quad_square_matches_multiplication() {
+        let zero = F::<f128>::from_f64(0.0);
+        let zero_sq = zero.square();
+        assert!(!zero_sq.is_nan());
+        assert!(!zero_sq.is_infinite());
+        assert_eq!(zero_sq, zero);
+
+        let x = F::<f128>::from_f64(500.0);
+        let x_sq = x.square();
+        assert!(!x_sq.is_nan());
+        assert!(!x_sq.is_infinite());
+        assert_eq!(x_sq, &x * &x);
+        assert_eq!(x_sq.sqrt(), x);
     }
 }
 

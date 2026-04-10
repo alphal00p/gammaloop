@@ -67,7 +67,7 @@ iterative_orientation_optimization = true
 compile = true
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 
 [cli_settings.global.generation.tropical_subgraph_table]

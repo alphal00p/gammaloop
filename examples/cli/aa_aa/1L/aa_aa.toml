@@ -38,7 +38,7 @@ commands = [
     #"import graphs ./aa_aa_1L.dot -p aa_aa_all_helicities -i 1L_ppmm",
     #"import graphs /Users/vjhirsch/Documents/Work/gammaloop_main/examples/cli/aa_aa/1L/aa_aa_1L.dot -p aa_aa_all_helicities -i 1L_ppmm",
     "save dot",
-    "generate",
+    "save state -o",
     "set process -p aa_aa_all_helicities -i 1L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
     "duplicate integrand -p aa_aa_all_helicities -i 1L_ppmm --output_process_name aa_aa_all_helicities --output_integrand_name 1L_mpmm",
     "set process -p aa_aa_all_helicities -i 1L_mpmm kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
@@ -95,7 +95,7 @@ check_esurface_at_generation = false
 disable_threshold_subtraction = false
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true
@@ -119,6 +119,32 @@ lmb_channels = "summed"
 coordinate_system = "spherical"
 mapping = "linear"
 b = 1.0
+
+[default_runtime_settings.stability]
+check_on_norm = true
+escalate_if_exact_zero = false
+loop_momenta_norm_escalation_factor = -1.0
+
+[[default_runtime_settings.stability.rotation_axis]]
+type = "z"
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 0.0000000001
+required_precision_for_im = 0.0000000001
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
 
 [[command_blocks]]
 name = "integrate"

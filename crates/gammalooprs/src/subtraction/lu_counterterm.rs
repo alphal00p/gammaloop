@@ -1,4 +1,5 @@
 use core::f64;
+use std::path::Path;
 
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
@@ -31,7 +32,7 @@ use crate::{
         IteratedCtCollection, LUCounterTermData, LeftThresholdId, RaisedCutId, RightThresholdId,
         build_derivative_structure,
     },
-    settings::{GlobalSettings, RuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
@@ -53,6 +54,29 @@ pub struct LUCounterTermEvaluators {
 }
 
 impl LUCounterTermEvaluators {
+    pub(crate) fn generic_evaluator_count(&self) -> usize {
+        let left = self
+            .left_thresholds_evaluator
+            .iter()
+            .flat_map(|evaluators| evaluators.iter())
+            .map(EvaluatorStack::generic_evaluator_count)
+            .sum::<usize>();
+        let right = self
+            .right_thresholds_evaluator
+            .iter()
+            .flat_map(|evaluators| evaluators.iter())
+            .map(EvaluatorStack::generic_evaluator_count)
+            .sum::<usize>();
+        let iterated = self
+            .iterated_evaluator
+            .iter()
+            .flat_map(|evaluators| evaluators.iter())
+            .map(EvaluatorStack::generic_evaluator_count)
+            .sum::<usize>();
+
+        left + right + iterated + 1
+    }
+
     pub fn from_atoms(
         counterterm_data: &LUCounterTermData,
         param_builder: &ParamBuilder,
@@ -148,6 +172,80 @@ impl LUCounterTermEvaluators {
             pass_two_evaluator,
         }
     }
+
+    pub(crate) fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        cut_id: RaisedCutId,
+        frozen_mode: &FrozenCompilationMode,
+    ) -> color_eyre::Result<()> {
+        for (threshold_id, evaluators) in self.left_thresholds_evaluator.iter_mut_enumerated() {
+            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+                let name = format!(
+                    "cut_{}_left_threshold_{}_{}",
+                    cut_id.0, threshold_id.0, num_esurface
+                );
+                evaluator.compile(&name, path.as_ref(), frozen_mode)?;
+            }
+        }
+
+        for (threshold_id, evaluators) in self.right_thresholds_evaluator.iter_mut_enumerated() {
+            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+                let name = format!(
+                    "cut_{}_right_threshold_{}_{}",
+                    cut_id.0, threshold_id.0, num_esurface
+                );
+                evaluator.compile(&name, path.as_ref(), frozen_mode)?;
+            }
+        }
+
+        for (iterated_index, evaluators) in self.iterated_evaluator.iter_mut().enumerate() {
+            for (num_esurface, evaluator) in evaluators.iter_mut().enumerate() {
+                let name = format!(
+                    "cut_{}_iterated_{}_{}",
+                    cut_id.0, iterated_index, num_esurface
+                );
+                evaluator.compile(&name, path.as_ref(), frozen_mode)?;
+            }
+        }
+
+        self.pass_two_evaluator.compile_external(
+            path.as_ref()
+                .join(format!("cut_{}_pass_two", cut_id.0))
+                .with_extension("cpp"),
+            format!("cut_{}_pass_two", cut_id.0),
+            path.as_ref()
+                .join(format!("cut_{}_pass_two", cut_id.0))
+                .with_extension("so"),
+            frozen_mode,
+        )?;
+
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
+    ) -> color_eyre::Result<()> {
+        for evaluators in self.left_thresholds_evaluator.iter_mut() {
+            for evaluator in evaluators.iter_mut() {
+                evaluator.for_each_generic_evaluator_mut(&mut f)?;
+            }
+        }
+        for evaluators in self.right_thresholds_evaluator.iter_mut() {
+            for evaluator in evaluators.iter_mut() {
+                evaluator.for_each_generic_evaluator_mut(&mut f)?;
+            }
+        }
+        for evaluators in self.iterated_evaluator.iter_mut() {
+            for evaluator in evaluators.iter_mut() {
+                evaluator.for_each_generic_evaluator_mut(&mut f)?;
+            }
+        }
+        f(&mut self.pass_two_evaluator)?;
+
+        Ok(())
+    }
 }
 
 type CutThresholds = (
@@ -202,6 +300,27 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
 }
 
 impl LUCounterTerm {
+    pub(crate) fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        frozen_mode: &FrozenCompilationMode,
+    ) -> color_eyre::Result<()> {
+        for (cut_id, evaluators) in self.evaluators.iter_mut_enumerated() {
+            evaluators.compile(path.as_ref(), cut_id, frozen_mode)?;
+        }
+        Ok(())
+    }
+
+    pub(crate) fn for_each_generic_evaluator_mut(
+        &mut self,
+        mut f: impl FnMut(&mut GenericEvaluator) -> color_eyre::Result<()>,
+    ) -> color_eyre::Result<()> {
+        for evaluators in self.evaluators.iter_mut() {
+            evaluators.for_each_generic_evaluator_mut(&mut f)?;
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn evaluate<T: FloatLike>(
         &mut self,

@@ -3419,6 +3419,10 @@ impl HistogramObservable {
                     .project(&combined_entry_weight(event, &entry))
                     .into_ff64()
                     .0;
+                if !projected_weight.is_finite() {
+                    self.state.statistics.register_nan();
+                    continue;
+                }
 
                 match bin_position {
                     HistogramBinPosition::Underflow => {

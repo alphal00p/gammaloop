@@ -522,6 +522,9 @@ pub struct PyIntegrandInfo {
     pub process_name: String,
     pub integrand_name: String,
     pub kind: String,
+    pub generation_backend: String,
+    pub generation_compile_options: Option<String>,
+    pub active_f64_backend: String,
     pub graph_count: usize,
     pub graph_group_count: usize,
     pub record_size_bytes: usize,
@@ -1670,6 +1673,15 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
         process_name: info.process_name,
         integrand_name: info.integrand_name,
         kind: info.kind.to_string(),
+        generation_backend: info
+            .generation_compilation
+            .active_backend_name()
+            .to_string(),
+        generation_compile_options: info
+            .generation_compilation
+            .external_options()
+            .map(ToString::to_string),
+        active_f64_backend: info.active_f64_backend.to_string(),
         graph_count: info.graph_count,
         graph_group_count: info.graph_group_count,
         record_size_bytes: info.record_size_bytes,

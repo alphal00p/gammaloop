@@ -17,6 +17,7 @@ use regex::Regex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::parse;
+use tabled::{builder::Builder, settings::Style};
 use thiserror::Error;
 
 use eyre::eyre;
@@ -28,12 +29,15 @@ use gammalooprs::feyngen::{
 use gammalooprs::model::Model;
 use gammalooprs::numerator::GlobalPrefactor;
 use gammalooprs::processes::amplitude::Amplitude;
-use gammalooprs::processes::{CrossSection, Process, ProcessDefinition, ProcessList};
+use gammalooprs::processes::{
+    merge_generated_graph_reports, CrossSection, GeneratedGraphReport, Process, ProcessDefinition,
+    ProcessList,
+};
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
 use crate::commands::set::KvPair;
 use crate::completion::CompletionArgExt;
-use crate::state::{ProcessRef, State};
+use crate::state::{GenerationResourceSummary, ProcessRef, State};
 
 // =================== CLI containers (kept close to your structure) ===================
 
@@ -312,6 +316,139 @@ pub struct SpecArgs {
 
 // =================== Runner ===================
 
+fn format_generation_duration(duration: std::time::Duration) -> String {
+    if duration.as_secs() >= 60 {
+        let minutes = duration.as_secs() / 60;
+        let seconds = duration.as_secs_f64() - (minutes * 60) as f64;
+        format!("{minutes}m {seconds:.1}s")
+    } else if duration.as_secs_f64() >= 1.0 {
+        format!("{:.2}s", duration.as_secs_f64())
+    } else {
+        format!("{}ms", duration.as_millis())
+    }
+}
+
+fn format_generation_fraction(
+    numerator: std::time::Duration,
+    total: std::time::Duration,
+) -> String {
+    let percent = if total.is_zero() {
+        0.0
+    } else {
+        (numerator.as_secs_f64() / total.as_secs_f64()) * 100.0
+    };
+
+    if percent >= 10.0 {
+        format!("{percent:.0}%")
+    } else if percent >= 1.0 {
+        format!("{percent:.1}%")
+    } else {
+        format!("{percent:.2}%")
+    }
+}
+
+fn format_generation_memory(bytes: u64) -> String {
+    const KIB: f64 = 1024.0;
+    const MIB: f64 = KIB * 1024.0;
+    const GIB: f64 = MIB * 1024.0;
+    const TIB: f64 = GIB * 1024.0;
+
+    let value = bytes as f64;
+    if value < KIB {
+        format!("{bytes} B")
+    } else if value < MIB {
+        format!("{:.2} KiB", value / KIB)
+    } else if value < GIB {
+        format!("{:.2} MiB", value / MIB)
+    } else if value < TIB {
+        format!("{:.2} GiB", value / GIB)
+    } else {
+        format!("{:.2} TiB", value / TIB)
+    }
+}
+
+fn render_generation_summary_table(
+    reports: &[GeneratedGraphReport],
+    resources: GenerationResourceSummary,
+) {
+    if reports.is_empty() {
+        return;
+    }
+
+    let mut sorted_reports = reports.to_vec();
+    sorted_reports.sort_by(|left, right| {
+        (
+            left.process_id,
+            left.integrand_name.as_str(),
+            left.graph_name.as_str(),
+        )
+            .cmp(&(
+                right.process_id,
+                right.integrand_name.as_str(),
+                right.graph_name.as_str(),
+            ))
+    });
+
+    let mut builder = Builder::new();
+    builder.push_record([
+        "integrand".bold().blue().to_string(),
+        "graph".bold().blue().to_string(),
+        "# evals".bold().blue().to_string(),
+        "expr build".bold().blue().to_string(),
+        "evaluator build".bold().blue().to_string(),
+        "compile".bold().blue().to_string(),
+    ]);
+
+    for report in sorted_reports {
+        let expr_time = report.stats.expression_build_time();
+        let total_time = report.stats.total_time;
+        let expr_value = format!(
+            "{} ({})",
+            format_generation_duration(expr_time).magenta(),
+            format_generation_fraction(expr_time, total_time).cyan()
+        );
+        let evaluator_build_value = format!(
+            "{} ({})",
+            format_generation_duration(report.stats.evaluator_build_time).magenta(),
+            format_generation_fraction(report.stats.evaluator_build_time, total_time).cyan()
+        );
+        let compile_value = format!(
+            "{} ({})",
+            format_generation_duration(report.stats.evaluator_compile_time).magenta(),
+            format_generation_fraction(report.stats.evaluator_compile_time, total_time).cyan()
+        );
+
+        builder.push_record([
+            report.integrand_name.yellow().to_string(),
+            report.graph_name.yellow().to_string(),
+            report
+                .stats
+                .evaluator_count
+                .to_string()
+                .yellow()
+                .to_string(),
+            expr_value,
+            evaluator_build_value,
+            compile_value,
+        ]);
+    }
+
+    let mut table = builder.build();
+    table.with(Style::rounded());
+    info!(
+        "\n{}\n{}\n{}",
+        "Integrand generation summary".bold().blue(),
+        format!(
+            "{} {} | {} {}",
+            "peak RAM".bold().blue(),
+            format_generation_memory(resources.peak_ram_bytes).yellow(),
+            "cores".bold().blue(),
+            resources.generation_cores.to_string().yellow(),
+        ),
+        table
+    );
+}
+
 impl Generate {
     pub fn run(
         &self,
@@ -436,12 +573,33 @@ impl Generate {
                     integrand_base_name
                 };
                 if !args.only_diagrams {
-                    state.generate_integrand(
+                    let generated_integrand_name_for_compile = generated_integrand_name.clone();
+                    let generation = state.generate_integrand(
                         global_settings,
                         runtime_settings.into(),
                         this_process_id,
                         Some(generated_integrand_name),
-                    )
+                    )?;
+                    let mut reports = generation.reports;
+                    if global_settings.generation.evaluator.compile
+                        && global_settings
+                            .generation
+                            .compile
+                            .requires_external_compilation()
+                    {
+                        merge_generated_graph_reports(
+                            &mut reports,
+                            state.compile_integrands(
+                                compile_folder,
+                                override_existing_compiled,
+                                global_settings,
+                                Some(this_process_id),
+                                Some(generated_integrand_name_for_compile),
+                            )?,
+                        );
+                    }
+                    render_generation_summary_table(&reports, generation.resources);
+                    Ok(())
                 } else {
                     info!(
                         "Only diagram generation was requested, skipping integrand generation. You can generate integrands later using the '{}' command.",
@@ -453,34 +611,55 @@ impl Generate {
             Some(GenerateCmd::Existing(process_args)) => {
                 let process_id = state.resolve_process_ref(process_args.process.as_ref())?;
 
-                state.generate_integrand(
+                let generation = state.generate_integrand(
                     global_settings,
                     runtime_settings.into(),
                     process_id,
                     process_args.integrand_name.clone(),
                 )?;
-                if global_settings.generation.evaluator.compile {
-                    state.compile_integrands(
-                        compile_folder,
-                        override_existing_compiled,
-                        global_settings,
-                        Some(process_id),
-                        process_args.integrand_name.clone(),
-                    )?;
+                let mut reports = generation.reports;
+                if global_settings.generation.evaluator.compile
+                    && global_settings
+                        .generation
+                        .compile
+                        .requires_external_compilation()
+                {
+                    merge_generated_graph_reports(
+                        &mut reports,
+                        state.compile_integrands(
+                            compile_folder,
+                            override_existing_compiled,
+                            global_settings,
+                            Some(process_id),
+                            process_args.integrand_name.clone(),
+                        )?,
+                    );
                 }
+                render_generation_summary_table(&reports, generation.resources);
                 Ok(())
             }
             None => {
-                state.generate_integrands(global_settings, runtime_settings.into())?;
-                if global_settings.generation.evaluator.compile {
-                    state.compile_integrands(
-                        compile_folder,
-                        override_existing_compiled,
-                        global_settings,
-                        None,
-                        None,
-                    )?
+                let generation =
+                    state.generate_integrands(global_settings, runtime_settings.into())?;
+                let mut reports = generation.reports;
+                if global_settings.generation.evaluator.compile
+                    && global_settings
+                        .generation
+                        .compile
+                        .requires_external_compilation()
+                {
+                    merge_generated_graph_reports(
+                        &mut reports,
+                        state.compile_integrands(
+                            compile_folder,
+                            override_existing_compiled,
+                            global_settings,
+                            None,
+                            None,
+                        )?,
+                    );
                 }
+                render_generation_summary_table(&reports, generation.resources);
                 Ok(())
             }
         }

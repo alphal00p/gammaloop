@@ -128,7 +128,7 @@ b = 1.0
 #b = 1.0
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true

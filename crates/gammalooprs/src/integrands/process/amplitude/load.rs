@@ -7,7 +7,7 @@
 //! rand = "0.9"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
 //! numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
@@ -34,7 +34,8 @@ use symbolica::{
         rational::{Fraction, Rational},
     },
     evaluate::{
-        CompileOptions, ExportSettings, ExpressionEvaluator, FunctionMap, OptimizationSettings,
+        CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
+        InlineASM, JITCompiledEvaluator, OptimizationSettings,
     },
     id::{MatchSettings, Replacement},
     parse_lit,
@@ -42,14 +43,29 @@ use symbolica::{
     symbol, try_parse,
 };
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 2;
+use crate::processes::StandaloneNumericTarget;
+
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 3;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorArchive<S = Vec<u8>, T = Vec<u8>> {
     pub(crate) version: u32,
+    pub(crate) numeric_target: StandaloneNumericTarget,
     pub(crate) symbolica_state: S,
     pub(crate) graph_terms: Vec<StandaloneGraphTermArchive<T>>,
+}
+
+#[derive(Clone, Encode, Decode, Serialize, Deserialize)]
+pub struct StandaloneComplexInput {
+    pub(crate) re: String,
+    pub(crate) im: String,
+}
+
+impl StandaloneComplexInput {
+    pub(crate) fn to_f64(&self) -> Result<Complex<f64>> {
+        Ok(Complex::new(self.re.parse()?, self.im.parse()?))
+    }
 }
 impl StandaloneEvaluatorArchive<(), String> {
     pub fn load(self) -> Result<LoadedStandaloneEvaluators> {
@@ -92,12 +108,7 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
             let timed_build = |label: &str,
                                payload: StandaloneGenericEvaluatorArchive<A>,
                                iterate: bool|
-             -> Result<(
-                Vec<Atom>,
-                Vec<Replacement>,
-                ExpressionEvaluator<Complex<f64>>,
-                Vec<Complex<f64>>,
-            )> {
+             -> Result<LoadedGenericEvaluator> {
                 let started = Instant::now();
                 let evaluator =
                     build_evaluator(payload, &params, replacements.clone(), state_map, iterate)?;
@@ -157,7 +168,12 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 orientation_start: graph.original_integrand.start,
                 override_pos: graph.original_integrand.override_pos,
                 mult_offset: graph.original_integrand.mult_offset,
-                representative_input: graph.original_integrand.representative_input,
+                representative_input: graph
+                    .original_integrand
+                    .representative_input
+                    .iter()
+                    .map(StandaloneComplexInput::to_f64)
+                    .collect::<Result<Vec<_>>>()?,
                 iterative,
                 summed,
                 summed_fnmap,
@@ -176,7 +192,11 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 let ct_evaluator = LoadedStandaloneEvaluatorStack {
                     orientation_start: ct.start,
                     mult_offset: ct.mult_offset,
-                    representative_input: ct.representative_input,
+                    representative_input: ct
+                        .representative_input
+                        .iter()
+                        .map(StandaloneComplexInput::to_f64)
+                        .collect::<Result<Vec<_>>>()?,
                     override_pos: ct.override_pos,
                     parametric,
                     iterative,
@@ -233,7 +253,7 @@ pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed: Option<StandaloneGenericEvaluatorArchive<A>>,
-    pub(crate) representative_input: Vec<Complex<f64>>,
+    pub(crate) representative_input: Vec<StandaloneComplexInput>,
     pub(crate) start: usize,
     pub(crate) override_pos: usize,
     pub(crate) mult_offset: usize,
@@ -248,6 +268,199 @@ pub struct StandaloneGenericEvaluatorArchive<A = Vec<u8>> {
 
 type SerializedFnMapEntry<A> = (A, A, Vec<A>, Vec<A>);
 type ParsedFnMapEntry = (Atom, Atom, Vec<Atom>, Vec<Indeterminate>);
+type LoadedGenericEvaluator = (
+    Vec<Atom>,
+    Vec<Replacement>,
+    ExpressionEvaluator<Complex<f64>>,
+    Vec<Complex<f64>>,
+);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StandaloneBackend {
+    Eager,
+    Cpp,
+    Assembly,
+    Symjit,
+}
+
+impl StandaloneBackend {
+    fn parse(value: &str) -> Result<Self> {
+        match value {
+            "eager" => Ok(Self::Eager),
+            "c++" | "cpp" => Ok(Self::Cpp),
+            "assembly" => Ok(Self::Assembly),
+            "symjit" => Ok(Self::Symjit),
+            _ => Err(eyre!(
+                "Unsupported backend '{value}', expected eager, c++, assembly, or symjit"
+            )),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Eager => "eager",
+            Self::Cpp => "c++",
+            Self::Assembly => "assembly",
+            Self::Symjit => "symjit",
+        }
+    }
+
+    fn inline_asm(self) -> InlineASM {
+        match self {
+            Self::Assembly => InlineASM::default(),
+            Self::Eager | Self::Cpp | Self::Symjit => InlineASM::None,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StandaloneMethod {
+    SingleParametric,
+    Iterative,
+    SummedFunctionMap,
+    Summed,
+}
+
+impl StandaloneMethod {
+    fn parse(value: &str) -> Result<Self> {
+        match value {
+            "single_parametric" | "parametric" => Ok(Self::SingleParametric),
+            "iterative" => Ok(Self::Iterative),
+            "summed_function_map" | "summed_fnmap" => Ok(Self::SummedFunctionMap),
+            "summed" => Ok(Self::Summed),
+            _ => Err(eyre!(
+                "Unsupported method '{value}', expected single_parametric, iterative, summed_function_map, or summed"
+            )),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::SingleParametric => "single_parametric",
+            Self::Iterative => "iterative",
+            Self::SummedFunctionMap => "summed_function_map",
+            Self::Summed => "summed",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum StandaloneStackSelection {
+    Original,
+    ThresholdCounterterm(usize),
+}
+
+impl StandaloneStackSelection {
+    fn parse(value: &str) -> Result<Self> {
+        if value == "original" {
+            return Ok(Self::Original);
+        }
+
+        if let Some(rest) = value.strip_prefix("ct:") {
+            return Ok(Self::ThresholdCounterterm(rest.parse::<usize>()?));
+        }
+
+        Err(eyre!(
+            "Unsupported stack '{value}', expected original or ct:<index>"
+        ))
+    }
+
+    fn label(&self) -> String {
+        match self {
+            Self::Original => "original".to_string(),
+            Self::ThresholdCounterterm(index) => format!("ct_{index}"),
+        }
+    }
+}
+
+#[derive(Debug)]
+struct StandaloneCliOptions {
+    input: PathBuf,
+    input_json: Option<PathBuf>,
+    graph_index: usize,
+    graph_name: Option<String>,
+    stack: StandaloneStackSelection,
+    method: StandaloneMethod,
+    orientation_index: Option<usize>,
+    backend: StandaloneBackend,
+    compare_backends: Vec<StandaloneBackend>,
+    artifact_dir: Option<PathBuf>,
+    print_input: bool,
+}
+
+impl Default for StandaloneCliOptions {
+    fn default() -> Self {
+        Self {
+            input: PathBuf::from("standalone_evaluators.bin"),
+            input_json: None,
+            graph_index: 0,
+            graph_name: None,
+            stack: StandaloneStackSelection::Original,
+            method: StandaloneMethod::SingleParametric,
+            orientation_index: None,
+            backend: StandaloneBackend::Eager,
+            compare_backends: Vec::new(),
+            artifact_dir: None,
+            print_input: false,
+        }
+    }
+}
+
+enum StandaloneRuntimeEvaluator<'a> {
+    Eager(&'a mut ExpressionEvaluator<Complex<f64>>),
+    Compiled(CompiledComplexEvaluator),
+    Symjit(JITCompiledEvaluator<Complex<f64>>),
+}
+
+impl<'a> StandaloneRuntimeEvaluator<'a> {
+    fn build(
+        evaluator: &'a mut ExpressionEvaluator<Complex<f64>>,
+        backend: StandaloneBackend,
+        artifact_root: &Path,
+        label: &str,
+    ) -> Result<Self> {
+        match backend {
+            StandaloneBackend::Eager => Ok(Self::Eager(evaluator)),
+            StandaloneBackend::Cpp | StandaloneBackend::Assembly => {
+                fs::create_dir_all(artifact_root)?;
+                let function_name = format!(
+                    "standalone_{}_{}",
+                    sanitize_label(label),
+                    sanitize_label(backend.as_str())
+                );
+                let source_path = artifact_root.join(format!("{function_name}.cpp"));
+                let library_path = artifact_root.join(format!("{function_name}.so"));
+                let compiled = evaluator
+                    .export_cpp::<Complex<f64>>(
+                        &source_path,
+                        &function_name,
+                        ExportSettings {
+                            include_header: true,
+                            inline_asm: backend.inline_asm(),
+                            custom_header: None,
+                        },
+                    )
+                    .map_err(|err| eyre!(err))?
+                    .compile(&library_path, CompileOptions::default())
+                    .map_err(|err| eyre!(err))?
+                    .load()
+                    .map_err(|err| eyre!(err))?;
+                Ok(Self::Compiled(compiled))
+            }
+            StandaloneBackend::Symjit => Ok(Self::Symjit(
+                evaluator.jit_compile().map_err(|err| eyre!(err))?,
+            )),
+        }
+    }
+
+    fn evaluate(&mut self, args: &[Complex<f64>], out: &mut [Complex<f64>]) {
+        match self {
+            Self::Eager(evaluator) => evaluator.evaluate(args, out),
+            Self::Compiled(evaluator) => evaluator.evaluate(args, out),
+            Self::Symjit(evaluator) => evaluator.evaluate(args, out),
+        }
+    }
+}
 
 pub trait ImportWithMap {
     fn import_with_map(&self, state_map: &StateMap) -> Result<Atom>;
@@ -374,15 +587,11 @@ fn build_evaluator<A: ImportWithMap>(
     mut fn_map_entries: Vec<ParsedFnMapEntry>,
     state_map: &StateMap,
     iterate: bool,
-) -> Result<(
-    Vec<Atom>,
-    Vec<Replacement>,
-    ExpressionEvaluator<Complex<f64>>,
-    Vec<Complex<f64>>,
-)> {
+) -> Result<LoadedGenericEvaluator> {
     let optimization_settings = OptimizationSettings {
         horner_iterations: 10,
         n_cores: 10,
+        abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
         ..Default::default()
     };
     let exprs = payload
@@ -482,30 +691,10 @@ pub struct LoadedStandaloneEvaluatorStack {
     pub(crate) orientation_start: usize,
     pub(crate) override_pos: usize,
     pub(crate) mult_offset: usize,
-    pub parametric: (
-        Vec<Atom>,
-        Vec<Replacement>,
-        ExpressionEvaluator<Complex<f64>>,
-        Vec<Complex<f64>>,
-    ),
-    pub iterative: Option<(
-        Vec<Atom>,
-        Vec<Replacement>,
-        ExpressionEvaluator<Complex<f64>>,
-        Vec<Complex<f64>>,
-    )>,
-    pub summed: Option<(
-        Vec<Atom>,
-        Vec<Replacement>,
-        ExpressionEvaluator<Complex<f64>>,
-        Vec<Complex<f64>>,
-    )>,
-    pub summed_fnmap: Option<(
-        Vec<Atom>,
-        Vec<Replacement>,
-        ExpressionEvaluator<Complex<f64>>,
-        Vec<Complex<f64>>,
-    )>,
+    pub parametric: LoadedGenericEvaluator,
+    pub iterative: Option<LoadedGenericEvaluator>,
+    pub summed: Option<LoadedGenericEvaluator>,
+    pub summed_fnmap: Option<LoadedGenericEvaluator>,
 }
 
 pub(crate) fn set_override_if<A: Clone>(
@@ -555,7 +744,286 @@ pub(crate) fn set_orientation_values_impl<A: Clone + Neg<Output = A>>(
     }
 }
 
+impl LoadedStandaloneEvaluators {
+    fn select_graph_term_mut(
+        &mut self,
+        graph_index: usize,
+        graph_name: Option<&str>,
+    ) -> Result<&mut LoadedStandaloneGraphTerm> {
+        if let Some(graph_name) = graph_name {
+            return self
+                .graph_terms
+                .iter_mut()
+                .find(|term| term.graph_name == graph_name)
+                .ok_or_else(|| eyre!("Unknown graph '{graph_name}'"));
+        }
+
+        let graph_count = self.graph_terms.len();
+        self.graph_terms.get_mut(graph_index).ok_or_else(|| {
+            eyre!(
+                "Graph index {} is out of range for {} graph terms",
+                graph_index,
+                graph_count
+            )
+        })
+    }
+}
+
+impl LoadedStandaloneGraphTerm {
+    fn stack_mut(
+        &mut self,
+        selection: &StandaloneStackSelection,
+    ) -> Result<&mut LoadedStandaloneEvaluatorStack> {
+        match selection {
+            StandaloneStackSelection::Original => Ok(&mut self.original_integrand),
+            StandaloneStackSelection::ThresholdCounterterm(index) => {
+                self.threshold_counterterms.get_mut(*index).ok_or_else(|| {
+                    eyre!(
+                        "Threshold counterterm index {} is out of range for graph {}",
+                        index,
+                        self.graph_name
+                    )
+                })
+            }
+        }
+    }
+}
+
+fn parse_backend_list(value: &str) -> Result<Vec<StandaloneBackend>> {
+    value
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(StandaloneBackend::parse)
+        .collect()
+}
+
+fn sanitize_label(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn print_usage(program: &str) {
+    eprintln!(
+        "Usage: {program} [standalone_evaluators.bin|json] [options]\n\
+         \n\
+         Options:\n\
+           --backend <eager|c++|assembly|symjit>\n\
+           --compare-backends <backend[,backend...]>\n\
+           --input-json <path>\n\
+           --graph-index <usize>\n\
+           --graph-name <name>\n\
+           --stack <original|ct:N>\n\
+           --method <single_parametric|iterative|summed_function_map|summed>\n\
+           --orientation-index <usize>\n\
+           --artifact-dir <path>\n\
+           --print-input\n\
+           --help"
+    );
+}
+
+fn parse_cli_options() -> Result<StandaloneCliOptions> {
+    let mut options = StandaloneCliOptions::default();
+    let mut args = std::env::args().skip(1);
+
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--help" | "-h" => {
+                let program = std::env::args()
+                    .next()
+                    .unwrap_or_else(|| "standalone_evaluators_rust.rs".to_string());
+                print_usage(&program);
+                std::process::exit(0);
+            }
+            "--backend" => {
+                options.backend = StandaloneBackend::parse(
+                    &args
+                        .next()
+                        .ok_or_else(|| eyre!("Missing value for --backend"))?,
+                )?;
+            }
+            "--compare-backends" => {
+                options.compare_backends = parse_backend_list(
+                    &args
+                        .next()
+                        .ok_or_else(|| eyre!("Missing value for --compare-backends"))?,
+                )?;
+            }
+            "--input-json" => {
+                options.input_json = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| eyre!("Missing value for --input-json"))?,
+                ));
+            }
+            "--graph-index" => {
+                options.graph_index = args
+                    .next()
+                    .ok_or_else(|| eyre!("Missing value for --graph-index"))?
+                    .parse()?;
+            }
+            "--graph-name" => {
+                options.graph_name = Some(
+                    args.next()
+                        .ok_or_else(|| eyre!("Missing value for --graph-name"))?,
+                );
+            }
+            "--stack" => {
+                options.stack = StandaloneStackSelection::parse(
+                    &args
+                        .next()
+                        .ok_or_else(|| eyre!("Missing value for --stack"))?,
+                )?;
+            }
+            "--method" => {
+                options.method = StandaloneMethod::parse(
+                    &args
+                        .next()
+                        .ok_or_else(|| eyre!("Missing value for --method"))?,
+                )?;
+            }
+            "--orientation-index" => {
+                options.orientation_index = Some(
+                    args.next()
+                        .ok_or_else(|| eyre!("Missing value for --orientation-index"))?
+                        .parse()?,
+                );
+            }
+            "--artifact-dir" => {
+                options.artifact_dir = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| eyre!("Missing value for --artifact-dir"))?,
+                ));
+            }
+            "--print-input" => {
+                options.print_input = true;
+            }
+            _ if arg.starts_with("--") => {
+                return Err(eyre!("Unsupported option '{arg}'"));
+            }
+            _ => {
+                options.input = PathBuf::from(arg);
+            }
+        }
+    }
+
+    Ok(options)
+}
+
+fn diff_ratio(lhs: Complex<f64>, rhs: Complex<f64>) -> Option<Complex<f64>> {
+    if rhs.re == 0.0 && rhs.im == 0.0 {
+        None
+    } else {
+        Some(lhs / rhs)
+    }
+}
+
 impl LoadedStandaloneEvaluatorStack {
+    fn selected_evaluator_mut(
+        &mut self,
+        method: StandaloneMethod,
+    ) -> Result<&mut LoadedGenericEvaluator> {
+        match method {
+            StandaloneMethod::SingleParametric => Ok(&mut self.parametric),
+            StandaloneMethod::Iterative => self
+                .iterative
+                .as_mut()
+                .ok_or_else(|| eyre!("Missing iterative evaluator in standalone archive")),
+            StandaloneMethod::SummedFunctionMap => self.summed_fnmap.as_mut().ok_or_else(|| {
+                eyre!("Missing summed_function_map evaluator in standalone archive")
+            }),
+            StandaloneMethod::Summed => self
+                .summed
+                .as_mut()
+                .ok_or_else(|| eyre!("Missing summed evaluator in standalone archive")),
+        }
+    }
+
+    fn override_input(&self) -> Vec<Complex<f64>> {
+        let mut new_input = self.representative_input.clone();
+        set_override_if(
+            &mut new_input,
+            Complex::new(1., 0.),
+            Complex::new(0., 0.),
+            true,
+            self.override_pos,
+            self.mult_offset,
+        );
+        new_input
+    }
+
+    fn evaluate_with_backend(
+        &mut self,
+        backend: StandaloneBackend,
+        method: StandaloneMethod,
+        orientations: &[Vec<i8>],
+        orientation_index: Option<usize>,
+        custom_input: Option<&[Complex<f64>]>,
+        artifact_root: &Path,
+        label: &str,
+    ) -> Result<Vec<Complex<f64>>> {
+        let inputs = if let Some(custom_input) = custom_input {
+            if custom_input.len() != self.representative_input.len() {
+                return Err(eyre!(
+                    "Custom input length {} does not match evaluator input length {}",
+                    custom_input.len(),
+                    self.representative_input.len()
+                ));
+            }
+            vec![custom_input.to_vec()]
+        } else {
+            match method {
+                StandaloneMethod::SingleParametric => {
+                    if let Some(index) = orientation_index {
+                        let orientation = orientations.get(index).ok_or_else(|| {
+                            eyre!(
+                                "Orientation index {} is out of range for {} orientations",
+                                index,
+                                orientations.len()
+                            )
+                        })?;
+                        vec![self.set_orientation(orientation)]
+                    } else {
+                        orientations
+                            .iter()
+                            .map(|orientation| self.set_orientation(orientation))
+                            .collect()
+                    }
+                }
+                StandaloneMethod::Iterative
+                | StandaloneMethod::SummedFunctionMap
+                | StandaloneMethod::Summed => vec![self.override_input()],
+            }
+        };
+
+        let evaluator = self.selected_evaluator_mut(method)?;
+        let (_, _, eval, result_template) = evaluator;
+        let mut runtime = StandaloneRuntimeEvaluator::build(
+            eval,
+            backend,
+            artifact_root,
+            &format!("{label}_{}", method.as_str()),
+        )?;
+        let mut accumulated = vec![Complex::new(0.0, 0.0); result_template.len()];
+
+        for input in inputs {
+            let mut current = vec![Complex::new(0.0, 0.0); result_template.len()];
+            runtime.evaluate(&input, &mut current);
+            for (accumulated_value, current_value) in accumulated.iter_mut().zip(current) {
+                *accumulated_value += current_value;
+            }
+        }
+
+        Ok(accumulated)
+    }
+
     // fn benchmark_parametric(&self){
     //     self.parametric.evaluate_single(params)
     // }
@@ -814,19 +1282,7 @@ impl LoadedStandaloneEvaluatorStack {
     }
 
     fn scramble_input<R: Rng + ?Sized>(&self, _rng: &mut R) -> Vec<Complex<f64>> {
-        let mut new_input = self.representative_input.clone();
-        // for n in &mut new_input {
-        //     *n = *n * rng.random_range(0.8..1.2);
-        // }
-        set_override_if(
-            &mut new_input,
-            Complex::new(1., 0.),
-            Complex::new(0., 0.),
-            true,
-            self.override_pos,
-            self.mult_offset,
-        );
-        new_input
+        self.override_input()
     }
 
     fn set_orientation(&self, orientation: &[i8]) -> Vec<Complex<f64>> {
@@ -860,12 +1316,27 @@ fn load_json(path: impl AsRef<Path>) -> Result<LoadedStandaloneEvaluators> {
     archive.load()
 }
 
+fn load_custom_input(path: impl AsRef<Path>) -> Result<Vec<Complex<f64>>> {
+    let binary =
+        fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
+    let raw: Vec<[f64; 2]> = serde_json::from_slice(&binary)
+        .with_context(|| format!("Failed to parse {}", path.as_ref().display()))?;
+    Ok(raw
+        .into_iter()
+        .map(|[re, im]| Complex::new(re, im))
+        .collect())
+}
+
+fn print_backend_result(backend: StandaloneBackend, values: &[Complex<f64>]) {
+    println!("backend={}", backend.as_str());
+    for (index, value) in values.iter().enumerate() {
+        println!("  result[{index}] = {value}");
+    }
+}
+
 fn main() -> Result<()> {
-    let input = PathBuf::from(
-        std::env::args()
-            .nth(1)
-            .unwrap_or_else(|| "standalone_evaluators_rust.bin".to_string()),
-    );
+    let options = parse_cli_options()?;
+    let input = options.input.clone();
 
     let Some(ext) = input.extension() else {
         return Err(eyre!("No extension, expected .bin or .json"));
@@ -881,59 +1352,107 @@ fn main() -> Result<()> {
         }
     };
 
-    let mut rng = rand::rng();
+    let compare_backends = if options.compare_backends.is_empty() {
+        vec![options.backend]
+    } else {
+        options.compare_backends.clone()
+    };
+    let custom_input = options
+        .input_json
+        .as_ref()
+        .map(load_custom_input)
+        .transpose()?;
+    let artifact_root = options.artifact_dir.clone().unwrap_or_else(|| {
+        input
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("standalone_backend_artifacts")
+    });
 
-    let orientations = loaded.graph_terms[0].orientations.clone();
+    let graph = loaded.select_graph_term_mut(options.graph_index, options.graph_name.as_deref())?;
+    let graph_name = graph.graph_name.clone();
+    let orientations = graph.orientations.clone();
+    let stack_label = options.stack.label();
+    let stack = graph.stack_mut(&options.stack)?;
 
-    let (_result_per_orientation, _samples, average, max) = loaded.graph_terms[0]
-        .original_integrand
-        .benchmark_parametric(&orientations, &mut rng, 1000);
+    println!(
+        "graph={} stack={} method={} orientation={} artifact_dir={}",
+        graph_name,
+        stack_label,
+        options.method.as_str(),
+        options
+            .orientation_index
+            .map(|index| index.to_string())
+            .unwrap_or_else(|| "all".to_string()),
+        artifact_root.display()
+    );
 
-    let (exprs, _all_reps, _single, result) = &loaded.graph_terms[0].original_integrand.parametric;
-
-    println!(" average {average:?} max {max:?}");
-    for (_e, value) in exprs.iter().zip(result) {
-        println!("for Last value {value},");
-    }
-    // for (i, o) in orientations.iter().enumerate() {
-    //     println!("{:?}", o);
-    // }
-    //
-    if let Some((_exprs, _all_reps, single, _result)) =
-        &loaded.graph_terms[0].original_integrand.summed_fnmap
-    {
-        for t in single.export_instructions().0 {
-            println!("{t}");
-        }
-    }
-
-    if let Some((_samples, average, max)) = loaded.graph_terms[0]
-        .original_integrand
-        .benchmark_summed_fnmap(&mut rng, 1000)
-    {
-        // for (p, v) in loaded.graph_terms[0]
-        //     .param_builder_params
-        //     .iter()
-        //     .zip(samples)
-        // {
-        //     println!("{:>20} = {:<}", p.to_string(), v);
-        // }
-
-        if let Some((e, _r, _, res)) = &loaded.graph_terms[0].original_integrand.summed_fnmap {
-            // println!(
-            //     "{:120}",
-            //     parse_lit!(gammalooprs::integrand(
-            //         1, 1, 1, 1, 1, -1, -1, -1, 1, -1, -1, -1, -1
-            //     ))
-            //     .replace_multiple(r)
-            //     .rationalize(&(1, 100).into())
-            //     .collect_num()
-            // );
-            for (e, value) in e.iter().zip(res) {
-                println!("for {e:120}Last value {value}, average {average:?} max {max:?}",);
+    if options.print_input {
+        match options.method {
+            StandaloneMethod::SingleParametric => {
+                if let Some(custom_input) = custom_input.as_ref() {
+                    println!("input={custom_input:?}");
+                } else if let Some(index) = options.orientation_index {
+                    let orientation = orientations.get(index).ok_or_else(|| {
+                        eyre!(
+                            "Orientation index {} is out of range for {} orientations",
+                            index,
+                            orientations.len()
+                        )
+                    })?;
+                    println!("input={:?}", stack.set_orientation(orientation));
+                } else {
+                    for (index, orientation) in orientations.iter().enumerate() {
+                        println!("orientation[{index}]={orientation:?}");
+                        println!("input[{index}]={:?}", stack.set_orientation(orientation));
+                    }
+                }
+            }
+            StandaloneMethod::Iterative
+            | StandaloneMethod::SummedFunctionMap
+            | StandaloneMethod::Summed => {
+                println!(
+                    "input={:?}",
+                    custom_input
+                        .as_ref()
+                        .cloned()
+                        .unwrap_or_else(|| stack.override_input())
+                );
             }
         }
     }
-    println!("Loaded {} graph evaluator sets", loaded.graph_terms.len());
+
+    let mut results = Vec::new();
+    for backend in compare_backends {
+        let values = stack.evaluate_with_backend(
+            backend,
+            options.method,
+            &orientations,
+            options.orientation_index,
+            custom_input.as_deref(),
+            &artifact_root.join(sanitize_label(&graph_name)),
+            &format!("{}_{}", graph_name, stack_label),
+        )?;
+        print_backend_result(backend, &values);
+        results.push((backend, values));
+    }
+
+    if results.len() == 2 {
+        let (lhs_backend, lhs_values) = &results[0];
+        let (rhs_backend, rhs_values) = &results[1];
+        println!(
+            "comparison {} -> {}",
+            lhs_backend.as_str(),
+            rhs_backend.as_str()
+        );
+        for (index, (lhs_value, rhs_value)) in lhs_values.iter().zip(rhs_values).enumerate() {
+            println!("  diff[{index}] = {}", *rhs_value - *lhs_value);
+            match diff_ratio(*rhs_value, *lhs_value) {
+                Some(ratio) => println!("  ratio[{index}] = {ratio}"),
+                None => println!("  ratio[{index}] = undefined"),
+            }
+        }
+    }
+
     Ok(())
 }

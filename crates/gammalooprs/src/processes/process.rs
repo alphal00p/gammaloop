@@ -41,7 +41,7 @@ use crate::{
     settings::global::GenerationSettings,
 };
 
-use super::{Amplitude, CrossSection};
+use super::{Amplitude, CrossSection, GeneratedGraphReport, NamedGraphGenerationReport};
 
 const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
 const SETTINGS_HISTORY_YAML: &str = "settings_history.yaml";
@@ -449,8 +449,8 @@ impl Process {
         settings: &GlobalSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
-        self.collection.preprocess(
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let reports = self.collection.preprocess(
             model,
             &self.definition,
             &settings.generation,
@@ -458,7 +458,22 @@ impl Process {
             thread_pool,
         )?;
         self.settings_history = Some(settings.clone());
-        Ok(())
+        Ok(self.attach_process_id(reports))
+    }
+
+    fn attach_process_id(
+        &self,
+        reports: Vec<NamedGraphGenerationReport>,
+    ) -> Vec<GeneratedGraphReport> {
+        reports
+            .into_iter()
+            .map(|report| GeneratedGraphReport {
+                process_id: self.definition.process_id,
+                integrand_name: report.integrand_name,
+                graph_name: report.graph_name,
+                stats: report.stats,
+            })
+            .collect()
     }
 }
 
@@ -583,10 +598,9 @@ impl Process {
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        settings: &GlobalSettings,
         integrand_name: Option<String>,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<GeneratedGraphReport>> {
         match &mut self.collection {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.as_ref().join("amplitudes");
@@ -603,6 +617,7 @@ impl Process {
                     r?;
                 }
 
+                let mut reports = Vec::new();
                 for amp in a.values_mut() {
                     if let Some(int_name) = integrand_name.clone()
                         && amp.name != int_name
@@ -610,8 +625,9 @@ impl Process {
                         continue;
                     }
 
-                    amp.compile(&p, override_existing, settings, thread_pool)?;
+                    reports.extend(amp.compile(&p, override_existing, thread_pool)?);
                 }
+                Ok(self.attach_process_id(reports))
             }
             ProcessCollection::CrossSections(cs) => {
                 let p = path.as_ref().join("cross_sections");
@@ -628,6 +644,7 @@ impl Process {
                     r?;
                 }
 
+                let mut reports = Vec::new();
                 for cs in cs.values_mut() {
                     if let Some(int_name) = integrand_name.clone()
                         && cs.name != int_name
@@ -635,7 +652,48 @@ impl Process {
                         continue;
                     }
 
-                    cs.compile(&p, override_existing, settings, thread_pool)?;
+                    reports.extend(cs.compile(&p, override_existing, thread_pool)?);
+                }
+                Ok(self.attach_process_id(reports))
+            }
+        }
+    }
+
+    pub fn activate_loaded_integrand_backends(
+        &mut self,
+        allow_symjit_fallback: bool,
+    ) -> Result<()> {
+        match &mut self.collection {
+            ProcessCollection::Amplitudes(amplitudes) => {
+                for (integrand_name, amplitude) in amplitudes.iter_mut() {
+                    if let Some(integrand) = amplitude.integrand.as_mut()
+                        && let Some(reason) =
+                            integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
+                    {
+                        warn!(
+                            "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
+                            integrand_name,
+                            self.definition.process_id,
+                            self.definition.folder_name,
+                            reason
+                        );
+                    }
+                }
+            }
+            ProcessCollection::CrossSections(cross_sections) => {
+                for (integrand_name, cross_section) in cross_sections.iter_mut() {
+                    if let Some(integrand) = cross_section.integrand.as_mut()
+                        && let Some(reason) =
+                            integrand.activate_runtime_backends_after_load(allow_symjit_fallback)?
+                    {
+                        warn!(
+                            "Falling back to symjit for integrand '{}' in process #{} ({}) after external compiled evaluator loading failed: {}",
+                            integrand_name,
+                            self.definition.process_id,
+                            self.definition.folder_name,
+                            reason
+                        );
+                    }
                 }
             }
         }
@@ -834,9 +892,14 @@ impl Process {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
-        self.collection
-            .generate_integrands(model, global_settings, runtime_default, thread_pool)
+    ) -> Result<Vec<GeneratedGraphReport>> {
+        let reports = self.collection.generate_integrands(
+            model,
+            global_settings,
+            runtime_default,
+            thread_pool,
+        )?;
+        Ok(self.attach_process_id(reports))
     }
 }
 
@@ -995,26 +1058,34 @@ impl ProcessCollection {
         settings: &GenerationSettings,
         locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
         match self {
             Self::Amplitudes(amplitudes) => {
+                let mut reports = Vec::new();
                 for amplitude in amplitudes.values_mut() {
-                    amplitude.preprocess(model, settings, locked_runtime_settings, thread_pool)?;
+                    reports.extend(amplitude.preprocess(
+                        model,
+                        settings,
+                        locked_runtime_settings,
+                        thread_pool,
+                    )?);
                 }
+                Ok(reports)
             }
             Self::CrossSections(cross_sections) => {
+                let mut reports = Vec::new();
                 for cross_section in cross_sections.values_mut() {
-                    cross_section.preprocess(
+                    reports.extend(cross_section.preprocess(
                         model,
                         process_definition,
                         settings,
                         *locked_runtime_settings,
                         thread_pool,
-                    )?;
+                    )?);
                 }
+                Ok(reports)
             }
         }
-        Ok(())
     }
 
     pub fn warm_up(&mut self, model: &Model) -> Result<()> {
@@ -1039,32 +1110,33 @@ impl ProcessCollection {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
-    ) -> Result<()> {
-        // let mut result = HashMap::default();
+    ) -> Result<Vec<NamedGraphGenerationReport>> {
         match self {
             Self::Amplitudes(amplitudes) => {
+                let mut reports = Vec::new();
                 for amplitude in amplitudes.values_mut() {
-                    amplitude.build_integrand(
+                    reports.extend(amplitude.build_integrand(
                         model,
                         global_settings,
                         runtime_default,
                         thread_pool,
-                    )?;
+                    )?);
                 }
+                Ok(reports)
             }
             Self::CrossSections(cross_sections) => {
+                let mut reports = Vec::new();
                 for cross_section in cross_sections.values_mut() {
-                    cross_section.build_integrand(
+                    reports.extend(cross_section.build_integrand(
                         model,
                         global_settings,
                         runtime_default,
                         thread_pool,
-                    )?;
+                    )?);
                 }
+                Ok(reports)
             }
         }
-        // result
-        Ok(())
     }
 }
 

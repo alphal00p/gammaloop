@@ -6,7 +6,7 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
 //! numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 //! graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
@@ -226,6 +226,7 @@ fn build_evaluator<A: ImportWithMap>(
     let optimization_settings = OptimizationSettings {
         horner_iterations: 10,
         n_cores: 10,
+        abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
         ..Default::default()
     };
     let exprs = payload

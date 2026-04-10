@@ -1,4 +1,73 @@
 use super::*;
+use gammalooprs::{
+    observables::{HistogramSnapshot, HistogramSnapshotKind},
+    utils::FloatLike,
+};
+use symbolica::domains::float::Real;
+
+pub(super) fn decimal_scalar<T>(value: &str) -> Result<F<T>>
+where
+    T: FloatLike + From<symbolica::domains::float::Float>,
+{
+    Ok(F(T::from(
+        symbolica::domains::float::Float::parse(value, Some(T::new_zero().get_precision()))
+            .map_err(|err| eyre::eyre!(err))?,
+    )))
+}
+
+pub(super) fn decimal_complex<T>(re: &str, im: &str) -> Result<Complex<F<T>>>
+where
+    T: FloatLike + From<symbolica::domains::float::Float>,
+{
+    Ok(Complex::new(decimal_scalar(re)?, decimal_scalar(im)?))
+}
+
+pub(super) fn assert_complex_approx_eq_precise<T: FloatLike>(
+    actual: &Complex<F<T>>,
+    expected: &Complex<F<T>>,
+    tolerance: &F<T>,
+    context: &str,
+) {
+    let distance = (actual.clone() - expected.clone()).norm().re;
+    let actual_norm = actual.norm().re;
+    let expected_norm = expected.norm().re;
+    let mut scale = if actual_norm > expected_norm {
+        actual_norm
+    } else {
+        expected_norm
+    };
+    let one = tolerance.clone() / tolerance.clone();
+    if scale < one {
+        scale = one;
+    }
+    let scaled_tolerance = tolerance.clone() * scale.clone();
+    assert!(
+        distance <= scaled_tolerance,
+        "{context}: actual={actual:e}, expected={expected:e}, tolerance={tolerance:e}, relative_distance={:e}",
+        distance / scale
+    );
+}
+
+pub(super) fn discrete_histogram_bin_average_and_error(
+    histogram: &HistogramSnapshot,
+    bin_id: isize,
+) -> Result<(f64, f64)> {
+    if histogram.kind != HistogramSnapshotKind::Discrete {
+        return Err(eyre::eyre!(
+            "Expected a discrete histogram for bin lookup, got {:?}",
+            histogram.kind
+        ));
+    }
+    let bin = histogram
+        .bins
+        .iter()
+        .find(|bin| bin.bin_id == Some(bin_id))
+        .ok_or_else(|| eyre::eyre!("Discrete histogram bin_id {bin_id} is missing"))?;
+    Ok((
+        bin.average(histogram.sample_count),
+        bin.error(histogram.sample_count),
+    ))
+}
 
 pub(super) fn single_slot_integral(result: &RuntimeIntegrationResult) -> &IntegralEstimate {
     &result

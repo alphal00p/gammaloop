@@ -37,6 +37,8 @@ pub(crate) use symbolica::symbol;
 pub(crate) use tabled::{Table, Tabled, settings::Style};
 pub(crate) use tracing::info;
 
+#[path = "test_runs/aa_aa.rs"]
+mod aa_aa;
 #[path = "test_runs/differential.rs"]
 mod differential;
 #[path = "test_runs/events.rs"]

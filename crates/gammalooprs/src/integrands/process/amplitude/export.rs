@@ -19,7 +19,7 @@ use crate::{
         amplitude::{
             AmplitudeIntegrand,
             load::{
-                STANDALONE_EVALUATORS_VERSION, StandaloneEvaluatorArchive,
+                STANDALONE_EVALUATORS_VERSION, StandaloneComplexInput, StandaloneEvaluatorArchive,
                 StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
                 StandaloneGraphTermArchive,
             },
@@ -27,12 +27,30 @@ use crate::{
     },
     momentum::ThreeMomentum,
     momentum::sample::{LoopMomenta, MomentumSample},
-    processes::{StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings},
-    utils::F,
+    processes::{
+        StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+        StandaloneNumericTarget,
+    },
+    utils::{ArbPrec, F, FloatLike, f128},
 };
 
 const STANDALONE_DATA_FILE: &str = "standalone_evaluators";
 const STANDALONE_RUST_SCRIPT_FILE: &str = "standalone_evaluators_rust.rs";
+
+#[cfg(unix)]
+fn make_script_executable(path: &Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_script_executable(_: &Path) -> Result<()> {
+    Ok(())
+}
 
 fn atom_to_bytes(atom: &Atom) -> Result<Vec<u8>> {
     let mut out = Vec::new();
@@ -69,16 +87,7 @@ fn export_generic_evaluator<T: ExportAtomTo>(
 }
 
 fn standalone_rust_script() -> String {
-    let mut script = include_str!("load.rs").to_string();
-    if let Some(rest) = script.strip_prefix("//#!/usr/bin/env -S rust-script\n") {
-        script = format!("#!/usr/bin/env -S rust-script\n{rest}");
-    }
-
-    script
-}
-
-pub trait CreateArchive<T, S> {
-    fn create_archive(&self, state: S) -> Result<StandaloneEvaluatorArchive<S, T>>;
+    include_str!("standalone_template.rs").to_string()
 }
 
 pub trait ExportAtomTo: Sized {
@@ -97,9 +106,51 @@ impl ExportAtomTo for String {
     }
 }
 
-impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
-    fn create_archive(&self, symbolica_state: S) -> Result<StandaloneEvaluatorArchive<S, T>> {
-        let sample_inputs = self.representative_input()?;
+trait StandaloneRepresentativeInputPrecision: FloatLike + GenericEvaluatorFloat + Default {
+    fn sample_from_base(sample: &MomentumSample<f64>) -> MomentumSample<Self>;
+}
+
+impl StandaloneRepresentativeInputPrecision for f64 {
+    fn sample_from_base(sample: &MomentumSample<f64>) -> MomentumSample<Self> {
+        sample.clone()
+    }
+}
+
+impl StandaloneRepresentativeInputPrecision for f128 {
+    fn sample_from_base(sample: &MomentumSample<f64>) -> MomentumSample<Self> {
+        sample.higher_precision()
+    }
+}
+
+impl StandaloneRepresentativeInputPrecision for ArbPrec {
+    fn sample_from_base(sample: &MomentumSample<f64>) -> MomentumSample<Self> {
+        sample.higher_precision().higher_precision()
+    }
+}
+
+fn serialize_representative_input<T: FloatLike>(
+    values: &[spenso::algebra::complex::Complex<F<T>>],
+) -> Vec<StandaloneComplexInput> {
+    values
+        .iter()
+        .map(|value| StandaloneComplexInput {
+            re: value.re.to_string(),
+            im: value.im.to_string(),
+        })
+        .collect()
+}
+
+impl AmplitudeIntegrand {
+    fn create_archive<T: ExportAtomTo, S>(
+        &self,
+        symbolica_state: S,
+        numeric_target: StandaloneNumericTarget,
+    ) -> Result<StandaloneEvaluatorArchive<S, T>> {
+        let sample_inputs = match numeric_target {
+            StandaloneNumericTarget::Double => self.representative_input_for::<f64>()?,
+            StandaloneNumericTarget::Quad => self.representative_input_for::<f128>()?,
+            StandaloneNumericTarget::Arb => self.representative_input_for::<ArbPrec>()?,
+        };
 
         let graph_terms = self
             .data
@@ -209,28 +260,23 @@ impl<T: ExportAtomTo, S> CreateArchive<T, S> for AmplitudeIntegrand {
             .collect::<Result<Vec<_>>>()?;
         Ok(StandaloneEvaluatorArchive {
             version: STANDALONE_EVALUATORS_VERSION,
+            numeric_target,
             symbolica_state,
             graph_terms,
         })
     }
-}
 
-impl AmplitudeIntegrand {
     #[allow(clippy::type_complexity)]
-    pub(crate) fn representative_input(
+    fn representative_input_for<T>(
         &self,
-    ) -> Result<
-        Vec<(
-            Vec<symbolica::domains::float::Complex<f64>>,
-            usize,
-            usize,
-            usize,
-        )>,
-    > {
+    ) -> Result<Vec<(Vec<StandaloneComplexInput>, usize, usize, usize)>>
+    where
+        T: StandaloneRepresentativeInputPrecision,
+    {
         let hel = self.settings.kinematics.externals.get_helicities();
         let mut rng = rand::rng();
 
-        let mut mom_samples = Vec::new();
+        let mut base_mom_samples = Vec::new();
         {
             let dependent_momenta_constructor = self.get_dependent_momenta_constructor();
             for t in self.data.graph_terms.iter() {
@@ -250,18 +296,19 @@ impl AmplitudeIntegrand {
                     dependent_momenta_constructor,
                     None,
                 )?;
-                mom_samples.push(momentum_sample);
+                base_mom_samples.push(momentum_sample);
             }
         }
         let mut inputs = Vec::new();
 
-        for (t, momentum_sample) in self.data.graph_terms.iter().zip(&mom_samples) {
+        for (t, base_momentum_sample) in self.data.graph_terms.iter().zip(&base_mom_samples) {
             let mut p_build = t.param_builder.clone();
-            let input = f64::get_parameters(
+            let momentum_sample = T::sample_from_base(base_momentum_sample);
+            let input = T::get_parameters(
                 &mut p_build,
                 (false, false),
                 &t.graph,
-                momentum_sample,
+                &momentum_sample,
                 hel,
                 &self.settings.additional_params(),
                 None,
@@ -270,11 +317,7 @@ impl AmplitudeIntegrand {
             );
 
             inputs.push((
-                input
-                    .as_slice()
-                    .iter()
-                    .map(|c| symbolica::domains::float::Complex::new(c.re.0, c.im.0))
-                    .collect(),
+                serialize_representative_input(input.as_slice()),
                 input.multiplicative_offset,
                 input.orientations_start,
                 input.override_pos,
@@ -300,7 +343,7 @@ impl AmplitudeIntegrand {
         match settings.format {
             StandaloneDataFormat::Binary => {
                 let standalone: StandaloneEvaluatorArchive<Vec<u8>, Vec<u8>> =
-                    self.create_archive(symbolica_state)?;
+                    self.create_archive(symbolica_state, settings.precision)?;
                 let binary = bincode::encode_to_vec(&standalone, bincode::config::standard())?;
                 standalone_path.add_extension("bin");
                 fs::write(&standalone_path, binary).with_context(|| {
@@ -311,7 +354,8 @@ impl AmplitudeIntegrand {
                 })?;
             }
             StandaloneDataFormat::Json => {
-                let standalone: StandaloneEvaluatorArchive<(), String> = self.create_archive(())?;
+                let standalone: StandaloneEvaluatorArchive<(), String> =
+                    self.create_archive((), settings.precision)?;
                 let json = serde_json::to_vec_pretty(&standalone)?;
                 standalone_path.add_extension("json");
                 fs::write(&standalone_path, json).with_context(|| {
@@ -336,6 +380,7 @@ impl AmplitudeIntegrand {
                         script_path.display()
                     )
                 })?;
+                make_script_executable(&script_path)?;
             }
         }
 

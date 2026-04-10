@@ -258,15 +258,19 @@ fn compare_inspect(
         );
         (
             xs.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>(),
-            Some(inv_jac.inv().0.to_f64()),
+            Some(inv_jac.inv().into_f64()),
         )
     } else {
         (pt.iter().map(|&x| F(x)).collect::<Vec<_>>(), None)
     };
-    let mut sample = symbolica::numerical_integration::Sample::Continuous(F(1.0), xs.clone());
+    let mut sample =
+        symbolica::numerical_integration::Sample::Continuous(F::<f64>(1.0), xs.clone());
     for &d in term.iter().rev() {
-        sample =
-            symbolica::numerical_integration::Sample::Discrete(F(1.0), d, Some(Box::new(sample)));
+        sample = symbolica::numerical_integration::Sample::Discrete(
+            F::<f64>(1.0),
+            d,
+            Some(Box::new(sample)),
+        );
     }
     let res = integrand
         .evaluate_sample(&sample, model, F(0.), 1, true, Complex::new_zero())?

@@ -30,6 +30,14 @@
       },
       "additionalProperties": false
     },
+    "CompilationMode": {
+      "type": "string",
+      "enum": [
+        "c++",
+        "assembly",
+        "symjit"
+      ]
+    },
     "CompilationOptimizationLevel": {
       "type": "string",
       "enum": [
@@ -133,6 +141,9 @@
     "GammaloopCompileOptions": {
       "type": "object",
       "properties": {
+        "compilation_mode": {
+          "$ref": "#/$defs/CompilationMode"
+        },
         "compiler": {
           "type": "string"
         },
@@ -143,9 +154,6 @@
           }
         },
         "fast_math": {
-          "type": "boolean"
-        },
-        "inline_asm": {
           "type": "boolean"
         },
         "optimization_level": {
@@ -189,6 +197,9 @@
         },
         "uv": {
           "$ref": "#/$defs/UVgenerationSettings"
+        },
+        "vector_polarization_sum_gauge": {
+          "$ref": "#/$defs/VectorPolarizationSumGauge"
         }
       },
       "additionalProperties": false
@@ -427,6 +438,13 @@
         }
       },
       "additionalProperties": false
+    },
+    "VectorPolarizationSumGauge": {
+      "type": "string",
+      "enum": [
+        "Feynman",
+        "LightLikeAxial"
+      ]
     }
   }
 }

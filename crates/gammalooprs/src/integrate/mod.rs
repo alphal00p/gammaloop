@@ -4675,6 +4675,10 @@ mod tests {
         assert!(rendered.contains("25.00K / 100.00K (25.0%)"), "{rendered}");
         assert!(rendered.contains("# samples total 125.00K"), "{rendered}");
         assert!(rendered.contains("#samples/s"), "{rendered}");
+        assert!(
+            rendered.contains("480µs /sample/core (4 cores)"),
+            "{rendered}"
+        );
         assert!(rendered.contains("/sample/core (4 cores)"), "{rendered}");
         assert!(rendered.contains("Integrands"), "{rendered}");
         assert!(rendered.contains("Focused integrand"), "{rendered}");
