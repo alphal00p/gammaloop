@@ -8,6 +8,7 @@ use gammaloop_api::commands::evaluate_samples::{
 use gammaloop_api::session::CliSessionState;
 use gammaloop_api::state::{RunHistory, State};
 use gammalooprs::{
+    initialisation::initialise,
     integrands::evaluation::PreciseEvaluationResultOutput,
     momentum::{Dep, ExternalMomenta, Helicity, SignOrZero},
     settings::{RuntimeSettings, runtime::kinematic::Externals},
@@ -19,6 +20,7 @@ use symbolica::domains::float::Float as SymbolicaFloat;
 use symbolica::domains::float::Real;
 
 const AA_AA_PROCESS: &str = "aa_aa_all_helicities";
+const AA_AA_ASSEMBLY_PROCESS: &str = "aa_aa_all_helicities_assembly";
 const AA_AA_PRIMARY_INTEGRAND: &str = "1L_ppmm";
 const AA_AA_GRAPH_COUNT: usize = 3;
 const HISTOGRAM_TARGET_N_SIGMA: f64 = 5.0;
@@ -35,16 +37,18 @@ const AA_AA_HELICITIES_INTEGRATED: [(&str, &str); 2] =
     [("1L_ppmm", "[+1,+1,-1,-1]"), ("1L_pmpm", "[+1,-1,+1,-1]")];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum InspectPrecision {
-    F64,
+enum InspectTargetKind {
+    F64Symjit,
+    F64Assembly,
     Quad,
     Arb,
 }
 
-impl InspectPrecision {
+impl InspectTargetKind {
     fn from_target_tag(tag: &str) -> Result<Self> {
         match tag {
-            "F64_TARGET" => Ok(Self::F64),
+            "F64_SYMJIT_TARGET" => Ok(Self::F64Symjit),
+            "F64_ASSEMBLY_TARGET" => Ok(Self::F64Assembly),
             "QUAD_TARGET" => Ok(Self::Quad),
             "ARB_TARGET" => Ok(Self::Arb),
             _ => Err(eyre::eyre!("Unsupported inspect target tag '{tag}'")),
@@ -54,7 +58,7 @@ impl InspectPrecision {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct InspectTargetKey {
-    precision: InspectPrecision,
+    kind: InspectTargetKind,
     kinematics: String,
     integrand: String,
     graph_id: usize,
@@ -62,13 +66,13 @@ struct InspectTargetKey {
 
 impl InspectTargetKey {
     fn new(
-        precision: InspectPrecision,
+        kind: InspectTargetKind,
         kinematics: impl Into<String>,
         integrand: impl Into<String>,
         graph_id: usize,
     ) -> Self {
         Self {
-            precision,
+            kind,
             kinematics: kinematics.into(),
             integrand: integrand.into(),
             graph_id,
@@ -151,7 +155,7 @@ fn load_inspect_targets() -> Result<BTreeMap<InspectTargetKey, (String, String)>
             .map_err(|err| eyre::eyre!("Invalid graph id in inspect target '{line}': {err}"))?;
         targets.insert(
             InspectTargetKey::new(
-                InspectPrecision::from_target_tag(parts[0])?,
+                InspectTargetKind::from_target_tag(parts[0])?,
                 parts[1],
                 parts[2],
                 graph_id,
@@ -201,35 +205,28 @@ fn load_integrated_targets() -> Result<BTreeMap<(String, String, usize), Integra
 
 fn inspect_target_entry<'a>(
     targets: &'a BTreeMap<InspectTargetKey, (String, String)>,
-    precision: InspectPrecision,
+    kind: InspectTargetKind,
     kinematics: &str,
     integrand: &str,
     graph_id: usize,
 ) -> &'a (String, String) {
     targets
-        .get(&InspectTargetKey::new(
-            precision, kinematics, integrand, graph_id,
-        ))
+        .get(&InspectTargetKey::new(kind, kinematics, integrand, graph_id))
         .unwrap_or_else(|| {
             panic!(
-                "missing inspect target for precision={precision:?}, kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                "missing inspect target for kind={kind:?}, kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
             )
         })
 }
 
 fn f64_inspect_target(
     targets: &BTreeMap<InspectTargetKey, (String, String)>,
+    kind: InspectTargetKind,
     kinematics: &str,
     integrand: &str,
     graph_id: usize,
 ) -> Complex<f64> {
-    let (re, im) = inspect_target_entry(
-        targets,
-        InspectPrecision::F64,
-        kinematics,
-        integrand,
-        graph_id,
-    );
+    let (re, im) = inspect_target_entry(targets, kind, kinematics, integrand, graph_id);
     Complex::new(
         re.parse().expect("f64 real inspect target must parse"),
         im.parse().expect("f64 imaginary inspect target must parse"),
@@ -238,7 +235,7 @@ fn f64_inspect_target(
 
 fn precise_inspect_target<T>(
     targets: &BTreeMap<InspectTargetKey, (String, String)>,
-    precision: InspectPrecision,
+    kind: InspectTargetKind,
     kinematics: &str,
     integrand: &str,
     graph_id: usize,
@@ -246,7 +243,7 @@ fn precise_inspect_target<T>(
 where
     T: gammalooprs::utils::FloatLike + From<SymbolicaFloat>,
 {
-    let (re, im) = inspect_target_entry(targets, precision, kinematics, integrand, graph_id);
+    let (re, im) = inspect_target_entry(targets, kind, kinematics, integrand, graph_id);
     decimal_complex(re, im)
 }
 
@@ -377,6 +374,7 @@ fn ensure_aa_aa_helicity_family(
 }
 
 fn load_example_aa_aa_cli() -> Result<gammaloop_integration_tests::CLIState> {
+    initialise()?;
     let state_folder = example_aa_aa_state_folder();
 
     let mut state = State::load(state_folder.clone(), None, None)?;
@@ -407,6 +405,7 @@ fn load_example_aa_aa_cli() -> Result<gammaloop_integration_tests::CLIState> {
 
 fn set_aa_aa_kinematics(
     cli: &mut gammaloop_integration_tests::CLIState,
+    process: &str,
     label: &str,
 ) -> Result<()> {
     let momenta = match label {
@@ -449,12 +448,12 @@ fn set_aa_aa_kinematics(
     };
     let process_id = cli
         .state
-        .resolve_process_ref(Some(&ProcessRef::Unqualified(AA_AA_PROCESS.to_string())))?;
+        .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
     for (integrand, _) in AA_AA_HELICITIES_ALL {
         if cli
             .state
             .find_integrand_ref(
-                Some(&ProcessRef::Unqualified(AA_AA_PROCESS.to_string())),
+                Some(&ProcessRef::Unqualified(process.to_string())),
                 Some(&integrand.to_string()),
             )
             .is_ok()
@@ -494,10 +493,10 @@ fn generate_aa_aa_helicity_family(
         .expect("helicity family must not be empty");
     set_compilation_mode(cli, compilation_mode)?;
     cli.run_command(&format!(
-        "import graphs ./examples/cli/aa_aa/1L/aa_aa_1L.dot -p {process} -i {first_integrand}"
+        "import graphs ./examples/cli/aa_aa/1L/aa_aa_1L.dot -p {process} -i {first_integrand} -o"
     ))?;
-    ensure_aa_aa_helicity_family(cli, process, helicities)?;
     cli.run_command(&format!("generate existing -p {process}"))?;
+    ensure_aa_aa_helicity_family(cli, process, helicities)?;
     Ok(())
 }
 
@@ -628,19 +627,25 @@ fn add_graph_id_observable(
 #[ignore = "manual aa_aa inspect regression; Quad is currently known-buggy"]
 fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
     let targets = load_inspect_targets()?;
-    let mut symjit_cli = load_example_aa_aa_cli()?;
+    let mut symjit_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends_symjit")?;
+    generate_aa_aa_helicity_family(
+        &mut symjit_cli,
+        AA_AA_PROCESS,
+        "symjit",
+        &AA_AA_HELICITIES_ALL,
+    )?;
     let mut assembly_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends")?;
     generate_aa_aa_helicity_family(
         &mut assembly_cli,
-        AA_AA_PROCESS,
+        AA_AA_ASSEMBLY_PROCESS,
         "assembly",
         &AA_AA_HELICITIES_ALL,
     )?;
 
-    set_aa_aa_kinematics(&mut symjit_cli, "a")?;
+    set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "a")?;
     let point_a =
         default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
-    set_aa_aa_kinematics(&mut symjit_cli, "b")?;
+    set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "b")?;
     let point_b =
         default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
 
@@ -648,8 +653,8 @@ fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
     let arb_compat_tolerance = arb_vs_quad_tolerance();
 
     for (kinematics, point) in [("a", &point_a), ("b", &point_b)] {
-        set_aa_aa_kinematics(&mut symjit_cli, kinematics)?;
-        set_aa_aa_kinematics(&mut assembly_cli, kinematics)?;
+        set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, kinematics)?;
+        set_aa_aa_kinematics(&mut assembly_cli, AA_AA_ASSEMBLY_PROCESS, kinematics)?;
         for (integrand, _) in AA_AA_HELICITIES_ALL {
             for graph_id in 0..AA_AA_GRAPH_COUNT {
                 let context =
@@ -663,24 +668,42 @@ fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
                     graph_id,
                     point,
                 )?;
-                let f64_target = f64_inspect_target(&targets, kinematics, integrand, graph_id);
+                let symjit_target = f64_inspect_target(
+                    &targets,
+                    InspectTargetKind::F64Symjit,
+                    kinematics,
+                    integrand,
+                    graph_id,
+                );
                 assert_complex_approx_eq(
                     symjit_result,
-                    f64_target,
+                    symjit_target,
                     &format!("{context}: symjit f64 benchmark"),
                 );
 
-                set_single_precision_level(&mut assembly_cli, AA_AA_PROCESS, integrand, "Double")?;
+                set_single_precision_level(
+                    &mut assembly_cli,
+                    AA_AA_ASSEMBLY_PROCESS,
+                    integrand,
+                    "Double",
+                )?;
                 let assembly_result = evaluate_graph_momentum_sample_f64(
                     &mut assembly_cli,
-                    AA_AA_PROCESS,
+                    AA_AA_ASSEMBLY_PROCESS,
                     integrand,
                     graph_id,
                     point,
                 )?;
+                let assembly_target = f64_inspect_target(
+                    &targets,
+                    InspectTargetKind::F64Assembly,
+                    kinematics,
+                    integrand,
+                    graph_id,
+                );
                 assert_complex_approx_eq(
                     assembly_result,
-                    f64_target,
+                    assembly_target,
                     &format!("{context}: assembly f64 benchmark"),
                 );
                 assert_complex_approx_eq(
@@ -700,7 +723,7 @@ fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
                 )?)?;
                 let quad_target = precise_inspect_target::<f128>(
                     &targets,
-                    InspectPrecision::Quad,
+                    InspectTargetKind::Quad,
                     kinematics,
                     integrand,
                     graph_id,
@@ -729,7 +752,7 @@ fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
                 )?)?;
                 let arb_target = precise_inspect_target::<ArbPrec>(
                     &targets,
-                    InspectPrecision::Arb,
+                    InspectTargetKind::Arb,
                     kinematics,
                     integrand,
                     graph_id,
@@ -751,6 +774,7 @@ fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
     }
 
     clean_test(&assembly_cli.cli_settings.state.folder);
+    clean_test(&symjit_cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -774,7 +798,7 @@ fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
         ("f", AA_AA_HELICITIES_INTEGRATED[0].0),
         ("f", AA_AA_HELICITIES_INTEGRATED[1].0),
     ] {
-        set_aa_aa_kinematics(&mut cli, kinematics)?;
+        set_aa_aa_kinematics(&mut cli, AA_AA_PROCESS, kinematics)?;
         let result = Integrate {
             process: vec![ProcessRef::Unqualified(AA_AA_PROCESS.to_string())],
             integrand_name: vec![integrand.to_string()],
