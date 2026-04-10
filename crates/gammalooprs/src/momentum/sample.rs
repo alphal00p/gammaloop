@@ -163,8 +163,11 @@ impl SubspaceData {
         graph: &Graph,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Result<Self> {
-        let mut subgraph = Self::cleaned_filter_pessimist(subgraph, graph);
+        let bridges = graph.bridges_of(&subgraph);
+
+        let mut subgraph = Self::cleaned_filter_pessimist(subgraph.subtract(&bridges), graph);
         subgraph.set_loopcount(graph);
+
         let edges_in_subgraph = graph
             .iter_edges_of(&subgraph.filter)
             .map(|ed| ed.1)

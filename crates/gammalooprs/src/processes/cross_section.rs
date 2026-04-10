@@ -1130,6 +1130,94 @@ impl CrossSectionGraph {
             lmbs.push(lmb);
         }
 
+        let sorted_graph_loop_edges = self
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .copied()
+            .sorted()
+            .collect_vec();
+
+        let matching_lmb_index = lmbs.iter_enumerated().find_map(|(lmb_index, lmb)| {
+            let sorted_loop_edges = lmb.loop_edges.iter().copied().sorted().collect_vec();
+            (sorted_loop_edges == sorted_graph_loop_edges).then_some(lmb_index)
+        });
+
+        if let Some(matching_lmb_index) = matching_lmb_index {
+            {
+                let matching_lmb = &mut lmbs[matching_lmb_index];
+                for (target_pos, target_edge) in
+                    self.graph.loop_momentum_basis.loop_edges.iter_enumerated()
+                {
+                    let current_pos = matching_lmb
+                        .loop_edges
+                        .iter()
+                        .find_position(|edge| *edge == target_edge)
+                        .map(|(pos, _)| pos)
+                        .unwrap();
+
+                    if current_pos != target_pos.0 {
+                        matching_lmb.swap_loops(current_pos.into(), target_pos);
+                    }
+                }
+            }
+
+            let matching_lmb_pos: usize = matching_lmb_index.into();
+            if matching_lmb_pos != 0 {
+                lmbs.raw[..=matching_lmb_pos].rotate_right(1);
+            }
+        } else {
+            warn!(
+                "Could not match current graph LMB against generated LMBs for graph {}",
+                self.graph.name
+            );
+        }
+
+        let sorted_graph_loop_edges = self
+            .graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .copied()
+            .sorted()
+            .collect_vec();
+
+        let matching_lmb_index = lmbs.iter_enumerated().find_map(|(lmb_index, lmb)| {
+            let sorted_loop_edges = lmb.loop_edges.iter().copied().sorted().collect_vec();
+            (sorted_loop_edges == sorted_graph_loop_edges).then_some(lmb_index)
+        });
+
+        if let Some(matching_lmb_index) = matching_lmb_index {
+            {
+                let matching_lmb = &mut lmbs[matching_lmb_index];
+                for (target_pos, target_edge) in
+                    self.graph.loop_momentum_basis.loop_edges.iter_enumerated()
+                {
+                    let current_pos = matching_lmb
+                        .loop_edges
+                        .iter()
+                        .find_position(|edge| *edge == target_edge)
+                        .map(|(pos, _)| pos)
+                        .unwrap();
+
+                    if current_pos != target_pos.0 {
+                        matching_lmb.swap_loops(current_pos.into(), target_pos);
+                    }
+                }
+            }
+
+            let matching_lmb_pos: usize = matching_lmb_index.into();
+            if matching_lmb_pos != 0 {
+                lmbs.raw[..=matching_lmb_pos].rotate_right(1);
+            }
+        } else {
+            warn!(
+                "Could not match current graph LMB against generated LMBs for graph {}",
+                self.graph.name
+            );
+        }
+
         self.derived_data.lmbs = Some(lmbs);
         Ok(())
     }
@@ -1545,11 +1633,11 @@ impl CrossSectionGraph {
                     })
                     .collect_vec();
 
-                let largest_left_subgraph = left_subgraphs.last().unwrap().clone();
+                let smallest_left_subgraph = left_subgraphs.first().unwrap().clone();
                 let smallest_right_subgraph = right_subgraphs.first().unwrap().clone();
 
                 let left_subspace = SubspaceData::new_with_user_selected_lmb(
-                    largest_left_subgraph,
+                    smallest_left_subgraph,
                     subspace_lmb_index,
                     &self.graph,
                     all_lmbs,

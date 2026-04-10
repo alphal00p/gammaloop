@@ -842,23 +842,9 @@ impl LUCounterTerm {
             return Ok(Complex::new_re(F::from_f64(f64::NAN)));
         };
 
-        debug!(
-            "left overlap structure: {:?}",
-            left_overlap
-                .overlap_groups
-                .iter()
-                .map(|group| group.existing_esurfaces.len())
-                .collect_vec()
-        );
+        debug!("left overlap structure: {}", left_overlap);
 
-        debug!(
-            "right overlap structure: {:?}",
-            right_overlap
-                .overlap_groups
-                .iter()
-                .map(|group| group.existing_esurfaces.len())
-                .collect_vec()
-        );
+        debug!("right overlap structure: {}", right_overlap);
 
         let left_counterterm_builder = CounterTermBuilder::new(
             graph,
@@ -1104,6 +1090,7 @@ impl LUCounterTerm {
                         .for_each(|value| params_for_pass_two.push(Complex::new_re(value.clone())));
                 }
                 DualOrNot::NonDual(non_dual_e_surface) => {
+                    debug!("non dual esurface: {}", non_dual_e_surface);
                     params_for_pass_two.push(Complex::new_re(non_dual_e_surface));
                 }
             }
@@ -1241,6 +1228,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         let lmbs = self.overlap_builder.counterterm_builder.all_lmbs;
         let masses = self.overlap_builder.counterterm_builder.real_mass_vector;
 
+        debug!("subspace: {:?}", subspace);
+
         let (radius_guess, _) = self.esurface.get_radius_guess_subspace(
             &self.overlap_builder.unit_shifted_momenta,
             self.overlap_builder
@@ -1253,6 +1242,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             graph,
             masses,
         );
+
+        debug!("initial radius guess: {:?}", radius_guess);
 
         let function = |r: &_| {
             self.esurface.compute_self_and_r_derivative_subspace(
@@ -1278,6 +1269,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             MAX_ITERATIONS,
             &self.overlap_builder.counterterm_builder.e_cm,
         );
+
+        debug!("r* solution: {:?}", solution);
 
         let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
             let t_star = match &self

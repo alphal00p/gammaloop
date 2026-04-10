@@ -9,6 +9,7 @@ use symbolica::{
     evaluate::{FunctionMap, OptimizationSettings},
     function, parse, symbol,
 };
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -151,9 +152,12 @@ impl RstarTDependenceEvaluator {
         lmb: &LoopMomentumBasis,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> HyperDual<F<T>> {
+        debug!("t-star: {}", t_star);
+        debug!("r-star: {}", radius_star);
+
         let dual = HyperDual::new(self.dual_shape_for_esurface_evaluation.clone());
-        let dual_rstar = dual.variable(0, radius_star.clone());
-        let dual_t = dual.variable(1, t_star.clone());
+        let dual_rstar = dual.variable(1, radius_star.clone());
+        let dual_t = dual.variable(0, t_star.clone());
 
         let rescale_tstar = unrescaled_momentum_sample
             .loop_moms()
@@ -228,10 +232,14 @@ impl RstarTDependenceEvaluator {
             &dualized_external_fourmomenta,
         );
 
+        debug!("Dual e-surface: {}", dual_esurface);
+
         let params = dual_esurface.values[1..]
             .iter()
             .map(|x| Complex::new_re(x.clone()))
             .collect_vec();
+
+        debug!("Parameters for implicit function theorem: {:#?}", params);
 
         let result = T::get_evaluator(
             self.implicit_function_theorem
@@ -241,6 +249,8 @@ impl RstarTDependenceEvaluator {
         .into_iter()
         .map(DualOrNot::unwrap_real)
         .collect_vec();
+
+        debug!("Result from implicit function theorem: {:#?}", result);
 
         let mut dual_values = vec![radius_star.clone()];
         let mut n_factorial = 1;
