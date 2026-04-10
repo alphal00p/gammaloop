@@ -381,6 +381,8 @@ mod tests {
             rust: true,
             binary: false,
             json: false,
+            quadprec: false,
+            arbprec: false,
         }
         .run(
             &mut state,
