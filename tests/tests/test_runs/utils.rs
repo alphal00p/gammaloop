@@ -9,7 +9,8 @@ where
     T: FloatLike + From<symbolica::domains::float::Float>,
 {
     Ok(F(T::from(
-        symbolica::domains::float::Float::parse(value, None).map_err(|err| eyre::eyre!(err))?,
+        symbolica::domains::float::Float::parse(value, Some(T::new_zero().get_precision()))
+            .map_err(|err| eyre::eyre!(err))?,
     )))
 }
 
