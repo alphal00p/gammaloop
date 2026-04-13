@@ -300,6 +300,7 @@ mod tests {
         cli_settings.global.generation.evaluator.compile = true;
 
         let err = Commands::Generate(Generate {
+            keep_sources: false,
             mode: Some(GenerateCmd::Existing(ProcessArgs {
                 process: None,
                 integrand_name: None,

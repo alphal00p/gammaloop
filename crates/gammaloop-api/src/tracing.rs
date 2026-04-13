@@ -161,6 +161,13 @@ struct FilterHandles {
 
 static FILTER_HANDLES: OnceLock<FilterHandles> = OnceLock::new();
 
+fn detached_filter_handles(file_reload_enabled: bool) -> FilterHandles {
+    FilterHandles {
+        file_reload: file_reload_enabled.then(|| Box::new(|_| Ok(())) as ReloadFilterFn),
+        stderr_reload: Box::new(|_| Ok(())),
+    }
+}
+
 fn log_filter_env_override(specific_env: &str) -> Option<String> {
     if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
         Some(all)
@@ -510,12 +517,15 @@ pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>)
             .with(Filtered::new(status_layer, stderr_filter_layer))
             .with(indicatif_layer.with_filter(IndicatifFilter::new(false)));
 
-        if file_state.hard_disabled() {
-            _ = subscriber.try_init();
+        let init_result = if file_state.hard_disabled() {
+            subscriber.try_init()
         } else {
-            _ = subscriber
+            subscriber
                 .with(Filtered::new(json, file_filter_layer))
-                .try_init();
+                .try_init()
+        };
+        if init_result.is_err() {
+            return detached_filter_handles(!file_state.hard_disabled());
         }
 
         let stderr_handle = stderr_handle.clone();

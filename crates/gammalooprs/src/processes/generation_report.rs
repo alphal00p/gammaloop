@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-#[derive(Debug, Clone, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct GraphGenerationStats {
     pub evaluator_count: usize,
     pub total_time: Duration,
@@ -23,21 +25,21 @@ impl GraphGenerationStats {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NamedGraphGenerationReport {
     pub integrand_name: String,
     pub graph_name: String,
     pub stats: GraphGenerationStats,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct GeneratedGraphKey {
     pub process_id: usize,
     pub integrand_name: String,
     pub graph_name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneratedGraphReport {
     pub process_id: usize,
     pub integrand_name: String,

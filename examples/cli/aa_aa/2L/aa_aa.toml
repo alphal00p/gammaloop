@@ -60,6 +60,8 @@ store_atom = false
 compile = true
 summed = false
 summed_function_map = false
+horner_iterations = 5
+cpe_iterations = 5
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]

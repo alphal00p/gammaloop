@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashSet},
     fs::{self},
     io::{self},
     ops::ControlFlow,
@@ -72,6 +72,18 @@ pub struct GenerationResourceSummary {
 pub struct GenerationReports {
     pub reports: Vec<GeneratedGraphReport>,
     pub resources: GenerationResourceSummary,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IntegrandGenerationSummaryKey {
+    pub process_id: usize,
+    pub integrand_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntegrandGenerationSummary {
+    pub peak_ram_bytes: u64,
+    pub reports: Vec<GeneratedGraphReport>,
 }
 
 struct GenerationMonitor {
@@ -910,9 +922,11 @@ pub struct State {
     pub model: Model,
     pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
+    pub generation_summaries: BTreeMap<IntegrandGenerationSummaryKey, IntegrandGenerationSummary>,
 }
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
+const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 const CURRENT_STATE_MANIFEST_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1049,6 +1063,63 @@ fn save_state_manifest(save_path: &Path) -> Result<()> {
         )
     })?;
     Ok(())
+}
+
+fn integrand_generation_summary_path(
+    root_folder: &Path,
+    process: &Process,
+    integrand_name: &str,
+) -> PathBuf {
+    let process_kind_folder = match &process.collection {
+        ProcessCollection::Amplitudes(_) => "amplitudes",
+        ProcessCollection::CrossSections(_) => "cross_sections",
+    };
+
+    root_folder
+        .join("processes")
+        .join(process_kind_folder)
+        .join(&process.definition.folder_name)
+        .join(integrand_name)
+        .join(INTEGRAND_GENERATION_SUMMARY_FILE)
+}
+
+fn load_integrand_generation_summaries(
+    root_folder: &Path,
+    process_list: &ProcessList,
+) -> Result<BTreeMap<IntegrandGenerationSummaryKey, IntegrandGenerationSummary>> {
+    let mut summaries = BTreeMap::new();
+
+    for (process_id, process) in process_list.processes.iter().enumerate() {
+        for integrand_name in process.collection.get_integrand_names() {
+            let summary_path =
+                integrand_generation_summary_path(root_folder, process, integrand_name);
+            if !summary_path.exists() {
+                continue;
+            }
+
+            let raw_summary = fs::read_to_string(&summary_path).with_context(|| {
+                format!(
+                    "Trying to read integrand generation summary {}",
+                    summary_path.display()
+                )
+            })?;
+            let summary = serde_json::from_str(&raw_summary).with_context(|| {
+                format!(
+                    "Trying to parse integrand generation summary {}",
+                    summary_path.display()
+                )
+            })?;
+            summaries.insert(
+                IntegrandGenerationSummaryKey {
+                    process_id,
+                    integrand_name: integrand_name.to_string(),
+                },
+                summary,
+            );
+        }
+    }
+
+    Ok(summaries)
 }
 
 impl State {
@@ -1219,6 +1290,13 @@ impl State {
                     process_entry.collection.remove_integrand(integrand_name)?;
                 }
             }
+            for integrand_name in &integrand_names {
+                self.generation_summaries
+                    .remove(&IntegrandGenerationSummaryKey {
+                        process_id,
+                        integrand_name: integrand_name.clone(),
+                    });
+            }
 
             let removed_empty_process = self.process_list.processes[process_id]
                 .collection
@@ -1226,6 +1304,7 @@ impl State {
                 .is_empty();
             if removed_empty_process {
                 self.process_list.processes.remove(process_id);
+                self.remove_generation_summaries_for_process(process_id);
             }
 
             for integrand_name in integrand_names {
@@ -1245,6 +1324,7 @@ impl State {
     pub fn remove_process(&mut self, process: Option<&ProcessRef>) -> Result<RemovedProcess> {
         let process_id = self.resolve_process_ref(process)?;
         let removed = self.process_list.processes.remove(process_id);
+        self.remove_generation_summaries_for_process(process_id);
         Ok(RemovedProcess {
             process_id,
             process_name: removed.definition.folder_name,
@@ -1257,18 +1337,31 @@ impl State {
         integrand_name: &str,
     ) -> Result<RemovedIntegrand> {
         let process_id = process.resolve(&self.process_list)?;
-        let process_entry = &mut self.process_list.processes[process_id];
-        let process_name = process_entry.definition.folder_name.clone();
-        let canonical_integrand_name = process_entry
-            .collection
-            .find_integrand(Some(integrand_name.to_string()))?;
-        process_entry
-            .collection
-            .remove_integrand(&canonical_integrand_name)?;
+        let (process_name, canonical_integrand_name, removed_empty_process) = {
+            let process_entry = &mut self.process_list.processes[process_id];
+            let process_name = process_entry.definition.folder_name.clone();
+            let canonical_integrand_name = process_entry
+                .collection
+                .find_integrand(Some(integrand_name.to_string()))?;
+            process_entry
+                .collection
+                .remove_integrand(&canonical_integrand_name)?;
+            let removed_empty_process = process_entry.collection.get_integrand_names().is_empty();
+            (
+                process_name,
+                canonical_integrand_name,
+                removed_empty_process,
+            )
+        };
+        self.generation_summaries
+            .remove(&IntegrandGenerationSummaryKey {
+                process_id,
+                integrand_name: canonical_integrand_name.clone(),
+            });
 
-        let removed_empty_process = process_entry.collection.get_integrand_names().is_empty();
         if removed_empty_process {
             self.process_list.processes.remove(process_id);
+            self.remove_generation_summaries_for_process(process_id);
         }
 
         Ok(RemovedIntegrand {
@@ -1567,6 +1660,79 @@ impl State {
         )
     }
 
+    pub fn generation_summary(
+        &self,
+        process_id: usize,
+        integrand_name: &str,
+    ) -> Option<&IntegrandGenerationSummary> {
+        self.generation_summaries
+            .get(&IntegrandGenerationSummaryKey {
+                process_id,
+                integrand_name: integrand_name.to_string(),
+            })
+    }
+
+    pub fn record_generation_summary(
+        &mut self,
+        reports: &[GeneratedGraphReport],
+        resources: GenerationResourceSummary,
+    ) {
+        let mut reports_by_integrand: BTreeMap<
+            IntegrandGenerationSummaryKey,
+            Vec<GeneratedGraphReport>,
+        > = BTreeMap::new();
+
+        for report in reports {
+            let Some(process) = self.process_list.processes.get(report.process_id) else {
+                continue;
+            };
+            if !process
+                .collection
+                .get_integrand_names()
+                .contains(&report.integrand_name.as_str())
+            {
+                continue;
+            }
+
+            reports_by_integrand
+                .entry(IntegrandGenerationSummaryKey {
+                    process_id: report.process_id,
+                    integrand_name: report.integrand_name.clone(),
+                })
+                .or_default()
+                .push(report.clone());
+        }
+
+        for (key, reports) in reports_by_integrand {
+            self.generation_summaries.insert(
+                key,
+                IntegrandGenerationSummary {
+                    peak_ram_bytes: resources.peak_ram_bytes,
+                    reports,
+                },
+            );
+        }
+    }
+
+    fn remove_generation_summaries_for_process(&mut self, process_id: usize) {
+        let mut updated = BTreeMap::new();
+        for (mut key, mut summary) in std::mem::take(&mut self.generation_summaries) {
+            if key.process_id == process_id {
+                continue;
+            }
+            if key.process_id > process_id {
+                key.process_id -= 1;
+                for report in &mut summary.reports {
+                    if report.process_id > process_id {
+                        report.process_id -= 1;
+                    }
+                }
+            }
+            updated.insert(key, summary);
+        }
+        self.generation_summaries = updated;
+    }
+
     pub fn export_dots(
         &mut self,
         path: impl AsRef<Path>,
@@ -1736,6 +1902,7 @@ impl State {
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
+            generation_summaries: BTreeMap::new(),
         }
     }
 
@@ -1746,6 +1913,7 @@ impl State {
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
+            generation_summaries: BTreeMap::new(),
         }
     }
 
@@ -1756,6 +1924,7 @@ impl State {
             model: Model::default(),
             process_list: ProcessList::default(),
             model_parameters: InputParamCard::default(),
+            generation_summaries: BTreeMap::new(),
         }
     }
 }
@@ -1822,11 +1991,13 @@ impl State {
         let process_list =
             ProcessList::load(&save_path, context).context("Trying to load processList")?;
 
-        let mut state = State::new(save_path, trace_logs_filename);
+        let mut state = State::new(&save_path, trace_logs_filename);
 
         state.process_list = process_list;
         state.model = model;
         state.model_parameters = input_param_card;
+        state.generation_summaries =
+            load_integrand_generation_summaries(&save_path, &state.process_list)?;
         Ok(state)
     }
 
@@ -1851,6 +2022,45 @@ impl State {
             .build()?;
         self.process_list
             .compile(root_folder, override_compiled, None, None, &compile_pool)?;
+        Ok(())
+    }
+
+    fn save_generation_summaries(&self, root_folder: &Path) -> Result<()> {
+        for (process_id, process) in self.process_list.processes.iter().enumerate() {
+            for integrand_name in process.collection.get_integrand_names() {
+                let summary_path =
+                    integrand_generation_summary_path(root_folder, process, integrand_name);
+                let key = IntegrandGenerationSummaryKey {
+                    process_id,
+                    integrand_name: integrand_name.to_string(),
+                };
+                if let Some(summary) = self.generation_summaries.get(&key) {
+                    if let Some(parent) = summary_path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    let raw_summary = serde_json::to_string_pretty(summary).with_context(|| {
+                        format!(
+                            "Trying to serialize integrand generation summary {}",
+                            summary_path.display()
+                        )
+                    })?;
+                    fs::write(&summary_path, raw_summary).with_context(|| {
+                        format!(
+                            "Trying to write integrand generation summary {}",
+                            summary_path.display()
+                        )
+                    })?;
+                } else if summary_path.exists() {
+                    fs::remove_file(&summary_path).with_context(|| {
+                        format!(
+                            "Trying to remove stale integrand generation summary {}",
+                            summary_path.display()
+                        )
+                    })?;
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -1908,6 +2118,7 @@ impl State {
         symbolica::state::State::export(&mut state_file)?;
         self.process_list
             .save(&selected_root_folder, override_state_file)?;
+        self.save_generation_summaries(&selected_root_folder)?;
 
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?
@@ -2027,9 +2238,13 @@ mod tests {
             default_runtime_settings: toml::from_str(
                 r#"
 [sampling]
-type = "discrete_graph_sampling"
-[sampling.sampling_type]
-subtype = "tropical"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "tropical"
+mapping = "linear"
+b = 1.0
 "#,
             )
             .unwrap(),

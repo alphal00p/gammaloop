@@ -25,7 +25,7 @@ use gammalooprs::{
 };
 
 use crate::{
-    commands::generate::ProcessArgs,
+    commands::generate::{render_generation_summary, ProcessArgs},
     commands::process_settings::{
         observable_kind, quantity_kind, selector_kind, serialize_runtime_named_settings,
         summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
@@ -34,7 +34,7 @@ use crate::{
     integrand_info::{IntegrandGraphGroupInfo, IntegrandInfo, IntegrandKind},
     session::display_command,
     settings_tree::{serialize_settings_with_defaults, value_at_path},
-    state::{CommandsBlock, ProcessRef, RunHistory, State},
+    state::{CommandsBlock, IntegrandGenerationSummary, ProcessRef, RunHistory, State},
     CLISettings,
 };
 
@@ -265,6 +265,8 @@ struct IntegrandArtifactSizes {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum IntegrandDisplayCategory {
+    #[value(name = "generation")]
+    Generation,
     #[value(name = "orientation")]
     Orientation,
     #[value(name = "loop_momentum_basis")]
@@ -276,6 +278,7 @@ pub enum IntegrandDisplayCategory {
 impl IntegrandDisplayCategory {
     fn title(self) -> &'static str {
         match self {
+            Self::Generation => "Generation",
             Self::Orientation => "Orientations",
             Self::LoopMomentumBasis => "Loop momentum bases",
             Self::Cuts => "Cuts",
@@ -284,6 +287,7 @@ impl IntegrandDisplayCategory {
 
     fn value_header(self) -> &'static str {
         match self {
+            Self::Generation => "generation",
             Self::Orientation => "orientation",
             Self::LoopMomentumBasis => "loop momentum basis",
             Self::Cuts => "cut",
@@ -434,10 +438,12 @@ fn master_graph(
 fn available_integrand_categories(detail: &IntegrandInfo) -> Vec<IntegrandDisplayCategory> {
     match detail.kind {
         IntegrandKind::Amplitude => vec![
+            IntegrandDisplayCategory::Generation,
             IntegrandDisplayCategory::Orientation,
             IntegrandDisplayCategory::LoopMomentumBasis,
         ],
         IntegrandKind::CrossSection => vec![
+            IntegrandDisplayCategory::Generation,
             IntegrandDisplayCategory::Orientation,
             IntegrandDisplayCategory::LoopMomentumBasis,
             IntegrandDisplayCategory::Cuts,
@@ -529,9 +535,11 @@ fn render_integrand_detail(
     let process = &state.process_list.processes[process_id];
     let artifact_sizes =
         collect_integrand_artifact_sizes(state_folder, process, &detail.integrand_name)?;
+    let generation_summary = state.generation_summary(process_id, &detail.integrand_name);
     render_integrand_detail_from_info(
         &detail,
         &artifact_sizes,
+        generation_summary,
         requested_graphs,
         requested_categories,
     )
@@ -542,6 +550,7 @@ fn category_rows(
     category: IntegrandDisplayCategory,
 ) -> Vec<CategoryRow> {
     match category {
+        IntegrandDisplayCategory::Generation => Vec::new(),
         IntegrandDisplayCategory::Orientation => group
             .orientations
             .iter()
@@ -592,9 +601,9 @@ fn category_group_header(
         IntegrandDisplayCategory::Orientation => {
             render_orientation_edge_ids(&group.orientation_edge_ids)
         }
-        IntegrandDisplayCategory::LoopMomentumBasis | IntegrandDisplayCategory::Cuts => {
-            String::new()
-        }
+        IntegrandDisplayCategory::Generation
+        | IntegrandDisplayCategory::LoopMomentumBasis
+        | IntegrandDisplayCategory::Cuts => String::new(),
     }
 }
 
@@ -820,9 +829,22 @@ fn render_integrand_category_table(
     Ok(Some(table.to_string()))
 }
 
+fn render_generation_category(summary: Option<&IntegrandGenerationSummary>) -> String {
+    summary
+        .and_then(|summary| {
+            render_generation_summary(&summary.reports, summary.peak_ram_bytes, None, None)
+        })
+        .unwrap_or_else(|| {
+            "No generation summary has been recorded for this integrand."
+                .yellow()
+                .to_string()
+        })
+}
+
 fn render_integrand_detail_from_info(
     detail: &IntegrandInfo,
     artifact_sizes: &IntegrandArtifactSizes,
+    generation_summary: Option<&IntegrandGenerationSummary>,
     requested_graphs: &[String],
     requested_categories: &[IntegrandDisplayCategory],
 ) -> Result<()> {
@@ -899,6 +921,17 @@ fn render_integrand_detail_from_info(
     let groups = filtered_graph_groups(detail, requested_graphs)?;
     let categories = selected_integrand_categories(detail, requested_categories)?;
     for category in categories {
+        if category == IntegrandDisplayCategory::Generation {
+            let table = render_generation_category(generation_summary);
+            info!(
+                "
+{}
+{table}",
+                category.title().bold().blue()
+            );
+            continue;
+        }
+
         if let Some(table) = render_integrand_category_table(&groups, category)? {
             info!(
                 "
@@ -1949,6 +1982,7 @@ mod test {
             "GL0",
             "GL2",
             "--category",
+            "generation",
             "orientation",
             "cuts",
         ])
@@ -1970,6 +2004,7 @@ mod test {
                 assert_eq!(
                     categories,
                     vec![
+                        IntegrandDisplayCategory::Generation,
                         IntegrandDisplayCategory::Orientation,
                         IntegrandDisplayCategory::Cuts,
                     ]

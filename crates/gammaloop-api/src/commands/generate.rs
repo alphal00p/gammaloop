@@ -6,6 +6,8 @@ use color_eyre::owo_colors::OwoColorize;
 use tracing::info;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
+use std::fs;
 use std::num::ParseIntError;
 use std::ops::RangeInclusive;
 use std::path::Path;
@@ -19,8 +21,9 @@ use serde::{Deserialize, Serialize};
 use symbolica::parse;
 use tabled::{builder::Builder, settings::Style};
 use thiserror::Error;
+use walkdir::WalkDir;
 
-use eyre::eyre;
+use eyre::{eyre, Context};
 use gammalooprs::feyngen::{
     FeynGenFilter, FeynGenFilters, GenerationType, GraphGroupingOptions,
     NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SewedFilterOptions,
@@ -44,6 +47,10 @@ use crate::state::{GenerationResourceSummary, ProcessRef, State};
 #[derive(Debug, Parser, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 /// Generate integrands
 pub struct Generate {
+    /// Keep generated C++ source files after external compilation
+    #[arg(long = "keep-sources", default_value_t = false, global = true)]
+    #[serde(default)]
+    pub keep_sources: bool,
     #[command(subcommand)]
     pub mode: Option<GenerateCmd>,
 }
@@ -367,12 +374,14 @@ fn format_generation_memory(bytes: u64) -> String {
     }
 }
 
-fn render_generation_summary_table(
+pub(crate) fn render_generation_summary(
     reports: &[GeneratedGraphReport],
-    resources: GenerationResourceSummary,
-) {
+    peak_ram_bytes: u64,
+    generation_cores: Option<usize>,
+    title: Option<&str>,
+) -> Option<String> {
     if reports.is_empty() {
-        return;
+        return None;
     }
 
     let mut sorted_reports = reports.to_vec();
@@ -435,18 +444,114 @@ fn render_generation_summary_table(
 
     let mut table = builder.build();
     table.with(Style::rounded());
-    info!(
-        "\n{}\n{}\n{}",
-        "Integrand generation summary".bold().blue(),
-        format!(
-            "{} {} | {} {}",
+    let mut sections = Vec::new();
+    if let Some(title) = title {
+        sections.push(title.bold().blue().to_string());
+    }
+    let resources = match generation_cores {
+        Some(cores) => {
+            format!(
+                "{} {} | {} {}",
+                "peak RAM".bold().blue(),
+                format_generation_memory(peak_ram_bytes).yellow(),
+                "cores".bold().blue(),
+                cores.to_string().yellow(),
+            )
+        }
+        None => format!(
+            "{} {}",
             "peak RAM".bold().blue(),
-            format_generation_memory(resources.peak_ram_bytes).yellow(),
-            "cores".bold().blue(),
-            resources.generation_cores.to_string().yellow(),
+            format_generation_memory(peak_ram_bytes).yellow(),
         ),
-        table
-    );
+    };
+    sections.push(resources);
+    sections.push(table.to_string());
+    Some(sections.join("\n"))
+}
+
+fn log_generation_summary_table(
+    reports: &[GeneratedGraphReport],
+    resources: GenerationResourceSummary,
+) {
+    if let Some(summary) = render_generation_summary(
+        reports,
+        resources.peak_ram_bytes,
+        Some(resources.generation_cores),
+        Some("Integrand generation summary"),
+    ) {
+        info!("\n{summary}");
+    }
+}
+
+fn remove_compiled_cpp_sources(root: &Path) -> Result<usize> {
+    let mut removed_count = 0usize;
+    for entry in WalkDir::new(root) {
+        let entry = entry?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+
+        let source_path = entry.path();
+        if source_path.extension() != Some(OsStr::new("cpp")) {
+            continue;
+        }
+
+        let library_path = source_path.with_extension("so");
+        if !library_path.is_file() {
+            continue;
+        }
+
+        fs::remove_file(source_path).with_context(|| {
+            format!(
+                "Trying to remove generated C++ source {} after compiling {}",
+                source_path.display(),
+                library_path.display()
+            )
+        })?;
+        removed_count += 1;
+    }
+
+    Ok(removed_count)
+}
+
+fn compile_integrands_for_generation(
+    state: &mut State,
+    compile_folder: &Path,
+    override_existing_compiled: bool,
+    global_settings: &GlobalSettings,
+    process_id: Option<usize>,
+    integrand_name: Option<String>,
+    keep_sources: bool,
+) -> Result<Vec<GeneratedGraphReport>> {
+    let reports = state.compile_integrands(
+        compile_folder,
+        override_existing_compiled,
+        global_settings,
+        process_id,
+        integrand_name,
+    )?;
+
+    if !keep_sources {
+        let removed_count = remove_compiled_cpp_sources(compile_folder)?;
+        if removed_count > 0 {
+            info!(
+                "Removed {} generated C++ source file(s). Use '{}' to keep them.",
+                removed_count,
+                "--keep-sources".green()
+            );
+        }
+    }
+
+    Ok(reports)
+}
+
+fn finish_generation(
+    state: &mut State,
+    reports: &[GeneratedGraphReport],
+    resources: GenerationResourceSummary,
+) {
+    state.record_generation_summary(reports, resources);
+    log_generation_summary_table(reports, resources);
 }
 
 impl Generate {
@@ -458,6 +563,7 @@ impl Generate {
         global_settings: &GlobalSettings,
         runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
+        let compile_folder = compile_folder.as_ref();
         let generation_mode = match &self.mode {
             Some(GenerateCmd::Xs(a)) => Some((GenerationType::CrossSection, a)),
             Some(GenerateCmd::Amp(a)) => Some((GenerationType::Amplitude, a)),
@@ -589,16 +695,18 @@ impl Generate {
                     {
                         merge_generated_graph_reports(
                             &mut reports,
-                            state.compile_integrands(
+                            compile_integrands_for_generation(
+                                state,
                                 compile_folder,
                                 override_existing_compiled,
                                 global_settings,
                                 Some(this_process_id),
                                 Some(generated_integrand_name_for_compile),
+                                self.keep_sources,
                             )?,
                         );
                     }
-                    render_generation_summary_table(&reports, generation.resources);
+                    finish_generation(state, &reports, generation.resources);
                     Ok(())
                 } else {
                     info!(
@@ -626,16 +734,18 @@ impl Generate {
                 {
                     merge_generated_graph_reports(
                         &mut reports,
-                        state.compile_integrands(
+                        compile_integrands_for_generation(
+                            state,
                             compile_folder,
                             override_existing_compiled,
                             global_settings,
                             Some(process_id),
                             process_args.integrand_name.clone(),
+                            self.keep_sources,
                         )?,
                     );
                 }
-                render_generation_summary_table(&reports, generation.resources);
+                finish_generation(state, &reports, generation.resources);
                 Ok(())
             }
             None => {
@@ -650,16 +760,18 @@ impl Generate {
                 {
                     merge_generated_graph_reports(
                         &mut reports,
-                        state.compile_integrands(
+                        compile_integrands_for_generation(
+                            state,
                             compile_folder,
                             override_existing_compiled,
                             global_settings,
                             None,
                             None,
+                            self.keep_sources,
                         )?,
                     );
                 }
-                render_generation_summary_table(&reports, generation.resources);
+                finish_generation(state, &reports, generation.resources);
                 Ok(())
             }
         }
@@ -1955,8 +2067,43 @@ fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{commands::Commands, Repl};
+    use clap::Parser;
     use gammalooprs::utils::load_generic_model;
     use gammalooprs::{feyngen::GenerationType, initialisation::test_initialise};
+
+    #[test]
+    fn remove_compiled_cpp_sources_only_removes_sources_with_matching_libraries() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let compiled_source = temp.path().join("integrand.cpp");
+        let compiled_library = temp.path().join("integrand.so");
+        let uncompiled_source = temp.path().join("orphan.cpp");
+        std::fs::write(&compiled_source, "compiled source")?;
+        std::fs::write(&compiled_library, "compiled library")?;
+        std::fs::write(&uncompiled_source, "orphan source")?;
+
+        let removed_count = remove_compiled_cpp_sources(temp.path())?;
+
+        assert_eq!(removed_count, 1);
+        assert!(!compiled_source.exists());
+        assert!(compiled_library.is_file());
+        assert!(uncompiled_source.is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn parse_generate_keep_sources_after_subcommand() {
+        let repl =
+            Repl::try_parse_from(["gammaloop", "generate", "existing", "--keep-sources"]).unwrap();
+
+        match repl.command {
+            Commands::Generate(generate) => {
+                assert!(generate.keep_sources);
+                assert!(matches!(generate.mode, Some(GenerateCmd::Existing(_))));
+            }
+            other => panic!("Expected generate command, got {other:?}"),
+        }
+    }
 
     fn base_args(tokens: &str) -> SpecArgs {
         SpecArgs {

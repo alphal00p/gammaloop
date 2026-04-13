@@ -1875,7 +1875,7 @@ mod tests {
 
     #[test]
     fn oneshot_parses_subcommand_without_run_card() {
-        let parsed = OneShot::try_parse_from(["gammaloop", "display", "integrands"]).unwrap();
+        let parsed = OneShot::try_parse_from(["gammaloop", "display", "integrand"]).unwrap();
         assert!(matches!(parsed.command, Some(Commands::Display(_))));
     }
 

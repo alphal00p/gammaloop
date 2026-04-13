@@ -33,7 +33,7 @@ commands = [
       --symmetrize-left-right-states true
       -p epem_a_tth -i NLO
       --global-prefactor-num "1𝑖"
-	  --select-graphs GL08 
+	  --select-graphs GL00 
       --only-diagrams""",
     "save dot",
 ]
@@ -74,7 +74,7 @@ helicities = [
 ]
 
 [default_runtime_settings.general]
-evaluator_method = "SummedFunctionMap"
+evaluator_method = "SingleParametric"
 enable_cache = false
 debug_cache = false
 generate_events = false
@@ -89,9 +89,9 @@ format = ["hwu","json"]
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
 store_atom = false
-compile = true
+compile = false
 summed = false
-summed_function_map = true
+summed_function_map = false
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]
@@ -104,7 +104,7 @@ check_esurface_at_generation = true
 disable_threshold_subtraction = true
 
 [cli_settings.global.generation.compile]
-compilation_mode = "assembly"
+compilation_mode = "symjit"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true

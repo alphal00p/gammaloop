@@ -334,8 +334,11 @@ impl<'a> CliSession<'a> {
                         master_graph_names.sort();
                         master_graph_names.dedup();
 
-                        let mut categories =
-                            vec!["orientation".to_string(), "loop_momentum_basis".to_string()];
+                        let mut categories = vec![
+                            "generation".to_string(),
+                            "orientation".to_string(),
+                            "loop_momentum_basis".to_string(),
+                        ];
                         if info.kind == IntegrandKind::CrossSection {
                             categories.push("cuts".to_string());
                         }

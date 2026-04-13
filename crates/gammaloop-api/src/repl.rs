@@ -3883,13 +3883,18 @@ mod tests {
                 process_name: "triangle".to_string(),
                 integrand_name: "LO".to_string(),
                 master_graph_names: vec!["GL0".to_string(), "GL1".to_string()],
-                categories: vec!["orientation".to_string(), "loop_momentum_basis".to_string()],
+                categories: vec![
+                    "generation".to_string(),
+                    "orientation".to_string(),
+                    "loop_momentum_basis".to_string(),
+                ],
             },
             IntegrandDetailCompletionEntry {
                 process_name: "epem_xs".to_string(),
                 integrand_name: "subtracted".to_string(),
                 master_graph_names: vec!["GL0".to_string(), "GL2".to_string()],
                 categories: vec![
+                    "generation".to_string(),
                     "orientation".to_string(),
                     "loop_momentum_basis".to_string(),
                     "cuts".to_string(),
@@ -4515,6 +4520,7 @@ mod tests {
             "display integrand -p epem_xs -i subtracted --category ",
             &completion_state,
         );
+        assert!(xs_values.contains(&"generation".to_string()));
         assert!(xs_values.contains(&"orientation".to_string()));
         assert!(xs_values.contains(&"loop_momentum_basis".to_string()));
         assert!(xs_values.contains(&"cuts".to_string()));
@@ -4523,6 +4529,7 @@ mod tests {
             "display integrand -p triangle -i LO --category ",
             &completion_state,
         );
+        assert!(amp_values.contains(&"generation".to_string()));
         assert!(amp_values.contains(&"orientation".to_string()));
         assert!(amp_values.contains(&"loop_momentum_basis".to_string()));
         assert!(!amp_values.contains(&"cuts".to_string()));
