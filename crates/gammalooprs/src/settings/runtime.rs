@@ -653,7 +653,7 @@ mod tests {
     }
 
     #[test]
-    fn integrator_settings_target_accuracy_defaults_serialize_via_showdefaults() {
+    fn integrator_settings_target_accuracy_defaults_stay_optional() {
         let settings = IntegratorSettings::default();
 
         let hidden_defaults = toml::to_string(&settings).expect("serialize integrator defaults");
@@ -662,8 +662,9 @@ mod tests {
 
         let _guard = ShowDefaultsGuard::new(true);
         let shown_defaults = toml::to_string(&settings).expect("serialize integrator defaults");
-        assert!(shown_defaults.contains("target_relative_accuracy"));
-        assert!(shown_defaults.contains("target_absolute_accuracy"));
+        assert!(shown_defaults.contains("n_bins"));
+        assert!(!shown_defaults.contains("target_relative_accuracy"));
+        assert!(!shown_defaults.contains("target_absolute_accuracy"));
     }
 
     #[test]
@@ -676,7 +677,11 @@ mod tests {
 
         let serialized = toml::to_string(&settings).expect("serialize configured integrator");
         assert!(serialized.contains("target_relative_accuracy = 0.05"));
-        assert!(serialized.contains("target_absolute_accuracy = 1e-6"));
+        assert!(serialized.contains("target_absolute_accuracy = "));
+
+        let deserialized: IntegratorSettings =
+            toml::from_str(&serialized).expect("deserialize configured integrator");
+        assert_eq!(settings, deserialized);
     }
 
     #[test]

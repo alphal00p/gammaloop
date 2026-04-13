@@ -11,7 +11,7 @@ fn test_grouped_subtraction() -> Result<()> {
     )?;
 
     let int1 = Integrate {
-        process: vec![],
+        process: vec![ProcessRef::Id(0)],
         integrand_name: vec!["default".to_string()],
         workspace_path: Some(
             get_tests_workspace_path()
@@ -406,7 +406,6 @@ fn scalar_box() -> Result<()> {
         integrand_name: Some("default".to_string()),
         point: vec![0.1, 0.2, 0.3],
         momentum_space: true,
-        discrete_dim: vec![0],
         ..Default::default()
     }
     .run(&mut cli)?;

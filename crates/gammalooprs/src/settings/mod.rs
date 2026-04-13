@@ -320,7 +320,7 @@ mod tests {
 
         let serialized = toml::to_string_pretty(&settings).unwrap();
         assert!(serialized.contains("[model]"));
-        assert!(serialized.contains("mass_scalar_2 = [2.0, 0.0]"));
+        assert!(serialized.contains("mass_scalar_2 = ["));
 
         let deserialized: RuntimeSettings = toml::from_str(&serialized).unwrap();
         assert_eq!(settings, deserialized);

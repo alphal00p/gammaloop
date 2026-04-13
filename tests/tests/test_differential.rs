@@ -4,13 +4,13 @@ use gammalooprs::{
     integrands::evaluation::GraphEvaluationResult,
     momentum::{Energy, FourMomentum, ThreeMomentum},
     observables::{
-        AdditionalWeightKey, ContinuousHistogramSettings, CutInfo, EntrySelection, Event,
-        EventGroupList, EventProcessingRuntime, FilterQuantity, GenericEventGroupList,
-        HistogramSettings, JetClusteringSettings, JetQuantitySettings, ObservablePhase,
-        ObservableSettings, ObservableSnapshotBundle, ObservableValueTransform, PairQuantity,
-        ParticleQuantitySettings, QuantitiesSettings, QuantityComputation,
-        QuantityComputationSettings, QuantityOrder, QuantityOrdering, QuantitySettings,
-        SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
+        AdditionalWeightKey, ContinuousHistogramSettings, CutInfo, DiscreteBinDomainSettings,
+        DiscreteHistogramSettings, EntrySelection, Event, EventGroupList, EventProcessingRuntime,
+        FilterQuantity, GenericEventGroupList, HistogramSettings, JetClusteringSettings,
+        JetQuantitySettings, ObservablePhase, ObservableSettings, ObservableSnapshotBundle,
+        ObservableValueTransform, PairQuantity, ParticleQuantitySettings, QuantitiesSettings,
+        QuantityComputation, QuantityComputationSettings, QuantityOrder, QuantityOrdering,
+        QuantitySettings, SelectorDefinitionSettings, SelectorReduction, SelectorSettings,
         ValueRangeSelectorSettings,
     },
     settings::RuntimeSettings,
@@ -198,7 +198,7 @@ fn jet_count_runtime_settings(with_misbinning: bool) -> RuntimeSettings {
             value_transform: ObservableValueTransform::Identity,
             phase: ObservablePhase::Real,
             misbinning_max_normalized_distance: with_misbinning.then_some(0.1),
-            histogram: continuous_histogram(0.0, 6.0, 6),
+            histogram: discrete_histogram(0, 6),
         },
     );
     settings
@@ -236,6 +236,13 @@ fn continuous_histogram(x_min: f64, x_max: f64, n_bins: usize) -> HistogramSetti
         log_y_axis: true,
         title: None,
         type_description: "AL".to_string(),
+    })
+}
+
+fn discrete_histogram(min: isize, max: isize) -> HistogramSettings {
+    HistogramSettings::Discrete(DiscreteHistogramSettings {
+        domain: DiscreteBinDomainSettings::ExplicitRange { min, max },
+        ..DiscreteHistogramSettings::default()
     })
 }
 
@@ -398,6 +405,11 @@ fn count_and_pair_runtime_settings() -> RuntimeSettings {
         4.0,
         4,
     );
+    settings
+        .observables
+        .get_mut("particle_count_hist")
+        .expect("particle-count histogram should exist")
+        .histogram = discrete_histogram(0, 4);
     insert_histogram_observable(
         &mut settings,
         "particle_delta_r_hist",
@@ -407,6 +419,11 @@ fn count_and_pair_runtime_settings() -> RuntimeSettings {
         4,
     );
     insert_histogram_observable(&mut settings, "jet_count_hist", "jet_count", 0.0, 4.0, 4);
+    settings
+        .observables
+        .get_mut("jet_count_hist")
+        .expect("jet-count histogram should exist")
+        .histogram = discrete_histogram(0, 4);
     insert_histogram_observable(
         &mut settings,
         "jet_delta_r_hist",
@@ -795,7 +812,7 @@ fn jet_count_histograms_disable_misbinning_and_reject_misbinning_settings() -> R
     assert!(
         error
             .to_string()
-            .contains("does not support misbinning mitigation")
+            .contains("uses a discrete histogram, so misbinning mitigation is not supported")
     );
     Ok(())
 }

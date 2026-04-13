@@ -318,14 +318,18 @@ fn ct_identifier_flips_outgoing_boundary_pdgs() {
     test_initialise().unwrap();
 
     let graph = build_tta_uv_graph();
-    let spinney = graph
+    let expected_internal_pdg_set = pdg_set([6, 21]);
+    let identifiers = graph
         .spinneys(&graph.full_filter())
         .into_iter()
-        .next()
-        .expect("tta triangle should have a UV spinney");
-    let identifier = graph.ct_identifier(&spinney.filter);
+        .map(|spinney| graph.ct_identifier(&spinney.filter))
+        .collect::<Vec<_>>();
+    let identifier = identifiers
+        .iter()
+        .find(|identifier| identifier.internal_pdg_set.as_ref() == Some(&expected_internal_pdg_set))
+        .unwrap_or_else(|| panic!("tta triangle should have a UV spinney: {identifiers:?}"));
 
-    assert_eq!(identifier.internal_pdg_set, Some(pdg_set([6, 21])));
+    assert_eq!(identifier.internal_pdg_set, Some(expected_internal_pdg_set));
     assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
 }
 

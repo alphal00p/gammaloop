@@ -1,34 +1,38 @@
 use super::utils::*;
 use super::*;
 
-#[test]
-#[serial]
-fn cross_section_fermion_spin_sum_matches_explicit_incoming_helicity_average() -> Result<()> {
-    let test_name = "cross_section_fermion_spin_sum_matches_explicit_incoming_helicity_average";
-    let mut cli = setup_epem_tth_spin_sum_cli(test_name)?;
-    let point = nontrivial_xspace_point_for(&mut cli, "epem_a_tth_sum", "LO")?;
+mod important {
+    use super::*;
 
-    let summed = inspect_xspace_process(&mut cli, "epem_a_tth_sum", "LO", &point)?;
-    let explicit_average = average_over_generated_helicity_processes(
-        &mut cli,
-        &[
-            "epem_a_tth_pp",
-            "epem_a_tth_pm",
-            "epem_a_tth_mp",
-            "epem_a_tth_mm",
-        ],
-        "LO",
-        &point,
-    )?;
+    #[test]
+    #[serial]
+    fn cross_section_fermion_spin_sum_matches_explicit_incoming_helicity_average() -> Result<()> {
+        let test_name = "cross_section_fermion_spin_sum_matches_explicit_incoming_helicity_average";
+        let mut cli = setup_epem_tth_spin_sum_cli(test_name)?;
+        let point = nontrivial_xspace_point_for(&mut cli, "epem_a_tth_sum", "LO")?;
 
-    assert_complex_approx_eq(
-        summed,
-        explicit_average,
-        "fermion incoming summed_averaged inspect should match the average over explicit helicity configurations",
-    );
+        let summed = inspect_xspace_process(&mut cli, "epem_a_tth_sum", "LO", &point)?;
+        let explicit_average = average_over_generated_helicity_processes(
+            &mut cli,
+            &[
+                "epem_a_tth_pp",
+                "epem_a_tth_pm",
+                "epem_a_tth_mp",
+                "epem_a_tth_mm",
+            ],
+            "LO",
+            &point,
+        )?;
 
-    clean_test(&cli.cli_settings.state.folder);
-    Ok(())
+        assert_complex_approx_eq(
+            summed,
+            explicit_average,
+            "fermion incoming summed_averaged inspect should match the average over explicit helicity configurations",
+        );
+
+        clean_test(&cli.cli_settings.state.folder);
+        Ok(())
+    }
 }
 
 #[test]
