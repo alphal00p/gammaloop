@@ -1260,11 +1260,11 @@ pub mod test {
           4	 [label = "S:(d(mink(4,2)))^2"];
           ext0	 [style=invis];
           0:0:s	-> ext0	 [id=0 color="red"];
-          3:8:s	-> 0:2:s	 [id=1  color="red:blue;0.5"];
+          4:10:s	-> 0:1:s	 [id=1  color="red:blue;0.5"];
           1:5:s	-> 0:4:s	 [id=2  color="red:blue;0.5"];
           2:6:s	-> 0:3:s	 [id=3  color="red:blue;0.5"];
           2:7:s	-> 3:9:s	 [id=4 dir=none  color="red:blue;0.5" label="mink4|1"];
-          4:10:s	-> 0:1:s	 [id=5  color="red:blue;0.5"];
+          3:8:s	-> 0:2:s	 [id=5  color="red:blue;0.5"];
         }
         "#
         );
