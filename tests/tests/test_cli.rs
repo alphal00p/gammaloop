@@ -480,6 +480,58 @@ fn booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_w
     Ok(())
 }
 
+fn boot_mismatch_uses_conflicting_boot_blocks_read_only() -> Result<()> {
+    let test_name = "boot_mismatch_uses_conflicting_boot_blocks_read_only";
+    let mut cli = new_cli(test_name)?;
+
+    cli.run_history.default_runtime_settings.general.mu_r = 11.0;
+    cli.run_history.command_blocks = vec![block(
+        "shared",
+        &["set global kv global.display_directive=info"],
+    )];
+    cli.save_state()?;
+
+    let boot_card_path = run_card_path("boot_settings_mismatch_conflicting_block.toml");
+    if let Some(parent) = boot_card_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut boot_runtime = RuntimeSettings::default();
+    boot_runtime.general.mu_r = 29.0;
+    let boot_run_history = RunHistory {
+        default_runtime_settings: boot_runtime,
+        command_blocks: vec![block(
+            "shared",
+            &["set global kv global.display_directive=warn"],
+        )],
+        ..RunHistory::default()
+    };
+    fs::write(&boot_card_path, toml::to_string_pretty(&boot_run_history)?)?;
+
+    let loaded = StateLoadOption {
+        state_folder: Some(cli.cli_settings.state.folder.clone()),
+        boot_commands_path: Some(boot_card_path),
+        ..StateLoadOption::default()
+    }
+    .load()?;
+
+    assert!(loaded.cli_settings.session.read_only_state);
+    assert_eq!(loaded.run_history.command_blocks.len(), 1);
+    assert!(loaded.run_history.command_blocks[0].semantically_eq(&block(
+        "shared",
+        &["set global kv global.display_directive=warn"],
+    )));
+    assert!(
+        loaded
+            .cli_settings
+            .session
+            .startup_warnings
+            .iter()
+            .any(|warning| warning.contains("will use the boot card command block definitions"))
+    );
+    Ok(())
+}
+
 #[test]
 #[serial]
 fn state_load_option_clean_state_removes_saved_state_before_load() -> Result<()> {
@@ -803,6 +855,7 @@ fn cli_stateful_workflow_behaviors() -> Result<()> {
     boot_run_history_conflicting_redefinitions_error_in_read_only_mode()?;
     boot_run_history_allows_identical_semantic_redefinitions()?;
     booting_existing_state_with_mismatched_frozen_settings_forces_read_only_and_warns()?;
+    boot_mismatch_uses_conflicting_boot_blocks_read_only()?;
     command_block_definition_mode_defers_execution_and_omits_history()?;
     run_command_block_then_inline_quit_preserves_override_flag()?;
     finish_commands_block_without_active_definition_fails()?;

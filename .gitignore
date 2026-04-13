@@ -37,13 +37,14 @@ IGNORE/
 crates/gammaloop-api/python/gammaloop/libgammaloop_api*
 # Temporary cache files
 *.sw*
+integration_workspace_*
 
 gammaloop_state_integration_workspace/
 result/
 examples/amplitude_computation/GL_*
 gammaloop_state/
 examples/cli/epem_a_ttxh/NNLO
-examples/**/*state/
+examples/**/*state*/
 examples/**/OLD_*
 examples/**/gammaloop_state/
 integration-tests/workspace/

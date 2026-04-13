@@ -25,7 +25,7 @@ use crate::{
         ProcessKind,
     },
     state::{CommandHistory, CommandsBlock, ProcessRef, RunHistory, State},
-    CLISettings,
+    CLISettings, ReadOnlyStateOrigin,
 };
 
 const MAX_DISPLAY_COMMAND_LINES: usize = 5;
@@ -173,7 +173,9 @@ impl<'a> CliSession<'a> {
                 "Boot card settings differ from the frozen settings stored in {}. This session is forced into --read-only-state. Line up cli_settings.global and default_runtime_settings in the boot card with the frozen settings in run.toml if you want to boot this state without read-only mode.",
                 self.cli_settings.state.folder.join("run.toml").display()
             );
-            self.cli_settings.session.read_only_state = true;
+            self.cli_settings
+                .session
+                .force_read_only_state(ReadOnlyStateOrigin::BootSettingsMismatch);
             self.cli_settings
                 .session
                 .startup_warnings
@@ -190,10 +192,28 @@ impl<'a> CliSession<'a> {
         let overwrite_conflicting_blocks = if conflicting_blocks.is_empty() {
             false
         } else if self.cli_settings.session.read_only_state {
-            return Err(eyre!(
-                "{}. Cannot proceed while --read-only-state is enabled.",
-                format_command_block_conflict_message(&conflicting_blocks)
-            ));
+            if self
+                .cli_settings
+                .session
+                .is_read_only_due_to_boot_settings_mismatch()
+            {
+                let warning = format!(
+                    "{}. The boot card settings differ from the frozen settings stored in {}; this session remains in --read-only-state for reproducibility, but will use the boot card command block definitions for this process only.",
+                    format_command_block_conflict_message(&conflicting_blocks),
+                    self.cli_settings.state.folder.join("run.toml").display()
+                );
+                self.cli_settings
+                    .session
+                    .startup_warnings
+                    .push(warning.clone());
+                warn!("{warning}");
+                true
+            } else {
+                return Err(eyre!(
+                    "{}. Cannot proceed while --read-only-state is enabled.",
+                    format_command_block_conflict_message(&conflicting_blocks)
+                ));
+            }
         } else if resolve_conflicts(&conflicting_blocks)? {
             true
         } else {

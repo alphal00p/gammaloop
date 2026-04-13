@@ -4,12 +4,18 @@ use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::{
+    ffi::OsStr,
+    fs,
+    path::{Path, PathBuf},
+};
 use tabled::{
     builder::Builder,
     settings::{style::HorizontalLine, themes::Theme, Style},
     Tabled,
 };
 use tracing::info;
+use walkdir::WalkDir;
 
 use color_eyre::Result;
 use eyre::{eyre, Context};
@@ -179,17 +185,18 @@ impl Display {
                 if let Some(integrand_name) = integrand_name.as_deref() {
                     render_integrand_detail(
                         state,
+                        &global_settings.state.folder,
                         process_id.expect("clap requires --process when --integrand-name is set"),
                         integrand_name,
                         graphs,
                         categories,
                     )?;
                 } else {
-                    render_integrands_table(state, process_id)?;
+                    render_integrands_table(state, &global_settings.state.folder, process_id)?;
                 }
             }
             Display::Processes => {
-                render_processes_table(state)?;
+                render_processes_table(state, &global_settings.state.folder)?;
             }
             Display::Quantities { target } => {
                 render_named_process_settings(state, target, NamedProcessSettingKind::Quantity)?;
@@ -243,7 +250,14 @@ struct IntegrandMetrics {
     name: String,
     graphs: usize,
     graph_groups: usize,
-    record_size_bytes: usize,
+    bin_disk_size_bytes: Option<u64>,
+    so_disk_size_bytes: Option<u64>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct IntegrandArtifactSizes {
+    bin_disk_size_bytes: Option<u64>,
+    so_disk_size_bytes: Option<u64>,
 }
 
 #[derive(
@@ -502,6 +516,7 @@ fn filtered_graph_groups<'a>(
 
 fn render_integrand_detail(
     state: &State,
+    state_folder: &Path,
     process_id: usize,
     integrand_name: &str,
     requested_graphs: &[String],
@@ -511,7 +526,15 @@ fn render_integrand_detail(
         Some(&ProcessRef::Id(process_id)),
         Some(&integrand_name.to_string()),
     )?;
-    render_integrand_detail_from_info(&detail, requested_graphs, requested_categories)
+    let process = &state.process_list.processes[process_id];
+    let artifact_sizes =
+        collect_integrand_artifact_sizes(state_folder, process, &detail.integrand_name)?;
+    render_integrand_detail_from_info(
+        &detail,
+        &artifact_sizes,
+        requested_graphs,
+        requested_categories,
+    )
 }
 
 fn category_rows(
@@ -799,6 +822,7 @@ fn render_integrand_category_table(
 
 fn render_integrand_detail_from_info(
     detail: &IntegrandInfo,
+    artifact_sizes: &IntegrandArtifactSizes,
     requested_graphs: &[String],
     requested_categories: &[IntegrandDisplayCategory],
 ) -> Result<()> {
@@ -858,7 +882,11 @@ fn render_integrand_detail_from_info(
         },
         DetailSummaryRow {
             field: ".bin size".to_string(),
-            value: format_bytes(detail.record_size_bytes).magenta().to_string(),
+            value: format_artifact_size(artifact_sizes.bin_disk_size_bytes),
+        },
+        DetailSummaryRow {
+            field: ".so size".to_string(),
+            value: format_artifact_size(artifact_sizes.so_disk_size_bytes),
         },
     ];
     let mut summary_table = tabled::Table::new(summary_rows);
@@ -895,7 +923,7 @@ fn render_integrand_detail_from_info(
     Ok(())
 }
 
-fn render_processes_table(state: &State) -> Result<()> {
+fn render_processes_table(state: &State, state_folder: &Path) -> Result<()> {
     if state.process_list.processes.is_empty() {
         info!("{}", "No processes generated yet.".yellow());
         return Ok(());
@@ -910,10 +938,11 @@ fn render_processes_table(state: &State) -> Result<()> {
         "graphs / integrand".bold().blue().to_string(),
         "graph groups / integrand".bold().blue().to_string(),
         ".bin size / integrand".bold().blue().to_string(),
+        ".so size / integrand".bold().blue().to_string(),
     ]);
 
     for process in &state.process_list.processes {
-        let metrics = collect_integrand_metrics(process)?;
+        let metrics = collect_integrand_metrics(state_folder, process)?;
         builder.push_record([
             format!("#{}", process.definition.process_id)
                 .blue()
@@ -929,7 +958,12 @@ fn render_processes_table(state: &State) -> Result<()> {
             format_integrand_names(&metrics),
             format_metrics_column(&metrics, |metric| metric.graphs.to_string()),
             format_metrics_column(&metrics, |metric| metric.graph_groups.to_string()),
-            format_metrics_column(&metrics, |metric| format_bytes(metric.record_size_bytes)),
+            format_metrics_column(&metrics, |metric| {
+                format_artifact_size(metric.bin_disk_size_bytes)
+            }),
+            format_metrics_column(&metrics, |metric| {
+                format_artifact_size(metric.so_disk_size_bytes)
+            }),
         ]);
     }
 
@@ -940,7 +974,11 @@ fn render_processes_table(state: &State) -> Result<()> {
     Ok(())
 }
 
-fn render_integrands_table(state: &State, process_filter: Option<usize>) -> Result<()> {
+fn render_integrands_table(
+    state: &State,
+    state_folder: &Path,
+    process_filter: Option<usize>,
+) -> Result<()> {
     if state.process_list.processes.is_empty() {
         info!("{}", "No processes generated yet.".yellow());
         return Ok(());
@@ -954,6 +992,7 @@ fn render_integrands_table(state: &State, process_filter: Option<usize>) -> Resu
         "graphs".bold().blue().to_string(),
         "graph groups".bold().blue().to_string(),
         ".bin size".bold().blue().to_string(),
+        ".so size".bold().blue().to_string(),
     ]);
 
     let mut num_rows = 0usize;
@@ -961,7 +1000,7 @@ fn render_integrands_table(state: &State, process_filter: Option<usize>) -> Resu
         if process_filter.is_some_and(|selected| selected != process_index) {
             continue;
         }
-        let metrics = collect_integrand_metrics(process)?;
+        let metrics = collect_integrand_metrics(state_folder, process)?;
         for metric in metrics {
             num_rows += 1;
             builder.push_record([
@@ -978,7 +1017,8 @@ fn render_integrands_table(state: &State, process_filter: Option<usize>) -> Resu
                 metric.name.cyan().to_string(),
                 metric.graphs.to_string().yellow().to_string(),
                 metric.graph_groups.to_string().yellow().to_string(),
-                format_bytes(metric.record_size_bytes).magenta().to_string(),
+                format_artifact_size(metric.bin_disk_size_bytes),
+                format_artifact_size(metric.so_disk_size_bytes),
             ]);
         }
     }
@@ -1021,61 +1061,132 @@ fn render_integrands_table(state: &State, process_filter: Option<usize>) -> Resu
     Ok(())
 }
 
-fn collect_integrand_metrics(process: &Process) -> Result<Vec<IntegrandMetrics>> {
+fn collect_integrand_metrics(
+    state_folder: &Path,
+    process: &Process,
+) -> Result<Vec<IntegrandMetrics>> {
     match &process.collection {
         ProcessCollection::Amplitudes(amplitudes) => amplitudes
             .values()
-            .map(integrand_metrics_from_amplitude)
+            .map(|amplitude| integrand_metrics_from_amplitude(state_folder, process, amplitude))
             .collect(),
         ProcessCollection::CrossSections(cross_sections) => cross_sections
             .values()
-            .map(integrand_metrics_from_cross_section)
+            .map(|cross_section| {
+                integrand_metrics_from_cross_section(state_folder, process, cross_section)
+            })
             .collect(),
     }
 }
 
-fn integrand_metrics_from_amplitude(amplitude: &Amplitude) -> Result<IntegrandMetrics> {
+fn integrand_metrics_from_amplitude(
+    state_folder: &Path,
+    process: &Process,
+    amplitude: &Amplitude,
+) -> Result<IntegrandMetrics> {
+    let artifact_sizes = collect_integrand_artifact_sizes(state_folder, process, &amplitude.name)?;
     Ok(IntegrandMetrics {
         name: amplitude.name.clone(),
         graphs: amplitude.graphs.len(),
         graph_groups: amplitude.graph_group_structure.len(),
-        record_size_bytes: integrand_record_size_from_amplitude(amplitude)?,
+        bin_disk_size_bytes: artifact_sizes.bin_disk_size_bytes,
+        so_disk_size_bytes: artifact_sizes.so_disk_size_bytes,
     })
 }
 
-fn integrand_metrics_from_cross_section(cross_section: &CrossSection) -> Result<IntegrandMetrics> {
+fn integrand_metrics_from_cross_section(
+    state_folder: &Path,
+    process: &Process,
+    cross_section: &CrossSection,
+) -> Result<IntegrandMetrics> {
+    let artifact_sizes =
+        collect_integrand_artifact_sizes(state_folder, process, &cross_section.name)?;
     Ok(IntegrandMetrics {
         name: cross_section.name.clone(),
         graphs: cross_section.supergraphs.len(),
         graph_groups: cross_section.graph_group_structure.len(),
-        record_size_bytes: integrand_record_size_from_cross_section(cross_section)?,
+        bin_disk_size_bytes: artifact_sizes.bin_disk_size_bytes,
+        so_disk_size_bytes: artifact_sizes.so_disk_size_bytes,
     })
 }
 
-fn integrand_record_size_from_amplitude(amplitude: &Amplitude) -> Result<usize> {
-    let mut record = amplitude.clone();
-    record.integrand = None;
-    let encoded =
-        bincode::encode_to_vec(&record, bincode::config::standard()).with_context(|| {
-            format!(
-                "While serializing amplitude '{}' for display",
-                amplitude.name
-            )
-        })?;
-    Ok(encoded.len())
+fn collect_integrand_artifact_sizes(
+    state_folder: &Path,
+    process: &Process,
+    integrand_name: &str,
+) -> Result<IntegrandArtifactSizes> {
+    let artifact_root = integrand_artifact_root(state_folder, process, integrand_name);
+    Ok(IntegrandArtifactSizes {
+        bin_disk_size_bytes: disk_usage_for_extension(&artifact_root, "bin")?,
+        so_disk_size_bytes: disk_usage_for_extension(&artifact_root, "so")?,
+    })
 }
 
-fn integrand_record_size_from_cross_section(cross_section: &CrossSection) -> Result<usize> {
-    let mut record = cross_section.clone();
-    record.integrand = None;
-    let encoded =
-        bincode::encode_to_vec(&record, bincode::config::standard()).with_context(|| {
+fn integrand_artifact_root(
+    state_folder: &Path,
+    process: &Process,
+    integrand_name: &str,
+) -> PathBuf {
+    let collection_dir = match &process.collection {
+        ProcessCollection::Amplitudes(_) => "amplitudes",
+        ProcessCollection::CrossSections(_) => "cross_sections",
+    };
+    state_folder
+        .join("processes")
+        .join(collection_dir)
+        .join(&process.definition.folder_name)
+        .join(integrand_name)
+}
+
+fn disk_usage_for_extension(root: &Path, extension: &str) -> Result<Option<u64>> {
+    if !root.try_exists().with_context(|| {
+        format!(
+            "While checking saved integrand artifacts under {}",
+            root.display()
+        )
+    })? {
+        return Ok(None);
+    }
+
+    let mut total = 0u64;
+    for entry in WalkDir::new(root) {
+        let entry = entry.with_context(|| {
             format!(
-                "While serializing cross-section '{}' for display",
-                cross_section.name
+                "While walking saved integrand artifacts under {}",
+                root.display()
             )
         })?;
-    Ok(encoded.len())
+        if !entry.file_type().is_file() || entry.path().extension() != Some(OsStr::new(extension)) {
+            continue;
+        }
+
+        let metadata = entry
+            .metadata()
+            .with_context(|| format!("While reading metadata for {}", entry.path().display()))?;
+        total = total
+            .checked_add(file_disk_usage_bytes(&metadata))
+            .ok_or_else(|| {
+                eyre!(
+                    "Artifact size overflow while summing .{} files under {}",
+                    extension,
+                    root.display()
+                )
+            })?;
+    }
+    Ok(Some(total))
+}
+
+fn file_disk_usage_bytes(metadata: &fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        metadata.blocks().saturating_mul(512)
+    }
+
+    #[cfg(not(unix))]
+    {
+        metadata.len()
+    }
 }
 
 fn format_integrand_names(metrics: &[IntegrandMetrics]) -> String {
@@ -1103,10 +1214,15 @@ fn format_metrics_column(
         .join("\n")
 }
 
-fn format_bytes(size: usize) -> String {
-    const KIB: usize = 1024;
-    const MIB: usize = KIB * 1024;
-    const GIB: usize = MIB * 1024;
+fn format_artifact_size(size: Option<u64>) -> String {
+    size.map(|size| format_bytes(size).magenta().to_string())
+        .unwrap_or_else(|| "(not saved)".dimmed().to_string())
+}
+
+fn format_bytes(size: u64) -> String {
+    const KIB: u64 = 1024;
+    const MIB: u64 = KIB * 1024;
+    const GIB: u64 = MIB * 1024;
 
     if size < KIB {
         format!("{size} B")

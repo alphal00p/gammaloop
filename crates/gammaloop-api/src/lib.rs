@@ -280,7 +280,35 @@ pub struct SessionSettings {
     pub read_only_state: bool,
     #[serde(skip)]
     #[schemars(skip)]
+    pub(crate) read_only_state_origin: Option<ReadOnlyStateOrigin>,
+    #[serde(skip)]
+    #[schemars(skip)]
     pub startup_warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReadOnlyStateOrigin {
+    UserRequested,
+    BootSettingsMismatch,
+}
+
+impl SessionSettings {
+    pub(crate) fn set_user_requested_read_only_state(&mut self, read_only_state: bool) {
+        self.read_only_state = read_only_state;
+        self.read_only_state_origin = read_only_state.then_some(ReadOnlyStateOrigin::UserRequested);
+    }
+
+    pub(crate) fn force_read_only_state(&mut self, origin: ReadOnlyStateOrigin) {
+        if !self.read_only_state {
+            self.read_only_state_origin = Some(origin);
+        }
+        self.read_only_state = true;
+    }
+
+    pub(crate) fn is_read_only_due_to_boot_settings_mismatch(&self) -> bool {
+        self.read_only_state
+            && self.read_only_state_origin == Some(ReadOnlyStateOrigin::BootSettingsMismatch)
+    }
 }
 
 impl Default for StateSettings {
@@ -362,7 +390,8 @@ impl CLISettings {
         self.override_state = cli.override_state;
 
         self.state.folder = cli.state_folder.clone();
-        self.session.read_only_state = cli.read_only_state;
+        self.session
+            .set_user_requested_read_only_state(cli.read_only_state);
     }
 
     pub(crate) fn ensure_write_target_outside_active_state(
@@ -669,6 +698,8 @@ fn print_state_load_summary(summary: &StateLoadSummary) {
 
 impl OneShot {
     pub fn new_cli_settings(&self, global: GlobalSettings) -> CLISettings {
+        let mut session = SessionSettings::default();
+        session.set_user_requested_read_only_state(self.read_only_state);
         CLISettings {
             try_strings: !self.no_try_strings,
             override_state: self.override_state,
@@ -677,10 +708,7 @@ impl OneShot {
                 ..StateSettings::default()
             },
             global,
-            session: SessionSettings {
-                read_only_state: self.read_only_state,
-                ..SessionSettings::default()
-            },
+            session,
         }
     }
 
@@ -1206,7 +1234,34 @@ impl OneShot {
 
         let implicit_read_only_exit =
             cli_settings.session.read_only_state && save_state == SaveState::default();
-        if !self.no_save_state && !implicit_read_only_exit {
+        let requested_active_state_save_after_auto_read_only = !self.no_save_state
+            && !implicit_read_only_exit
+            && !save_state.no_save_state
+            && cli_settings
+                .session
+                .is_read_only_due_to_boot_settings_mismatch()
+            && path_lies_within(
+                &cli_settings.state.folder,
+                &save_state
+                    .path
+                    .clone()
+                    .unwrap_or_else(|| cli_settings.state.folder.clone()),
+            )?;
+        if requested_active_state_save_after_auto_read_only {
+            warn!(
+                "Skipping save state to {} because boot card settings differ from the frozen settings stored in {} and this session was forced into --read-only-state. The active state was left unchanged; save to a path outside the active state folder if you want a separate snapshot.",
+                save_state
+                    .path
+                    .as_deref()
+                    .unwrap_or(&cli_settings.state.folder)
+                    .display(),
+                cli_settings.state.folder.join("run.toml").display()
+            );
+        }
+        if !self.no_save_state
+            && !implicit_read_only_exit
+            && !requested_active_state_save_after_auto_read_only
+        {
             debug!("Saving State, override: {}", self.override_state);
             save_state.save(
                 &mut state,
@@ -1459,7 +1514,7 @@ mod tests {
         utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
     };
 
-    use crate::commands::{Duplicate, Remove};
+    use crate::commands::{save::SaveState, Duplicate, Remove};
     use crate::settings_tree::serialize_settings_with_defaults;
     use crate::state::ProcessRef;
     use crate::tracing::{
@@ -1470,8 +1525,8 @@ mod tests {
 
     use super::{
         generate_completion_script, CLISettings, CommandHistory, Commands, CompletionShell,
-        LogFormat, LogLevel, OneShot, Repl, RunHistory, StateSettings, GLOBAL_SETTINGS_FILENAME,
-        LOG_TEST_MUTEX,
+        LogFormat, LogLevel, OneShot, Repl, RunHistory, State, StateSettings,
+        GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX,
     };
     use crate::state::CommandsBlock;
 
@@ -1711,6 +1766,63 @@ mod tests {
                 "set global kv global.display_directive=warn",
                 "run cmdBlockA cmdBlockB -c 'set default-runtime kv general.m_uv=7.0'",
             ]
+        );
+    }
+
+    #[test]
+    fn auto_read_only_boot_settings_mismatch_ignores_quit_override_for_active_state() {
+        let temp = tempdir().unwrap();
+        let state_path = temp.path().join("state");
+        let boot_path = temp.path().join("boot.toml");
+
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        cli_settings.state.folder = state_path.clone();
+        let mut saved_run_history = RunHistory::default();
+        saved_run_history.default_runtime_settings.general.mu_r = 11.0;
+        SaveState {
+            override_state: Some(true),
+            ..Default::default()
+        }
+        .save(
+            &mut state,
+            &saved_run_history,
+            &RuntimeSettings::default(),
+            &cli_settings,
+        )
+        .unwrap();
+        let saved_run_toml = fs::read_to_string(state_path.join("run.toml")).unwrap();
+
+        let mut boot_runtime = RuntimeSettings::default();
+        boot_runtime.general.mu_r = 29.0;
+        let boot_run_history = RunHistory {
+            default_runtime_settings: boot_runtime,
+            ..RunHistory::default()
+        };
+        fs::write(
+            &boot_path,
+            boot_run_history
+                .to_toml_string(cli_settings.try_strings)
+                .unwrap(),
+        )
+        .unwrap();
+
+        let mut one_shot = OneShot::try_parse_from([
+            "gammaloop",
+            "-s",
+            state_path.to_string_lossy().as_ref(),
+            boot_path.to_string_lossy().as_ref(),
+            "quit",
+            "-o",
+        ])
+        .unwrap();
+        one_shot.state_folder_explicitly_set = true;
+
+        one_shot.run("quit -o".to_string()).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(state_path.join("run.toml")).unwrap(),
+            saved_run_toml
         );
     }
 

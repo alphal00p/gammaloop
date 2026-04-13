@@ -1,0 +1,405 @@
+[cli_settings]
+[cli_settings.state]
+name = "aa_aa_2L"
+folder = "./examples/cli/aa_aa/2L/state"
+
+[[command_blocks]]
+name = "generate_diagrams"
+commands = [
+    "import model sm-default.json",
+    "set global kv global.n_cores.feyngen=10",
+    #"set global kv global.generation.uv.use_legacy=true",
+
+    "remove processes -p aa_aa",
+    """generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}]
+        --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+		--select-graphs GL16
+		--loop-momentum-bases GL16=9,10
+        -p aa_aa -i 2L --only-diagrams""",
+    #"import graphs ./aa_aa_2L.dot -p aa_aa -i 2L",
+
+    "save dot",
+    "save state -o"
+]
+
+[[command_blocks]]
+name = "generate_integrands"
+commands = [
+    "generate existing -p aa_aa -i 2L",
+    "save state -o",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    [ 500.0, 0.0, 0.0,  500.0 ],
+    [ 500.0, 0.0, 0.0, -500.0 ],
+    [ 500.0, 500.0, 0.0, 0.0 ],
+    "dependent"
+]
+helicities = [+1,+1,-1,-1]
+
+[default_runtime_settings.general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 91.188
+m_uv = 91.188
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = false
+compile = true
+summed = false
+summed_function_map = false
+
+# Otherwise leave them enabled with
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+# The option below specifies the generation of threshold for the kinematics supplied
+check_esurface_at_generation = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[cli_settings.global.generation.compile]
+compilation_mode="assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.n_cores]
+feyngen = 10
+generate = 10
+compile = 10
+integrate = 10
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = true
+disable_tropical_generation = false
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[[command_blocks]]
+name = "integrate"
+commands = [
+    "run set_model_parameters",
+
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_m_uv_UP",
+    "set process -p aa_aa -i 2L_m_uv_UP kv general.m_uv=364.752",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_m_uv_DOWN",
+    "set process -p aa_aa -i 2L_m_uv_DOWN kv general.m_uv=22.797",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_mu_r_UP",
+    "set process -p aa_aa -i 2L_mu_r_UP kv general.mu_r=364.752",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_mu_r_DOWN",
+    "set process -p aa_aa -i 2L_mu_r_DOWN kv general.mu_r=22.797",
+
+    # --target -1.0214510394091818e-6 0.0
+    "run set_kinematics_a",
+    "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+
+    # --target -5.9925800791548554e-9 0.0
+    # "run set_kinematics_a",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
+    # "set process -p aa_aa kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+
+    """set process -p aa_aa -i 2L kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer tabled
+	"""integrate -p aa_aa -i 2L -p aa_aa -i 2L_m_uv_UP -p aa_aa -i 2L_m_uv_DOWN -p aa_aa -i 2L_mu_r_UP -p aa_aa -i 2L_mu_r_DOWN
+	             --n-cores 1
+				 --target -1.1497174416783368e-6 0.0
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_all_helicities"
+commands = [
+    "run set_model_parameters",
+
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_ppmm",
+    "set process -p aa_aa -i 2L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_mpmm",
+    "set process -p aa_aa -i 2L_mpmm kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_mmmm",
+    "set process -p aa_aa -i 2L_mmmm kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_pmmp",
+    "set process -p aa_aa -i 2L_pmmp kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_pmpm",
+    "set process -p aa_aa -i 2L_pmpm kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+
+    "set process -p aa_aa kv general.m_uv=20.0",
+    "set process -p aa_aa kv general.mu_r=20.0",
+
+	#--target aa_aa@2L_ppmm=-1.1497174416783368e-6,0.0
+	#--target aa_aa@2L_mpmm=6.373051761707151e-9,0.0
+	#--target aa_aa@2L_mmmm=2.0882859672980857e-6,0.0
+	#--target aa_aa@2L_pmmp=-8.613561726298797e-7,0.0
+	#--target aa_aa@2L_pmpm=-1.6341413464490002e-7,0.0
+	"run set_kinematics_a",
+
+	#--target aa_aa@2L_ppmm=-0.000015704948157359166,2.900596409937903e-6
+	#--target aa_aa@2L_mpmm=-0.000013020225233215451,6.35418776663792e-6
+	#--target aa_aa@2L_mmmm=0.00004307676090475245,-0.000018107981811865167
+	#--target aa_aa@2L_pmmp=-7.754173638277812e-6,-0.000043612263623801745
+    #--target aa_aa@2L_pmpm=-7.09523165496091e-6,-0.000020695888189878644
+	#"run set_kinematics_f",
+
+
+    """set process -p aa_aa kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+    # --show-max-weight-info-for-discrete-bins
+	# --batch-size 100000
+	# --no-stream-iterations
+	# --show-max-weight-info-for-discrete-bins
+	# --no-stream-iterations
+	#			 --show-phase both
+	#			 --show-top-discrete-grid
+	#			 --show-discrete-contributions-sum
+	#			 --sort-contributions integral
+	#			 --show-max-weight-info
+	#			 --renderer tabled
+	"""integrate -p aa_aa -i 2L_ppmm -p aa_aa -i 2L_mpmm -p aa_aa -i 2L_mmmm -p aa_aa -i 2L_pmmp -p aa_aa -i 2L_pmpm
+	             --n-cores 5
+				 --target aa_aa@2L_ppmm=-1.1497174416783368e-6,0.0
+				 --target aa_aa@2L_mpmm=6.373051761707151e-9,0.0
+				 --target aa_aa@2L_mmmm=2.0882859672980857e-6,0.0
+				 --target aa_aa@2L_pmmp=-8.613561726298797e-7,0.0
+				 --target aa_aa@2L_pmpm=-1.6341413464490002e-7,0.0
+				 --uncorrelated
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "integrate_all_helicities_kinematics_f"
+commands = [
+    "run set_model_parameters",
+
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_ppmm",
+    "set process -p aa_aa -i 2L_ppmm kv kinematics.externals.data.helicities=[+1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_mpmm",
+    "set process -p aa_aa -i 2L_mpmm kv kinematics.externals.data.helicities=[-1,+1,-1,-1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_mmmm",
+    "set process -p aa_aa -i 2L_mmmm kv kinematics.externals.data.helicities=[-1,-1,-1,-1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_pmmp",
+    "set process -p aa_aa -i 2L_pmmp kv kinematics.externals.data.helicities=[+1,-1,-1,+1]",
+    "duplicate integrand -p aa_aa -i 2L --output_process_name aa_aa --output_integrand_name 2L_pmpm",
+    "set process -p aa_aa -i 2L_pmpm kv kinematics.externals.data.helicities=[+1,-1,+1,-1]",
+
+    "set process -p aa_aa kv general.m_uv=20.0",
+    "set process -p aa_aa kv general.mu_r=20.0",
+
+	#--target aa_aa@2L_ppmm=-1.1497174416783368e-6,0.0
+	#--target aa_aa@2L_mpmm=6.373051761707151e-9,0.0
+	#--target aa_aa@2L_mmmm=2.0882859672980857e-6,0.0
+	#--target aa_aa@2L_pmmp=-8.613561726298797e-7,0.0
+	#--target aa_aa@2L_pmpm=-1.6341413464490002e-7,0.0
+	#"run set_kinematics_a",
+
+	#--target aa_aa@2L_ppmm=-0.000015704948157359166,2.900596409937903e-6
+	#--target aa_aa@2L_mpmm=-0.000013020225233215451,6.35418776663792e-6
+	#--target aa_aa@2L_mmmm=0.00004307676090475245,-0.000018107981811865167
+	#--target aa_aa@2L_pmmp=-7.754173638277812e-6,-0.000043612263623801745
+    #--target aa_aa@2L_pmpm=-7.09523165496091e-6,-0.000020695888189878644
+	"run set_kinematics_f",
+
+
+    """set process -p aa_aa kv
+        integrator.n_increase=0
+        integrator.n_start=1000000
+        integrator.n_max=10000000000
+        integrator.seed=1337
+        integrator.integrated_phase="real"
+        integrator.target_relative_accuracy=1.0e-3
+    """,
+
+	"""integrate -p aa_aa -i 2L_ppmm -p aa_aa -i 2L_mpmm -p aa_aa -i 2L_mmmm -p aa_aa -i 2L_pmmp -p aa_aa -i 2L_pmpm
+	             --n-cores 5
+				 --target aa_aa@2L_ppmm=-0.000015704948157359166,2.900596409937903e-6
+				 --target aa_aa@2L_mpmm=-0.000013020225233215451,6.35418776663792e-6
+					 --target aa_aa@2L_mmmm=0.00004307676090475245,-0.000018107981811865167
+				 --target aa_aa@2L_pmmp=-7.754173638277812e-6,-0.000043612263623801745
+					 --target aa_aa@2L_pmpm=-7.09523165496091e-6,-0.000020695888189878644
+				 --uncorrelated
+				 --renderer ratatui
+				 --batch-size 10000
+				 --show-phase both
+				 --show-max-weight-info
+				 --show-top-discrete-grid
+				 --show-discrete-contributions-sum
+				 --write-results-for-each-iteration
+                 --restart
+    """
+]
+
+[[command_blocks]]
+name = "set_model_parameters"
+commands = [
+    "set model MT=173.0",
+    "set model WT=0.0",
+    "set model ymt=173.0",
+    "set model aS=0.118",
+    "set model aEWM1=137.036",
+    "set model Gf=1.166390e-05",
+    "set model MZ=91.188",
+]
+
+[[command_blocks]]
+name = "set_kinematics_a"
+commands = [
+    # s / m_t^2 = 1, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 86.5, 0.0, 0.0, 86.5 ],
+        [ 86.5, 0.0, 0.0, -86.5 ],
+        [ 86.5, 0.0, -79.27855952273603, -34.6 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_b"
+commands = [
+    # s / m_t^2 = 1.44, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 103.8, 0.0, 0.0, 103.8 ],
+        [ 103.8, 0.0, 0.0, -103.8 ],
+        [ 103.8, 0.0, -95.13427142728324, -41.52 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_c"
+commands = [
+    # s / m_t^2 = 2.985984, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 149.472, 0.0, 0.0, 149.472 ],
+        [ 149.472, 0.0, 0.0, -149.472 ],
+        [ 149.472, 0.0, -136.99335085528787, -59.7888 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_d"
+commands = [
+    # s / m_t^2 = 4.29981696, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 179.3664, 0.0, 0.0, 179.3664 ],
+        [ 179.3664, 0.0, 0.0, -179.3664 ],
+        [ 179.3664, 0.0, -164.39202102634547, -71.74656 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_e"
+commands = [
+    # s / m_t^2 = 22.18611106740436992, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 407.4334663894049, 0.0, 0.0, 407.4334663894049 ],
+        [ 407.4334663894049, 0.0, 0.0, -407.4334663894049 ],
+        [ 407.4334663894049, 0.0, -373.4189400775389, -162.97338655576192 ],
+        "dependent"
+    ]
+    '""",
+]
+
+[[command_blocks]]
+name = "set_kinematics_f"
+commands = [
+    # s / m_t^2 = 410.186270246002225336426103593500274, u / s = -0.3
+    """set process string '
+    [kinematics.externals]
+    type = "constant"
+    [kinematics.externals.data]
+    momenta = [
+        [ 1751.8893288527534, 0.0, 0.0, 1751.8893288527534 ],
+        [ 1751.8893288527534, 0.0, 0.0, -1751.8893288527534 ],
+        [ 1751.8893288527534, 0.0, -1605.6330917306252, -700.755731541101 ],
+        "dependent"
+    ]
+    '""",
+]
