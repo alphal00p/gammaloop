@@ -482,16 +482,15 @@ impl LUCounterTermEvaluators {
             }
         }
 
-        self.pass_two_evaluator.compile_external(
-            path.as_ref()
-                .join(format!("cut_{}_pass_two", cut_id.0))
-                .with_extension("cpp"),
-            format!("cut_{}_pass_two", cut_id.0),
-            path.as_ref()
-                .join(format!("cut_{}_pass_two", cut_id.0))
-                .with_extension("so"),
-            frozen_mode,
-        )?;
+        for (order, pass_to_evaluator) in self.pass_two_evaluator.iter_mut().enumerate() {
+            let name = format!("cut_{}_pass_two_{}", cut_id.0, order);
+            pass_to_evaluator.compile_external(
+                path.as_ref().join(&name).with_extension("cpp"),
+                &name,
+                path.as_ref().join(&name).with_extension("so"),
+                frozen_mode,
+            )?;
+        }
 
         Ok(())
     }
@@ -515,7 +514,9 @@ impl LUCounterTermEvaluators {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
-        f(&mut self.pass_two_evaluator)?;
+        for pass_to_evaluator in self.pass_two_evaluator.iter_mut() {
+            f(pass_to_evaluator)?;
+        }
 
         Ok(())
     }
