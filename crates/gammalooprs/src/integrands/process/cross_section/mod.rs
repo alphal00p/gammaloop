@@ -1129,15 +1129,17 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let lu_params = LUParams { h_function, tstar };
 
-                kinematic_point
-                    .dualized_momentum_sample_cache
-                    .push(rescaled_momenta.clone());
-                kinematic_point
-                    .lu_cut_parameter_cache
-                    .push(lu_params.clone());
-                kinematic_point
-                    .lu_cut_esurface_values
-                    .push(esurface_derivatives.clone().unwrap_real());
+                if !settings.subtraction.disable_threshold_subtraction {
+                    kinematic_point
+                        .dualized_momentum_sample_cache
+                        .push(rescaled_momenta.clone());
+                    kinematic_point
+                        .lu_cut_parameter_cache
+                        .push(lu_params.clone());
+                    kinematic_point
+                        .lu_cut_esurface_values
+                        .push(esurface_derivatives.clone().unwrap_real());
+                }
 
                 let prefactor =
                     Complex::new_re(if let Some((_channel_index, _alpha)) = &channel_id {
