@@ -76,6 +76,15 @@ inherits = "dev"
 opt-level = 2
 # lto=true
 
+[profile.dev-optim.package."*"]
+opt-level = 3
+
+[profile.dev-optim.package.gammalooprs]
+opt-level = 2
+
+[profile.dev-optim.package.gammaloop-api]
+opt-level = 2
+
 [profile.profiling]
 inherits = "release"
 opt-level = 3
