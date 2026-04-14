@@ -5,7 +5,7 @@ use eyre::{Result as EyreResult, eyre};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     evaluate::{CompileOptions, ExportSettings, InlineASM},
     function, try_parse,
 };
@@ -439,6 +439,14 @@ impl From<Atom> for OrientationPattern {
 }
 
 impl OrientationPattern {
+    fn is_orientation_delta_atom(atom: &Atom) -> bool {
+        matches!(
+            atom.as_view(),
+            AtomView::Fun(function)
+                if function.get_symbol().get_stripped_name() == "orientation_delta"
+        )
+    }
+
     fn split_top_level_args(input: &str) -> EyreResult<Vec<String>> {
         let mut args = Vec::new();
         let mut start = 0usize;
@@ -519,6 +527,17 @@ impl OrientationPattern {
     }
 
     pub fn parse_user_pattern(pattern: &str) -> EyreResult<Atom> {
+        let trimmed = pattern.trim();
+        if trimmed.is_empty() {
+            return Err(eyre!("Orientation pattern cannot be empty"));
+        }
+
+        if let Ok(parsed) = try_parse!(trimmed)
+            && Self::is_orientation_delta_atom(&parsed)
+        {
+            return Ok(parsed);
+        }
+
         let normalized = Self::normalize_user_pattern(pattern)?;
         try_parse!(normalized.as_str())
             .map_err(|error| eyre!("Symbolica parsing error for orientation pattern: {error}"))
@@ -568,6 +587,7 @@ impl OrientationPattern {
 mod orientation_pattern_tests {
     use super::OrientationPattern;
     use linnet::half_edge::involution::{EdgeVec, Orientation};
+    use symbolica::atom::AtomCore;
 
     fn orientation(value: i8) -> Orientation {
         match value {
@@ -608,6 +628,16 @@ mod orientation_pattern_tests {
         assert!(pattern.filter(&edgevec([1, 1, -1, 0, -1, 0, 1, 0, 1, -1, -1, 1])));
         assert!(!pattern.filter(&edgevec([1, 1, -1, 1, -1, 0, 1, 0, 1, 0, -1, 1])));
         assert!(pattern.alt_filter(&edgevec([1, 1, -1, 1, -1, 1, 1, 0, 1, 0, -1, 1])));
+    }
+
+    #[test]
+    fn orientation_pattern_accepts_canonical_namespaced_roundtrip() {
+        let original = OrientationPattern::from_user_pattern("(+,-,0)").unwrap();
+        let canonical = original.pat.as_ref().unwrap().0.to_canonical_string();
+        let reparsed = OrientationPattern::from_user_pattern(&canonical).unwrap();
+
+        assert_eq!(original, reparsed);
+        assert!(reparsed.filter(&edgevec([1, -1, 0])));
     }
 }
 

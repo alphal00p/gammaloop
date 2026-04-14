@@ -1179,7 +1179,7 @@ mod test {
             FilterQuantity, PairQuantity, QuantityComputation, QuantityOrder, QuantityOrdering,
             QuantitySettings, SelectorDefinitionSettings,
         },
-        settings::RuntimeSettings,
+        settings::{global::OrientationPattern, RuntimeSettings},
         utils::{load_generic_model, F},
     };
     use serde::{Deserialize, Serialize};
@@ -2675,5 +2675,30 @@ integrate = 10
         assert!(format!("{err:?}").contains("logfile logger disabled"));
         crate::tracing::configure_file_log_boot_mode(false, None).unwrap();
         crate::tracing::set_file_log_filter_override(None).unwrap();
+    }
+
+    #[test]
+    fn set_global_kv_preserves_existing_orientation_pattern() {
+        let mut state = State::new_test();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+
+        cli_settings.global.generation.orientation_pattern =
+            OrientationPattern::from_user_pattern("(+,-,0)").unwrap();
+        let expected = cli_settings.global.generation.orientation_pattern.clone();
+
+        Set::Global {
+            input: SetArgs::Kv {
+                pairs: vec![KvPair {
+                    key: "global.n_cores.feyngen".to_string(),
+                    value: "10".to_string(),
+                }],
+            },
+        }
+        .run(&mut state, &mut cli_settings, &mut runtime_settings)
+        .unwrap();
+
+        assert_eq!(cli_settings.global.n_cores.feyngen, 10);
+        assert_eq!(cli_settings.global.generation.orientation_pattern, expected);
     }
 }
