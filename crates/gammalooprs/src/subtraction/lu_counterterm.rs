@@ -2,6 +2,8 @@ use core::f64;
 use std::path::Path;
 
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
@@ -275,6 +277,10 @@ pub(crate) struct LUCounterTerm {
     pub evaluators: TiVec<RaisedCutId, LUCounterTermEvaluators>,
     pub thresholds: TiVec<RaisedCutId, CutThresholds>,
     pub subspaces: TiVec<RaisedCutId, (SubspaceData, SubspaceData)>,
+    pub active_cuts: TiVec<RaisedCutId, bool>,
+    pub active_left_thresholds: TiVec<RaisedCutId, TiVec<LeftThresholdId, bool>>,
+    pub active_right_thresholds: TiVec<RaisedCutId, TiVec<RightThresholdId, bool>>,
+    pub active_iterated_thresholds: TiVec<RaisedCutId, IteratedCtCollection<bool>>,
 }
 
 pub struct LUCTKinematicPoint<T: FloatLike> {
@@ -322,6 +328,10 @@ impl<T: FloatLike> Default for LUCTKinematicPoint<T> {
 }
 
 impl LUCounterTerm {
+    pub(crate) fn cut_is_active(&self, cut_id: RaisedCutId) -> bool {
+        self.active_cuts[cut_id]
+    }
+
     pub(crate) fn compile(
         &mut self,
         path: impl AsRef<Path>,
@@ -343,6 +353,66 @@ impl LUCounterTerm {
         Ok(())
     }
 
+    fn ensure_active_cut(&self, cut_id: RaisedCutId) -> Result<()> {
+        if self.cut_is_active(cut_id) {
+            return Ok(());
+        }
+
+        Err(eyre!(
+            "Raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            cut_id.0
+        ))
+    }
+
+    fn ensure_active_left_threshold(
+        &self,
+        cut_id: RaisedCutId,
+        threshold_id: LeftThresholdId,
+    ) -> Result<()> {
+        if self.active_left_thresholds[cut_id][threshold_id] {
+            return Ok(());
+        }
+
+        Err(eyre!(
+            "Left threshold evaluator {} for raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            threshold_id.0,
+            cut_id.0
+        ))
+    }
+
+    fn ensure_active_right_threshold(
+        &self,
+        cut_id: RaisedCutId,
+        threshold_id: RightThresholdId,
+    ) -> Result<()> {
+        if self.active_right_thresholds[cut_id][threshold_id] {
+            return Ok(());
+        }
+
+        Err(eyre!(
+            "Right threshold evaluator {} for raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            threshold_id.0,
+            cut_id.0
+        ))
+    }
+
+    fn ensure_active_iterated_threshold(
+        &self,
+        cut_id: RaisedCutId,
+        iterated_index: (LeftThresholdId, RightThresholdId),
+    ) -> Result<()> {
+        if self.active_iterated_thresholds[cut_id][iterated_index] {
+            return Ok(());
+        }
+
+        Err(eyre!(
+            "Iterated threshold evaluator ({}, {}) for raised cut {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            iterated_index.0.0,
+            iterated_index.1.0,
+            cut_id.0
+        ))
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn evaluate<T: FloatLike>(
         &mut self,
@@ -358,7 +428,8 @@ impl LUCounterTerm {
         orientations: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_meta_data: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Complex<F<T>> {
+    ) -> Result<Complex<F<T>>> {
+        self.ensure_active_cut(cut_id)?;
         let (left_subspace, right_subspace) = &self.subspaces[cut_id];
         let (sample_left_transformed, sample_right_transformed) = (
             kinematic_point
@@ -473,7 +544,7 @@ impl LUCounterTerm {
         ) {
             left_overlap
         } else {
-            return Complex::new_re(F::from_f64(f64::NAN));
+            return Ok(Complex::new_re(F::from_f64(f64::NAN)));
         };
 
         let right_overlap = if let Ok(right_overlap) = overlap_subspace::find_maximal_overlap(
@@ -484,7 +555,7 @@ impl LUCounterTerm {
         ) {
             right_overlap
         } else {
-            return Complex::new_re(F::from_f64(f64::NAN));
+            return Ok(Complex::new_re(F::from_f64(f64::NAN)));
         };
 
         debug!(
@@ -587,6 +658,7 @@ impl LUCounterTerm {
                     sample.extract_threshold_parameters(true);
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
+                self.ensure_active_left_threshold(cut_id, left_threshold_id)?;
 
                 let params = T::get_parameters(
                     param_builder,
@@ -628,6 +700,7 @@ impl LUCounterTerm {
                     sample.extract_threshold_parameters(true);
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
+                self.ensure_active_right_threshold(cut_id, right_threshold_id)?;
 
                 let params = T::get_parameters(
                     param_builder,
@@ -684,6 +757,7 @@ impl LUCounterTerm {
                 LeftThresholdId::from(sample_left.get_esurface_id().0),
                 RightThresholdId::from(sample_right.get_esurface_id().0),
             );
+            self.ensure_active_iterated_threshold(cut_id, iterated_index)?;
             let inverse_transformed_momentum_sample =
                 merge_and_inverse_transform(sample_left, sample_right);
 
@@ -736,12 +810,12 @@ impl LUCounterTerm {
             pass_one_result,
             Complex::new_re(kinematic_point.lu_cut_esurface_values[0].clone()),
         ];
-        evaluate_evaluator_single(
+        Ok(evaluate_evaluator_single(
             &mut self.evaluators[cut_id].pass_two_evaluator,
             &params_for_pass_two,
             evaluation_meta_data,
             record_primary_timing,
-        )
+        ))
     }
 }
 
@@ -903,6 +977,29 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             esurface_ct_builder: self,
             solution,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LUCounterTerm;
+    use crate::processes::RaisedCutId;
+    use typed_index_collections::{TiVec, ti_vec};
+
+    #[test]
+    fn inactive_cut_guard_reports_runtime_access() {
+        let counterterm = LUCounterTerm {
+            evaluators: TiVec::new(),
+            thresholds: TiVec::new(),
+            subspaces: TiVec::new(),
+            active_cuts: ti_vec![false],
+            active_left_thresholds: ti_vec![TiVec::new()],
+            active_right_thresholds: ti_vec![TiVec::new()],
+            active_iterated_thresholds: TiVec::new(),
+        };
+
+        let error = counterterm.ensure_active_cut(RaisedCutId(0)).unwrap_err();
+        assert!(error.to_string().contains("generation marked it inactive"));
     }
 }
 

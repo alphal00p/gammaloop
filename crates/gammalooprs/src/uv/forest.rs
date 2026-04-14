@@ -45,6 +45,13 @@ impl ParametricIntegrands {
             cuts: self.cuts,
         }
     }
+
+    pub fn zero_like(&self) -> Self {
+        Self {
+            integrands: vec![Atom::Zero; self.integrands.len()],
+            cuts: self.cuts.clone(),
+        }
+    }
 }
 
 impl CutForests {
@@ -350,4 +357,24 @@ impl Forest {
 
     //     out
     // }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ParametricIntegrands;
+    use crate::graph::cuts::CutSet;
+    use symbolica::{atom::Atom, symbol};
+
+    #[test]
+    fn zero_like_preserves_shape_and_cuts() {
+        let integrands = ParametricIntegrands {
+            integrands: vec![Atom::var(symbol!("x")), Atom::num(7)],
+            cuts: CutSet::empty(3),
+        };
+
+        let zeroed = integrands.zero_like();
+
+        assert_eq!(zeroed.integrands, vec![Atom::Zero, Atom::Zero]);
+        assert_eq!(zeroed.cuts, CutSet::empty(3));
+    }
 }

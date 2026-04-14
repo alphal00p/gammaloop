@@ -98,11 +98,17 @@ impl<'a, OID: IndexLike> SingleOrAllOrientations<'a, OID> {
     }
 }
 
-impl<OID> Length for SingleOrAllOrientations<'_, OID> {
+impl<OID: IndexLike> Length for SingleOrAllOrientations<'_, OID> {
     fn len(&self) -> usize {
         match self {
             SingleOrAllOrientations::Single { .. } => 1,
-            SingleOrAllOrientations::All { all, .. } => all.len(),
+            SingleOrAllOrientations::All { all, filter } => {
+                if filter.is_full() {
+                    all.len()
+                } else {
+                    filter.included_iter().count()
+                }
+            }
         }
     }
 }
@@ -262,6 +268,53 @@ pub struct EvaluatorStack {
     // pub iterative_function_map: Option<GenericEvaluator>,
     pub summed_function_map: Option<GenericEvaluator>,
     pub summed: Option<GenericEvaluator>,
+}
+
+fn sum_iterative_outputs_for_selected_orientations<V>(
+    output: Vec<V>,
+    num_generated_orientations: usize,
+    selected_orientation_ids: &[usize],
+) -> Vec<V>
+where
+    V: Clone + std::ops::AddAssign,
+{
+    assert!(
+        num_generated_orientations > 0,
+        "iterative evaluators must be generated with at least one orientation"
+    );
+    assert!(
+        !selected_orientation_ids.is_empty(),
+        "iterative subset evaluation requires at least one selected orientation"
+    );
+    assert!(
+        selected_orientation_ids
+            .iter()
+            .all(|selected_id| *selected_id < num_generated_orientations),
+        "selected orientation ids {:?} exceed generated orientation count {}",
+        selected_orientation_ids,
+        num_generated_orientations
+    );
+    assert!(
+        output.len().is_multiple_of(num_generated_orientations),
+        "iterative evaluator output length {} is not divisible by the generated orientation count {}",
+        output.len(),
+        num_generated_orientations
+    );
+
+    output
+        .chunks(num_generated_orientations)
+        .map(|chunk| {
+            let mut selected = selected_orientation_ids.iter();
+            let first = *selected
+                .next()
+                .expect("selected orientation ids must be non-empty");
+            let mut sum = chunk[first].clone();
+            for selected_id in selected {
+                sum += chunk[*selected_id].clone();
+            }
+            sum
+        })
+        .collect()
 }
 
 impl EvaluatorStack {
@@ -618,7 +671,7 @@ impl EvaluatorStack {
 
     fn evaluate_iterative<'a, T: FloatLike, OID: IndexLike>(
         &'a mut self,
-        mut input: InputParams<'a, T>,
+        input: InputParams<'a, T>,
         orientations: SingleOrAllOrientations<'a, OID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
@@ -657,38 +710,21 @@ impl EvaluatorStack {
             }
             Ok(result)
         } else {
-            for (_, e) in orientations.iter() {
-                input.set_orientation_values(e);
-
-                let mut val = None;
-                for (i, r) in evaluate_evaluator(
-                    iterative,
-                    input.as_slice(),
-                    evaluation_metadata,
-                    record_primary_timing,
-                )
-                .into_iter()
-                .enumerate()
-                {
-                    if let Some(mut value) = val.take() {
-                        value += r;
-                        if i % *len == 0 {
-                            let pos = i / (*len);
-                            if result.len() >= pos {
-                                result.push(value);
-                            } else {
-                                result[pos] += value;
-                            }
-                            val = None;
-                        } else {
-                            val = Some(value)
-                        }
-                    } else {
-                        val = Some(r);
-                    }
-                }
-            }
-            Ok(result)
+            let selected_orientation_ids = orientations
+                .iter()
+                .map(|(id, _)| usize::from(id))
+                .collect::<Vec<_>>();
+            let output = evaluate_evaluator(
+                iterative,
+                input.as_slice(),
+                evaluation_metadata,
+                record_primary_timing,
+            );
+            Ok(sum_iterative_outputs_for_selected_orientations(
+                output,
+                *len,
+                &selected_orientation_ids,
+            ))
         }
     }
 
@@ -1605,5 +1641,23 @@ mod tests {
         ]));
 
         println!("{:100}", a);
+    }
+
+    #[test]
+    fn iterative_subset_output_sums_only_selected_orientation_blocks() {
+        let output = vec![10, 20, 30, 40, 50, 60];
+
+        let summed = sum_iterative_outputs_for_selected_orientations(output, 3, &[0, 2]);
+
+        assert_eq!(summed, vec![40, 100]);
+    }
+
+    #[test]
+    fn iterative_subset_output_keeps_single_selected_orientation() {
+        let output = vec![10, 20, 30, 40, 50, 60];
+
+        let summed = sum_iterative_outputs_for_selected_orientations(output, 3, &[1]);
+
+        assert_eq!(summed, vec![20, 50]);
     }
 }

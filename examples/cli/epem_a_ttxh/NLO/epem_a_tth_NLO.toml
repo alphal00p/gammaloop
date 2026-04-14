@@ -83,10 +83,14 @@ integral_unit = "picobarn"
 mu_r = 91.188
 m_uv = 91.188
 
+[default_runtime_settings.general.orientation_pat]
+pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
+
 [default_runtime_settings.integrator.observables_output]
 format = ["hwu","json"]
 
 [cli_settings.global.generation.evaluator]
+do_algebra = true
 iterative_orientation_optimization = false
 store_atom = true
 compile = true
@@ -94,6 +98,9 @@ summed = false
 summed_function_map = false
 #horner_iterations = 0
 #cpe_iterations = 0
+
+[cli_settings.global.generation.orientation_pattern]
+pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]

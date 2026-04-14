@@ -1,15 +1,14 @@
 use std::fmt;
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::involution::EdgeIndex;
+use eyre::{Result as EyreResult, eyre};
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
+    atom::{Atom, AtomCore},
     evaluate::{CompileOptions, ExportSettings, InlineASM},
-    function,
+    function, try_parse,
 };
-use tracing::debug;
 
 use crate::{
     GammaLoopContext,
@@ -410,8 +409,25 @@ impl Default for TropicalSubgraphTableSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct OrientationPattern {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(
+        default,
+        skip_serializing_if = "IsDefault::is_default",
+        deserialize_with = "deserialize_orientation_pattern_atom"
+    )]
     pub pat: Option<StringSerializedAtom>,
+}
+
+fn deserialize_orientation_pattern_atom<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Option<StringSerializedAtom>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(deserializer)?;
+    raw.map(|value| OrientationPattern::parse_user_pattern(&value))
+        .transpose()
+        .map(|parsed| parsed.map(StringSerializedAtom))
+        .map_err(serde::de::Error::custom)
 }
 
 impl From<Atom> for OrientationPattern {
@@ -423,6 +439,97 @@ impl From<Atom> for OrientationPattern {
 }
 
 impl OrientationPattern {
+    fn split_top_level_args(input: &str) -> EyreResult<Vec<String>> {
+        let mut args = Vec::new();
+        let mut start = 0usize;
+        let mut depth = 0usize;
+
+        for (index, ch) in input.char_indices() {
+            match ch {
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' => {
+                    if depth == 0 {
+                        return Err(eyre!(
+                            "Unbalanced delimiter in orientation pattern: {input}"
+                        ));
+                    }
+                    depth -= 1;
+                }
+                ',' if depth == 0 => {
+                    let arg = input[start..index].trim();
+                    if arg.is_empty() {
+                        return Err(eyre!("Empty orientation-pattern entry in pattern: {input}"));
+                    }
+                    args.push(arg.to_string());
+                    start = index + ch.len_utf8();
+                }
+                _ => {}
+            }
+        }
+
+        if depth != 0 {
+            return Err(eyre!(
+                "Unbalanced delimiter in orientation pattern: {input}"
+            ));
+        }
+
+        let tail = input[start..].trim();
+        if tail.is_empty() {
+            if args.is_empty() {
+                return Err(eyre!("Orientation pattern cannot be empty"));
+            }
+            return Err(eyre!("Empty orientation-pattern entry in pattern: {input}"));
+        }
+        args.push(tail.to_string());
+
+        Ok(args)
+    }
+
+    fn normalize_user_pattern(pattern: &str) -> EyreResult<String> {
+        let trimmed = pattern.trim();
+        if trimmed.is_empty() {
+            return Err(eyre!("Orientation pattern cannot be empty"));
+        }
+
+        let args = if let Some(rest) = trimmed.strip_prefix("orientation_delta") {
+            let rest = rest.trim();
+            if !(rest.starts_with('(') && rest.ends_with(')')) {
+                return Err(eyre!(
+                    "orientation_delta patterns must use parentheses, got: {pattern}"
+                ));
+            }
+            Self::split_top_level_args(&rest[1..rest.len() - 1])?
+        } else if trimmed.starts_with('(') && trimmed.ends_with(')') {
+            Self::split_top_level_args(&trimmed[1..trimmed.len() - 1])?
+        } else {
+            Self::split_top_level_args(trimmed)?
+        };
+
+        let normalized_args = args
+            .into_iter()
+            .map(|arg| match arg.as_str() {
+                "+" | "+1" => "1".to_string(),
+                "-" | "-1" => "-1".to_string(),
+                _ => arg,
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+
+        Ok(format!("orientation_delta({normalized_args})"))
+    }
+
+    pub fn parse_user_pattern(pattern: &str) -> EyreResult<Atom> {
+        let normalized = Self::normalize_user_pattern(pattern)?;
+        try_parse!(normalized.as_str())
+            .map_err(|error| eyre!("Symbolica parsing error for orientation pattern: {error}"))
+    }
+
+    pub fn from_user_pattern(pattern: &str) -> EyreResult<Self> {
+        Ok(Self {
+            pat: Some(StringSerializedAtom(Self::parse_user_pattern(pattern)?)),
+        })
+    }
+
     pub fn from_orientation<O: GraphOrientation>(orientation: &O) -> Self {
         orientation.orientation_delta().into()
     }
@@ -453,49 +560,54 @@ impl OrientationPattern {
     }
 
     pub fn alt_filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
-        if let Some(pat) = &self.pat {
-            let mut theta_rep = Atom::num(1);
-            let atom_pat = pat.as_view();
+        self.filter(orientation)
+    }
+}
 
-            if let AtomView::Fun(f) = atom_pat {
-                if f.get_symbol() == GS.orientation_delta {
-                    for (edge_id, edge_or) in f.iter().enumerate() {
-                        let edge_id = EdgeIndex::from(edge_id);
-                        if let Ok(sign) = i64::try_from(edge_or) {
-                            match sign {
-                                1 => theta_rep *= GS.sign_theta(GS.sign(edge_id)),
-                                -1 => theta_rep *= GS.sign_theta(-GS.sign(edge_id)),
-                                0 => {
-                                    theta_rep *= GS.sign_theta(GS.sign(edge_id))
-                                        * GS.sign_theta(-GS.sign(edge_id))
-                                }
-                                _ => {
-                                    panic!(
-                                        "arguments of orientation delta function should be -1,0 1"
-                                    )
-                                }
-                            }
-                        } else {
-                            panic!("arguments of orientation delta function should be -1,0 1")
-                        }
-                    }
-                } else {
-                    panic!("pattern should be a orientation delta function")
-                }
-            } else {
-                panic!("pattern should be a orientation delta function")
-            }
+#[cfg(test)]
+mod orientation_pattern_tests {
+    use super::OrientationPattern;
+    use linnet::half_edge::involution::{EdgeVec, Orientation};
 
-            let orientation_theta_rep = orientation.orientation_thetas().to_pattern();
-
-            debug!("matching {} with {}", theta_rep, orientation_theta_rep);
-            theta_rep
-                .pattern_match(&orientation_theta_rep, None, None)
-                .next()
-                .is_some()
-        } else {
-            true
+    fn orientation(value: i8) -> Orientation {
+        match value {
+            1 => Orientation::Default,
+            -1 => Orientation::Reversed,
+            0 => Orientation::Undirected,
+            _ => panic!("invalid orientation encoding"),
         }
+    }
+
+    fn edgevec(values: impl IntoIterator<Item = i8>) -> EdgeVec<Orientation> {
+        EdgeVec::from_iter(values.into_iter().map(orientation))
+    }
+
+    #[test]
+    fn orientation_pattern_deserialization_supports_shorthand_and_missing_wrapper() {
+        let wrapped: OrientationPattern =
+            toml::from_str(r#"pat = "orientation_delta(+,-,0)""#).unwrap();
+        let tuple_only: OrientationPattern = toml::from_str(r#"pat = "(+,-,0)""#).unwrap();
+        let bare_args: OrientationPattern = toml::from_str(r#"pat = "+,-,0""#).unwrap();
+
+        assert_eq!(wrapped, tuple_only);
+        assert_eq!(wrapped, bare_args);
+        assert_eq!(
+            wrapped.pat.as_ref().unwrap().to_string(),
+            "orientation_delta(1,-1,0)"
+        );
+        assert!(wrapped.filter(&edgevec([1, -1, 0])));
+        assert!(!wrapped.filter(&edgevec([1, 1, 0])));
+    }
+
+    #[test]
+    fn orientation_pattern_repeated_wildcards_enforce_identical_bindings() {
+        let pattern: OrientationPattern =
+            toml::from_str(r#"pat = "(+,+,-,x_,-,x_,+,0,+,y_,-,+)""#).unwrap();
+
+        assert!(pattern.filter(&edgevec([1, 1, -1, 1, -1, 1, 1, 0, 1, 0, -1, 1])));
+        assert!(pattern.filter(&edgevec([1, 1, -1, 0, -1, 0, 1, 0, 1, -1, -1, 1])));
+        assert!(!pattern.filter(&edgevec([1, 1, -1, 1, -1, 0, 1, 0, 1, 0, -1, 1])));
+        assert!(pattern.alt_filter(&edgevec([1, 1, -1, 1, -1, 1, 1, 0, 1, 0, -1, 1])));
     }
 }
 

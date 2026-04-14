@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs::{self},
     path::Path,
 };
@@ -32,6 +33,7 @@ use crate::{
             EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId, get_representative,
         },
         expression::OrientationID,
+        surface::HybridSurfaceID,
     },
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
@@ -61,8 +63,9 @@ use crate::{
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample, format_lmb_channel_label, format_orientation_label,
-    histogram_process_info_for_integrand, prepare_buffered_event,
+    evaluate_sample, filtered_orientation_count, format_lmb_channel_label,
+    format_orientation_label, histogram_process_info_for_integrand, prepare_buffered_event,
+    resolve_visible_orientation_id,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -97,15 +100,46 @@ impl AmplitudeGraphTerm {
             return Err(eyre!("Generation interrupted by user"));
         }
         let mut stats = GraphGenerationStats::default();
-        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
+        let selected_generation_orientations = graph
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
             .orientations
             .iter()
-            .map(|a| a.data.orientation.clone())
-            .collect();
+            .filter(|orientation| settings.generation.orientation_pattern.filter(*orientation))
+            .collect_vec();
+        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
+            selected_generation_orientations
+                .iter()
+                .map(|a| a.data.orientation.clone())
+                .collect();
+        if orientations.is_empty() {
+            let pattern = settings
+                .generation
+                .orientation_pattern
+                .pat
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "<empty>".to_string());
+            return Err(eyre!(
+                "Generation orientation pattern {pattern} matched no orientations for graph {}",
+                graph.graph.name
+            ));
+        }
+
+        let selected_generation_esurfaces = selected_generation_orientations
+            .iter()
+            .flat_map(|orientation| {
+                orientation.expression.iter_nodes().filter_map(|tree_node| {
+                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                        Some(esurface_id)
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<HashSet<_>>();
 
         debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
 
@@ -128,12 +162,26 @@ impl AmplitudeGraphTerm {
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
         let mut threshold_evaluators =
             Vec::with_capacity(graph.derived_data.threshold_counterterms.len());
-        for ct in &graph.derived_data.threshold_counterterms {
+        let active_mask: TiVec<EsurfaceID, bool> = graph
+            .derived_data
+            .threshold_counterterms
+            .iter_enumerated()
+            .map(|(esurface_id, _)| selected_generation_esurfaces.contains(&esurface_id))
+            .collect();
+        for (esurface_id, ct) in graph.derived_data.threshold_counterterms.iter_enumerated() {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            let (evaluator, evaluator_timings) =
-                ct.to_evaluator_with_timings(&graph.graph.param_builder, &orientations, settings);
+            let masked_counterterm = if active_mask[esurface_id] {
+                ct.clone()
+            } else {
+                ct.zero_like()
+            };
+            let (evaluator, evaluator_timings) = masked_counterterm.to_evaluator_with_timings(
+                &graph.graph.param_builder,
+                &orientations,
+                settings,
+            );
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
@@ -148,6 +196,10 @@ impl AmplitudeGraphTerm {
             .iter()
             .map(AmplitudeCountertermAtom::is_generated)
             .collect();
+        // `generated_mask` answers "does this threshold slot exist symbolically at all?",
+        // while `active_mask` answers "is that generated slot compatible with the
+        // selected generation-time orientation subset for this evaluator build?"
+        threshold_counterterm.active_mask = active_mask;
 
         threshold_counterterm.esurface_map = esurface_map;
 
@@ -380,7 +432,7 @@ impl AmplitudeGraphTerm {
             orientations,
             evaluation_metadata,
             record_primary_timing,
-        );
+        )?;
         let sum_of_cts = counterterm_evaluation.total.clone();
 
         debug!(
@@ -426,6 +478,19 @@ impl GraphTerm for AmplitudeGraphTerm {
             if settings.general.orientation_pat.filter(o) {
                 self.orientation_filter.add(id);
             }
+        }
+        if self.orientation_filter.included_iter().next().is_none() {
+            let pattern = settings
+                .general
+                .orientation_pat
+                .pat
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "<empty>".to_string());
+            return Err(eyre!(
+                "Runtime orientation pattern {pattern} matched no orientations for graph {}",
+                self.graph.name
+            ));
         }
 
         self.estimated_scale = Some(
@@ -494,7 +559,10 @@ impl GraphTerm for AmplitudeGraphTerm {
 
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
         self.orientations
-            .get(OrientationID::from(orientation_id))
+            .get(resolve_visible_orientation_id(
+                &self.orientation_filter,
+                orientation_id,
+            )?)
             .map(format_orientation_label)
     }
 
@@ -589,7 +657,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_num_orientations(&self) -> usize {
-        self.orientations.len()
+        filtered_orientation_count(&self.orientation_filter, &self.orientations)
     }
 
     fn get_tropical_sampler(&self) -> &SampleGenerator<3> {

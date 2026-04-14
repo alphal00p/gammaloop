@@ -76,8 +76,8 @@ use typed_index_collections::{TiVec, ti_vec};
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample, format_lmb_channel_label, format_orientation_label,
-    histogram_process_info_for_integrand,
+    evaluate_sample, filtered_orientation_count, format_lmb_channel_label,
+    format_orientation_label, histogram_process_info_for_integrand, resolve_visible_orientation_id,
 };
 
 pub mod export;
@@ -493,7 +493,7 @@ impl CrossSectionGraphTerm {
             return Err(eyre!("Generation interrupted by user"));
         }
         let mut stats = GraphGenerationStats::default();
-        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> = graph
+        let selected_generation_orientations = graph
             .derived_data
             .global_cff_expression
             .as_ref()
@@ -501,17 +501,134 @@ impl CrossSectionGraphTerm {
             .orientations
             .iter()
             .filter(|orientation| {
-                orientation.expression.iter_nodes().any(|tree_node| {
-                    graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
-                        tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
+                settings.generation.orientation_pattern.filter(*orientation)
+                    && orientation.expression.iter_nodes().any(|tree_node| {
+                        graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
+                            tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
+                        })
                     })
+            })
+            .collect_vec();
+        let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
+            selected_generation_orientations
+                .iter()
+                .map(|data| data.orientation().clone())
+                .collect();
+        if orientations.is_empty() {
+            let pattern = settings
+                .generation
+                .orientation_pattern
+                .pat
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "<empty>".to_string());
+            return Err(eyre!(
+                "Generation orientation pattern {pattern} matched no orientations for graph {}",
+                graph.graph.name
+            ));
+        }
+
+        let selected_generation_esurfaces = selected_generation_orientations
+            .iter()
+            .flat_map(|orientation| {
+                orientation.expression.iter_nodes().filter_map(|tree_node| {
+                    if let HybridSurfaceID::Esurface(esurface_id) = tree_node.data {
+                        Some(esurface_id)
+                    } else {
+                        None
+                    }
                 })
             })
-            .map(|data| data.orientation().clone())
+            .collect::<HashSet<_>>();
+
+        let active_cuts: TiVec<RaisedCutId, bool> = graph
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .map(|raised_cut_group| {
+                raised_cut_group
+                    .related_esurface_group
+                    .esurface_ids
+                    .iter()
+                    .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
+            })
             .collect();
 
+        let masked_cut_parametric_integrand: TiVec<RaisedCutId, _> = graph
+            .derived_data
+            .cut_paramatric_integrand
+            .iter_enumerated()
+            .map(|(raised_cut_id, integrands)| {
+                if active_cuts[raised_cut_id] {
+                    integrands.clone()
+                } else {
+                    integrands.zero_like()
+                }
+            })
+            .collect();
+
+        let mut active_left_thresholds: TiVec<_, TiVec<_, bool>> = TiVec::new();
+        let mut active_right_thresholds: TiVec<_, TiVec<_, bool>> = TiVec::new();
+        let mut active_iterated_thresholds: TiVec<_, _> = TiVec::new();
+        let mut masked_threshold_counterterms: TiVec<RaisedCutId, _> = TiVec::new();
+        for (raised_cut_id, counterterm_data) in
+            graph.derived_data.threshold_counterterms.iter_enumerated()
+        {
+            let left_active: TiVec<_, bool> = counterterm_data
+                .left_thresholds
+                .iter()
+                .map(|esurface_id| {
+                    active_cuts[raised_cut_id]
+                        && selected_generation_esurfaces.contains(esurface_id)
+                })
+                .collect();
+            let right_active: TiVec<_, bool> = counterterm_data
+                .right_thresholds
+                .iter()
+                .map(|esurface_id| {
+                    active_cuts[raised_cut_id]
+                        && selected_generation_esurfaces.contains(esurface_id)
+                })
+                .collect();
+            let mut iterated_active = counterterm_data.iterated.map_ref(|_| false);
+            for (left_id, _) in counterterm_data.left_thresholds.iter_enumerated() {
+                for (right_id, _) in counterterm_data.right_thresholds.iter_enumerated() {
+                    iterated_active[(left_id, right_id)] =
+                        left_active[left_id] && right_active[right_id];
+                }
+            }
+
+            let mut masked_counterterm_data = counterterm_data.clone();
+            for (left_id, integrands) in masked_counterterm_data.left_atoms.iter_mut_enumerated() {
+                if !left_active[left_id] {
+                    *integrands = integrands.zero_like();
+                }
+            }
+            for (right_id, integrands) in masked_counterterm_data.right_atoms.iter_mut_enumerated()
+            {
+                if !right_active[right_id] {
+                    *integrands = integrands.zero_like();
+                }
+            }
+            for (integrands, is_active) in masked_counterterm_data
+                .iterated
+                .iter_mut()
+                .zip(iterated_active.iter())
+            {
+                if !*is_active {
+                    *integrands = integrands.zero_like();
+                }
+            }
+
+            active_left_thresholds.push(left_active);
+            active_right_thresholds.push(right_active);
+            active_iterated_thresholds.push(iterated_active);
+            masked_threshold_counterterms.push(masked_counterterm_data);
+        }
+
         let mut integrand = TiVec::new();
-        for integrand_for_cut in &graph.derived_data.cut_paramatric_integrand {
+        for integrand_for_cut in &masked_cut_parametric_integrand {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
@@ -552,7 +669,7 @@ impl CrossSectionGraphTerm {
         }
 
         let mut ct_evaluators = TiVec::new();
-        for ct_data in &graph.derived_data.threshold_counterterms {
+        for ct_data in &masked_threshold_counterterms {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
@@ -597,6 +714,10 @@ impl CrossSectionGraphTerm {
             evaluators: ct_evaluators,
             thresholds,
             subspaces: graph.derived_data.subspace_data.clone(),
+            active_cuts,
+            active_left_thresholds,
+            active_right_thresholds,
+            active_iterated_thresholds,
         };
 
         let reversed_edges = graph
@@ -848,7 +969,10 @@ impl GraphTerm for CrossSectionGraphTerm {
 
     fn orientation_label(&self, orientation_id: usize) -> Option<String> {
         self.orientations
-            .get(OrientationID::from(orientation_id))
+            .get(resolve_visible_orientation_id(
+                &self.orientation_filter,
+                orientation_id,
+            )?)
             .map(format_orientation_label)
     }
 
@@ -870,6 +994,19 @@ impl GraphTerm for CrossSectionGraphTerm {
             if settings.general.orientation_pat.filter(or) {
                 self.orientation_filter.add(i);
             }
+        }
+        if self.orientation_filter.included_iter().next().is_none() {
+            let pattern = settings
+                .general
+                .orientation_pat
+                .pat
+                .as_ref()
+                .map(ToString::to_string)
+                .unwrap_or_else(|| "<empty>".to_string());
+            return Err(eyre!(
+                "Runtime orientation pattern {pattern} matched no orientations for graph {}",
+                self.graph.name
+            ));
         }
 
         let externals = settings
@@ -978,6 +1115,14 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         for (raised_cut, raised_cut_group) in self.raised_data.raised_cut_groups.iter_enumerated() {
             let max_occurance = raised_cut_group.related_esurface_group.max_occurence;
+            if !self.counterterm.cut_is_active(raised_cut) {
+                let zero = Complex::new_re(momentum_sample.zero());
+                for _ in 1..=max_occurance {
+                    cut_results[raised_cut].push(zero.clone());
+                }
+                cut_threshold_counterterms.push(zero);
+                continue;
+            }
             debug!("\n =====START EVALUTAION FOR CUT {}=====", raised_cut.0);
             let representative_esurface = &self.cut_esurface[raised_cut_group.cuts[0]];
 
@@ -1039,9 +1184,9 @@ impl GraphTerm for CrossSectionGraphTerm {
             if !prepared_event.selectors_pass {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurance {
-                    cut_threshold_counterterms.push(zero.clone());
                     cut_results[raised_cut].push(zero.clone());
                 }
+                cut_threshold_counterterms.push(zero);
                 continue;
             }
 
@@ -1240,7 +1385,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     orientations,
                     evaluation_metadata,
                     record_primary_timing,
-                )
+                )?
             };
 
             threshold_counterterm_weights.push(ct_result.clone());
@@ -1378,7 +1523,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn get_num_orientations(&self) -> usize {
-        self.orientations.len()
+        filtered_orientation_count(&self.orientation_filter, &self.orientations)
     }
 
     fn get_tropical_sampler(&self) -> &momtrop::SampleGenerator<3> {

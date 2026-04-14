@@ -19,6 +19,7 @@ use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{
     Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
 };
+use linnet::half_edge::typed_vec::IndexLike;
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::dual::HyperDual;
@@ -762,7 +763,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
 }
 
 impl<T: FloatLike> MomentumSample<T> {
-    pub(crate) fn orientations<'a, OID: From<usize> + Copy>(
+    pub(crate) fn orientations<'a, OID: From<usize> + Copy + IndexLike>(
         &self,
         filter: &'a SubSet<OID>,
         orientations: &'a TiVec<OID, EdgeVec<Orientation>>,
@@ -771,7 +772,18 @@ impl<T: FloatLike> MomentumSample<T> {
         usize: From<OID>,
     {
         if let Some(o) = self.sample.orientation {
-            let id = OID::from(o);
+            let id = if filter.is_full() {
+                OID::from(o)
+            } else {
+                filter
+                    .included_iter()
+                    .nth(o)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "sampled orientation index {o} must resolve within the filtered orientation subset"
+                        )
+                    })
+            };
             SingleOrAllOrientations::Single {
                 id,
                 orientation: &orientations[id],

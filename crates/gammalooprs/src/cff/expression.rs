@@ -272,7 +272,7 @@ where
         self.orientations
             .iter()
             .filter_map(|orientation| {
-                if pattern.alt_filter(orientation.orientation()) {
+                if pattern.filter(orientation.orientation()) {
                     Some(orientation.expression.to_atom_inv())
                 } else {
                     None
@@ -289,7 +289,7 @@ where
         self.orientations
             .iter()
             .map(|orientation| {
-                if pattern.alt_filter(orientation.orientation()) {
+                if pattern.filter(orientation.orientation()) {
                     orientation.expression.to_atom_inv()
                 } else {
                     Atom::new()
@@ -305,7 +305,7 @@ where
         self.orientations
             .iter()
             .map(|orientation| {
-                let atom = if pattern.alt_filter(orientation.orientation()) {
+                let atom = if pattern.filter(orientation.orientation()) {
                     orientation.expression.to_atom_inv()
                 } else {
                     Atom::new()

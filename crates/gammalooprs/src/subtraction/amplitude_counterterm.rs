@@ -50,7 +50,15 @@ const TOLERANCE: f64 = 1.0;
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+    // `generated_mask` tracks whether a threshold slot actually has symbolic content.
+    // This is independent of any orientation filtering and reflects the underlying
+    // threshold-generation logic itself.
     pub generated_mask: TiVec<EsurfaceID, bool>,
+    // `active_mask` is an additional generation-time gate coming from the selected
+    // orientation subset. A slot can be generated in principle but inactive for the
+    // current generated evaluator set, in which case we keep its index but compile it
+    // to a zero/dummy evaluator and hard-fail if runtime ever reaches it.
+    pub active_mask: TiVec<EsurfaceID, bool>,
     pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
     pub own_group_position: GraphGroupPosition,
 }
@@ -65,6 +73,13 @@ pub struct AmplitudeCountertermAtom {
 impl AmplitudeCountertermAtom {
     pub(crate) fn is_generated(&self) -> bool {
         self.parametric_local != Atom::new() || self.parametric_integrated != Atom::new()
+    }
+
+    pub(crate) fn zero_like(&self) -> Self {
+        Self {
+            parametric_local: Atom::Zero,
+            parametric_integrated: Atom::Zero,
+        }
     }
 
     #[instrument(
@@ -135,9 +150,21 @@ impl AmplitudeCountertermData {
             overlap: OverlapStructure::new_empty(),
             evaluators: TiVec::new(),
             generated_mask: TiVec::new(),
+            active_mask: TiVec::new(),
             esurface_map: TiVec::new(),
             own_group_position,
         }
+    }
+
+    fn ensure_active_esurface(&self, esurface_id: EsurfaceID) -> Result<()> {
+        if self.active_mask[esurface_id] {
+            return Ok(());
+        }
+
+        Err(color_eyre::eyre::eyre!(
+            "Amplitude threshold evaluator {} was reached at runtime even though generation marked it inactive for the selected orientation subset",
+            esurface_id.0
+        ))
     }
 
     pub fn compile(
@@ -201,7 +228,7 @@ impl AmplitudeCountertermData {
         orientation: SingleOrAllOrientations<'_, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> AmplitudeCountertermEvaluation<T> {
+    ) -> Result<AmplitudeCountertermEvaluation<T>> {
         debug!("start evaluate threshold counterterm");
         let existing_esurfaces = self
             .overlap
@@ -232,17 +259,19 @@ impl AmplitudeCountertermData {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
 
             for existing_esurface_id in group.existing_esurfaces.iter() {
-                let single_result = overlap_builder
-                    .new_esurface_builder(*existing_esurface_id)
-                    .map(|esurface_builder| {
-                        esurface_builder.solve_rstar().rstar_samples().evaluate(
-                            param_builder,
-                            orientation,
-                            evaluation_metadata,
-                            record_primary_timing,
-                        )
-                    })
-                    .unwrap_or_else(|| Complex::new_re(momentum_sample.zero()));
+                let single_result = if let Some(esurface_builder) =
+                    overlap_builder.new_esurface_builder(*existing_esurface_id)
+                {
+                    self.ensure_active_esurface(esurface_builder.esurface_id)?;
+                    esurface_builder.solve_rstar().rstar_samples().evaluate(
+                        param_builder,
+                        orientation,
+                        evaluation_metadata,
+                        record_primary_timing,
+                    )?
+                } else {
+                    Complex::new_re(momentum_sample.zero())
+                };
 
                 if !single_result.is_zero() {
                     debug!(
@@ -259,10 +288,10 @@ impl AmplitudeCountertermData {
                 result += single_result;
             }
         }
-        AmplitudeCountertermEvaluation {
+        Ok(AmplitudeCountertermEvaluation {
             total: result,
             local_counterterms,
-        }
+        })
     }
 }
 
@@ -463,7 +492,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         orientations: SingleOrAllOrientations<'a, OrientationID>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
-    ) -> Complex<F<T>> {
+    ) -> Result<Complex<F<T>>> {
         let esurface_ct_builder = &self.rstar_solution.esurface_ct_builder;
         let ct_builder = esurface_ct_builder.overlap_builder.counterterm_builder;
 
@@ -566,7 +595,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             "esurface {}", esurface_id.0
         );
 
-        final_result
+        Ok(final_result)
     }
 
     fn evaluate_multichanneling_prefactor(
@@ -613,8 +642,10 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::AmplitudeCountertermAtom;
+    use super::{AmplitudeCountertermAtom, AmplitudeCountertermData};
+    use crate::{cff::esurface::EsurfaceID, graph::GraphGroupPosition};
     use symbolica::{atom::Atom, symbol};
+    use typed_index_collections::ti_vec;
 
     #[test]
     fn empty_amplitude_counterterm_atom_is_not_generated() {
@@ -634,5 +665,27 @@ mod tests {
         };
 
         assert!(atom.is_generated());
+    }
+
+    #[test]
+    fn zero_like_amplitude_counterterm_atom_is_zero() {
+        let atom = AmplitudeCountertermAtom {
+            parametric_local: Atom::var(symbol!("x")),
+            parametric_integrated: Atom::var(symbol!("y")),
+        };
+
+        let zeroed = atom.zero_like();
+
+        assert_eq!(zeroed.parametric_local, Atom::Zero);
+        assert_eq!(zeroed.parametric_integrated, Atom::Zero);
+    }
+
+    #[test]
+    fn inactive_amplitude_esurface_guard_reports_runtime_access() {
+        let mut data = AmplitudeCountertermData::new_empty(GraphGroupPosition(0));
+        data.active_mask = ti_vec![false];
+
+        let error = data.ensure_active_esurface(EsurfaceID(0)).unwrap_err();
+        assert!(error.to_string().contains("generation marked it inactive"));
     }
 }

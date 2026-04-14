@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 
+use crate::cff::expression::OrientationID;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
@@ -29,6 +30,7 @@ use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use linnet::half_edge::involution::Orientation;
+use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use momtrop::SampleGenerator;
 use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
@@ -947,6 +949,30 @@ fn format_orientation_label(signature: &EdgeVec<Orientation>) -> String {
             Orientation::Undirected => '0',
         })
         .collect()
+}
+
+pub(crate) fn resolve_visible_orientation_id(
+    orientation_filter: &SubSet<OrientationID>,
+    visible_orientation_id: usize,
+) -> Option<OrientationID> {
+    if orientation_filter.is_full() {
+        Some(OrientationID::from(visible_orientation_id))
+    } else {
+        orientation_filter
+            .included_iter()
+            .nth(visible_orientation_id)
+    }
+}
+
+pub(crate) fn filtered_orientation_count(
+    orientation_filter: &SubSet<OrientationID>,
+    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+) -> usize {
+    if orientation_filter.is_full() {
+        orientations.len()
+    } else {
+        orientation_filter.included_iter().count()
+    }
 }
 
 fn format_lmb_channel_label(edge_ids: &[usize]) -> String {
@@ -3370,7 +3396,13 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 
 #[cfg(test)]
 mod tests {
-    use super::RuntimeCache;
+    use super::{RuntimeCache, filtered_orientation_count, resolve_visible_orientation_id};
+    use crate::cff::expression::OrientationID;
+    use linnet::half_edge::{
+        involution::{EdgeVec, Orientation},
+        subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
+    };
+    use typed_index_collections::TiVec;
 
     #[test]
     fn runtime_cache_serializes_as_empty() {
@@ -3386,5 +3418,29 @@ mod tests {
                 .expect("runtime cache should decode");
         assert_eq!(consumed, 0);
         assert!(decoded.0.is_none());
+    }
+
+    #[test]
+    fn filtered_orientation_helpers_map_visible_indices_into_subset_order() {
+        let orientations = TiVec::<OrientationID, EdgeVec<Orientation>>::from_iter([
+            EdgeVec::from_iter([Orientation::Default]),
+            EdgeVec::from_iter([Orientation::Reversed]),
+            EdgeVec::from_iter([Orientation::Undirected]),
+            EdgeVec::from_iter([Orientation::Default]),
+        ]);
+        let mut filter = SubSet::empty(orientations.len());
+        filter.add(OrientationID(1));
+        filter.add(OrientationID(3));
+
+        assert_eq!(filtered_orientation_count(&filter, &orientations), 2);
+        assert_eq!(
+            resolve_visible_orientation_id(&filter, 0),
+            Some(OrientationID(1))
+        );
+        assert_eq!(
+            resolve_visible_orientation_id(&filter, 1),
+            Some(OrientationID(3))
+        );
+        assert_eq!(resolve_visible_orientation_id(&filter, 2), None);
     }
 }

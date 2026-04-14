@@ -598,6 +598,7 @@ impl AmplitudeGraph {
 
         Ok(())
     }
+
     #[instrument(skip_all, fields(indicatif.pb_show = true,indicatif.pb_msg = "preprocessing"), err)]
     pub(crate) fn preprocess(
         &mut self,
@@ -1313,9 +1314,20 @@ impl Amplitude {
 pub mod test {
 
     use crate::{
-        dot, graph::parse::IntoGraph, initialisation::test_initialise, processes::AmplitudeGraph,
+        cff::expression::OrientationID,
+        dot,
+        graph::{GraphGroupPosition, parse::IntoGraph},
+        initialisation::test_initialise,
+        integrands::process::amplitude::AmplitudeGraphTerm,
+        processes::AmplitudeGraph,
+        settings::{
+            GlobalSettings, RuntimeSettings,
+            global::{GenerationSettings, OrientationPattern, ThresholdSubtractionSettings},
+        },
         utils::load_generic_model,
     };
+    use typed_index_collections::TiVec;
+
     #[test]
     fn amplitude_tree() {
         test_initialise().unwrap();
@@ -1349,5 +1361,88 @@ pub mod test {
         // )
         // .unwrap();
         // println!(" {}", a);
+    }
+
+    #[test]
+    fn generation_orientation_pattern_filters_evaluator_orientations() {
+        test_initialise().unwrap();
+        let mut graph: AmplitudeGraph = dot!(
+            digraph bub {
+                edge [particle=scalar_1]
+                node [num=1]
+                e [style=invis]
+                e -> A:0 [id=3]
+                B:1 -> e [id=2]
+                A -> B [id=1]
+                A -> B [id=0]
+            },
+            "scalars"
+        )
+        .unwrap();
+
+        let model = load_generic_model("scalars");
+        let generation_settings = GenerationSettings {
+            threshold_subtraction: ThresholdSubtractionSettings {
+                enable_thresholds: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let runtime_settings = RuntimeSettings::default();
+        graph
+            .preprocess(&model, &generation_settings, &(&runtime_settings).into())
+            .unwrap();
+
+        assert!(
+            graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations
+                .len()
+                > 1
+        );
+
+        let global_settings = GlobalSettings {
+            generation: GenerationSettings {
+                orientation_pattern: OrientationPattern::from_orientation(
+                    &graph
+                        .derived_data
+                        .cff_expression
+                        .as_ref()
+                        .unwrap()
+                        .orientations[OrientationID(0)],
+                ),
+                threshold_subtraction: ThresholdSubtractionSettings {
+                    enable_thresholds: false,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let (term, _stats) = AmplitudeGraphTerm::from_amplitude_graph(
+            &graph,
+            GraphGroupPosition(0),
+            TiVec::new(),
+            &model,
+            &global_settings,
+        )
+        .unwrap();
+
+        assert_eq!(term.orientations.len(), 1);
+        assert_eq!(
+            term.orientations[OrientationID(0)],
+            graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations[OrientationID(0)]
+            .data
+            .orientation
+        );
     }
 }

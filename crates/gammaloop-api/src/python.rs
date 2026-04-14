@@ -2804,12 +2804,12 @@ impl GammaLoopAPI {
             exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
         })?;
 
-        let or_pattern: OrientationPattern = match orientation_pattern {
-            Some(pattern) => {
-                serde_json::from_str(format!("{{\"pat\": \"{}\"}}", pattern).as_str()).unwrap()
-            }
-            None => OrientationPattern { pat: None },
-        };
+        let or_pattern = orientation_pattern
+            .as_deref()
+            .map(OrientationPattern::from_user_pattern)
+            .transpose()
+            .map_err(|error| exceptions::PyException::new_err(error.to_string()))?
+            .unwrap_or_default();
 
         let atoms = cff.get_orientation_atoms_with_data(or_pattern);
         let inverse_energies = graph::get_cff_inverse_energy_product_impl(&graph, &subgraph, &[]);
