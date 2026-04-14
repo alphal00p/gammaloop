@@ -262,6 +262,18 @@ enum SettingsCatalogKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettingsCompletionMode {
+    Assignment,
+    PathOnly,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SettingsCompletionKind {
+    catalog: SettingsCatalogKind,
+    mode: SettingsCompletionMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ProcessSettingsMutationKind {
     Add,
     Update,
@@ -304,6 +316,12 @@ impl SettingsValueKind {
 enum SettingsPathKind {
     Container,
     Leaf(SettingsValueKind),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SettingsPathCompletionMode {
+    Assignment,
+    PathOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1099,8 +1117,15 @@ fn add_value_suggestions(
         return;
     }
 
-    if let Some(catalog_kind) = settings_catalog_kind(context) {
-        add_settings_kv_suggestions(context, pos, catalog_kind, suggestions, seen);
+    if let Some(kind) = settings_completion_kind(context) {
+        match kind.mode {
+            SettingsCompletionMode::Assignment => {
+                add_settings_kv_suggestions(context, pos, kind.catalog, suggestions, seen);
+            }
+            SettingsCompletionMode::PathOnly => {
+                add_settings_path_only_suggestions(context, pos, kind.catalog, suggestions, seen);
+            }
+        }
     }
 }
 
@@ -1736,14 +1761,31 @@ fn add_generate_literal_suggestion(
     });
 }
 
-fn settings_catalog_kind(context: &CommandContext<'_>) -> Option<SettingsCatalogKind> {
+fn settings_completion_kind(context: &CommandContext<'_>) -> Option<SettingsCompletionKind> {
     if matches_command_path(context, &["set", "global", "kv"]) {
-        Some(SettingsCatalogKind::Global)
+        Some(SettingsCompletionKind {
+            catalog: SettingsCatalogKind::Global,
+            mode: SettingsCompletionMode::Assignment,
+        })
     } else if matches_command_path(context, &["set", "default-runtime", "kv"])
         || matches_command_path(context, &["set", "process", "kv"])
+    {
+        Some(SettingsCompletionKind {
+            catalog: SettingsCatalogKind::Runtime,
+            mode: SettingsCompletionMode::Assignment,
+        })
+    } else if matches_command_path(context, &["display", "settings", "global"]) {
+        Some(SettingsCompletionKind {
+            catalog: SettingsCatalogKind::Global,
+            mode: SettingsCompletionMode::PathOnly,
+        })
+    } else if matches_command_path(context, &["display", "settings", "default-runtime"])
         || matches_command_path(context, &["display", "settings", "process"])
     {
-        Some(SettingsCatalogKind::Runtime)
+        Some(SettingsCompletionKind {
+            catalog: SettingsCatalogKind::Runtime,
+            mode: SettingsCompletionMode::PathOnly,
+        })
     } else {
         None
     }
@@ -1853,7 +1895,42 @@ fn add_settings_kv_suggestions(
         return;
     }
 
-    add_settings_path_suggestions(root, schema, &key_request, pos, suggestions, seen);
+    add_settings_path_suggestions(
+        root,
+        schema,
+        &key_request,
+        SettingsPathCompletionMode::Assignment,
+        pos,
+        suggestions,
+        seen,
+    );
+}
+
+fn add_settings_path_only_suggestions(
+    context: &CommandContext<'_>,
+    pos: usize,
+    catalog_kind: SettingsCatalogKind,
+    suggestions: &mut Vec<Suggestion>,
+    seen: &mut HashSet<String>,
+) {
+    let root = match catalog_kind {
+        SettingsCatalogKind::Global => global_settings_root(),
+        SettingsCatalogKind::Runtime => runtime_settings_root(),
+    };
+    let schema = match catalog_kind {
+        SettingsCatalogKind::Global => global_settings_schema(),
+        SettingsCatalogKind::Runtime => runtime_settings_schema(),
+    };
+
+    add_settings_path_suggestions(
+        root,
+        schema,
+        context.current_token.cooked.as_str(),
+        SettingsPathCompletionMode::PathOnly,
+        pos,
+        suggestions,
+        seen,
+    );
 }
 
 fn add_process_settings_suggestions(
@@ -2139,7 +2216,15 @@ fn add_process_settings_kv_suggestions(
         return;
     }
 
-    add_settings_path_suggestions(root, schema, &key_request, pos, suggestions, seen);
+    add_settings_path_suggestions(
+        root,
+        schema,
+        &key_request,
+        SettingsPathCompletionMode::Assignment,
+        pos,
+        suggestions,
+        seen,
+    );
 }
 
 fn add_literal_value_suggestions<'a>(
@@ -2718,6 +2803,7 @@ fn add_settings_path_suggestions(
     root: &JsonValue,
     schema: &JsonValue,
     key_request: &str,
+    mode: SettingsPathCompletionMode,
     pos: usize,
     suggestions: &mut Vec<Suggestion>,
     seen: &mut HashSet<String>,
@@ -2758,7 +2844,7 @@ fn add_settings_path_suggestions(
 
         let value = map.get(&key);
         let path_kind = settings_path_kind_for_key(value, schema, &container_path, &key);
-        let replacement = render_settings_path_completion(&container_path, &key, path_kind);
+        let replacement = render_settings_path_completion(&container_path, &key, path_kind, mode);
         if !seen.insert(replacement.clone()) {
             continue;
         }
@@ -2954,6 +3040,7 @@ fn render_settings_path_completion(
     container_path: &str,
     key: &str,
     path_kind: SettingsPathKind,
+    mode: SettingsPathCompletionMode,
 ) -> String {
     let mut value = if container_path.is_empty() {
         key.to_string()
@@ -2962,7 +3049,10 @@ fn render_settings_path_completion(
     };
     match path_kind {
         SettingsPathKind::Container => value.push('.'),
-        SettingsPathKind::Leaf(_) => value.push('='),
+        SettingsPathKind::Leaf(_) if mode == SettingsPathCompletionMode::Assignment => {
+            value.push('=')
+        }
+        SettingsPathKind::Leaf(_) => {}
     }
     value
 }
@@ -4122,10 +4212,22 @@ mod tests {
     }
 
     #[test]
-    fn completion_uses_path_hints_instead_of_name_heuristics() {
+    fn completion_offers_global_paths_for_display_settings_global() {
         let values = completion_values("display settings global ", &CompletionState::default());
 
-        assert!(values.is_empty());
+        assert!(values.contains(&"global.".to_string()), "{values:?}");
+        assert!(values.contains(&"state.".to_string()), "{values:?}");
+    }
+
+    #[test]
+    fn completion_offers_path_only_leaves_for_display_settings_global() {
+        let values = completion_values(
+            "display settings global global.",
+            &CompletionState::default(),
+        );
+
+        assert!(values.contains(&"global.display_directive".to_string()));
+        assert!(!values.contains(&"global.display_directive=".to_string()));
     }
 
     #[test]

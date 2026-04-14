@@ -57,7 +57,7 @@ use linnet::half_edge::{
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
-    evaluate::{FunctionMap, OptimizationSettings},
+    evaluate::FunctionMap,
     function, parse, symbol,
 };
 use tracing::{debug, warn};
@@ -752,7 +752,7 @@ impl CrossSectionGraph {
         self.graph.dot_serialize_fmt(writer, settings)
     }
 
-    fn generate_cff(&mut self, _settings: &GenerationSettings) -> Result<GraphGenerationStats> {
+    fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -805,8 +805,11 @@ impl CrossSectionGraph {
             .graph
             .determine_raised_esurfaces_from_expression(&global_cff);
 
-        let (raised_cut_data, raised_cut_stats) =
-            RaisedCutData::new_from_esurface(&esurface_raised_data, &self.cut_esurface_id_map);
+        let (raised_cut_data, raised_cut_stats) = RaisedCutData::new_from_esurface(
+            &esurface_raised_data,
+            &self.cut_esurface_id_map,
+            &settings.evaluator,
+        );
 
         self.derived_data.global_cff_expression = Some(global_cff);
         self.derived_data.raised_data = raised_cut_data;
@@ -1621,6 +1624,7 @@ impl RaisedCutData {
     pub fn new_from_esurface(
         raised_esurface_data: &RaisedEsurfaceData,
         cut_esurface_map: &TiVec<CutId, EsurfaceID>,
+        evaluator_settings: &EvaluatorSettings,
     ) -> (Self, GraphGenerationStats) {
         let mut stats = GraphGenerationStats::default();
         let reversed_map = cut_esurface_map
@@ -1667,7 +1671,7 @@ impl RaisedCutData {
         let pass_two_evaluators = (1..=global_max_occurence)
             .map(|i| {
                 let evaluator_started = std::time::Instant::now();
-                let evaluator = build_derivative_structure(i as u8);
+                let evaluator = build_derivative_structure(i as u8, evaluator_settings);
                 stats.evaluator_symbolica_time += evaluator_started.elapsed();
                 stats.evaluator_count += 1;
                 evaluator
@@ -1700,7 +1704,10 @@ impl CrossSectionDerivedData {
     }
 }
 
-pub(crate) fn build_derivative_structure(order: u8) -> GenericEvaluator {
+pub(crate) fn build_derivative_structure(
+    order: u8,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
     let order = order as i32;
     let f = symbol!("f");
 
@@ -1748,11 +1755,12 @@ pub(crate) fn build_derivative_structure(order: u8) -> GenericEvaluator {
         &params,
         &FunctionMap::default(),
         vec![],
-        OptimizationSettings::default(),
+        evaluator_settings.optimization_settings(),
         None,
-        &EvaluatorSettings::default(),
+        evaluator_settings,
     )
     .unwrap()
+    .into_eager_only()
 }
 
 fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {

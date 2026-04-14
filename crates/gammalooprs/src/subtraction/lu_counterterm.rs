@@ -175,7 +175,7 @@ impl LUCounterTermEvaluators {
         timings += iterated_timings.get();
 
         let symbolica_started = std::time::Instant::now();
-        let pass_two_evaluator = build_derivative_structure(1);
+        let pass_two_evaluator = build_derivative_structure(1, &settings.generation.evaluator);
         timings.symbolica_time += symbolica_started.elapsed();
 
         (

@@ -270,7 +270,7 @@ struct MomentumRow {
     px: String,
     py: String,
     pz: String,
-    #[tabled(rename = "p^2")]
+    #[tabled(rename = "sqrt(p^2)")]
     p2: String,
 }
 
@@ -363,6 +363,10 @@ fn momentum_mass_squared<T: FloatLike>(momentum: &FourMomentum<F<T>>) -> F<T> {
         - momentum.spatial.pz.clone() * momentum.spatial.pz.clone()
 }
 
+fn momentum_mass<T: FloatLike>(momentum: &FourMomentum<F<T>>) -> F<T> {
+    momentum_mass_squared(momentum).abs().sqrt()
+}
+
 fn format_momentum_rows<T: FloatLike>(
     state: String,
     momenta: &[FourMomentum<F<T>>],
@@ -379,7 +383,7 @@ fn format_momentum_rows<T: FloatLike>(
             px: format_real_generic(&momentum.spatial.px),
             py: format_real_generic(&momentum.spatial.py),
             pz: format_real_generic(&momentum.spatial.pz),
-            p2: format_real_generic(&momentum_mass_squared(momentum))
+            p2: format_real_generic(&momentum_mass(momentum))
                 .bright_yellow()
                 .to_string(),
         })

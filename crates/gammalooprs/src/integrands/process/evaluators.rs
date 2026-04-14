@@ -209,6 +209,13 @@ impl std::fmt::Display for ActiveF64Backend {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Encode, Decode, PartialEq, Eq)]
+pub enum EvaluatorBackendPolicy {
+    #[default]
+    FollowIntegrand,
+    EagerOnly,
+}
+
 #[derive(Clone)]
 pub struct SymjitComplexEvaluatorGL(JITCompiledEvaluator<SymComplex<f64>>);
 
@@ -930,6 +937,7 @@ pub struct GenericEvaluator {
     pub exprs: Option<Vec<Atom>>,
     pub fn_map_entries: Vec<FnMapEntry>,
     pub exprs_len: usize,
+    pub backend_policy: EvaluatorBackendPolicy,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
     pub f64_compiled: Option<CompiledCode<Complex<f64>>>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
@@ -942,6 +950,21 @@ pub struct GenericEvaluator {
 }
 
 impl GenericEvaluator {
+    pub(crate) fn into_eager_only(mut self) -> Self {
+        self.backend_policy = EvaluatorBackendPolicy::EagerOnly;
+        self.activate_eager_only();
+        self
+    }
+
+    fn activate_eager_only(&mut self) {
+        self.f64_compiled = None;
+        self.activate_eager();
+    }
+
+    fn is_eager_only(&self) -> bool {
+        matches!(self.backend_policy, EvaluatorBackendPolicy::EagerOnly)
+    }
+
     pub(crate) fn compute_out_size(&self) -> usize {
         let number_type_size = if let Some(dual_shape) = &self.dual_shape {
             dual_shape.iter().map(|vec| vec.len()).sum()
@@ -959,6 +982,11 @@ impl GenericEvaluator {
         lib_path: impl AsRef<Path>,
         frozen_mode: &FrozenCompilationMode,
     ) -> Result<()> {
+        if self.is_eager_only() {
+            self.activate_eager_only();
+            return Ok(());
+        }
+
         let compile_options = frozen_mode
             .to_symbolica_compile_options()
             .ok_or_else(|| eyre!("Frozen mode {frozen_mode} is not externally compiled"))?;
@@ -989,6 +1017,11 @@ impl GenericEvaluator {
     }
 
     pub(crate) fn activate_symjit(&mut self) -> Result<()> {
+        if self.is_eager_only() {
+            self.activate_eager_only();
+            return Ok(());
+        }
+
         let rational = self
             .rational
             .as_ref()
@@ -1006,6 +1039,11 @@ impl GenericEvaluator {
         &mut self,
         backend: ActiveF64Backend,
     ) -> Result<()> {
+        if self.is_eager_only() {
+            self.activate_eager_only();
+            return Ok(());
+        }
+
         let compiled = self
             .f64_compiled
             .as_ref()
@@ -1018,10 +1056,14 @@ impl GenericEvaluator {
     }
 
     pub(crate) fn has_external_compiled_artifact(&self) -> bool {
-        self.f64_compiled.is_some()
+        self.is_eager_only() || self.f64_compiled.is_some()
     }
 
     pub(crate) fn active_f64_backend(&self) -> ActiveF64Backend {
+        if self.is_eager_only() {
+            return ActiveF64Backend::Eager;
+        }
+
         self.active_f64_backend
             .as_ref()
             .copied()
@@ -1141,6 +1183,7 @@ impl GenericEvaluator {
             } else {
                 None
             },
+            backend_policy: EvaluatorBackendPolicy::FollowIntegrand,
             rational: Some(rational),
             f64_compiled: None,
             f64_eager,
