@@ -226,7 +226,7 @@ fn build_evaluator<A: ImportWithMap>(
     let optimization_settings = OptimizationSettings {
         horner_iterations: 10,
         n_cores: 10,
-        abort_check: Some(Box::new(crate::is_interrupt_requested as fn() -> bool)),
+        abort_check: None,
         ..Default::default()
     };
     let exprs = payload
@@ -570,12 +570,20 @@ fn load_json(path: impl AsRef<Path>) -> Result<LoadedStandaloneCrossSection> {
     archive.load()
 }
 
+fn default_input_path() -> PathBuf {
+    let binary = PathBuf::from("standalone_cross_section.bin");
+    if binary.exists() {
+        binary
+    } else {
+        PathBuf::from("standalone_cross_section.json")
+    }
+}
+
 fn main() -> Result<()> {
-    let input = PathBuf::from(
-        std::env::args()
-            .nth(1)
-            .unwrap_or_else(|| "standalone_cross_section.bin".to_string()),
-    );
+    let input = std::env::args()
+        .nth(1)
+        .map(PathBuf::from)
+        .unwrap_or_else(default_input_path);
 
     let Some(ext) = input.extension() else {
         return Err(eyre!("No extension, expected .bin or .json"));
