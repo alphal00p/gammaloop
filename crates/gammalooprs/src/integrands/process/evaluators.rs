@@ -1,6 +1,7 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier, metric::MetricSimplifier};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     subgraph::{SubSetIter, SubSetLike, subset::SubSet},
@@ -473,7 +474,16 @@ impl EvaluatorStack {
             .iter()
             .map(|a| {
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
-                let mut net = a.as_atom_view().parse_into_net()?;
+                let mut net = if settings.do_algebra {
+                    a.as_atom_view()
+                        .simplify_color()
+                        .simplify_gamma()
+                        .simplify_metrics()
+                        .to_dots()
+                        .parse_into_net()?
+                } else {
+                    a.as_atom_view().parse_into_net()?
+                };
 
                 // println!("Executing {}", net.dot_pretty());
                 net.execute::<Sequential, SmallestDegree, _, _, _>(

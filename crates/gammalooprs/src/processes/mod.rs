@@ -28,6 +28,8 @@ pub use generation_report::{
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "is_false")]
+    pub do_algebra: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     pub iterative_orientation_optimization: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
@@ -65,6 +67,7 @@ impl Default for EvaluatorSettings {
         Self {
             iterative_orientation_optimization: true,
             summed: false,
+            do_algebra: false,
             summed_function_map: false,
             compile: false,
             do_fn_map_replacements: false,
