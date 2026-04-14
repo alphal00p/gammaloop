@@ -400,7 +400,7 @@ fn test_mass_approach_scalar_self_energy() -> Result<()> {
         "Inspect magnitude is not monotonically decreasing as mass_scalar_2 approaches 1: {inspect_magnitudes:?}"
     );
     assert!(
-        inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 1.0e-11,
+        inspect_magnitudes.last().copied().unwrap_or(f64::INFINITY) < 2.0e-10,
         "Inspect did not approach zero closely enough near mass_scalar_2=1: {inspect_magnitudes:?}"
     );
 

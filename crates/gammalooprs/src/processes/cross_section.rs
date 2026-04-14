@@ -994,8 +994,8 @@ impl CrossSectionGraph {
         Ok(parametric_integrands
             .into_iter()
             .zip(cutkosky_corrections)
-            .map(|(integrand, _cutkosky_correction)| {
-                integrand.map(|a| a * &lu_prefactor /* * &cutkosky_correction */)
+            .map(|(integrand, cutkosky_correction)| {
+                integrand.map(|a| a * &lu_prefactor * &cutkosky_correction)
             })
             .collect())
     }

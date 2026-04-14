@@ -72,7 +72,7 @@ use symbolica::{
     numerical_integration::{Grid, Sample},
 };
 use tracing::debug;
-use typed_index_collections::TiVec;
+use typed_index_collections::{TiVec, ti_vec};
 
 use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
@@ -958,8 +958,9 @@ impl GraphTerm for CrossSectionGraphTerm {
         ]);
         let masses = self.graph.get_real_mass_vector(model);
         let hel = settings.kinematics.externals.get_helicities();
-        let mut cut_results = TiVec::<CutId, Complex<F<T>>>::new();
-        let mut cut_threshold_counterterms = TiVec::<CutId, Complex<F<T>>>::new();
+        let mut cut_results: TiVec<RaisedCutId, Vec<Complex<F<T>>>> =
+            ti_vec![Vec::new(); self.raised_data.raised_cut_groups.len()];
+        let mut cut_threshold_counterterms = TiVec::<RaisedCutId, Complex<F<T>>>::new();
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
@@ -1041,7 +1042,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurance {
                     cut_threshold_counterterms.push(zero.clone());
-                    cut_results.push(zero.clone());
+                    cut_results[raised_cut].push(zero.clone());
                 }
                 continue;
             }
@@ -1220,11 +1221,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                 debug!("pass_two_result: {:+16e}", pass_two_result);
                 //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-                let bare_contribution = pass_two_result
-                    * prefactor
-                    * Complex::new_im(momentum_sample.one()).pow(num_esurfaces as u64);
+                let bare_contribution = pass_two_result * prefactor;
                 bare_cut_total += bare_contribution.clone();
-                cut_results.push(bare_contribution);
+                cut_results[raised_cut].push(bare_contribution);
             }
 
             let ct_result = if settings.subtraction.disable_threshold_subtraction {
@@ -1281,10 +1280,22 @@ impl GraphTerm for CrossSectionGraphTerm {
             .iter_enumerated()
             .zip(cut_threshold_counterterms.iter())
         {
-            debug!("cut {} results:", cut_id);
-            debug!("bare result: {:+16e}", result);
-            debug!("threshold counterterm: {:+16e}", ct_result);
-            all_cut_result += result + ct_result;
+            for (i, bare_contribution) in result.iter().enumerate() {
+                debug!(
+                    "cut {} contribution with {} esurfaces: {:+16e}",
+                    cut_id.0,
+                    i + 1,
+                    bare_contribution
+                );
+
+                all_cut_result += bare_contribution;
+            }
+
+            debug!(
+                "threshold counterterm for cut {}: {:+16e}",
+                cut_id.0, ct_result
+            );
+            all_cut_result += ct_result;
         }
 
         let resolved_integral_unit = settings.general.integral_unit.resolve_for_cross_section(
