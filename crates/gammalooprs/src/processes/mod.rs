@@ -12,7 +12,7 @@ use tracing::debug;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     settings::{GlobalSettings, runtime::LockedRuntimeSettings},
-    utils::serde_utils::{IsDefault, is_false, is_usize},
+    utils::serde_utils::{IsDefault, is_false, is_true, is_usize},
 };
 use serde::{Deserialize, Serialize};
 
@@ -20,8 +20,8 @@ use crate::model::Model;
 
 mod generation_report;
 pub use generation_report::{
-    GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats, NamedGraphGenerationReport,
-    merge_generated_graph_reports,
+    EvaluatorBuildTimings, GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats,
+    NamedGraphGenerationReport, merge_generated_graph_reports,
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
@@ -29,7 +29,10 @@ pub use generation_report::{
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_algebra: bool,
-    #[serde(default, skip_serializing_if = "is_false")]
+    #[serde(
+        default = "evaluator_default_iterative_orientation_optimization",
+        skip_serializing_if = "is_true"
+    )]
     pub iterative_orientation_optimization: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
@@ -41,44 +44,84 @@ pub struct EvaluatorSettings {
     pub store_atom: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
-    #[serde(default, skip_serializing_if = "is_usize::<10>")]
+    #[serde(
+        default = "evaluator_default_horner_iterations",
+        skip_serializing_if = "is_usize::<10>"
+    )]
     pub horner_iterations: usize,
-    #[serde(default, skip_serializing_if = "is_usize::<10>")]
+    #[serde(
+        default = "evaluator_default_n_cores",
+        skip_serializing_if = "is_usize::<1>"
+    )]
     pub n_cores: usize,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub cpe_iterations: Option<usize>,
-    #[serde(default, skip_serializing_if = "is_usize::<10>")]
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub abort_level: usize,
 
-    #[serde(default, skip_serializing_if = "is_usize::<10>")]
+    #[serde(
+        default = "evaluator_default_max_horner_scheme_variables",
+        skip_serializing_if = "is_usize::<500>"
+    )]
     pub max_horner_scheme_variables: usize,
 
-    #[serde(default, skip_serializing_if = "is_usize::<10>")]
+    #[serde(
+        default = "evaluator_default_max_common_pair_cache_entries",
+        skip_serializing_if = "is_usize::<1000000>"
+    )]
     pub max_common_pair_cache_entries: usize,
 
-    #[serde(default, skip_serializing_if = "is_usize::<10>")]
+    #[serde(
+        default = "evaluator_default_max_common_pair_distance",
+        skip_serializing_if = "is_usize::<1000>"
+    )]
     pub max_common_pair_distance: usize,
     #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
 }
 
+const fn evaluator_default_iterative_orientation_optimization() -> bool {
+    true
+}
+
+const fn evaluator_default_horner_iterations() -> usize {
+    10
+}
+
+const fn evaluator_default_n_cores() -> usize {
+    1
+}
+
+const fn evaluator_default_max_horner_scheme_variables() -> usize {
+    500
+}
+
+const fn evaluator_default_max_common_pair_cache_entries() -> usize {
+    1_000_000
+}
+
+const fn evaluator_default_max_common_pair_distance() -> usize {
+    1000
+}
+
 impl Default for EvaluatorSettings {
     fn default() -> Self {
         Self {
-            iterative_orientation_optimization: true,
+            iterative_orientation_optimization:
+                evaluator_default_iterative_orientation_optimization(),
             summed: false,
             do_algebra: false,
             summed_function_map: false,
             compile: false,
             do_fn_map_replacements: false,
             store_atom: false,
-            horner_iterations: 10,
-            n_cores: 1,
+            horner_iterations: evaluator_default_horner_iterations(),
+            n_cores: evaluator_default_n_cores(),
             cpe_iterations: None,
             abort_level: 0,
-            max_horner_scheme_variables: 500,
-            max_common_pair_cache_entries: 1_000_000,
-            max_common_pair_distance: 1000,
+            max_horner_scheme_variables: evaluator_default_max_horner_scheme_variables(),
+            max_common_pair_cache_entries: evaluator_default_max_common_pair_cache_entries(),
+            max_common_pair_distance: evaluator_default_max_common_pair_distance(),
             verbose: false,
         }
     }

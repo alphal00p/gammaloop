@@ -29,8 +29,8 @@ use crate::{
         sample::{LoopMomenta, MomentumSample, SubspaceData},
     },
     processes::{
-        IteratedCtCollection, LUCounterTermData, LeftThresholdId, RaisedCutId, RightThresholdId,
-        build_derivative_structure,
+        EvaluatorBuildTimings, IteratedCtCollection, LUCounterTermData, LeftThresholdId,
+        RaisedCutId, RightThresholdId, build_derivative_structure,
     },
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
@@ -82,7 +82,8 @@ impl LUCounterTermEvaluators {
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
-    ) -> Self {
+    ) -> (Self, EvaluatorBuildTimings) {
+        let mut timings = EvaluatorBuildTimings::default();
         let left_thresholds_evaluator = counterterm_data
             .left_atoms
             .iter()
@@ -98,14 +99,16 @@ impl LUCounterTermEvaluators {
                             None
                         };
 
-                        EvaluatorStack::new(
-                            &[atom.clone()],
+                        let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
+                            std::slice::from_ref(atom),
                             param_builder,
                             &orientations.raw,
                             dual_shape,
                             &settings.generation.evaluator,
                         )
-                        .unwrap()
+                        .unwrap();
+                        timings += evaluator_timings;
+                        evaluator
                     })
                     .collect()
             })
@@ -126,19 +129,22 @@ impl LUCounterTermEvaluators {
                             None
                         };
 
-                        EvaluatorStack::new(
-                            &[atom.clone()],
+                        let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
+                            std::slice::from_ref(atom),
                             param_builder,
                             &orientations.raw,
                             dual_shape,
                             &settings.generation.evaluator,
                         )
-                        .unwrap()
+                        .unwrap();
+                        timings += evaluator_timings;
+                        evaluator
                     })
                     .collect()
             })
             .collect();
 
+        let iterated_timings = std::cell::Cell::new(EvaluatorBuildTimings::default());
         let iterated_evaluator = counterterm_data.iterated.map_ref(|parametric_integrands| {
             parametric_integrands
                 .integrands
@@ -151,26 +157,36 @@ impl LUCounterTermEvaluators {
                         None
                     };
 
-                    EvaluatorStack::new(
-                        &[atom.clone()],
+                    let (evaluator, evaluator_timings) = EvaluatorStack::new_with_timings(
+                        std::slice::from_ref(atom),
                         param_builder,
                         &orientations.raw,
                         dual_shape,
                         &settings.generation.evaluator,
                     )
-                    .unwrap()
+                    .unwrap();
+                    let mut timings = iterated_timings.get();
+                    timings += evaluator_timings;
+                    iterated_timings.set(timings);
+                    evaluator
                 })
                 .collect()
         });
+        timings += iterated_timings.get();
 
+        let symbolica_started = std::time::Instant::now();
         let pass_two_evaluator = build_derivative_structure(1);
+        timings.symbolica_time += symbolica_started.elapsed();
 
-        LUCounterTermEvaluators {
-            left_thresholds_evaluator,
-            right_thresholds_evaluator,
-            iterated_evaluator,
-            pass_two_evaluator,
-        }
+        (
+            LUCounterTermEvaluators {
+                left_thresholds_evaluator,
+                right_thresholds_evaluator,
+                iterated_evaluator,
+                pass_two_evaluator,
+            },
+            timings,
+        )
     }
 
     pub(crate) fn compile(
@@ -296,6 +312,12 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
             lu_cut_parameter_cache: Vec::new(),
             lu_cut_esurface_values: Vec::new(),
         }
+    }
+}
+
+impl<T: FloatLike> Default for LUCTKinematicPoint<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -714,14 +736,12 @@ impl LUCounterTerm {
             pass_one_result,
             Complex::new_re(kinematic_point.lu_cut_esurface_values[0].clone()),
         ];
-        let pass_two_result = evaluate_evaluator_single(
+        evaluate_evaluator_single(
             &mut self.evaluators[cut_id].pass_two_evaluator,
             &params_for_pass_two,
             evaluation_meta_data,
             record_primary_timing,
-        );
-
-        pass_two_result
+        )
     }
 }
 

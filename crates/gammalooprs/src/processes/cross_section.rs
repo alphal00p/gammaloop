@@ -1667,7 +1667,7 @@ impl RaisedCutData {
             .map(|i| {
                 let evaluator_started = std::time::Instant::now();
                 let evaluator = build_derivative_structure(i as u8);
-                stats.evaluator_build_time += evaluator_started.elapsed();
+                stats.evaluator_symbolica_time += evaluator_started.elapsed();
                 stats.evaluator_count += 1;
                 evaluator
             })

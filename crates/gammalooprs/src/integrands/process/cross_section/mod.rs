@@ -528,8 +528,7 @@ impl CrossSectionGraphTerm {
                     None
                 };
 
-                let evaluator_started = Instant::now();
-                let evaluator_stack = EvaluatorStack::new(
+                let (evaluator_stack, evaluator_timings) = EvaluatorStack::new_with_timings(
                     slice::from_ref(integrand_for_subset),
                     &graph.graph.param_builder,
                     &orientations.raw,
@@ -545,7 +544,7 @@ impl CrossSectionGraphTerm {
                 if crate::is_interrupted() {
                     return Err(eyre!("Generation interrupted by user"));
                 }
-                stats.evaluator_build_time += evaluator_started.elapsed();
+                stats.add_evaluator_build_timings(evaluator_timings);
                 stats.evaluator_count += evaluator_stack.generic_evaluator_count();
                 cut_integrands.push(evaluator_stack);
             }
@@ -557,8 +556,7 @@ impl CrossSectionGraphTerm {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            let evaluator_started = Instant::now();
-            let evaluators = LUCounterTermEvaluators::from_atoms(
+            let (evaluators, evaluator_timings) = LUCounterTermEvaluators::from_atoms(
                 ct_data,
                 &graph.graph.param_builder,
                 settings,
@@ -567,7 +565,7 @@ impl CrossSectionGraphTerm {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            stats.evaluator_build_time += evaluator_started.elapsed();
+            stats.add_evaluator_build_timings(evaluator_timings);
             stats.evaluator_count += evaluators.generic_evaluator_count();
             ct_evaluators.push(evaluators);
         }

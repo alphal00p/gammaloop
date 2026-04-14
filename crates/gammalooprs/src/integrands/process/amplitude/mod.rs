@@ -109,11 +109,10 @@ impl AmplitudeGraphTerm {
 
         debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations \n{}",graph.graph.param_builder.table());
 
-        let evaluator_started = std::time::Instant::now();
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
-        let original_integrand = EvaluatorStack::new(
+        let (original_integrand, evaluator_timings) = EvaluatorStack::new_with_timings(
             &[&graph.derived_data.all_mighty_integrand],
             &graph.graph.param_builder,
             orientations.as_slice().as_ref(),
@@ -123,7 +122,7 @@ impl AmplitudeGraphTerm {
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
         }
-        stats.evaluator_build_time += evaluator_started.elapsed();
+        stats.add_evaluator_build_timings(evaluator_timings);
         stats.evaluator_count += original_integrand.generic_evaluator_count();
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
@@ -133,12 +132,12 @@ impl AmplitudeGraphTerm {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            let evaluator_started = std::time::Instant::now();
-            let evaluator = ct.to_evaluator(&graph.graph.param_builder, &orientations, settings);
+            let (evaluator, evaluator_timings) =
+                ct.to_evaluator_with_timings(&graph.graph.param_builder, &orientations, settings);
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
-            stats.evaluator_build_time += evaluator_started.elapsed();
+            stats.add_evaluator_build_timings(evaluator_timings);
             stats.evaluator_count += evaluator.evaluator_stack.borrow().generic_evaluator_count();
             threshold_evaluators.push(evaluator);
         }

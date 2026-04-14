@@ -33,7 +33,7 @@ commands = [
       --symmetrize-left-right-states true
       -p epem_a_tth -i NLO
       --global-prefactor-num "1𝑖"
-	  --select-graphs GL00 
+	  --select-graphs GL00
       --only-diagrams""",
     "save dot",
 ]
@@ -92,6 +92,8 @@ store_atom = false
 compile = false
 summed = false
 summed_function_map = false
+horner_iterations = 0
+cpe_iterations = 0
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]

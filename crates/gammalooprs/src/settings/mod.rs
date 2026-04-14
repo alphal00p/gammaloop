@@ -201,6 +201,32 @@ mod tests {
     }
 
     #[test]
+    fn evaluator_settings_partial_tables_use_evaluator_defaults() {
+        use crate::processes::EvaluatorSettings;
+
+        let parsed: EvaluatorSettings =
+            toml::from_str("horner_iterations = 0\ncpe_iterations = 0\n").unwrap();
+
+        assert_eq!(
+            parsed,
+            EvaluatorSettings {
+                horner_iterations: 0,
+                cpe_iterations: Some(0),
+                ..EvaluatorSettings::default()
+            }
+        );
+
+        let serialized = toml::to_string(&parsed).unwrap();
+        assert!(serialized.contains("horner_iterations = 0"));
+        assert!(serialized.contains("cpe_iterations = 0"));
+        assert!(!serialized.contains("iterative_orientation_optimization"));
+        assert!(!serialized.contains("n_cores"));
+        assert!(!serialized.contains("max_horner_scheme_variables"));
+        assert!(!serialized.contains("max_common_pair_cache_entries"));
+        assert!(!serialized.contains("max_common_pair_distance"));
+    }
+
+    #[test]
     fn compile_test_serialize_deserialize() {
         use crate::settings::global::GammaloopCompileOptions;
         generic_test_settings::<GammaloopCompileOptions>();

@@ -404,7 +404,8 @@ pub(crate) fn render_generation_summary(
         "graph".bold().blue().to_string(),
         "# evals".bold().blue().to_string(),
         "expr build".bold().blue().to_string(),
-        "evaluator build".bold().blue().to_string(),
+        "spenso".bold().blue().to_string(),
+        "symbolica eval".bold().blue().to_string(),
         "compile".bold().blue().to_string(),
     ]);
 
@@ -416,10 +417,15 @@ pub(crate) fn render_generation_summary(
             format_generation_duration(expr_time).magenta(),
             format_generation_fraction(expr_time, total_time).cyan()
         );
-        let evaluator_build_value = format!(
+        let spenso_value = format!(
             "{} ({})",
-            format_generation_duration(report.stats.evaluator_build_time).magenta(),
-            format_generation_fraction(report.stats.evaluator_build_time, total_time).cyan()
+            format_generation_duration(report.stats.evaluator_spenso_time).magenta(),
+            format_generation_fraction(report.stats.evaluator_spenso_time, total_time).cyan()
+        );
+        let symbolica_value = format!(
+            "{} ({})",
+            format_generation_duration(report.stats.evaluator_symbolica_time).magenta(),
+            format_generation_fraction(report.stats.evaluator_symbolica_time, total_time).cyan()
         );
         let compile_value = format!(
             "{} ({})",
@@ -437,7 +443,8 @@ pub(crate) fn render_generation_summary(
                 .yellow()
                 .to_string(),
             expr_value,
-            evaluator_build_value,
+            spenso_value,
+            symbolica_value,
             compile_value,
         ]);
     }

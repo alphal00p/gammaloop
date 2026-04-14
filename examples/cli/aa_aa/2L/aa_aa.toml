@@ -57,7 +57,7 @@ m_uv = 91.188
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
 store_atom = false
-compile = true
+compile = false
 summed = false
 summed_function_map = false
 horner_iterations = 5
@@ -92,7 +92,7 @@ disable_tropical_generation = false
 [default_runtime_settings.sampling]
 graphs = "monte_carlo"
 orientations = "summed"
-lmb_multichanneling = true
+lmb_multichanneling = false
 lmb_channels = "summed"
 coordinate_system = "spherical"
 mapping = "linear"

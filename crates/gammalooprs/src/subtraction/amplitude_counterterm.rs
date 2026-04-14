@@ -29,6 +29,7 @@ use crate::{
         Rotation,
         sample::{LoopMomenta, MomentumSample},
     },
+    processes::EvaluatorBuildTimings,
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
@@ -70,24 +71,27 @@ impl AmplitudeCountertermAtom {
            skip_all,
            fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Threshold CT Evaluator"),
        )]
-    pub(crate) fn to_evaluator(
+    pub(crate) fn to_evaluator_with_timings(
         &self,
         param_builder: &ParamBuilder,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
-    ) -> AmplitudeCountertermEvaluator {
-        AmplitudeCountertermEvaluator {
-            evaluator_stack: RefCell::new(
-                EvaluatorStack::new(
-                    &[&self.parametric_local, &self.parametric_integrated],
-                    param_builder,
-                    orientations.as_slice().as_ref(),
-                    None,
-                    &global_settings.generation.evaluator,
-                )
-                .unwrap(),
-            ),
-        }
+    ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
+        let (evaluator_stack, timings) = EvaluatorStack::new_with_timings(
+            &[&self.parametric_local, &self.parametric_integrated],
+            param_builder,
+            orientations.as_slice().as_ref(),
+            None,
+            &global_settings.generation.evaluator,
+        )
+        .unwrap();
+
+        (
+            AmplitudeCountertermEvaluator {
+                evaluator_stack: RefCell::new(evaluator_stack),
+            },
+            timings,
+        )
     }
 
     pub(crate) fn new() -> Self {

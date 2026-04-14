@@ -50,7 +50,7 @@ use crate::{
     },
     momentum::{Helicity, sample::MomentumSample},
     numerator::symbolica_ext::AtomCoreExt,
-    processes::EvaluatorSettings,
+    processes::{EvaluatorBuildTimings, EvaluatorSettings},
     settings::{RuntimeSettings, global::FrozenCompilationMode},
     utils::{
         ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
@@ -458,11 +458,6 @@ impl EvaluatorStack {
             settings,
         )
     }
-    #[instrument(
-           skip_all,
-           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
-           err
-       )]
     pub fn new<A: AtomCore>(
         atoms: &[A],
         param_builder: &ParamBuilder,
@@ -470,6 +465,23 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
+        Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
+    }
+
+    #[instrument(
+           skip_all,
+           fields(indicatif.pb_show = true, indicatif.pb_msg = "Building Evaluator Stack"),
+           err
+       )]
+    pub(crate) fn new_with_timings<A: AtomCore>(
+        atoms: &[A],
+        param_builder: &ParamBuilder,
+        orientations: &[EdgeVec<Orientation>],
+        dual_shape: Option<Vec<Vec<usize>>>,
+        settings: &EvaluatorSettings,
+    ) -> Result<(Self, EvaluatorBuildTimings)> {
+        let mut timings = EvaluatorBuildTimings::default();
+        let spenso_started = std::time::Instant::now();
         let parsed_atoms = atoms
             .iter()
             .map(|a| {
@@ -503,7 +515,9 @@ impl EvaluatorStack {
                     })
             })
             .collect::<Result<Vec<_>>>()?;
+        timings.spenso_time += spenso_started.elapsed();
 
+        let symbolica_started = std::time::Instant::now();
         let iterative = if settings.iterative_orientation_optimization {
             Some(
                 Self::new_iterative(
@@ -552,13 +566,17 @@ impl EvaluatorStack {
         let single_parametric =
             Self::new_single_parametric(&parsed_atoms, param_builder, &dual_shape, settings)
                 .with_context(|| "Failed to create parametric")?;
+        timings.symbolica_time += symbolica_started.elapsed();
 
-        Ok(EvaluatorStack {
-            single_parametric,
-            iterative,
-            summed_function_map,
-            summed,
-        })
+        Ok((
+            EvaluatorStack {
+                single_parametric,
+                iterative,
+                summed_function_map,
+                summed,
+            },
+            timings,
+        ))
     }
 
     fn evaluate_parametric<'a, T: FloatLike, OID: IndexLike>(
