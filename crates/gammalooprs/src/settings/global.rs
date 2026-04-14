@@ -213,7 +213,6 @@ impl fmt::Display for ExternalCompilationOptionsSnapshot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
-#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum FrozenCompilationMode {
     Eager,
     Symjit,

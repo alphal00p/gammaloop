@@ -28,6 +28,14 @@ build-api:
 build-api-abi:
     maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
 
+# Build gammaloop Python API with UFO support and dev-optim profile
+build-api-wheel:
+	maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
+
+# Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
+build-api-abi-weel:
+    maturin build -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_abi --profile=dev-optim
+
 # Build gammaloop Python API with UFO support and release profile
 build-api-release:
 	maturin develop -m crates/gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=release
