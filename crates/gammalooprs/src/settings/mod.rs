@@ -140,7 +140,7 @@ mod tests {
         momentum::{Dep, ExternalMomenta, Helicity},
         settings::{
             GlobalSettings, RuntimeSettings, SamplingSettings,
-            global::GenerationSettings,
+            global::{GammaloopCompileOptions, GenerationSettings},
             runtime::{
                 DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
                 GammaloopTropicalSamplingSettings,
@@ -529,6 +529,7 @@ mod tests {
         use std::collections::{BTreeMap, BTreeSet};
 
         let settings = UVgenerationSettings {
+            softct: true,
             renormalization_schemes: BTreeMap::from([
                 (
                     CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
@@ -542,7 +543,16 @@ mod tests {
             ..Default::default()
         };
 
-        let toml = toml::to_string_pretty(&settings).unwrap();
+        let toml = toml::to_string_pretty(&GenerationSettings {
+            compile: GammaloopCompileOptions {
+                compiler: "symjit".to_string(),
+                ..Default::default()
+            },
+            uv: settings.clone(),
+            ..Default::default()
+        })
+        .unwrap();
+        println!("{}", toml);
         assert!(toml.contains("[[renormalization_schemes]]"));
 
         let deserialized_from_toml: UVgenerationSettings = toml::from_str(&toml).unwrap();

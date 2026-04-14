@@ -107,7 +107,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         )
     }
 
-    fn renormalization_scheme<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+    fn approximation_scheme<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
         settings: &UVgenerationSettings,
@@ -115,7 +115,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        settings.renormalization_scheme_for(&self.ct_identifier(subgraph))
+        settings.approximation_scheme_for(&self.ct_identifier(subgraph))
     }
 
     fn classify_spinney<E: UVE, V, H>(
@@ -127,7 +127,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        let renormalization_scheme = self.renormalization_scheme(&spinney.filter, settings);
+        let renormalization_scheme = self.approximation_scheme(&spinney.filter, settings);
 
         (renormalization_scheme != ApproximationType::Unsubtracted)
             .then(|| Spinney::with_scheme(spinney, self, lmb, renormalization_scheme))

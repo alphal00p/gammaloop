@@ -1079,7 +1079,7 @@ impl Graph {
                 }
             }
             let external = underlying.internal_crown(&full);
-            underlying.lmb_impl(&full, full_cut, external)
+            underlying.lmb_impl(&full, full_cut, external)?
         } else {
             return Err(eyre!(
                 "No included edges found in full_cut for loop momentum basis setup"

@@ -370,7 +370,7 @@ impl UVgenerationSettings {
         self.generate_only_integrated_uv_with_n_loops
     }
 
-    pub fn renormalization_scheme_for(&self, ct_identifier: &CTIdentifier) -> ApproximationType {
+    pub fn approximation_scheme_for(&self, ct_identifier: &CTIdentifier) -> ApproximationType {
         if let Some(scheme) = self.renormalization_schemes.get(ct_identifier) {
             return *scheme;
         }
@@ -451,7 +451,7 @@ mod tests {
         };
 
         assert_eq!(
-            settings.renormalization_scheme_for(&exact_identifier),
+            settings.approximation_scheme_for(&exact_identifier),
             ApproximationType::OS
         );
     }
@@ -468,7 +468,7 @@ mod tests {
         };
 
         assert_eq!(
-            settings.renormalization_scheme_for(&candidate_identifier),
+            settings.approximation_scheme_for(&candidate_identifier),
             ApproximationType::OS
         );
     }
@@ -485,7 +485,7 @@ mod tests {
         };
 
         assert_eq!(
-            settings.renormalization_scheme_for(&candidate_identifier),
+            settings.approximation_scheme_for(&candidate_identifier),
             ApproximationType::Unsubtracted
         );
     }
@@ -495,10 +495,8 @@ mod tests {
         let settings = UVgenerationSettings::default();
 
         assert_eq!(
-            settings.renormalization_scheme_for(&CTIdentifier::new(
-                pdg_set([1]),
-                Some(pdg_set([1, 22]))
-            )),
+            settings
+                .approximation_scheme_for(&CTIdentifier::new(pdg_set([1]), Some(pdg_set([1, 22])))),
             ApproximationType::MUV
         );
     }

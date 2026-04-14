@@ -1,0 +1,29 @@
+commands = [
+  "import model sm-default",
+  "import graphs ./tests/resources/graphs/dgse.dot",
+  "generate",
+  "profile infra-red"
+]
+
+[cli_settings.global]
+logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "info"
+
+[cli_settings.global.generation.uv]
+generate_integrated = false
+softct = false
+add_sigma = false
+inner_products = true
+
+[[cli_settings.global.generation.uv.renormalization_schemes]]
+renormalization_scheme = "IR"
+
+[cli_settings.global.generation.uv.renormalization_schemes.ct_identifier]
+external_pdg_set = [1]
+
+[cli_settings.global.generation.tropical_subgraph_table]
+panic_on_fail = false
+disable_tropical_generation = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false

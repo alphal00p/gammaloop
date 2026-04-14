@@ -22,7 +22,7 @@ pyo3-stub-gen = { workspace = true ,optional =true }
 nu-ansi-term = { workspace = true }
 
 [dev-dependencies]
-insta = { version = "1.38.0", features = ["yaml", "json", "ron", "toml"] }
+insta = { workspace = true, features = ["yaml", "json", "ron", "toml"] }
 
 [features]
 

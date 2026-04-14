@@ -424,7 +424,7 @@ pub mod vertex;
 pub use vertex::Vertex;
 
 pub mod lmb;
-pub use lmb::{LMBext, LmbIndex, LoopMomentumBasis};
+pub use lmb::{LMBext, LmbError, LmbIndex, LoopMomentumBasis};
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Eq)]
 pub struct GraphGroup {

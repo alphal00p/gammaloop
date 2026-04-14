@@ -14,11 +14,11 @@ path = "src/lib.rs"
 [dependencies]
 bincode = { workspace = true, features = ["serde"] }
 color-eyre = "0.6"
-colored = "*"
+colored = { workspace = true }
 eyre = {workspace = true}
 gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }
-insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
+insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 itertools = "0.14"
 momtrop = { version = "0.3.0" }
 spenso = { workspace = true, features = ["shadowing"] }
@@ -30,7 +30,7 @@ tabled = { version = "0.20.0", features = ["ansi"] }
 toml = { workspace = true }
 tracing = { version = "0.1.41", features = ["release_max_level_info"] }
 vakint = {workspace=true}
-which = "8.0.0"
+which = { workspace = true }
 serial_test = "3.2.0"
 rand = { workspace = true, features = ["small_rng"] }
 ndarray = "0.17"

@@ -1,0 +1,14 @@
+digraph se {
+
+num = "spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(1)))"
+
+ext    [style=invis]
+ext -> v1:0 [particle=d];
+ext -> v5:2 [particle=g];
+v4:1 -> ext [particle=d];
+v1 -> v2 ->v3 ->v4 [particle=d];
+
+v1 -> v5 -> v4 [particle=g];
+
+v2 -> v3  [particle=g];
+}

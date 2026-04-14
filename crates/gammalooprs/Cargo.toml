@@ -34,16 +34,14 @@ colored = { workspace = true }
 ctrlc = "3.4.4"
 delegate = "0.12.0"
 derive_more = "0.99.17"
-dirs = "5"
+dirs = { workspace = true }
 dot-parser = { workspace = true }
 enum_dispatch = "*"
 eyre = { workspace = true }
 git-version = { workspace = true }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }
-indexmap = "2.2.2"
-indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
-insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
+indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
 libc = "0.2.0"
 
 itertools = { workspace = true }
@@ -117,7 +115,6 @@ typed-index-collections = { workspace = true, features = [
 vakint = { workspace = true }
 varpro = "0.14.0"
 vectorize = "0.2.0"
-which = "8.0.0"
 
 [dependencies.pyo3]
 workspace = true
@@ -126,6 +123,7 @@ optional = true
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 # oneloop_bridge = { git = "https://github.com/SecretGmG/OneLOopBridge", version = "0.2.0" }
 
 [build-dependencies]

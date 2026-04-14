@@ -33,20 +33,18 @@ color-eyre = "0.6.5"
 colored = { workspace = true }
 console = "0.16.0"
 crossterm = "0.28.1"
-dirs = "6.0.0"
+dirs = { workspace = true }
 eyre = { workspace = true }
 figment = { version = "0.10.19", features = ["json", "toml"] }
 gammalooprs = { workspace = true }
 git-version = { workspace = true, optional = true }
 idenso = { workspace = true }
 include_dir = { workspace = true }
-indexmap = "2.2.2"
-indicatif = "0.18.4"
+indicatif = { workspace = true }
 itertools = { workspace = true }
 json5 = "0.4.1"
 linnet = { workspace = true, features = [
   "bincode",
-  "drawing",
   "serde",
   "symbolica",
 ] }

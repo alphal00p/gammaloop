@@ -8,8 +8,11 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 use gammalooprs::{
-    integrands::process::ir::{IRProfileSetting, IrLimitTestReport},
-    integrands::process::ProcessIntegrand,
+    integrands::process::{
+        ir::{IRProfileSetting, IrLimitTestReport},
+        ProcessIntegrand,
+    },
+    processes::ProcessCollection,
     uv::{
         profile::{ProfileSettings, UVProfileable},
         UVProfileAnalysis,
@@ -237,20 +240,45 @@ impl Profile {
 
                 let (process_id, integrand_name) =
                     state.find_integrand_ref(process.as_ref(), integrand_name.as_ref())?;
-                let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
-                let process_ref = ProcessRef::Id(process_id);
-                let cross_section = state
-                    .process_list
-                    .get_cross_section_mut_ref(Some(&process_ref), Some(&integrand_name))?;
 
-                let profile_result = match cross_section.integrand.as_mut().ok_or(eyre!(
+                let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
+
+                let process = &mut state.process_list.processes[process_id];
+                let integrand = match &mut process.collection {
+                    ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                        .get_mut(&integrand_name)
+                        .ok_or_else(|| {
+                            eyre!(
+                                "No amplitude named '{}' in process '{}'",
+                                integrand_name,
+                                process.definition.folder_name
+                            )
+                        })?
+                        .integrand
+                        .as_mut(),
+                    ProcessCollection::CrossSections(xs) => xs
+                        .get_mut(&integrand_name)
+                        .ok_or_else(|| {
+                            eyre!(
+                                "No xs named '{}' in process '{}'",
+                                integrand_name,
+                                process.definition.folder_name
+                            )
+                        })?
+                        .integrand
+                        .as_mut(),
+                };
+
+                let profile_result = match integrand.ok_or(eyre!(
                     "Integrand {} has not yet been generated",
-                    cross_section.name
+                    integrand_name
                 ))? {
                     ProcessIntegrand::CrossSection(cross_section_integrand) => {
                         cross_section_integrand.test_ir(&ir_profile_settings, &model)?
                     }
-                    _ => unreachable!(),
+                    ProcessIntegrand::Amplitude(amplitude_integrand) => {
+                        amplitude_integrand.test_ir(&ir_profile_settings, &model)?
+                    }
                 };
 
                 info!("\n{}", profile_result);

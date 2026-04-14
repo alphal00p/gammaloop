@@ -713,7 +713,7 @@ impl CrossSectionGraph {
         debug!("generating cff");
         stats.merge_in_place(&self.generate_cff(settings)?);
         debug!("building lmbs");
-        self.build_lmbs();
+        self.build_lmbs()?;
         debug!("building multi channeling channels");
 
         if self.graph.is_group_master {
@@ -1089,7 +1089,7 @@ impl CrossSectionGraph {
         local_prefactor + integrated_prefactor
     }
 
-    fn build_lmbs(&mut self) {
+    fn build_lmbs(&mut self) -> Result<()> {
         let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
 
         let externals: SuBitGraph = self.graph.empty_subgraph();
@@ -1097,7 +1097,7 @@ impl CrossSectionGraph {
         let cut_graph = full_filter.subtract(&self.graph.initial_state_cut.right);
 
         for s in self.graph.all_spanning_forests_of(&cut_graph) {
-            let mut lmb = self.graph.lmb_impl(&full_filter, &s, externals.clone());
+            let mut lmb = self.graph.lmb_impl(&full_filter, &s, externals.clone())?;
             let mut exts = vec![];
 
             for i in lmb.loop_edges.iter() {
@@ -1127,7 +1127,8 @@ impl CrossSectionGraph {
             lmbs.push(lmb);
         }
 
-        self.derived_data.lmbs = Some(lmbs)
+        self.derived_data.lmbs = Some(lmbs);
+        Ok(())
     }
 
     fn build_multi_channeling_channels(&mut self, override_lmb_heuristics: bool) {

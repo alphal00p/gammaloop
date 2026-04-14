@@ -48,6 +48,47 @@ use symbolica::{
 };
 
 #[test]
+fn soft_ct_test() {
+    test_initialise().unwrap();
+    let mut amp: AmplitudeGraph = dot!(
+        digraph physical_1L_4photons_0 {
+        ext    [style=invis]
+        ext -> v1 [particle=a];
+        ext -> v2 [particle=a];
+        v3 -> ext [particle=a];
+        v4 -> ext [particle=a];
+        v1 -> v2 [particle=t];
+        v2 -> v3 [particle=t];
+        v3 -> v4 [particle=t];
+        v4 -> v1 [particle=t];
+        }
+    )
+    .unwrap();
+
+    let set = GenerationSettings {
+        orientation_pattern: OrientationPattern::from_orientation(
+            &amp.derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations[OrientationID(0)],
+        ),
+        uv: UVgenerationSettings {
+            generate_integrated: true,
+            softct: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let vk = crate::utils::vakint().unwrap();
+
+    amp.generate_cff().unwrap();
+    amp.build_integrands(&set, vk).unwrap();
+
+    println!("{}", amp.derived_data.all_mighty_integrand);
+}
+
+#[test]
 fn four_photon_one_loop_amp() {
     test_initialise().unwrap();
     let mut amp: AmplitudeGraph = dot!(

@@ -4385,7 +4385,12 @@ impl ProcessDefinition {
                         .unwrap();
 
                         let external = graph.internal_crown(&full_filter);
-                        graph.lmb_impl(&full_filter, &tree.tree_subgraph, external)
+                        graph
+                            .lmb_impl(&full_filter, &tree.tree_subgraph, external)
+                            .map_err(|source| FeynGenError::LoopMomentumBasisError {
+                                graph_name: graph.name.clone(),
+                                source,
+                            })?
                     } else {
                         return Err(FeynGenError::Eyre(eyre!(
                             "No included edges found in full_cut for loop momentum basis setup"

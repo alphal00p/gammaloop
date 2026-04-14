@@ -44,7 +44,7 @@ eyre = { workspace = true }
 features = "0.10.0"
 # flexi_logger = "0.28.5"
 gat-lending-iterator = "0.1.5"
-indexmap = { version = "2.2.6", features = ["serde"] }
+indexmap = { workspace = true, features = ["serde"] }
 linnet = { workspace = true, features = ["bincode", "serde"] }
 # itertools = "0.14.0"
 log = "0.4.22"
@@ -70,14 +70,14 @@ thiserror = { workspace = true }
 
 pyo3 = { workspace = true, optional = true }
 
-colored = "3.0.0"
+colored = { workspace = true }
 itertools = "0.14.0"
 nu-ansi-term = { workspace = true }
 pyo3-stub-gen = { workspace = true, optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-insta = { version = "1.38.0", features = ["json", "ron", "toml", "yaml"] }
+insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
 ron = "0.8"
 
 [features]

@@ -17,14 +17,18 @@ use symbolica::atom::Atom;
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
-use crate::model::Model;
+use crate::{graph::LmbError, model::Model};
 
 #[derive(Error, Debug)]
 pub enum FeynGenError {
     #[error("{0}")]
     GenericError(String),
-    #[error("Invalid loop momentum basis | {0}")]
-    LoopMomentumBasisError(String),
+    #[error("failed to build loop momentum basis for graph '{graph_name}'")]
+    LoopMomentumBasisError {
+        graph_name: String,
+        #[source]
+        source: LmbError,
+    },
     #[error("Could not convert symbolica graph symmetry factor to an integer: {0}")]
     SymmetryFactorError(String),
     #[error("Could not numerically evaluate numerator: {0}")]

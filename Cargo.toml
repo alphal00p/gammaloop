@@ -12,6 +12,7 @@ bincode = "2.0.0"
 bincode-trait-derive = "0.1.1"
 clap = "4.5.47"
 colored = "3.0.0"
+dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
 gammaloop-api = { path = "crates/gammaloop-api/" }
@@ -19,6 +20,9 @@ gammalooprs = { path = "crates/gammalooprs/" }
 git-version = "0.3"
 idenso = { path = "crates/idenso/" }
 include_dir = "0.7"
+indexmap = "2.7.0"
+indicatif = "0.18.4"
+insta = "1.46.3"
 itertools = "0.14"
 linnest = { path = "crates/linnest/" }
 linnet = { path = "crates/linnet/" }
@@ -52,11 +56,12 @@ tracing-subscriber = "0.3.19"
 typed-index-collections = "3.3.0"
 vakint = { path = "crates/vakint/" }
 vergen-gitcl = { version = "9", default-features = false }
+which = "8.0.0"
 
 [patch.crates-io]
-#graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-#numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-#symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+# graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+# numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
+# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
@@ -64,9 +69,6 @@ symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1
 [profile.bench]
 opt-level = 3
 lto = "fat"
-
-[profile.dev.package]
-insta.opt-level = 3
 
 [profile.release]
 lto = "fat"
@@ -79,10 +81,10 @@ opt-level = 2
 [profile.dev-optim.package."*"]
 opt-level = 3
 
-[profile.dev-optim.package.gammalooprs]
+[profile.dev-optim.package.gammaloop-api]
 opt-level = 2
 
-[profile.dev-optim.package.gammaloop-api]
+[profile.dev-optim.package.gammalooprs]
 opt-level = 2
 
 [profile.profiling]
