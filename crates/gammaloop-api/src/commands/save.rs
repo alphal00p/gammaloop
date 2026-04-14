@@ -41,6 +41,9 @@ pub enum Save {
         #[arg(long,num_args(0..=1), default_missing_value = "true",
                value_parser = clap::builder::BoolishValueParser::new(),)]
         do_color_algebra: Option<bool>,
+        #[arg(long, num_args(0..=1), default_missing_value = "true",
+               value_parser = clap::builder::BoolishValueParser::new(),)]
+        split_xs_by_initial_states: Option<bool>,
     },
     Standalone {
         #[arg(value_hint = clap::ValueHint::FilePath)]
@@ -78,6 +81,7 @@ impl Save {
                 output_full_numerator,
                 do_color_algebra,
                 do_gamma_algebra,
+                split_xs_by_initial_states,
                 with_uv,
             } => {
                 // Use original default location (state folder) or custom path if provided
@@ -104,7 +108,7 @@ impl Save {
                     do_color_algebra: do_color_algebra.unwrap_or(false),
                     do_gamma_algebra: do_gamma_algebra.unwrap_or(false),
                     output_full_numerator: output_full_numerator.unwrap_or(false),
-                    split_xs_by_initial_states: true,
+                    split_xs_by_initial_states: split_xs_by_initial_states.unwrap_or(true),
                     with_uv: with_uv.unwrap_or(false),
                     combine_diagrams,
                 };
@@ -356,6 +360,7 @@ mod tests {
             output_full_numerator: None,
             do_gamma_algebra: None,
             do_color_algebra: None,
+            split_xs_by_initial_states: None,
         }
         .run(
             &mut state,

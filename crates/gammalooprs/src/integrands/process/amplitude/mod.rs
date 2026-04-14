@@ -48,7 +48,7 @@ use crate::{
     model::Model,
     momentum::sample::{ExternalIndex, MomentumSample},
     momentum::signature::SignatureLike,
-    momentum::{Rotation, RotationMethod, SignOrZero},
+    momentum::{Helicity, Rotation, RotationMethod, SignOrZero},
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
     processes::{AmplitudeGraph, GraphGenerationStats, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
@@ -708,6 +708,65 @@ pub mod export;
 pub mod load;
 
 impl AmplitudeIntegrand {
+    fn warn_on_off_shell_external_states(&self, model: &Model) -> Result<()> {
+        let externals = self
+            .settings
+            .kinematics
+            .externals
+            .get_dependent_externals::<f64>(DependentMomentaConstructor::Amplitude(
+                &self.data.external_signature,
+            ))?;
+        let masses = self.data.graph_terms[0].graph.get_external_masses(model);
+        let particles = self.data.graph_terms[0].graph.get_external_partcles();
+        let helicities = self.settings.kinematics.externals.get_helicities();
+
+        if externals.len() != masses.len()
+            || externals.len() != particles.len()
+            || externals.len() != helicities.len()
+        {
+            return Ok(());
+        }
+
+        let one = F::<f64>::from_f64(1.0);
+        let threshold = F::<f64>::from_f64(1.0e-8)
+            * (F::<f64>::from_f64(self.settings.kinematics.e_cm).square() + one);
+
+        for (external_index, (((momentum, mass), particle), helicity)) in externals
+            .iter()
+            .zip(masses.iter())
+            .zip(particles.iter())
+            .zip(helicities.iter())
+            .enumerate()
+        {
+            if particle.is_scalar() || !matches!(helicity, Helicity::Signed(_)) {
+                continue;
+            }
+
+            let expected_mass_sq = mass.square();
+            let actual_mass_sq = momentum.square();
+            let mass_sq_difference = actual_mass_sq.clone() - expected_mass_sq.clone();
+            let off_shellness = if mass_sq_difference < mass_sq_difference.zero() {
+                -mass_sq_difference
+            } else {
+                mass_sq_difference
+            };
+
+            if off_shellness > threshold {
+                warn!(
+                    "External state {external_index} ('{}', PDG {}, helicity {}) is off shell: p^2 = {:+e}, expected m^2 = {:+e} (|Δ| = {:+e}). Fixed-helicity spinor/vector/tensor external states may be ill-defined at this kinematic point.",
+                    particle.name,
+                    particle.pdg_code,
+                    helicity,
+                    actual_mass_sq,
+                    expected_mass_sq,
+                    off_shellness
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn frozen_compilation(&self) -> &FrozenCompilationMode {
         &self.data.compilation
     }
@@ -1071,6 +1130,7 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
             .kinematics
             .externals
             .improve_and_cache(constructor, &masses, &e_cm)?;
+        self.warn_on_off_shell_external_states(model)?;
 
         let thresholds_generated = self
             .data

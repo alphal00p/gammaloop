@@ -1,12 +1,14 @@
 digraph se {
 
-num = "spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(1)))"
+projector = "spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(100)))*spenso::g(spenso::dind(spenso::cof(3,hedge(101))),spenso::cof(3,hedge(1)))*spenso::t(spenso::coad(8,hedge(2)),spenso::cof(3,hedge(101)),spenso::dind(spenso::cof(3,hedge(100))))*u(2,spenso::bis(4,hedge(0)))*ubar(7,spenso::bis(4,hedge(1)))*ϵ(3,spenso::mink(4,hedge(2)))"
 
 ext    [style=invis]
 ext -> v1:0 [particle=d];
 ext -> v5:2 [particle=g];
 v4:1 -> ext [particle=d];
-v1 -> v2 ->v3 ->v4 [particle=d];
+v1 -> v2[ id=0 particle=d];
+v2 -> v3[particle=d];
+v3 ->v4 [ id=1 particle=d];
 
 v1 -> v5 -> v4 [particle=g];
 

@@ -93,6 +93,9 @@ impl<'a> LockedRuntimeSettings<'a> {
                     ..
                 } => {
                     if momenta.is_empty() && helicities.is_empty() {
+                        warn!(
+                            "No external kinematics were provided; using default-generated external momenta and helicities."
+                        );
                         let new_externals = generate_default_momenta(
                             external_masses,
                             external_signature,

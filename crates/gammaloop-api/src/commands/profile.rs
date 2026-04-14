@@ -125,6 +125,20 @@ pub struct InfraRedProfile {
     pub select: Option<String>,
 }
 
+impl Default for InfraRedProfile {
+    fn default() -> Self {
+        Self {
+            process: None,
+            integrand_name: None,
+            n_points: 20,
+            min_scale_exponent: -2.0,
+            max_scale_exponent: -3.0,
+            seed: None,
+            output_file: None,
+            select: None,
+        }
+    }
+}
 impl Default for UltraVioletProfile {
     fn default() -> Self {
         Self {
@@ -151,6 +165,13 @@ impl ProfileResult {
         match self {
             ProfileResult::UltraViolet(uv_analyis) => uv_analyis,
             _ => panic!("result does not contain uv profilel analysis data"),
+        }
+    }
+
+    pub fn unwrap_ir(self) -> IrLimitTestReport {
+        match self {
+            ProfileResult::InfraRed(ir_analyis) => ir_analyis,
+            _ => panic!("result does not contain ir profile analysis data"),
         }
     }
 }

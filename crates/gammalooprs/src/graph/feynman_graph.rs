@@ -639,11 +639,10 @@ impl FeynmanGraph for Graph {
     }
 
     fn get_external_partcles(&self) -> Vec<ArcParticle> {
-        self.iter_edges()
-            .filter_map(|(pair, _, data)| match pair {
-                HedgePair::Unpaired { .. } => data.data.particle(),
-                _ => None,
-            })
+        let external_filter: SuBitGraph = self.external_filter();
+
+        self.iter_edges_of(&external_filter)
+            .filter_map(|(_, _, data)| data.data.particle())
             .collect()
     }
 

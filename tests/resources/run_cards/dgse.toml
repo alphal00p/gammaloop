@@ -2,8 +2,28 @@ commands = [
   "import model sm-default",
   "import graphs ./tests/resources/graphs/dgse.dot",
   "generate",
-  "profile infra-red"
 ]
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [
+    0.2,
+    0.0,
+    0.0,
+    0.2,
+  ],
+  [
+    0.3,
+    0.1,
+    0.0,
+    -0.282842712474619,
+  ],
+  "dependent",
+]
+helicities = [1, 1, 1]
 
 [cli_settings.global]
 logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
@@ -11,7 +31,7 @@ display_directive = "info"
 
 [cli_settings.global.generation.uv]
 generate_integrated = false
-softct = false
+softct = true
 add_sigma = false
 inner_products = true
 

@@ -10,7 +10,10 @@ use crate::{
         GenerationType,
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     },
-    graph::{GraphGroup, GroupId, LoopMomentumBasis, edge::EdgeExtraData},
+    graph::{
+        GraphGroup, GroupId, LoopMomentumBasis, attribute_warnings::warn_about_unknown_attributes,
+        edge::EdgeExtraData,
+    },
     integrands::process::ParamBuilder,
     model::Model,
     momentum::sample::LoopIndex,
@@ -18,14 +21,17 @@ use crate::{
         GlobalPrefactor,
         aind::{Aind, NewAind},
         graph::GeneratePolarizations,
+        symbolica_ext::AtomCoreExt,
         ufo::UFO,
     },
     processes::DotExportSettings,
     utils::symbolica_ext::DOD,
+    uv::UltravioletGraph,
 };
 use ahash::{AHashMap, AHashSet};
+use idenso::color::ColorSimplifier;
 
-use color_eyre::{Result, Section};
+use color_eyre::{Report, Result, Section};
 
 use eyre::{Context, Ok, eyre};
 use itertools::Itertools;
@@ -53,8 +59,8 @@ use symbolica::{
     atom::{Atom, AtomOrView},
     graph::Graph as SymbolicaGraph,
 };
-use tracing::debug;
 use tracing::instrument;
+use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 use super::{
@@ -562,6 +568,7 @@ impl ParseGraph {
 
 impl ParseGraph {
     pub(crate) fn from_parsed(graph: DotGraph, model: &Model) -> Result<Self> {
+        warn_about_unknown_attributes(&graph);
         let global_data = graph.global_data.into();
         let graph = graph
             .graph
@@ -781,9 +788,44 @@ impl Graph {
 
         g.param_builder = updated_param_builder_with_lmb;
 
+        g.validate_full_numerator_tensor_network()
+            .with_context(|| {
+                format!(
+                    "Failed to validate full numerator tensor network for graph {}",
+                    g.name
+                )
+            })?;
+
         debug!("{}", g.debug_dot());
 
         Ok(g)
+    }
+
+    fn validate_full_numerator_tensor_network(&self) -> Result<()> {
+        let full_num = self
+            .numerator(&self.full_filter(), &self.empty_subgraph())
+            .get_single_atom()
+            .unwrap()
+            * &self.global_prefactor.num
+            * &self.global_prefactor.projector
+            * &self.overall_factor;
+        let color_simplified = full_num.as_view().simplify_color();
+        if !full_num.is_zero() && color_simplified.is_zero() {
+            warn!(
+                "Full numerator for graph '{}' becomes zero after color algebra. The graph/projector color structure likely annihilates the amplitude.",
+                self.name
+            );
+        }
+        let net = full_num.parse_into_net().map_err(Report::from)?;
+        let dangling = net.graph.dangling_indices();
+        if !dangling.is_empty() {
+            return Err(eyre!(
+                "Full numerator still has dangling tensor indices: {}",
+                dangling.iter().map(|slot| format!("{slot:?}")).join(", ")
+            ));
+        }
+
+        Ok(())
     }
 
     fn extract_initial_data(

@@ -490,6 +490,7 @@ impl AmplitudeIntegrand {
             .iter()
             .map(|loop_id| (*loop_id, sample_random_unit_vector(rng)))
             .collect_vec();
+
         let externals = self.data.graph_terms[graph_id]
             .graph
             .get_external_signature();
