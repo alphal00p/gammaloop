@@ -81,8 +81,8 @@ fn assert_bubble_uv_profile_passes(cli: &mut CLIState, process: &str) -> Result<
     let res = Profile::UltraViolet(UltraVioletProfile {
         process: Some(ProcessRef::Unqualified(process.to_string())),
         integrand_name: Some("scalar_bubble_below_thres".to_string()),
-        min_scale_exponent: 3.0,
-        max_scale_exponent: 5.0,
+        min_scale_exponent: 4.0,
+        max_scale_exponent: 6.0,
         per_orientation: true,
         ..Default::default()
     })
