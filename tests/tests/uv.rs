@@ -6,10 +6,91 @@ use gammaloop_api::commands::{
 };
 use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{
-    clean_test, get_example_cli, get_test_cli, get_tests_workspace_path,
+    CLIState, clean_test, get_example_cli, get_test_cli, get_tests_workspace_path,
 };
 use gammalooprs::utils::F;
 use spenso::algebra::complex::Complex;
+
+fn run_bubble_below_threshold_integration(
+    cli: &mut CLIState,
+    test_name: &str,
+    no_integrated_process: &str,
+    integrated_process: &str,
+    no_integrated_target: f64,
+    integrated_target: f64,
+) -> Result<()> {
+    cli.run_command("run generate")?;
+    cli.run_command(
+        "set process kv integrator.target_relative_accuracy=0.005 \
+         integrator.n_increase=0 integrator.n_start=50000 \
+         integrator.n_max=1000000 integrator.seed=1337",
+    )?;
+    let integration_result = Integrate {
+        process: vec![
+            ProcessRef::Unqualified(no_integrated_process.to_string()),
+            ProcessRef::Unqualified(integrated_process.to_string()),
+        ],
+        integrand_name: vec![
+            "scalar_bubble_below_thres".to_string(),
+            "scalar_bubble_below_thres".to_string(),
+        ],
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join(format!("{test_name}/integration_workspace_below_threshold")),
+        ),
+        n_cores: Some(1),
+        target: vec![
+            format!("{no_integrated_process}@scalar_bubble_below_thres={no_integrated_target},0.0"),
+            format!("{integrated_process}@scalar_bubble_below_thres={integrated_target},0.0"),
+        ],
+        restart: true,
+        ..Default::default()
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    let no_integrated_key = format!("{no_integrated_process}@scalar_bubble_below_thres");
+    let no_integrated_slot = integration_result
+        .slot(&no_integrated_key)
+        .expect("below-threshold no-integrated slot should exist");
+    assert!(
+        no_integrated_slot
+            .integral
+            .is_compatible_with_target(Complex::new_re(F(no_integrated_target)), 2),
+        "Integration result {} not compatible with target {}",
+        no_integrated_slot.integral,
+        Complex::new_re(F(no_integrated_target))
+    );
+
+    let integrated_key = format!("{integrated_process}@scalar_bubble_below_thres");
+    let integrated_slot = integration_result
+        .slot(&integrated_key)
+        .expect("below-threshold integrated slot should exist");
+    assert!(
+        integrated_slot
+            .integral
+            .is_compatible_with_target(Complex::new_re(F(integrated_target)), 2),
+        "Integration result {} not compatible with target {}",
+        integrated_slot.integral,
+        Complex::new_re(F(integrated_target))
+    );
+
+    Ok(())
+}
+
+fn assert_bubble_uv_profile_passes(cli: &mut CLIState, process: &str) -> Result<()> {
+    let res = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified(process.to_string())),
+        integrand_name: Some("scalar_bubble_below_thres".to_string()),
+        min_scale_exponent: 3.0,
+        max_scale_exponent: 5.0,
+        per_orientation: true,
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let uv = res.unwrap_uv();
+    assert_eq!(uv.pass_fail(-0.9).failed, 0);
+    Ok(())
+}
 
 #[test]
 fn soft_ct_se() -> Result<()> {
@@ -70,84 +151,16 @@ fn dod1_bubble_uv() -> Result<()> {
         false,
     )?;
 
-    cli.run_command("run generate")?;
-    cli.run_command(
-        "set process kv integrator.target_relative_accuracy=0.005 \
-         integrator.n_increase=0 integrator.n_start=50000 \
-         integrator.n_max=1000000 integrator.seed=1337",
+    run_bubble_below_threshold_integration(
+        &mut cli,
+        "dod1_bubble",
+        "bubble_dod1_no_integrated_UV",
+        "bubble_dod1",
+        7.358320108607984e-3,
+        1.3514937842276269e-3,
     )?;
-    let integration_result = Integrate {
-        process: vec![
-            ProcessRef::Unqualified("bubble_dod1_no_integrated_UV".to_string()),
-            ProcessRef::Unqualified("bubble_dod1".to_string()),
-        ],
-        integrand_name: vec![
-            "scalar_bubble_below_thres".to_string(),
-            "scalar_bubble_below_thres".to_string(),
-        ],
-        workspace_path: Some(
-            get_tests_workspace_path().join("dod1_bubble/integration_workspace_below_threshold"),
-        ),
-        n_cores: Some(1),
-        target: vec![
-            "bubble_dod1_no_integrated_UV@scalar_bubble_below_thres=7.358320108607984e-3,0.0"
-                .to_string(),
-            "bubble_dod1@scalar_bubble_below_thres=1.3514937842276269e-3,0.0".to_string(),
-        ],
-        restart: true,
-        ..Default::default()
-    }
-    .run(&mut cli.state, &cli.cli_settings)?;
-
-    let no_integrated_slot = integration_result
-        .slot("bubble_dod1_no_integrated_UV@scalar_bubble_below_thres")
-        .expect("bubble_dod1_no_integrated_UV below-threshold slot should exist");
-    assert!(
-        no_integrated_slot
-            .integral
-            .is_compatible_with_target(Complex::new_re(F(7.358320108607984e-3)), 2),
-        "Integration result {} not compatible with target {}",
-        no_integrated_slot.integral,
-        Complex::new_re(F(7.358320108607984e-3))
-    );
-
-    let integrated_slot = integration_result
-        .slot("bubble_dod1@scalar_bubble_below_thres")
-        .expect("bubble_dod1 below-threshold slot should exist");
-    assert!(
-        integrated_slot
-            .integral
-            .is_compatible_with_target(Complex::new_re(F(1.3514937842276269e-3)), 2),
-        "Integration result {} not compatible with target {}",
-        integrated_slot.integral,
-        Complex::new_re(F(1.3514937842276269e-3))
-    );
-
-    let res = Profile::UltraViolet(UltraVioletProfile {
-        process: Some(ProcessRef::Unqualified("bubble_dod1".to_string())),
-        integrand_name: Some("scalar_bubble_below_thres".to_string()),
-        min_scale_exponent: 3.0,
-        max_scale_exponent: 5.0,
-        per_orientation: true,
-        ..Default::default()
-    })
-    .run(&mut cli.state, &cli.cli_settings)?;
-    let uv = res.unwrap_uv();
-    assert_eq!(uv.pass_fail(-0.9).failed, 0);
-
-    let res = Profile::UltraViolet(UltraVioletProfile {
-        process: Some(ProcessRef::Unqualified(
-            "bubble_dod1_no_integrated_UV".to_string(),
-        )),
-        integrand_name: Some("scalar_bubble_below_thres".to_string()),
-        min_scale_exponent: 3.0,
-        max_scale_exponent: 5.0,
-        per_orientation: true,
-        ..Default::default()
-    })
-    .run(&mut cli.state, &cli.cli_settings)?;
-    let uv = res.unwrap_uv();
-    assert_eq!(uv.pass_fail(-0.9).failed, 0);
+    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod1")?;
+    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod1_no_integrated_UV")?;
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
@@ -161,13 +174,16 @@ fn dod2_bubble_uv() -> Result<()> {
         false,
     )?;
 
-    cli.run_command("run generate integrate_bubble_below_threshold")?;
-    let res = Profile::UltraViolet(UltraVioletProfile {
-        ..Default::default()
-    })
-    .run(&mut cli.state, &cli.cli_settings)?;
-    let uv = res.unwrap_uv();
-    assert_eq!(uv.pass_fail(-0.9).failed, 0);
+    run_bubble_below_threshold_integration(
+        &mut cli,
+        "dod2_bubble",
+        "bubble_dod2_no_integrated_UV",
+        "bubble_dod2",
+        -0.5940830828502411,
+        1.2143596454658382e-2,
+    )?;
+    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2")?;
+    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2_no_integrated_UV")?;
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
@@ -181,13 +197,16 @@ fn dod0_bubble_uv() -> Result<()> {
         false,
     )?;
 
-    cli.run_command("run generate integrate_bubble_below_threshold")?;
-    let res = Profile::UltraViolet(UltraVioletProfile {
-        ..Default::default()
-    })
-    .run(&mut cli.state, &cli.cli_settings)?;
-    let uv = res.unwrap_uv();
-    assert_eq!(uv.pass_fail(-0.9).failed, 0);
+    run_bubble_below_threshold_integration(
+        &mut cli,
+        "dod0_bubble",
+        "bubble_no_integrated_UV",
+        "bubble",
+        1.471664021721597e-2,
+        2.7029875684552542e-3,
+    )?;
+    assert_bubble_uv_profile_passes(&mut cli, "bubble")?;
+    assert_bubble_uv_profile_passes(&mut cli, "bubble_no_integrated_UV")?;
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
