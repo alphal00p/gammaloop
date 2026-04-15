@@ -16,7 +16,6 @@ use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
 use tracing::debug;
-use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
@@ -61,6 +60,23 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    pub(crate) fn contains_all_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
+        edges.iter().all(|edge| {
+            self.external_shift
+                .iter()
+                .any(|(index, sign)| *index == *edge && *sign == -1)
+        })
+    }
+
+    pub(crate) fn contains_only_with_minus_sign(&self, edges: &[EdgeIndex]) -> bool {
+        self.external_shift.iter().all(|(index, sign)| {
+            if edges.contains(index) {
+                *sign == -1
+            } else {
+                false
+            }
+        })
+    }
     pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let symbolic_energies = self
             .energies

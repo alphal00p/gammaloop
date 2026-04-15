@@ -62,6 +62,7 @@ use linnet::{
         involution::{EdgeVec, HedgePair},
         subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetOps},
     },
+    num_traits::SignOrZero,
     parser::DotGraph,
 };
 use symbolica::{
@@ -959,6 +960,24 @@ impl AmplitudeGraph {
 
         let mut cuts = vec![];
 
+        let external_filter: SuBitGraph = self.graph.external_filter();
+        let external_signature = self.graph.get_external_signature();
+
+        let mut incoming_externals = vec![];
+        let mut outgoing_externals = vec![];
+
+        for ((_, edge_id, _), external_sign) in self
+            .graph
+            .iter_edges_of(&external_filter)
+            .zip(external_signature.iter())
+        {
+            match external_sign {
+                SignOrZero::Plus => incoming_externals.push(edge_id),
+                SignOrZero::Minus => outgoing_externals.push(edge_id),
+                _ => {}
+            }
+        }
+
         for raised_data in esurface_raising.raised_groups.into_iter() {
             assert!(
                 raised_data.esurface_ids.len() == 1,
@@ -984,6 +1003,13 @@ impl AmplitudeGraph {
                 ) {
                     continue;
                 }
+            }
+
+            if esurface.contains_all_with_minus_sign(&incoming_externals)
+                || esurface.contains_only_with_minus_sign(&outgoing_externals)
+            {
+            } else {
+                continue;
             }
 
             let mut cut_union: SuBitGraph = self.graph.empty_subgraph();
