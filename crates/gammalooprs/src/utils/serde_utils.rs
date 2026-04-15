@@ -370,7 +370,11 @@ pub fn is_default_stability_levels(
 }
 
 pub fn _default_rotation_axis() -> Vec<crate::settings::runtime::RotationSetting> {
-    vec![crate::settings::runtime::RotationSetting::default()]
+    vec![crate::settings::runtime::RotationSetting::EulerAngles {
+        alpha: 0.1,
+        beta: 0.2,
+        gamma: 0.3,
+    }]
 }
 
 pub fn is_default_rotation_axis(
