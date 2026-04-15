@@ -11,11 +11,11 @@ pub(crate) use gammaloop_api::{
         integrate::Integrate,
         profile::UltraVioletProfile,
     },
-    state::{ProcessRef, RunHistory, SyncSettings},
+    state::{ProcessRef, SyncSettings},
 };
 pub(crate) use gammaloop_integration_tests::{
-    clean_test, get_test_cli, get_tests_workspace_path, new_cli_for_test, run_commands,
-    setup_sm_differential_lu_cli,
+    clean_test, example_run_card, get_example_cli, get_test_cli, get_tests_workspace_path,
+    run_commands, setup_sm_differential_lu_cli,
 };
 pub(crate) use gammalooprs::utils as gloop_utils;
 pub(crate) use gammalooprs::{

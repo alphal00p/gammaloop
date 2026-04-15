@@ -21,7 +21,10 @@ use crate::utils::F;
 use crate::uv::UltravioletGraph;
 use crate::{
     graph::LoopMomentumBasis,
-    integrands::process::{MomentumSpaceEvaluationInput, ProcessIntegrand},
+    integrands::process::{
+        OrientationProfileMode, ProcessIntegrand, evaluate_profile_momentum_point,
+        orientation_labels_for_graph,
+    },
 };
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
@@ -50,6 +53,7 @@ use typed_index_collections::TiVec;
 
 type ExternalMomenta = TiVec<ExternalIndex, ThreeMomentum<F<f64>>>;
 type LoopMomentumSample = TiVec<LoopIndex, ThreeMomentum<F<f64>>>;
+const UV_PROFILE_RETRY_MAX_DOD: f64 = -0.9;
 
 pub struct ProfileSettings {
     pub n_points: usize,
@@ -58,6 +62,7 @@ pub struct ProfileSettings {
     pub seed: u64,
     pub use_f128: bool,
     pub analyse_analytically: bool,
+    pub orientation_mode: OrientationProfileMode,
 }
 
 impl Default for ProfileSettings {
@@ -68,7 +73,8 @@ impl Default for ProfileSettings {
             max_scale_exponent: 6.0,
             seed: 42,
             analyse_analytically: false,
-            use_f128: true,
+            use_f128: false,
+            orientation_mode: OrientationProfileMode::Summed,
         }
     }
 }
@@ -226,6 +232,8 @@ impl UVProfile {
                                     .map(|loop_index| lmb.lmb.loop_edges[loop_index])
                                     .collect();
                                 let analysis = subset_result.analyse(&self.scales);
+                                let per_orientation_inspect_entries =
+                                    analysis.per_orientation_inspect_entries();
                                 let analytic_entries =
                                     analysis.analytic.as_ref().and_then(|analytic| {
                                         let entries = analytic
@@ -261,6 +269,7 @@ impl UVProfile {
                                     free,
                                     initial_dod: subset_result.initial_dod,
                                     analysis,
+                                    per_orientation_inspect_entries,
                                     analytic_entries,
                                 }
                             })
@@ -332,6 +341,7 @@ pub struct UVProfileSubsetAnalysis {
     pub initial_dod: i32,
     // pub subset_label: String,
     pub analysis: Analysis,
+    pub per_orientation_inspect_entries: Option<Vec<UVProfileOrientationInspectEntry>>,
     pub analytic_entries: Option<Vec<UVProfileAnalyticEntry>>,
 }
 
@@ -378,6 +388,7 @@ pub struct UVProfileFailure {
     pub lmb_index: usize,
     pub fixed: Vec<EdgeIndex>,
     pub free: Vec<EdgeIndex>,
+    pub orientation_label: Option<String>,
     pub reason: String,
 }
 
@@ -394,6 +405,12 @@ pub struct UVProfileAnalyticEntry {
     pub leading_coef: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct UVProfileOrientationInspectEntry {
+    pub orientation_label: String,
+    pub analysis: Option<InspectAnalysis>,
+}
+
 #[derive(Tabled)]
 struct UVProfileSubsetRow {
     #[tabled(rename = "fixed")]
@@ -408,6 +425,28 @@ struct UVProfileSubsetRow {
     estimated_dod: String,
     #[tabled(rename = "bare DOD")]
     initial_dod: String,
+    #[tabled(rename = "inspect")]
+    inspect: String,
+}
+
+#[derive(Tabled)]
+struct UVProfileOrientationSubsetRow {
+    #[tabled(rename = "fixed")]
+    fixed: String,
+    #[tabled(rename = "→ ∞")]
+    free: String,
+    #[tabled(rename = "orientation")]
+    orientation_label: String,
+    #[tabled(rename = "slope")]
+    slope: String,
+    #[tabled(rename = "r2")]
+    r_squared: String,
+    #[tabled(rename = "DOD")]
+    estimated_dod: String,
+    #[tabled(rename = "bare DOD")]
+    initial_dod: String,
+    #[tabled(rename = "inspect")]
+    inspect: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -471,6 +510,9 @@ impl UVProfileAnalysis {
                                 } else {
                                     subset.initial_dod.to_string().green().to_string()
                                 },
+                                inspect: inspect_retry_label(
+                                    subset.analysis.inspect_level.as_ref(),
+                                ),
                             }
                         })
                     })
@@ -559,6 +601,86 @@ impl UVProfileAnalysis {
             .collect()
     }
 
+    pub fn per_orientation_tables_per_graph(&self, max_dod: f64) -> Vec<Option<Table>> {
+        self.graphs
+            .iter()
+            .map(|graph| {
+                let rows = graph
+                    .lmbs
+                    .iter()
+                    .flat_map(|lmb| {
+                        lmb.subsets.iter().flat_map(|subset| {
+                            subset
+                                .per_orientation_inspect_entries
+                                .iter()
+                                .flatten()
+                                .map(|entry| {
+                                    let (slope, r_squared, estimated_dod) = match &entry.analysis {
+                                        Some(analysis) => {
+                                            let r2_text =
+                                                format!("{:.3}", analysis.result.r_squared);
+                                            let r2_text = if analysis.result.r_squared >= 0.99 {
+                                                r2_text.green()
+                                            } else {
+                                                r2_text.red()
+                                            }
+                                            .to_string();
+
+                                            let dod = analysis.estimated_dod;
+                                            let dod_text = dod.to_string();
+                                            let dod_text = if (dod as f64) <= max_dod {
+                                                dod_text.green()
+                                            } else {
+                                                dod_text.red()
+                                            }
+                                            .to_string();
+
+                                            (
+                                                format!("{:.6}", analysis.result.slope),
+                                                r2_text,
+                                                dod_text,
+                                            )
+                                        }
+                                        None => ("-".to_string(), "-".to_string(), "-".to_string()),
+                                    };
+
+                                    UVProfileOrientationSubsetRow {
+                                        fixed: format!(
+                                            "{{{}}}",
+                                            subset.fixed.iter().map(ToString::to_string).join(",")
+                                        ),
+                                        free: format!(
+                                            "{{{}}}",
+                                            subset.free.iter().map(ToString::to_string).join(",")
+                                        ),
+                                        orientation_label: entry.orientation_label.clone(),
+                                        slope,
+                                        r_squared,
+                                        estimated_dod,
+                                        initial_dod: if subset.initial_dod >= 0 {
+                                            subset.initial_dod.to_string().red().to_string()
+                                        } else {
+                                            subset.initial_dod.to_string().green().to_string()
+                                        },
+                                        inspect: inspect_retry_label(entry.analysis.as_ref()),
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                    })
+                    .collect::<Vec<_>>();
+
+                if rows.is_empty() {
+                    None
+                } else {
+                    let mut table = Table::new(rows);
+                    table.with(Style::rounded());
+                    Some(table)
+                }
+            })
+            .collect()
+    }
+
     pub fn write_profile_data<P: AsRef<Path>>(&self, out_dir: P) -> Result<()> {
         let out_dir = out_dir.as_ref();
         std::fs::create_dir_all(out_dir).context("failed to create UV profile output directory")?;
@@ -596,8 +718,34 @@ impl UVProfileAnalysis {
                             lmb_index: lmb.lmb_index,
                             fixed: subset.fixed.clone(),
                             free: subset.free.clone(),
+                            orientation_label: None,
                             reason: reason.to_string(),
                         });
+                    }
+
+                    for entry in subset.per_orientation_inspect_entries.iter().flatten() {
+                        total += 1;
+                        let reason = match &entry.analysis {
+                            None => Some("missing_fit"),
+                            Some(analysis)
+                                if analysis.result.slope > max_dod
+                                    || analysis.result.slope.is_nan() =>
+                            {
+                                Some("dod_exceeds_threshold")
+                            }
+                            _ => None,
+                        };
+
+                        if let Some(reason) = reason {
+                            failures.push(UVProfileFailure {
+                                graph_index: graph.graph_index,
+                                lmb_index: lmb.lmb_index,
+                                fixed: subset.fixed.clone(),
+                                free: subset.free.clone(),
+                                orientation_label: Some(entry.orientation_label.clone()),
+                                reason: reason.to_string(),
+                            });
+                        }
                     }
                 }
             }
@@ -639,7 +787,7 @@ impl<'a> UVProfileRunner<'a> {
     fn sample_graph(&self, graph_id: usize, g: &AmplitudeGraph) -> Result<UVSamplingResult> {
         let lmbs = g.derived_data.lmbs.as_ref().unwrap();
         let integrand_expr = &g.derived_data.all_mighty_integrand;
-        let orientations: Vec<_> = g
+        let analytic_orientations: Vec<_> = g
             .derived_data
             .cff_expression
             .as_ref()
@@ -647,6 +795,23 @@ impl<'a> UVProfileRunner<'a> {
             .orientations
             .iter()
             .collect();
+        let orientation_labels = if self
+            .profile_settings
+            .orientation_mode
+            .profiles_per_orientation()
+        {
+            let integrand = self.integrand.lock().expect("integrand mutex poisoned");
+            match &*integrand {
+                ProcessIntegrand::Amplitude(amplitude) => {
+                    Some(orientation_labels_for_graph(amplitude, graph_id)?)
+                }
+                ProcessIntegrand::CrossSection(_) => {
+                    unreachable!("UV profiling expects amplitudes")
+                }
+            }
+        } else {
+            None
+        };
         let lmb_refs: Vec<_> = lmbs.iter().enumerate().collect();
 
         let lmb_span = info_span!(
@@ -666,14 +831,20 @@ impl<'a> UVProfileRunner<'a> {
         let per_lmb = lmb_refs
             .par_iter()
             .map(|(lmb_index, lmb)| {
-                let mut res = self.sample_lmb(graph_id, &g.graph, *lmb_index, lmb)?;
+                let mut res = self.sample_lmb(
+                    graph_id,
+                    &g.graph,
+                    *lmb_index,
+                    lmb,
+                    orientation_labels.as_deref(),
+                )?;
 
                 if self.profile_settings.analyse_analytically {
                     let orientation_limits: Vec<(
                         SubSet<LoopIndex>,
                         OrientationData,
                         Series<AtomField>,
-                    )> = orientations
+                    )> = analytic_orientations
                         .par_iter()
                         .map(|o| {
                             let oatom = o.data.orientation.select(integrand_expr);
@@ -723,6 +894,7 @@ impl<'a> UVProfileRunner<'a> {
         graph: &Graph,
         lmb_index: usize,
         lmb: &LoopMomentumBasis,
+        orientation_labels: Option<&[String]>,
     ) -> Result<LMBResult> {
         let mut rng = MonteCarloRng::new(lmb_seed(self.base_seed, graph_id, lmb_index), 0);
         let sample: LoopMomentumSample = lmb
@@ -769,7 +941,15 @@ impl<'a> UVProfileRunner<'a> {
                         .clone()
                 },
                 |integrand, ls| {
-                    let res = self.sample_subset(integrand, graph_id, graph, &ls, lmb, &sample)?;
+                    let res = self.sample_subset(
+                        integrand,
+                        graph_id,
+                        graph,
+                        &ls,
+                        lmb,
+                        &sample,
+                        orientation_labels,
+                    )?;
                     subset_span.pb_inc(1);
                     Ok((ls, res))
                 },
@@ -789,8 +969,28 @@ impl<'a> UVProfileRunner<'a> {
 
 pub struct SubSetResult {
     pub(crate) initial_dod: i32,
-    pub(crate) inspect: Vec<InspectResult>,
+    pub(crate) inspect: InspectSamples,
     pub(crate) analytic: Option<AnalyticResult>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct InspectSamples {
+    pub(crate) summed: Vec<InspectResult>,
+    pub(crate) summed_used_arb_prec_retry: bool,
+    pub(crate) per_orientation: Vec<OrientationInspectSamples>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct OrientationInspectSamples {
+    pub(crate) label: String,
+    pub(crate) inspect: Vec<InspectResult>,
+    pub(crate) used_arb_prec_retry: bool,
+}
+
+#[derive(Debug, Clone)]
+struct InspectRun {
+    inspect: Vec<InspectResult>,
+    used_arb_prec_retry: bool,
 }
 
 impl<'a> UVProfileRunner<'a> {
@@ -802,6 +1002,7 @@ impl<'a> UVProfileRunner<'a> {
         subset: &SubSet<LoopIndex>,
         lmb: &LoopMomentumBasis,
         sample: &LoopMomentumSample,
+        orientation_labels: Option<&[String]>,
     ) -> Result<SubSetResult> {
         let mut subgraph: SuBitGraph = graph.empty_subgraph();
         for l in subset.included_iter() {
@@ -821,10 +1022,104 @@ impl<'a> UVProfileRunner<'a> {
         }
 
         let initial_dod = graph.dod(&subgraph);
+        let inspect = if let Some(orientation_labels) = orientation_labels {
+            let per_orientation = orientation_labels
+                .iter()
+                .enumerate()
+                .map(|(orientation_id, label)| {
+                    let inspect = self.sample_subset_orientation(
+                        integrand,
+                        graph_id,
+                        subset,
+                        lmb,
+                        sample,
+                        Some(orientation_id),
+                    )?;
+                    Ok(OrientationInspectSamples {
+                        label: label.clone(),
+                        inspect: inspect.inspect,
+                        used_arb_prec_retry: inspect.used_arb_prec_retry,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let summed = sum_orientation_inspect_samples(&per_orientation);
+            InspectSamples {
+                summed,
+                summed_used_arb_prec_retry: per_orientation
+                    .iter()
+                    .any(|orientation| orientation.used_arb_prec_retry),
+                per_orientation,
+            }
+        } else {
+            let inspect =
+                self.sample_subset_orientation(integrand, graph_id, subset, lmb, sample, None)?;
+            InspectSamples {
+                summed: inspect.inspect,
+                summed_used_arb_prec_retry: inspect.used_arb_prec_retry,
+                per_orientation: Vec::new(),
+            }
+        };
+        let analytic = None;
 
+        Ok(SubSetResult {
+            inspect,
+            initial_dod,
+            analytic,
+        })
+    }
+
+    fn sample_subset_orientation(
+        &self,
+        integrand: &mut ProcessIntegrand,
+        graph_id: usize,
+        subset: &SubSet<LoopIndex>,
+        lmb: &LoopMomentumBasis,
+        sample: &LoopMomentumSample,
+        orientation: Option<usize>,
+    ) -> Result<InspectRun> {
+        let inspect = self.sample_subset_orientation_with_precision(
+            integrand,
+            graph_id,
+            subset,
+            lmb,
+            sample,
+            orientation,
+            self.profile_settings.use_f128,
+        )?;
+        if !self.profile_settings.use_f128
+            && inspect_results_need_arbprec_retry(&inspect, self.scales)
+        {
+            return Ok(InspectRun {
+                inspect: self.sample_subset_orientation_with_precision(
+                    integrand,
+                    graph_id,
+                    subset,
+                    lmb,
+                    sample,
+                    orientation,
+                    true,
+                )?,
+                used_arb_prec_retry: true,
+            });
+        }
+        Ok(InspectRun {
+            inspect,
+            used_arb_prec_retry: false,
+        })
+    }
+
+    fn sample_subset_orientation_with_precision(
+        &self,
+        integrand: &mut ProcessIntegrand,
+        graph_id: usize,
+        subset: &SubSet<LoopIndex>,
+        lmb: &LoopMomentumBasis,
+        sample: &LoopMomentumSample,
+        orientation: Option<usize>,
+        use_arb_prec: bool,
+    ) -> Result<Vec<InspectResult>> {
         let n_included = subset.n_included() as i32;
-        let inspect_results: Vec<InspectResult> = self
-            .scales
+        self.scales
             .iter()
             .map(|s| {
                 let prefactor = s.powi(3 * n_included);
@@ -832,22 +1127,21 @@ impl<'a> UVProfileRunner<'a> {
                 for l in subset.included_iter() {
                     scaled_sample[l] = scaled_sample[l].map_ref(&|a| a * F(*s));
                 }
-                let pt: Vec<F<f64>> = lmb
+                let loop_momenta = lmb
                     .loop_edges
                     .iter()
-                    .flat_map(|a| {
-                        lmb.edge_signatures[*a]
-                            .compute_momentum(&scaled_sample, self.externals)
-                            .into_iter()
+                    .map(|edge| {
+                        lmb.edge_signatures[*edge].compute_momentum(&scaled_sample, self.externals)
                     })
-                    .collect();
+                    .collect::<Vec<_>>();
 
                 let inspect_res_eval = evaluate_momentum_space_point(
                     integrand,
                     self.model,
-                    pt,
+                    loop_momenta,
                     graph_id,
-                    self.profile_settings.use_f128,
+                    orientation,
+                    use_arb_prec,
                 )?;
 
                 Ok(InspectResult {
@@ -855,32 +1149,36 @@ impl<'a> UVProfileRunner<'a> {
                     prefactor,
                 })
             })
-            .collect::<Result<Vec<_>>>()?;
-        let analytic = None;
-
-        Ok(SubSetResult {
-            inspect: inspect_results,
-            initial_dod,
-            analytic,
-        })
+            .collect()
     }
 }
 
 impl SubSetResult {
     pub fn analyse_inspect(&self, scales: &[f64]) -> Option<InspectAnalysis> {
-        let result = self.log_log_slope(scales)?;
-
-        let dod = result.slope.round() as i64;
-
-        Some(InspectAnalysis {
-            result,
-            estimated_dod: dod,
-        })
+        analyse_inspect_results(
+            &self.inspect.summed,
+            scales,
+            self.inspect.summed_used_arb_prec_retry,
+        )
     }
 
     pub fn analyse(&self, scales: &[f64]) -> Analysis {
         Analysis {
             inspect_level: self.analyse_inspect(scales),
+            per_orientation_inspect: (!self.inspect.per_orientation.is_empty()).then(|| {
+                self.inspect
+                    .per_orientation
+                    .iter()
+                    .map(|orientation| OrientationInspectAnalysis {
+                        orientation_label: orientation.label.clone(),
+                        analysis: analyse_inspect_results(
+                            &orientation.inspect,
+                            scales,
+                            orientation.used_arb_prec_retry,
+                        ),
+                    })
+                    .collect()
+            }),
             analytic: self.analyse_analytic(),
         }
     }
@@ -934,87 +1232,145 @@ impl SubSetResult {
                 .collect(),
         })
     }
+}
 
-    fn log_log_slope(&self, scales: &[f64]) -> Option<FitResult> {
-        let mut sum_x = 0.0;
-        let mut sum_y = 0.0;
-        let mut sum_xy = 0.0;
-        let mut sum_x2 = 0.0;
-        let mut points = vec![];
-        let mut points_detail = vec![];
+fn analyse_inspect_results(
+    inspect: &[InspectResult],
+    scales: &[f64],
+    used_arb_prec_retry: bool,
+) -> Option<InspectAnalysis> {
+    let result = log_log_slope(inspect, scales)?;
+    let dod = result.slope.round() as i64;
+    Some(InspectAnalysis {
+        result,
+        estimated_dod: dod,
+        used_arb_prec_retry,
+    })
+}
 
-        for (x, s) in self.inspect.iter().zip(scales) {
-            let norm = x.magnitude();
-            if norm <= 0.0 {
-                println!("{s}:\t{}", x.result.evaluation_metadata)
-            }
-            points_detail.push(x.result.clone());
-            points.push(norm);
-            let y = (norm).log10();
-            let x = s.log10();
-            sum_x += x;
-            sum_y += y;
-            sum_xy += x * y;
-            sum_x2 += x * x;
+fn inspect_results_need_arbprec_retry(inspect: &[InspectResult], scales: &[f64]) -> bool {
+    match analyse_inspect_results(inspect, scales, false) {
+        None => true,
+        Some(analysis) => {
+            analysis.result.slope.is_nan() || analysis.result.slope > UV_PROFILE_RETRY_MAX_DOD
         }
-
-        let n = scales.len() as f64;
-        let denominator = n * sum_x2 - sum_x * sum_x;
-        if denominator.abs() < 1e-15 {
-            return None;
-        }
-
-        let slope = (n * sum_xy - sum_x * sum_y) / denominator;
-        let intercept = (sum_y - slope * sum_x) / n;
-
-        let y_mean = sum_y / n;
-        let mut ss_tot = 0.0;
-        let mut ss_res = 0.0;
-        for (norm, s) in points.iter().zip(scales) {
-            let y = norm.log10();
-            let x = s.log10();
-            let y_pred = intercept + slope * x;
-            ss_tot += (y - y_mean).powi(2);
-            ss_res += (y - y_pred).powi(2);
-        }
-
-        let r_squared = if ss_tot > 1e-15 {
-            1.0 - ss_res / ss_tot
-        } else {
-            0.0
-        };
-
-        Some(FitResult {
-            points,
-            points_detail,
-            slope,
-            intercept,
-            r_squared,
-        })
     }
 }
+
+fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult> {
+    let mut sum_x = 0.0;
+    let mut sum_y = 0.0;
+    let mut sum_xy = 0.0;
+    let mut sum_x2 = 0.0;
+    let mut points = vec![];
+    let mut points_detail = vec![];
+
+    for (x, s) in inspect.iter().zip(scales) {
+        let norm = x.magnitude();
+        if norm <= 0.0 {
+            println!("{s}:\t{}", x.result.evaluation_metadata)
+        }
+        points_detail.push(x.result.clone());
+        points.push(norm);
+        let y = (norm).log10();
+        let x = s.log10();
+        sum_x += x;
+        sum_y += y;
+        sum_xy += x * y;
+        sum_x2 += x * x;
+    }
+
+    let n = scales.len() as f64;
+    let denominator = n * sum_x2 - sum_x * sum_x;
+    if denominator.abs() < 1e-15 {
+        return None;
+    }
+
+    let slope = (n * sum_xy - sum_x * sum_y) / denominator;
+    let intercept = (sum_y - slope * sum_x) / n;
+
+    let y_mean = sum_y / n;
+    let mut ss_tot = 0.0;
+    let mut ss_res = 0.0;
+    for (norm, s) in points.iter().zip(scales) {
+        let y = norm.log10();
+        let x = s.log10();
+        let y_pred = intercept + slope * x;
+        ss_tot += (y - y_mean).powi(2);
+        ss_res += (y - y_pred).powi(2);
+    }
+
+    let r_squared = if ss_tot > 1e-15 {
+        1.0 - ss_res / ss_tot
+    } else {
+        0.0
+    };
+
+    Some(FitResult {
+        points,
+        points_detail,
+        slope,
+        intercept,
+        r_squared,
+    })
+}
+
+fn sum_orientation_inspect_samples(
+    per_orientation: &[OrientationInspectSamples],
+) -> Vec<InspectResult> {
+    let Some((first, rest)) = per_orientation.split_first() else {
+        return Vec::new();
+    };
+
+    (0..first.inspect.len())
+        .map(|point_index| {
+            let mut summed = first.inspect[point_index].clone();
+            for orientation in rest {
+                summed.result.integrand_result +=
+                    orientation.inspect[point_index].result.integrand_result;
+            }
+            summed
+        })
+        .collect()
+}
+
+fn inspect_retry_label(analysis: Option<&InspectAnalysis>) -> String {
+    match analysis {
+        Some(analysis) if analysis.used_arb_prec_retry => "arb retry".yellow().to_string(),
+        Some(_) => String::new(),
+        None => "-".to_string(),
+    }
+}
+
 fn evaluate_momentum_space_point(
     integrand: &mut ProcessIntegrand,
     model: &Model,
-    pt: Vec<F<f64>>,
+    loop_momenta: Vec<ThreeMomentum<F<f64>>>,
     graph_id: usize,
+    orientation: Option<usize>,
     use_arb_prec: bool,
 ) -> Result<EvaluationResult> {
-    let loop_momenta = pt
-        .chunks_exact(3)
-        .map(|x| ThreeMomentum::new(x[0], x[1], x[2]))
-        .collect::<Vec<_>>();
-    let input = MomentumSpaceEvaluationInput {
-        loop_momenta,
-        integrator_weight: F(1.0),
-        graph_id: Some(graph_id),
-        group_id: None,
-        orientation: None,
-        channel_id: None,
-    };
-    integrand.evaluate_momentum_configuration(model, &input, use_arb_prec)
+    match integrand {
+        ProcessIntegrand::Amplitude(amplitude) => evaluate_profile_momentum_point(
+            amplitude,
+            model,
+            graph_id,
+            orientation,
+            loop_momenta,
+            use_arb_prec,
+        ),
+        ProcessIntegrand::CrossSection(cross_section) => evaluate_profile_momentum_point(
+            cross_section,
+            model,
+            graph_id,
+            orientation,
+            loop_momenta,
+            use_arb_prec,
+        ),
+    }
 }
 
+#[derive(Debug, Clone)]
 pub struct InspectResult {
     pub(crate) result: EvaluationResult,
     pub(crate) prefactor: f64,
@@ -1030,9 +1386,31 @@ impl InspectResult {
 pub struct Analysis {
     ///Is None if the fit hasn't worked
     inspect_level: Option<InspectAnalysis>,
+    #[serde(skip_serializing)]
+    per_orientation_inspect: Option<Vec<OrientationInspectAnalysis>>,
     ///Is None if the analytic analysis is disabled
     #[serde(skip_serializing)]
     analytic: Option<AnalyticAnalysis>,
+}
+
+impl Analysis {
+    fn per_orientation_inspect_entries(&self) -> Option<Vec<UVProfileOrientationInspectEntry>> {
+        self.per_orientation_inspect.as_ref().map(|entries| {
+            entries
+                .iter()
+                .map(|entry| UVProfileOrientationInspectEntry {
+                    orientation_label: entry.orientation_label.clone(),
+                    analysis: entry.analysis.clone(),
+                })
+                .collect()
+        })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct OrientationInspectAnalysis {
+    orientation_label: String,
+    analysis: Option<InspectAnalysis>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1050,6 +1428,7 @@ pub struct OrientationAnalyticAnalysis {
 pub struct InspectAnalysis {
     result: FitResult,
     estimated_dod: i64,
+    used_arb_prec_retry: bool,
 }
 
 pub struct AnalyticResult {

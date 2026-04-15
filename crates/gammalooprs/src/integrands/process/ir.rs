@@ -7,10 +7,9 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use nalgebra::DVector;
 use rand::Rng;
-use spenso::algebra::complex::Complex;
 use symbolica::{
     domains::float::{Real, RealLike},
-    numerical_integration::{MonteCarloRng, Sample},
+    numerical_integration::MonteCarloRng,
 };
 use tabled::{builder::Builder, settings::Style};
 use tracing::warn;
@@ -19,12 +18,12 @@ use crate::{
     DependentMomentaConstructor,
     graph::{FeynmanGraph, LmbError, lmb::LMBwithEdges},
     integrands::{
-        HasIntegrand,
         evaluation::EvaluationResult,
         process::{
-            ProcessIntegrandImpl,
+            GraphTerm, OrientationProfileMode, ProcessIntegrandImpl,
             amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand},
             cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand},
+            evaluate_profile_momentum_point, orientation_labels_for_graph,
         },
     },
     model::Model,
@@ -53,6 +52,7 @@ pub struct IRProfileSetting {
     pub steps: usize,
     pub seed: u64,
     pub select_limits_and_graphs: Option<String>,
+    pub orientation_mode: OrientationProfileMode,
 }
 
 impl AmplitudeGraphTerm {
@@ -167,6 +167,7 @@ pub struct GraphIRLimitReport {
 
 pub struct SingleLimitReport {
     pub limit_name: String,
+    pub orientation_label: Option<String>,
     pub passed: bool,
     pub power_law_fit: PowerLawFit,
     pub scaling: f64,
@@ -257,6 +258,7 @@ impl Display for GraphIRLimitReport {
         limit_table.push_record([
             "status",
             "limit",
+            "orientation",
             "scaling",
             "p",
             "coefficient",
@@ -275,6 +277,10 @@ impl Display for GraphIRLimitReport {
             limit_table.push_record([
                 status,
                 report.limit_name.clone(),
+                report
+                    .orientation_label
+                    .clone()
+                    .unwrap_or_else(|| "sum".to_string()),
                 format!("{:+.4}", report.scaling),
                 format!("{:+.4}", report.power_law_fit.exponent),
                 format!("{:+.4e}", report.power_law_fit.coefficient),
@@ -300,9 +306,13 @@ impl Display for SingleLimitReport {
 
         write!(
             f,
-            "{} {} | scaling={:+.4} | p={:+.4} | coeff={:+.4e} | const={:+.4e} | R²={:.4} | n_soft={}",
+            "{} {}{} | scaling={:+.4} | p={:+.4} | coeff={:+.4e} | const={:+.4e} | R²={:.4} | n_soft={}",
             status,
             self.limit_name,
+            self.orientation_label
+                .as_ref()
+                .map(|label| format!(" @ {label}"))
+                .unwrap_or_default(),
             self.scaling,
             self.power_law_fit.exponent,
             self.power_law_fit.coefficient,
@@ -313,17 +323,175 @@ impl Display for SingleLimitReport {
     }
 }
 
+fn ir_profile_completion_entries(
+    limits: Vec<(String, Vec<IrLimit>)>,
+) -> Vec<(String, Vec<String>)> {
+    limits
+        .into_iter()
+        .map(|(graph_name, limits)| {
+            (
+                graph_name,
+                limits.into_iter().map(|limit| limit.to_string()).collect(),
+            )
+        })
+        .collect()
+}
+
+fn graph_id_by_name<I: ProcessIntegrandImpl>(integrand: &I, graph_name: &str) -> Option<usize> {
+    (0..integrand.graph_count())
+        .find(|graph_id| integrand.get_graph(*graph_id).name() == graph_name)
+}
+
+fn parse_select_limits_and_graphs<I: ProcessIntegrandImpl>(
+    integrand: &I,
+    input: &str,
+) -> Result<Vec<(String, Vec<IrLimit>)>> {
+    input
+        .split(';')
+        .map(|graph_info_string| {
+            let mut parts = graph_info_string.split(' ');
+            let graph_name = parts
+                .next()
+                .ok_or_else(|| eyre!("Expected graph name in select_limits_and_graphs"))?
+                .to_string();
+
+            let Some(graph_id) = graph_id_by_name(integrand, &graph_name) else {
+                return Err(eyre!(
+                    "Graph name '{}' in select_limits_and_graphs does not match any graph in the integrand",
+                    graph_name
+                ));
+            };
+
+            let ir_limits = parts
+                .map(IrLimit::parse_limit)
+                .collect::<Result<Vec<_>, _>>()?;
+
+            if ir_limits.is_empty() {
+                return Err(eyre!(
+                    "No IR limits specified for graph '{}' in select_limits_and_graphs",
+                    graph_name
+                ));
+            }
+
+            let loop_number = integrand
+                .get_graph(graph_id)
+                .get_graph()
+                .loop_momentum_basis
+                .loop_edges
+                .len();
+            if ir_limits.iter().any(|limit| !limit.is_valid(loop_number).is_ok()) {
+                return Err(eyre!(
+                    "One or more IR limits specified for graph '{}' in select_limits_and_graphs are not valid",
+                    graph_name
+                ));
+            }
+
+            Ok((graph_name, ir_limits))
+        })
+        .collect::<Result<Vec<_>, _>>()
+}
+
+fn requested_orientations<I: ProcessIntegrandImpl>(
+    integrand: &I,
+    graph_id: usize,
+    settings: &IRProfileSetting,
+) -> Result<Vec<(Option<usize>, Option<String>)>> {
+    if settings.orientation_mode.profiles_per_orientation() {
+        Ok(orientation_labels_for_graph(integrand, graph_id)?
+            .into_iter()
+            .enumerate()
+            .map(|(orientation_id, label)| (Some(orientation_id), Some(label)))
+            .collect())
+    } else {
+        Ok(vec![(None, None)])
+    }
+}
+
+fn build_single_limit_report(
+    ir_limit: &IrLimit,
+    orientation_label: Option<String>,
+    slope: PowerLawFit,
+) -> SingleLimitReport {
+    let num_soft = ir_limit.num_soft();
+    let scaling = slope.exponent + ((num_soft * 3) as f64);
+    SingleLimitReport {
+        limit_name: format!("{}", ir_limit),
+        orientation_label,
+        passed: scaling > 0.0,
+        power_law_fit: slope,
+        scaling,
+        num_soft,
+    }
+}
+
+fn run_ir_profile<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    ir_profile_settings: &IRProfileSetting,
+    model: &Model,
+    enumerate_limits: impl Fn(&I) -> Vec<(String, Vec<IrLimit>)>,
+    mut test_single_limit: impl FnMut(
+        &mut I,
+        usize,
+        &IrLimit,
+        &mut MonteCarloRng,
+        &IRProfileSetting,
+        &Model,
+    ) -> Result<Vec<SingleLimitReport>>,
+) -> Result<IrLimitTestReport> {
+    let mut rng = MonteCarloRng::new(ir_profile_settings.seed, 0);
+    let limits_to_check =
+        if let Some(select_limits_and_graphs) = &ir_profile_settings.select_limits_and_graphs {
+            parse_select_limits_and_graphs(integrand, select_limits_and_graphs)?
+        } else {
+            enumerate_limits(integrand)
+        };
+
+    let mut result = IrLimitTestReport {
+        all_passed: false,
+        results_per_graph: Vec::new(),
+    };
+
+    for (graph_name, limits) in limits_to_check {
+        let Some(graph_id) = graph_id_by_name(integrand, &graph_name) else {
+            return Err(eyre!("Graph name '{}' not found in integrand", graph_name));
+        };
+
+        let mut graph_report = GraphIRLimitReport {
+            graph_name: graph_name.clone(),
+            all_limits_passed: false,
+            single_limit_reports: Vec::new(),
+        };
+
+        for limit in limits {
+            graph_report.single_limit_reports.extend(test_single_limit(
+                integrand,
+                graph_id,
+                &limit,
+                &mut rng,
+                ir_profile_settings,
+                model,
+            )?);
+        }
+
+        graph_report.all_limits_passed = graph_report
+            .single_limit_reports
+            .iter()
+            .all(|report| report.passed);
+
+        result.results_per_graph.push(graph_report);
+    }
+
+    result.all_passed = result
+        .results_per_graph
+        .iter()
+        .all(|graph_report| graph_report.all_limits_passed);
+
+    Ok(result)
+}
+
 impl AmplitudeIntegrand {
     pub fn ir_profile_completion_entries(&self) -> Vec<(String, Vec<String>)> {
-        self.enumerate_ir_limits()
-            .into_iter()
-            .map(|(graph_name, limits)| {
-                (
-                    graph_name,
-                    limits.into_iter().map(|limit| limit.to_string()).collect(),
-                )
-            })
-            .collect()
+        ir_profile_completion_entries(self.enumerate_ir_limits())
     }
 
     pub fn test_ir(
@@ -342,63 +510,13 @@ impl AmplitudeIntegrand {
         });
 
         self.warm_up(model)?;
-
-        let mut rng = MonteCarloRng::new(ir_profile_settings.seed, 0);
-
-        let limits_to_check =
-            if let Some(select_limits_and_graphs) = &ir_profile_settings.select_limits_and_graphs {
-                self.parse_select_limits_and_graphs(select_limits_and_graphs)?
-            } else {
-                self.enumerate_ir_limits()
-            };
-
-        let mut result = IrLimitTestReport {
-            all_passed: false,
-            results_per_graph: Vec::new(),
-        };
-
-        for (graph_name, limits) in limits_to_check {
-            let mut graph_report = GraphIRLimitReport {
-                graph_name: graph_name.clone(),
-                all_limits_passed: false,
-                single_limit_reports: Vec::new(),
-            };
-
-            let graph_id = self
-                .data
-                .graph_terms
-                .iter()
-                .enumerate()
-                .find(|(_, term)| term.graph.name == graph_name)
-                .ok_or_else(|| eyre!("Graph name '{}' not found in integrand", graph_name))?
-                .0;
-
-            for limit in limits {
-                let single_limit_report = self.test_single_ir_limit_impl(
-                    graph_id,
-                    &limit,
-                    &mut rng,
-                    ir_profile_settings,
-                    model,
-                )?;
-
-                graph_report.single_limit_reports.push(single_limit_report);
-            }
-
-            graph_report.all_limits_passed = graph_report
-                .single_limit_reports
-                .iter()
-                .all(|report| report.passed);
-
-            result.results_per_graph.push(graph_report);
-        }
-
-        result.all_passed = result
-            .results_per_graph
-            .iter()
-            .all(|graph_report| graph_report.all_limits_passed);
-
-        Ok(result)
+        run_ir_profile(
+            self,
+            ir_profile_settings,
+            model,
+            Self::enumerate_ir_limits,
+            Self::test_single_ir_limit_impl,
+        )
     }
 
     fn enumerate_ir_limits(&self) -> Vec<(String, Vec<IrLimit>)> {
@@ -413,52 +531,6 @@ impl AmplitudeIntegrand {
             .collect()
     }
 
-    fn parse_select_limits_and_graphs(&self, input: &str) -> Result<Vec<(String, Vec<IrLimit>)>> {
-        input
-            .split(';')
-            .map(|graph_info_string| {
-                let mut parts = graph_info_string.split(' ');
-                let graph_name = parts
-                    .next()
-                    .ok_or_else(|| eyre!("Expected graph name in select_limits_and_graphs"))?
-                    .to_string();
-
-                let is_valid_name = self
-                    .data
-                    .graph_terms
-                    .iter()
-                    .any(|term| term.graph.name == graph_name);
-
-                if !is_valid_name {
-                    return Err(eyre!(
-                        "Graph name '{}' in select_limits_and_graphs does not match any graph in the integrand",
-                        graph_name
-                    ));
-                }
-
-                let ir_limits = parts
-                    .map(IrLimit::parse_limit)
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                if ir_limits.is_empty() {
-                    return Err(eyre!(
-                        "No IR limits specified for graph '{}' in select_limits_and_graphs",
-                        graph_name
-                    ));
-                }
-
-                if ir_limits.iter().any(|limit| !limit.is_valid(self.data.graph_terms.iter().find(|term| term.graph.name == graph_name).unwrap().graph.loop_momentum_basis.loop_edges.len()).is_ok()) {
-                    return Err(eyre!(
-                        "One or more IR limits specified for graph '{}' in select_limits_and_graphs are not valid",
-                        graph_name
-                    ));
-                }
-
-                Ok((graph_name, ir_limits))
-            })
-            .collect::<Result<Vec<_>, _>>()
-    }
-
     fn test_single_ir_limit_impl(
         &mut self,
         graph_id: usize,
@@ -466,13 +538,9 @@ impl AmplitudeIntegrand {
         rng: &mut MonteCarloRng,
         approach_settings: &IRProfileSetting,
         model: &Model,
-    ) -> Result<SingleLimitReport> {
+    ) -> Result<Vec<SingleLimitReport>> {
         let edges_in_limit = ir_limit.get_all_edges()?;
-        // find lmb
         let lmb = self.data.graph_terms[graph_id].lmb_with_loop_edges(edges_in_limit.as_slice())?;
-
-        // let model_parameter_cache = model.generate_values::<f128>();
-
         let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings);
         let non_limit_loops = lmb
             .loop_edges
@@ -498,102 +566,78 @@ impl AmplitudeIntegrand {
         let dependent_momenta_constructor = DependentMomentaConstructor::Amplitude(&externals);
 
         let loop_number = lmb.loop_edges.len();
+        let orientations = requested_orientations(self, graph_id, approach_settings)?;
+        let mut reports = Vec::with_capacity(orientations.len());
 
-        let mut limit_data = LimitData { data: Vec::new() };
+        for (orientation, orientation_label) in orientations {
+            let mut limit_data = LimitData { data: Vec::new() };
 
-        for (loop_mom_id, lambda_point) in momenta.into_iter().enumerate() {
-            let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
-                .map(|_| ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0)))
-                .collect();
+            for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
+                let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
+                    .map(|_| {
+                        ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0))
+                    })
+                    .collect();
 
-            for (loop_id, momentum) in non_limit_momenta.iter() {
-                loop_moms[*loop_id] = *momentum;
-            }
+                for (loop_id, momentum) in non_limit_momenta.iter() {
+                    loop_moms[*loop_id] = *momentum;
+                }
 
-            for tagged_momenta in &lambda_point.momenta {
-                let edge_id = tagged_momenta.tag;
-                let loop_id = lmb
-                    .loop_edges
-                    .iter()
-                    .position(|loop_edge| loop_edge == &edge_id)
-                    .unwrap_or_else(|| {
-                        unreachable!("corrupted lmb and ir limit: {}", ir_limit);
-                    });
+                for tagged_momenta in &lambda_point.momenta {
+                    let edge_id = tagged_momenta.tag;
+                    let loop_id = lmb
+                        .loop_edges
+                        .iter()
+                        .position(|loop_edge| loop_edge == &edge_id)
+                        .unwrap_or_else(|| {
+                            unreachable!("corrupted lmb and ir limit: {}", ir_limit);
+                        });
 
-                loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum;
-            }
+                    loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum;
+                }
 
-            let sample_in_cmb = MomentumSample::new(
-                loop_moms,
-                loop_mom_id,
-                &self.settings.kinematics.externals,
-                0,
-                F::from_f64(1.0),
-                dependent_momenta_constructor,
-                None,
-            )?;
+                let sample_in_cmb = MomentumSample::new(
+                    loop_moms,
+                    loop_mom_id,
+                    &self.settings.kinematics.externals,
+                    0,
+                    F::from_f64(1.0),
+                    dependent_momenta_constructor,
+                    orientation,
+                )?;
 
-            let sample = sample_in_cmb.lmb_transform(
-                &lmb,
-                &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
-            );
+                let sample = sample_in_cmb.lmb_transform(
+                    &lmb,
+                    &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
+                );
 
-            let sample_flattened = sample
-                .loop_moms()
-                .iter()
-                .flat_map(|mom| [mom.px, mom.py, mom.pz])
-                .collect_vec();
-
-            let symbolica_sample = Sample::Discrete(
-                F(1.0),
-                graph_id,
-                Some(Box::new(Sample::Continuous(F(1.0), sample_flattened))),
-            );
-
-            limit_data.data.push(LambdaPointEval {
-                lambda_point,
-                value: self
-                    .evaluate_sample(
-                        &symbolica_sample,
+                limit_data.data.push(LambdaPointEval {
+                    lambda_point,
+                    value: evaluate_profile_momentum_point(
+                        self,
                         model,
-                        sample.one(),
-                        0,
+                        graph_id,
+                        orientation,
+                        sample.loop_moms().iter().cloned().collect_vec(),
                         false,
-                        Complex::new_re(F::from_f64(100.0 * self.settings.kinematics.e_cm)),
-                    )
-                    .unwrap(),
-            });
+                    )?,
+                });
+            }
+
+            reports.push(build_single_limit_report(
+                ir_limit,
+                orientation_label,
+                limit_data.extract_power()?,
+            ));
         }
 
-        let slope = limit_data.extract_power()?;
-
-        let num_soft = ir_limit.num_soft();
-        let scaling = slope.exponent + ((num_soft * 3) as f64);
-        let passed = scaling > 0.0;
-
-        let result = SingleLimitReport {
-            limit_name: format!("{}", ir_limit),
-            num_soft: ir_limit.num_soft(),
-            scaling,
-            passed,
-            power_law_fit: slope,
-        };
-
-        Ok(result)
+        Ok(reports)
     }
 }
 
 impl CrossSectionIntegrand {
     pub fn ir_profile_completion_entries(&self) -> Vec<(String, Vec<String>)> {
-        self.enumerate_ir_limits()
-            .into_iter()
-            .map(|(graph_name, limits)| {
-                (
-                    graph_name,
-                    limits.into_iter().map(|limit| limit.to_string()).collect(),
-                )
-            })
-            .collect()
+        ir_profile_completion_entries(self.enumerate_ir_limits())
     }
 
     pub fn test_ir(
@@ -612,63 +656,13 @@ impl CrossSectionIntegrand {
         });
 
         self.warm_up(model)?;
-
-        let mut rng = MonteCarloRng::new(ir_profile_settings.seed, 0);
-
-        let limits_to_check =
-            if let Some(select_limits_and_graphs) = &ir_profile_settings.select_limits_and_graphs {
-                self.parse_select_limits_and_graphs(select_limits_and_graphs)?
-            } else {
-                self.enumerate_ir_limits()
-            };
-
-        let mut result = IrLimitTestReport {
-            all_passed: false,
-            results_per_graph: Vec::new(),
-        };
-
-        for (graph_name, limits) in limits_to_check {
-            let mut graph_report = GraphIRLimitReport {
-                graph_name: graph_name.clone(),
-                all_limits_passed: false,
-                single_limit_reports: Vec::new(),
-            };
-
-            let graph_id = self
-                .data
-                .graph_terms
-                .iter()
-                .enumerate()
-                .find(|(_, term)| term.graph.name == graph_name)
-                .ok_or_else(|| eyre!("Graph name '{}' not found in integrand", graph_name))?
-                .0;
-
-            for limit in limits {
-                let single_limit_report = self.test_single_ir_limit_impl(
-                    graph_id,
-                    &limit,
-                    &mut rng,
-                    ir_profile_settings,
-                    model,
-                )?;
-
-                graph_report.single_limit_reports.push(single_limit_report);
-            }
-
-            graph_report.all_limits_passed = graph_report
-                .single_limit_reports
-                .iter()
-                .all(|report| report.passed);
-
-            result.results_per_graph.push(graph_report);
-        }
-
-        result.all_passed = result
-            .results_per_graph
-            .iter()
-            .all(|graph_report| graph_report.all_limits_passed);
-
-        Ok(result)
+        run_ir_profile(
+            self,
+            ir_profile_settings,
+            model,
+            Self::enumerate_ir_limits,
+            Self::test_single_ir_limit_impl,
+        )
     }
 
     fn enumerate_ir_limits(&self) -> Vec<(String, Vec<IrLimit>)> {
@@ -683,52 +677,6 @@ impl CrossSectionIntegrand {
             .collect()
     }
 
-    fn parse_select_limits_and_graphs(&self, input: &str) -> Result<Vec<(String, Vec<IrLimit>)>> {
-        input
-            .split(';')
-            .map(|graph_info_string| {
-                let mut parts = graph_info_string.split(' ');
-                let graph_name = parts
-                    .next()
-                    .ok_or_else(|| eyre!("Expected graph name in select_limits_and_graphs"))?
-                    .to_string();
-
-                let is_valid_name = self
-                    .data
-                    .graph_terms
-                    .iter()
-                    .any(|term| term.graph.name == graph_name);
-
-                if !is_valid_name {
-                    return Err(eyre!(
-                        "Graph name '{}' in select_limits_and_graphs does not match any graph in the integrand",
-                        graph_name
-                    ));
-                }
-
-                let ir_limits = parts
-                    .map(IrLimit::parse_limit)
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                if ir_limits.is_empty() {
-                    return Err(eyre!(
-                        "No IR limits specified for graph '{}' in select_limits_and_graphs",
-                        graph_name
-                    ));
-                }
-
-                if ir_limits.iter().any(|limit| !limit.is_valid(self.data.graph_terms.iter().find(|term| term.graph.name == graph_name).unwrap().graph.loop_momentum_basis.loop_edges.len()).is_ok()) {
-                    return Err(eyre!(
-                        "One or more IR limits specified for graph '{}' in select_limits_and_graphs are not valid",
-                        graph_name
-                    ));
-                }
-
-                Ok((graph_name, ir_limits))
-            })
-            .collect::<Result<Vec<_>, _>>()
-    }
-
     fn test_single_ir_limit_impl(
         &mut self,
         graph_id: usize,
@@ -736,7 +684,7 @@ impl CrossSectionIntegrand {
         rng: &mut MonteCarloRng,
         approach_settings: &IRProfileSetting,
         model: &Model,
-    ) -> Result<SingleLimitReport> {
+    ) -> Result<Vec<SingleLimitReport>> {
         let edges_in_limit = ir_limit.get_all_edges()?;
 
         // find cut that for that as all edges of the limit
@@ -776,11 +724,7 @@ impl CrossSectionIntegrand {
             })
             .collect_vec();
 
-        // find lmb
         let lmb = self.data.graph_terms[graph_id].lmb_with_loop_edges(edges_in_limit.as_slice())?;
-
-        // let model_parameter_cache = model.generate_values::<f128>();
-
         let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings);
         let non_limit_loops = lmb
             .loop_edges
@@ -802,92 +746,76 @@ impl CrossSectionIntegrand {
         let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection;
 
         let loop_number = lmb.loop_edges.len();
+        let orientations = requested_orientations(self, graph_id, approach_settings)?;
+        let mut reports = Vec::with_capacity(orientations.len());
 
-        let mut limit_data = LimitData { data: Vec::new() };
+        for (orientation, orientation_label) in orientations {
+            let mut limit_data = LimitData { data: Vec::new() };
 
-        for (loop_mom_id, lambda_point) in momenta.into_iter().enumerate() {
-            let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
-                .map(|_| ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0)))
-                .collect();
+            for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
+                let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
+                    .map(|_| {
+                        ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0))
+                    })
+                    .collect();
 
-            for (loop_id, momentum) in non_limit_momenta.iter() {
-                loop_moms[*loop_id] = *momentum;
-            }
+                for (loop_id, momentum) in non_limit_momenta.iter() {
+                    loop_moms[*loop_id] = *momentum;
+                }
 
-            for tagged_momenta in &lambda_point.momenta {
-                let edge_id = tagged_momenta.tag;
-                let loop_id = lmb
-                    .loop_edges
-                    .iter()
-                    .position(|loop_edge| loop_edge == &edge_id)
-                    .unwrap_or_else(|| {
-                        unreachable!("corrupted lmb and ir limit: {}", ir_limit);
-                    });
+                for tagged_momenta in &lambda_point.momenta {
+                    let edge_id = tagged_momenta.tag;
+                    let loop_id = lmb
+                        .loop_edges
+                        .iter()
+                        .position(|loop_edge| loop_edge == &edge_id)
+                        .unwrap_or_else(|| {
+                            unreachable!("corrupted lmb and ir limit: {}", ir_limit);
+                        });
 
-                if edges_to_flip.contains(&edge_id) {
-                    loop_moms[LoopIndex(loop_id)] = -tagged_momenta.momentum;
-                } else {
-                    loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum
-                };
-            }
+                    loop_moms[LoopIndex(loop_id)] = if edges_to_flip.contains(&edge_id) {
+                        -tagged_momenta.momentum
+                    } else {
+                        tagged_momenta.momentum
+                    };
+                }
 
-            let sample_in_cmb = MomentumSample::new(
-                loop_moms,
-                loop_mom_id,
-                &self.settings.kinematics.externals,
-                0,
-                F::from_f64(1.0),
-                dependent_momenta_constructor,
-                None,
-            )?;
+                let sample_in_cmb = MomentumSample::new(
+                    loop_moms,
+                    loop_mom_id,
+                    &self.settings.kinematics.externals,
+                    0,
+                    F::from_f64(1.0),
+                    dependent_momenta_constructor,
+                    orientation,
+                )?;
 
-            let sample = sample_in_cmb.lmb_transform(
-                &lmb,
-                &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
-            );
+                let sample = sample_in_cmb.lmb_transform(
+                    &lmb,
+                    &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
+                );
 
-            let sample_flattened = sample
-                .loop_moms()
-                .iter()
-                .flat_map(|mom| [mom.px, mom.py, mom.pz])
-                .collect_vec();
-
-            let symbolica_sample = Sample::Discrete(
-                F(1.0),
-                graph_id,
-                Some(Box::new(Sample::Continuous(F(1.0), sample_flattened))),
-            );
-
-            limit_data.data.push(LambdaPointEval {
-                lambda_point,
-                value: self
-                    .evaluate_sample(
-                        &symbolica_sample,
+                limit_data.data.push(LambdaPointEval {
+                    lambda_point,
+                    value: evaluate_profile_momentum_point(
+                        self,
                         model,
-                        sample.one(),
-                        0,
+                        graph_id,
+                        orientation,
+                        sample.loop_moms().iter().cloned().collect_vec(),
                         false,
-                        Complex::new_re(F::from_f64(100.0 * self.settings.kinematics.e_cm)),
-                    )
-                    .unwrap(),
-            });
+                    )?,
+                });
+            }
+
+            reports.push(build_single_limit_report(
+                ir_limit,
+                orientation_label,
+                limit_data.extract_power()?,
+            ));
         }
 
-        let slope = limit_data.extract_power()?;
-
-        let num_soft = ir_limit.num_soft();
-        let scaling = slope.exponent + ((num_soft * 3) as f64);
-        let passed = scaling > 0.0;
-
-        let result = SingleLimitReport {
-            limit_name: format!("{}", ir_limit),
-            num_soft: ir_limit.num_soft(),
-            scaling,
-            passed,
-            power_law_fit: slope,
-        };
-
-        Ok(result)
+        Ok(reports)
     }
 }
 
@@ -1333,11 +1261,13 @@ fn sample_random_unit_vector<T: FloatLike>(rng: &mut MonteCarloRng) -> ThreeMome
     unnormalized_momentum * norm.inv()
 }
 
+#[derive(Clone)]
 struct TaggedMomenta<T> {
     momentum: ThreeMomentum<T>,
     tag: EdgeIndex,
 }
 
+#[derive(Clone)]
 struct LambdaPoint<T: FloatLike> {
     lambda: F<T>,
     momenta: Vec<TaggedMomenta<F<T>>>,

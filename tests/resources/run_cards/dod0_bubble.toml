@@ -1,0 +1,154 @@
+commands = []
+
+[cli_settings]
+[cli_settings.state]
+folder = "./examples/cli/scalar_topologies/bubble_state"
+name = "bubble_state"
+
+[cli_settings.global.log_style]
+include_fields = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = false
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model scalars-default.json",
+
+  "remove processes",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble_below_thres",
+  "duplicate integrand -p bubble -i scalar_bubble_below_thres --output_process_name bubble --output_integrand_name scalar_bubble_above_thres",
+  "save dot",
+
+  "set global kv global.generation.uv.generate_integrated=false",
+  "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble_no_integrated_UV -i scalar_bubble_below_thres",
+  "duplicate integrand -p bubble_no_integrated_UV -i scalar_bubble_below_thres --output_process_name bubble_no_integrated_UV --output_integrand_name scalar_bubble_above_thres",
+
+  "save standalone --json",
+
+  "set model mass_scalar_2=2.0",
+
+  "set process kv general.mu_r=3.0 general.m_uv=20.0",
+
+  """set process -p bubble -i scalar_bubble_below_thres string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[1.0, 0.0, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+]
+    '""",
+
+  """set process -p bubble_no_integrated_UV -i scalar_bubble_below_thres string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[1.0, 0.0, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+]
+    '""",
+
+  """set process -p bubble -i scalar_bubble_above_thres string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[10.0, 0.0, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+]
+    '""",
+
+  """set process -p bubble_no_integrated_UV -i scalar_bubble_above_thres string '
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [
+   	[10.0, 0.0, 0.0,  0.0],
+    "dependent"
+]
+helicities = [
+    0,
+	0,
+]
+    '""",
+
+  "save state -o",
+]
+
+[[command_blocks]]
+name = "uv_profile"
+commands = [
+  "display integrand",
+]
+
+[[command_blocks]]
+name = "integrate_bubble_below_threshold"
+commands = [
+  """set process kv
+		integrator.target_relative_accuracy=0.00001
+		integrator.n_increase=0 integrator.n_start=1000000
+		integrator.n_max=200000000000
+		integrator.seed=1337
+	""",
+
+  """integrate -p bubble_no_integrated_UV -i scalar_bubble_below_thres -p bubble -i scalar_bubble_below_thres --n-cores 1
+	             --target bubble_no_integrated_UV@scalar_bubble_below_thres=1.471664021721597e-2,0.0 bubble@scalar_bubble_below_thres=2.7029875684552542e-3,0.0
+                 --restart
+    """,
+]
+
+[[command_blocks]]
+name = "integrate_bubble_above_threshold"
+commands = [
+  """set process kv
+		integrator.target_relative_accuracy=0.00001
+		integrator.n_increase=0 integrator.n_start=1000000
+		integrator.n_max=200000000000
+		integrator.seed=1337
+	""",
+
+  """integrate -p bubble_no_integrated_UV -i scalar_bubble_above_thres -p bubble -i scalar_bubble_above_thres --n-cores 1
+	             --target bubble_no_integrated_UV@scalar_bubble_above_thres=1.182031845384170e-2,9.11674467431249e-3 bubble@scalar_bubble_above_thres=-1.93334194919018e-4,9.116744674312493e-3
+                 --restart
+    """,
+]
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = false
+lmb_channels = "summed"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false

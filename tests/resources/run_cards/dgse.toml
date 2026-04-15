@@ -35,11 +35,11 @@ softct = true
 add_sigma = false
 inner_products = true
 
-[[cli_settings.global.generation.uv.renormalization_schemes]]
-renormalization_scheme = "IR"
+# [[cli_settings.global.generation.uv.renormalization_schemes]]
+# renormalization_scheme = "IR"
 
-[cli_settings.global.generation.uv.renormalization_schemes.ct_identifier]
-external_pdg_set = [1]
+# [cli_settings.global.generation.uv.renormalization_schemes.ct_identifier]
+# external_pdg_set = [1]
 
 [cli_settings.global.generation.tropical_subgraph_table]
 panic_on_fail = false

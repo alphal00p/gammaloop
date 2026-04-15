@@ -63,6 +63,19 @@ pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum OrientationProfileMode {
+    #[default]
+    Summed,
+    PerOrientation,
+}
+
+impl OrientationProfileMode {
+    pub fn profiles_per_orientation(self) -> bool {
+        matches!(self, Self::PerOrientation)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct MomentumSpaceEvaluationInput {
     pub loop_momenta: Vec<ThreeMomentum<F<f64>>>,
@@ -973,6 +986,55 @@ pub(crate) fn filtered_orientation_count(
     } else {
         orientation_filter.included_iter().count()
     }
+}
+
+pub(crate) fn orientation_labels_for_graph<I: ProcessIntegrandImpl>(
+    integrand: &I,
+    graph_id: usize,
+) -> Result<Vec<String>> {
+    let group_id = integrand
+        .graph_group_id_for_graph(graph_id)
+        .map(GroupId)
+        .ok_or_else(|| {
+            eyre!(
+                "Unknown graph '{}' while resolving orientation labels.",
+                graph_id
+            )
+        })?;
+    let master = integrand.get_master_graph(group_id);
+    Ok((0..master.get_num_orientations())
+        .map(|orientation_id| {
+            master
+                .orientation_label(orientation_id)
+                .unwrap_or_else(|| format!("#{}", orientation_id))
+        })
+        .collect())
+}
+
+pub(crate) fn evaluate_profile_momentum_point<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    graph_id: usize,
+    orientation: Option<usize>,
+    loop_momenta: Vec<ThreeMomentum<F<f64>>>,
+    use_arb_prec: bool,
+) -> Result<EvaluationResult> {
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta,
+        integrator_weight: F(1.0),
+        graph_id: Some(graph_id),
+        group_id: None,
+        orientation,
+        channel_id: None,
+    };
+    evaluate_momentum_configuration(
+        integrand,
+        model,
+        &input,
+        F(1.0),
+        use_arb_prec,
+        Complex::new_re(F(100.0 * integrand.get_settings().kinematics.e_cm)),
+    )
 }
 
 fn format_lmb_channel_label(edge_ids: &[usize]) -> String {

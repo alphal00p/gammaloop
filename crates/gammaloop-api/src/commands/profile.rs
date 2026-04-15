@@ -10,7 +10,7 @@ use eyre::eyre;
 use gammalooprs::{
     integrands::process::{
         ir::{IRProfileSetting, IrLimitTestReport},
-        ProcessIntegrand,
+        OrientationProfileMode, ProcessIntegrand,
     },
     processes::ProcessCollection,
     uv::{
@@ -71,6 +71,10 @@ pub struct UltraVioletProfile {
     #[arg(long = "analyse_analytically")]
     pub analyse_analytically: bool,
 
+    /// Profile each visible orientation separately and include per-orientation results
+    #[arg(long = "per-orientation")]
+    pub per_orientation: bool,
+
     /// Random seed for momentum sampling
     #[arg(long = "seed")]
     pub seed: Option<u64>,
@@ -123,6 +127,10 @@ pub struct InfraRedProfile {
     /// restrict test to particular graphs or limits
     #[arg(short = 's', long = "select")]
     pub select: Option<String>,
+
+    /// Profile each visible orientation separately and report one row per orientation
+    #[arg(long = "per-orientation")]
+    pub per_orientation: bool,
 }
 
 impl Default for InfraRedProfile {
@@ -136,6 +144,7 @@ impl Default for InfraRedProfile {
             seed: None,
             output_file: None,
             select: None,
+            per_orientation: false,
         }
     }
 }
@@ -149,6 +158,7 @@ impl Default for UltraVioletProfile {
             max_scale_exponent: 2.0,
             use_f128: false,
             analyse_analytically: false,
+            per_orientation: false,
             seed: None,
             output_file: None,
         }
@@ -194,6 +204,7 @@ impl Profile {
                 use_f128,
                 seed,
                 analyse_analytically,
+                per_orientation,
                 output_file,
             }) => {
                 let (process_id, integrand_name) =
@@ -220,6 +231,11 @@ impl Profile {
                     seed: (*seed).unwrap_or(42),
                     use_f128: *use_f128,
                     analyse_analytically: *analyse_analytically,
+                    orientation_mode: if *per_orientation {
+                        OrientationProfileMode::PerOrientation
+                    } else {
+                        OrientationProfileMode::Summed
+                    },
                     ..Default::default()
                 };
                 let profile_res = amplitude.profile(&model, &profile_settings)?.analyse();
@@ -229,6 +245,13 @@ impl Profile {
                 }
 
                 for t in profile_res.analytic_tables_per_graph() {
+                    let Some(t) = t else {
+                        continue;
+                    };
+                    info!("\n{}", t);
+                }
+
+                for t in profile_res.per_orientation_tables_per_graph(-0.9) {
                     let Some(t) = t else {
                         continue;
                     };
@@ -250,6 +273,7 @@ impl Profile {
                 seed,
                 output_file: _,
                 select,
+                per_orientation,
             }) => {
                 let ir_profile_settings = IRProfileSetting {
                     lambda_exp_start: *min_scale_exponent,
@@ -257,6 +281,11 @@ impl Profile {
                     steps: *n_points,
                     seed: seed.unwrap_or(420),
                     select_limits_and_graphs: select.clone(),
+                    orientation_mode: if *per_orientation {
+                        OrientationProfileMode::PerOrientation
+                    } else {
+                        OrientationProfileMode::Summed
+                    },
                 };
 
                 let (process_id, integrand_name) =

@@ -9,7 +9,7 @@ use gammaloop_api::{
     commands::CommandExecution,
     commands::save::SaveState,
     session::{CliSession, CliSessionState},
-    state::{RunHistory, State, SyncSettings},
+    state::{CommandHistory, RunHistory, State, SyncSettings},
 };
 
 use gammalooprs::{
@@ -50,6 +50,19 @@ pub fn run_card(resource_path: impl AsRef<Path>) -> Result<RunHistory> {
     initialise()?;
 
     RunHistory::load(PathBuf::from("./tests/resources/run_cards").join(resource_path))
+}
+
+pub fn example_run_card(run_card_path: impl AsRef<Path>) -> Result<RunHistory> {
+    ensure_workspace_cwd();
+    initialise()?;
+
+    let run_card_path = run_card_path.as_ref();
+    let resolved_path = if run_card_path.is_absolute() {
+        run_card_path.to_path_buf()
+    } else {
+        workspace_root().join("examples/cli").join(run_card_path)
+    };
+    RunHistory::load(resolved_path)
 }
 
 pub const TESTS_ARTIFACTS: &str = "tests/artifacts";
@@ -150,36 +163,69 @@ pub fn get_test_cli(
     clean: bool,
 ) -> Result<CLIState> {
     ensure_workspace_cwd();
-    if clean && state_path.as_ref().exists() {
-        clean_test(state_path.as_ref());
-    }
-    let mut state = new_cli_for_test(state_path.as_ref(), log_file_name);
-
-    let cmds = if let Some(rc_path) = run_card_path {
-        let mut run_card_cmds = run_card(rc_path)?;
-        let mut global_settings_for_running_cms = run_card_cmds.cli_settings.clone();
-        let mut default_runtime_settings_for_running_cms =
-            run_card_cmds.default_runtime_settings.clone();
-        _ = run_card_cmds.run(
-            &mut state,
-            &mut global_settings_for_running_cms,
-            &mut default_runtime_settings_for_running_cms,
-        )?;
-        run_card_cmds
+    let run_history = if let Some(rc_path) = run_card_path {
+        run_card(rc_path)?
     } else {
         RunHistory::default()
     };
-    let mut global_settings = cmds.cli_settings.clone();
-    global_settings.state.folder = state_path.as_ref().to_path_buf();
+    build_cli_for_run_history(run_history, state_path.as_ref(), log_file_name, clean)
+}
+
+pub fn get_example_cli(
+    run_card_path: impl AsRef<Path>,
+    selected_block_names: &[&str],
+    state_path_override: Option<PathBuf>,
+    log_file_name: Option<String>,
+    clean: bool,
+) -> Result<CLIState> {
+    ensure_workspace_cwd();
+    let mut run_history = example_run_card(run_card_path)?;
+    if !selected_block_names.is_empty() {
+        let run_selected_blocks = format!("run {}", selected_block_names.join(" "));
+        run_history
+            .commands
+            .push(CommandHistory::from_raw_string(&run_selected_blocks)?);
+    }
+    let state_path =
+        state_path_override.unwrap_or_else(|| run_history.cli_settings.state.folder.clone());
+    build_cli_for_run_history(run_history, &state_path, log_file_name, clean)
+}
+
+fn build_cli_for_run_history(
+    mut run_history: RunHistory,
+    state_path: &Path,
+    log_file_name: Option<String>,
+    clean: bool,
+) -> Result<CLIState> {
+    if clean && state_path.exists() {
+        clean_test(state_path);
+    }
+    let mut state = new_cli_for_test(state_path, log_file_name);
+
+    if !run_history.commands.is_empty() {
+        let mut global_settings_for_running_cmds = run_history.cli_settings.clone();
+        global_settings_for_running_cmds.state.folder = state_path.to_path_buf();
+        global_settings_for_running_cmds.sync_settings()?;
+        let mut default_runtime_settings_for_running_cmds =
+            run_history.default_runtime_settings.clone();
+        _ = run_history.run(
+            &mut state,
+            &mut global_settings_for_running_cmds,
+            &mut default_runtime_settings_for_running_cmds,
+        )?;
+    }
+
+    let mut global_settings = run_history.cli_settings.clone();
+    global_settings.state.folder = state_path.to_path_buf();
     global_settings.sync_settings()?;
-    let default_runtime_settings = cmds.default_runtime_settings.clone();
+    let default_runtime_settings = run_history.default_runtime_settings.clone();
     SaveState {
         override_state: Some(true),
         ..Default::default()
     }
     .save(
         &mut state,
-        &cmds,
+        &run_history,
         &default_runtime_settings,
         &global_settings,
     )?;
@@ -188,7 +234,7 @@ pub fn get_test_cli(
         state,
         cli_settings: global_settings,
         default_runtime_settings,
-        run_history: cmds,
+        run_history,
         session_state: CliSessionState::default(),
     })
 }

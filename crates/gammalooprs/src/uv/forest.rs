@@ -8,6 +8,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
 use idenso::{color::ColorSimplifier, metric::MetricSimplifier};
+use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -78,7 +79,7 @@ impl CutForests {
         }
         Ok(())
     }
-
+    #[instrument(skip_all)]
     pub(crate) fn orientation_parametric_exprs(
         self,
         graph: &Graph,
@@ -86,8 +87,21 @@ impl CutForests {
     ) -> Result<Vec<ParametricIntegrands>> {
         let mut exprs = vec![];
 
-        for (forest, cuts) in self.forests.iter().zip(self.cuts.cuts.into_iter()) {
+        for (i, (forest, cuts)) in self
+            .forests
+            .iter()
+            .zip(self.cuts.cuts.into_iter())
+            .enumerate()
+        {
             let integrands = forest.orientation_parametric_expr(graph, add_sigma)?;
+
+            debug!(integrands=%integrands.iter().map(|s| s.to_canonical_string()).join("\n\n"),
+                "Orientation Parametric integrand {i},with {} terms for \n{}\n{}",
+                forest.n_terms(),
+                graph.dot(&cuts.union),
+                integrands.iter().map(|s| s.log_print(Some(100))).join("\n"),
+
+            );
             exprs.push(ParametricIntegrands { integrands, cuts });
         }
         Ok(exprs)
@@ -99,7 +113,7 @@ pub struct Forest {
 }
 
 impl Forest {
-    pub(crate) fn _n_terms(&self) -> usize {
+    pub(crate) fn n_terms(&self) -> usize {
         self.dag.nodes.len()
     }
 
@@ -330,8 +344,10 @@ impl Forest {
         }
 
         for s in &mut sum {
-            *s = s.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_);
-            // println!("Final integrand for forest: {}", s.log_print(Some(100)));
+            *s = s
+                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                .with(W_.d_)
+                .collect_factors();
         }
         Ok(sum)
     }

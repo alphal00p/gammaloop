@@ -9,7 +9,7 @@ use symbolica::{
     id::Replacement,
     parse,
 };
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 use crate::{
     graph::{Graph, LMBext, cuts::CutSet},
@@ -228,6 +228,7 @@ impl Local3DApproximation {
             .replace(parse!("der(x__, OSE(y__))"))
             .with(Atom::num(0));
         a = a.replace(GS.rescale).with(Atom::num(1));
+        debug!("a: {}", a);
         Ok(a)
     }
 

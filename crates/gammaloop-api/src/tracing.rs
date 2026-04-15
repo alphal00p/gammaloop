@@ -1,8 +1,7 @@
 use std::{
     fs::{self, OpenOptions},
-    io,
-    path::Path,
-    path::PathBuf,
+    io::{self, Write},
+    path::{Path, PathBuf},
     sync::{Arc, LazyLock, Mutex, OnceLock},
     time::Duration,
 };
@@ -189,6 +188,7 @@ struct LazyJsonMakeWriter {
 
 struct LazyJsonWriter {
     state: Arc<LazyJsonWriterState>,
+    buffer: Vec<u8>,
 }
 
 impl LazyJsonMakeWriter {
@@ -209,12 +209,36 @@ impl<'a> MakeWriter<'a> for LazyJsonMakeWriter {
     fn make_writer(&'a self) -> Self::Writer {
         LazyJsonWriter {
             state: Arc::clone(&self.state),
+            buffer: Vec::new(),
         }
     }
 }
 
 impl io::Write for LazyJsonWriter {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.buffer.extend_from_slice(buf);
+
+        while let Some(newline_index) = self.buffer.iter().position(|byte| *byte == b'\n') {
+            let line = self.buffer.drain(..=newline_index).collect::<Vec<_>>();
+            self.write_sanitized_line(&line)?;
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if !self.buffer.is_empty() {
+            let line = std::mem::take(&mut self.buffer);
+            self.write_sanitized_line(&line)?;
+        }
+        if let Some(file) = self.state.file.lock().unwrap().as_mut() {
+            file.flush()?;
+        }
+        Ok(())
+    }
+}
+
+impl LazyJsonWriter {
+    fn write_sanitized_line(&self, line: &[u8]) -> io::Result<()> {
         let mut file = self.state.file.lock().unwrap();
         if file.is_none() {
             fs::create_dir_all(&self.state.dir)?;
@@ -224,16 +248,77 @@ impl io::Write for LazyJsonWriter {
                 .open(self.state.dir.join(&self.state.filename))?;
             *file = Some(opened);
         }
-        file.as_mut().unwrap().write(buf)
+
+        let file = file.as_mut().unwrap();
+        let line = sanitize_json_log_line(line);
+        file.write_all(&line)
+    }
+}
+
+fn sanitize_json_log_line(line: &[u8]) -> Vec<u8> {
+    let mut trailing_newline = false;
+    let line = if let Some(stripped) = line.strip_suffix(b"\n") {
+        trailing_newline = true;
+        stripped
+    } else {
+        line
+    };
+
+    let sanitized = match serde_json::from_slice::<serde_json::Value>(line) {
+        Ok(mut value) => {
+            strip_ansi_from_json_value(&mut value);
+            serde_json::to_vec(&value).unwrap_or_else(|_| line.to_vec())
+        }
+        Err(_) => line.to_vec(),
+    };
+
+    if trailing_newline {
+        let mut with_newline = sanitized;
+        with_newline.push(b'\n');
+        with_newline
+    } else {
+        sanitized
+    }
+}
+
+fn strip_ansi_from_json_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(string) => {
+            *string = strip_ansi_escape_codes(string);
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                strip_ansi_from_json_value(item);
+            }
+        }
+        serde_json::Value::Object(map) => {
+            for value in map.values_mut() {
+                strip_ansi_from_json_value(value);
+            }
+        }
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+    }
+}
+
+fn strip_ansi_escape_codes(line: &str) -> String {
+    let mut stripped = String::with_capacity(line.len());
+    let mut chars = line.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\u{1b}' && chars.peek() == Some(&'[') {
+            chars.next();
+            for code in chars.by_ref() {
+                if ('@'..='~').contains(&code) {
+                    break;
+                }
+            }
+            continue;
+        }
+
+        stripped.push(ch);
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        if let Some(file) = self.state.file.lock().unwrap().as_mut() {
-            file.flush()
-        } else {
-            Ok(())
-        }
-    }
+    stripped
 }
 
 fn directive_is_effectively_off(spec: &str) -> bool {

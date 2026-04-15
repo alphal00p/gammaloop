@@ -1,0 +1,15 @@
+digraph GL0{
+    num = "1";
+    overall_factor = "(AutG(2))^(-1)*ExternalFermionOrderingSign(1)";
+    overall_factor_evaluated = "1/2";
+    projector = "1";
+
+
+	exte0	 [style=invis];
+	exte0	-> 1:0	 [id=0 dir=none sink=0  dod="-2" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="scalar_1" pin="x:@-left"];
+	exte1	 [style=invis];
+	0:1	-> exte1	 [id=1 dir=none source=0  dod="-2" is_dummy="false" lmb_rep="P(0,a___)" name="e1" num="1𝑖" particle="scalar_1" pin="x:@+right"];
+
+	0:2	-> 1:3	 [id=2 dir=none source=1 sink=1  dod="-1" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="1𝑖 * Q(2,spenso::mink(4,edge(2,1))) * Q(0,spenso::mink(4,edge(2,1)))" particle="scalar_2"];
+	0:4	-> 1:5	 [id=3 dir=none source=2 sink=2  dod="-1" is_dummy="false" lmb_rep="-1*K(0,a___)+-1*P(0,a___)" name="e3" num="-1𝑖 * ( Q(3,spenso::mink(4,edge(3,1))) + Q(0,spenso::mink(4,edge(3,1))) ) * Q(0,spenso::mink(4,edge(3,1)))" particle="scalar_2"];
+}

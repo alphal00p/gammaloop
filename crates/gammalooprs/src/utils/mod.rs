@@ -4390,7 +4390,7 @@ mod formatting_tests {
         let x_sq = x.square();
         assert!(!x_sq.is_nan());
         assert!(!x_sq.is_infinite());
-        assert_eq!(x_sq, &x * &x);
+        assert_eq!(x_sq, &x * x);
         assert_eq!(x_sq.sqrt(), x);
     }
 }
