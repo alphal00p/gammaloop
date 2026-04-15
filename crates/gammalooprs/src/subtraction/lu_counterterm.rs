@@ -431,8 +431,9 @@ impl LUCounterTermEvaluators {
             .unwrap_or(1);
 
         let pass_two_evaluator = (1..=max_num_esurfaces)
-            .map(|order| build_derivative_structure(order as u8))
-            .collect(, &settings.generation.evaluator);
+            .map(|order| build_derivative_structure(order as u8, &settings.generation.evaluator))
+            .collect();
+
         timings.symbolica_time += symbolica_started.elapsed();
 
         (
@@ -603,12 +604,6 @@ impl<T: FloatLike> LUCTKinematicPoint<T> {
             lu_cut_parameter_cache: Vec::new(),
             lu_cut_esurface_values: Vec::new(),
         }
-    }
-}
-
-impl<T: FloatLike> Default for LUCTKinematicPoint<T> {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -931,7 +926,7 @@ impl LUCounterTerm {
                         sample.extract_threshold_parameters(true);
                     let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                     let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
-                self.ensure_active_left_threshold(cut_id, left_threshold_id)?;
+                    self.ensure_active_left_threshold(cut_id, left_threshold_id)?;
 
                     let params = T::get_parameters(
                         param_builder,
@@ -975,7 +970,7 @@ impl LUCounterTerm {
                         sample.extract_threshold_parameters(true);
                     let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                     let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
-                self.ensure_active_right_threshold(cut_id, right_threshold_id)?;
+                    self.ensure_active_right_threshold(cut_id, right_threshold_id)?;
 
                     let params = T::get_parameters(
                         param_builder,
@@ -1031,7 +1026,7 @@ impl LUCounterTerm {
                                 RightThresholdId::from(sample_right.get_esurface_id().0),
                             );
                             self.ensure_active_iterated_threshold(cut_id, iterated_index)?;
-            let inverse_transformed_momentum_sample =
+                            let inverse_transformed_momentum_sample =
                                 merge_and_inverse_transform(&sample_left, &sample_right);
 
                             let params = T::get_parameters(
@@ -1107,7 +1102,7 @@ impl LUCounterTerm {
                 /* Complex::new_re(F::from_f64((-1i32).pow(order as u32) as f64)) */  pass_two_result;
         }
 
-        total_result
+        Ok(total_result)
     }
 }
 
@@ -1332,29 +1327,7 @@ mod tests {
             evaluators: TiVec::new(),
             thresholds: TiVec::new(),
             subspaces: TiVec::new(),
-            active_cuts: ti_vec![false],
-            active_left_thresholds: ti_vec![TiVec::new()],
-            active_right_thresholds: ti_vec![TiVec::new()],
-            active_iterated_thresholds: TiVec::new(),
-        };
-
-        let error = counterterm.ensure_active_cut(RaisedCutId(0)).unwrap_err();
-        assert!(error.to_string().contains("generation marked it inactive"));
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::LUCounterTerm;
-    use crate::processes::RaisedCutId;
-    use typed_index_collections::{TiVec, ti_vec};
-
-    #[test]
-    fn inactive_cut_guard_reports_runtime_access() {
-        let counterterm = LUCounterTerm {
-            evaluators: TiVec::new(),
-            thresholds: TiVec::new(),
-            subspaces: TiVec::new(),
+            rstar_dependence_calculator: TiVec::new(),
             active_cuts: ti_vec![false],
             active_left_thresholds: ti_vec![TiVec::new()],
             active_right_thresholds: ti_vec![TiVec::new()],
