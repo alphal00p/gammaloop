@@ -1103,7 +1103,8 @@ impl LUCounterTerm {
                 record_primary_timing,
             );
 
-            total_result += pass_two_result;
+            total_result -=
+                /* Complex::new_re(F::from_f64((-1i32).pow(order as u32) as f64)) */  pass_two_result;
         }
 
         total_result

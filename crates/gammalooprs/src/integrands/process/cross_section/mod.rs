@@ -717,10 +717,6 @@ impl CrossSectionGraphTerm {
             ));
         }
 
-        let rstar_dependence_calculator = (1..=graph.derived_data.raised_data.dual_shapes.len())
-            .map(|i| generate_rstar_t_dependence_evaluator(i))
-            .collect::<Result<Vec<_>>>()?;
-
         let rstar_dependence_calculator = graph
             .derived_data
             .raised_data
@@ -1447,6 +1443,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             .iter_enumerated()
             .zip(cut_threshold_counterterms.iter())
         {
+            let mut total_bare_contribution = Complex::new_re(momentum_sample.zero());
             for (i, bare_contribution) in result.iter().enumerate() {
                 debug!(
                     "cut {} contribution with {} esurfaces: {:+16e}",
@@ -1455,8 +1452,14 @@ impl GraphTerm for CrossSectionGraphTerm {
                     bare_contribution
                 );
 
-                all_cut_result += bare_contribution;
+                total_bare_contribution += bare_contribution;
             }
+            debug!(
+                "total bare contribution for cut {}: {:+16e}",
+                cut_id.0, total_bare_contribution
+            );
+
+            all_cut_result += total_bare_contribution;
 
             debug!(
                 "threshold counterterm for cut {}: {:+16e}",
