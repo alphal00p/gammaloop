@@ -63,7 +63,7 @@ pub struct StandaloneCountertermArchive<A = Vec<u8>> {
     pub(crate) right_thresholds_evaluator: Vec<Vec<StandaloneEvaluatorStackArchive<A>>>,
     pub(crate) iterated_evaluator:
         StandaloneIteratedCollectionArchive<Vec<StandaloneEvaluatorStackArchive<A>>>,
-    pub(crate) pass_two_evaluator: StandaloneGenericEvaluatorArchive<A>,
+    pub(crate) pass_two_evaluator: Vec<StandaloneGenericEvaluatorArchive<A>>,
 }
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -364,7 +364,7 @@ pub struct LoadedStandaloneCounterterm {
     pub left_thresholds_evaluator: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
     pub right_thresholds_evaluator: Vec<Vec<LoadedStandaloneEvaluatorStack>>,
     pub iterated_evaluator: LoadedStandaloneIteratedCollection<Vec<LoadedStandaloneEvaluatorStack>>,
-    pub pass_two_evaluator: LoadedGenericEvaluator,
+    pub pass_two_evaluator: Vec<LoadedGenericEvaluator>,
 }
 
 pub struct LoadedStandaloneIteratedCollection<T> {
@@ -496,19 +496,27 @@ impl<S, A: ImportWithMap + Clone> StandaloneCrossSectionArchive<S, A> {
                             })
                         };
 
-                    let pass_two_started = Instant::now();
-                    let pass_two_evaluator = build_evaluator(
-                        counterterm.pass_two_evaluator,
-                        &params,
-                        parse_fn_map_entries(&graph.fn_map_entries, state_map)?,
-                        state_map,
-                        false,
-                    )?;
-                    println!(
-                        "[timing] build_evaluator {}::counterterm[{cut_id}]::pass_two_evaluator took {:?}",
-                        graph.graph_name,
-                        pass_two_started.elapsed()
-                    );
+                    let pass_two_evaluator = counterterm
+                        .pass_two_evaluator
+                        .into_iter()
+                        .enumerate()
+                        .map(|(order, payload)| {
+                            let started = Instant::now();
+                            let evaluator = build_evaluator(
+                                payload,
+                                &params,
+                                parse_fn_map_entries(&graph.fn_map_entries, state_map)?,
+                                state_map,
+                                false,
+                            )?;
+                            println!(
+                                "[timing] build_evaluator {}::counterterm[{cut_id}]::pass_two_evaluator[{order}] took {:?}",
+                                graph.graph_name,
+                                started.elapsed()
+                            );
+                            Ok(evaluator)
+                        })
+                        .collect::<Result<Vec<_>>>()?;
 
                     Ok(LoadedStandaloneCounterterm {
                         left_thresholds_evaluator: counterterm
@@ -621,7 +629,7 @@ fn main() -> Result<()> {
                 counterterm.left_thresholds_evaluator.len(),
                 counterterm.right_thresholds_evaluator.len(),
                 counterterm.iterated_evaluator.data.len(),
-                counterterm.pass_two_evaluator.0.len()
+                counterterm.pass_two_evaluator.len()
             );
         }
     }

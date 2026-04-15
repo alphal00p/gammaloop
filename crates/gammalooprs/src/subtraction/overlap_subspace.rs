@@ -57,7 +57,7 @@ impl Display for OverlapStructure {
                 .map(|id| self.existing_esurfaces[*id].0)
                 .collect();
 
-            writeln!(f, "center:\n {}", group.center)?;
+            writeln!(f, "center:\n{}", group.center)?;
             writeln!(
                 f,
                 "existing esurfaces in group: {:?}",

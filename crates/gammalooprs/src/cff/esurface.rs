@@ -16,6 +16,7 @@ use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
 use tracing::debug;
+use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
@@ -510,6 +511,8 @@ impl Esurface {
             masses,
         );
 
+        debug!("shift part for radius guess: {}", esurface_shift);
+
         let mut radius_guess = const_builder.zero();
         let mut denominator = const_builder.zero();
 
@@ -520,7 +523,7 @@ impl Esurface {
 
         //println!("got to energy loop");
         for energy in subspace.contains(&self.energies, graph) {
-            //println!("computing contribution for energy {:?}", energy);
+            debug!("computing contribution for energy {:?}", energy);
             let signature = &lmb.edge_signatures[energy];
             //println!("signature {:?}", signature);
 
@@ -540,11 +543,19 @@ impl Esurface {
             let norm_unit_loop_part_squared = unit_loop_part.norm_squared();
             let loop_dot_shift = &unit_loop_part * three_shift;
 
+            debug!(
+                "norm unit loop part squared: {}",
+                norm_unit_loop_part_squared
+            );
+
             radius_guess += loop_dot_shift.abs() / &norm_unit_loop_part_squared;
+            debug!("current radius guess: {}", radius_guess);
             denominator += norm_unit_loop_part_squared.sqrt();
+            debug!("current denominator: {}", denominator);
         }
 
         radius_guess += esurface_shift.abs() / denominator;
+        debug!("final radius guess: {}", radius_guess);
         let negative_radius = radius_guess.ref_neg();
         (radius_guess, negative_radius)
     }

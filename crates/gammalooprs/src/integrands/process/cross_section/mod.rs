@@ -30,7 +30,10 @@ use crate::{
     settings::{
         GlobalSettings, RuntimeSettings, global::FrozenCompilationMode, runtime::IntegralUnit,
     },
-    subtraction::lu_counterterm::{LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators},
+    subtraction::{
+        generate_rstar_t_dependence_evaluator,
+        lu_counterterm::{LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators},
+    },
     utils::{
         F, FloatLike, Length, h, h_dual,
         hyperdual_utils::{
@@ -464,6 +467,10 @@ impl CrossSectionGraphTerm {
         &self,
         raised_cut_id: RaisedCutId,
     ) -> (Vec<usize>, Vec<usize>) {
+        if self.counterterm.thresholds.is_empty() {
+            return (vec![], vec![]);
+        }
+
         let (left_thresholds, right_thresholds) = &self.counterterm.thresholds[raised_cut_id];
         let resolve_ids = |thresholds: &[Esurface]| {
             thresholds
@@ -710,10 +717,23 @@ impl CrossSectionGraphTerm {
             ));
         }
 
+        let rstar_dependence_calculator = graph
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter()
+            .map(|raised_cut_group| {
+                generate_rstar_t_dependence_evaluator(
+                    raised_cut_group.related_esurface_group.max_occurence - 1,
+                )
+            })
+            .collect::<Result<TiVec<RaisedCutId, _>>>()?;
+
         let counterterm = LUCounterTerm {
             evaluators: ct_evaluators,
             thresholds,
             subspaces: graph.derived_data.subspace_data.clone(),
+            rstar_dependence_calculator,
             active_cuts,
             active_left_thresholds,
             active_right_thresholds,
@@ -1193,7 +1213,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             let accepted_event = prepared_event.buffered_event;
             let mut bare_cut_total = Complex::new_re(momentum_sample.zero());
             let mut threshold_counterterm_weights = Vec::with_capacity(max_occurance);
-            let mut kinematic_point = LUCTKinematicPoint::new();
+            let mut kinematic_point = LUCTKinematicPoint::new(momentum_sample.clone());
             for num_esurfaces in 1..=max_occurance {
                 let dual_shape = if num_esurfaces > 1 {
                     Some(HyperDual::<F<T>>::new(
@@ -1282,7 +1302,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .push(lu_params.clone());
                     kinematic_point
                         .lu_cut_esurface_values
-                        .push(esurface_derivatives.clone().unwrap_real());
+                        .push(esurface_derivatives.clone());
                 }
 
                 let prefactor =
@@ -1423,6 +1443,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             .iter_enumerated()
             .zip(cut_threshold_counterterms.iter())
         {
+            let mut total_bare_contribution = Complex::new_re(momentum_sample.zero());
             for (i, bare_contribution) in result.iter().enumerate() {
                 debug!(
                     "cut {} contribution with {} esurfaces: {:+16e}",
@@ -1431,8 +1452,14 @@ impl GraphTerm for CrossSectionGraphTerm {
                     bare_contribution
                 );
 
-                all_cut_result += bare_contribution;
+                total_bare_contribution += bare_contribution;
             }
+            debug!(
+                "total bare contribution for cut {}: {:+16e}",
+                cut_id.0, total_bare_contribution
+            );
+
+            all_cut_result += total_bare_contribution;
 
             debug!(
                 "threshold counterterm for cut {}: {:+16e}",

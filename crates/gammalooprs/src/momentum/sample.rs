@@ -163,8 +163,11 @@ impl SubspaceData {
         graph: &Graph,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Result<Self> {
-        let mut subgraph = Self::cleaned_filter_pessimist(subgraph, graph);
+        let bridges = graph.bridges_of(&subgraph);
+
+        let mut subgraph = Self::cleaned_filter_pessimist(subgraph.subtract(&bridges), graph);
         subgraph.set_loopcount(graph);
+
         let edges_in_subgraph = graph
             .iter_edges_of(&subgraph.filter)
             .map(|ed| ed.1)
@@ -313,6 +316,10 @@ impl SubspaceData {
     pub(crate) fn loopcount(&self) -> usize {
         self.subgraph.loopcount.unwrap()
     }
+
+    pub(crate) fn as_subspace_simple(&self) -> Subspace<'_> {
+        Some(self.lmb_indices.as_slice())
+    }
 }
 
 // #[comemo::track]
@@ -436,7 +443,7 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
 }
 
 impl<T: FloatLike> LoopMomenta<HyperDual<F<T>>> {
-    fn lmb_transform(
+    pub fn lmb_transform(
         &self,
         from: &LoopMomentumBasis,
         to: &LoopMomentumBasis,
@@ -449,7 +456,7 @@ impl<T: FloatLike> LoopMomenta<HyperDual<F<T>>> {
         }))
     }
 
-    fn rescale(&self, factor: &HyperDual<F<T>>, subspace: Subspace) -> Self {
+    pub fn rescale(&self, factor: &HyperDual<F<T>>, subspace: Subspace) -> Self {
         match subspace {
             None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
             // this branch is wrong
