@@ -2,7 +2,7 @@ commands = [
     "import model assets/models/json/scalars/scalars_2p_3p.json",
 	"set model mass_scalar_1=2.0",
 	"set model mass_scalar_2=2.0001",
-	"import graphs dotted_double_triangle.dot", 
+	"import graphs tests/resources/graphs/dotted_double_triangle.dot", 
 	"generate",
 ]
 

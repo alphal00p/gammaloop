@@ -1098,7 +1098,7 @@ impl LUCounterTerm {
                 record_primary_timing,
             );
 
-            total_result = pass_two_result;
+            total_result += pass_two_result;
         }
 
         Ok(total_result)
