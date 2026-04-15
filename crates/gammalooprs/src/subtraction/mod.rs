@@ -148,7 +148,7 @@ impl RstarTDependenceEvaluator {
         subspace: &SubspaceData,
         unrescaled_momentum_sample: &MomentumSample<T>,
         masses: &EdgeVec<F<T>>,
-        cut_esurface: &Esurface,
+        threshold_esurface: &Esurface,
         lmb: &LoopMomentumBasis,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> HyperDual<F<T>> {
@@ -225,8 +225,8 @@ impl RstarTDependenceEvaluator {
             .map(|(momentum, center)| momentum.clone() + center.clone())
             .collect::<crate::momentum::sample::LoopMomenta<_>>();
 
-        let dual_esurface = cut_esurface.compute_from_dual_momenta(
-            lmb,
+        let dual_esurface = threshold_esurface.compute_from_dual_momenta(
+            subspace.get_lmb(all_lmbs),
             masses,
             &rescale_rstar,
             &dualized_external_fourmomenta,
