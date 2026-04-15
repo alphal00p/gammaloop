@@ -441,6 +441,7 @@ fn available_integrand_categories(detail: &IntegrandInfo) -> Vec<IntegrandDispla
             IntegrandDisplayCategory::Generation,
             IntegrandDisplayCategory::Orientation,
             IntegrandDisplayCategory::LoopMomentumBasis,
+            IntegrandDisplayCategory::Cuts,
         ],
         IntegrandKind::CrossSection => vec![
             IntegrandDisplayCategory::Generation,

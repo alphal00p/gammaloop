@@ -78,13 +78,14 @@ pub struct IntegrandGraphGroupInfo {
     pub cuts: Vec<IntegrandCutInfo>,
 }
 
-fn threshold_esurface_edge_ids(graph: &Graph, esurface_id: usize) -> Vec<usize> {
-    graph
-        .surface_cache
-        .esurface_cache
+fn threshold_esurface_edge_ids(
+    esurfaces: &gammalooprs::cff::esurface::EsurfaceCollection,
+    esurface_id: usize,
+) -> Vec<usize> {
+    esurfaces
         .iter()
         .nth(esurface_id)
-        .expect("threshold esurface id should resolve in graph")
+        .expect("threshold esurface id should resolve in collection")
         .energies
         .iter()
         .map(|edge_id| edge_id.0)
@@ -287,6 +288,20 @@ fn amplitude_graph_groups(
                 .expect("graph group should not be empty");
             let master_graph = &integrand.data.graph_terms[master_graph_id];
             let channel_ids = lmb_channel_ids(&master_graph.graph, &master_graph.lmbs);
+            let threshold_esurface_ids = master_graph
+                .threshold_counterterm
+                .generated_mask
+                .iter_enumerated()
+                .filter_map(|(esurface_id, is_generated)| is_generated.then_some(esurface_id.0))
+                .collect::<Vec<_>>();
+            let threshold_esurfaces = threshold_esurface_ids
+                .iter()
+                .copied()
+                .map(|esurface_id| IntegrandThresholdEsurfaceInfo {
+                    esurface_id,
+                    edge_ids: threshold_esurface_edge_ids(&master_graph.esurfaces, esurface_id),
+                })
+                .collect::<Vec<_>>();
             IntegrandGraphGroupInfo {
                 group_id,
                 graphs: group
@@ -322,8 +337,8 @@ fn amplitude_graph_groups(
                             == master_graph.graph.loop_momentum_basis.loop_edges,
                     })
                     .collect(),
-                threshold_esurface_ids: Vec::new(),
-                threshold_esurfaces: Vec::new(),
+                threshold_esurface_ids,
+                threshold_esurfaces,
                 cuts: Vec::new(),
             }
         })
@@ -395,7 +410,10 @@ fn cross_section_graph_groups(
                 .copied()
                 .map(|esurface_id| IntegrandThresholdEsurfaceInfo {
                     esurface_id,
-                    edge_ids: threshold_esurface_edge_ids(&master_graph.graph, esurface_id),
+                    edge_ids: threshold_esurface_edge_ids(
+                        &master_graph.graph.surface_cache.esurface_cache,
+                        esurface_id,
+                    ),
                 })
                 .collect::<Vec<_>>();
 
