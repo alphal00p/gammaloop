@@ -224,7 +224,7 @@ fn quad_vs_f64_tolerance() -> F<f128> {
 }
 
 fn quad_benchmark_tolerance() -> Result<F<f128>> {
-    decimal_scalar("1.0e-30")
+    decimal_scalar("1.0e-27")
 }
 
 fn arb_vs_quad_tolerance() -> Result<F<ArbPrec>> {

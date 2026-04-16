@@ -1076,25 +1076,6 @@ mod tests {
     }
 
     #[test]
-    fn test_to_atom() {
-        let external_shift = vec![(EdgeIndex::from(1), -1)];
-
-        let esurface = Esurface {
-            energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
-            external_shift,
-            vertex_set: VertexSet::dummy(),
-            // subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
-        };
-
-        let esurface_atom = esurface.to_atom(&[]);
-        let expected_atom = parse!("Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))");
-
-        let diff = esurface_atom - &expected_atom;
-        let diff = diff.expand();
-        assert_eq!(diff, Atom::new());
-    }
-
-    #[test]
     fn test_add_external_shifts() {
         let shift_1 = vec![
             (EdgeIndex::from(0), 1),
@@ -1147,139 +1128,193 @@ mod tests {
         assert_eq!(esurface_1, esurface_2);
     }
 
-    #[test]
-    fn test_from_cut_left_dt() {
-        let mut hedge_graph_builder = HedgeGraphBuilder::new();
-        let nodes = (0..4)
-            .map(|_| hedge_graph_builder.add_node(()))
-            .collect_vec();
+    mod failing {
+        use super::*;
 
-        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
-        hedge_graph_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
-        hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
-        hedge_graph_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
-        hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+        #[test]
+        fn test_to_atom() {
+            let external_shift = vec![(EdgeIndex::from(1), -1)];
 
-        hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
-        hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
-
-        let double_triangle: HedgeGraph<(), (), ()> =
-            hedge_graph_builder.build::<NodeStorageVec<()>>();
-        let node_0 = double_triangle.iter_crown(nodes[0]).into();
-        let node_3 = double_triangle.iter_crown(nodes[3]).into();
-
-        let cuts = double_triangle.all_cuts(node_0, node_3);
-
-        let cross_section_cuts = cuts
-            .into_iter()
-            .map(|(node_l, cut, node_r)| CrossSectionCut {
-                cut,
-                left: node_l,
-                right: node_r,
-            })
-            .map(|cut| Esurface::new_from_cut_left(&double_triangle, &cut, None))
-            .collect_vec();
-
-        let expected_esurfaces = vec![
-            Esurface {
-                energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
-                external_shift: vec![(EdgeIndex::from(5), -1)],
+            let esurface = Esurface {
+                energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
+                external_shift,
                 vertex_set: VertexSet::dummy(),
-                //subspace_graph: double_triangle.full_graph(),
-            },
-            Esurface {
-                energies: vec![EdgeIndex::from(0), EdgeIndex::from(2), EdgeIndex::from(4)],
-                external_shift: vec![(EdgeIndex::from(5), -1)],
-                vertex_set: VertexSet::dummy(),
-                //subspace_graph: double_triangle.full_graph(),
-            },
-            Esurface {
-                energies: vec![EdgeIndex::from(3), EdgeIndex::from(4)],
-                external_shift: vec![(EdgeIndex::from(5), -1)],
-                vertex_set: VertexSet::dummy(),
-                //subspace_graph: double_triangle.full_graph(),
-            },
-            Esurface {
-                energies: vec![EdgeIndex::from(1), EdgeIndex::from(2), EdgeIndex::from(3)],
-                external_shift: vec![(EdgeIndex::from(5), -1)],
-                vertex_set: VertexSet::dummy(),
-                //subspace_graph: double_triangle.full_graph(),
-            },
-        ];
+                // subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
+            };
 
-        for expected_esurface in expected_esurfaces {
-            assert!(cross_section_cuts.contains(&expected_esurface));
+            let esurface_atom = esurface.to_atom(&[]);
+            let expected_atom = parse!("Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))");
+
+            let diff = esurface_atom - &expected_atom;
+            let diff = diff.expand();
+            assert_eq!(diff, Atom::new());
         }
-    }
 
-    #[test]
-    fn test_from_cut_left_box() {
-        let mut hedge_graph_builder = HedgeGraphBuilder::new();
-        let nodes = (0..4)
-            .map(|_| hedge_graph_builder.add_node(()))
-            .collect_vec();
+        #[test]
+        fn test_from_cut_left_dt() {
+            let mut hedge_graph_builder = HedgeGraphBuilder::new();
+            let nodes = (0..4)
+                .map(|_| hedge_graph_builder.add_node(()))
+                .collect_vec();
 
-        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
-        hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
-        hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
-        hedge_graph_builder.add_edge(nodes[3], nodes[0], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
 
-        hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
-        hedge_graph_builder.add_external_edge(nodes[1], (), Orientation::Undirected, Flow::Source);
-        hedge_graph_builder.add_external_edge(nodes[2], (), Orientation::Undirected, Flow::Source);
-        hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Sink);
+            hedge_graph_builder.add_external_edge(
+                nodes[0],
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+            hedge_graph_builder.add_external_edge(
+                nodes[3],
+                (),
+                Orientation::Undirected,
+                Flow::Source,
+            );
 
-        let box_graph: HedgeGraph<(), (), ()> = hedge_graph_builder.build::<NodeStorageVec<()>>();
+            let double_triangle: HedgeGraph<(), (), ()> =
+                hedge_graph_builder.build::<NodeStorageVec<()>>();
+            let node_0 = double_triangle.iter_crown(nodes[0]).into();
+            let node_3 = double_triangle.iter_crown(nodes[3]).into();
 
-        let node_0 = box_graph.iter_crown(nodes[0]).into();
-        let node_2 = box_graph.iter_crown(nodes[2]).into();
+            let cuts = double_triangle.all_cuts(node_0, node_3);
 
-        let cuts = box_graph.all_cuts(node_0, node_2);
-        assert_eq!(cuts.len(), 4);
+            let cross_section_cuts = cuts
+                .into_iter()
+                .map(|(node_l, cut, node_r)| CrossSectionCut {
+                    cut,
+                    left: node_l,
+                    right: node_r,
+                })
+                .map(|cut| Esurface::new_from_cut_left(&double_triangle, &cut, None))
+                .collect_vec();
 
-        let cross_section_cuts = cuts
-            .into_iter()
-            .map(|(node_l, cut, node_r)| CrossSectionCut {
-                cut,
-                left: node_l,
-                right: node_r,
-            })
-            .map(|cut| Esurface::new_from_cut_left(&box_graph, &cut, None))
-            .collect_vec();
+            let expected_esurfaces = vec![
+                Esurface {
+                    energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
+                    external_shift: vec![(EdgeIndex::from(5), -1)],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: double_triangle.full_graph(),
+                },
+                Esurface {
+                    energies: vec![EdgeIndex::from(0), EdgeIndex::from(2), EdgeIndex::from(4)],
+                    external_shift: vec![(EdgeIndex::from(5), -1)],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: double_triangle.full_graph(),
+                },
+                Esurface {
+                    energies: vec![EdgeIndex::from(3), EdgeIndex::from(4)],
+                    external_shift: vec![(EdgeIndex::from(5), -1)],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: double_triangle.full_graph(),
+                },
+                Esurface {
+                    energies: vec![EdgeIndex::from(1), EdgeIndex::from(2), EdgeIndex::from(3)],
+                    external_shift: vec![(EdgeIndex::from(5), -1)],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: double_triangle.full_graph(),
+                },
+            ];
 
-        let expected_esurfaces = vec![
-            Esurface {
-                energies: vec![EdgeIndex::from(0), EdgeIndex::from(3)],
-                external_shift: vec![(EdgeIndex::from(4), -1)],
-                vertex_set: VertexSet::dummy(),
-                //subspace_graph: box_graph.full_graph(),
-            },
-            Esurface {
-                energies: vec![EdgeIndex::from(0), EdgeIndex::from(2)],
-                external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(7), -1)],
-                vertex_set: VertexSet::dummy(),
-                //subspace_graph: box_graph.full_graph(),
-            },
-            Esurface {
-                energies: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
-                external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)],
-                vertex_set: VertexSet::dummy(),
-                //subspace_graph: box_graph.full_graph(),
-            },
-            Esurface {
-                energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
-                external_shift: vec![
-                    (EdgeIndex::from(4), -1),
-                    (EdgeIndex::from(5), 1),
-                    (EdgeIndex::from(7), -1),
-                ],
-                vertex_set: VertexSet::dummy(),
-                //subspace_graph: box_graph.full_graph(),
-            },
-        ];
+            for expected_esurface in expected_esurfaces {
+                assert!(cross_section_cuts.contains(&expected_esurface));
+            }
+        }
 
-        for expected_esurface in expected_esurfaces {
-            assert!(cross_section_cuts.contains(&expected_esurface));
+        #[test]
+        fn test_from_cut_left_box() {
+            let mut hedge_graph_builder = HedgeGraphBuilder::new();
+            let nodes = (0..4)
+                .map(|_| hedge_graph_builder.add_node(()))
+                .collect_vec();
+
+            hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+            hedge_graph_builder.add_edge(nodes[3], nodes[0], (), Orientation::Undirected);
+
+            hedge_graph_builder.add_external_edge(
+                nodes[0],
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+            hedge_graph_builder.add_external_edge(
+                nodes[1],
+                (),
+                Orientation::Undirected,
+                Flow::Source,
+            );
+            hedge_graph_builder.add_external_edge(
+                nodes[2],
+                (),
+                Orientation::Undirected,
+                Flow::Source,
+            );
+            hedge_graph_builder.add_external_edge(
+                nodes[3],
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+
+            let box_graph: HedgeGraph<(), (), ()> =
+                hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+            let node_0 = box_graph.iter_crown(nodes[0]).into();
+            let node_2 = box_graph.iter_crown(nodes[2]).into();
+
+            let cuts = box_graph.all_cuts(node_0, node_2);
+            assert_eq!(cuts.len(), 4);
+
+            let cross_section_cuts = cuts
+                .into_iter()
+                .map(|(node_l, cut, node_r)| CrossSectionCut {
+                    cut,
+                    left: node_l,
+                    right: node_r,
+                })
+                .map(|cut| Esurface::new_from_cut_left(&box_graph, &cut, None))
+                .collect_vec();
+
+            let expected_esurfaces = vec![
+                Esurface {
+                    energies: vec![EdgeIndex::from(0), EdgeIndex::from(3)],
+                    external_shift: vec![(EdgeIndex::from(4), -1)],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: box_graph.full_graph(),
+                },
+                Esurface {
+                    energies: vec![EdgeIndex::from(0), EdgeIndex::from(2)],
+                    external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(7), -1)],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: box_graph.full_graph(),
+                },
+                Esurface {
+                    energies: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
+                    external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: box_graph.full_graph(),
+                },
+                Esurface {
+                    energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
+                    external_shift: vec![
+                        (EdgeIndex::from(4), -1),
+                        (EdgeIndex::from(5), 1),
+                        (EdgeIndex::from(7), -1),
+                    ],
+                    vertex_set: VertexSet::dummy(),
+                    //subspace_graph: box_graph.full_graph(),
+                },
+            ];
+
+            for expected_esurface in expected_esurfaces {
+                assert!(cross_section_cuts.contains(&expected_esurface));
+            }
         }
     }
 }

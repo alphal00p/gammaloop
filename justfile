@@ -108,6 +108,105 @@ doc-nix:
 test:
     cargo nextest run --workspace --cargo-profile dev-optim -P local_test
 
+test_gammaloop *classes:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    gammaloop_packages=(
+        gammaloop-api
+        gammalooprs
+        idenso
+        linnest
+        linnet
+        spenso
+        spenso-hep-lib
+        spenso-macros
+        vakint
+        gammaloop-integration-tests
+    )
+    gammaloop_module_classes=(important slow failing)
+    gammaloop_base_excluded_classes=(slow failing)
+    selected_classes=({{ classes }})
+
+    contains_value() {
+        local needle="$1"
+        shift
+        local value
+        for value in "$@"; do
+            if [ "$value" = "$needle" ]; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    if [ ${#selected_classes[@]} -eq 0 ]; then
+        selected_classes=(base)
+    fi
+
+    want_base=0
+    selected_modules=()
+    declare -A seen_modules=()
+
+    for class in "${selected_classes[@]}"; do
+        if [ "$class" = "base" ]; then
+            want_base=1
+        elif contains_value "$class" "${gammaloop_module_classes[@]}"; then
+            if [ -z "${seen_modules[$class]+x}" ]; then
+                selected_modules+=("$class")
+                seen_modules[$class]=1
+            fi
+        else
+            echo "unknown test_gammaloop class: $class" >&2
+            echo "available classes: base ${gammaloop_module_classes[*]}" >&2
+            exit 1
+        fi
+    done
+
+    filter_terms=()
+    if [ "$want_base" -eq 1 ]; then
+        remaining_excluded=()
+        for class in "${gammaloop_base_excluded_classes[@]}"; do
+            if [ -z "${seen_modules[$class]+x}" ]; then
+                remaining_excluded+=("$class")
+            fi
+        done
+
+        if [ ${#remaining_excluded[@]} -gt 0 ]; then
+            excluded_regex="$(printf '%s|' "${remaining_excluded[@]}")"
+            excluded_regex="${excluded_regex%|}"
+            filter_terms+=("not test(/(^|::)(${excluded_regex})::/)")
+        fi
+    fi
+
+    if ! { [ "$want_base" -eq 1 ] && [ ${#filter_terms[@]} -eq 0 ]; }; then
+        for class in "${selected_modules[@]}"; do
+            filter_terms+=("test(/(^|::)${class}::/)")
+        done
+    fi
+
+    cmd=(
+        cargo nextest run
+        --cargo-profile dev-optim
+        -P test_gammaloop
+        --run-ignored all
+    )
+    for package in "${gammaloop_packages[@]}"; do
+        cmd+=(-p "$package")
+    done
+    if [ ${#filter_terms[@]} -gt 0 ]; then
+        filterset="${filter_terms[0]}"
+        for term in "${filter_terms[@]:1}"; do
+            filterset="${filterset} or ${term}"
+        done
+        cmd+=(-E "$filterset")
+    fi
+
+    printf 'Running:'
+    printf ' %q' "${cmd[@]}"
+    printf '\n'
+    "${cmd[@]}"
+
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all
 

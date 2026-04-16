@@ -472,86 +472,90 @@ mod tests_inspect {
     //     assert!(false);
     // }
 
-    #[test]
-    fn inspect_unit_volume() -> Result<()> {
-        let mut settings = load_default_settings();
-        let mut itg = get_unit_volume_integrand();
-        itg.n_3d_momenta = 6;
-        settings.kinematics.e_cm = 1.;
-        let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
-            mode: ParameterizationMode::Spherical,
-            ..Default::default()
-        });
-        settings.sampling = sampling_settings;
+    mod failing {
+        use super::*;
 
-        settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
-        assert!(compare_inspect(
-            &mut settings,
-            &Model::default(),
-            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-            &[0],
-            true,
-            Complex::new(1.3793965770302298e3, 0.0)
-        )?);
+        #[test]
+        fn inspect_unit_volume() -> Result<()> {
+            let mut settings = load_default_settings();
+            let mut itg = get_unit_volume_integrand();
+            itg.n_3d_momenta = 6;
+            settings.kinematics.e_cm = 1.;
+            let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
+                mode: ParameterizationMode::Spherical,
+                ..Default::default()
+            });
+            settings.sampling = sampling_settings;
 
-        itg.n_3d_momenta = 9;
-        settings.kinematics.e_cm = 100.;
+            settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
+            assert!(compare_inspect(
+                &mut settings,
+                &Model::default(),
+                vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+                &[0],
+                true,
+                Complex::new(1.3793965770302298e3, 0.0)
+            )?);
 
-        let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
-            mode: ParameterizationMode::HyperSpherical,
-            ..Default::default()
-        });
+            itg.n_3d_momenta = 9;
+            settings.kinematics.e_cm = 100.;
 
-        settings.sampling = sampling_settings;
-        settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
-        assert!(compare_inspect(
-            &mut settings,
-            &Model::default(),
-            vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-            &[0],
-            true,
-            Complex::new(4.792927924134406e-45, 0.0)
-        )?);
-        Ok(())
-    }
+            let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
+                mode: ParameterizationMode::HyperSpherical,
+                ..Default::default()
+            });
 
-    #[test]
-    fn inspect_h_function_test() -> Result<()> {
-        let mut settings = load_default_settings();
-        let mut itg = get_h_function_test_integrand();
-        settings.kinematics.e_cm = 1.;
+            settings.sampling = sampling_settings;
+            settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
+            assert!(compare_inspect(
+                &mut settings,
+                &Model::default(),
+                vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+                &[0],
+                true,
+                Complex::new(4.792927924134406e-45, 0.0)
+            )?);
+            Ok(())
+        }
 
-        itg.h_function = HFunctionSettings {
-            function: HFunction::PolyLeftRightExponential,
-            sigma: 0.01,
-            power: Some(12),
-            enabled_dampening: true,
-        };
-        settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
-        assert!(compare_inspect(
-            &mut settings,
-            &Model::default(),
-            vec![0.2188450233532342,],
-            &[0],
-            false,
-            Complex::new(1.4016882047579115e-34, 0.0)
-        )?);
+        #[test]
+        fn inspect_h_function_test() -> Result<()> {
+            let mut settings = load_default_settings();
+            let mut itg = get_h_function_test_integrand();
+            settings.kinematics.e_cm = 1.;
 
-        itg.h_function = HFunctionSettings {
-            function: HFunction::PolyLeftRightExponential,
-            sigma: 0.3,
-            power: Some(9),
-            enabled_dampening: false,
-        };
-        settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
-        assert!(compare_inspect(
-            &mut settings,
-            &Model::default(),
-            vec![0.2188450233532342,],
-            &[0],
-            false,
-            Complex::new(3.112977432926161e-4, 0.0)
-        )?);
-        Ok(())
+            itg.h_function = HFunctionSettings {
+                function: HFunction::PolyLeftRightExponential,
+                sigma: 0.01,
+                power: Some(12),
+                enabled_dampening: true,
+            };
+            settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
+            assert!(compare_inspect(
+                &mut settings,
+                &Model::default(),
+                vec![0.2188450233532342,],
+                &[0],
+                false,
+                Complex::new(1.4016882047579115e-34, 0.0)
+            )?);
+
+            itg.h_function = HFunctionSettings {
+                function: HFunction::PolyLeftRightExponential,
+                sigma: 0.3,
+                power: Some(9),
+                enabled_dampening: false,
+            };
+            settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
+            assert!(compare_inspect(
+                &mut settings,
+                &Model::default(),
+                vec![0.2188450233532342,],
+                &[0],
+                false,
+                Complex::new(3.112977432926161e-4, 0.0)
+            )?);
+            Ok(())
+        }
     }
 }

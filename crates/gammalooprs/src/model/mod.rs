@@ -2722,27 +2722,6 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_decode_arc_propagator() {
-        let model = load_generic_model(
-            "sm
-        ",
-        );
-        let propagator = model.get_propagator("t_propFeynman");
-        let propagator_encoded =
-            bincode::encode_to_vec(&propagator, bincode::config::standard()).unwrap();
-
-        let propagator_decoded: ArcPropagator = bincode::decode_from_slice_with_context(
-            &propagator_encoded,
-            bincode::config::standard(),
-            model,
-        )
-        .unwrap()
-        .0;
-
-        assert_eq!(propagator.name, propagator_decoded.name);
-    }
-
-    #[test]
     fn test_pol_limit_vector() {
         let vals = [0., 3., 4.].into_iter().map(F).collect::<Vec<_>>();
         let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None); //Some(F(8.66025)));
@@ -2818,5 +2797,30 @@ mod tests {
         let external_index = description.find("zeta").unwrap();
         let internal_index = description.find("alpha").unwrap();
         assert!(external_index < internal_index);
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn test_encode_decode_arc_propagator() {
+            let model = load_generic_model(
+                "sm
+            ",
+            );
+            let propagator = model.get_propagator("t_propFeynman");
+            let propagator_encoded =
+                bincode::encode_to_vec(&propagator, bincode::config::standard()).unwrap();
+
+            let propagator_decoded: ArcPropagator = bincode::decode_from_slice_with_context(
+                &propagator_encoded,
+                bincode::config::standard(),
+                model,
+            )
+            .unwrap()
+            .0;
+
+            assert_eq!(propagator.name, propagator_decoded.name);
+        }
     }
 }

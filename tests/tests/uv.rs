@@ -147,56 +147,6 @@ fn assert_integrated_result_is_muv_invariant(
 }
 
 #[test]
-fn soft_ct_se() -> Result<()> {
-    let mut state = get_test_cli(
-        Some("dgse.toml".into()),
-        get_tests_workspace_path().join("dgse"),
-        None,
-        false,
-    )?;
-
-    let res = Profile::InfraRed(InfraRedProfile {
-        select: Some("se S(e0)".into()),
-        ..Default::default()
-    })
-    .run(&mut state.state, &state.cli_settings)?;
-
-    assert!(res.unwrap_ir().all_passed);
-
-    let res = Profile::UltraViolet(UltraVioletProfile {
-        ..Default::default()
-    })
-    .run(&mut state.state, &state.cli_settings)?;
-
-    let uv = res.unwrap_uv();
-    assert_eq!(uv.pass_fail(-0.9).failed, 0);
-    Ok(())
-}
-
-#[test]
-fn epem_a_tth_nlo_uv() -> Result<()> {
-    let state_path = get_tests_workspace_path().join("epem_a_tth_nlo_example");
-    let mut cli = get_example_cli(
-        "epem_a_ttxh/NLO/epem_a_tth_NLO.toml",
-        &["generate_diagrams"],
-        Some(state_path.clone()),
-        None,
-        true,
-    )?;
-
-    cli.run_command("run generate_diagrams generate_integrands")?;
-    let res = Profile::UltraViolet(UltraVioletProfile {
-        ..Default::default()
-    })
-    .run(&mut cli.state, &cli.cli_settings)?;
-
-    let uv = res.unwrap_uv();
-    assert_eq!(uv.pass_fail(-0.9).failed, 0);
-    clean_test(&state_path);
-    Ok(())
-}
-
-#[test]
 fn dod1_bubble_uv() -> Result<()> {
     let mut cli = get_test_cli(
         Some("dod1_bubble.toml".into()),
@@ -223,36 +173,6 @@ fn dod1_bubble_uv() -> Result<()> {
     assert_bubble_below_threshold_targets(&baseline, 7.358320108607984e-3, 1.3514937842276269e-3);
     assert_bubble_uv_profile_passes(&mut cli, "bubble_dod1")?;
     assert_bubble_uv_profile_passes(&mut cli, "bubble_dod1_no_integrated_UV")?;
-    clean_test(&cli.cli_settings.state.folder);
-    Ok(())
-}
-
-#[test]
-fn dod2_bubble_uv() -> Result<()> {
-    let mut cli = get_test_cli(
-        Some("dod2_bubble.toml".into()),
-        get_tests_workspace_path().join("dod2_bubble"),
-        None,
-        true,
-    )?;
-    cli.run_command("run generate")?;
-    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2")?;
-    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2_no_integrated_UV")?;
-    let baseline = run_bubble_below_threshold_integration(
-        &mut cli,
-        "dod2_bubble",
-        "bubble_dod2_no_integrated_UV",
-        "bubble_dod2",
-    )?;
-    assert_integrated_result_is_muv_invariant(
-        &mut cli,
-        "dod2_bubble",
-        "bubble_dod2",
-        &baseline.integrated,
-        20.0,
-        7.0,
-    )?;
-    assert_bubble_below_threshold_targets(&baseline, -0.5940830828502411, 1.2143596454658382e-2);
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
@@ -285,4 +205,96 @@ fn dod0_bubble_uv() -> Result<()> {
     assert_bubble_uv_profile_passes(&mut cli, "bubble_no_integrated_UV")?;
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
+}
+
+mod slow {
+    use super::*;
+
+    #[test]
+    fn soft_ct_se() -> Result<()> {
+        let mut state = get_test_cli(
+            Some("dgse.toml".into()),
+            get_tests_workspace_path().join("dgse"),
+            None,
+            false,
+        )?;
+
+        let res = Profile::InfraRed(InfraRedProfile {
+            select: Some("se S(e0)".into()),
+            ..Default::default()
+        })
+        .run(&mut state.state, &state.cli_settings)?;
+
+        assert!(res.unwrap_ir().all_passed);
+
+        let res = Profile::UltraViolet(UltraVioletProfile {
+            ..Default::default()
+        })
+        .run(&mut state.state, &state.cli_settings)?;
+
+        let uv = res.unwrap_uv();
+        assert_eq!(uv.pass_fail(-0.9).failed, 0);
+        Ok(())
+    }
+}
+
+mod failing {
+    use super::*;
+
+    #[test]
+    fn epem_a_tth_nlo_uv() -> Result<()> {
+        let state_path = get_tests_workspace_path().join("epem_a_tth_nlo_example");
+        let mut cli = get_example_cli(
+            "epem_a_ttxh/NLO/epem_a_tth_NLO.toml",
+            &["generate_diagrams"],
+            Some(state_path.clone()),
+            None,
+            true,
+        )?;
+
+        cli.run_command("run generate_diagrams generate_integrands")?;
+        let res = Profile::UltraViolet(UltraVioletProfile {
+            ..Default::default()
+        })
+        .run(&mut cli.state, &cli.cli_settings)?;
+
+        let uv = res.unwrap_uv();
+        assert_eq!(uv.pass_fail(-0.9).failed, 0);
+        clean_test(&state_path);
+        Ok(())
+    }
+
+    #[test]
+    fn dod2_bubble_uv() -> Result<()> {
+        let mut cli = get_test_cli(
+            Some("dod2_bubble.toml".into()),
+            get_tests_workspace_path().join("dod2_bubble"),
+            None,
+            true,
+        )?;
+        cli.run_command("run generate")?;
+        assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2")?;
+        assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2_no_integrated_UV")?;
+        let baseline = run_bubble_below_threshold_integration(
+            &mut cli,
+            "dod2_bubble",
+            "bubble_dod2_no_integrated_UV",
+            "bubble_dod2",
+        )?;
+        assert_integrated_result_is_muv_invariant(
+            &mut cli,
+            "dod2_bubble",
+            "bubble_dod2",
+            &baseline.integrated,
+            20.0,
+            7.0,
+        )?;
+        assert_bubble_below_threshold_targets(
+            &baseline,
+            -0.5940830828502411,
+            1.2143596454658382e-2,
+        );
+        clean_test(&cli.cli_settings.state.folder);
+        Ok(())
+    }
 }

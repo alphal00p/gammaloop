@@ -36,7 +36,7 @@ commands = [
   "generate existing -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres",
   "duplicate integrand -p bubble_dod1_no_integrated_UV -i scalar_bubble_below_thres --output_process_name bubble_dod1_no_integrated_UV --output_integrand_name scalar_bubble_above_thres",
 
-  "save standalone --json",
+  #"save standalone --json",
 
   "set model mass_scalar_2=2.0",
 

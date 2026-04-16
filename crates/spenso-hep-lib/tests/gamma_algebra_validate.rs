@@ -157,95 +157,6 @@ fn validate() {
     // );
 }
 
-#[test]
-fn gl_03() {
-    test_initialize();
-    let mut const_map = HashMap::new();
-    let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
-        [Minkowski {}.new_slot(4, 1)],
-        symbol!("spenso::P"),
-        Some(vec![Atom::num(0)]),
-    )
-    .structure
-    .to_shell()
-    .concretize(None);
-
-    for (i, a) in pt.iter_flat() {
-        const_map.insert(
-            a.clone(),
-            symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-        );
-    }
-
-    let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
-        [Minkowski {}.new_slot(4, 1)],
-        symbol!("spenso::K"),
-        Some(vec![Atom::num(1)]),
-    )
-    .structure
-    .to_shell()
-    .concretize(None);
-
-    for (i, a) in pt.iter_flat() {
-        const_map.insert(
-            a.clone(),
-            symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-        );
-    }
-
-    let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
-        [Minkowski {}.new_slot(4, 1)],
-        symbol!("spenso::K"),
-        Some(vec![Atom::num(0)]),
-    )
-    .structure
-    .to_shell()
-    .concretize(None);
-
-    for (i, a) in pt.iter_flat() {
-        const_map.insert(
-            a.clone(),
-            symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
-        );
-    }
-
-    const_map.insert(
-        parse_lit!(spenso::MC),
-        symbolica::domains::float::Complex::new(11232., 0.),
-    );
-
-    const_map.insert(
-        parse_lit!(spenso::MW),
-        symbolica::domains::float::Complex::new(1231., 0.),
-    );
-
-    let expr = parse_lit!(
-        1 / 6
-            ^ 4
-            ^ -2 * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
-                - K(0, mink(4, edge(1, 1)))
-                    * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
-                * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
-                * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
-                    ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
-                        * (-P(0, mink(4, hedge(8))) - K(1, mink(4, hedge(8)))))
-                * (P(0, mink(4, edge(5, 1)))
-                    + K(0, mink(4, edge(5, 1)))
-                    + K(1, mink(4, edge(5, 1))))
-                * g(mink(4, hedge(0)), mink(4, hedge(8)))
-                * gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
-                * gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
-                * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
-                * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
-                * projm(bis(4, hedge(5)), bis(4, hedge(1)))
-                * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
-                * (1 / 2)
-            ^ (1 / 2),
-        default_namespace = "spenso"
-    );
-
-    validate_gamma(expr.cook_indices(), const_map.clone());
-}
 fn validate_gamma(expr: Atom, const_map: HashMap<Atom, symbolica::domains::float::Complex<f64>>) {
     let mut net = expr.parse_to_hep_net(&ParseSettings::default()).unwrap();
 
@@ -299,5 +210,99 @@ fn validate_gamma(expr: Atom, const_map: HashMap<Atom, symbolica::domains::float
         }
     } else {
         panic!("Expected tensor result");
+    }
+}
+
+mod failing {
+    use super::*;
+
+    #[test]
+    fn gl_03() {
+        test_initialize();
+        let mut const_map = HashMap::new();
+        let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
+            [Minkowski {}.new_slot(4, 1)],
+            symbol!("spenso::P"),
+            Some(vec![Atom::num(0)]),
+        )
+        .structure
+        .to_shell()
+        .concretize(None);
+
+        for (i, a) in pt.iter_flat() {
+            const_map.insert(
+                a.clone(),
+                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
+            );
+        }
+
+        let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
+            [Minkowski {}.new_slot(4, 1)],
+            symbol!("spenso::K"),
+            Some(vec![Atom::num(1)]),
+        )
+        .structure
+        .to_shell()
+        .concretize(None);
+
+        for (i, a) in pt.iter_flat() {
+            const_map.insert(
+                a.clone(),
+                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
+            );
+        }
+
+        let pt: DenseTensor<Atom, _> = ShadowedStructure::<AbstractIndex>::from_iter(
+            [Minkowski {}.new_slot(4, 1)],
+            symbol!("spenso::K"),
+            Some(vec![Atom::num(0)]),
+        )
+        .structure
+        .to_shell()
+        .concretize(None);
+
+        for (i, a) in pt.iter_flat() {
+            const_map.insert(
+                a.clone(),
+                symbolica::domains::float::Complex::new(usize::from(i) as f64 * 1., 0.),
+            );
+        }
+
+        const_map.insert(
+            parse_lit!(spenso::MC),
+            symbolica::domains::float::Complex::new(11232., 0.),
+        );
+
+        const_map.insert(
+            parse_lit!(spenso::MW),
+            symbolica::domains::float::Complex::new(1231., 0.),
+        );
+
+        let expr = parse_lit!(
+            1 / 6
+                ^ 4
+                ^ -2 * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
+                    - K(0, mink(4, edge(1, 1)))
+                        * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
+                    * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
+                    * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
+                        ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
+                            * (-P(0, mink(4, hedge(8))) - K(1, mink(4, hedge(8)))))
+                    * (P(0, mink(4, edge(5, 1)))
+                        + K(0, mink(4, edge(5, 1)))
+                        + K(1, mink(4, edge(5, 1))))
+                    * g(mink(4, hedge(0)), mink(4, hedge(8)))
+                    * gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
+                    * gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
+                    * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
+                    * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
+                    * projm(bis(4, hedge(5)), bis(4, hedge(1)))
+                    * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
+                    * (1 / 2)
+                ^ (1 / 2),
+            default_namespace = "spenso"
+        );
+
+        validate_gamma(expr.cook_indices(), const_map.clone());
     }
 }

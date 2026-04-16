@@ -1193,398 +1193,6 @@ mod tests_cff {
     }
 
     #[test]
-    fn test_cff_generation_triangle() {
-        let triangle = vec![(2, 0), (0, 1), (1, 2)];
-
-        let incoming_vertices = vec![0, 1, 2];
-        let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
-        assert_eq!(orientations.len(), 6);
-
-        let dep_mom = EdgeIndex::from(2);
-        let dep_mom_expr = vec![(EdgeIndex::from(0), -1), (EdgeIndex::from(1), -1)];
-
-        let shift_rewrite = Some(ShiftRewrite {
-            dependent_momentum: dep_mom,
-            dependent_momentum_expr: dep_mom_expr,
-        });
-
-        let mut surface_cache = SurfaceCache::new();
-
-        let cff = generate_cff_from_orientations(
-            orientations,
-            &mut surface_cache,
-            &[],
-            &shift_rewrite.clone(),
-        )
-        .unwrap();
-        assert_eq!(
-            cff.surfaces.esurface_cache.len(),
-            6,
-            "too many esurfaces: {:#?}",
-            cff.surfaces.esurface_cache,
-        );
-
-        let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
-        let p2 = FourMomentum::from_args(F(1.), F(6.), F(7.), F(8.));
-        let p3 = -p1 - p2;
-        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
-        let m = F(0.);
-
-        let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
-
-        let virtual_energy_cache = [
-            compute_one_loop_energy(k, zero.spatial, m),
-            compute_one_loop_energy(k, p1.spatial, m),
-            compute_one_loop_energy(k, p1.spatial + p2.spatial, m),
-        ];
-
-        let external_energy_cache = [p1.temporal.value, p2.temporal.value, p3.temporal.value];
-
-        // combine the virtual and external energies
-        let mut energy_cache = external_energy_cache.to_vec();
-        energy_cache.extend(virtual_energy_cache);
-
-        let energy_cache = dummy_hedge_graph(6)
-            .new_edgevec_from_iter(energy_cache)
-            .unwrap();
-
-        let energy_prefactor = virtual_energy_cache
-            .iter()
-            .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| acc * x)
-            .unwrap();
-
-        let mut evaluator = cff.quick_symbolica_evaluator(0..3, 3..6);
-
-        let cff_res: F<f64> = energy_prefactor
-            * evaluator.evaluate_single(energy_cache.clone().as_ref())
-            * F((2. * std::f64::consts::PI).powi(-3));
-
-        let target_res = F(6.333_549_225_536_17e-9_f64);
-        let absolute_error = cff_res - target_res;
-        let relative_error = absolute_error.abs() / cff_res.abs();
-
-        assert!(
-            relative_error.abs() < F(1.0e-15),
-            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
-            relative_error,
-            target_res,
-            cff_res
-        );
-
-        // test cff from hedge graph
-        let mut triangle_hedge_graph_builder = HedgeGraphBuilder::new();
-
-        let nodes = (0..3)
-            .map(|_| triangle_hedge_graph_builder.add_node(()))
-            .collect_vec();
-
-        for node in nodes.clone() {
-            triangle_hedge_graph_builder.add_external_edge(
-                node,
-                (),
-                Orientation::Undirected,
-                Flow::Sink,
-            );
-        }
-
-        triangle_hedge_graph_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
-        triangle_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
-        triangle_hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
-
-        let triangle_hedge_graph: HedgeGraph<(), (), ()> =
-            triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
-
-        let cff_hedge =
-            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[], &[]).unwrap();
-        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
-
-        let cff_res: F<f64> = energy_prefactor
-            * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref())
-            * F((2. * std::f64::consts::PI).powi(-3));
-
-        let target_res = F(6.333_549_225_536_17e-9_f64);
-        let absolute_error = cff_res - target_res;
-        let relative_error = absolute_error.abs() / cff_res.abs();
-
-        assert!(
-            relative_error.abs() < F(1.0e-15),
-            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
-            relative_error,
-            target_res,
-            cff_res
-        );
-    }
-
-    #[test]
-    fn test_cff_test_double_triangle() {
-        let double_triangle_edges = vec![(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)];
-        let incoming_vertices = vec![0, 3];
-
-        let orientations =
-            generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
-
-        let dep_mom = EdgeIndex::from(1);
-        let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
-
-        let shift_rewrite = Some(ShiftRewrite {
-            dependent_momentum: dep_mom,
-            dependent_momentum_expr: dep_mom_expr,
-        });
-
-        let mut surface_cache = SurfaceCache::new();
-
-        let cff =
-            generate_cff_from_orientations(orientations, &mut surface_cache, &[], &shift_rewrite)
-                .unwrap();
-
-        let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
-        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
-
-        let k = ThreeMomentum::new(F(6.), F(23.), F(9.));
-        let l = ThreeMomentum::new(F(3.), F(12.), F(34.));
-
-        let m = F::from_f64(0.);
-
-        let virtual_energy_cache = [
-            compute_one_loop_energy(k, zero.spatial, m),
-            compute_one_loop_energy(q.spatial - k, zero.spatial, m),
-            compute_one_loop_energy(k - l, zero.spatial, m),
-            compute_one_loop_energy(l, zero.spatial, m),
-            compute_one_loop_energy(q.spatial - l, zero.spatial, m),
-        ];
-
-        let external_energy_cache = [q.temporal.value, -q.temporal.value];
-
-        let mut energy_cache = external_energy_cache.to_vec();
-        energy_cache.extend(virtual_energy_cache);
-
-        let energy_cache = dummy_hedge_graph(energy_cache.len())
-            .new_edgevec_from_iter(energy_cache)
-            .unwrap();
-
-        let energy_prefactor = virtual_energy_cache
-            .iter()
-            .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| acc * x)
-            .unwrap();
-
-        let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..7);
-
-        let cff_res = energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
-
-        let target = F(1.0794792137096797e-13);
-        let absolute_error = cff_res - target;
-        let relative_error = absolute_error / cff_res;
-
-        assert!(
-            relative_error.abs() < F(1.0e-15),
-            "relative error: {:+e}, target: {:+e}, result: {:+e}",
-            relative_error,
-            target,
-            cff_res
-        );
-
-        let mut hedge_double_triangle_builder = HedgeGraphBuilder::new();
-        let nodes = (0..4)
-            .map(|_| hedge_double_triangle_builder.add_node(()))
-            .collect_vec();
-
-        hedge_double_triangle_builder.add_external_edge(
-            nodes[0],
-            (),
-            Orientation::Undirected,
-            Flow::Sink,
-        );
-        hedge_double_triangle_builder.add_external_edge(
-            nodes[3],
-            (),
-            Orientation::Undirected,
-            Flow::Sink,
-        );
-
-        hedge_double_triangle_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
-        hedge_double_triangle_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
-        hedge_double_triangle_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
-        hedge_double_triangle_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
-        hedge_double_triangle_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
-
-        let hedge_double_traingle: HedgeGraph<(), (), ()> =
-            hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
-        let cff_hedge =
-            generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
-        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
-        let cff_res = energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
-
-        let target = F(1.0794792137096797e-13);
-        let absolute_error = cff_res - target;
-        let relative_error = absolute_error / cff_res;
-
-        assert!(
-            relative_error.abs() < F(1.0e-15),
-            "relative error: {:+e}, target: {:+e}, result: {:+e}",
-            relative_error,
-            target,
-            cff_res
-        );
-
-        let node_3 = hedge_double_traingle.iter_crown(nodes[3]).into();
-        let node_0 = hedge_double_traingle.iter_crown(nodes[0]).into();
-
-        let cuts = hedge_double_traingle.all_cuts(node_3, node_0);
-        let mut num_with_6_ors = 0;
-        let mut num_with_4_ors = 0;
-        assert_eq!(cuts.len(), 4);
-        for (_, cut, _) in &cuts {
-            let orientations = get_orientations_with_cut(&hedge_double_traingle, cut);
-            if orientations.len() == 4 {
-                num_with_4_ors += 1
-            } else if orientations.len() == 6 {
-                num_with_6_ors += 1
-            }
-        }
-
-        assert_eq!(num_with_4_ors, 2);
-        assert_eq!(num_with_6_ors, 2);
-    }
-
-    #[test]
-    fn test_cff_tbt() {
-        let tbt_edges = vec![
-            (0, 1),
-            (2, 0),
-            (1, 2),
-            (1, 3),
-            (2, 4),
-            (3, 4),
-            (3, 5),
-            (5, 4),
-        ];
-
-        let incoming_vertices = vec![0, 5];
-
-        let dep_mom = EdgeIndex::from(1);
-        let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
-
-        let shift_rewrite = Some(ShiftRewrite {
-            dependent_momentum: dep_mom,
-            dependent_momentum_expr: dep_mom_expr,
-        });
-        let mut surface_cache = SurfaceCache::new();
-        let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff =
-            generate_cff_from_orientations(orientataions, &mut surface_cache, &[], &shift_rewrite)
-                .unwrap();
-
-        let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
-        let zero_vector = q.default();
-
-        let p0 = q;
-        let p5 = -q;
-
-        let k = ThreeMomentum::new(F(6.), F(23.), F(9.));
-        let l = ThreeMomentum::new(F(3.), F(12.), F(34.));
-        let m = ThreeMomentum::new(F(7.), F(24.), F(1.));
-
-        let mass = F(0.);
-
-        let energies_cache = [
-            p0.temporal.value,
-            p5.temporal.value,
-            compute_one_loop_energy(k, zero_vector.spatial, mass),
-            compute_one_loop_energy(k - q.spatial, zero_vector.spatial, mass),
-            compute_one_loop_energy(k - l, zero_vector.spatial, mass),
-            compute_one_loop_energy(l, zero_vector.spatial, mass),
-            compute_one_loop_energy(q.spatial - l, zero_vector.spatial, mass),
-            compute_one_loop_energy(l - m, zero_vector.spatial, mass),
-            compute_one_loop_energy(m, zero_vector.spatial, mass),
-            compute_one_loop_energy(m - q.spatial, zero_vector.spatial, mass),
-        ];
-
-        let virtual_energy_cache = energies_cache[2..].to_vec();
-
-        let energy_prefactor = virtual_energy_cache
-            .iter()
-            .map(|e| (F(2.) * e).inv())
-            .reduce(|acc, x| acc * x)
-            .unwrap();
-
-        let energies_cache = dummy_hedge_graph(energies_cache.len())
-            .new_edgevec_from_iter(energies_cache)
-            .unwrap();
-
-        let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..10);
-
-        let res = evaluator.evaluate_single(energies_cache.clone().as_ref()) * energy_prefactor;
-
-        let absolute_error = res - F(1.2625322619777278e-21);
-        let relative_error = absolute_error / res;
-        assert!(
-            relative_error.abs() < F(1.0e-15),
-            "relative error: {:+e}",
-            relative_error
-        );
-
-        let mut tbt_hedge_builder = HedgeGraphBuilder::new();
-        let nodes = (0..6).map(|_| tbt_hedge_builder.add_node(())).collect_vec();
-        tbt_hedge_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
-        tbt_hedge_builder.add_external_edge(nodes[5], (), Orientation::Undirected, Flow::Sink);
-
-        tbt_hedge_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
-        tbt_hedge_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
-        tbt_hedge_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
-        tbt_hedge_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
-        tbt_hedge_builder.add_edge(nodes[2], nodes[4], (), Orientation::Undirected);
-        tbt_hedge_builder.add_edge(nodes[3], nodes[4], (), Orientation::Undirected);
-        tbt_hedge_builder.add_edge(nodes[3], nodes[5], (), Orientation::Undirected);
-        tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
-
-        let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
-        let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[]).unwrap();
-
-        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
-        let res = cff_hedge_evaluator.evaluate_single(energies_cache.as_ref()) * energy_prefactor;
-
-        let absolute_error = res - F(1.2625322619777278e-21);
-        let relative_error = absolute_error / res;
-        assert!(
-            relative_error.abs() < F(1.0e-15),
-            "relative error: {:+e}",
-            relative_error
-        );
-
-        let node_0 = tbt_hedge.iter_crown(nodes[0]).into();
-        let node_5 = tbt_hedge.iter_crown(nodes[5]).into();
-
-        let cuts = tbt_hedge.all_cuts(node_0, node_5).clone();
-        assert_eq!(cuts.len(), 9);
-        let mut num_with_24 = 0;
-        let mut num_with_16 = 0;
-        let mut num_with_42 = 0;
-        let mut num_with_36 = 0;
-        for (_, cut, _) in cuts.iter() {
-            let orientations = get_orientations_with_cut(&tbt_hedge, cut);
-            if orientations.len() == 24 {
-                num_with_24 += 1;
-            }
-            if orientations.len() == 16 {
-                num_with_16 += 1;
-            }
-            if orientations.len() == 42 {
-                num_with_42 += 1
-            }
-            if orientations.len() == 36 {
-                num_with_36 += 1;
-            }
-        }
-
-        assert_eq!(num_with_24, 4);
-        assert_eq!(num_with_16, 2);
-        assert_eq!(num_with_42, 2);
-        assert_eq!(num_with_36, 1);
-    }
-
-    #[test]
     #[ignore]
     fn fishnet2b2() {
         let edges = vec![
@@ -1691,72 +1299,6 @@ mod tests_cff {
         let _finish = std::time::Instant::now();
     }
 
-    #[test]
-    #[ignore]
-    fn fishnet2b3() {
-        let edges = vec![
-            (0, 1),
-            (1, 2),
-            (3, 4),
-            (4, 5),
-            (6, 7),
-            (7, 8),
-            (9, 10),
-            (10, 11),
-            (0, 3),
-            (3, 6),
-            (6, 9),
-            (1, 4),
-            (4, 7),
-            (7, 10),
-            (2, 5),
-            (5, 8),
-            (8, 11),
-        ];
-
-        let incoming_vertices = vec![];
-
-        let dep_mom = EdgeIndex::from(3);
-        let dep_mom_expr = vec![
-            (EdgeIndex::from(0), -1),
-            (EdgeIndex::from(1), -1),
-            (EdgeIndex::from(2), -1),
-        ];
-
-        let shift_rewrite = ShiftRewrite {
-            dependent_momentum: dep_mom,
-            dependent_momentum_expr: dep_mom_expr,
-        };
-
-        let start = std::time::Instant::now();
-        let orientations = generate_orientations_for_testing(edges, incoming_vertices);
-        let mut surface_cache = SurfaceCache::new();
-
-        let cff = generate_cff_from_orientations(
-            orientations,
-            &mut surface_cache,
-            &[],
-            &Some(shift_rewrite),
-        )
-        .unwrap();
-        let finish = std::time::Instant::now();
-        println!("time to generate cff: {:?}", finish - start);
-
-        let energy_cache = [F(3.0); 17];
-
-        //let energy_cache = dummy_hedge_graph(energy_cache.len())
-        //    .new_hedgevec_from_iter(energy_cache)
-        //    .unwrap();
-
-        let mut evaluator = cff.quick_symbolica_evaluator(0..4, 4..17);
-        let start = std::time::Instant::now();
-        for _ in 0..100 {
-            let _res = evaluator.evaluate_single(&energy_cache);
-        }
-        let finish = std::time::Instant::now();
-        println!("time to evaluate cff: {:?}", (finish - start) / 100);
-    }
-
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
         let cff = generate_cff_expression(graph, &None, &[], &[]).unwrap();
 
@@ -1850,5 +1392,482 @@ mod tests_cff {
         //.expand();
 
         println!("diff: {}", diff);
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn test_cff_generation_triangle() {
+            let triangle = vec![(2, 0), (0, 1), (1, 2)];
+
+            let incoming_vertices = vec![0, 1, 2];
+            let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
+            assert_eq!(orientations.len(), 6);
+
+            let dep_mom = EdgeIndex::from(2);
+            let dep_mom_expr = vec![(EdgeIndex::from(0), -1), (EdgeIndex::from(1), -1)];
+
+            let shift_rewrite = Some(ShiftRewrite {
+                dependent_momentum: dep_mom,
+                dependent_momentum_expr: dep_mom_expr,
+            });
+
+            let mut surface_cache = SurfaceCache::new();
+
+            let cff = generate_cff_from_orientations(
+                orientations,
+                &mut surface_cache,
+                &[],
+                &shift_rewrite.clone(),
+            )
+            .unwrap();
+            assert_eq!(
+                cff.surfaces.esurface_cache.len(),
+                6,
+                "too many esurfaces: {:#?}",
+                cff.surfaces.esurface_cache,
+            );
+
+            let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
+            let p2 = FourMomentum::from_args(F(1.), F(6.), F(7.), F(8.));
+            let p3 = -p1 - p2;
+            let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+            let m = F(0.);
+
+            let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
+
+            let virtual_energy_cache = [
+                compute_one_loop_energy(k, zero.spatial, m),
+                compute_one_loop_energy(k, p1.spatial, m),
+                compute_one_loop_energy(k, p1.spatial + p2.spatial, m),
+            ];
+
+            let external_energy_cache = [p1.temporal.value, p2.temporal.value, p3.temporal.value];
+
+            // combine the virtual and external energies
+            let mut energy_cache = external_energy_cache.to_vec();
+            energy_cache.extend(virtual_energy_cache);
+
+            let energy_cache = dummy_hedge_graph(6)
+                .new_edgevec_from_iter(energy_cache)
+                .unwrap();
+
+            let energy_prefactor = virtual_energy_cache
+                .iter()
+                .map(|e| (F(2.) * e).inv())
+                .reduce(|acc, x| acc * x)
+                .unwrap();
+
+            let mut evaluator = cff.quick_symbolica_evaluator(0..3, 3..6);
+
+            let cff_res: F<f64> = energy_prefactor
+                * evaluator.evaluate_single(energy_cache.clone().as_ref())
+                * F((2. * std::f64::consts::PI).powi(-3));
+
+            let target_res = F(6.333_549_225_536_17e-9_f64);
+            let absolute_error = cff_res - target_res;
+            let relative_error = absolute_error.abs() / cff_res.abs();
+
+            assert!(
+                relative_error.abs() < F(1.0e-15),
+                "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+                relative_error,
+                target_res,
+                cff_res
+            );
+
+            // test cff from hedge graph
+            let mut triangle_hedge_graph_builder = HedgeGraphBuilder::new();
+
+            let nodes = (0..3)
+                .map(|_| triangle_hedge_graph_builder.add_node(()))
+                .collect_vec();
+
+            for node in nodes.clone() {
+                triangle_hedge_graph_builder.add_external_edge(
+                    node,
+                    (),
+                    Orientation::Undirected,
+                    Flow::Sink,
+                );
+            }
+
+            triangle_hedge_graph_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+            triangle_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+            triangle_hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+
+            let triangle_hedge_graph: HedgeGraph<(), (), ()> =
+                triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+            let cff_hedge =
+                generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[], &[]).unwrap();
+            let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
+
+            let cff_res: F<f64> = energy_prefactor
+                * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref())
+                * F((2. * std::f64::consts::PI).powi(-3));
+
+            let target_res = F(6.333_549_225_536_17e-9_f64);
+            let absolute_error = cff_res - target_res;
+            let relative_error = absolute_error.abs() / cff_res.abs();
+
+            assert!(
+                relative_error.abs() < F(1.0e-15),
+                "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+                relative_error,
+                target_res,
+                cff_res
+            );
+        }
+
+        #[test]
+        fn test_cff_test_double_triangle() {
+            let double_triangle_edges = vec![(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)];
+            let incoming_vertices = vec![0, 3];
+
+            let orientations =
+                generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
+
+            let dep_mom = EdgeIndex::from(1);
+            let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
+
+            let shift_rewrite = Some(ShiftRewrite {
+                dependent_momentum: dep_mom,
+                dependent_momentum_expr: dep_mom_expr,
+            });
+
+            let mut surface_cache = SurfaceCache::new();
+
+            let cff = generate_cff_from_orientations(
+                orientations,
+                &mut surface_cache,
+                &[],
+                &shift_rewrite,
+            )
+            .unwrap();
+
+            let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
+            let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+
+            let k = ThreeMomentum::new(F(6.), F(23.), F(9.));
+            let l = ThreeMomentum::new(F(3.), F(12.), F(34.));
+
+            let m = F::from_f64(0.);
+
+            let virtual_energy_cache = [
+                compute_one_loop_energy(k, zero.spatial, m),
+                compute_one_loop_energy(q.spatial - k, zero.spatial, m),
+                compute_one_loop_energy(k - l, zero.spatial, m),
+                compute_one_loop_energy(l, zero.spatial, m),
+                compute_one_loop_energy(q.spatial - l, zero.spatial, m),
+            ];
+
+            let external_energy_cache = [q.temporal.value, -q.temporal.value];
+
+            let mut energy_cache = external_energy_cache.to_vec();
+            energy_cache.extend(virtual_energy_cache);
+
+            let energy_cache = dummy_hedge_graph(energy_cache.len())
+                .new_edgevec_from_iter(energy_cache)
+                .unwrap();
+
+            let energy_prefactor = virtual_energy_cache
+                .iter()
+                .map(|e| (F(2.) * e).inv())
+                .reduce(|acc, x| acc * x)
+                .unwrap();
+
+            let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..7);
+
+            let cff_res =
+                energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+            let target = F(1.0794792137096797e-13);
+            let absolute_error = cff_res - target;
+            let relative_error = absolute_error / cff_res;
+
+            assert!(
+                relative_error.abs() < F(1.0e-15),
+                "relative error: {:+e}, target: {:+e}, result: {:+e}",
+                relative_error,
+                target,
+                cff_res
+            );
+
+            let mut hedge_double_triangle_builder = HedgeGraphBuilder::new();
+            let nodes = (0..4)
+                .map(|_| hedge_double_triangle_builder.add_node(()))
+                .collect_vec();
+
+            hedge_double_triangle_builder.add_external_edge(
+                nodes[0],
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+            hedge_double_triangle_builder.add_external_edge(
+                nodes[3],
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+
+            hedge_double_triangle_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+            hedge_double_triangle_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+            hedge_double_triangle_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+            hedge_double_triangle_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+            hedge_double_triangle_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+
+            let hedge_double_traingle: HedgeGraph<(), (), ()> =
+                hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
+            let cff_hedge =
+                generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
+            let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
+            let cff_res =
+                energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
+
+            let target = F(1.0794792137096797e-13);
+            let absolute_error = cff_res - target;
+            let relative_error = absolute_error / cff_res;
+
+            assert!(
+                relative_error.abs() < F(1.0e-15),
+                "relative error: {:+e}, target: {:+e}, result: {:+e}",
+                relative_error,
+                target,
+                cff_res
+            );
+
+            let node_3 = hedge_double_traingle.iter_crown(nodes[3]).into();
+            let node_0 = hedge_double_traingle.iter_crown(nodes[0]).into();
+
+            let cuts = hedge_double_traingle.all_cuts(node_3, node_0);
+            let mut num_with_6_ors = 0;
+            let mut num_with_4_ors = 0;
+            assert_eq!(cuts.len(), 4);
+            for (_, cut, _) in &cuts {
+                let orientations = get_orientations_with_cut(&hedge_double_traingle, cut);
+                if orientations.len() == 4 {
+                    num_with_4_ors += 1
+                } else if orientations.len() == 6 {
+                    num_with_6_ors += 1
+                }
+            }
+
+            assert_eq!(num_with_4_ors, 2);
+            assert_eq!(num_with_6_ors, 2);
+        }
+
+        #[test]
+        fn test_cff_tbt() {
+            let tbt_edges = vec![
+                (0, 1),
+                (2, 0),
+                (1, 2),
+                (1, 3),
+                (2, 4),
+                (3, 4),
+                (3, 5),
+                (5, 4),
+            ];
+
+            let incoming_vertices = vec![0, 5];
+
+            let dep_mom = EdgeIndex::from(1);
+            let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
+
+            let shift_rewrite = Some(ShiftRewrite {
+                dependent_momentum: dep_mom,
+                dependent_momentum_expr: dep_mom_expr,
+            });
+            let mut surface_cache = SurfaceCache::new();
+            let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
+            let cff = generate_cff_from_orientations(
+                orientataions,
+                &mut surface_cache,
+                &[],
+                &shift_rewrite,
+            )
+            .unwrap();
+
+            let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
+            let zero_vector = q.default();
+
+            let p0 = q;
+            let p5 = -q;
+
+            let k = ThreeMomentum::new(F(6.), F(23.), F(9.));
+            let l = ThreeMomentum::new(F(3.), F(12.), F(34.));
+            let m = ThreeMomentum::new(F(7.), F(24.), F(1.));
+
+            let mass = F(0.);
+
+            let energies_cache = [
+                p0.temporal.value,
+                p5.temporal.value,
+                compute_one_loop_energy(k, zero_vector.spatial, mass),
+                compute_one_loop_energy(k - q.spatial, zero_vector.spatial, mass),
+                compute_one_loop_energy(k - l, zero_vector.spatial, mass),
+                compute_one_loop_energy(l, zero_vector.spatial, mass),
+                compute_one_loop_energy(q.spatial - l, zero_vector.spatial, mass),
+                compute_one_loop_energy(l - m, zero_vector.spatial, mass),
+                compute_one_loop_energy(m, zero_vector.spatial, mass),
+                compute_one_loop_energy(m - q.spatial, zero_vector.spatial, mass),
+            ];
+
+            let virtual_energy_cache = energies_cache[2..].to_vec();
+
+            let energy_prefactor = virtual_energy_cache
+                .iter()
+                .map(|e| (F(2.) * e).inv())
+                .reduce(|acc, x| acc * x)
+                .unwrap();
+
+            let energies_cache = dummy_hedge_graph(energies_cache.len())
+                .new_edgevec_from_iter(energies_cache)
+                .unwrap();
+
+            let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..10);
+
+            let res = evaluator.evaluate_single(energies_cache.clone().as_ref()) * energy_prefactor;
+
+            let absolute_error = res - F(1.2625322619777278e-21);
+            let relative_error = absolute_error / res;
+            assert!(
+                relative_error.abs() < F(1.0e-15),
+                "relative error: {:+e}",
+                relative_error
+            );
+
+            let mut tbt_hedge_builder = HedgeGraphBuilder::new();
+            let nodes = (0..6).map(|_| tbt_hedge_builder.add_node(())).collect_vec();
+            tbt_hedge_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+            tbt_hedge_builder.add_external_edge(nodes[5], (), Orientation::Undirected, Flow::Sink);
+
+            tbt_hedge_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+            tbt_hedge_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+            tbt_hedge_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+            tbt_hedge_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+            tbt_hedge_builder.add_edge(nodes[2], nodes[4], (), Orientation::Undirected);
+            tbt_hedge_builder.add_edge(nodes[3], nodes[4], (), Orientation::Undirected);
+            tbt_hedge_builder.add_edge(nodes[3], nodes[5], (), Orientation::Undirected);
+            tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
+
+            let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
+            let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[]).unwrap();
+
+            let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
+            let res =
+                cff_hedge_evaluator.evaluate_single(energies_cache.as_ref()) * energy_prefactor;
+
+            let absolute_error = res - F(1.2625322619777278e-21);
+            let relative_error = absolute_error / res;
+            assert!(
+                relative_error.abs() < F(1.0e-15),
+                "relative error: {:+e}",
+                relative_error
+            );
+
+            let node_0 = tbt_hedge.iter_crown(nodes[0]).into();
+            let node_5 = tbt_hedge.iter_crown(nodes[5]).into();
+
+            let cuts = tbt_hedge.all_cuts(node_0, node_5).clone();
+            assert_eq!(cuts.len(), 9);
+            let mut num_with_24 = 0;
+            let mut num_with_16 = 0;
+            let mut num_with_42 = 0;
+            let mut num_with_36 = 0;
+            for (_, cut, _) in cuts.iter() {
+                let orientations = get_orientations_with_cut(&tbt_hedge, cut);
+                if orientations.len() == 24 {
+                    num_with_24 += 1;
+                }
+                if orientations.len() == 16 {
+                    num_with_16 += 1;
+                }
+                if orientations.len() == 42 {
+                    num_with_42 += 1
+                }
+                if orientations.len() == 36 {
+                    num_with_36 += 1;
+                }
+            }
+
+            assert_eq!(num_with_24, 4);
+            assert_eq!(num_with_16, 2);
+            assert_eq!(num_with_42, 2);
+            assert_eq!(num_with_36, 1);
+        }
+    }
+
+    mod slow {
+        use super::*;
+
+        #[test]
+        #[ignore]
+        fn fishnet2b3() {
+            let edges = vec![
+                (0, 1),
+                (1, 2),
+                (3, 4),
+                (4, 5),
+                (6, 7),
+                (7, 8),
+                (9, 10),
+                (10, 11),
+                (0, 3),
+                (3, 6),
+                (6, 9),
+                (1, 4),
+                (4, 7),
+                (7, 10),
+                (2, 5),
+                (5, 8),
+                (8, 11),
+            ];
+
+            let incoming_vertices = vec![];
+
+            let dep_mom = EdgeIndex::from(3);
+            let dep_mom_expr = vec![
+                (EdgeIndex::from(0), -1),
+                (EdgeIndex::from(1), -1),
+                (EdgeIndex::from(2), -1),
+            ];
+
+            let shift_rewrite = ShiftRewrite {
+                dependent_momentum: dep_mom,
+                dependent_momentum_expr: dep_mom_expr,
+            };
+
+            let start = std::time::Instant::now();
+            let orientations = generate_orientations_for_testing(edges, incoming_vertices);
+            let mut surface_cache = SurfaceCache::new();
+
+            let cff = generate_cff_from_orientations(
+                orientations,
+                &mut surface_cache,
+                &[],
+                &Some(shift_rewrite),
+            )
+            .unwrap();
+            let finish = std::time::Instant::now();
+            println!("time to generate cff: {:?}", finish - start);
+
+            let energy_cache = [F(3.0); 17];
+
+            //let energy_cache = dummy_hedge_graph(energy_cache.len())
+            //    .new_hedgevec_from_iter(energy_cache)
+            //    .unwrap();
+
+            let mut evaluator = cff.quick_symbolica_evaluator(0..4, 4..17);
+            let start = std::time::Instant::now();
+            for _ in 0..100 {
+                let _res = evaluator.evaluate_single(&energy_cache);
+            }
+            let finish = std::time::Instant::now();
+            println!("time to evaluate cff: {:?}", (finish - start) / 100);
+        }
     }
 }

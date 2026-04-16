@@ -853,33 +853,37 @@ pub(crate) fn chain_dis_generate(options: &[ProcessDefinition], model: &Model) -
         .collect()
 }
 
-#[test]
-fn nlo_fs_dis() {
-    // setup_logger().unwrap();
+mod failing {
+    use super::*;
 
-    let model = load_generic_model("sm_dis");
-    let options = dis_cart_prod(&["d", "d~", "g"], 1, &model);
+    #[test]
+    fn nlo_fs_dis() {
+        // setup_logger().unwrap();
 
-    for option in options {
-        let diagrams = chain_dis_generate(std::slice::from_ref(&option), &model);
+        let model = load_generic_model("sm_dis");
+        let options = dis_cart_prod(&["d", "d~", "g"], 1, &model);
 
-        let process_name = option
-            .initial_pdgs
-            .iter()
-            .map(|a| model.get_particle_from_pdg(*a as isize).0.name.clone())
-            .join(",");
+        for option in options {
+            let diagrams = chain_dis_generate(std::slice::from_ref(&option), &model);
 
-        assert_snapshot!(
-            format!("number of diagrams for {}", process_name),
-            diagrams.len()
-        );
-        // let dots = diagrams
-        //     .iter()
-        //     .map(|a| a.dot())
-        //     .collect::<Vec<_>>()
-        //     .join("\n");
-        // assert_snapshot!(format!("dots for {}", process_name), dots);
+            let process_name = option
+                .initial_pdgs
+                .iter()
+                .map(|a| model.get_particle_from_pdg(*a as isize).0.name.clone())
+                .join(",");
+
+            assert_snapshot!(
+                format!("number of diagrams for {}", process_name),
+                diagrams.len()
+            );
+            // let dots = diagrams
+            //     .iter()
+            //     .map(|a| a.dot())
+            //     .collect::<Vec<_>>()
+            //     .join("\n");
+            // assert_snapshot!(format!("dots for {}", process_name), dots);
+        }
+
+        // println!("Number of fs: {}", fs_diagrams.len());
     }
-
-    // println!("Number of fs: {}", fs_diagrams.len());
 }

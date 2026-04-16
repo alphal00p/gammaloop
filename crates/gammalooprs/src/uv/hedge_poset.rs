@@ -921,136 +921,6 @@ mod tests {
     }
 
     #[test]
-    fn triple_double_tadpole() -> Result<()> {
-        test_initialise().unwrap();
-        let dumbell: Graph = dot!(
-            digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v3;
-                v3 -> v3;v3 -> v3;
-                v2 -> v2; v2 -> v2;
-                v1 -> v1;v1 -> v1;
-            },"scalars"
-        )?;
-
-        let spinneys: Vec<_> = dumbell
-            .spinneys(&dumbell.full_filter())
-            .into_iter()
-            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
-            .collect();
-        let f = Wood::new(
-            CutStructure::empty(&dumbell),
-            &dumbell,
-            &UVgenerationSettings::default(),
-        );
-
-        println!("{}", f);
-
-        insta::assert_snapshot!(
-            f.graph.n_nodes(),
-            @"64",
-            // format!("Wood does not have correct number of spinneys: \n{}",f)
-        );
-
-        for (_, _, d) in f.graph.iter_nodes() {
-            println!(
-                "//Node {}: \n{}",
-                d.subgraph.string_label(),
-                dumbell.dot(&d.subgraph)
-            );
-        }
-        let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
-
-        // println!("{}", ff.dot(&dumbell));
-
-        let f = f.unfold();
-        f.debug_walk();
-        println!("{}", f);
-        insta::assert_snapshot!(
-            f.graph.n_nodes(),
-            @"160");
-
-        Ok(())
-    }
-
-    #[test]
-    fn lobsided_double_dumbell() -> Result<()> {
-        test_initialise().unwrap();
-        let dumbell: Graph = dot!(
-            digraph G{
-                edge [particle="scalar_1"];
-                v1 -> v2;
-                v2 -> v2; //v2 -> v2;
-                v1 -> v1;v1 -> v1;
-            },"scalars"
-        )?;
-
-        let spinneys: Vec<_> = dumbell
-            .spinneys(&dumbell.full_filter())
-            .into_iter()
-            .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
-            .collect();
-        let f = Wood::new(
-            CutStructure::empty(&dumbell),
-            &dumbell,
-            &UVgenerationSettings::default(),
-        );
-
-        println!("{}", f);
-
-        insta::assert_snapshot!(
-            f.graph.n_nodes(),
-            @"8",
-            // format!("Wood does not have correct number of spinneys: \n{}",f)
-        );
-
-        for (_, _, d) in f.graph.iter_nodes() {
-            println!(
-                "//Node {}: \n{}",
-                d.subgraph.string_label(),
-                dumbell.dot(&d.subgraph)
-            );
-        }
-        let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
-
-        // println!("{}", ff.dot(&dumbell));
-
-        let f = f.unfold();
-        f.debug_walk();
-        println!("{}", f);
-        insta::assert_snapshot!(
-            f.node_label(NodeIndex(10)),
-            @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
-        );
-        insta::assert_snapshot!(
-            f.node_label(NodeIndex(11)),
-            @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
-        );
-        insta::assert_snapshot!(
-            f.graph.n_nodes(),
-            @"12");
-
-        let f = Wood::new(
-            CutStructure::empty(&dumbell),
-            &dumbell,
-            &UVgenerationSettings::default(),
-        )
-        .unfold_uncached();
-        assert!(f.compute_store.entries.is_empty());
-        insta::assert_snapshot!(
-            f.node_label(NodeIndex(10)),
-            @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
-        );
-        insta::assert_snapshot!(
-            f.node_label(NodeIndex(11)),
-            @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
-        );
-
-        Ok(())
-    }
-
-    #[test]
     fn dumbells() -> Result<()> {
         test_initialise().unwrap();
         let dumbell: Graph = dot!(
@@ -1469,5 +1339,139 @@ mod tests {
          );
 
         Ok(())
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn triple_double_tadpole() -> Result<()> {
+            test_initialise().unwrap();
+            let dumbell: Graph = dot!(
+                digraph G{
+                    edge [particle="scalar_1"];
+                    v1 -> v2;
+                    v2 -> v3;
+                    v3 -> v3;v3 -> v3;
+                    v2 -> v2; v2 -> v2;
+                    v1 -> v1;v1 -> v1;
+                },"scalars"
+            )?;
+
+            let spinneys: Vec<_> = dumbell
+                .spinneys(&dumbell.full_filter())
+                .into_iter()
+                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .collect();
+            let f = Wood::new(
+                CutStructure::empty(&dumbell),
+                &dumbell,
+                &UVgenerationSettings::default(),
+            );
+
+            println!("{}", f);
+
+            insta::assert_snapshot!(
+                f.graph.n_nodes(),
+                @"64",
+                // format!("Wood does not have correct number of spinneys: \n{}",f)
+            );
+
+            for (_, _, d) in f.graph.iter_nodes() {
+                println!(
+                    "//Node {}: \n{}",
+                    d.subgraph.string_label(),
+                    dumbell.dot(&d.subgraph)
+                );
+            }
+            let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
+
+            // println!("{}", ff.dot(&dumbell));
+
+            let f = f.unfold();
+            f.debug_walk();
+            println!("{}", f);
+            insta::assert_snapshot!(
+                f.graph.n_nodes(),
+                @"160");
+
+            Ok(())
+        }
+
+        #[test]
+        fn lobsided_double_dumbell() -> Result<()> {
+            test_initialise().unwrap();
+            let dumbell: Graph = dot!(
+                digraph G{
+                    edge [particle="scalar_1"];
+                    v1 -> v2;
+                    v2 -> v2; //v2 -> v2;
+                    v1 -> v1;v1 -> v1;
+                },"scalars"
+            )?;
+
+            let spinneys: Vec<_> = dumbell
+                .spinneys(&dumbell.full_filter())
+                .into_iter()
+                .map(|a| Spinney::new(a, &dumbell, &dumbell.loop_momentum_basis))
+                .collect();
+            let f = Wood::new(
+                CutStructure::empty(&dumbell),
+                &dumbell,
+                &UVgenerationSettings::default(),
+            );
+
+            println!("{}", f);
+
+            insta::assert_snapshot!(
+                f.graph.n_nodes(),
+                @"8",
+                // format!("Wood does not have correct number of spinneys: \n{}",f)
+            );
+
+            for (_, _, d) in f.graph.iter_nodes() {
+                println!(
+                    "//Node {}: \n{}",
+                    d.subgraph.string_label(),
+                    dumbell.dot(&d.subgraph)
+                );
+            }
+            let _ff = OldWood::from_spinneys(spinneys, &dumbell); //.unfold(&g, &g.loop_momentum_basis);
+
+            // println!("{}", ff.dot(&dumbell));
+
+            let f = f.unfold();
+            f.debug_walk();
+            println!("{}", f);
+            insta::assert_snapshot!(
+                f.node_label(NodeIndex(10)),
+                @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
+            );
+            insta::assert_snapshot!(
+                f.node_label(NodeIndex(11)),
+                @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+            );
+            insta::assert_snapshot!(
+                f.graph.n_nodes(),
+                @"12");
+
+            let f = Wood::new(
+                CutStructure::empty(&dumbell),
+                &dumbell,
+                &UVgenerationSettings::default(),
+            )
+            .unfold_uncached();
+            assert!(f.compute_store.entries.is_empty());
+            insta::assert_snapshot!(
+                f.node_label(NodeIndex(10)),
+                @"{C} · {36,F}: T((-1*S_C+S_F(11))*T(S_C(1)))*T(S_36(2))"
+            );
+            insta::assert_snapshot!(
+                f.node_label(NodeIndex(11)),
+                @"{3} · {36,F}: T((-1*S_3+S_F(4))*T(S_3(3)))*T(S_36(2))"
+            );
+
+            Ok(())
+        }
     }
 }

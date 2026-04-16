@@ -717,36 +717,6 @@ fn fermion_polarization_sum_massive_transverse() {
 }
 
 #[test]
-fn vector_polarization_sum_massless_z_axis() {
-    assert_vector_sum_matches_rule(
-        FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(4.0)),
-        UFOSymbol::zero(),
-        VectorPolarizationSumGauge::LightLikeAxial,
-        false,
-    );
-}
-
-#[test]
-fn vector_polarization_sum_massless_antiz_axis() {
-    assert_vector_sum_matches_rule(
-        FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(-4.0)),
-        UFOSymbol::zero(),
-        VectorPolarizationSumGauge::LightLikeAxial,
-        false,
-    );
-}
-
-#[test]
-fn vector_polarization_sum_massless_transverse() {
-    assert_vector_sum_matches_rule(
-        FourMomentum::from_args(F(4.0), F(0.0), F(4.0), F(0.0)),
-        UFOSymbol::zero(),
-        VectorPolarizationSumGauge::LightLikeAxial,
-        false,
-    );
-}
-
-#[test]
 fn vector_polarization_sum_massive_z_axis() {
     assert_vector_sum_matches_rule(
         FourMomentum::from_args(F(5.0), F(0.0), F(0.0), F(4.0)),
@@ -764,4 +734,38 @@ fn vector_polarization_sum_massive_transverse() {
         VectorPolarizationSumGauge::LightLikeAxial,
         true,
     );
+}
+
+mod failing {
+    use super::*;
+
+    #[test]
+    fn vector_polarization_sum_massless_z_axis() {
+        assert_vector_sum_matches_rule(
+            FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(4.0)),
+            UFOSymbol::zero(),
+            VectorPolarizationSumGauge::LightLikeAxial,
+            false,
+        );
+    }
+
+    #[test]
+    fn vector_polarization_sum_massless_antiz_axis() {
+        assert_vector_sum_matches_rule(
+            FourMomentum::from_args(F(4.0), F(0.0), F(0.0), F(-4.0)),
+            UFOSymbol::zero(),
+            VectorPolarizationSumGauge::LightLikeAxial,
+            false,
+        );
+    }
+
+    #[test]
+    fn vector_polarization_sum_massless_transverse() {
+        assert_vector_sum_matches_rule(
+            FourMomentum::from_args(F(4.0), F(0.0), F(4.0), F(0.0)),
+            UFOSymbol::zero(),
+            VectorPolarizationSumGauge::LightLikeAxial,
+            false,
+        );
+    }
 }

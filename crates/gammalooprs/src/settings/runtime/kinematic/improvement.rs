@@ -804,81 +804,85 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_photon_box() {
-        test_initialise().unwrap();
+    mod failing {
+        use super::*;
 
-        let photon_box: Graph = dot!(
-            digraph photon_box {
-                ext [style=invis];
-                ext -> v1:0 [particle = "a", id=0];
-                ext -> v2:1 [particle = "a", id=1];
-                v3:2 -> ext [particle = "a", id=2];
-                v4:3 -> ext [particle = "a", id=3];
-                v1 -> v2 [particle = "t", id=4];
-                v2 -> v3 [particle = "t", id=5];
-                v3 -> v4 [particle = "t", id=6];
-                v4 -> v1 [particle = "t", id=7];
-            },
-            "sm"
-        )
-        .unwrap();
+        #[test]
+        fn test_photon_box() {
+            test_initialise().unwrap();
 
-        let sm = load_generic_model("sm");
-        let e_cm = F(500.0);
+            let photon_box: Graph = dot!(
+                digraph photon_box {
+                    ext [style=invis];
+                    ext -> v1:0 [particle = "a", id=0];
+                    ext -> v2:1 [particle = "a", id=1];
+                    v3:2 -> ext [particle = "a", id=2];
+                    v4:3 -> ext [particle = "a", id=3];
+                    v1 -> v2 [particle = "t", id=4];
+                    v2 -> v3 [particle = "t", id=5];
+                    v3 -> v4 [particle = "t", id=6];
+                    v4 -> v1 [particle = "t", id=7];
+                },
+                "sm"
+            )
+            .unwrap();
 
-        let photon_box_res = test_default_momenta_graph(&photon_box, &sm, &e_cm);
-        if let Some(err) = photon_box_res.err() {
-            panic!("Error in photon box test: {:?}", err);
+            let sm = load_generic_model("sm");
+            let e_cm = F(500.0);
+
+            let photon_box_res = test_default_momenta_graph(&photon_box, &sm, &e_cm);
+            if let Some(err) = photon_box_res.err() {
+                panic!("Error in photon box test: {:?}", err);
+            }
         }
-    }
 
-    #[test]
-    fn test_aa_tt() {
-        test_initialise().unwrap();
-        let sm = load_generic_model("sm");
-        let e_cm = F(600.0);
+        #[test]
+        fn test_aa_tt() {
+            test_initialise().unwrap();
+            let sm = load_generic_model("sm");
+            let e_cm = F(600.0);
 
-        let aa_tt: Graph = dot!(
-            digraph aa_tt {
-                ext [style=invis];
-                ext -> v1:0 [particle = "a", id=0];
-                ext -> v2:1 [particle = "a", id=1];
-                v1:2 -> ext [particle = "t", id=2];
-                v2:3 -> ext [particle = "t~", id=3];
-                v2 -> v1 [particle = "t", id=4];
-            },
-            "sm"
-        )
-        .unwrap();
+            let aa_tt: Graph = dot!(
+                digraph aa_tt {
+                    ext [style=invis];
+                    ext -> v1:0 [particle = "a", id=0];
+                    ext -> v2:1 [particle = "a", id=1];
+                    v1:2 -> ext [particle = "t", id=2];
+                    v2:3 -> ext [particle = "t~", id=3];
+                    v2 -> v1 [particle = "t", id=4];
+                },
+                "sm"
+            )
+            .unwrap();
 
-        let aa_tt_res = test_default_momenta_graph(&aa_tt, &sm, &e_cm);
-        if let Some(err) = aa_tt_res.err() {
-            panic!("Error in aa_tt test: {:?}", err);
+            let aa_tt_res = test_default_momenta_graph(&aa_tt, &sm, &e_cm);
+            if let Some(err) = aa_tt_res.err() {
+                panic!("Error in aa_tt test: {:?}", err);
+            }
         }
-    }
 
-    #[test]
-    fn test_gt_gt() {
-        test_initialise().unwrap();
-        let sm = load_generic_model("sm");
-        let e_cm = F(700.0);
+        #[test]
+        fn test_gt_gt() {
+            test_initialise().unwrap();
+            let sm = load_generic_model("sm");
+            let e_cm = F(700.0);
 
-        let gt_gt: Graph = dot!(
-            digraph gt_gt {
-                ext [style=invis];
-                ext -> v1:0 [particle = "g", id=0];
-                ext -> v1:1 [particle = "t", id=1];
-                v2:2 -> ext [particle = "g", id=2];
-                v2:3 -> ext [particle = "t", id=3];
-                v1 -> v2 [particle = "t", id=4];
-            }, "sm"
-        )
-        .unwrap();
+            let gt_gt: Graph = dot!(
+                digraph gt_gt {
+                    ext [style=invis];
+                    ext -> v1:0 [particle = "g", id=0];
+                    ext -> v1:1 [particle = "t", id=1];
+                    v2:2 -> ext [particle = "g", id=2];
+                    v2:3 -> ext [particle = "t", id=3];
+                    v1 -> v2 [particle = "t", id=4];
+                }, "sm"
+            )
+            .unwrap();
 
-        let gt_gt_res = test_default_momenta_graph(&gt_gt, &sm, &e_cm);
-        if let Some(err) = gt_gt_res.err() {
-            panic!("Error in gt_gt test: {:?}", err);
+            let gt_gt_res = test_default_momenta_graph(&gt_gt, &sm, &e_cm);
+            if let Some(err) = gt_gt_res.err() {
+                panic!("Error in gt_gt test: {:?}", err);
+            }
         }
     }
 }

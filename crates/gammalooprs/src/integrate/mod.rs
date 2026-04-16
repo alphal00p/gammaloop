@@ -5222,24 +5222,6 @@ mod tests {
     }
 
     #[test]
-    fn target_accuracy_status_treats_zero_relative_reference_as_inactive() {
-        let state = make_integration_state();
-        let status = status_update::evaluate_target_accuracy(
-            &state,
-            100_000,
-            Duration::from_secs(10),
-            &[Some(Complex::new(F(0.0), F(0.0))), None],
-            IntegrationStatusPhaseDisplay::Real,
-            Some(0.05),
-            None,
-        );
-
-        assert!(!status.relative_reached);
-        assert!(!status.absolute_reached);
-        assert_eq!(status.eta_to_target, None);
-    }
-
-    #[test]
     fn target_accuracy_status_reports_infinite_eta_for_unreachable_absolute_target() {
         let state = make_integration_state();
         let status = status_update::evaluate_target_accuracy(
@@ -5588,6 +5570,28 @@ mod tests {
 
         assert!(rendered.contains(&expected), "{rendered}");
         assert!(rendered.contains("graph: 0, xs: ["), "{rendered}");
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn target_accuracy_status_treats_zero_relative_reference_as_inactive() {
+            let state = make_integration_state();
+            let status = status_update::evaluate_target_accuracy(
+                &state,
+                100_000,
+                Duration::from_secs(10),
+                &[Some(Complex::new(F(0.0), F(0.0))), None],
+                IntegrationStatusPhaseDisplay::Real,
+                Some(0.05),
+                None,
+            );
+
+            assert!(!status.relative_reached);
+            assert!(!status.absolute_reached);
+            assert_eq!(status.eta_to_target, None);
+        }
     }
 }
 

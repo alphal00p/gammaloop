@@ -788,84 +788,89 @@ mod important {
     }
 }
 
-#[test]
-#[serial]
-fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
-    let targets = load_integrated_targets()?;
-    let mut cli = load_example_aa_aa_cli()?;
-    let workspace_root = get_tests_workspace_path().join("aa_aa_integrated_graph_histogram_bins");
+mod failing {
+    use super::*;
 
-    clean_test(&workspace_root);
-    add_graph_id_observable(&mut cli, AA_AA_PROCESS)?;
-    cli.run_command(
-        "set process -p aa_aa_all_helicities kv integrator.target_relative_accuracy=0.0 integrator.n_start=100000 integrator.n_increase=100000 integrator.n_max=1000000 integrator.seed=1337",
-    )?;
+    #[test]
+    #[serial]
+    fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
+        let targets = load_integrated_targets()?;
+        let mut cli = load_example_aa_aa_cli()?;
+        let workspace_root =
+            get_tests_workspace_path().join("aa_aa_integrated_graph_histogram_bins");
 
-    for (kinematics, integrand) in [
-        ("a", AA_AA_HELICITIES_INTEGRATED[0].0),
-        ("a", AA_AA_HELICITIES_INTEGRATED[1].0),
-        ("f", AA_AA_HELICITIES_INTEGRATED[0].0),
-        ("f", AA_AA_HELICITIES_INTEGRATED[1].0),
-    ] {
-        set_aa_aa_kinematics(&mut cli, AA_AA_PROCESS, kinematics)?;
-        let result = Integrate {
-            process: vec![ProcessRef::Unqualified(AA_AA_PROCESS.to_string())],
-            integrand_name: vec![integrand.to_string()],
-            workspace_path: Some(
-                workspace_root.join(format!("{kinematics}_{integrand}_workspace")),
-            ),
-            n_cores: Some(1),
-            restart: true,
-            ..Default::default()
-        }
-        .run(&mut cli.state, &cli.cli_settings)?;
+        clean_test(&workspace_root);
+        add_graph_id_observable(&mut cli, AA_AA_PROCESS)?;
+        cli.run_command(
+            "set process -p aa_aa_all_helicities kv integrator.target_relative_accuracy=0.0 integrator.n_start=100000 integrator.n_increase=100000 integrator.n_max=1000000 integrator.seed=1337",
+        )?;
 
-        let slot_key = format!("{AA_AA_PROCESS}@{integrand}");
-        let bundle = result
-            .slot_observables(&slot_key)
-            .unwrap_or_else(|| panic!("missing observables bundle for slot '{slot_key}'"));
-        let real_hist = bundle
-            .histograms
-            .get("graph_id_hist_real")
-            .expect("missing graph_id_hist_real histogram");
-        let imag_hist = bundle
-            .histograms
-            .get("graph_id_hist_imag")
-            .expect("missing graph_id_hist_imag histogram");
-
-        for graph_id in 0..AA_AA_GRAPH_COUNT {
-            let target = targets
-                .get(&(kinematics.to_string(), integrand.to_string(), graph_id))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "missing integrated target for kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
-                    )
-                });
-            let (actual_re_avg, actual_re_err) =
-                discrete_histogram_bin_average_and_error(real_hist, graph_id as isize)?;
-            let (actual_im_avg, actual_im_err) =
-                discrete_histogram_bin_average_and_error(imag_hist, graph_id as isize)?;
-            assert_histogram_estimate_compatible(
-                actual_re_avg,
-                actual_re_err,
-                target.re_avg,
-                target.re_err,
-                &format!(
-                    "integrated real bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+        for (kinematics, integrand) in [
+            ("a", AA_AA_HELICITIES_INTEGRATED[0].0),
+            ("a", AA_AA_HELICITIES_INTEGRATED[1].0),
+            ("f", AA_AA_HELICITIES_INTEGRATED[0].0),
+            ("f", AA_AA_HELICITIES_INTEGRATED[1].0),
+        ] {
+            set_aa_aa_kinematics(&mut cli, AA_AA_PROCESS, kinematics)?;
+            let result = Integrate {
+                process: vec![ProcessRef::Unqualified(AA_AA_PROCESS.to_string())],
+                integrand_name: vec![integrand.to_string()],
+                workspace_path: Some(
+                    workspace_root.join(format!("{kinematics}_{integrand}_workspace")),
                 ),
-            );
-            assert_histogram_estimate_compatible(
-                actual_im_avg,
-                actual_im_err,
-                target.im_avg,
-                target.im_err,
-                &format!(
-                    "integrated imag bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
-                ),
-            );
+                n_cores: Some(1),
+                restart: true,
+                ..Default::default()
+            }
+            .run(&mut cli.state, &cli.cli_settings)?;
+
+            let slot_key = format!("{AA_AA_PROCESS}@{integrand}");
+            let bundle = result
+                .slot_observables(&slot_key)
+                .unwrap_or_else(|| panic!("missing observables bundle for slot '{slot_key}'"));
+            let real_hist = bundle
+                .histograms
+                .get("graph_id_hist_real")
+                .expect("missing graph_id_hist_real histogram");
+            let imag_hist = bundle
+                .histograms
+                .get("graph_id_hist_imag")
+                .expect("missing graph_id_hist_imag histogram");
+
+            for graph_id in 0..AA_AA_GRAPH_COUNT {
+                let target = targets
+                    .get(&(kinematics.to_string(), integrand.to_string(), graph_id))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "missing integrated target for kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                        )
+                    });
+                let (actual_re_avg, actual_re_err) =
+                    discrete_histogram_bin_average_and_error(real_hist, graph_id as isize)?;
+                let (actual_im_avg, actual_im_err) =
+                    discrete_histogram_bin_average_and_error(imag_hist, graph_id as isize)?;
+                assert_histogram_estimate_compatible(
+                    actual_re_avg,
+                    actual_re_err,
+                    target.re_avg,
+                    target.re_err,
+                    &format!(
+                        "integrated real bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                    ),
+                );
+                assert_histogram_estimate_compatible(
+                    actual_im_avg,
+                    actual_im_err,
+                    target.im_avg,
+                    target.im_err,
+                    &format!(
+                        "integrated imag bin kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                    ),
+                );
+            }
         }
+
+        clean_test(&workspace_root);
+        Ok(())
     }
-
-    clean_test(&workspace_root);
-    Ok(())
 }

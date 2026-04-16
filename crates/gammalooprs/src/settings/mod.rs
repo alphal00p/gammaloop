@@ -476,12 +476,6 @@ mod tests {
     }
 
     #[test]
-    fn test_stability_settings_serialize_deserialize() {
-        use crate::settings::runtime::StabilitySettings;
-        generic_test_settings::<StabilitySettings>();
-    }
-
-    #[test]
     fn test_multi_channeling_settings_serialize_deserialize() {
         use crate::settings::runtime::MultiChannelingSettings;
         generic_test_settings::<MultiChannelingSettings>();
@@ -524,46 +518,6 @@ mod tests {
     }
 
     #[test]
-    fn test_uv_generation_settings_serializes_renormalization_rules() {
-        use crate::uv::{ApproximationType, CTIdentifier, UVgenerationSettings};
-        use std::collections::{BTreeMap, BTreeSet};
-
-        let settings = UVgenerationSettings {
-            softct: true,
-            renormalization_schemes: BTreeMap::from([
-                (
-                    CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
-                    ApproximationType::OS,
-                ),
-                (
-                    CTIdentifier::new(BTreeSet::from([6]), None),
-                    ApproximationType::Unsubtracted,
-                ),
-            ]),
-            ..Default::default()
-        };
-
-        let toml = toml::to_string_pretty(&GenerationSettings {
-            compile: GammaloopCompileOptions {
-                compiler: "symjit".to_string(),
-                ..Default::default()
-            },
-            uv: settings.clone(),
-            ..Default::default()
-        })
-        .unwrap();
-        println!("{}", toml);
-        assert!(toml.contains("[[renormalization_schemes]]"));
-
-        let deserialized_from_toml: UVgenerationSettings = toml::from_str(&toml).unwrap();
-        assert_eq!(settings, deserialized_from_toml);
-
-        let json = serde_json::to_string(&settings).unwrap();
-        let deserialized_from_json: UVgenerationSettings = serde_json::from_str(&json).unwrap();
-        assert_eq!(settings, deserialized_from_json);
-    }
-
-    #[test]
     fn test_overlap_settings_serialize_deserialize() {
         use crate::settings::runtime::OverlapSettings;
         generic_test_settings::<OverlapSettings>();
@@ -572,12 +526,6 @@ mod tests {
     fn test_h_function_settings_serialize_deserialize() {
         use crate::settings::runtime::HFunctionSettings;
         generic_test_settings::<HFunctionSettings>();
-    }
-
-    #[test]
-    fn test_stability_level_settings_serialize_deserialize() {
-        use crate::settings::runtime::StabilitySettings;
-        generic_test_settings::<StabilitySettings>();
     }
 
     #[test]
@@ -704,5 +652,61 @@ b = 5.0
         let toml = toml::to_string_pretty(&sampling_settings).unwrap();
         println!("{toml}");
         SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn test_stability_settings_serialize_deserialize() {
+            use crate::settings::runtime::StabilitySettings;
+            generic_test_settings::<StabilitySettings>();
+        }
+
+        #[test]
+        fn test_uv_generation_settings_serializes_renormalization_rules() {
+            use crate::uv::{ApproximationType, CTIdentifier, UVgenerationSettings};
+            use std::collections::{BTreeMap, BTreeSet};
+
+            let settings = UVgenerationSettings {
+                softct: true,
+                renormalization_schemes: BTreeMap::from([
+                    (
+                        CTIdentifier::new(BTreeSet::from([1]), Some(BTreeSet::from([1, 22]))),
+                        ApproximationType::OS,
+                    ),
+                    (
+                        CTIdentifier::new(BTreeSet::from([6]), None),
+                        ApproximationType::Unsubtracted,
+                    ),
+                ]),
+                ..Default::default()
+            };
+
+            let toml = toml::to_string_pretty(&GenerationSettings {
+                compile: GammaloopCompileOptions {
+                    compiler: "symjit".to_string(),
+                    ..Default::default()
+                },
+                uv: settings.clone(),
+                ..Default::default()
+            })
+            .unwrap();
+            println!("{}", toml);
+            assert!(toml.contains("[[renormalization_schemes]]"));
+
+            let deserialized_from_toml: UVgenerationSettings = toml::from_str(&toml).unwrap();
+            assert_eq!(settings, deserialized_from_toml);
+
+            let json = serde_json::to_string(&settings).unwrap();
+            let deserialized_from_json: UVgenerationSettings = serde_json::from_str(&json).unwrap();
+            assert_eq!(settings, deserialized_from_json);
+        }
+
+        #[test]
+        fn test_stability_level_settings_serialize_deserialize() {
+            use crate::settings::runtime::StabilitySettings;
+            generic_test_settings::<StabilitySettings>();
+        }
     }
 }

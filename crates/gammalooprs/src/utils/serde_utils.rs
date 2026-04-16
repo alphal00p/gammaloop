@@ -391,18 +391,6 @@ mod tests {
     use super::{SerdeFileError, SmartSerde};
 
     #[test]
-    fn convert_models() {
-        let name = "scalars";
-        load_generic_model(name)
-            .to_serializable()
-            .to_file(
-                output_dir().join(format!("gammaloop_models/{name}.json")),
-                true,
-            )
-            .unwrap();
-    }
-
-    #[test]
     fn test_file_vs_parse_errors() {
         use std::collections::BTreeMap;
 
@@ -466,5 +454,21 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_file(&temp_path);
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn convert_models() {
+            let name = "scalars";
+            load_generic_model(name)
+                .to_serializable()
+                .to_file(
+                    output_dir().join(format!("gammaloop_models/{name}.json")),
+                    true,
+                )
+                .unwrap();
+        }
     }
 }

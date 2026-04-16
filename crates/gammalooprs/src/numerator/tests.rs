@@ -60,131 +60,7 @@ fn hhgghh() {
     validate_gamma(amplitude.amplitude_graphs[0].graph.clone(), &model, path);
 }
 
-#[test]
-fn trees() {
-    let _ = env_logger::builder().is_test(true).try_init();
-    let tree_name = "th_th";
-    let amp_name = "tree_amplitude_1_th_th";
-    let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/test_resources/trees")
-        .join(tree_name)
-        .join("GL_OUTPUT");
 
-    let model = Model::from_file(String::from(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/test_resources")
-            .join("gammaloop_models/sm.yaml")
-            .to_str()
-            .unwrap(),
-    ))
-    .unwrap();
-
-    let amplitude = Amplitude::from_file(
-        &model,
-        String::from(
-            file_path
-                .join(format!("sources/amplitudes/{}/amplitude.yaml", amp_name))
-                .to_str()
-                .unwrap(),
-        ),
-    )
-    .unwrap();
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    let lmb = &graph.bare_graph.loop_momentum_basis;
-    let sample: crate::momentum::sample::MomentumSample<f64> = sample_generator(
-        3,
-        &graph.bare_graph,
-        Some(vec![
-            Helicity::PLUS,
-            Helicity::ZERO,
-            Helicity::PLUS,
-            Helicity::ZERO,
-        ]),
-    );
-    let emr = graph.bare_graph.cff_emr_from_lmb(&sample.sample, lmb);
-
-    let three_emr = lmb.spatial_emr(&sample.sample);
-
-    let onshell_energies = graph
-        .bare_graph
-        .compute_onshell_energies(sample.loop_moms(), sample.external_moms());
-
-    for ((e, q), p) in onshell_energies.iter().zip(emr).zip(three_emr) {
-        F::approx_eq_res(e, &q.temporal.value, &F(1e-10)).unwrap();
-
-        for (a, b) in q.spatial.into_iter().zip(p) {
-            F::approx_eq_res(&a, &b, &F(1e-10)).unwrap();
-        }
-    }
-
-    let export_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/test_resources/trees")
-        .join(tree_name);
-
-    let contraction_settings = ContractionSettings::<Rational>::Normal;
-
-    let mut export_settings = test_export_settings();
-    for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
-        println!("{i}:{}", s);
-    }
-    export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
-        color: parse!("id(cof(3,2),dind(cof(3,0)))/Nc"),
-        colorless: Atom::num(1),
-    };
-
-    graph.generate_cff();
-    let mut graph =
-        graph.process_numerator(&model, contraction_settings, export_path, &export_settings);
-
-    let external_mom = Externals::Constant {
-        momenta: vec![
-            ExternalMomenta::Independent([F(592.625), F(0.), F(0.), F(566.8116)]), // 1
-            ExternalMomenta::Independent([F(579.375), F(0.), F(0.), F(-566.8116)]), // 2
-            ExternalMomenta::Independent([F(592.625), F(125.7463), F(504.2705), F(-226.2178)]), // 3
-            ExternalMomenta::Dependent(Dep::Dep),                                  // 4
-        ],
-        helicities: vec![
-            Helicity::MINUS,
-            Helicity::ZERO,
-            Helicity::PLUS,
-            Helicity::ZERO,
-        ],
-    };
-
-    let external_signature = graph.bare_graph.external_in_or_out_signature();
-
-    let sample: MomentumSample<f64> = MomentumSample::new(
-        LoopMomenta::from(vec![]),
-        &external_mom,
-        F(1.),
-        &external_mom.generate_polarizations(
-            &graph.bare_graph.external_particles(),
-            DependentMomentaConstructor::Amplitude(&external_signature),
-        ),
-        DependentMomentaConstructor::Amplitude(&external_signature),
-        None,
-    );
-    let settings = Settings::default();
-
-    let val = graph
-        .evaluate_fourd_expr(
-            &[],
-            &sample.external_moms().raw,
-            &sample.polarizations().raw,
-            &settings,
-        )
-        .scalar()
-        .unwrap();
-
-    let energy_product = graph
-        .bare_graph
-        .compute_energy_product(sample.loop_moms(), sample.external_moms());
-
-    let valcff = graph.evaluate_cff_expression(&sample, &settings) / energy_product;
-    println!("4d: {}", val);
-    println!("CFF: {}", valcff);
-}
 
 fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> bool {
     let color_simplified = Numerator::default()
@@ -1091,4 +967,135 @@ fn dumb_four_gluon() {
 
     assert!((&expanded - gammasingle).expand().is_zero());
     assert_snapshot!(expanded.to_canonical_string());
+}
+
+
+mod failing {
+    use super::*;
+
+    #[test]
+    fn trees() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        let tree_name = "th_th";
+        let amp_name = "tree_amplitude_1_th_th";
+        let file_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/test_resources/trees")
+            .join(tree_name)
+            .join("GL_OUTPUT");
+
+        let model = Model::from_file(String::from(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/test_resources")
+                .join("gammaloop_models/sm.yaml")
+                .to_str()
+                .unwrap(),
+        ))
+        .unwrap();
+
+        let amplitude = Amplitude::from_file(
+            &model,
+            String::from(
+                file_path
+                    .join(format!("sources/amplitudes/{}/amplitude.yaml", amp_name))
+                    .to_str()
+                    .unwrap(),
+            ),
+        )
+        .unwrap();
+
+        let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+        let lmb = &graph.bare_graph.loop_momentum_basis;
+        let sample: crate::momentum::sample::MomentumSample<f64> = sample_generator(
+            3,
+            &graph.bare_graph,
+            Some(vec![
+                Helicity::PLUS,
+                Helicity::ZERO,
+                Helicity::PLUS,
+                Helicity::ZERO,
+            ]),
+        );
+        let emr = graph.bare_graph.cff_emr_from_lmb(&sample.sample, lmb);
+
+        let three_emr = lmb.spatial_emr(&sample.sample);
+
+        let onshell_energies = graph
+            .bare_graph
+            .compute_onshell_energies(sample.loop_moms(), sample.external_moms());
+
+        for ((e, q), p) in onshell_energies.iter().zip(emr).zip(three_emr) {
+            F::approx_eq_res(e, &q.temporal.value, &F(1e-10)).unwrap();
+
+            for (a, b) in q.spatial.into_iter().zip(p) {
+                F::approx_eq_res(&a, &b, &F(1e-10)).unwrap();
+            }
+        }
+
+        let export_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("src/test_resources/trees")
+            .join(tree_name);
+
+        let contraction_settings = ContractionSettings::<Rational>::Normal;
+
+        let mut export_settings = test_export_settings();
+        for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
+            println!("{i}:{}", s);
+        }
+        export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
+            color: parse!("id(cof(3,2),dind(cof(3,0)))/Nc"),
+            colorless: Atom::num(1),
+        };
+
+        graph.generate_cff();
+        let mut graph =
+            graph.process_numerator(&model, contraction_settings, export_path, &export_settings);
+
+        let external_mom = Externals::Constant {
+            momenta: vec![
+                ExternalMomenta::Independent([F(592.625), F(0.), F(0.), F(566.8116)]), // 1
+                ExternalMomenta::Independent([F(579.375), F(0.), F(0.), F(-566.8116)]), // 2
+                ExternalMomenta::Independent([F(592.625), F(125.7463), F(504.2705), F(-226.2178)]), // 3
+                ExternalMomenta::Dependent(Dep::Dep),                                  // 4
+            ],
+            helicities: vec![
+                Helicity::MINUS,
+                Helicity::ZERO,
+                Helicity::PLUS,
+                Helicity::ZERO,
+            ],
+        };
+
+        let external_signature = graph.bare_graph.external_in_or_out_signature();
+
+        let sample: MomentumSample<f64> = MomentumSample::new(
+            LoopMomenta::from(vec![]),
+            &external_mom,
+            F(1.),
+            &external_mom.generate_polarizations(
+                &graph.bare_graph.external_particles(),
+                DependentMomentaConstructor::Amplitude(&external_signature),
+            ),
+            DependentMomentaConstructor::Amplitude(&external_signature),
+            None,
+        );
+        let settings = Settings::default();
+
+        let val = graph
+            .evaluate_fourd_expr(
+                &[],
+                &sample.external_moms().raw,
+                &sample.polarizations().raw,
+                &settings,
+            )
+            .scalar()
+            .unwrap();
+
+        let energy_product = graph
+            .bare_graph
+            .compute_energy_product(sample.loop_moms(), sample.external_moms());
+
+        let valcff = graph.evaluate_cff_expression(&sample, &settings) / energy_product;
+        println!("4d: {}", val);
+        println!("CFF: {}", valcff);
+    }
 }

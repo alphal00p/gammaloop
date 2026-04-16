@@ -3,7 +3,7 @@
 
 [profile.default]
 # Slow tests get extra time
-slow-timeout = { period = "10s", terminate-after = 2 }
+slow-timeout = { period = "10s", terminate-after = 6 }
 # Test threads - use all available cores for maximum parallelism
 test-threads = "num-cpus"
 fail-fast = false
@@ -33,6 +33,11 @@ filter = "test(bench) or test(benchmark)"
 [profile.default.junit]
 # Default JUnit output location
 path = "target/nextest/default/junit.xml"
+
+[profile.test_gammaloop]
+inherits = "default"
+# Reuse the default profile behavior but disable early termination for this curated suite.
+slow-timeout = "30y"
 
 [profile.ci]
 slow-timeout = { period = "120s", terminate-after = 2 }

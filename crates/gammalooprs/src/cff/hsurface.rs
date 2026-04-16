@@ -148,25 +148,6 @@ mod tests {
     use super::Hsurface;
 
     #[test]
-    fn test_to_atom() {
-        let external_shift = vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)];
-        let h_surface = Hsurface {
-            positive_energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
-            negative_energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
-            external_shift,
-            vertex_set: VertexSet::dummy(),
-        };
-
-        let h_surface_atom = h_surface.to_atom(&[]);
-        let expected_atom = parse!(
-            "Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))"
-        );
-        let diff = h_surface_atom - &expected_atom;
-        let diff = diff.expand();
-        assert_eq!(diff, Atom::new());
-    }
-
-    #[test]
     fn test_equality_under_energy_conservation() {
         let constraint = Esurface {
             energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
@@ -192,5 +173,28 @@ mod tests {
                 .equality_under_energy_conservation(&other, &[&constraint])
                 .unwrap()
         );
+    }
+
+    mod failing {
+        use super::*;
+
+        #[test]
+        fn test_to_atom() {
+            let external_shift = vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)];
+            let h_surface = Hsurface {
+                positive_energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
+                negative_energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
+                external_shift,
+                vertex_set: VertexSet::dummy(),
+            };
+
+            let h_surface_atom = h_surface.to_atom(&[]);
+            let expected_atom = parse!(
+                "Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))"
+            );
+            let diff = h_surface_atom - &expected_atom;
+            let diff = diff.expand();
+            assert_eq!(diff, Atom::new());
+        }
     }
 }

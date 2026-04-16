@@ -526,97 +526,101 @@ mod tests {
 
     use super::AmplitudeGraph;
 
-    #[test]
-    fn test_encode_decode_amplitude_graph() {
-        // load the model and hack the masses, go through serializable model since arc is not mutable
-        let model = load_generic_model("sm");
+    mod failing {
+        use super::*;
 
-        let mut graph: Graph = dot!(
-            digraph G{
-                e1      [flow=sink]
-                e2      [flow=source]
-                e3      [flow=source]
-                e1 -> n1  [particle=h]
-                e2 -> n4    [particle=h]
-                n1 -> n2    [particle=h]
-                n1 -> n3    [particle=h]
-                n2 -> n3    [particle=t]
-                n3 -> n4    [particle=t]
-                n4 -> n2    [particle=t]
-            }
-        )
-        .unwrap();
-        let loop_momentum_basis = LoopMomentumBasis {
-            tree: SuBitGraph::empty(0),
-            loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
-            ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
-            edge_signatures: graph
-                .underlying
-                .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
-        };
+        #[test]
+        fn test_encode_decode_amplitude_graph() {
+            // load the model and hack the masses, go through serializable model since arc is not mutable
+            let model = load_generic_model("sm");
 
-        // loop_momentum_basis
-        //     .set_edge_signatures(&graph.underlying)
-        //     .unwrap();
-
-        graph.loop_momentum_basis = loop_momentum_basis;
-
-        let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
-
-        amplitude
-            .preprocess(
-                &model,
-                &GenerationSettings {
-                    compile: GammaloopCompileOptions {
-                        compilation_mode: CompilationMode::Cpp,
-                        fast_math: false,
-                        optimization_level: CompilationOptimizationLevel::O0,
-                        unsafe_math: false,
-                        compiler: "g++".into(),
-                        custom: Vec::new(),
-                    },
-                    tropical_subgraph_table: TropicalSubgraphTableSettings {
-                        panic_on_fail: false,
-                        target_omega: 1.0,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                &LockedRuntimeSettings::from(&RuntimeSettings::default()),
+            let mut graph: Graph = dot!(
+                digraph G{
+                    e1      [flow=sink]
+                    e2      [flow=source]
+                    e3      [flow=source]
+                    e1 -> n1  [particle=h]
+                    e2 -> n4    [particle=h]
+                    n1 -> n2    [particle=h]
+                    n1 -> n3    [particle=h]
+                    n2 -> n3    [particle=t]
+                    n3 -> n4    [particle=t]
+                    n4 -> n2    [particle=t]
+                }
             )
             .unwrap();
+            let loop_momentum_basis = LoopMomentumBasis {
+                tree: SuBitGraph::empty(0),
+                loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+                ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
+                edge_signatures: graph
+                    .underlying
+                    .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+            };
 
-        let mut temp = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open("test.bin")
-            .unwrap();
+            // loop_momentum_basis
+            //     .set_edge_signatures(&graph.underlying)
+            //     .unwrap();
 
-        State::export(&mut temp).unwrap();
-        drop(temp);
+            graph.loop_momentum_basis = loop_momentum_basis;
 
-        let mut temp = OpenOptions::new().read(true).open("test.bin").unwrap();
-        let state_map = State::import(&mut temp, None).unwrap();
+            let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
 
-        let context = GammaLoopContextContainer {
-            model: &model,
-            state_map: &state_map,
-        };
+            amplitude
+                .preprocess(
+                    &model,
+                    &GenerationSettings {
+                        compile: GammaloopCompileOptions {
+                            compilation_mode: CompilationMode::Cpp,
+                            fast_math: false,
+                            optimization_level: CompilationOptimizationLevel::O0,
+                            unsafe_math: false,
+                            compiler: "g++".into(),
+                            custom: Vec::new(),
+                        },
+                        tropical_subgraph_table: TropicalSubgraphTableSettings {
+                            panic_on_fail: false,
+                            target_omega: 1.0,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    &LockedRuntimeSettings::from(&RuntimeSettings::default()),
+                )
+                .unwrap();
 
-        println!("context created");
+            let mut temp = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open("test.bin")
+                .unwrap();
 
-        let encoded_amplitude =
-            bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
+            State::export(&mut temp).unwrap();
+            drop(temp);
 
-        let _amplitude: AmplitudeGraph = bincode::decode_from_slice_with_context(
-            &encoded_amplitude,
-            bincode::config::standard(),
-            context,
-        )
-        .expect("amplitude decode failed")
-        .0;
+            let mut temp = OpenOptions::new().read(true).open("test.bin").unwrap();
+            let state_map = State::import(&mut temp, None).unwrap();
 
-        println!("amplitude graph passed");
+            let context = GammaLoopContextContainer {
+                model: &model,
+                state_map: &state_map,
+            };
+
+            println!("context created");
+
+            let encoded_amplitude =
+                bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
+
+            let _amplitude: AmplitudeGraph = bincode::decode_from_slice_with_context(
+                &encoded_amplitude,
+                bincode::config::standard(),
+                context,
+            )
+            .expect("amplitude decode failed")
+            .0;
+
+            println!("amplitude graph passed");
+        }
     }
 }

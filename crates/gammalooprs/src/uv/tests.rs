@@ -47,88 +47,6 @@ use symbolica::{
     function, parse,
 };
 
-#[test]
-fn soft_ct_test() {
-    test_initialise().unwrap();
-    let mut amp: AmplitudeGraph = dot!(
-        digraph physical_1L_4photons_0 {
-        ext    [style=invis]
-        ext -> v1 [particle=a];
-        ext -> v2 [particle=a];
-        v3 -> ext [particle=a];
-        v4 -> ext [particle=a];
-        v1 -> v2 [particle=t];
-        v2 -> v3 [particle=t];
-        v3 -> v4 [particle=t];
-        v4 -> v1 [particle=t];
-        }
-    )
-    .unwrap();
-
-    let set = GenerationSettings {
-        orientation_pattern: OrientationPattern::from_orientation(
-            &amp.derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .orientations[OrientationID(0)],
-        ),
-        uv: UVgenerationSettings {
-            generate_integrated: true,
-            softct: true,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let vk = crate::utils::vakint().unwrap();
-
-    amp.generate_cff().unwrap();
-    amp.build_integrands(&set, vk).unwrap();
-
-    println!("{}", amp.derived_data.all_mighty_integrand);
-}
-
-#[test]
-fn four_photon_one_loop_amp() {
-    test_initialise().unwrap();
-    let mut amp: AmplitudeGraph = dot!(
-        digraph physical_1L_4photons_0 {
-        ext    [style=invis]
-        ext -> v1 [particle=a];
-        ext -> v2 [particle=a];
-        v3 -> ext [particle=a];
-        v4 -> ext [particle=a];
-        v1 -> v2 [particle=t];
-        v2 -> v3 [particle=t];
-        v3 -> v4 [particle=t];
-        v4 -> v1 [particle=t];
-        }
-    )
-    .unwrap();
-
-    let set = GenerationSettings {
-        orientation_pattern: OrientationPattern::from_orientation(
-            &amp.derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .orientations[OrientationID(0)],
-        ),
-        uv: UVgenerationSettings {
-            generate_integrated: true,
-            softct: true,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let vk = crate::utils::vakint().unwrap();
-
-    amp.generate_cff().unwrap();
-    amp.build_integrands(&set, vk).unwrap();
-
-    println!("{}", amp.derived_data.all_mighty_integrand);
-}
-
 fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
     let log_start = start;
     let log_stop = stop;
@@ -314,26 +232,6 @@ fn scalar_profile_tables(analysis: &crate::uv::profile::UVProfileAnalysis, max_d
 }
 
 #[test]
-fn ct_identifier_flips_outgoing_boundary_pdgs() {
-    test_initialise().unwrap();
-
-    let graph = build_tta_uv_graph();
-    let expected_internal_pdg_set = pdg_set([6, 21]);
-    let identifiers = graph
-        .spinneys(&graph.full_filter())
-        .into_iter()
-        .map(|spinney| graph.ct_identifier(&spinney.filter))
-        .collect::<Vec<_>>();
-    let identifier = identifiers
-        .iter()
-        .find(|identifier| identifier.internal_pdg_set.as_ref() == Some(&expected_internal_pdg_set))
-        .unwrap_or_else(|| panic!("tta triangle should have a UV spinney: {identifiers:?}"));
-
-    assert_eq!(identifier.internal_pdg_set, Some(expected_internal_pdg_set));
-    assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
-}
-
-#[test]
 fn scalars_profile() {
     let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
         generate_integrated: false,
@@ -401,428 +299,6 @@ fn scalars_profile_new() {
         "subtracted scalar UV profile failed:\n{pass_fail:#?}\n\n{}",
         scalar_profile_tables(&analysis, -0.9)
     );
-}
-
-#[test]
-fn unsubtracted_scalars() {
-    test_initialise().unwrap();
-    let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
-        generate_integrated: false,
-        softct: false,
-        add_sigma: true,
-        subtract_uv: true,
-        ..Default::default()
-    });
-
-    let profile_settings = scalar_uv_profile_settings();
-    let res = amp.profile(&model, &profile_settings).unwrap();
-
-    let analysis = res.analyse();
-    assert!(res.pass_fail(-0.9, &profile_settings).failed > 0);
-    for graph in &analysis.graphs {
-        for lmb in &graph.lmbs {
-            for subset in &lmb.subsets {
-                assert!(
-                    subset.bare_dod_matches_estimate(),
-                    "bare DOD mismatch for fixed {:?}, free {:?}",
-                    subset.fixed,
-                    subset.free
-                );
-            }
-        }
-    }
-    for t in analysis.tables_per_graph(-0.9) {
-        println!("{}", t);
-    }
-
-    for t in analysis.analytic_tables_per_graph() {
-        let Some(t) = t else {
-            continue;
-        };
-        println!("{}", t);
-    }
-}
-
-#[test]
-fn tta_uv() {
-    test_initialise().unwrap();
-
-    let g: Vec<Graph> = dot!(
-        digraph G{
-            e        [style=invis]
-            e -> A:0   [ id=0 particle=t]
-            B:1 -> e   [ id=1 particle=t]
-            e -> C:2   [ id=2 particle=a]
-            A -> B    [ lmb_index=0 particle=g]
-            C -> B  [particle=t]
-            A -> C [particle=t]
-        }
-    )
-    .unwrap();
-
-    let mut amp = Amplitude::from_graph_list("tta", g).unwrap();
-
-    let model = load_generic_model("sm");
-
-    let theadpool = rayon::ThreadPoolBuilder::new()
-        .num_threads(1)
-        .build()
-        .unwrap();
-
-    let runtime = RuntimeSettings::default();
-    amp.preprocess(
-        &model,
-        &GenerationSettings {
-            ..Default::default()
-        },
-        &(&runtime).into(),
-        &theadpool,
-    )
-    .unwrap();
-
-    amp.build_integrand(
-        &model,
-        &GlobalSettings {
-            ..Default::default()
-        },
-        (&runtime).into(),
-        &theadpool,
-    )
-    .unwrap();
-
-    println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
-
-    for g in amp.graphs {
-        // let all = g.graph.all_cycle_unions(&g.graph.full_filter());
-
-        g.graph.all_limits(
-            &g.graph.full_filter(),
-            &g.derived_data.all_mighty_integrand,
-            symbol!("lambd"),
-            &g.graph.loop_momentum_basis,
-        );
-    }
-}
-
-#[test]
-fn tri_box_tri_LU() {
-    let uv_dod = 1;
-    let box_uv_dod = -1; // can be -1, 0, 1, 2
-    let is_massless = false;
-    let force_cut: Option<CutId> = None;
-    //let force_cut: Option<CutId> = Some(CutId(3));
-
-    // load the model and hack the masses, go through serializable model since arc is not mutable
-    let model = if is_massless {
-        load_generic_model("sm_massless")
-    } else {
-        load_generic_model("sm")
-    };
-
-    let mut underlying = HedgeGraphBuilder::new();
-
-    let hhh = model.get_vertex_rule("V_9");
-    let htt = model.get_vertex_rule("V_141");
-
-    let hprop = model.get_propagator("H_propFeynman");
-    let hp = model.get_particle("H");
-
-    let tprop = model.get_propagator("t_propFeynman");
-    let tp = model.get_particle("t");
-
-    let n1 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
-    let n2 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
-    let n3 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
-    let n4 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
-    let n5 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
-    let n6 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
-
-    underlying.add_edge(
-        n1.add_data(ParseHedge::default()),
-        n2.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone())
-            .with_num(Atom::one())
-            .with_lmb_id(LoopIndex(0)),
-        false,
-    );
-
-    underlying.add_edge(
-        n1.add_data(ParseHedge::default()),
-        n3.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_num(Atom::one()),
-        false,
-    );
-
-    underlying.add_edge(
-        n2.add_data(ParseHedge::default()),
-        n3.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 1 {
-            spenso_lor_atom(2, 30, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        // Edge {
-        //     name: "e2".into(),
-
-        //     particle: hp.clone(),
-        //     propagator: hprop.clone(),
-
-        //     dod: if box_uv_dod >= 1 { -1 } else { -2 },
-        //     num: if box_uv_dod >= 1 {
-        //         spenso_lor_atom(2, 30, GS.dim)
-        //     } else {
-        //         Atom::one()
-        //     },
-        // },
-        false,
-    );
-
-    underlying.add_edge(
-        n2.add_data(ParseHedge::default()),
-        n4.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 0 && uv_dod >= 1 {
-            spenso_lor_atom(3, 20, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        false,
-    );
-
-    underlying.add_edge(
-        n3.add_data(ParseHedge::default()),
-        n5.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone())
-            .with_num(if box_uv_dod == 2 {
-                spenso_lor_atom(4, 30, GS.dim)
-            } else {
-                Atom::one()
-            })
-            .with_lmb_id(LoopIndex(1)),
-        false,
-    );
-
-    underlying.add_edge(
-        n4.add_data(ParseHedge::default()),
-        n5.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
-            spenso_lor_atom(5, 10, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        true,
-    );
-
-    underlying.add_edge(
-        n6.add_data(ParseHedge::default()),
-        n4.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
-            spenso_lor_atom(6, 20, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        true,
-    );
-
-    underlying.add_edge(
-        n5.add_data(ParseHedge::default()),
-        n6.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone())
-            .with_num(if uv_dod >= 0 {
-                spenso_lor_atom(7, 10, GS.dim)
-            } else {
-                Atom::one()
-            })
-            .with_lmb_id(LoopIndex(2)),
-        true,
-    );
-
-    underlying.add_external_edge(
-        n1.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_num(if box_uv_dod == 1 {
-            spenso_lor_atom(8, 30, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        false,
-        Flow::Sink,
-    );
-
-    underlying.add_external_edge(
-        n6.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_num(if box_uv_dod == -1 && uv_dod >= 1 {
-            spenso_lor_atom(9, 20, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        false,
-        Flow::Source,
-    );
-
-    let underlying = ParseGraph {
-        graph: underlying.build(),
-        global_data: ParseData::default(),
-    };
-
-    println!("{}", underlying.dot(&underlying.full_filter()));
-
-    let graph = Graph::from_parsed(underlying, &model).unwrap();
-
-    println!(
-        "dot lmb:{}",
-        graph
-            .underlying
-            .dot_lmb_of(&graph.underlying.full_filter(), &graph.loop_momentum_basis)
-    );
-
-    let hpdg = hp.pdg_code as i64;
-    let tpdg = tp.pdg_code as i64;
-    let cs: CrossSection = CrossSection::new("".into());
-    //    cs.preprocess(
-    //        &model,
-    //        &ProcessDefinition {
-    //            initial_pdgs: vec![hpdg],
-    //            final_pdgs_lists: vec![
-    //                vec![tpdg, -tpdg],
-    //                vec![tpdg, -tpdg, hpdg],
-    //                vec![hpdg, hpdg],
-    //                vec![hpdg, hpdg, hpdg],
-    //                vec![tpdg, -tpdg, hpdg, hpdg],
-    //            ],
-    //            amplitude_filters: FeynGenFilters(vec![]),
-    //            cross_section_filters: FeynGenFilters(vec![]),
-    //            ..Default::default()
-    //        },
-    //    )
-    //    .unwrap();
-    //    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
-    //        .unwrap();
-    //
-    //println!("Final result: {:>}", sum.expand());
-}
-
-#[test]
-fn double_triangle_LU() {
-    let uv_dod = 1;
-
-    // load the model and hack the masses, go through serializable model since arc is not mutable
-    let model = load_generic_model("sm");
-
-    let mut underlying = HedgeGraphBuilder::new();
-
-    let hhh = model.get_vertex_rule("V_9");
-    let htt = model.get_vertex_rule("V_141");
-
-    let hprop = model.get_propagator("H_propFeynman");
-    let hp = model.get_particle("H");
-
-    let tprop = model.get_propagator("t_propFeynman");
-    let tp = model.get_particle("t");
-
-    let n1 = underlying.add_node(hhh.clone().into());
-    let n2 = underlying.add_node(htt.clone().into());
-    let n3 = underlying.add_node(htt.clone().into());
-    let n4 = underlying.add_node(htt.clone().into());
-
-    underlying.add_edge(
-        n1.add_data(ParseHedge::default()),
-        n2.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()),
-        false,
-    );
-
-    underlying.add_edge(
-        n1.add_data(ParseHedge::default()),
-        n3.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()),
-        false,
-    );
-
-    underlying.add_edge(
-        n2.add_data(ParseHedge::default()),
-        n3.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
-            spenso_lor_atom(2, 10, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        true,
-    );
-
-    underlying.add_edge(
-        n3.add_data(ParseHedge::default()),
-        n4.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
-            spenso_lor_atom(3, 20, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        true,
-    );
-
-    underlying.add_edge(
-        n4.add_data(ParseHedge::default()),
-        n2.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
-            spenso_lor_atom(4, 10, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        true,
-    );
-
-    underlying.add_external_edge(
-        n1.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()),
-        false,
-        Flow::Sink,
-    );
-
-    underlying.add_external_edge(
-        n4.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_num(if uv_dod >= 1 {
-            spenso_lor_atom(6, 20, GS.dim)
-        } else {
-            Atom::one()
-        }),
-        false,
-        Flow::Source,
-    );
-
-    let underlying = ParseGraph {
-        graph: underlying.build(),
-        global_data: ParseData::default(),
-    };
-
-    let loop_momentum_basis = LoopMomentumBasis {
-        tree: SuBitGraph::empty(0),
-        loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(3)].into(),
-        ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
-        edge_signatures: underlying.new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
-    };
-
-    let graph = Graph::from_parsed(underlying, &model).unwrap();
-
-    let cs: CrossSection = CrossSection::new("".into());
-    //    cs.add_supergraph(graph).unwrap();
-    //
-    //    let hpdg = hp.pdg_code as i64;
-    //    let tpdg = tp.pdg_code as i64;
-    //    cs.preprocess(
-    //        &model,
-    //        &ProcessDefinition {
-    //            initial_pdgs: vec![hpdg],
-    //            final_pdgs_lists: vec![vec![tpdg, -tpdg], vec![tpdg, -tpdg, hpdg], vec![hpdg, hpdg]],
-    //            amplitude_filters: FeynGenFilters(vec![]),
-    //            cross_section_filters: FeynGenFilters(vec![]),
-    //            ..Default::default()
-    //        },
-    //    )
-    //    .unwrap();
-    //
-    //    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
-    //        .unwrap();
-    //
-    //println!("Final result: {:>}", sum.expand());
 }
 
 /*
@@ -2009,78 +1485,610 @@ subtraction:
     try_origin: false
     try_origin_all_lmbs: false";
 
-#[test]
-fn quick_test() {
-    fn expose_mass_dimension(atom: &Atom) -> Atom {
-        atom.replace(function!(GS.ose, W_.x___))
-            .with(parse!("E"))
-            .replace(function!(GS.dot, W_.x_, W_.y_))
-            .with(parse!("-E^2"))
-            .expand()
+mod failing {
+    use super::*;
+
+    #[test]
+    fn soft_ct_test() {
+        test_initialise().unwrap();
+        let mut amp: AmplitudeGraph = dot!(
+            digraph physical_1L_4photons_0 {
+            ext    [style=invis]
+            ext -> v1 [particle=a];
+            ext -> v2 [particle=a];
+            v3 -> ext [particle=a];
+            v4 -> ext [particle=a];
+            v1 -> v2 [particle=t];
+            v2 -> v3 [particle=t];
+            v3 -> v4 [particle=t];
+            v4 -> v1 [particle=t];
+            }
+        )
+        .unwrap();
+
+        let set = GenerationSettings {
+            orientation_pattern: OrientationPattern::from_orientation(
+                &amp.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .orientations[OrientationID(0)],
+            ),
+            uv: UVgenerationSettings {
+                generate_integrated: true,
+                softct: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let vk = crate::utils::vakint().unwrap();
+
+        amp.generate_cff().unwrap();
+        amp.build_integrands(&set, vk).unwrap();
+
+        println!("{}", amp.derived_data.all_mighty_integrand);
     }
 
-    let edge_id = 4;
+    #[test]
+    fn four_photon_one_loop_amp() {
+        test_initialise().unwrap();
+        let mut amp: AmplitudeGraph = dot!(
+            digraph physical_1L_4photons_0 {
+            ext    [style=invis]
+            ext -> v1 [particle=a];
+            ext -> v2 [particle=a];
+            v3 -> ext [particle=a];
+            v4 -> ext [particle=a];
+            v1 -> v2 [particle=t];
+            v2 -> v3 [particle=t];
+            v3 -> v4 [particle=t];
+            v4 -> v1 [particle=t];
+            }
+        )
+        .unwrap();
 
-    let cff = parse!(
-        "
-        1 / 8 * (OSE(2) + OSE(3))
-            ^ -1 * (OSE(2) + OSE(4))
-            ^ -1 * OSE(2)
-            ^ -1 * OSE(3)
-            ^ -1 * OSE(4)
-            ^ -1"
-    );
+        let set = GenerationSettings {
+            orientation_pattern: OrientationPattern::from_orientation(
+                &amp.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .orientations[OrientationID(0)],
+            ),
+            uv: UVgenerationSettings {
+                generate_integrated: true,
+                softct: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let vk = crate::utils::vakint().unwrap();
 
-    let num_2 = parse!("(-OSE(2) * OSE(4) + dot(Q3(3), Q3(3))) * OSE(3)^2");
+        amp.generate_cff().unwrap();
+        amp.build_integrands(&set, vk).unwrap();
 
-    let mut expr = &num_2 * &cff;
+        println!("{}", amp.derived_data.all_mighty_integrand);
+    }
 
-    expr = expr
-        .replace(function!(GS.ose, edge_id, W_.x___))
-        .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
-        .derivative(GS.rescale)
-        .replace(function!(Symbol::DERIVATIVE, W_.x___, W_.x_))
-        .with(Atom::var(W_.x_).pow(-1) / 2)
-        .replace(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
-        .with(function!(GS.ose, edge_id, W_.x___));
+    #[test]
+    fn ct_identifier_flips_outgoing_boundary_pdgs() {
+        test_initialise().unwrap();
 
-    expr = expr.replace(function!(GS.ose, W_.x___)).with(parse!("E"));
+        let graph = build_tta_uv_graph();
+        let expected_internal_pdg_set = pdg_set([6, 21]);
+        let identifiers = graph
+            .spinneys(&graph.full_filter())
+            .into_iter()
+            .map(|spinney| graph.ct_identifier(&spinney.filter))
+            .collect::<Vec<_>>();
+        let identifier = identifiers
+            .iter()
+            .find(|identifier| {
+                identifier.internal_pdg_set.as_ref() == Some(&expected_internal_pdg_set)
+            })
+            .unwrap_or_else(|| panic!("tta triangle should have a UV spinney: {identifiers:?}"));
 
-    println!("expr: {}", expr.expand());
-    expr = expose_mass_dimension(&expr);
-    println!("expr: {}", expr);
+        assert_eq!(identifier.internal_pdg_set, Some(expected_internal_pdg_set));
+        assert_eq!(identifier.external_pdg_set, pdg_set([-6, 6, 22]));
+    }
 
-    let new_expr = num_2 * cff;
-    let mut alt_der = new_expr
-        .replace(function!(GS.ose, edge_id))
-        .with(parse!("OSE4"))
-        .derivative(symbol!("OSE4"))
-        / parse!("2*OSE4");
+    #[test]
+    fn unsubtracted_scalars() {
+        test_initialise().unwrap();
+        let (mut amp, model) = build_uv_scalars_amplitude(UVgenerationSettings {
+            generate_integrated: false,
+            softct: false,
+            add_sigma: true,
+            subtract_uv: true,
+            ..Default::default()
+        });
 
-    alt_der = alt_der
-        .replace(symbol!("OSE4"))
-        .with(function!(GS.ose, edge_id));
+        let profile_settings = scalar_uv_profile_settings();
+        let res = amp.profile(&model, &profile_settings).unwrap();
 
-    alt_der = alt_der
-        .replace(function!(GS.ose, W_.x___))
-        .with(parse!("E"));
+        let analysis = res.analyse();
+        assert!(res.pass_fail(-0.9, &profile_settings).failed > 0);
+        for graph in &analysis.graphs {
+            for lmb in &graph.lmbs {
+                for subset in &lmb.subsets {
+                    assert!(
+                        subset.bare_dod_matches_estimate(),
+                        "bare DOD mismatch for fixed {:?}, free {:?}",
+                        subset.fixed,
+                        subset.free
+                    );
+                }
+            }
+        }
+        for t in analysis.tables_per_graph(-0.9) {
+            println!("{}", t);
+        }
 
-    println!("alt_der: {}", alt_der.expand());
-    alt_der = expose_mass_dimension(&alt_der);
-    println!("alt_der: {}", alt_der);
+        for t in analysis.analytic_tables_per_graph() {
+            let Some(t) = t else {
+                continue;
+            };
+            println!("{}", t);
+        }
+    }
 
-    let test_expr = (parse!("1/(8*(OSE3+ OSE4))").derivative(symbol!("OSE4")) / parse!("2*OSE4"))
+    #[test]
+    fn tta_uv() {
+        test_initialise().unwrap();
+
+        let g: Vec<Graph> = dot!(
+            digraph G{
+                e        [style=invis]
+                e -> A:0   [ id=0 particle=t]
+                B:1 -> e   [ id=1 particle=t]
+                e -> C:2   [ id=2 particle=a]
+                A -> B    [ lmb_index=0 particle=g]
+                C -> B  [particle=t]
+                A -> C [particle=t]
+            }
+        )
+        .unwrap();
+
+        let mut amp = Amplitude::from_graph_list("tta", g).unwrap();
+
+        let model = load_generic_model("sm");
+
+        let theadpool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+
+        let runtime = RuntimeSettings::default();
+        amp.preprocess(
+            &model,
+            &GenerationSettings {
+                ..Default::default()
+            },
+            &(&runtime).into(),
+            &theadpool,
+        )
+        .unwrap();
+
+        amp.build_integrand(
+            &model,
+            &GlobalSettings {
+                ..Default::default()
+            },
+            (&runtime).into(),
+            &theadpool,
+        )
+        .unwrap();
+
+        println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
+
+        for g in amp.graphs {
+            // let all = g.graph.all_cycle_unions(&g.graph.full_filter());
+
+            g.graph.all_limits(
+                &g.graph.full_filter(),
+                &g.derived_data.all_mighty_integrand,
+                symbol!("lambd"),
+                &g.graph.loop_momentum_basis,
+            );
+        }
+    }
+
+    #[test]
+    fn tri_box_tri_LU() {
+        let uv_dod = 1;
+        let box_uv_dod = -1; // can be -1, 0, 1, 2
+        let is_massless = false;
+        let force_cut: Option<CutId> = None;
+        //let force_cut: Option<CutId> = Some(CutId(3));
+
+        // load the model and hack the masses, go through serializable model since arc is not mutable
+        let model = if is_massless {
+            load_generic_model("sm_massless")
+        } else {
+            load_generic_model("sm")
+        };
+
+        let mut underlying = HedgeGraphBuilder::new();
+
+        let hhh = model.get_vertex_rule("V_9");
+        let htt = model.get_vertex_rule("V_141");
+
+        let hprop = model.get_propagator("H_propFeynman");
+        let hp = model.get_particle("H");
+
+        let tprop = model.get_propagator("t_propFeynman");
+        let tp = model.get_particle("t");
+
+        let n1 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
+        let n2 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
+        let n3 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
+        let n4 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
+        let n5 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
+        let n6 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
+
+        underlying.add_edge(
+            n1.add_data(ParseHedge::default()),
+            n2.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone())
+                .with_num(Atom::one())
+                .with_lmb_id(LoopIndex(0)),
+            false,
+        );
+
+        underlying.add_edge(
+            n1.add_data(ParseHedge::default()),
+            n3.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()).with_num(Atom::one()),
+            false,
+        );
+
+        underlying.add_edge(
+            n2.add_data(ParseHedge::default()),
+            n3.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 1 {
+                spenso_lor_atom(2, 30, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            // Edge {
+            //     name: "e2".into(),
+
+            //     particle: hp.clone(),
+            //     propagator: hprop.clone(),
+
+            //     dod: if box_uv_dod >= 1 { -1 } else { -2 },
+            //     num: if box_uv_dod >= 1 {
+            //         spenso_lor_atom(2, 30, GS.dim)
+            //     } else {
+            //         Atom::one()
+            //     },
+            // },
+            false,
+        );
+
+        underlying.add_edge(
+            n2.add_data(ParseHedge::default()),
+            n4.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 0 && uv_dod >= 1 {
+                spenso_lor_atom(3, 20, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            false,
+        );
+
+        underlying.add_edge(
+            n3.add_data(ParseHedge::default()),
+            n5.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone())
+                .with_num(if box_uv_dod == 2 {
+                    spenso_lor_atom(4, 30, GS.dim)
+                } else {
+                    Atom::one()
+                })
+                .with_lmb_id(LoopIndex(1)),
+            false,
+        );
+
+        underlying.add_edge(
+            n4.add_data(ParseHedge::default()),
+            n5.add_data(ParseHedge::default()),
+            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
+                spenso_lor_atom(5, 10, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            true,
+        );
+
+        underlying.add_edge(
+            n6.add_data(ParseHedge::default()),
+            n4.add_data(ParseHedge::default()),
+            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
+                spenso_lor_atom(6, 20, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            true,
+        );
+
+        underlying.add_edge(
+            n5.add_data(ParseHedge::default()),
+            n6.add_data(ParseHedge::default()),
+            ParseEdge::new(tp.clone())
+                .with_num(if uv_dod >= 0 {
+                    spenso_lor_atom(7, 10, GS.dim)
+                } else {
+                    Atom::one()
+                })
+                .with_lmb_id(LoopIndex(2)),
+            true,
+        );
+
+        underlying.add_external_edge(
+            n1.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()).with_num(if box_uv_dod == 1 {
+                spenso_lor_atom(8, 30, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            false,
+            Flow::Sink,
+        );
+
+        underlying.add_external_edge(
+            n6.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()).with_num(if box_uv_dod == -1 && uv_dod >= 1 {
+                spenso_lor_atom(9, 20, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            false,
+            Flow::Source,
+        );
+
+        let underlying = ParseGraph {
+            graph: underlying.build(),
+            global_data: ParseData::default(),
+        };
+
+        println!("{}", underlying.dot(&underlying.full_filter()));
+
+        let graph = Graph::from_parsed(underlying, &model).unwrap();
+
+        println!(
+            "dot lmb:{}",
+            graph
+                .underlying
+                .dot_lmb_of(&graph.underlying.full_filter(), &graph.loop_momentum_basis)
+        );
+
+        let hpdg = hp.pdg_code as i64;
+        let tpdg = tp.pdg_code as i64;
+        let cs: CrossSection = CrossSection::new("".into());
+        //    cs.preprocess(
+        //        &model,
+        //        &ProcessDefinition {
+        //            initial_pdgs: vec![hpdg],
+        //            final_pdgs_lists: vec![
+        //                vec![tpdg, -tpdg],
+        //                vec![tpdg, -tpdg, hpdg],
+        //                vec![hpdg, hpdg],
+        //                vec![hpdg, hpdg, hpdg],
+        //                vec![tpdg, -tpdg, hpdg, hpdg],
+        //            ],
+        //            amplitude_filters: FeynGenFilters(vec![]),
+        //            cross_section_filters: FeynGenFilters(vec![]),
+        //            ..Default::default()
+        //        },
+        //    )
+        //    .unwrap();
+        //    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
+        //        .unwrap();
+        //
+        //println!("Final result: {:>}", sum.expand());
+    }
+
+    #[test]
+    fn double_triangle_LU() {
+        let uv_dod = 1;
+
+        // load the model and hack the masses, go through serializable model since arc is not mutable
+        let model = load_generic_model("sm");
+
+        let mut underlying = HedgeGraphBuilder::new();
+
+        let hhh = model.get_vertex_rule("V_9");
+        let htt = model.get_vertex_rule("V_141");
+
+        let hprop = model.get_propagator("H_propFeynman");
+        let hp = model.get_particle("H");
+
+        let tprop = model.get_propagator("t_propFeynman");
+        let tp = model.get_particle("t");
+
+        let n1 = underlying.add_node(hhh.clone().into());
+        let n2 = underlying.add_node(htt.clone().into());
+        let n3 = underlying.add_node(htt.clone().into());
+        let n4 = underlying.add_node(htt.clone().into());
+
+        underlying.add_edge(
+            n1.add_data(ParseHedge::default()),
+            n2.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()),
+            false,
+        );
+
+        underlying.add_edge(
+            n1.add_data(ParseHedge::default()),
+            n3.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()),
+            false,
+        );
+
+        underlying.add_edge(
+            n2.add_data(ParseHedge::default()),
+            n3.add_data(ParseHedge::default()),
+            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
+                spenso_lor_atom(2, 10, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            true,
+        );
+
+        underlying.add_edge(
+            n3.add_data(ParseHedge::default()),
+            n4.add_data(ParseHedge::default()),
+            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
+                spenso_lor_atom(3, 20, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            true,
+        );
+
+        underlying.add_edge(
+            n4.add_data(ParseHedge::default()),
+            n2.add_data(ParseHedge::default()),
+            ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
+                spenso_lor_atom(4, 10, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            true,
+        );
+
+        underlying.add_external_edge(
+            n1.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()),
+            false,
+            Flow::Sink,
+        );
+
+        underlying.add_external_edge(
+            n4.add_data(ParseHedge::default()),
+            ParseEdge::new(hp.clone()).with_num(if uv_dod >= 1 {
+                spenso_lor_atom(6, 20, GS.dim)
+            } else {
+                Atom::one()
+            }),
+            false,
+            Flow::Source,
+        );
+
+        let underlying = ParseGraph {
+            graph: underlying.build(),
+            global_data: ParseData::default(),
+        };
+
+        let loop_momentum_basis = LoopMomentumBasis {
+            tree: SuBitGraph::empty(0),
+            loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(3)].into(),
+            ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
+            edge_signatures: underlying
+                .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+        };
+
+        let graph = Graph::from_parsed(underlying, &model).unwrap();
+
+        let cs: CrossSection = CrossSection::new("".into());
+        //    cs.add_supergraph(graph).unwrap();
+        //
+        //    let hpdg = hp.pdg_code as i64;
+        //    let tpdg = tp.pdg_code as i64;
+        //    cs.preprocess(
+        //        &model,
+        //        &ProcessDefinition {
+        //            initial_pdgs: vec![hpdg],
+        //            final_pdgs_lists: vec![vec![tpdg, -tpdg], vec![tpdg, -tpdg, hpdg], vec![hpdg, hpdg]],
+        //            amplitude_filters: FeynGenFilters(vec![]),
+        //            cross_section_filters: FeynGenFilters(vec![]),
+        //            ..Default::default()
+        //        },
+        //    )
+        //    .unwrap();
+        //
+        //    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
+        //        .unwrap();
+        //
+        //println!("Final result: {:>}", sum.expand());
+    }
+
+    #[test]
+    fn quick_test() {
+        fn expose_mass_dimension(atom: &Atom) -> Atom {
+            atom.replace(function!(GS.ose, W_.x___))
+                .with(parse!("E"))
+                .replace(function!(GS.dot, W_.x_, W_.y_))
+                .with(parse!("-E^2"))
+                .expand()
+        }
+
+        let edge_id = 4;
+
+        let cff = parse!(
+            "
+            1 / 8 * (OSE(2) + OSE(3))
+                ^ -1 * (OSE(2) + OSE(4))
+                ^ -1 * OSE(2)
+                ^ -1 * OSE(3)
+                ^ -1 * OSE(4)
+                ^ -1"
+        );
+
+        let num_2 = parse!("(-OSE(2) * OSE(4) + dot(Q3(3), Q3(3))) * OSE(3)^2");
+
+        let mut expr = &num_2 * &cff;
+
+        expr = expr
+            .replace(function!(GS.ose, edge_id, W_.x___))
+            .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
+            .derivative(GS.rescale)
+            .replace(function!(Symbol::DERIVATIVE, W_.x___, W_.x_))
+            .with(Atom::var(W_.x_).pow(-1) / 2)
+            .replace(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
+            .with(function!(GS.ose, edge_id, W_.x___));
+
+        expr = expr.replace(function!(GS.ose, W_.x___)).with(parse!("E"));
+
+        println!("expr: {}", expr.expand());
+        expr = expose_mass_dimension(&expr);
+        println!("expr: {}", expr);
+
+        let new_expr = num_2 * cff;
+        let mut alt_der = new_expr
+            .replace(function!(GS.ose, edge_id))
+            .with(parse!("OSE4"))
+            .derivative(symbol!("OSE4"))
+            / parse!("2*OSE4");
+
+        alt_der = alt_der
+            .replace(symbol!("OSE4"))
+            .with(function!(GS.ose, edge_id));
+
+        alt_der = alt_der
+            .replace(function!(GS.ose, W_.x___))
+            .with(parse!("E"));
+
+        println!("alt_der: {}", alt_der.expand());
+        alt_der = expose_mass_dimension(&alt_der);
+        println!("alt_der: {}", alt_der);
+
+        let test_expr = (parse!("1/(8*(OSE3+ OSE4))").derivative(symbol!("OSE4"))
+            / parse!("2*OSE4"))
         .replace(parse!("OSE4"))
         .with(parse!("OSE3"))
         .expand();
 
-    println!("test_expr: {}", test_expr);
+        println!("test_expr: {}", test_expr);
 
-    let test_expr_2 = (parse!("OSE4/(8*OSE4*(OSE3+ OSE4))").derivative(symbol!("OSE4"))
-        / parse!("2*OSE4"))
-    .replace(parse!("OSE4"))
-    .with(parse!("OSE3"))
-    .expand();
+        let test_expr_2 = (parse!("OSE4/(8*OSE4*(OSE3+ OSE4))").derivative(symbol!("OSE4"))
+            / parse!("2*OSE4"))
+        .replace(parse!("OSE4"))
+        .with(parse!("OSE3"))
+        .expand();
 
-    println!("test_expr: {}", test_expr_2);
+        println!("test_expr: {}", test_expr_2);
+    }
 }
