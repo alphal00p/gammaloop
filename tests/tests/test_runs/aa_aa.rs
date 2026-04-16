@@ -622,165 +622,174 @@ fn add_graph_id_observable(
     ))
 }
 
-#[test]
-#[serial]
-#[ignore = "manual aa_aa inspect regression"]
-fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
-    let targets = load_inspect_targets()?;
-    let mut symjit_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends_symjit")?;
-    generate_aa_aa_helicity_family(
-        &mut symjit_cli,
-        AA_AA_PROCESS,
-        "symjit",
-        &AA_AA_HELICITIES_ALL,
-    )?;
-    let mut assembly_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends")?;
-    generate_aa_aa_helicity_family(
-        &mut assembly_cli,
-        AA_AA_ASSEMBLY_PROCESS,
-        "assembly",
-        &AA_AA_HELICITIES_ALL,
-    )?;
+mod important {
+    use super::*;
 
-    set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "a")?;
-    let point_a =
-        default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
-    set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "b")?;
-    let point_b =
-        default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
+    #[test]
+    #[serial]
+    fn aa_aa_local_inspect_precisions_and_backends() -> Result<()> {
+        let targets = load_inspect_targets()?;
+        let mut symjit_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends_symjit")?;
+        generate_aa_aa_helicity_family(
+            &mut symjit_cli,
+            AA_AA_PROCESS,
+            "symjit",
+            &AA_AA_HELICITIES_ALL,
+        )?;
+        let mut assembly_cli = setup_aa_aa_cli("aa_aa_local_inspect_precisions_and_backends")?;
+        generate_aa_aa_helicity_family(
+            &mut assembly_cli,
+            AA_AA_ASSEMBLY_PROCESS,
+            "assembly",
+            &AA_AA_HELICITIES_ALL,
+        )?;
 
-    let quad_compat_tolerance = quad_vs_f64_tolerance();
-    let arb_compat_tolerance = arb_vs_quad_tolerance();
+        set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "a")?;
+        let point_a =
+            default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
+        set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, "b")?;
+        let point_b =
+            default_momentum_space_point_for(&symjit_cli, AA_AA_PROCESS, AA_AA_PRIMARY_INTEGRAND)?;
 
-    for (kinematics, point) in [("a", &point_a), ("b", &point_b)] {
-        set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, kinematics)?;
-        set_aa_aa_kinematics(&mut assembly_cli, AA_AA_ASSEMBLY_PROCESS, kinematics)?;
-        for (integrand, _) in AA_AA_HELICITIES_ALL {
-            for graph_id in 0..AA_AA_GRAPH_COUNT {
-                let context =
-                    format!("kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}");
+        let quad_compat_tolerance = quad_vs_f64_tolerance();
+        let arb_compat_tolerance = arb_vs_quad_tolerance();
 
-                set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Double")?;
-                let symjit_result = evaluate_graph_momentum_sample_f64(
-                    &mut symjit_cli,
-                    AA_AA_PROCESS,
-                    integrand,
-                    graph_id,
-                    point,
-                )?;
-                let symjit_target = f64_inspect_target(
-                    &targets,
-                    InspectTargetKind::F64Symjit,
-                    kinematics,
-                    integrand,
-                    graph_id,
-                );
-                assert_complex_approx_eq(
-                    symjit_result,
-                    symjit_target,
-                    &format!("{context}: symjit f64 benchmark"),
-                );
+        for (kinematics, point) in [("a", &point_a), ("b", &point_b)] {
+            set_aa_aa_kinematics(&mut symjit_cli, AA_AA_PROCESS, kinematics)?;
+            set_aa_aa_kinematics(&mut assembly_cli, AA_AA_ASSEMBLY_PROCESS, kinematics)?;
+            for (integrand, _) in AA_AA_HELICITIES_ALL {
+                for graph_id in 0..AA_AA_GRAPH_COUNT {
+                    let context = format!(
+                        "kinematics={kinematics}, integrand={integrand}, graph_id={graph_id}"
+                    );
 
-                set_single_precision_level(
-                    &mut assembly_cli,
-                    AA_AA_ASSEMBLY_PROCESS,
-                    integrand,
-                    "Double",
-                )?;
-                let assembly_result = evaluate_graph_momentum_sample_f64(
-                    &mut assembly_cli,
-                    AA_AA_ASSEMBLY_PROCESS,
-                    integrand,
-                    graph_id,
-                    point,
-                )?;
-                let assembly_target = f64_inspect_target(
-                    &targets,
-                    InspectTargetKind::F64Assembly,
-                    kinematics,
-                    integrand,
-                    graph_id,
-                );
-                assert_complex_approx_eq(
-                    assembly_result,
-                    assembly_target,
-                    &format!("{context}: assembly f64 benchmark"),
-                );
-                assert_complex_approx_eq(
-                    assembly_result,
-                    symjit_result,
-                    &format!("{context}: assembly vs symjit f64"),
-                );
+                    set_single_precision_level(
+                        &mut symjit_cli,
+                        AA_AA_PROCESS,
+                        integrand,
+                        "Double",
+                    )?;
+                    let symjit_result = evaluate_graph_momentum_sample_f64(
+                        &mut symjit_cli,
+                        AA_AA_PROCESS,
+                        integrand,
+                        graph_id,
+                        point,
+                    )?;
+                    let symjit_target = f64_inspect_target(
+                        &targets,
+                        InspectTargetKind::F64Symjit,
+                        kinematics,
+                        integrand,
+                        graph_id,
+                    );
+                    assert_complex_approx_eq(
+                        symjit_result,
+                        symjit_target,
+                        &format!("{context}: symjit f64 benchmark"),
+                    );
 
-                set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Quad")?;
-                let quad_result = quad_integrand_result(evaluate_graph_momentum_sample_precise(
-                    &mut symjit_cli,
-                    AA_AA_PROCESS,
-                    integrand,
-                    graph_id,
-                    point,
-                    false,
-                )?)?;
-                let quad_target = precise_inspect_target::<f128>(
-                    &targets,
-                    InspectTargetKind::Quad,
-                    kinematics,
-                    integrand,
-                    graph_id,
-                )?;
-                assert_complex_approx_eq_precise(
-                    &quad_result,
-                    &quad_target,
-                    &quad_compat_tolerance,
-                    &format!("{context}: quad benchmark"),
-                );
-                assert_complex_approx_eq_precise(
-                    &quad_result,
-                    &exact_f64_as_quad(symjit_result),
-                    &quad_compat_tolerance,
-                    &format!("{context}: quad vs f64 compatibility"),
-                );
+                    set_single_precision_level(
+                        &mut assembly_cli,
+                        AA_AA_ASSEMBLY_PROCESS,
+                        integrand,
+                        "Double",
+                    )?;
+                    let assembly_result = evaluate_graph_momentum_sample_f64(
+                        &mut assembly_cli,
+                        AA_AA_ASSEMBLY_PROCESS,
+                        integrand,
+                        graph_id,
+                        point,
+                    )?;
+                    let assembly_target = f64_inspect_target(
+                        &targets,
+                        InspectTargetKind::F64Assembly,
+                        kinematics,
+                        integrand,
+                        graph_id,
+                    );
+                    assert_complex_approx_eq(
+                        assembly_result,
+                        assembly_target,
+                        &format!("{context}: assembly f64 benchmark"),
+                    );
+                    assert_complex_approx_eq(
+                        assembly_result,
+                        symjit_result,
+                        &format!("{context}: assembly vs symjit f64"),
+                    );
 
-                set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Arb")?;
-                let arb_result = arb_integrand_result(evaluate_graph_momentum_sample_precise(
-                    &mut symjit_cli,
-                    AA_AA_PROCESS,
-                    integrand,
-                    graph_id,
-                    point,
-                    true,
-                )?)?;
-                let arb_target = precise_inspect_target::<ArbPrec>(
-                    &targets,
-                    InspectTargetKind::Arb,
-                    kinematics,
-                    integrand,
-                    graph_id,
-                )?;
-                assert_complex_approx_eq_precise(
-                    &arb_result,
-                    &arb_target,
-                    &arb_compat_tolerance,
-                    &format!("{context}: arb benchmark"),
-                );
-                assert_complex_approx_eq_precise(
-                    &arb_result,
-                    &exact_quad_as_arb(&quad_result),
-                    &arb_compat_tolerance,
-                    &format!("{context}: arb vs quad compatibility"),
-                );
+                    set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Quad")?;
+                    let quad_result =
+                        quad_integrand_result(evaluate_graph_momentum_sample_precise(
+                            &mut symjit_cli,
+                            AA_AA_PROCESS,
+                            integrand,
+                            graph_id,
+                            point,
+                            false,
+                        )?)?;
+                    let quad_target = precise_inspect_target::<f128>(
+                        &targets,
+                        InspectTargetKind::Quad,
+                        kinematics,
+                        integrand,
+                        graph_id,
+                    )?;
+                    assert_complex_approx_eq_precise(
+                        &quad_result,
+                        &quad_target,
+                        &quad_compat_tolerance,
+                        &format!("{context}: quad benchmark"),
+                    );
+                    assert_complex_approx_eq_precise(
+                        &quad_result,
+                        &exact_f64_as_quad(symjit_result),
+                        &quad_compat_tolerance,
+                        &format!("{context}: quad vs f64 compatibility"),
+                    );
+
+                    set_single_precision_level(&mut symjit_cli, AA_AA_PROCESS, integrand, "Arb")?;
+                    let arb_result = arb_integrand_result(evaluate_graph_momentum_sample_precise(
+                        &mut symjit_cli,
+                        AA_AA_PROCESS,
+                        integrand,
+                        graph_id,
+                        point,
+                        true,
+                    )?)?;
+                    let arb_target = precise_inspect_target::<ArbPrec>(
+                        &targets,
+                        InspectTargetKind::Arb,
+                        kinematics,
+                        integrand,
+                        graph_id,
+                    )?;
+                    assert_complex_approx_eq_precise(
+                        &arb_result,
+                        &arb_target,
+                        &arb_compat_tolerance,
+                        &format!("{context}: arb benchmark"),
+                    );
+                    assert_complex_approx_eq_precise(
+                        &arb_result,
+                        &exact_quad_as_arb(&quad_result),
+                        &arb_compat_tolerance,
+                        &format!("{context}: arb vs quad compatibility"),
+                    );
+                }
             }
         }
-    }
 
-    clean_test(&assembly_cli.cli_settings.state.folder);
-    clean_test(&symjit_cli.cli_settings.state.folder);
-    Ok(())
+        clean_test(&assembly_cli.cli_settings.state.folder);
+        clean_test(&symjit_cli.cli_settings.state.folder);
+        Ok(())
+    }
 }
 
 #[test]
 #[serial]
-#[ignore = "manual aa_aa integrated regression"]
 fn aa_aa_integrated_graph_histogram_bins() -> Result<()> {
     let targets = load_integrated_targets()?;
     let mut cli = load_example_aa_aa_cli()?;

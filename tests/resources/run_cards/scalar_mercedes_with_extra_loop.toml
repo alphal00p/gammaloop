@@ -47,15 +47,35 @@ rotation_axis = [
   { type = "x" },
   { type = "euler_angles", alpha = 0.1, beta = 0.2, gamma = 0.3 },
 ]
+check_on_norm = true
+escalate_if_exact_zero = true
+loop_momenta_norm_escalation_factor = 0.9
 # levels = [
 #   { precision = "Arb", required_precision_for_re = 1e-5, required_precision_for_im = 1e-5, escalate_for_large_weight_threshold = -1.0 },
 # ]
-check_on_norm = true
 
 [default_runtime_settings.stability.recording]
 record_all_stability_levels = true
 record_rotated_results = true
 record_loop_momenta_escalation = true
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 0.0000000001
+required_precision_for_im = 0.0000000001
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Quad"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 0.00001
+required_precision_for_im = 0.00001
+escalate_for_large_weight_threshold = -1.0
 
 [default_runtime_settings.general]
 m_uv = 1.0

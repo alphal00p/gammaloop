@@ -94,7 +94,7 @@ coordinate_system = "spherical"
 mapping = "linear"
 b = 10.0
 
-[cli_settings.global.generation]
+[cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = false
 
 [cli_settings.global.generation.evaluator]

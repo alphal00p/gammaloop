@@ -77,3 +77,12 @@ integration = { max-threads = 2 }
 memory-intensive = { max-threads = 2 }
 # Group tests that might be flaky - serialize these for stability
 flaky = { max-threads = 1 }
+
+[profile.local_test]
+fail-fast = true
+slow-timeout = { period = "1m", terminate-after = 3, on-timeout = "pass" }
+global-timeout = "120m"
+
+[profile.local_test_all]
+slow-timeout = { period = "5m" }
+fail-fast = false

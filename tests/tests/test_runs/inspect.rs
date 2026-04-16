@@ -82,7 +82,6 @@ fn scalar_sunrise_inspect() -> Result<()> {
     let mut ins = Inspect {
         point: point.clone(),
         momentum_space: true,
-        discrete_dim: vec![0],
         ..Default::default()
     };
 
@@ -208,9 +207,10 @@ fn inspect_momentum_space_graph_id_is_sampling_agnostic() -> Result<()> {
     cli.run_command(
         r#"set process -p box -i scalar_box string '
 [sampling]
-type = "discrete_graph_sampling"
-[sampling.sampling_type]
-subtype = "multi_channeling"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = false
+lmb_channels = "summed"
 '"#,
     )?;
 

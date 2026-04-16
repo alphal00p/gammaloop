@@ -122,16 +122,16 @@ pub fn get_vakint(mut vakint_settings: VakintSettings) -> TestVakint {
 #[allow(dead_code)]
 pub fn should_skip_pysecdec_tests() -> bool {
     static WARNED: Once = Once::new();
-    let skip = match std::env::var("VAKINT_SKIP_PYSECDEC_TESTS") {
+    let skip = match std::env::var("RUN_PYSECDEC_TESTS") {
         Ok(value) => {
             let trimmed = value.trim();
-            !(trimmed.is_empty() || trimmed == "0" || trimmed.eq_ignore_ascii_case("false"))
+            !(trimmed.is_empty() || trimmed == "1" || trimmed.eq_ignore_ascii_case("true"))
         }
-        Err(_) => false,
+        Err(_) => true,
     };
     if skip {
         WARNED.call_once(|| {
-            eprintln!("Skipping PySecDec tests because VAKINT_SKIP_PYSECDEC_TESTS is set.");
+            eprintln!("Skipping PySecDec tests because RUN_PYSECDEC_TESTS is not set.");
         });
     }
     skip

@@ -10,7 +10,7 @@ commands = [
   "display processes",
   "set default-runtime kv integrator.n_max=10000000 integrator.discrete_dim_learning_rate=1.5 integrator.continuous_dim_learning_rate=1.5 integrator.max_prob_ratio=0.01",
   "set default-runtime kv kinematics.e_cm=500.0 stability.check_on_norm=true",
-  "integrate -p advanced_process -i generated_process --n-cores 8 --workspace-path ./integration_workspace --result-path ./results.txt",
+  "integrate -p advanced_process -i generated_process --n-cores 8 --workspace-path ./integration_workspace",
   "inspect -p advanced_process -i generated_process --discrete-dim 0 -x 0.1 0.2 0.3 0.4 0.5 --momentum-space",
   "bench --samples 100000 -p advanced_process -i generated_process -c 4"
 ]
@@ -34,7 +34,7 @@ iterative_orientation_optimization = true
 compile = true
 
 [cli_settings.global.generation.compile]
-inline_asm = true
+compilation_mode = "assembly"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true

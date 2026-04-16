@@ -231,134 +231,138 @@ fn arb_vs_quad_tolerance() -> Result<F<ArbPrec>> {
     decimal_scalar("2.0e-16")
 }
 
-#[test]
-#[serial]
-fn scalar_bubble_inspect() -> Result<()> {
-    let mut cli = setup_scalar_bubble_uv_cli("scalar_bubble_inspect")?;
+mod important {
+    use super::*;
 
-    set_single_precision_level(
-        &mut cli,
-        "bubble_no_integrated_UV",
-        "scalar_bubble_below_thres",
-        "Double",
-    )?;
-    let bubble_no_integrated_f64 = inspect_bubble_process(
-        &mut cli,
-        "bubble_no_integrated_UV",
-        "scalar_bubble_below_thres",
-        vec![0, 0],
-    )?;
-    assert_complex_approx_eq(
-        bubble_no_integrated_f64,
-        bubble_no_integrated_inspect_f64_target(),
-        "bubble_no_integrated_UV inspect f64 benchmark",
-    );
+    #[test]
+    #[serial]
+    fn scalar_bubble_inspect() -> Result<()> {
+        let mut cli = setup_scalar_bubble_uv_cli("scalar_bubble_inspect")?;
 
-    set_single_precision_level(&mut cli, "bubble", "scalar_bubble_below_thres", "Double")?;
-    let bubble_integrated_f64 =
-        inspect_bubble_process(&mut cli, "bubble", "scalar_bubble_below_thres", vec![0, 1])?;
-    assert_complex_approx_eq(
-        bubble_integrated_f64,
-        bubble_integrated_inspect_f64_target(),
-        "bubble integrated inspect f64 benchmark",
-    );
+        set_single_precision_level(
+            &mut cli,
+            "bubble_no_integrated_UV",
+            "scalar_bubble_below_thres",
+            "Double",
+        )?;
+        let bubble_no_integrated_f64 = inspect_bubble_process(
+            &mut cli,
+            "bubble_no_integrated_UV",
+            "scalar_bubble_below_thres",
+            vec![0, 0],
+        )?;
+        assert_complex_approx_eq(
+            bubble_no_integrated_f64,
+            bubble_no_integrated_inspect_f64_target(),
+            "bubble_no_integrated_UV inspect f64 benchmark",
+        );
 
-    set_single_precision_level(
-        &mut cli,
-        "bubble_no_integrated_UV",
-        "scalar_bubble_below_thres",
-        "Quad",
-    )?;
-    let bubble_no_integrated_quad = quad_result(precise_inspect_bubble_process(
-        &mut cli,
-        "bubble_no_integrated_UV",
-        "scalar_bubble_below_thres",
-        vec![0, 0],
-        false,
-    )?)?;
-    assert_complex_approx_eq_precise(
-        &bubble_no_integrated_quad,
-        &bubble_no_integrated_inspect_quad_target()?,
-        &quad_benchmark_tolerance()?,
-        "bubble_no_integrated_UV inspect Quad benchmark",
-    );
-    assert_complex_approx_eq_precise(
-        &bubble_no_integrated_quad,
-        &exact_f64_as_quad(bubble_no_integrated_f64),
-        &quad_vs_f64_tolerance(),
-        "bubble_no_integrated_UV inspect Quad compatible with f64",
-    );
+        set_single_precision_level(&mut cli, "bubble", "scalar_bubble_below_thres", "Double")?;
+        let bubble_integrated_f64 =
+            inspect_bubble_process(&mut cli, "bubble", "scalar_bubble_below_thres", vec![0, 1])?;
+        assert_complex_approx_eq(
+            bubble_integrated_f64,
+            bubble_integrated_inspect_f64_target(),
+            "bubble integrated inspect f64 benchmark",
+        );
 
-    set_single_precision_level(&mut cli, "bubble", "scalar_bubble_below_thres", "Quad")?;
-    let bubble_integrated_quad = quad_result(precise_inspect_bubble_process(
-        &mut cli,
-        "bubble",
-        "scalar_bubble_below_thres",
-        vec![0, 1],
-        false,
-    )?)?;
-    assert_complex_approx_eq_precise(
-        &bubble_integrated_quad,
-        &bubble_integrated_inspect_quad_target()?,
-        &quad_benchmark_tolerance()?,
-        "bubble integrated inspect Quad benchmark",
-    );
-    assert_complex_approx_eq_precise(
-        &bubble_integrated_quad,
-        &exact_f64_as_quad(bubble_integrated_f64),
-        &quad_vs_f64_tolerance(),
-        "bubble integrated inspect Quad compatible with f64",
-    );
+        set_single_precision_level(
+            &mut cli,
+            "bubble_no_integrated_UV",
+            "scalar_bubble_below_thres",
+            "Quad",
+        )?;
+        let bubble_no_integrated_quad = quad_result(precise_inspect_bubble_process(
+            &mut cli,
+            "bubble_no_integrated_UV",
+            "scalar_bubble_below_thres",
+            vec![0, 0],
+            false,
+        )?)?;
+        assert_complex_approx_eq_precise(
+            &bubble_no_integrated_quad,
+            &bubble_no_integrated_inspect_quad_target()?,
+            &quad_benchmark_tolerance()?,
+            "bubble_no_integrated_UV inspect Quad benchmark",
+        );
+        assert_complex_approx_eq_precise(
+            &bubble_no_integrated_quad,
+            &exact_f64_as_quad(bubble_no_integrated_f64),
+            &quad_vs_f64_tolerance(),
+            "bubble_no_integrated_UV inspect Quad compatible with f64",
+        );
 
-    set_single_precision_level(
-        &mut cli,
-        "bubble_no_integrated_UV",
-        "scalar_bubble_below_thres",
-        "Arb",
-    )?;
-    let bubble_no_integrated_arb = arb_result(precise_inspect_bubble_process(
-        &mut cli,
-        "bubble_no_integrated_UV",
-        "scalar_bubble_below_thres",
-        vec![0, 0],
-        true,
-    )?)?;
-    assert_complex_approx_eq_precise(
-        &bubble_no_integrated_arb,
-        &bubble_no_integrated_inspect_arb_target()?,
-        &decimal_scalar("1.0e-60")?,
-        "bubble_no_integrated_UV inspect ArbPrec benchmark",
-    );
-    assert_complex_approx_eq_precise(
-        &bubble_no_integrated_arb,
-        &exact_quad_as_arb(&bubble_no_integrated_quad),
-        &arb_vs_quad_tolerance()?,
-        "bubble_no_integrated_UV inspect ArbPrec compatible with Quad",
-    );
+        set_single_precision_level(&mut cli, "bubble", "scalar_bubble_below_thres", "Quad")?;
+        let bubble_integrated_quad = quad_result(precise_inspect_bubble_process(
+            &mut cli,
+            "bubble",
+            "scalar_bubble_below_thres",
+            vec![0, 1],
+            false,
+        )?)?;
+        assert_complex_approx_eq_precise(
+            &bubble_integrated_quad,
+            &bubble_integrated_inspect_quad_target()?,
+            &quad_benchmark_tolerance()?,
+            "bubble integrated inspect Quad benchmark",
+        );
+        assert_complex_approx_eq_precise(
+            &bubble_integrated_quad,
+            &exact_f64_as_quad(bubble_integrated_f64),
+            &quad_vs_f64_tolerance(),
+            "bubble integrated inspect Quad compatible with f64",
+        );
 
-    set_single_precision_level(&mut cli, "bubble", "scalar_bubble_below_thres", "Arb")?;
-    let bubble_integrated_arb = arb_result(precise_inspect_bubble_process(
-        &mut cli,
-        "bubble",
-        "scalar_bubble_below_thres",
-        vec![0, 1],
-        true,
-    )?)?;
-    assert_complex_approx_eq_precise(
-        &bubble_integrated_arb,
-        &bubble_integrated_inspect_arb_target()?,
-        &decimal_scalar("1.0e-60")?,
-        "bubble integrated inspect ArbPrec benchmark",
-    );
-    assert_complex_approx_eq_precise(
-        &bubble_integrated_arb,
-        &exact_quad_as_arb(&bubble_integrated_quad),
-        &arb_vs_quad_tolerance()?,
-        "bubble integrated inspect ArbPrec compatible with Quad",
-    );
+        set_single_precision_level(
+            &mut cli,
+            "bubble_no_integrated_UV",
+            "scalar_bubble_below_thres",
+            "Arb",
+        )?;
+        let bubble_no_integrated_arb = arb_result(precise_inspect_bubble_process(
+            &mut cli,
+            "bubble_no_integrated_UV",
+            "scalar_bubble_below_thres",
+            vec![0, 0],
+            true,
+        )?)?;
+        assert_complex_approx_eq_precise(
+            &bubble_no_integrated_arb,
+            &bubble_no_integrated_inspect_arb_target()?,
+            &decimal_scalar("1.0e-60")?,
+            "bubble_no_integrated_UV inspect ArbPrec benchmark",
+        );
+        assert_complex_approx_eq_precise(
+            &bubble_no_integrated_arb,
+            &exact_quad_as_arb(&bubble_no_integrated_quad),
+            &arb_vs_quad_tolerance()?,
+            "bubble_no_integrated_UV inspect ArbPrec compatible with Quad",
+        );
 
-    clean_test(&cli.cli_settings.state.folder);
-    Ok(())
+        set_single_precision_level(&mut cli, "bubble", "scalar_bubble_below_thres", "Arb")?;
+        let bubble_integrated_arb = arb_result(precise_inspect_bubble_process(
+            &mut cli,
+            "bubble",
+            "scalar_bubble_below_thres",
+            vec![0, 1],
+            true,
+        )?)?;
+        assert_complex_approx_eq_precise(
+            &bubble_integrated_arb,
+            &bubble_integrated_inspect_arb_target()?,
+            &decimal_scalar("1.0e-60")?,
+            "bubble integrated inspect ArbPrec benchmark",
+        );
+        assert_complex_approx_eq_precise(
+            &bubble_integrated_arb,
+            &exact_quad_as_arb(&bubble_integrated_quad),
+            &arb_vs_quad_tolerance()?,
+            "bubble integrated inspect ArbPrec compatible with Quad",
+        );
+
+        clean_test(&cli.cli_settings.state.folder);
+        Ok(())
+    }
 }
 
 #[test]

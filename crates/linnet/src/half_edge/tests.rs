@@ -697,36 +697,15 @@ fn flower_snark() {
 
     let graph: HedgeGraph<(), ()> = builder.build();
 
-    println!("{}", graph.base_dot());
-
-    // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
     assert_eq!(11, graph.cyclotomatic_number(&graph.full_graph()));
-    println!("cycle count {}", graph.all_cycles().len());
+    // Keep a concrete regression check here instead of the much slower debug-only spinney dump.
+    assert_eq!(1444, graph.all_cycles().len());
     assert_eq!(
         11,
         graph
             .paton_count_loops(&graph.full_graph(), &graph.node_id(Hedge(0)))
             .unwrap()
     );
-    if let Some((s, v)) = graph
-        .all_spinneys()
-        .iter()
-        .find(|(s, _)| graph.full_filter() == s.filter)
-    {
-        println!(
-            "{}",
-            graph.dot(&graph.nesting_node_from_subgraph(s.clone()))
-        );
-        for (ci, cj) in v {
-            println!("{}", graph.dot(&ci.to_hairy_subgraph(&graph)));
-            println!(
-                "{}",
-                graph.dot(&cj.as_ref().unwrap().to_hairy_subgraph(&graph))
-            );
-        }
-    } else {
-        println!("not found");
-    }
 }
 
 #[test]

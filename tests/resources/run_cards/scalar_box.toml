@@ -61,7 +61,7 @@ discrete_dim_learning_rate = 1.5
 continuous_dim_learning_rate = 1.5
 max_prob_ratio = 0.01
 
-[cli_settings.global.generation]
+[cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = false
 
 # [cli_settings.global]

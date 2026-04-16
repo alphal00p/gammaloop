@@ -872,10 +872,10 @@ fn lu_rust_explicit_lmb_multichanneling_groups_channel_events_and_tags_metadata(
     explicit_cli.run_command(
         r#"set process string '
 [sampling]
-type = "discrete_graph_sampling"
-sample_orientations = false
-[sampling.sampling_type]
-subtype = "multi_channeling"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "summed"
 '"#,
     )?;
 
@@ -941,10 +941,10 @@ subtype = "multi_channeling"
     per_channel_cli.run_command(
         r#"set process string '
 [sampling]
-type = "discrete_graph_sampling"
-sample_orientations = false
-[sampling.sampling_type]
-subtype = "discrete_multi_channeling"
+graphs = "monte_carlo"
+orientations = "summed"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
 '"#,
     )?;
 

@@ -105,6 +105,12 @@ deny-nix:
 doc-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doc
 
+test:
+    cargo nextest run --workspace --cargo-profile dev-optim -P local_test
+
+test-all:
+    cargo nextest run --workspace --cargo-profile release -P local_test_all
+
 # Run all nextest partitions locally (same as CI)
 test-nix-all:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-1
@@ -178,7 +184,7 @@ list-all-tests:
 # Run integration test by name (searches across all test files)
 
 # Example: just test evaluate_1l_scalar_vacuum
-test TEST_NAME:
+test_one TEST_NAME:
     cargo nextest run {{ TEST_NAME }}
 
 # Run integration tests with nocapture (shows output during test execution)

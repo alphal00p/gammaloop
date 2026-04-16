@@ -3,6 +3,8 @@ use vakint::{
     EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, PySecDecOptions, VakintSettings,
     vakint_parse,
 };
+#[allow(unused)]
+use vakint::{FMFTOptions, MATADOptions};
 
 use std::{collections::HashMap, vec};
 
@@ -51,6 +53,7 @@ fn test_integrate_1l_cross_product() {
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, ..VakintSettings::default()},
         EvaluationOrder(vec![EvaluationMethod::PySecDec(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/test_integrate_1l_cross_product".into()) ,..PySecDecOptions::default() })]),
+        //EvaluationOrder(vec![EvaluationMethod::MATAD(MATADOptions::default())]),
         vakint_parse!(
             "(k(1,11)*p(1,11)*k(1,12)*p(1,12))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,2)\
@@ -67,11 +70,11 @@ fn test_integrate_1l_cross_product() {
             .collect(),
             N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS),
         vec![
-            (-1, ("0.0".into(), "-15.41829599538179739876641630989".into()),),
-            (0,  ("0.0".into(),  "41.25556923066471696715797280407".into()),),
-            (1,  ("0.0".into(), "-75.58506810083682014451198579381".into()),),
-            (2,  ("0.0".into(),  "104.8268973321405776943695037314".into()),),
-            (3,  ("0.0".into(),  "-130.2125934660588794479583559489".into()),),
+            (-1, ("0.0".into(), "-9.8927470662601990625262260437e-3".into()),),
+            (0,  ("0.0".into(), "-9.8927470662601990625262260437e-3".into()),),
+            (1,  ("0.0".into(), "-1.8029205397397163324058055878e-2".into()),),
+            (2,  ("0.0".into(), "-1.4065323763134074397385120392e-2".into()),),
+            (3,  ("0.0".into(), "-2.0088095635401259642094373703e-2".into()),),
         ],
         N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS, MAX_PULL
     );
@@ -86,6 +89,7 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     compare_vakint_evaluation_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar, ..VakintSettings::default()},
         EvaluationOrder(vec![EvaluationMethod::PySecDec(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/test_integrate_1l_cross_product_additional_symbols_numerator".into()) ,..PySecDecOptions::default() })]),
+        //EvaluationOrder(vec![EvaluationMethod::MATAD(MATADOptions::default())]),
         vakint_parse!(
             "(user_space::A*k(1,11)*p(1,11)*k(1,12)*p(1,12)+user_space::B)*topo(\
                 prop(1,edge(1,1),k(1),muvsq,2)\
@@ -102,11 +106,11 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
             .collect(),
             N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS),
         vec![
-            (-1, ("0.0".into(), "-6.776470381787957720961284930165".into()),),
-            (0,  ("0.0".into(), "-21.34624897436485396509954629830".into()),),
-            (1,  ("0.0".into(), "72.41426780477804749630966479154".into()),),
-            (2,  ("0.0".into(), "-147.4626326303287005964359960851".into()),),
-            (3,  ("0.0".into(), "211.1788648410998597813244933220".into()),),
+            (-1, ("0.0".into(), "-4.3479452906467486172914505005e-3".into()),),
+            (0,  ("0.0".into(), "-2.9678241200599586591124534607e-2".into()),),
+            (1,  ("0.0".into(), "-3.3254282865527784451842308044e-2".into()),),
+            (2,  ("0.0".into(), "-5.2345456981129245832562446594e-2".into()),),
+            (3,  ("0.0".into(), "-4.4843030036645359359681606293e-2".into()),),
         ],
         N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS, MAX_PULL
     );
@@ -121,6 +125,7 @@ fn test_integrate_2l_different_masses() {
     compare_vakint_evaluation_vs_reference(
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar, allow_unknown_integrals: true, ..VakintSettings::default()},
         EvaluationOrder(vec![EvaluationMethod::PySecDec(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/test_integrate_2l_different_masses".into()) ,..PySecDecOptions::default() })]),
+        //EvaluationOrder(vec![EvaluationMethod::MATAD(MATADOptions::default())]),
         vakint_parse!(
             "(1)*topo(\
                 prop(1,edge(1,2),k(1),muvsqA,1)\
@@ -139,10 +144,10 @@ fn test_integrate_2l_different_masses() {
             .collect(),
             N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS),
         vec![
-            (-2, ("-146.1136365510036558546604990331".into(), "0.0".into()),),
-            (-1, ("635.8146971740286947808753047759".into(),  "0.0".into()),),
-            (0,  ("-1646.531034471454483109201793220".into(), "0.0".into()),),
-            (1,  ("2240.516116133454318298096346441".into(),  "0.0".into()),),
+            (-2, ("-6.0152239775845828262390568852e-5".into(), "0.0".into()),),
+            (-1, ("-1.8045671933464291214477270842e-4".into(),  "0.0".into()),),
+            (0,  ("-3.7902087660768302157521247864e-4".into(), "0.0".into()),),
+            (1,  ("-9.7081416197397629730403423309e-4".into(),  "0.0".into()),),
         ],
         N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS, MAX_PULL
     );
@@ -157,6 +162,7 @@ fn test_integrate_3l_o_eps() {
     compare_vakint_evaluation_vs_reference(
         VakintSettings { integral_normalization_factor: LoopNormalizationFactor::MSbar, number_of_terms_in_epsilon_expansion: 5, ..VakintSettings::default()},
         EvaluationOrder(vec![EvaluationMethod::PySecDec(PySecDecOptions { reuse_existing_output: Some("./tests_workspace/test_integrate_3l_o_eps".into()) ,..PySecDecOptions::default() })]),
+        //EvaluationOrder(vec![EvaluationMethod::MATAD(MATADOptions::default())]),
         vakint_parse!(
             "(1)*topo(\
                  prop(1,edge(1,2),k(1),muvsq,1)\
@@ -178,13 +184,11 @@ fn test_integrate_3l_o_eps() {
             .collect(),
             N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS),
             vec![
-                // These first two entries are obtained from the analytic expression
-                (-1, ("0.0".into(), "-2311.289033520460340396770711738".into()),),
-                ( 0, ("0.0".into(), "35134.99893627257345553503414002".into()),),
-                // This last entry does not have an analytical expression (MATAD not implemented yet)
-                ( 1, ("0.0".into(), "-287175.6919264755".into()),),
+                (-1, ("0.0".into(), "-6.1051429657027990274129863910e-7".into()),),
+                ( 0, ("0.0".into(), "+2.5484155391724767149965275403e-6".into()),),
+                ( 1, ("0.0".into(), "-1.0634407259633205821030975460e-5".into()),),
             ],
-        N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS, MAX_PULL
+            N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS, MAX_PULL
     );
 }
 
@@ -204,6 +208,7 @@ fn test_integrate_4l_h() {
         vakint_default_settings,
         EvaluationOrder(vec![EvaluationMethod::PySecDec(
             PySecDecOptions{ min_n_evals: 100_000, max_n_evals: 1_000_000, reuse_existing_output: Some("./tests_workspace/test_integrate_4l_h".into()), ..PySecDecOptions::default()} )]),
+        //EvaluationOrder(vec![EvaluationMethod::FMFT(FMFTOptions::default())]),
         vakint_parse!(
             "(1)*topo(\
                  prop(1,edge(5,1),k(1),muvsq,1)\
@@ -224,7 +229,7 @@ fn test_integrate_4l_h() {
             4),
         HashMap::default(),
         vec![
-            (0,  ("-12799.53514305961548130719263292".into(), "0.0".into()),),
+            (0,  ("-2.169283452273432986058475530569e-9".into(), "0.0".into()),),
         ],
         4, MAX_PULL
     );
@@ -373,7 +378,7 @@ fn test_integrate_4l_clover_with_numerator() {
     compare_vakint_evaluation_vs_reference(
         vakint_default_settings,
         EvaluationOrder(vec![EvaluationMethod::PySecDec(
-            PySecDecOptions{ relative_precision: 1e-8, min_n_evals: 10_000_000, max_n_evals: 100_000_000, reuse_existing_output: Some("./tests_workspace/test_integrate_4l_clover_with_numerator".into()), ..PySecDecOptions::default()} )]),
+           PySecDecOptions{ relative_precision: 1e-8, min_n_evals: 10_000_000, max_n_evals: 100_000_000, reuse_existing_output: Some("./tests_workspace/test_integrate_4l_clover_with_numerator".into()), ..PySecDecOptions::default()} )]),
         vakint_parse!(
             "(
                 user_space::A * k(1,11)*k(2,11)*k(1,22)*k(2,22)
