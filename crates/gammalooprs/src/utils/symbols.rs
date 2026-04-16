@@ -201,6 +201,12 @@ pub struct GammaloopSymbols {
     pub inverse_temperature: Symbol,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThermalDistributionLimit {
+    Default,
+    Vacuum,
+}
+
 impl GammaloopSymbols {
     pub fn collect_orientation_if<'a>(
         &self,
@@ -878,6 +884,22 @@ impl GammaloopSymbols {
     pub fn thermal_distribution<'a>(&self, eid: impl Into<AtomOrView<'a>>, sign: Sign) -> Atom {
         self.thermal_distribution
             .f(&[eid.into().as_view(), (sign * Atom::num(1)).as_view()])
+    }
+
+    pub fn apply_thermal_distribution_limit<'a>(
+        &self,
+        arg: impl Into<AtomOrView<'a>>,
+        limit: ThermalDistributionLimit,
+    ) -> Atom {
+        let a = arg.into();
+        match limit {
+            ThermalDistributionLimit::Default => a.as_view().into(),
+            ThermalDistributionLimit::Vacuum => a
+                .replace(self.thermal_distribution(W_.a_, Sign::Positive))
+                .with(Atom::one())
+                .replace(self.thermal_distribution(W_.a_, Sign::Negative))
+                .with(Atom::zero()),
+        }
     }
 
     pub fn wrap_tree_denoms<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
