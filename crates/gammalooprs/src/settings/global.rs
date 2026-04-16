@@ -681,12 +681,23 @@ impl Default for Parallelisation {
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct MediumSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mode: MediumMode,
+    #[serde(skip_serializing_if = "is_true")]
+    pub vacuum_subtraction: bool,
+}
+
+impl Default for MediumSettings {
+    fn default() -> Self {
+        Self {
+            mode: MediumMode::Vacuum,
+            vacuum_subtraction: false,
+        }
+    }
 }
 
 #[derive(
