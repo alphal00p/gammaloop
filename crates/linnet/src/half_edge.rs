@@ -811,16 +811,22 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     /// Panics if the traversal (used internally) fails, which can happen if the
     /// starting node for traversal is not part of the `subgraph`.
     pub fn is_connected<S: SubGraphLike>(&self, subgraph: &S) -> bool {
-        let n_edges = subgraph.nedges(self);
         if let Some(start) = subgraph.included_iter().next() {
-            SimpleTraversalTree::depth_first_traverse(self, subgraph, &self.node_id(start), None)
-                .unwrap()
-                .covers(subgraph)
-                .nedges(self)
-                == n_edges
-        } else {
-            true
+            let cover = SimpleTraversalTree::depth_first_traverse(
+                self,
+                subgraph,
+                &self.node_id(start),
+                None,
+            )
+            .unwrap()
+            .covers(subgraph);
+            for h in subgraph.included_iter() {
+                if !cover.includes(&h) {
+                    return false;
+                }
+            }
         }
+        true
     }
 
     /// Modifies a [`HedgeNode`] subgraph by removing "branches" or "tendrils".

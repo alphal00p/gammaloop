@@ -1,4 +1,29 @@
 #[test]
+fn dis_connected_nodes() {
+    let two: DotGraph = dot!(digraph {
+
+      6:22  -> 7:0      [id=0 dir=back];
+      6:23  -> 7:1      [id=1];
+      0:2   -> 1:3:s    [id=2 dir=none];
+      0:4   -> 3:5      [id=3];
+      5:6:s -> 0:7      [id=4];
+      3:8   -> 1:9:s    [id=5];
+      1:10:s -> 4:11    [id=6];
+      4:12  -> 2:13     [id=7];
+      2:14  -> 5:15:s   [id=8];
+      2:16  -> 7:17     [id=9 dir=none];
+      3:18  -> 6:19     [id=10 dir=none];
+      4:20  -> 5:21:s   [id=11 dir=none];
+    }
+    )
+    .unwrap();
+
+    let disconnected: SuBitGraph = two.compass_subgraph(Some(CompassPt::S));
+
+    assert!(!two.is_connected(&disconnected));
+}
+
+#[test]
 fn twobonds() {
     let two: DotGraph = dot!(digraph { 0 -> 1
         1 -> 2
