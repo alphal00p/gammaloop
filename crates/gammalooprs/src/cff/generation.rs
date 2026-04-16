@@ -1352,7 +1352,7 @@ fn advance_tree_thermal(
 
 #[cfg(test)]
 mod tests_cff {
-    use std::{ops::Range, vec};
+    use std::{collections::BTreeSet, ops::Range, vec};
 
     use ahash::HashMap;
 
@@ -1447,6 +1447,40 @@ mod tests_cff {
                 CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone(), None)
             })
             .filter(|graph| !graph.has_directed_cycle_initial())
+            .collect_vec()
+    }
+
+    fn generate_all_orientations_for_testing(
+        edges: Vec<(usize, usize)>,
+        incoming_vertices: Vec<usize>,
+    ) -> Vec<CFFGenerationGraph> {
+        let num_edges = edges.len();
+        let incoming_vertices = incoming_vertices
+            .into_iter()
+            .map(|v| (v, CFFEdgeType::External))
+            .collect_vec();
+
+        iterate_possible_orientations(num_edges)
+            .map(|or| {
+                let orientation_vector = or.into_iter().collect_vec();
+                let mut new_edges = edges.clone();
+                for (edge_id, edge_orientation) in orientation_vector.iter().enumerate() {
+                    match edge_orientation {
+                        Orientation::Default => {
+                            new_edges[edge_id] = edges[edge_id];
+                        }
+                        Orientation::Reversed => {
+                            let rotated_edge = (edges[edge_id].1, edges[edge_id].0);
+                            new_edges[edge_id] = rotated_edge;
+                        }
+                        Orientation::Undirected => {
+                            unreachable!("unexpected orientation")
+                        }
+                    }
+                }
+
+                CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone(), None)
+            })
             .collect_vec()
     }
 
@@ -1877,6 +1911,125 @@ mod tests_cff {
             relative_error,
             target_res,
             cff_res
+        );
+    }
+
+    #[test]
+    fn thermal_mode_keeps_cyclic_orientations() {
+        let triangle = vec![(2, 0), (0, 1), (1, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let vacuum = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle.clone(), incoming_vertices.clone()),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::Vacuum,
+        )
+        .unwrap();
+        let thermal = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle, incoming_vertices),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+
+        assert_eq!(vacuum.orientations.len(), 6);
+        assert_eq!(thermal.orientations.len(), 8);
+    }
+
+    #[test]
+    fn thermal_generation_populates_and_deduplicates_thermal_numerator_cache() {
+        let triangle = vec![(2, 0), (0, 1), (1, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let thermal = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle, incoming_vertices),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+
+        assert!(
+            !thermal.surfaces.thermal_numerator_cache.is_empty(),
+            "thermal generation should populate the thermal numerator cache"
+        );
+
+        let referenced_ids = thermal
+            .orientations
+            .iter()
+            .flat_map(|orientation| orientation.expression.iter_nodes())
+            .filter_map(|node| node.data.thermal_numerator_id)
+            .map(|id| {
+                let id: usize = id.into();
+                id
+            })
+            .collect_vec();
+        assert!(
+            !referenced_ids.is_empty(),
+            "thermal orientation trees should reference cached thermal numerators"
+        );
+
+        let unique_referenced_ids = referenced_ids.iter().copied().collect::<BTreeSet<_>>();
+        assert_eq!(
+            unique_referenced_ids.len(),
+            thermal.surfaces.thermal_numerator_cache.len(),
+            "each cached thermal numerator should be reused by id, not stored multiple times"
+        );
+        assert!(
+            referenced_ids.len() > unique_referenced_ids.len(),
+            "expected repeated thermal numerator references across thermal CFF branches"
+        );
+
+        let unique_cached_numerators = thermal
+            .surfaces
+            .thermal_numerator_cache
+            .iter()
+            .map(|numerator| numerator.to_atom(&[]).to_canonical_string())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            unique_cached_numerators.len(),
+            thermal.surfaces.thermal_numerator_cache.len(),
+            "cached thermal numerators should already be deduplicated structurally"
+        );
+    }
+
+    #[test]
+    fn thermal_surface_cache_substitutes_tnum_placeholders_with_distribution_atoms() {
+        let triangle = vec![(2, 0), (0, 1), (1, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let thermal = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle, incoming_vertices),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+
+        let atom_with_placeholders = thermal.to_atom(OrientationPattern::default());
+        let placeholder_string = atom_with_placeholders.to_canonical_string();
+        assert!(
+            placeholder_string.contains("Tnum("),
+            "thermal CFF atoms should carry thermal numerator placeholders before substitution: {placeholder_string}"
+        );
+
+        let substituted = thermal
+            .surfaces
+            .substitute_energies(&atom_with_placeholders, &[]);
+        let substituted_string = substituted.to_canonical_string();
+        assert!(
+            !substituted_string.contains("Tnum("),
+            "thermal numerator placeholders should disappear after cache substitution: {substituted_string}"
+        );
+        assert!(
+            substituted_string.contains("N("),
+            "substituted thermal CFF should contain explicit thermal distribution atoms: {substituted_string}"
         );
     }
 
