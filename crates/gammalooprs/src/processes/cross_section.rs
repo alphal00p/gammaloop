@@ -1232,12 +1232,18 @@ impl CrossSectionGraph {
 
                 // if the subgraph on the left of the threshold cut is a subgraph of the left amplitude, then the threshold is on the left of the cut
                 if cut.left.includes(left_threshold_diagram) {
-                    // now we must check that the threshold cuts a loop
+                    let sandwich = cut.left.intersection(right_threshold_diagram);
+
+                    // now we must check that the threshold cuts a loop and that the sandwich is connected
                     if self.graph.underlying.cyclotomatic_number(&cut.left)
                         > self
                             .graph
                             .underlying
                             .cyclotomatic_number(left_threshold_diagram)
+                        && self.graph.underlying.is_connected(&sandwich)
+                        && !self
+                            .graph
+                            .is_always_pinch(&sandwich, &cut.cut, threshold_cut)
                     {
                         let cross_section_cut_for_threshold = CrossSectionCut {
                             cut: threshold_cut.clone(),
@@ -1251,12 +1257,6 @@ impl CrossSectionGraph {
                             Some(&self.graph.initial_state_cut),
                         );
 
-                        //threshold_esurface.subspace_graph =
-                        //    InternalSubGraph::cleaned_filter_pessimist(
-                        //        cut.left.clone(),
-                        //        &self.graph,
-                        //    );
-
                         let threshold_id = self
                             .graph
                             .surface_cache
@@ -1267,40 +1267,46 @@ impl CrossSectionGraph {
 
                         left_cut_threshold_data[cut_id].push(threshold_id);
                     }
-                } else if cut.right.includes(right_threshold_diagram)
-                    && self.graph.underlying.cyclotomatic_number(&cut.right)
+                } else if cut.right.includes(right_threshold_diagram) {
+                    let sandwich = cut.right.intersection(left_threshold_diagram);
+                    if self.graph.underlying.cyclotomatic_number(&cut.right)
                         > self
                             .graph
                             .underlying
                             .cyclotomatic_number(right_threshold_diagram)
-                {
-                    let cross_section_cut_for_threshold = CrossSectionCut {
-                        cut: threshold_cut.clone(),
-                        left: left_threshold_diagram.clone(),
-                        right: right_threshold_diagram.clone(),
-                    };
+                        && self.graph.underlying.is_connected(&sandwich)
+                        && !self
+                            .graph
+                            .is_always_pinch(&sandwich, &cut.cut, threshold_cut)
+                    {
+                        let cross_section_cut_for_threshold = CrossSectionCut {
+                            cut: threshold_cut.clone(),
+                            left: left_threshold_diagram.clone(),
+                            right: right_threshold_diagram.clone(),
+                        };
 
-                    let threshold_esurface = Esurface::new_from_cut_left(
-                        &self.graph.underlying,
-                        &cross_section_cut_for_threshold,
-                        Some(&self.graph.initial_state_cut),
-                    );
+                        let threshold_esurface = Esurface::new_from_cut_left(
+                            &self.graph.underlying,
+                            &cross_section_cut_for_threshold,
+                            Some(&self.graph.initial_state_cut),
+                        );
 
-                    // threshold_esurface.subspace_graph =
-                    //     InternalSubGraph::cleaned_filter_pessimist(
-                    //         cut.right.clone(),
-                    //         &self.graph,
-                    //     );
+                        // threshold_esurface.subspace_graph =
+                        //     InternalSubGraph::cleaned_filter_pessimist(
+                        //         cut.right.clone(),
+                        //         &self.graph,
+                        //     );
 
-                    let threshold_id = self
-                        .graph
-                        .surface_cache
-                        .esurface_cache
-                        .position(|esurface| esurface == &threshold_esurface)
-                        .unwrap()
-                        .into();
+                        let threshold_id = self
+                            .graph
+                            .surface_cache
+                            .esurface_cache
+                            .position(|esurface| esurface == &threshold_esurface)
+                            .unwrap()
+                            .into();
 
-                    right_cut_threshold_data[cut_id].push(threshold_id);
+                        right_cut_threshold_data[cut_id].push(threshold_id);
+                    }
                 }
             }
         }

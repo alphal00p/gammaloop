@@ -8,8 +8,8 @@ use linnet::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
-            subset::SubSet,
+            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
+            SubSetOps, subset::SubSet,
         },
     },
     parser::DotGraph,
@@ -428,6 +428,13 @@ impl Graph {
 
         let cut_a_sandwich = cut_a_all_edges.intersection(sandwich);
         let cut_b_sandwich = cut_b_all_edges.intersection(sandwich);
+
+        let n_edges_cut_a_sandwich = cut_a_sandwich.n_included();
+        let n_edges_cut_b_sandwich = cut_b_sandwich.n_included();
+
+        if n_edges_cut_a_sandwich > 1 && n_edges_cut_b_sandwich > 1 {
+            return false;
+        }
 
         let mut cut_a_mass_sum = Atom::new();
         for (_, _, edge_data) in self.iter_edges_of(&cut_a_sandwich) {
