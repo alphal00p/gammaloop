@@ -18,7 +18,7 @@ use tracing::debug;
 
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use tracing::warn;
 use typed_index_collections::TiVec;
 
@@ -26,6 +26,7 @@ use crate::{
     cff::generation::SurfaceCache,
     define_index,
     feyngen::diagram_generator::evaluate_overall_factor,
+    graph::edge::EdgeMass,
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
@@ -413,6 +414,50 @@ impl Graph {
             .iter_edges_of(&self.initial_state_cut)
             .map(|(_, edge_index, _)| edge_index)
             .collect_vec()
+    }
+
+    #[allow(unused)]
+    pub(crate) fn is_always_pinch(
+        &self,
+        sandwich: &SuBitGraph,
+        cut_a: &OrientedCut,
+        cut_b: &OrientedCut,
+    ) -> bool {
+        let cut_a_all_edges = cut_a.left.union(&cut_a.right);
+        let cut_b_all_edges = cut_b.left.union(&cut_b.right);
+
+        let cut_a_sandwich = cut_a_all_edges.intersection(sandwich);
+        let cut_b_sandwich = cut_b_all_edges.intersection(sandwich);
+
+        let mut cut_a_mass_sum = Atom::new();
+        for (_, _, edge_data) in self.iter_edges_of(&cut_a_sandwich) {
+            match edge_data.data.mass {
+                EdgeMass::Zero => {}
+                EdgeMass::ModelVar(m) => {
+                    cut_a_mass_sum += m;
+                }
+                _ => {
+                    // If there is a non-zero, non-model-var mass, we can't make any statements about pinches without runtime information, so we return false
+                    return false;
+                }
+            }
+        }
+
+        let mut cut_b_mass_sum = Atom::new();
+        for (_, _, edge_data) in self.iter_edges_of(&cut_b_sandwich) {
+            match edge_data.data.mass {
+                EdgeMass::Zero => {}
+                EdgeMass::ModelVar(m) => {
+                    cut_b_mass_sum += m;
+                }
+                _ => {
+                    // If there is a non-zero, non-model-var mass, we can't make any statements about pinches without runtime information, so we return false
+                    return false;
+                }
+            }
+        }
+
+        (cut_a_mass_sum - cut_b_mass_sum).expand().is_zero()
     }
 }
 
