@@ -14,7 +14,7 @@ use tracing::{debug, instrument};
 use crate::{
     graph::{Graph, LMBext, cuts::CutSet},
     settings::global::MediumMode,
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_, symbolica_ext::CallSymbol, symbols::ThermalDistributionLimit},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ApproximationKernel, UVCtx},
@@ -254,6 +254,7 @@ impl Local3DApproximation {
         let graph = ctx.graph;
         let settings = ctx.settings;
         let reduced = current.reduced_subgraph(given);
+        let cff = GS.apply_thermal_distribution_limit(cff, ThermalDistributionLimit::Vacuum);
         let mut atomarg = cff
             * graph
                 .numerator(&reduced, given.subgraph())
