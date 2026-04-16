@@ -1562,9 +1562,9 @@ impl CrossSectionGraph {
             .raised_cut_groups
             .iter()
             .map(|cut_group| {
-                let (subspace_lmb_index, _lmb) = all_lmbs
+                let valid_subspace_lmbs = all_lmbs
                     .iter_enumerated()
-                    .find(|(_index, lmb)| {
+                    .filter_map(|(index, lmb)| {
                         let mut edges_in_cut = self
                             .graph
                             .underlying
@@ -1573,9 +1573,13 @@ impl CrossSectionGraph {
                             .collect_vec();
 
                         edges_in_cut.retain(|e| !lmb.loop_edges.contains(e));
-                        edges_in_cut.len() == 1
+                        if edges_in_cut.len() == 1 {
+                            Some(index)
+                        } else {
+                            None
+                        }
                     })
-                    .unwrap();
+                    .collect_vec();
 
                 let left_subgraphs = cut_group
                     .cuts
@@ -1602,20 +1606,36 @@ impl CrossSectionGraph {
                 let smallest_left_subgraph = left_subgraphs.first().unwrap().clone();
                 let smallest_right_subgraph = right_subgraphs.first().unwrap().clone();
 
-                let left_subspace = SubspaceData::new_with_user_selected_lmb(
-                    smallest_left_subgraph,
-                    subspace_lmb_index,
-                    &self.graph,
-                    all_lmbs,
-                )?;
-                let right_subspace = SubspaceData::new_with_user_selected_lmb(
-                    smallest_right_subgraph,
-                    subspace_lmb_index,
-                    &self.graph,
-                    all_lmbs,
-                )?;
+                let mut possible_subspaces = valid_subspace_lmbs
+                    .iter()
+                    .map(|lmb_index| {
+                        (
+                            SubspaceData::new_with_user_selected_lmb(
+                                smallest_left_subgraph.clone(),
+                                *lmb_index,
+                                &self.graph,
+                                all_lmbs,
+                            )
+                            .unwrap(),
+                            SubspaceData::new_with_user_selected_lmb(
+                                smallest_right_subgraph.clone(),
+                                *lmb_index,
+                                &self.graph,
+                                all_lmbs,
+                            )
+                            .unwrap(),
+                        )
+                    })
+                    .collect_vec();
 
-                Ok((left_subspace, right_subspace))
+                possible_subspaces.sort_by_key(|(left, right)| {
+                    (
+                        left.iter_basis_edges(all_lmbs).collect_vec(),
+                        right.iter_basis_edges(all_lmbs).collect_vec(),
+                    )
+                });
+
+                Ok(possible_subspaces.first().unwrap().clone())
             })
             .collect::<Result<_>>()?;
 

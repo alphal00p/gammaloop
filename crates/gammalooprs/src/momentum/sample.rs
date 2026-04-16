@@ -309,6 +309,15 @@ impl SubspaceData {
         self.lmb_indices.iter().copied()
     }
 
+    pub(crate) fn iter_basis_edges<'a>(
+        &'a self,
+        all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> impl Iterator<Item = EdgeIndex> + 'a {
+        self.lmb_indices
+            .iter()
+            .map(|&loop_index| self.get_lmb(all_lmbs).loop_edges[loop_index])
+    }
+
     pub(crate) fn contains_loop_index(&self, loop_index: LoopIndex) -> bool {
         self.lmb_indices.contains(&loop_index)
     }
