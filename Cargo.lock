@@ -1898,7 +1898,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "1.2.1"
-source = "git+https://github.com/benruijl/symbolica?rev=309a156264f1b535af653803497d91330fc5abfc#309a156264f1b535af653803497d91330fc5abfc"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=d74554ce882c5511876e4b77cbc63670675db6d3#d74554ce882c5511876e4b77cbc63670675db6d3"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -2872,7 +2872,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "1.4.2"
-source = "git+https://github.com/benruijl/symbolica?rev=309a156264f1b535af653803497d91330fc5abfc#309a156264f1b535af653803497d91330fc5abfc"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=d74554ce882c5511876e4b77cbc63670675db6d3#d74554ce882c5511876e4b77cbc63670675db6d3"
 dependencies = [
  "ahash",
  "bincode 2.0.1",
@@ -4579,7 +4579,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "1.5.0"
-source = "git+https://github.com/benruijl/symbolica?rev=309a156264f1b535af653803497d91330fc5abfc#309a156264f1b535af653803497d91330fc5abfc"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=d74554ce882c5511876e4b77cbc63670675db6d3#d74554ce882c5511876e4b77cbc63670675db6d3"
 dependencies = [
  "ahash",
  "append-only-vec",
