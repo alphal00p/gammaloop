@@ -46,3 +46,30 @@ impl From<ThermalNumeratorID> for Atom {
         parse!(&format!("Tnum({})", Into::<usize>::into(id.0)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use linnet::num_traits::Sign;
+    use symbolica::atom::AtomCore;
+
+    #[test]
+    fn thermal_numerator_to_atom_has_expected_sign_structure() {
+        let numerator = ThermalNumerator {
+            positive_energies: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
+            negative_energies: vec![EdgeIndex::from(2)],
+        };
+
+        let expected = thermal_distribution_atom_from_index(EdgeIndex::from(1), Sign::Positive)
+            * thermal_distribution_atom_from_index(EdgeIndex::from(3), Sign::Positive)
+            * thermal_distribution_atom_from_index(EdgeIndex::from(2), Sign::Negative)
+            - thermal_distribution_atom_from_index(EdgeIndex::from(1), Sign::Negative)
+                * thermal_distribution_atom_from_index(EdgeIndex::from(3), Sign::Negative)
+                * thermal_distribution_atom_from_index(EdgeIndex::from(2), Sign::Positive);
+
+        assert_eq!(
+            numerator.to_atom(&[]).to_canonical_string(),
+            expected.to_canonical_string()
+        );
+    }
+}
