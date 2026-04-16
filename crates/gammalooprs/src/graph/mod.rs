@@ -415,8 +415,6 @@ impl Graph {
             .map(|(_, edge_index, _)| edge_index)
             .collect_vec()
     }
-
-    #[allow(unused)]
     pub(crate) fn is_always_pinch(
         &self,
         sandwich: &SuBitGraph,
