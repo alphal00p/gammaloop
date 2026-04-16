@@ -21,6 +21,7 @@ use crate::{
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
+        symbols::ThermalDistributionLimit,
     },
     uv::{
         ApproximationType, UltravioletGraph,
@@ -268,6 +269,7 @@ impl Local3DApproximation {
         let graph = ctx.graph;
         let settings = ctx.settings;
         let reduced = current.reduced_subgraph(given);
+        let cff = GS.apply_thermal_distribution_limit(cff, ThermalDistributionLimit::Vacuum);
         let mut atomarg = cff
             * graph
                 .numerator(&reduced, given.subgraph())
