@@ -1034,6 +1034,13 @@ impl Graph {
         model: &Model,
         param_builder: &ParamBuilder,
     ) -> Result<UnderlyingGraph> {
+        let mut loop_edge_filter = graph.full_filter();
+        loop_edge_filter.subtract_with(&graph.bridges_of(&loop_edge_filter));
+        let hard_edge_ids: Vec<EdgeIndex> = graph
+            .iter_edges_of(&loop_edge_filter)
+            .filter(|(pair, _, _)| pair.is_paired())
+            .map(|(_, edge_id, _)| edge_id)
+            .collect();
         let mut vertex_color_nums = numerators.color_vertex.clone();
         let mut vertex_spin_nums = numerators.spin_vertex.clone();
         graph.map_result(
@@ -1050,7 +1057,11 @@ impl Graph {
                         .unwrap()
                 };
 
-                let dod = if let Some(d) = v.dod { d } else { DOD::dod(&num) };
+                let dod = if let Some(d) = v.dod {
+                    d
+                } else {
+                    num.dod(&hard_edge_ids)
+                };
 
                 Ok(Vertex {
                     name: v.name.unwrap_or(i.to_string()),
@@ -1081,7 +1092,7 @@ impl Graph {
                 let dod = if let Some(d) = e.dod {
                     d
                 } else {
-                    DOD::dod(&num) - 2
+                    num.dod(&hard_edge_ids) - 2
                 };
 
                 Ok(EdgeData::new(

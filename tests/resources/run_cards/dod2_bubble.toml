@@ -1,9 +1,9 @@
 commands = []
 
 [cli_settings]
-[cli_settings.state]
-folder = "./examples/cli/scalar_topologies/bubble_dod2_state"
-name = "bubble_dod2_state"
+[cli_settings.global]
+logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "info,gammalooprs[orientation_parametric_exprs]=debug,gammalooprs[kernel]=debug,poly::gcd =off"
 
 [cli_settings.global.log_style]
 include_fields = true
@@ -18,6 +18,10 @@ summed_function_map = true
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 check_esurface_at_generation = false
+
+[cli_settings.state]
+folder = "./examples/cli/scalar_topologies/bubble_dod2_state"
+name = "bubble_dod2_state"
 
 [[command_blocks]]
 name = "generate"
@@ -72,13 +76,13 @@ helicities = [
 ]
     '""",
 
-  """set process -p bubble_dod2_no_integrated_UV -i scalar_bubble_above_thres string '
+  """set process -p bubble_dod2_no_integrated_UV -i scalar_bubble_below_thres string '
 [kinematics.externals]
 type = "constant"
 
 [kinematics.externals.data]
 momenta = [
-   	[10.0, 0.0, 0.0,  0.0],
+   	[1.0, 0.0, 0.0,  0.0],
     "dependent"
 ]
 helicities = [

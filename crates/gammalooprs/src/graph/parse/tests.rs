@@ -930,6 +930,28 @@ fn parse_lmbsetting_crossection() {
 }
 
 #[test]
+fn dod_rescales_only_internal_edge_qs() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+        digraph G {
+            edge [pdg=1000]
+            ext0 [style=invis]
+            ext1 [style=invis]
+            A [num="1"]
+            B [num="1"]
+            ext0 -> A [id=0]
+            B -> ext1 [id=1]
+            A -> B [id=2, num="Q(2,spenso::mink(4,edge(2,1)))*Q(0,spenso::mink(4,edge(2,1)))"]
+            A -> B [id=3, num="1"]
+        },
+        "scalars"
+    )
+    .unwrap();
+
+    assert_eq!(g.underlying[EdgeIndex::from(2)].dod, -1);
+}
+
+#[test]
 fn lmb() {
     test_initialise().unwrap();
 

@@ -700,6 +700,25 @@ impl UVProfileAnalysis {
         for graph in &self.graphs {
             for lmb in &graph.lmbs {
                 for subset in &lmb.subsets {
+                    let per_orientation_reason_count = subset
+                        .per_orientation_inspect_entries
+                        .as_ref()
+                        .map(|entries| {
+                            entries
+                                .iter()
+                                .filter(|entry| match &entry.analysis {
+                                    None => true,
+                                    Some(analysis) => {
+                                        analysis.result.slope > max_dod
+                                            || analysis.result.slope.is_nan()
+                                    }
+                                })
+                                .count()
+                        })
+                        .unwrap_or(0);
+                    let all_orientations_pass = subset.per_orientation_inspect_entries.is_some()
+                        && per_orientation_reason_count == 0;
+
                     total += 1;
                     let reason = match &subset.analysis.inspect_level {
                         None => Some("missing_fit"),
@@ -712,7 +731,7 @@ impl UVProfileAnalysis {
                         _ => None,
                     };
 
-                    if let Some(reason) = reason {
+                    if let Some(reason) = reason.filter(|_| !all_orientations_pass) {
                         failures.push(UVProfileFailure {
                             graph_index: graph.graph_index,
                             lmb_index: lmb.lmb_index,
@@ -1258,6 +1277,7 @@ fn inspect_results_need_arbprec_retry(inspect: &[InspectResult], scales: &[f64])
 }
 
 fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult> {
+    let mut valid_samples = Vec::new();
     let mut sum_x = 0.0;
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
@@ -1268,19 +1288,31 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
     for (x, s) in inspect.iter().zip(scales) {
         let norm = x.magnitude();
         if norm <= 0.0 {
-            println!("{s}:\t{}", x.result.evaluation_metadata)
+            println!("{s}:\t{}", x.result.evaluation_metadata);
+            continue;
+        }
+        if !norm.is_finite() {
+            continue;
         }
         points_detail.push(x.result.clone());
         points.push(norm);
         let y = (norm).log10();
         let x = s.log10();
+        if !y.is_finite() || !x.is_finite() {
+            continue;
+        }
+        valid_samples.push((x, y));
         sum_x += x;
         sum_y += y;
         sum_xy += x * y;
         sum_x2 += x * x;
     }
 
-    let n = scales.len() as f64;
+    if valid_samples.len() < 2 {
+        return None;
+    }
+
+    let n = valid_samples.len() as f64;
     let denominator = n * sum_x2 - sum_x * sum_x;
     if denominator.abs() < 1e-15 {
         return None;
@@ -1292,9 +1324,7 @@ fn log_log_slope(inspect: &[InspectResult], scales: &[f64]) -> Option<FitResult>
     let y_mean = sum_y / n;
     let mut ss_tot = 0.0;
     let mut ss_res = 0.0;
-    for (norm, s) in points.iter().zip(scales) {
-        let y = norm.log10();
-        let x = s.log10();
+    for (x, y) in &valid_samples {
         let y_pred = intercept + slope * x;
         ss_tot += (y - y_mean).powi(2);
         ss_res += (y - y_pred).powi(2);

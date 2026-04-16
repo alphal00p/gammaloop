@@ -2,7 +2,7 @@ use crate::{
     GammaLoopContext,
     graph::{Graph, LMBext, cuts::CutSet},
     utils::{GS, W_, symbolica_ext::LogPrint},
-    uv::approx::{CFFapprox, CutStructure},
+    uv::approx::{CFFapprox, CutStructure, ForestNodeLike},
 };
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -280,6 +280,15 @@ impl Forest {
         let mut sum = None;
 
         for (_, n) in &self.dag.nodes {
+            debug!(
+                dod = %n.data.dod(),
+                simple = %
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),"Terms"
+            );
             let mut first = false;
 
             if sum.is_none() {

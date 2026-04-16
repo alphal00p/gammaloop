@@ -4,7 +4,7 @@ use ahash::AHashSet;
 use idenso::metric::MetricSimplifier;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
-    involution::{Flow, Hedge, HedgePair},
+    involution::{EdgeIndex, Flow, Hedge, HedgePair},
     subgraph::{
         Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
         SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
@@ -23,7 +23,10 @@ use crate::{
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{
+        GS, W_,
+        symbolica_ext::{CallSymbol, DOD},
+    },
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
@@ -381,21 +384,23 @@ impl UltravioletGraph for Graph {
     }
 
     fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
-        let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
-        // println!("nloops: {}", dod / 4);
+        let hard_edge_ids: Vec<EdgeIndex> = self
+            .underlying
+            .iter_edges_of(subgraph)
+            .filter(|(pair, _, _)| pair.is_paired())
+            .map(|(_, edge_id, _)| edge_id)
+            .collect();
 
-        // FIXME: does not work if subgraph has external edges that contain both nodes!
+        let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         for (p, _, e) in self.underlying.iter_edges_of(subgraph) {
             if p.is_paired() {
-                dod += e.data.dod;
+                dod += e.data.num.dod(&hard_edge_ids) - 2;
             }
         }
 
         for (_, _, n) in self.underlying.iter_nodes_of(subgraph) {
-            dod += n.dod;
+            dod += n.num.dod(&hard_edge_ids);
         }
-
-        // println!("Dod:{dod} for subgraph:{}", self.dot(subgraph));
 
         dod
     }

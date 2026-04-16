@@ -1,5 +1,6 @@
-use ahash::{AHashSet, HashSet, HashSetExt};
+use ahash::{HashSet, HashSetExt};
 use color_eyre::Result;
+use eyre::eyre;
 use idenso::{gamma::GammaSimplifier, metric::MetricSimplifier};
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
@@ -12,7 +13,7 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
+    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function,
     id::{MatchSettings, Replacement},
     parse, parse_lit,
@@ -50,24 +51,13 @@ impl Integrated<'_> {
             vakint_settings,
         }
     }
-}
 
-fn integrated_triangle_spatial_norm_sq(
-    loop_edge: linnet::half_edge::involution::EdgeIndex,
-) -> Atom {
-    GS.emr_mom(loop_edge, GS.cind(1)).pow(2)
-        + GS.emr_mom(loop_edge, GS.cind(2)).pow(2)
-        + GS.emr_mom(loop_edge, GS.cind(3)).pow(2)
-}
-
-impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
-    #[instrument(skip_all)]
-    fn kernel<S: ForestNodeLike>(
+    pub(crate) fn start<S: super::ForestNodeLike>(
         &self,
         ctx: &UVCtx<'_>,
         current: &S,
         given: &S,
-        expr: &Atom,
+        integrand: &Atom,
     ) -> Result<Atom> {
         let reduced = current.reduced_subgraph(given);
         let graph = ctx.graph;
@@ -79,128 +69,98 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             .get_single_atom()
             .unwrap();
 
-        if settings.pole_part {
-            debug!(t_arg = %t_arg.log_print(None),"T arg for pole part 4d CT");
-        } else {
-            debug!(t_arg = %t_arg.log_print(None),"T arg for integrated 4d CT");
-        }
+        debug!(t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg without denoms");
         t_arg = t_arg.simplify_metrics().simplify_gamma() / graph.denominator(&reduced, |_| 1);
-        if settings.pole_part {
-            debug!(t_arg = %t_arg.log_print(None),"T arg  gamma simplified for pole part 4d CT");
-        } else {
-            debug!(t_arg = %t_arg.log_print(None),"T arg gamma simplified for integrated 4d CT");
-        }
+        debug!(t_arg = %t_arg.log_print(None),pole_part=%settings.pole_part,"T arg gamma simplified for integrated 4d CT");
 
         t_arg = t_arg
             .replace(GS.dim)
             .max_level(0)
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
-        let n_loops = graph.n_loops(&graph.full_filter());
+        Ok(t_arg * integrand)
+    }
 
-        let mut atomarg = t_arg * expr;
-
-        debug!(atomarg = %atomarg.log_print(None),"t_arg * inner_t for 4d CT");
+    pub(crate) fn t<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrand: &Atom,
+    ) -> Result<Atom> {
+        let graph = ctx.graph;
+        let reduced = current.reduced_subgraph(given);
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
 
-        // println!("Reps:");
-        // for r in &mom_reps {
-        //     println!("{r}");
-        // }
+        let mut atomarg = integrand.replace_multiple(&mom_reps);
 
-        // println!(
-        //     "Expand-prerep {} with dod={} in {:?}",
-        //     atomarg, self.dod, self.lmb.ext_edges
-        // );
-
-        // rewrite the inner_t as well
-        atomarg = atomarg.replace_multiple(&mom_reps);
-
-        // println!(
-        //     "Expand {} with dod={} in {:?}",
-        //     atomarg, self.dod, self.lmb.ext_edges
-        // );
-        for e in &current.lmb().ext_edges {
+        // rescale the loop momenta in the whole subgraph, including previously expanded cycles
+        for e in &current.lmb().loop_edges {
+            // println!("Rescale {}", e);
             atomarg = atomarg
-                .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
-                .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
-        }
-        let soft_ct = current.renormalization_scheme() == ApproximationType::OS
-            && graph.full_crown(current.subgraph()).n_included() == 2
-            && current.dod() > 0
-            && settings.softct;
-
-        let mut masses = AHashSet::new();
-        masses.insert(Atom::var(GS.m_uv));
-        // scale all masses, including UV masses from subgraphs
-
-        for (p, _, e) in graph.iter_edges_of(current.subgraph()) {
-            if p.is_paired() {
-                let e_mass = e.data.mass_atom();
-                masses.insert(e_mass);
-            }
+                .replace(GS.emr_mom(*e, W_.x___))
+                .with(GS.emr_mom(*e, W_.x___) / GS.rescale);
         }
 
-        if !soft_ct {
-            for m in &masses {
-                let rescaled = m.clone() * GS.rescale;
-                atomarg = atomarg.replace(m.clone()).with(rescaled);
-            }
+        let tsquare = Atom::var(GS.rescale).pow(2);
 
-            // expand the propagator around a propagator with a UV mass
-            atomarg = atomarg.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(
+        debug!(res = %atomarg.log_print(None),"Rescaled momenta expanded");
+        atomarg = atomarg
+            .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
+            .with(
                 GS.den(
                     W_.a_,
-                    W_.b_,
-                    Atom::var(W_.c_) + Atom::var(GS.m_uv).pow(2),
-                    Atom::var(W_.d_) - Atom::var(GS.m_uv).pow(2)
-                        + (Atom::var(GS.m_uv) * GS.rescale).pow(2),
-                ), // "den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)"
-            );
-        }
+                    W_.mom_,
+                    Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
+                    Atom::var(W_.prop_) * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
+                        - (Atom::var(GS.m_uv)).pow(2),
+                ) / &tsquare, // "den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)"
+            )
+            .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___)) //rescale the momenta for the same reason
+            .with_map(move |m| {
+                let mut f = FunctionBuilder::new(GS.den);
+                f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
+                f = f.add_arg(
+                    (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
+                        .expand()
+                        .replace(GS.rescale)
+                        .with(Atom::Zero),
+                );
+                f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
 
-        debug!(atomarg = %atomarg.log_print(None),"t_arg * inner_t after rescaling masses for 4d CT");
-        // den(..) tags a propagator, its first derivative is 1 and the rest is 0
-        let mut a = atomarg
-            .series(GS.rescale, Atom::Zero, current.dod().into(), true)
-            .unwrap()
-            .to_atom();
-        // .replace(parse!("der(0,0,0,1, den(y__))"))
-        // .with(Atom::num(1))
-        // .replace(parse!("der(x__, den(y__))"))
-        // .with(Atom::num(0));
+                f.finish()
+            });
 
-        debug!(a = %a.log_print(None),"Series expanded for 4d CT");
+        atomarg *= Atom::var(GS.rescale).pow(-4 * graph.n_loops(current.subgraph()) as i64);
 
-        if soft_ct {
-            let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
-            let mut b = Atom::Zero;
-            let dod_pow = Atom::var(GS.rescale).pow(current.dod());
-            for (pow, mut i) in coeffs {
-                if pow == dod_pow {
-                    // set the masses in the t=dod term to 0
-                    // UV rearrange the denominators
-                    for m in &masses {
-                        i = i.replace(m.clone()).with(Atom::Zero);
-                    }
+        debug!(res = %atomarg.log_print(None),"Rescaled expanded");
+        let a = atomarg
+            .series(GS.rescale, Atom::Zero, 0.into(), true)
+            .unwrap();
 
-                    i = i
-                        .replace(parse!("den(n_,q_,mass_,prop_)"))
-                        .with(parse!("den(n_,q_,mUV^2,prop_-mUV^2)"));
-                }
+        let mut a = a.to_atom();
 
-                b += i;
-            }
+        debug!(res = %a.log_print(None),"Series expanded");
+        a = a.replace(GS.rescale).with(Atom::num(1));
+        debug!(res = %a.log_print(None),"Series expanded");
 
-            a = b;
-        } else {
-            a = a.replace(GS.rescale).with(Atom::num(1));
-        }
+        Ok(a)
+    }
 
+    pub(crate) fn integrate_and_truncate<S: super::ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrand: &Atom,
+    ) -> Result<Atom> {
+        let graph = ctx.graph;
+        let reduced = current.reduced_subgraph(given);
+        let settings = ctx.settings;
         let mut integrand_vakint = to_vakint_integrand(
-            &a,
+            integrand,
             graph,
             &reduced,
             given.subgraph(),
@@ -312,6 +272,8 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
             .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
 
         debug!(res = %res.expand().log_print(None),"Replaced post vakint ");
+
+        let n_loops = graph.n_loops(&graph.full_filter());
         let series = res
             .series(
                 GS.dim_epsilon,
@@ -387,27 +349,42 @@ impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use linnet::half_edge::involution::EdgeIndex;
+fn integrated_triangle_spatial_norm_sq(
+    loop_edge: linnet::half_edge::involution::EdgeIndex,
+) -> Atom {
+    GS.emr_mom(loop_edge, GS.cind(1)).pow(2)
+        + GS.emr_mom(loop_edge, GS.cind(2)).pow(2)
+        + GS.emr_mom(loop_edge, GS.cind(3)).pow(2)
+}
 
-    use super::*;
-
-    #[test]
-    fn integrated_triangle_norm_is_euclidean() {
-        let edge = EdgeIndex(7);
-        let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
-        let minkowski_norm = Minkowski {}
-            .new_rep(4)
-            .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
-
-        assert_eq!(
-            euclidean_norm,
-            GS.emr_mom(edge, GS.cind(1)).pow(2)
-                + GS.emr_mom(edge, GS.cind(2)).pow(2)
-                + GS.emr_mom(edge, GS.cind(3)).pow(2)
-        );
-        assert_ne!(euclidean_norm, minkowski_norm);
+impl ApproximationKernel<UVCtx<'_>> for Integrated<'_> {
+    #[instrument(skip_all)]
+    fn kernel<S: ForestNodeLike>(
+        &self,
+        ctx: &UVCtx<'_>,
+        current: &S,
+        given: &S,
+        integrand: &Atom,
+    ) -> Result<Atom> {
+        match current.renormalization_scheme() {
+            ApproximationType::MUV => self.integrate_and_truncate(
+                ctx,
+                current,
+                given,
+                &self.t(
+                    ctx,
+                    current,
+                    given,
+                    &self.start(ctx, current, given, integrand)?,
+                )?,
+            ),
+            ApproximationType::IR => Err(eyre!("Not yet implemented IR")),
+            ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+            ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
+            ApproximationType::Unsubtracted => {
+                panic!("should have been kept out of the wood");
+            }
+        }
     }
 }
 
@@ -852,4 +829,28 @@ pub(crate) fn to_vakint_integrand<
     }
 
     a
+}
+
+#[cfg(test)]
+mod tests {
+    use linnet::half_edge::involution::EdgeIndex;
+
+    use super::*;
+
+    #[test]
+    fn integrated_triangle_norm_is_euclidean() {
+        let edge = EdgeIndex(7);
+        let euclidean_norm = integrated_triangle_spatial_norm_sq(edge);
+        let minkowski_norm = Minkowski {}
+            .new_rep(4)
+            .inner_product(GS.emr_vec(edge), GS.emr_vec(edge));
+
+        assert_eq!(
+            euclidean_norm,
+            GS.emr_mom(edge, GS.cind(1)).pow(2)
+                + GS.emr_mom(edge, GS.cind(2)).pow(2)
+                + GS.emr_mom(edge, GS.cind(3)).pow(2)
+        );
+        assert_ne!(euclidean_norm, minkowski_norm);
+    }
 }

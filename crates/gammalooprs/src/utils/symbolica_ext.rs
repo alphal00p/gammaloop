@@ -1,5 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
+use linnet::half_edge::involution::EdgeIndex;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
@@ -728,31 +729,129 @@ impl PrimeGenerate for Atom {
 }
 
 pub trait DOD {
-    fn dod(&self) -> i32;
+    fn dod(&self, hard_edge_ids: &[EdgeIndex]) -> i32;
 }
 
 impl DOD for Atom {
-    fn dod(&self) -> i32 {
-        self.as_view().dod()
+    fn dod(&self, hard_edge_ids: &[EdgeIndex]) -> i32 {
+        self.as_view().dod(hard_edge_ids)
     }
 }
 impl DOD for AtomView<'_> {
-    fn dod(&self) -> i32 {
-        let rescaled = self
-            .replace(GS.emr_mom.f(&[W_.a__]))
-            .with(GS.emr_mom.f(&[W_.a__]) * GS.rescale);
+    fn dod(&self, hard_edge_ids: &[EdgeIndex]) -> i32 {
+        let mut rescaled = self.to_owned();
 
+        for eid in hard_edge_ids {
+            rescaled = rescaled
+                .replace(GS.emr_mom(*eid, W_.a___))
+                .with(GS.emr_mom(*eid, W_.a___) / GS.rescale);
+        }
         let series = rescaled
-            .series(GS.rescale, Atom::Zero, (4, 1).into(), true)
+            .series(
+                GS.rescale,
+                Atom::Zero,
+                (hard_edge_ids.len() * 2).into(),
+                true,
+            )
             .unwrap();
+        let dod = series.terms().next().unwrap_or((0.into(), &Atom::Zero)).0;
 
-        let dod = series.degree();
+        // for (t, a) in series.terms() {
+        //     println!("{t} -> {a}");
+        // }
 
         if dod.is_integer() {
-            dod.numerator().to_i64().unwrap() as i32
+            -(dod.numerator().to_i64().unwrap() as i32)
         } else {
             panic!("{dod} for {self}")
         }
+    }
+}
+
+#[test]
+fn test_dod() {
+    let (e1, e2) = (EdgeIndex(1), EdgeIndex(2));
+
+    let atom = (GS.emr_mom(e1, Atom::Zero) * GS.emr_mom(e2, Atom::Zero)
+        + GS.emr_mom(e2, Atom::Zero))
+        / (GS.emr_mom(e1, Atom::Zero) * GS.emr_mom(e1, Atom::Zero));
+
+    let atom2 =
+        Atom::num(1) / (GS.emr_mom(e1, Atom::Zero) * GS.emr_mom(e1, Atom::Zero) + parse!("m"));
+    let atom3 =
+        GS.emr_mom(e1, Atom::Zero) * GS.emr_mom(e2, Atom::Zero) + GS.emr_mom(e2, Atom::Zero);
+
+    assert_eq!(0, atom.dod(&[e1, e2]));
+    assert_eq!(-2, atom2.dod(&[e1]));
+    assert_eq!(1, atom3.dod(&[e1]));
+    assert_eq!(2, atom3.dod(&[e1, e2]));
+}
+
+mod dod {
+    use symbolica::{
+        atom::{Atom, AtomCore, AtomOrView, AtomView},
+        function, parse, symbol,
+    };
+
+    fn emr_mom<'a>(e: usize, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+        function!(symbol!("Q"), usize::from(e) as i64, a.as_view())
+    }
+    pub trait DOD {
+        fn dod(&self, hard_edge_ids: &[usize]) -> i32;
+    }
+
+    impl DOD for Atom {
+        fn dod(&self, hard_edge_ids: &[usize]) -> i32 {
+            self.as_view().dod(hard_edge_ids)
+        }
+    }
+    impl DOD for AtomView<'_> {
+        fn dod(&self, hard_edge_ids: &[usize]) -> i32 {
+            let mut rescaled = self.to_owned();
+
+            for eid in hard_edge_ids {
+                rescaled = rescaled
+                    .replace(emr_mom(*eid, symbol!("a___")))
+                    .with(emr_mom(*eid, symbol!("a___")) / symbol!("t"));
+            }
+            let series = rescaled
+                .series(
+                    symbol!("t"),
+                    Atom::Zero,
+                    (hard_edge_ids.len() * 2).into(),
+                    true,
+                )
+                .unwrap();
+            let dod = series.terms().next().unwrap_or((0.into(), &Atom::Zero)).0;
+
+            // for (t, a) in series.terms() {
+            //     println!("{t} -> {a}");
+            // }
+
+            if dod.is_integer() {
+                -(dod.numerator().to_i64().unwrap() as i32)
+            } else {
+                panic!("{dod} for {self}")
+            }
+        }
+    }
+
+    #[test]
+    fn test_dod() {
+        let (e1, e2) = (1, 2);
+
+        let atom = (emr_mom(e1, Atom::Zero) * emr_mom(e2, Atom::Zero) + emr_mom(e2, Atom::Zero))
+            / (emr_mom(e1, Atom::Zero) * emr_mom(e1, Atom::Zero));
+
+        let atom2 =
+            Atom::num(1) / (emr_mom(e1, Atom::Zero) * emr_mom(e1, Atom::Zero) + parse!("m")).pow(8);
+        let atom3 = emr_mom(e1, Atom::Zero) * emr_mom(e2, Atom::Zero) + emr_mom(e2, Atom::Zero);
+
+        assert_eq!(0, atom.dod(&[e1, e2]));
+        assert_eq!(-16, atom2.dod(&[e1]));
+        assert_eq!(1, atom3.dod(&[e1]));
+        assert_eq!(2, atom3.dod(&[e1, e2]));
     }
 }
 

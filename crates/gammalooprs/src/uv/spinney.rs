@@ -56,11 +56,12 @@ impl Spinney {
             .map(|component| g.as_ref().cyclotomatic_number(component))
             .max()
             .unwrap_or(0);
+        let lmb = g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb);
 
         Self {
             components,
             dod: g.dod(&subgraph),
-            lmb: g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb),
+            lmb,
             subgraph,
             renormalization_scheme,
             max_comp_loop_count,
