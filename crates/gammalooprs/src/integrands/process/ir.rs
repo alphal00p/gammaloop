@@ -5,12 +5,8 @@ use colored::Colorize;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use nalgebra::DVector;
 use rand::Rng;
-use symbolica::{
-    domains::float::{Real, RealLike},
-    numerical_integration::MonteCarloRng,
-};
+use symbolica::numerical_integration::MonteCarloRng;
 use tabled::{builder::Builder, settings::Style};
 use tracing::warn;
 
@@ -18,12 +14,12 @@ use crate::{
     DependentMomentaConstructor,
     graph::{FeynmanGraph, LmbError, lmb::LMBwithEdges},
     integrands::{
-        evaluation::EvaluationResult,
+        evaluation::PreciseEvaluationResult,
         process::{
             GraphTerm, OrientationProfileMode, ProcessIntegrandImpl,
             amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand},
             cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand},
-            evaluate_profile_momentum_point, orientation_labels_for_graph,
+            evaluate_profile_momentum_point_precise, orientation_labels_for_graph,
         },
     },
     model::Model,
@@ -38,11 +34,10 @@ use crate::{
             ParameterizationMode, ParameterizationSettings,
         },
     },
-    utils::{F, FloatLike, box_muller},
-    uv::profile::logspace,
-};
-use varpro::{
-    prelude::SeparableModelBuilder, problem::SeparableProblemBuilder, solvers::levmar::LevMarSolver,
+    utils::{
+        ArbPrec, F, FloatLike, box_muller,
+        fitting::{constant_dropped_fit_points, log_log_slope_constant_dropped},
+    },
 };
 
 /// The range is from 10^start to 10^end.
@@ -261,8 +256,6 @@ impl Display for GraphIRLimitReport {
             "orientation",
             "scaling",
             "p",
-            "coefficient",
-            "const_offset",
             "r_squared",
             "n_soft",
         ]);
@@ -283,8 +276,6 @@ impl Display for GraphIRLimitReport {
                     .unwrap_or_else(|| "sum".to_string()),
                 format!("{:+.4}", report.scaling),
                 format!("{:+.4}", report.power_law_fit.exponent),
-                format!("{:+.4e}", report.power_law_fit.coefficient),
-                format!("{:+.4e}", report.power_law_fit.constant_offset),
                 format!("{:.4}", report.power_law_fit.r_squared),
                 report.num_soft.to_string(),
             ]);
@@ -306,7 +297,7 @@ impl Display for SingleLimitReport {
 
         write!(
             f,
-            "{} {}{} | scaling={:+.4} | p={:+.4} | coeff={:+.4e} | const={:+.4e} | R²={:.4} | n_soft={}",
+            "{} {}{} | scaling={:+.4} | p={:+.4} | R²={:.4} | n_soft={}",
             status,
             self.limit_name,
             self.orientation_label
@@ -315,8 +306,6 @@ impl Display for SingleLimitReport {
                 .unwrap_or_default(),
             self.scaling,
             self.power_law_fit.exponent,
-            self.power_law_fit.coefficient,
-            self.power_law_fit.constant_offset,
             self.power_law_fit.r_squared,
             self.num_soft
         )
@@ -541,7 +530,7 @@ impl AmplitudeIntegrand {
     ) -> Result<Vec<SingleLimitReport>> {
         let edges_in_limit = ir_limit.get_all_edges()?;
         let lmb = self.data.graph_terms[graph_id].lmb_with_loop_edges(edges_in_limit.as_slice())?;
-        let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings);
+        let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings)?;
         let non_limit_loops = lmb
             .loop_edges
             .iter_enumerated()
@@ -613,13 +602,12 @@ impl AmplitudeIntegrand {
 
                 limit_data.data.push(LambdaPointEval {
                     lambda_point,
-                    value: evaluate_profile_momentum_point(
+                    value: evaluate_profile_momentum_point_arb(
                         self,
                         model,
                         graph_id,
                         orientation,
                         sample.loop_moms().iter().cloned().collect_vec(),
-                        false,
                     )?,
                 });
             }
@@ -725,7 +713,7 @@ impl CrossSectionIntegrand {
             .collect_vec();
 
         let lmb = self.data.graph_terms[graph_id].lmb_with_loop_edges(edges_in_limit.as_slice())?;
-        let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings);
+        let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings)?;
         let non_limit_loops = lmb
             .loop_edges
             .iter_enumerated()
@@ -797,13 +785,12 @@ impl CrossSectionIntegrand {
 
                 limit_data.data.push(LambdaPointEval {
                     lambda_point,
-                    value: evaluate_profile_momentum_point(
+                    value: evaluate_profile_momentum_point_arb(
                         self,
                         model,
                         graph_id,
                         orientation,
                         sample.loop_moms().iter().cloned().collect_vec(),
-                        false,
                     )?,
                 });
             }
@@ -1192,20 +1179,16 @@ impl IrLimit {
         rng: &mut MonteCarloRng,
         settings: &RuntimeSettings,
         approach_settings: &IRProfileSetting,
-    ) -> Vec<LambdaPoint<f64>> {
+    ) -> Result<Vec<LambdaPoint<f64>>> {
         let momentum_builders = self.get_momentum_builders(rng);
 
-        let lambda_values: Vec<F<f64>> = logspace(
-            approach_settings.lambda_exp_start,
-            approach_settings.lambda_exp_end,
+        let lambda_values = constant_dropped_fit_points(
+            &F::from_f64(10.0_f64.powf(approach_settings.lambda_exp_start)),
+            &F::from_f64(10.0_f64.powf(approach_settings.lambda_exp_end)),
             approach_settings.steps,
-            10.0,
-        )
-        .into_iter()
-        .map(F::from_f64)
-        .collect();
+        )?;
 
-        lambda_values
+        Ok(lambda_values
             .into_iter()
             .map(|lambda| LambdaPoint {
                 momenta: momentum_builders
@@ -1243,7 +1226,32 @@ impl IrLimit {
                     .collect(),
                 lambda,
             })
-            .collect()
+            .collect())
+    }
+}
+
+fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    graph_id: usize,
+    orientation: Option<usize>,
+    loop_momenta: Vec<ThreeMomentum<F<f64>>>,
+) -> Result<F<ArbPrec>> {
+    match evaluate_profile_momentum_point_precise(
+        integrand,
+        model,
+        graph_id,
+        orientation,
+        loop_momenta,
+        true,
+    )? {
+        PreciseEvaluationResult::Arb(result) => Ok(result.integrand_result.re),
+        PreciseEvaluationResult::Double(_) => Err(eyre!(
+            "IR profiling requested arbitrary precision but received a double-precision result"
+        )),
+        PreciseEvaluationResult::Quad(_) => Err(eyre!(
+            "IR profiling requested arbitrary precision but received a quad-precision result"
+        )),
     }
 }
 
@@ -1275,7 +1283,7 @@ struct LambdaPoint<T: FloatLike> {
 
 struct LambdaPointEval<T: FloatLike> {
     lambda_point: LambdaPoint<T>,
-    value: EvaluationResult,
+    value: F<ArbPrec>,
 }
 
 struct LimitData<T: FloatLike> {
@@ -1287,21 +1295,27 @@ impl<T: FloatLike> LimitData<T> {
         let x = self
             .data
             .iter()
-            .map(|point_eval| point_eval.lambda_point.lambda.to_f64())
+            .map(|point_eval| F::<ArbPrec>::from_ff64(point_eval.lambda_point.lambda.into_ff64()))
             .collect_vec();
 
         let y = self
             .data
             .iter()
-            .map(|point_eval| point_eval.value.integrand_result.re.to_f64())
+            .map(|point_eval| point_eval.value.clone())
             .collect_vec();
 
         let result = fit_power_law(x.clone(), y.clone())?;
 
         if result.r_squared < 0.9 {
             warn!("low r^2 value found for input data");
-            warn!("x: {:?}", x);
-            warn!("y: {:?}", y);
+            warn!(
+                "x: {:?}",
+                x.iter().map(|value| value.into_f64()).collect_vec()
+            );
+            warn!(
+                "y: {:?}",
+                y.iter().map(|value| value.into_f64()).collect_vec()
+            );
         }
 
         Ok(result)
@@ -1311,176 +1325,34 @@ impl<T: FloatLike> LimitData<T> {
 #[derive(Debug, Clone)]
 pub struct PowerLawFit {
     exponent: f64,
-    coefficient: f64,
-    constant_offset: f64,
     r_squared: f64,
 }
 
-// using varpro fit  y =  a x^p + c
-fn fit_power_law(x: Vec<f64>, y: Vec<f64>) -> Result<PowerLawFit> {
+fn fit_power_law(x: Vec<F<ArbPrec>>, y: Vec<F<ArbPrec>>) -> Result<PowerLawFit> {
     if x.len() != y.len() {
         return Err(eyre!(
             "fit_power_law requires x and y to have the same length"
         ));
     }
-    if x.len() < 2 {
-        return Err(eyre!("fit_power_law requires at least two observations"));
+    if x.len() < 3 {
+        return Err(eyre!("fit_power_law requires at least three observations"));
     }
-    if x.iter().any(|value| !value.is_finite() || *value <= 0.0) {
+    if x.iter()
+        .any(|value| value.is_nan() || value.is_infinite() || value <= &value.zero())
+    {
         return Err(eyre!(
             "fit_power_law requires strictly positive, finite x values"
         ));
     }
-    if y.iter().any(|value| !value.is_finite()) {
+    if y.iter().any(|value| value.is_nan() || value.is_infinite()) {
         return Err(eyre!("fit_power_law requires finite y values"));
     }
 
-    let x_scale = (x.iter().map(|value| value.ln()).sum::<f64>() / x.len() as f64).exp();
-    if !x_scale.is_finite() || x_scale <= 0.0 {
-        return Err(eyre!(
-            "fit_power_law could not determine a valid x rescaling factor"
-        ));
-    }
-
-    let x_normalized = x.iter().map(|value| value / x_scale).collect::<Vec<_>>();
-
-    let x_data = DVector::from_vec(x_normalized.clone());
-    let y_data = DVector::from_vec(y.clone());
-
-    let initial_exponent = {
-        let mut log_x = Vec::new();
-        let mut log_y_shifted = Vec::new();
-        let min_y = y.iter().copied().fold(f64::INFINITY, f64::min);
-        let y_shift = if min_y <= 0.0 { 1.0 - min_y } else { 0.0 };
-        for (xv, yv) in x.iter().zip(y.iter()) {
-            let shifted = yv + y_shift;
-            if shifted > 0.0 {
-                log_x.push(xv.ln());
-                log_y_shifted.push(shifted.ln());
-            }
-        }
-
-        if log_x.len() >= 2 {
-            let mean_x = log_x.iter().sum::<f64>() / log_x.len() as f64;
-            let mean_y = log_y_shifted.iter().sum::<f64>() / log_y_shifted.len() as f64;
-            let covariance = log_x
-                .iter()
-                .zip(log_y_shifted.iter())
-                .map(|(xv, yv)| (xv - mean_x) * (yv - mean_y))
-                .sum::<f64>();
-            let variance = log_x.iter().map(|xv| (xv - mean_x).powi(2)).sum::<f64>();
-            if variance > 0.0 {
-                covariance / variance
-            } else {
-                -1.0
-            }
-        } else {
-            -1.0
-        }
-    };
-
-    const LARGE_FINITE_GUARD: f64 = 1.0e200;
-
-    let model = SeparableModelBuilder::new(["p"])
-        .initial_parameters(vec![initial_exponent])
-        .independent_variable(x_data)
-        .function(["p"], |x: &DVector<f64>, p: f64| {
-            x.map(|xv| {
-                let value = xv.powf(p);
-                if value.is_finite() {
-                    value
-                } else if value.is_nan() {
-                    LARGE_FINITE_GUARD
-                } else if value.is_sign_negative() {
-                    -LARGE_FINITE_GUARD
-                } else {
-                    LARGE_FINITE_GUARD
-                }
-            })
-        })
-        .partial_deriv("p", |x: &DVector<f64>, p: f64| {
-            x.map(|xv| {
-                let deriv = xv.powf(p) * xv.ln();
-                if deriv.is_finite() {
-                    deriv
-                } else if deriv.is_nan() {
-                    LARGE_FINITE_GUARD
-                } else if deriv.is_sign_negative() {
-                    -LARGE_FINITE_GUARD
-                } else {
-                    LARGE_FINITE_GUARD
-                }
-            })
-        })
-        .invariant_function(|x: &DVector<f64>| DVector::from_element(x.len(), 1.0))
-        .build()
-        .map_err(|error| eyre!("could not build varpro model for power-law fit: {error}"))?;
-
-    let problem = SeparableProblemBuilder::new(model)
-        .observations(y_data)
-        .build()
-        .map_err(|error| eyre!("could not build varpro problem for power-law fit: {error}"))?;
-
-    let fit_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        LevMarSolver::default().solve(problem)
-    }))
-    .map_err(|_| eyre!("varpro/nalgebra panicked while solving power-law fit"))?
-    .map_err(|error| eyre!("varpro solve failed for power-law fit: {:?}", error))?;
-
-    if !fit_result.minimization_report.termination.was_successful() {
-        return Err(eyre!(
-            "varpro did not terminate successfully in power-law fit"
-        ));
-    }
-
-    let exponent = fit_result.nonlinear_parameters()[0];
-    let coefficients = fit_result
-        .linear_coefficients()
-        .ok_or_else(|| eyre!("varpro did not return linear coefficients"))?;
-    let coefficient_normalized = coefficients[0];
-    let constant_offset = coefficients[1];
-
-    let exponent = if exponent.is_finite() {
-        exponent
-    } else {
-        return Err(eyre!("power-law fit returned non-finite exponent"));
-    };
-
-    let coefficient_scale = x_scale.powf(-exponent);
-    if !coefficient_scale.is_finite() {
-        return Err(eyre!(
-            "power-law fit produced non-finite coefficient rescaling"
-        ));
-    }
-
-    let coefficient = coefficient_normalized * coefficient_scale;
-    if !coefficient.is_finite() || !constant_offset.is_finite() {
-        return Err(eyre!(
-            "power-law fit returned non-finite linear coefficients"
-        ));
-    }
-
-    let mean_y = y.iter().sum::<f64>() / y.len() as f64;
-    let ss_tot = y.iter().map(|yv| (yv - mean_y).powi(2)).sum::<f64>();
-    let ss_res = x
-        .iter()
-        .zip(y.iter())
-        .map(|(xv, yv)| {
-            let prediction = coefficient * xv.powf(&exponent) + constant_offset;
-            (yv - prediction).powi(2)
-        })
-        .sum::<f64>();
-    let r_squared = if ss_tot > 0.0 {
-        1.0 - ss_res / ss_tot
-    } else {
-        1.0
-    };
+    let fit = log_log_slope_constant_dropped(&x, &y)?;
 
     Ok(PowerLawFit {
-        exponent,
-        coefficient,
-        constant_offset,
-        r_squared,
+        exponent: fit.slope.into_f64(),
+        r_squared: fit.r_squared().into_f64(),
     })
 }
 
@@ -1574,71 +1446,46 @@ mod tests {
 
     #[test]
     fn fit_power_law_recovers_known_parameters() {
-        let exponent = -1.75;
-        let coefficient = 3.2;
-        let offset = 0.6;
+        let exponent = -1.75_f64;
+        let coefficient = 3.2_f64;
+        let offset = 0.6_f64;
 
-        let x = vec![0.2, 0.35, 0.5, 0.8, 1.1, 1.7, 2.4, 3.3];
+        let x = constant_dropped_fit_points(
+            &F::<ArbPrec>::from_f64(0.2_f64 * 1.6_f64.powi(7)),
+            &F::<ArbPrec>::from_f64(0.2_f64),
+            8,
+        )
+        .expect("geometric fit points should be generated");
         let y = x
             .iter()
-            .map(|xv| coefficient * xv.powf(&exponent) + offset)
+            .map(|xv| F::<ArbPrec>::from_f64(coefficient * xv.into_f64().powf(exponent) + offset))
             .collect::<Vec<_>>();
 
         let fit = fit_power_law(x, y).expect("power-law fit should succeed");
 
-        assert!((fit.exponent - exponent).abs() < 1e-3);
-        assert!((fit.coefficient - coefficient).abs() < 1e-3);
+        assert!((fit.exponent - exponent).abs() < 1e-10);
         assert!(fit.r_squared > 0.999_999);
     }
 
     #[test]
-    fn fit_power_law_on_panicking_data() {
-        let x = vec![
-            0.001,
-            0.0007847599703514615,
-            0.0006158482110660267,
-            0.0004832930238571752,
-            0.000379269019073225,
-            0.00029763514416313193,
-            0.00023357214690901214,
-            0.00018329807108324357,
-            0.0001438449888287663,
-            0.00011288378916846895,
-            8.858667904100833e-5,
-            6.951927961775606e-5,
-            5.4555947811685143e-5,
-            4.281332398719396e-5,
-            3.359818286283781e-5,
-            2.6366508987303556e-5,
-            2.06913808111479e-5,
-            1.6237767391887242e-5,
-            1.2742749857031348e-5,
-            1e-5,
-        ];
+    fn fit_power_law_rejects_non_geometric_grid() {
+        let exponent = -1.75_f64;
+        let coefficient = 3.2_f64;
+        let offset = 0.6_f64;
 
-        let y = vec![
-            0.002950535397303611,
-            0.004802153664059006,
-            0.007811787818354787,
-            0.012702615924354177,
-            0.020646917328122072,
-            0.033559978182893246,
-            0.05451887019444257,
-            0.08857211912982166,
-            0.14386785496026278,
-            0.2341369427740574,
-            0.378563791513443,
-            0.6228243708610535,
-            1.0381001830101013,
-            1.609904408454895,
-            2.4859671592712402,
-            4.144830703735352,
-            7.431371688842773,
-            8.509048461914063,
-            -28.14263916015625,
-            90.61788940429688,
-        ];
+        let x = [
+            0.2_f64, 0.37_f64, 0.55_f64, 0.92_f64, 1.3_f64, 1.85_f64, 2.75_f64, 3.6_f64,
+        ]
+        .into_iter()
+        .map(F::<ArbPrec>::from_f64)
+        .collect::<Vec<_>>();
+        let y = x
+            .iter()
+            .map(|xv| F::<ArbPrec>::from_f64(coefficient * xv.into_f64().powf(exponent) + offset))
+            .collect::<Vec<_>>();
 
-        let _ = fit_power_law(x, y).is_ok();
+        let fit = fit_power_law(x, y);
+
+        assert!(fit.is_err());
     }
 }

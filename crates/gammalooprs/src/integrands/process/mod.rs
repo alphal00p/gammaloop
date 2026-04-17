@@ -1037,6 +1037,32 @@ pub(crate) fn evaluate_profile_momentum_point<I: ProcessIntegrandImpl>(
     )
 }
 
+pub(crate) fn evaluate_profile_momentum_point_precise<I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    model: &Model,
+    graph_id: usize,
+    orientation: Option<usize>,
+    loop_momenta: Vec<ThreeMomentum<F<f64>>>,
+    use_arb_prec: bool,
+) -> Result<PreciseEvaluationResult> {
+    let input = MomentumSpaceEvaluationInput {
+        loop_momenta,
+        integrator_weight: F(1.0),
+        graph_id: Some(graph_id),
+        group_id: None,
+        orientation,
+        channel_id: None,
+    };
+    evaluate_momentum_configuration_precise(
+        integrand,
+        model,
+        &input,
+        F(1.0),
+        use_arb_prec,
+        Complex::new_re(F(100.0 * integrand.get_settings().kinematics.e_cm)),
+    )
+}
+
 fn format_lmb_channel_label(edge_ids: &[usize]) -> String {
     let mut sorted = edge_ids.to_vec();
     sorted.sort_unstable();

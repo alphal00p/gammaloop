@@ -21,19 +21,20 @@ pub fn constant_dropped_fit_points<T: FloatLike>(
         ));
     }
 
-    if stop <= start {
+    if stop == start {
         return Err(eyre!(
-            "fit point range must satisfy start < stop for multiplicative spacing"
+            "fit point range must have distinct bounds for multiplicative spacing"
         ));
     }
 
+    let is_ascending = stop > start;
     let log_start = start.log10();
     let log_stop = stop.log10();
     let step_count = start.from_usize(num - 1);
     let log_step = (&log_stop - &log_start) / &step_count;
-    if !log_step.positive() || log_step.is_nan() || log_step.is_infinite() {
+    if log_step.is_nan() || log_step.is_infinite() || log_step.abs().less_than_epsilon() {
         return Err(eyre!(
-            "fit point range must yield a finite positive log step"
+            "fit point range must yield a finite non-zero log step"
         ));
     }
 
@@ -48,18 +49,30 @@ pub fn constant_dropped_fit_points<T: FloatLike>(
         if point.is_nan() || point.is_infinite() {
             return Err(eyre!("generated a non-finite fit point"));
         }
-        if &point <= points.last().expect("point list is non-empty") {
+        let previous = points.last().expect("point list is non-empty");
+        let advances = if is_ascending {
+            &point > previous
+        } else {
+            &point < previous
+        };
+        if !advances {
             return Err(eyre!(
-                "range and point count collapse at current precision; generated fit points are not strictly increasing"
+                "range and point count collapse at current precision; generated fit points are not strictly monotonic"
             ));
         }
 
         points.push(point);
     }
 
-    if stop <= points.last().expect("point list is non-empty") {
+    let previous = points.last().expect("point list is non-empty");
+    let advances = if is_ascending {
+        stop > previous
+    } else {
+        stop < previous
+    };
+    if !advances {
         return Err(eyre!(
-            "range and point count collapse at current precision; final bound is not larger than the generated interior points"
+            "range and point count collapse at current precision; final bound does not preserve the requested monotonic direction"
         ));
     }
 
@@ -133,8 +146,11 @@ fn collect_log_difference_samples<T: FloatLike>(
     let reference_log_x = samples[0].0.log10();
     let next_log_x = samples[1].0.log10();
     let reference_step = &next_log_x - &reference_log_x;
-    if !reference_step.positive() {
-        return Err(eyre!("x grid must have a positive multiplicative spacing"));
+    if reference_step.is_nan()
+        || reference_step.is_infinite()
+        || reference_step.abs().less_than_epsilon()
+    {
+        return Err(eyre!("x grid must have a non-zero multiplicative spacing"));
     }
 
     let tolerance = {
@@ -274,6 +290,38 @@ mod tests {
 
         assert!((x_values[0] - 0.2_f64).abs() < 1.0e-12);
         assert!((x_values[7] - 0.2_f64 * ratio.powi(7)).abs() < 1.0e-12);
+        assert!((fit.slope.into_f64() - slope).abs() < 1.0e-10);
+        assert!(fit.r_squared().into_f64() > 0.999_999_999);
+    }
+
+    #[test]
+    fn constant_dropped_fit_supports_descending_geometric_grid() {
+        let coefficient = 3.2_f64;
+        let slope = -1.75_f64;
+        let offset = 0.6_f64;
+        let ratio: f64 = 1.6;
+
+        let x = constant_dropped_fit_points(
+            &F::from_f64(0.2_f64 * ratio.powi(7)),
+            &F::from_f64(0.2_f64),
+            8,
+        )
+        .expect("descending fit point generation should succeed");
+        let x_values = x
+            .iter()
+            .map(|x_value| x_value.into_f64())
+            .collect::<Vec<_>>();
+        let y = x
+            .iter()
+            .map(|x_value| coefficient * x_value.into_f64().powf(slope) + offset)
+            .collect::<Vec<_>>();
+
+        let fit = log_log_slope_constant_dropped(&x, &ff64_values(&y))
+            .expect("power-law fit should succeed on a descending geometric grid");
+
+        assert!((x_values[0] - 0.2_f64 * ratio.powi(7)).abs() < 1.0e-12);
+        assert!((x_values[7] - 0.2_f64).abs() < 1.0e-12);
+        assert!(x_values.windows(2).all(|window| window[0] > window[1]));
         assert!((fit.slope.into_f64() - slope).abs() < 1.0e-10);
         assert!(fit.r_squared().into_f64() > 0.999_999_999);
     }
