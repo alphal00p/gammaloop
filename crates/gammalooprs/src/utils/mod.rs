@@ -77,6 +77,7 @@ use typed_index_collections::TiVec;
 use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 pub const VERSION: &str = "0.0.1";
+pub mod fitting;
 pub mod hyperdual_utils;
 pub mod representations;
 pub mod serde_utils;
