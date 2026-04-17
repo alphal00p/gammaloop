@@ -1632,11 +1632,11 @@ impl<T: FloatLike> LimitData<T> {
             warn!("low r^2 value found for input data");
             warn!(
                 "x: {:?}",
-                x.iter().map(|value| value.into_f64()).collect_vec()
+                x.iter().map(|value| format!("{}", value)).collect_vec()
             );
             warn!(
                 "y: {:?}",
-                y.iter().map(|value| value.into_f64()).collect_vec()
+                y.iter().map(|value| format!("{}", value)).collect_vec()
             );
         }
 
