@@ -1,4 +1,7 @@
-use std::{collections::HashSet, fmt::Display};
+use std::{
+    collections::{BTreeMap, HashSet},
+    fmt::Display,
+};
 
 use color_eyre::eyre::Result;
 use colored::Colorize;
@@ -48,6 +51,7 @@ pub struct IRProfileSetting {
     pub seed: u64,
     pub select_limits_and_graphs: Option<String>,
     pub orientation_mode: OrientationProfileMode,
+    pub show_per_cut_info: bool,
 }
 
 impl AmplitudeGraphTerm {
@@ -157,7 +161,14 @@ pub struct IrLimitTestReport {
 pub struct GraphIRLimitReport {
     pub graph_name: String,
     pub all_limits_passed: bool,
+    pub cut_definitions: Vec<GraphCutDefinition>,
     pub single_limit_reports: Vec<SingleLimitReport>,
+}
+
+#[derive(Debug, Clone)]
+pub struct GraphCutDefinition {
+    pub cut_id: usize,
+    pub edges: Vec<EdgeIndex>,
 }
 
 pub struct SingleLimitReport {
@@ -166,7 +177,15 @@ pub struct SingleLimitReport {
     pub passed: bool,
     pub power_law_fit: PowerLawFit,
     pub scaling: f64,
+    pub per_cut_reports: Vec<CutLimitReport>,
     num_soft: usize,
+}
+
+pub struct CutLimitReport {
+    pub cut_id: usize,
+    pub power_law_fit: Option<PowerLawFit>,
+    pub scaling: Option<f64>,
+    pub fit_error: Option<String>,
 }
 
 impl Display for IrLimitTestReport {
@@ -249,18 +268,27 @@ impl Display for GraphIRLimitReport {
             self.single_limit_reports.len()
         )?;
 
+        if !self.cut_definitions.is_empty() {
+            render_graph_cut_definitions(f, &self.cut_definitions)?;
+            writeln!(f)?;
+        }
+
         let mut limit_table = Builder::new();
+        let mut separators_after_data_rows = Vec::new();
+        let mut data_row_count = 0;
         limit_table.push_record([
             "status",
             "limit",
             "orientation",
+            "cut",
             "scaling",
             "p",
             "r_squared",
             "n_soft",
+            "note",
         ]);
 
-        for report in &self.single_limit_reports {
+        for (report_index, report) in self.single_limit_reports.iter().enumerate() {
             let status = if report.passed {
                 "PASS".green().bold().to_string()
             } else {
@@ -274,14 +302,47 @@ impl Display for GraphIRLimitReport {
                     .orientation_label
                     .clone()
                     .unwrap_or_else(|| "sum".to_string()),
+                "sum".to_string(),
                 format!("{:+.4}", report.scaling),
                 format!("{:+.4}", report.power_law_fit.exponent),
                 format!("{:.4}", report.power_law_fit.r_squared),
                 report.num_soft.to_string(),
+                String::new(),
             ]);
+            data_row_count += 1;
+
+            if !report.per_cut_reports.is_empty() {
+                separators_after_data_rows.push(data_row_count);
+            }
+
+            for cut_report in &report.per_cut_reports {
+                let [cut_id, scaling, exponent, r_squared, note] =
+                    cut_report_display_row(cut_report);
+                limit_table.push_record([
+                    "INFO".cyan().bold().to_string(),
+                    String::new(),
+                    String::new(),
+                    cut_id,
+                    scaling,
+                    exponent,
+                    r_squared,
+                    String::new(),
+                    note,
+                ]);
+                data_row_count += 1;
+            }
+
+            if report_index + 1 < self.single_limit_reports.len() {
+                separators_after_data_rows.push(data_row_count);
+            }
         }
 
-        write!(f, "{}", limit_table.build().with(Style::rounded()))?;
+        let mut table = limit_table.build();
+        table.with(Style::rounded());
+        let rendered =
+            insert_limit_table_separators(table.to_string(), &separators_after_data_rows);
+
+        write!(f, "{rendered}")?;
 
         Ok(())
     }
@@ -308,8 +369,127 @@ impl Display for SingleLimitReport {
             self.power_law_fit.exponent,
             self.power_law_fit.r_squared,
             self.num_soft
-        )
+        )?;
+
+        render_per_cut_reports(f, self, "")
     }
+}
+
+fn render_per_cut_reports(
+    f: &mut std::fmt::Formatter<'_>,
+    report: &SingleLimitReport,
+    indent: &str,
+) -> std::fmt::Result {
+    if report.per_cut_reports.is_empty() {
+        return Ok(());
+    }
+
+    writeln!(f)?;
+    writeln!(
+        f,
+        "\n{indent}per-cut fits for {}{}",
+        report.limit_name,
+        report
+            .orientation_label
+            .as_ref()
+            .map(|label| format!(" @ {label}"))
+            .unwrap_or_default(),
+    )?;
+
+    let mut cut_table = Builder::new();
+    cut_table.push_record(["cut", "scaling", "p", "r_squared", "note"]);
+
+    for cut_report in &report.per_cut_reports {
+        cut_table.push_record(cut_report_display_row(cut_report));
+    }
+
+    write!(f, "{}", cut_table.build().with(Style::rounded()))
+}
+
+fn render_graph_cut_definitions(
+    f: &mut std::fmt::Formatter<'_>,
+    cut_definitions: &[GraphCutDefinition],
+) -> std::fmt::Result {
+    writeln!(f, "  cut definitions")?;
+
+    let mut cut_table = Builder::new();
+    cut_table.push_record(["cut", "edges"]);
+
+    for cut_definition in cut_definitions {
+        cut_table.push_record([
+            cut_definition.cut_id.to_string(),
+            cut_definition
+                .edges
+                .iter()
+                .map(ToString::to_string)
+                .join(", "),
+        ]);
+    }
+
+    writeln!(f, "{}", cut_table.build().with(Style::rounded()))
+}
+
+fn cut_report_display_row(cut_report: &CutLimitReport) -> [String; 5] {
+    let (scaling, exponent, r_squared, note) =
+        match (&cut_report.power_law_fit, &cut_report.fit_error) {
+            (Some(fit), None) => (
+                format!("{:+.4}", cut_report.scaling.unwrap_or(fit.exponent)),
+                format!("{:+.4}", fit.exponent),
+                format!("{:.4}", fit.r_squared),
+                String::new(),
+            ),
+            (None, Some(error)) => (
+                "-".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+                error.clone(),
+            ),
+            _ => (
+                "-".to_string(),
+                "-".to_string(),
+                "-".to_string(),
+                "missing cut fit".to_string(),
+            ),
+        };
+
+    [
+        cut_report.cut_id.to_string(),
+        scaling,
+        exponent,
+        r_squared,
+        note,
+    ]
+}
+
+fn insert_limit_table_separators(rendered: String, separators_after_data_rows: &[usize]) -> String {
+    if separators_after_data_rows.is_empty() {
+        return rendered;
+    }
+
+    let lines = rendered.lines().collect_vec();
+    if lines.len() < 4 {
+        return rendered;
+    }
+
+    let line_count = lines.len();
+    let separator_line = lines[2].to_string();
+    let mut next_separator = separators_after_data_rows.iter().copied().peekable();
+    let mut output = Vec::with_capacity(lines.len() + separators_after_data_rows.len());
+    let mut seen_data_rows = 0;
+
+    for (line_index, line) in lines.into_iter().enumerate() {
+        output.push(line.to_string());
+
+        if line_index >= 3 && line_index + 1 < line_count {
+            seen_data_rows += 1;
+            while next_separator.peek().copied() == Some(seen_data_rows) {
+                output.push(separator_line.clone());
+                next_separator.next();
+            }
+        }
+    }
+
+    output.join("\n")
 }
 
 fn ir_profile_completion_entries(
@@ -322,6 +502,25 @@ fn ir_profile_completion_entries(
                 graph_name,
                 limits.into_iter().map(|limit| limit.to_string()).collect(),
             )
+        })
+        .collect()
+}
+
+fn graph_cut_definitions_for_cross_section_term(
+    graph_term: &CrossSectionGraphTerm,
+) -> Vec<GraphCutDefinition> {
+    graph_term
+        .cuts
+        .iter_enumerated()
+        .map(|(cut_id, cut)| GraphCutDefinition {
+            cut_id: cut_id.into(),
+            edges: graph_term
+                .graph
+                .underlying
+                .iter_edges_of(&cut.cut)
+                .map(|(_, edge_id, _)| edge_id)
+                .sorted()
+                .collect(),
         })
         .collect()
 }
@@ -400,6 +599,7 @@ fn build_single_limit_report(
     ir_limit: &IrLimit,
     orientation_label: Option<String>,
     slope: PowerLawFit,
+    per_cut_reports: Vec<CutLimitReport>,
 ) -> SingleLimitReport {
     let num_soft = ir_limit.num_soft();
     let scaling = slope.exponent + ((num_soft * 3) as f64);
@@ -409,8 +609,32 @@ fn build_single_limit_report(
         passed: scaling > 0.0,
         power_law_fit: slope,
         scaling,
+        per_cut_reports,
         num_soft,
     }
+}
+
+fn build_cut_limit_reports(
+    num_soft: usize,
+    cut_fits: Vec<(usize, Result<PowerLawFit>)>,
+) -> Vec<CutLimitReport> {
+    cut_fits
+        .into_iter()
+        .map(|(cut_id, fit)| match fit {
+            Ok(power_law_fit) => CutLimitReport {
+                cut_id,
+                scaling: Some(power_law_fit.exponent + ((num_soft * 3) as f64)),
+                power_law_fit: Some(power_law_fit),
+                fit_error: None,
+            },
+            Err(error) => CutLimitReport {
+                cut_id,
+                scaling: None,
+                power_law_fit: None,
+                fit_error: Some(error.to_string()),
+            },
+        })
+        .collect()
 }
 
 fn run_ir_profile<I: ProcessIntegrandImpl>(
@@ -418,6 +642,7 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
     ir_profile_settings: &IRProfileSetting,
     model: &Model,
     enumerate_limits: impl Fn(&I) -> Vec<(String, Vec<IrLimit>)>,
+    graph_cut_definitions: impl Fn(&I, usize) -> Vec<GraphCutDefinition>,
     mut test_single_limit: impl FnMut(
         &mut I,
         usize,
@@ -448,6 +673,7 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
         let mut graph_report = GraphIRLimitReport {
             graph_name: graph_name.clone(),
             all_limits_passed: false,
+            cut_definitions: graph_cut_definitions(integrand, graph_id),
             single_limit_reports: Vec::new(),
         };
 
@@ -498,14 +724,28 @@ impl AmplitudeIntegrand {
             }),
         });
 
-        self.warm_up(model)?;
-        run_ir_profile(
-            self,
-            ir_profile_settings,
-            model,
-            Self::enumerate_ir_limits,
-            Self::test_single_ir_limit_impl,
-        )
+        let previous_generate_events = self.settings.general.generate_events;
+        if ir_profile_settings.show_per_cut_info {
+            self.settings.general.generate_events = true;
+        }
+
+        let result = (|| {
+            self.warm_up(model)?;
+            run_ir_profile(
+                self,
+                ir_profile_settings,
+                model,
+                Self::enumerate_ir_limits,
+                Self::graph_cut_definitions,
+                Self::test_single_ir_limit_impl,
+            )
+        })();
+
+        if self.settings.general.generate_events != previous_generate_events {
+            self.settings.general.generate_events = previous_generate_events;
+        }
+
+        result
     }
 
     fn enumerate_ir_limits(&self) -> Vec<(String, Vec<IrLimit>)> {
@@ -518,6 +758,10 @@ impl AmplitudeIntegrand {
                 (graph_name, limits)
             })
             .collect()
+    }
+
+    fn graph_cut_definitions(&self, _graph_id: usize) -> Vec<GraphCutDefinition> {
+        Vec::new()
     }
 
     fn test_single_ir_limit_impl(
@@ -608,14 +852,17 @@ impl AmplitudeIntegrand {
                         graph_id,
                         orientation,
                         sample.loop_moms().iter().cloned().collect_vec(),
+                        approach_settings.show_per_cut_info,
                     )?,
                 });
             }
 
+            let (power_law_fit, cut_fits) = limit_data.extract_power()?;
             reports.push(build_single_limit_report(
                 ir_limit,
                 orientation_label,
-                limit_data.extract_power()?,
+                power_law_fit,
+                build_cut_limit_reports(ir_limit.num_soft(), cut_fits),
             ));
         }
 
@@ -643,14 +890,28 @@ impl CrossSectionIntegrand {
             }),
         });
 
-        self.warm_up(model)?;
-        run_ir_profile(
-            self,
-            ir_profile_settings,
-            model,
-            Self::enumerate_ir_limits,
-            Self::test_single_ir_limit_impl,
-        )
+        let previous_generate_events = self.settings.general.generate_events;
+        if ir_profile_settings.show_per_cut_info {
+            self.settings.general.generate_events = true;
+        }
+
+        let result = (|| {
+            self.warm_up(model)?;
+            run_ir_profile(
+                self,
+                ir_profile_settings,
+                model,
+                Self::enumerate_ir_limits,
+                Self::graph_cut_definitions,
+                Self::test_single_ir_limit_impl,
+            )
+        })();
+
+        if self.settings.general.generate_events != previous_generate_events {
+            self.settings.general.generate_events = previous_generate_events;
+        }
+
+        result
     }
 
     fn enumerate_ir_limits(&self) -> Vec<(String, Vec<IrLimit>)> {
@@ -663,6 +924,10 @@ impl CrossSectionIntegrand {
                 (graph_name, limits)
             })
             .collect()
+    }
+
+    fn graph_cut_definitions(&self, graph_id: usize) -> Vec<GraphCutDefinition> {
+        graph_cut_definitions_for_cross_section_term(&self.data.graph_terms[graph_id])
     }
 
     fn test_single_ir_limit_impl(
@@ -791,14 +1056,17 @@ impl CrossSectionIntegrand {
                         graph_id,
                         orientation,
                         sample.loop_moms().iter().cloned().collect_vec(),
+                        approach_settings.show_per_cut_info,
                     )?,
                 });
             }
 
+            let (power_law_fit, cut_fits) = limit_data.extract_power()?;
             reports.push(build_single_limit_report(
                 ir_limit,
                 orientation_label,
-                limit_data.extract_power()?,
+                power_law_fit,
+                build_cut_limit_reports(ir_limit.num_soft(), cut_fits),
             ));
         }
 
@@ -1236,7 +1504,8 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
     graph_id: usize,
     orientation: Option<usize>,
     loop_momenta: Vec<ThreeMomentum<F<f64>>>,
-) -> Result<F<ArbPrec>> {
+    show_per_cut_info: bool,
+) -> Result<ProfilePointValue> {
     match evaluate_profile_momentum_point_precise(
         integrand,
         model,
@@ -1245,7 +1514,28 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         loop_momenta,
         true,
     )? {
-        PreciseEvaluationResult::Arb(result) => Ok(result.integrand_result.re),
+        PreciseEvaluationResult::Arb(result) => {
+            let per_cut = if show_per_cut_info {
+                let zero = result.integrand_result.re.zero();
+                let mut per_cut = BTreeMap::new();
+                for event_group in result.event_groups.iter() {
+                    for event in event_group.iter() {
+                        let entry = per_cut
+                            .entry(event.cut_info.cut_id)
+                            .or_insert_with(|| zero.clone());
+                        *entry += event.weight.re.clone();
+                    }
+                }
+                per_cut
+            } else {
+                BTreeMap::new()
+            };
+
+            Ok(ProfilePointValue {
+                total: result.integrand_result.re,
+                per_cut,
+            })
+        }
         PreciseEvaluationResult::Double(_) => Err(eyre!(
             "IR profiling requested arbitrary precision but received a double-precision result"
         )),
@@ -1283,7 +1573,12 @@ struct LambdaPoint<T: FloatLike> {
 
 struct LambdaPointEval<T: FloatLike> {
     lambda_point: LambdaPoint<T>,
-    value: F<ArbPrec>,
+    value: ProfilePointValue,
+}
+
+struct ProfilePointValue {
+    total: F<ArbPrec>,
+    per_cut: BTreeMap<usize, F<ArbPrec>>,
 }
 
 struct LimitData<T: FloatLike> {
@@ -1291,7 +1586,7 @@ struct LimitData<T: FloatLike> {
 }
 
 impl<T: FloatLike> LimitData<T> {
-    fn extract_power(&self) -> Result<PowerLawFit> {
+    fn extract_power(&self) -> Result<(PowerLawFit, Vec<(usize, Result<PowerLawFit>)>)> {
         let x = self
             .data
             .iter()
@@ -1301,10 +1596,37 @@ impl<T: FloatLike> LimitData<T> {
         let y = self
             .data
             .iter()
-            .map(|point_eval| point_eval.value.clone())
+            .map(|point_eval| point_eval.value.total.clone())
             .collect_vec();
 
         let result = fit_power_law(x.clone(), y.clone())?;
+
+        let zero = x
+            .first()
+            .map(|value| value.zero())
+            .unwrap_or_else(|| F::<ArbPrec>::from_f64(0.0));
+        let cut_fits = self
+            .data
+            .iter()
+            .flat_map(|point_eval| point_eval.value.per_cut.keys().copied())
+            .unique()
+            .sorted()
+            .map(|cut_id| {
+                let y = self
+                    .data
+                    .iter()
+                    .map(|point_eval| {
+                        point_eval
+                            .value
+                            .per_cut
+                            .get(&cut_id)
+                            .cloned()
+                            .unwrap_or_else(|| zero.clone())
+                    })
+                    .collect_vec();
+                (cut_id, fit_power_law(x.clone(), y))
+            })
+            .collect_vec();
 
         if result.r_squared < 0.9 {
             warn!("low r^2 value found for input data");
@@ -1318,7 +1640,7 @@ impl<T: FloatLike> LimitData<T> {
             );
         }
 
-        Ok(result)
+        Ok((result, cut_fits))
     }
 }
 
@@ -1487,5 +1809,140 @@ mod tests {
         let fit = fit_power_law(x, y);
 
         assert!(fit.is_err());
+    }
+
+    #[test]
+    fn negative_cut_scaling_does_not_fail_limit() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let cut_reports = build_cut_limit_reports(
+            ir_limit.num_soft(),
+            vec![
+                (
+                    0,
+                    Ok(PowerLawFit {
+                        exponent: -4.5,
+                        r_squared: 0.999,
+                    }),
+                ),
+                (
+                    1,
+                    Ok(PowerLawFit {
+                        exponent: -2.5,
+                        r_squared: 0.999,
+                    }),
+                ),
+            ],
+        );
+
+        let report = build_single_limit_report(&ir_limit, None, total_fit, cut_reports);
+
+        assert!(report.passed);
+        assert_eq!(report.per_cut_reports.len(), 2);
+        assert!(report.per_cut_reports[0].scaling.unwrap() < 0.0);
+        assert!(report.per_cut_reports[1].scaling.unwrap() > 0.0);
+    }
+
+    #[test]
+    fn single_limit_display_includes_per_cut_table() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let cut_reports = build_cut_limit_reports(
+            ir_limit.num_soft(),
+            vec![(
+                0,
+                Ok(PowerLawFit {
+                    exponent: -4.5,
+                    r_squared: 0.999,
+                }),
+            )],
+        );
+
+        let report = build_single_limit_report(&ir_limit, None, total_fit, cut_reports);
+        let rendered = format!("{report}");
+
+        assert!(rendered.contains("per-cut fits for"));
+        assert!(rendered.contains("cut"));
+        assert!(rendered.contains("r_squared"));
+    }
+
+    #[test]
+    fn graph_limit_display_weaves_per_cut_rows_into_limit_table() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let cut_reports = build_cut_limit_reports(
+            ir_limit.num_soft(),
+            vec![
+                (
+                    0,
+                    Ok(PowerLawFit {
+                        exponent: -4.5,
+                        r_squared: 0.999,
+                    }),
+                ),
+                (
+                    1,
+                    Ok(PowerLawFit {
+                        exponent: -2.5,
+                        r_squared: 0.999,
+                    }),
+                ),
+            ],
+        );
+
+        let report = build_single_limit_report(&ir_limit, None, total_fit, cut_reports);
+        let second_report = build_single_limit_report(
+            &ir_limit,
+            Some("ori-1".to_string()),
+            PowerLawFit {
+                exponent: -2.5,
+                r_squared: 0.999,
+            },
+            build_cut_limit_reports(
+                ir_limit.num_soft(),
+                vec![(
+                    2,
+                    Ok(PowerLawFit {
+                        exponent: -1.5,
+                        r_squared: 0.995,
+                    }),
+                )],
+            ),
+        );
+        let graph_report = GraphIRLimitReport {
+            graph_name: "GL0".to_string(),
+            all_limits_passed: true,
+            cut_definitions: vec![
+                GraphCutDefinition {
+                    cut_id: 0,
+                    edges: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
+                },
+                GraphCutDefinition {
+                    cut_id: 1,
+                    edges: vec![EdgeIndex::from(2), EdgeIndex::from(4)],
+                },
+            ],
+            single_limit_reports: vec![report, second_report],
+        };
+        let rendered = format!("{graph_report}");
+
+        assert!(rendered.contains("cut definitions"));
+        assert!(rendered.contains("edges"));
+        assert!(rendered.contains("e1, e3"));
+        assert!(rendered.find("cut definitions").unwrap() < rendered.find("status").unwrap());
+        assert!(rendered.contains("cut"));
+        assert!(rendered.contains("sum"));
+        assert!(rendered.contains("INFO"));
+        assert!(!rendered.contains("per-cut fits for"));
+        assert!(rendered.matches('├').count() >= 3);
     }
 }
