@@ -1361,7 +1361,7 @@ mod tests_cff {
     };
     use symbolica::{
         evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
-        parse, symbol,
+        function, parse, parse_lit, symbol,
     };
     use utils::FloatLike;
 
@@ -1371,9 +1371,10 @@ mod tests_cff {
         settings::global::OrientationPattern,
         utils::{
             self, F, RefDefault, external_energy_atom_from_index, ose_atom_from_index,
-            test_utils::dummy_hedge_graph,
+            test_utils::dummy_hedge_graph, thermal_distribution_atom_from_index,
         },
     };
+    use linnet::num_traits::Sign;
 
     use super::*;
 
@@ -1392,6 +1393,30 @@ mod tests_cff {
             for edge_id in 0..num_energies {
                 let edge_id = EdgeIndex::from(edge_id);
                 expression_atom = expression_atom
+                    .replace(thermal_distribution_atom_from_index(
+                        edge_id,
+                        Sign::Positive,
+                    ))
+                    .with(
+                        (Atom::num(1)
+                            + function!(
+                                symbol!("coth"),
+                                ose_atom_from_index(edge_id) / Atom::num(2)
+                            ))
+                            / Atom::num(2),
+                    )
+                    .replace(thermal_distribution_atom_from_index(
+                        edge_id,
+                        Sign::Negative,
+                    ))
+                    .with(
+                        (Atom::num(-1)
+                            + function!(
+                                symbol!("coth"),
+                                ose_atom_from_index(edge_id) / Atom::num(2)
+                            ))
+                            / Atom::num(2),
+                    )
                     .replace(ose_atom_from_index(edge_id))
                     .with(external_energy_atom_from_index(edge_id));
             }
@@ -1400,7 +1425,16 @@ mod tests_cff {
                 .map(|i| external_energy_atom_from_index(EdgeIndex::from(i)))
                 .collect_vec();
 
-            let function_map = FunctionMap::new();
+            let mut function_map = FunctionMap::new();
+            // TODO: remove this once Symbolica has hyperbolic functions built in
+            function_map
+                .add_function(
+                    symbol!("coth"),
+                    "coth".into(),
+                    vec![symbol!("x")],
+                    parse_lit!((exp(x) + exp(-x)) / (exp(x) - exp(-x))),
+                )
+                .unwrap();
 
             let mut tree = expression_atom
                 .to_evaluation_tree(&function_map, &params)
@@ -2033,6 +2067,130 @@ mod tests_cff {
         );
     }
 
+    #[test]
+    fn thermal_mercedes() {
+        let mercedes = vec![(0, 1), (1, 2), (2, 0), (1, 3), (3, 0), (2, 3)];
+
+        let incoming_vertices = vec![];
+        let orientations = generate_all_orientations_for_testing(mercedes, incoming_vertices);
+        assert_eq!(orientations.len(), 64);
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 64);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            7,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            33,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.thermal_numerator_cache.len(),
+            77,
+            "incorrect number of thermal numerators: {:#?}",
+            cff.surfaces.thermal_numerator_cache,
+        );
+
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k1 = ThreeMomentum::new(F(1.1), F(-2.0), F(1.3));
+        let k2 = ThreeMomentum::new(F(2.7), F(2.1), F(-2.4));
+        let k3 = ThreeMomentum::new(F(0.2), F(1.4), F(-0.6));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(k1 - k2, zero.spatial, m),
+            compute_one_loop_energy(k1 - k3, zero.spatial, m),
+            compute_one_loop_energy(k2 - k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(6)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..0, 0..6);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(7.510_957_576_577_536e-7_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        // test cff from hedge graph
+        let mut mercedes_hedge_graph_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..4)
+            .map(|_| mercedes_hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        mercedes_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[3], nodes[0], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+
+        let mercedes_hedge_graph: HedgeGraph<(), (), ()> =
+            mercedes_hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+        let cff_hedge = generate_cff_expression(
+            &mercedes_hedge_graph,
+            &None,
+            &[],
+            &[],
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..0, 0..6);
+
+        let cff_res: F<f64> =
+            energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
+
+        let target_res = F(7.510_957_576_577_536e-7_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
     mod failing {
         use super::*;
 
