@@ -108,10 +108,11 @@ doc-nix:
 test:
     cargo nextest run --workspace --cargo-profile dev-optim -P local_test
 
-test_gammaloop *classes:
+test_gammaloop *args:
     #!/usr/bin/env bash
     set -euo pipefail
 
+    enforce_warnings_as_errors=1
     gammaloop_packages=(
         gammaloop-api
         gammalooprs
@@ -126,7 +127,10 @@ test_gammaloop *classes:
     )
     gammaloop_module_classes=(important slow failing)
     gammaloop_base_excluded_classes=(slow failing)
-    selected_classes=({{ classes }})
+    raw_args=({{ args }})
+    selected_classes=()
+    nextest_args=()
+    passthrough_mode=0
 
     contains_value() {
         local needle="$1"
@@ -139,6 +143,28 @@ test_gammaloop *classes:
         done
         return 1
     }
+
+    for arg in "${raw_args[@]}"; do
+        if [ "$passthrough_mode" -eq 1 ]; then
+            nextest_args+=("$arg")
+            continue
+        fi
+
+        case "$arg" in
+            --)
+                passthrough_mode=1
+                ;;
+            --allow-warnings|--no-warnings-as-errors)
+                enforce_warnings_as_errors=0
+                ;;
+            --fail-fast|--ff|--no-fail-fast|--nff)
+                nextest_args+=("$arg")
+                ;;
+            *)
+                selected_classes+=("$arg")
+                ;;
+        esac
+    done
 
     if [ ${#selected_classes[@]} -eq 0 ]; then
         selected_classes=(base)
@@ -185,12 +211,26 @@ test_gammaloop *classes:
         done
     fi
 
-    cmd=(
-        cargo nextest run
-        --cargo-profile dev-optim
-        -P test_gammaloop
-        --run-ignored all
-    )
+    existing_rustflags="${RUSTFLAGS-}"
+
+    if [ "$enforce_warnings_as_errors" -eq 1 ]; then
+        compile_rustflags="${existing_rustflags:+$existing_rustflags }-Dwarnings"
+        cmd=(
+            env
+            "RUSTFLAGS=$compile_rustflags"
+            cargo nextest run
+            --cargo-profile dev-optim
+            -P test_gammaloop
+            --run-ignored all
+        )
+    else
+        cmd=(
+            cargo nextest run
+            --cargo-profile dev-optim
+            -P test_gammaloop
+            --run-ignored all
+        )
+    fi
     for package in "${gammaloop_packages[@]}"; do
         cmd+=(-p "$package")
     done
@@ -200,6 +240,9 @@ test_gammaloop *classes:
             filterset="${filterset} or ${term}"
         done
         cmd+=(-E "$filterset")
+    fi
+    if [ ${#nextest_args[@]} -gt 0 ]; then
+        cmd+=("${nextest_args[@]}")
     fi
 
     printf 'Running:'
