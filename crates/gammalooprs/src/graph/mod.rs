@@ -30,6 +30,7 @@ use crate::{
     integrands::process::{LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
+    processes::DotExportSettings,
     settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
     utils::{F, Length, ose_atom_from_index, symbolica_ext::LogPrint},
 };
@@ -73,6 +74,10 @@ pub mod ext;
 impl Graph {
     pub fn debug_dot(&self) -> String {
         DotGraph::from(self).debug_dot()
+    }
+
+    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> String {
+        self.to_dot_graph_with_settings(settings).debug_dot()
     }
 
     pub fn pretty_dot(&self) -> String {

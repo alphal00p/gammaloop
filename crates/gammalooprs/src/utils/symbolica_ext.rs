@@ -25,6 +25,7 @@ use symbolica::{
     parse,
     poly::polynomial::PolynomialRing,
     printer::{PrintMode, PrintOptions},
+    symbol,
 };
 
 use crate::GammaLoopContext;
@@ -33,6 +34,8 @@ use super::{GS, W_};
 
 pub static Q_I: LazyLock<AlgebraicExtension<FractionField<IntegerRing>>> =
     LazyLock::new(|| AlgebraicExtension::new_complex(Q));
+static RAW_UFO_MOMENTUM: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::P"));
+static RAW_UFO_PSLASH: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::PSlash"));
 
 pub static COMPLEXRATPOLYFIELD: LazyLock<
     FractionField<PolynomialRing<AlgebraicExtension<FractionField<IntegerRing>>, u16>>,
@@ -763,6 +766,10 @@ impl DOD for AtomView<'_> {
     fn all_dod(&self) -> i32 {
         self.replace(function!(GS.emr_mom, W_.a___))
             .with(function!(GS.emr_mom, W_.a___) / GS.rescale)
+            .replace(function!(*RAW_UFO_MOMENTUM, W_.a___))
+            .with(function!(*RAW_UFO_MOMENTUM, W_.a___) / GS.rescale)
+            .replace(function!(*RAW_UFO_PSLASH, W_.a___))
+            .with(function!(*RAW_UFO_PSLASH, W_.a___) / GS.rescale)
             .trailing_exponent()
     }
 

@@ -267,7 +267,9 @@ impl Forest {
         //     }
         // }
         Ok(RenormalizationPart::legacy(
-            sum.replace_multiple(&replacements),
+            sum.replace_multiple(&replacements)
+                .replace(GS.m_uv_int)
+                .with(GS.m_uv),
         ))
     }
 

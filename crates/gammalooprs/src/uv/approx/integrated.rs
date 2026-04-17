@@ -142,22 +142,18 @@ impl Integrated<'_> {
     ) -> Result<Atom> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
+        let n_loops = graph.n_loops(current.subgraph()) - graph.n_loops(given.subgraph());
 
-        let atomarg = graph.uv_rescaled(
-            &reduced,
-            graph.n_loops(current.subgraph()),
-            current.lmb(),
-            integrand,
-        );
+        let atomarg = graph.uv_rescaled(&reduced, n_loops, current.lmb(), integrand);
 
-        debug!(res = %atomarg.log_print(None),"Rescaled expanded");
+        debug!(res = %atomarg.log_print(None),n_loops=%n_loops,"Rescaled expanded");
         let a = atomarg
-            .series(GS.rescale, Atom::Zero, 0.into(), true)
+            .series(GS.rescale, Atom::Zero, 1.into(), true)
             .unwrap();
 
         let mut a = a.to_atom();
 
-        debug!(res = %a.log_print(None),"Series expanded");
+        debug!(res = %a.log_print(None),res_raw = %a.to_plain_string(),"Series expanded");
         a = a.replace(GS.rescale).with(Atom::num(1));
         debug!(res = %a.log_print(None),"Series expanded");
 
@@ -195,7 +191,7 @@ impl Integrated<'_> {
 
         integrand_vakint.canonicalize(self.vakint_settings, &self.vakint.topologies, false)?;
         for t in &integrand_vakint.0 {
-            debug!(integral = %t.integral.log_print(None),numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
+            debug!(integral = %t.integral.log_print(None),integral_raw = %t.integral.to_plain_string(), numerator_raw = %t.numerator.to_plain_string(), numerator = %t.numerator.log_print(None),"Vakint term after canonicalization");
         }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
         for t in &integrand_vakint.0 {

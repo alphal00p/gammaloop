@@ -11,12 +11,13 @@ use colored::{ColoredString, Colorize};
 use eyre::Context;
 use gammalooprs::utils::tracing::{LogFormat, LogStyle};
 use indicatif::ProgressState;
-use tracing::{level_filters::LevelFilter, Event, Subscriber};
+use tracing::{field::Visit, level_filters::LevelFilter, Event, Subscriber};
 use tracing_indicatif::{filter::IndicatifFilter, style::ProgressStyle, IndicatifLayer};
 use tracing_subscriber::field::RecordFields;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{
     filter::Filtered,
+    fmt::FormattedFields,
     fmt::{
         self,
         format::Writer,
@@ -189,6 +190,136 @@ struct LazyJsonMakeWriter {
 struct LazyJsonWriter {
     state: Arc<LazyJsonWriterState>,
     buffer: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LogSink {
+    Display,
+    File,
+}
+
+impl Default for LogSink {
+    fn default() -> Self {
+        Self::Display
+    }
+}
+
+const DISPLAY_ONLY_FIELD_PREFIX: &str = "display.";
+const FILE_ONLY_FIELD_PREFIX: &str = "file.";
+
+fn route_field_name(name: &str, sink: LogSink) -> Option<String> {
+    if let Some(stripped) = name.strip_prefix(DISPLAY_ONLY_FIELD_PREFIX) {
+        return (sink == LogSink::Display).then(|| stripped.to_string());
+    }
+    if let Some(stripped) = name.strip_prefix(FILE_ONLY_FIELD_PREFIX) {
+        return (sink == LogSink::File).then(|| stripped.to_string());
+    }
+    Some(name.to_string())
+}
+
+#[derive(Default)]
+struct RoutedFieldsVisitor {
+    sink: LogSink,
+    message: Option<String>,
+    fields: serde_json::Map<String, serde_json::Value>,
+}
+
+impl RoutedFieldsVisitor {
+    fn for_sink(sink: LogSink) -> Self {
+        Self {
+            sink,
+            ..Self::default()
+        }
+    }
+
+    fn record_json_value(&mut self, field: &tracing::field::Field, value: serde_json::Value) {
+        let Some(name) = route_field_name(field.name(), self.sink) else {
+            return;
+        };
+        if name == "message" {
+            self.message = match value {
+                serde_json::Value::String(string) => Some(string),
+                other => Some(other.to_string()),
+            };
+        } else {
+            self.fields.insert(name, value);
+        }
+    }
+}
+
+impl Visit for RoutedFieldsVisitor {
+    fn record_bool(&mut self, field: &tracing::field::Field, value: bool) {
+        self.record_json_value(field, serde_json::Value::Bool(value));
+    }
+
+    fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
+        self.record_json_value(field, value.into());
+    }
+
+    fn record_u64(&mut self, field: &tracing::field::Field, value: u64) {
+        self.record_json_value(field, value.into());
+    }
+
+    fn record_i128(&mut self, field: &tracing::field::Field, value: i128) {
+        self.record_json_value(field, serde_json::Value::String(value.to_string()));
+    }
+
+    fn record_u128(&mut self, field: &tracing::field::Field, value: u128) {
+        self.record_json_value(field, serde_json::Value::String(value.to_string()));
+    }
+
+    fn record_f64(&mut self, field: &tracing::field::Field, value: f64) {
+        let value = serde_json::Number::from_f64(value)
+            .map(serde_json::Value::Number)
+            .unwrap_or_else(|| serde_json::Value::String(value.to_string()));
+        self.record_json_value(field, value);
+    }
+
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        self.record_json_value(field, serde_json::Value::String(value.to_string()));
+    }
+
+    fn record_error(
+        &mut self,
+        field: &tracing::field::Field,
+        value: &(dyn std::error::Error + 'static),
+    ) {
+        self.record_json_value(field, serde_json::Value::String(value.to_string()));
+    }
+
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        self.record_json_value(field, serde_json::Value::String(format!("{value:?}")));
+    }
+}
+
+fn render_display_message(
+    style: &LogStyle,
+    message: &str,
+    fields: &serde_json::Map<String, serde_json::Value>,
+) -> String {
+    let field_suffix = if style.include_fields && !fields.is_empty() {
+        let mut s = String::new();
+        if !message.is_empty() {
+            s.push(' ');
+        }
+        s.push('{');
+        for (index, (key, value)) in fields.iter().enumerate() {
+            if index > 0 {
+                s.push_str(", ");
+            }
+            s.push_str(key);
+            s.push('=');
+            match value {
+                serde_json::Value::String(string) => s.push_str(string),
+                other => s.push_str(&other.to_string()),
+            }
+        }
+        s.push('}');
+        s
+    } else {
+        String::new()
+    };
+    format!("{message}{field_suffix}")
 }
 
 impl LazyJsonMakeWriter {
@@ -551,9 +682,7 @@ pub(crate) fn init_tracing(dir: impl AsRef<Path>, log_file_name: Option<String>)
         ));
 
         let json = fmt::layer()
-            .json()
-            .flatten_event(true)
-            .with_current_span(true)
+            .event_format(FileJsonFmt)
             .with_writer(file_writer);
 
         let indicatif_layer = IndicatifLayer::new()
@@ -659,27 +788,6 @@ pub fn set_log_format_override(log_format: Option<LogFormat>) {
     LOG_STYLE_STATE.lock().unwrap().format_override = log_format;
 }
 
-/// Collect the event's formatted "message" field.
-#[derive(Default)]
-struct MessageVisitor {
-    message: Option<String>,
-    fields: Vec<(String, String)>,
-}
-impl tracing::field::Visit for MessageVisitor {
-    fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
-        self.record_value(f, format!("{v:?}"));
-    }
-}
-impl MessageVisitor {
-    fn record_value(&mut self, f: &tracing::field::Field, value: String) {
-        if f.name() == "message" {
-            self.message = Some(value);
-        } else {
-            self.fields.push((f.name().to_string(), value));
-        }
-    }
-}
-
 #[derive(Clone, Default)]
 struct IndicatifPbMsgFields;
 
@@ -734,29 +842,10 @@ where
         let meta = event.metadata();
         let style = LOG_STYLE_STATE.lock().unwrap().effective_style();
 
-        let mut v = MessageVisitor::default();
+        let mut v = RoutedFieldsVisitor::for_sink(LogSink::Display);
         event.record(&mut v);
         let msg = v.message.as_deref().unwrap_or("");
-        let field_suffix = if style.include_fields && !v.fields.is_empty() {
-            let mut s = String::new();
-            if !msg.is_empty() {
-                s.push(' ');
-            }
-            s.push('{');
-            for (i, (k, v)) in v.fields.iter().enumerate() {
-                if i > 0 {
-                    s.push_str(", ");
-                }
-                s.push_str(k);
-                s.push('=');
-                s.push_str(v);
-            }
-            s.push('}');
-            s
-        } else {
-            String::new()
-        };
-        let rendered = format!("{msg}{field_suffix}");
+        let rendered = render_display_message(&style, msg, &v.fields);
 
         let ts_long = format!(
             "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
@@ -839,6 +928,81 @@ where
     }
 }
 
+#[derive(Clone, Default)]
+struct FileJsonFmt;
+
+impl<S, N> FormatEvent<S, N> for FileJsonFmt
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'writer> FormatFields<'writer> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut w: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        let now = Local::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let meta = event.metadata();
+
+        let mut visitor = RoutedFieldsVisitor::for_sink(LogSink::File);
+        event.record(&mut visitor);
+
+        let mut payload = serde_json::Map::new();
+        payload.insert("timestamp".to_string(), serde_json::Value::String(now));
+        payload.insert(
+            "level".to_string(),
+            serde_json::Value::String(meta.level().to_string()),
+        );
+        payload.insert(
+            "target".to_string(),
+            serde_json::Value::String(meta.target().to_string()),
+        );
+
+        if let Some(module_path) = meta.module_path() {
+            payload.insert(
+                "module_path".to_string(),
+                serde_json::Value::String(module_path.to_string()),
+            );
+        }
+        if let Some(file) = meta.file() {
+            payload.insert(
+                "file".to_string(),
+                serde_json::Value::String(file.to_string()),
+            );
+        }
+        if let Some(line) = meta.line() {
+            payload.insert("line".to_string(), line.into());
+        }
+        if let Some(message) = visitor.message {
+            payload.insert("message".to_string(), serde_json::Value::String(message));
+        }
+
+        for (key, value) in visitor.fields {
+            payload.insert(key, value);
+        }
+
+        if let Some(span) = ctx.lookup_current() {
+            let mut current_span = serde_json::Map::new();
+            current_span.insert(
+                "name".to_string(),
+                serde_json::Value::String(span.name().to_string()),
+            );
+            if let Some(fields) = span.extensions().get::<FormattedFields<N>>() {
+                let formatted = fields.to_string();
+                if !formatted.is_empty() {
+                    current_span.insert("fields".to_string(), serde_json::Value::String(formatted));
+                }
+            }
+            payload.insert("span".to_string(), serde_json::Value::Object(current_span));
+        }
+
+        let line = serde_json::to_string(&payload).map_err(|_| std::fmt::Error)?;
+        w.write_str(&line)?;
+        w.write_char('\n')
+    }
+}
+
 pub(crate) fn format_level(level: tracing::Level) -> ColoredString {
     match level {
         tracing::Level::ERROR => format!("{:<8}", "ERROR").red(),
@@ -901,7 +1065,8 @@ mod tests {
     use super::{
         collapse_scoped_gamma_level, display_filter_from, file_filter_from, format_target,
         format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
-        set_stderr_log_filter, set_stderr_log_filter_override, StderrLogSpecState, STDERR_LOG_SPEC,
+        render_display_message, route_field_name, set_stderr_log_filter,
+        set_stderr_log_filter_override, LogSink, StderrLogSpecState, STDERR_LOG_SPEC,
     };
 
     struct StderrStateRestore(StderrLogSpecState);
@@ -989,5 +1154,54 @@ mod tests {
         assert!(format_target(target, tracing::Level::INFO)
             .to_string()
             .contains("..."));
+    }
+
+    #[test]
+    fn route_field_name_hides_display_only_fields_from_file_sink() {
+        assert_eq!(
+            route_field_name("display.progress", LogSink::Display),
+            Some("progress".to_string())
+        );
+        assert_eq!(route_field_name("display.progress", LogSink::File), None);
+        assert_eq!(
+            route_field_name("plain", LogSink::Display),
+            Some("plain".to_string())
+        );
+        assert_eq!(
+            route_field_name("plain", LogSink::File),
+            Some("plain".to_string())
+        );
+    }
+
+    #[test]
+    fn route_field_name_hides_file_only_fields_from_display_sink() {
+        assert_eq!(route_field_name("file.json", LogSink::Display), None);
+        assert_eq!(
+            route_field_name("file.json", LogSink::File),
+            Some("json".to_string())
+        );
+    }
+
+    #[test]
+    fn display_message_renders_only_display_visible_fields() {
+        let style = gammalooprs::utils::tracing::LogStyle {
+            include_fields: true,
+            ..Default::default()
+        };
+        let fields = serde_json::Map::from_iter([
+            (
+                "shared".to_string(),
+                serde_json::Value::String("ok".to_string()),
+            ),
+            (
+                "progress".to_string(),
+                serde_json::Value::String("step-1".to_string()),
+            ),
+        ]);
+
+        assert_eq!(
+            render_display_message(&style, "hello", &fields),
+            "hello {progress=step-1, shared=ok}"
+        );
     }
 }

@@ -21,11 +21,10 @@ use crate::{
         GlobalPrefactor,
         aind::{Aind, NewAind},
         graph::GeneratePolarizations,
-        symbolica_ext::AtomCoreExt,
         ufo::UFO,
     },
     processes::DotExportSettings,
-    utils::symbolica_ext::DOD,
+    utils::symbolica_ext::{DOD, LogPrint},
     uv::UltravioletGraph,
 };
 use ahash::{AHashMap, AHashSet};
@@ -51,8 +50,11 @@ use linnet::{
 };
 use spenso::{
     contraction::Contract,
-    network::library::TensorLibraryData,
-    structure::{HasStructure, OrderedStructure, representation::Euclidean},
+    network::{
+        library::TensorLibraryData,
+        parsing::{NetworkParse, ParseSettings},
+    },
+    structure::{HasStructure, OrderedStructure, representation::Euclidean, slot::IsAbstractSlot},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::{
@@ -816,12 +818,21 @@ impl Graph {
                 self.name
             );
         }
-        let net = full_num.parse_into_net().map_err(Report::from)?;
+        let net = full_num
+            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+            .map_err(Report::from)?;
         let dangling = net.graph.dangling_indices();
         if !dangling.is_empty() {
             return Err(eyre!(
                 "Full numerator still has dangling tensor indices: {}",
-                dangling.iter().map(|slot| format!("{slot:?}")).join(", ")
+                dangling
+                    .iter()
+                    .map(|slot| format!(
+                        "{}:{}",
+                        slot.to_atom().log_print(None),
+                        slot.to_atom().to_plain_string()
+                    ))
+                    .join(", ")
             ));
         }
 

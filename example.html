@@ -1,0 +1,16 @@
+
+running 1 test
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ Snapshot Summary ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Snapshot: finite_part_ghost_2loop
+Source: crates/gammalooprs/tests/test_renormalization.rs:924
+────────────────────────────────────────────────────────────────────────────────
+Expression: align_to_rqft(&a, &model).to_bare_ordered_string()
+────────────────────────────────────────────────────────────────────────────────
+-old snapshot
++new results
+────────────┬───────────────────────────────────────────────────────────────────
+    1       │-(-3/16+5/32*ε)*ca^2*dot(P(0),P(0),mink(4))*gs^4*ε^(-2)
+          1 │+((dot(P(0),P(0),mink(4)))^2*1/160*ε+1/8*dot(P(0),P(0),mink(4))*mUV^2*ε+13/32*mUV^4*ε+3/16*mUV^4)*ca^2*dot(P(0),P(0),mink(4))*gs^4*mUV^(-4)*ε^(-2)
+────────────┴───────────────────────────────────────────────────────────────────
+To update snapshots run `cargo insta review`
+Stopped on the first failure. Run `cargo insta test` to run all snapshots.
