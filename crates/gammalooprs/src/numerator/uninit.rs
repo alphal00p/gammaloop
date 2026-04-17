@@ -55,7 +55,7 @@ impl Numerator<UnInit> {
                     num *= graph[sink_n].get_num();
                 }
 
-                num *= &e.data.num //.kill_color();
+                num *= &e.data.num.value //.kill_color();
             }
         }
 
@@ -110,7 +110,7 @@ impl Numerator<UnInit> {
                     num *= graph[sink_n].get_num();
                 }
 
-                num *= &e.data.num //.kill_color();
+                num *= &e.data.num.value //.kill_color();
             }
         }
 

@@ -79,7 +79,7 @@ iterative_orientation_optimization = true
 compile = true
 
 [cli_settings.global.generation.compile]
-compilation_mode = "assembly"
+compilation_mode = "c++"
 optimization_level = "O3"
 fast_math = true
 unsafe_math = true

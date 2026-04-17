@@ -8,7 +8,7 @@ use crate::graph::cuts::CutSet;
 use crate::graph::edge::ParseEdge;
 use crate::graph::feynman_graph::FeynmanGraph;
 use crate::graph::global::ParseData;
-use crate::graph::hedge_data::ParseHedge;
+use crate::graph::hedge_data::ParseHedgeData;
 use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
@@ -1727,8 +1727,8 @@ mod failing {
         let n6 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
 
         underlying.add_edge(
-            n1.add_data(ParseHedge::default()),
-            n2.add_data(ParseHedge::default()),
+            n1.add_data(ParseHedgeData::default()),
+            n2.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone())
                 .with_num(Atom::one())
                 .with_lmb_id(LoopIndex(0)),
@@ -1736,15 +1736,15 @@ mod failing {
         );
 
         underlying.add_edge(
-            n1.add_data(ParseHedge::default()),
-            n3.add_data(ParseHedge::default()),
+            n1.add_data(ParseHedgeData::default()),
+            n3.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()).with_num(Atom::one()),
             false,
         );
 
         underlying.add_edge(
-            n2.add_data(ParseHedge::default()),
-            n3.add_data(ParseHedge::default()),
+            n2.add_data(ParseHedgeData::default()),
+            n3.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 1 {
                 spenso_lor_atom(2, 30, GS.dim)
             } else {
@@ -1767,8 +1767,8 @@ mod failing {
         );
 
         underlying.add_edge(
-            n2.add_data(ParseHedge::default()),
-            n4.add_data(ParseHedge::default()),
+            n2.add_data(ParseHedgeData::default()),
+            n4.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 0 && uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
@@ -1778,8 +1778,8 @@ mod failing {
         );
 
         underlying.add_edge(
-            n3.add_data(ParseHedge::default()),
-            n5.add_data(ParseHedge::default()),
+            n3.add_data(ParseHedgeData::default()),
+            n5.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone())
                 .with_num(if box_uv_dod == 2 {
                     spenso_lor_atom(4, 30, GS.dim)
@@ -1791,8 +1791,8 @@ mod failing {
         );
 
         underlying.add_edge(
-            n4.add_data(ParseHedge::default()),
-            n5.add_data(ParseHedge::default()),
+            n4.add_data(ParseHedgeData::default()),
+            n5.add_data(ParseHedgeData::default()),
             ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
                 spenso_lor_atom(5, 10, GS.dim)
             } else {
@@ -1802,8 +1802,8 @@ mod failing {
         );
 
         underlying.add_edge(
-            n6.add_data(ParseHedge::default()),
-            n4.add_data(ParseHedge::default()),
+            n6.add_data(ParseHedgeData::default()),
+            n4.add_data(ParseHedgeData::default()),
             ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
                 spenso_lor_atom(6, 20, GS.dim)
             } else {
@@ -1813,8 +1813,8 @@ mod failing {
         );
 
         underlying.add_edge(
-            n5.add_data(ParseHedge::default()),
-            n6.add_data(ParseHedge::default()),
+            n5.add_data(ParseHedgeData::default()),
+            n6.add_data(ParseHedgeData::default()),
             ParseEdge::new(tp.clone())
                 .with_num(if uv_dod >= 0 {
                     spenso_lor_atom(7, 10, GS.dim)
@@ -1826,7 +1826,7 @@ mod failing {
         );
 
         underlying.add_external_edge(
-            n1.add_data(ParseHedge::default()),
+            n1.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()).with_num(if box_uv_dod == 1 {
                 spenso_lor_atom(8, 30, GS.dim)
             } else {
@@ -1837,7 +1837,7 @@ mod failing {
         );
 
         underlying.add_external_edge(
-            n6.add_data(ParseHedge::default()),
+            n6.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()).with_num(if box_uv_dod == -1 && uv_dod >= 1 {
                 spenso_lor_atom(9, 20, GS.dim)
             } else {
@@ -1913,22 +1913,22 @@ mod failing {
         let n4 = underlying.add_node(htt.clone().into());
 
         underlying.add_edge(
-            n1.add_data(ParseHedge::default()),
-            n2.add_data(ParseHedge::default()),
+            n1.add_data(ParseHedgeData::default()),
+            n2.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()),
             false,
         );
 
         underlying.add_edge(
-            n1.add_data(ParseHedge::default()),
-            n3.add_data(ParseHedge::default()),
+            n1.add_data(ParseHedgeData::default()),
+            n3.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()),
             false,
         );
 
         underlying.add_edge(
-            n2.add_data(ParseHedge::default()),
-            n3.add_data(ParseHedge::default()),
+            n2.add_data(ParseHedgeData::default()),
+            n3.add_data(ParseHedgeData::default()),
             ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
                 spenso_lor_atom(2, 10, GS.dim)
             } else {
@@ -1938,8 +1938,8 @@ mod failing {
         );
 
         underlying.add_edge(
-            n3.add_data(ParseHedge::default()),
-            n4.add_data(ParseHedge::default()),
+            n3.add_data(ParseHedgeData::default()),
+            n4.add_data(ParseHedgeData::default()),
             ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
@@ -1949,8 +1949,8 @@ mod failing {
         );
 
         underlying.add_edge(
-            n4.add_data(ParseHedge::default()),
-            n2.add_data(ParseHedge::default()),
+            n4.add_data(ParseHedgeData::default()),
+            n2.add_data(ParseHedgeData::default()),
             ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
                 spenso_lor_atom(4, 10, GS.dim)
             } else {
@@ -1960,14 +1960,14 @@ mod failing {
         );
 
         underlying.add_external_edge(
-            n1.add_data(ParseHedge::default()),
+            n1.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()),
             false,
             Flow::Sink,
         );
 
         underlying.add_external_edge(
-            n4.add_data(ParseHedge::default()),
+            n4.add_data(ParseHedgeData::default()),
             ParseEdge::new(hp.clone()).with_num(if uv_dod >= 1 {
                 spenso_lor_atom(6, 20, GS.dim)
             } else {

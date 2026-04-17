@@ -13,7 +13,7 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, Symbol},
     function,
     id::{MatchSettings, Replacement},
     parse, parse_lit,
@@ -23,7 +23,7 @@ use tracing::{debug, instrument};
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
 use crate::{
-    graph::LMBext,
+    graph::{Graph, LMBext, LoopMomentumBasis},
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LogPrint},
@@ -39,6 +39,58 @@ use crate::{
 pub struct Integrated<'a> {
     pub vakint: &'a Vakint,
     pub vakint_settings: &'a vakint::VakintSettings,
+}
+
+impl Graph {
+    pub(crate) fn uv_rescaled(
+        &self,
+        replacement_subgraph: &SuBitGraph,
+        n_loops: usize,
+        lmb: &LoopMomentumBasis,
+        atom: &Atom,
+    ) -> Atom {
+        // only apply replacements for edges in the reduced graph
+        let mom_reps = self.uv_wrapped_replacement(replacement_subgraph, lmb, &[W_.x___]);
+        let mut atomarg = atom.replace_multiple(&mom_reps);
+
+        // rescale the loop momenta in the whole subgraph, including previously expanded cycles
+        for edge in &lmb.loop_edges {
+            atomarg = atomarg
+                .replace(GS.emr_mom(*edge, W_.x___))
+                .with(GS.emr_mom(*edge, W_.x___) / GS.rescale);
+        }
+
+        let tsquare = Atom::var(GS.rescale).pow(2);
+
+        debug!(res = %atomarg.log_print(None),"Rescaled momenta expanded");
+        atomarg = atomarg
+            .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
+            .with(
+                GS.den(
+                    W_.a_,
+                    W_.mom_,
+                    Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
+                    Atom::var(W_.prop_) * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
+                        - (Atom::var(GS.m_uv)).pow(2),
+                ) / &tsquare,
+            )
+            .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___))
+            .with_map(move |m| {
+                let mut f = symbolica::atom::FunctionBuilder::new(GS.den);
+                f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
+                f = f.add_arg(
+                    (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
+                        .expand()
+                        .replace(GS.rescale)
+                        .with(Atom::Zero),
+                );
+                f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
+                f.finish()
+            });
+
+        atomarg *= Atom::var(GS.rescale).pow(-4 * n_loops as i64);
+        atomarg
+    }
 }
 
 impl Integrated<'_> {
@@ -91,49 +143,12 @@ impl Integrated<'_> {
         let graph = ctx.graph;
         let reduced = current.reduced_subgraph(given);
 
-        // only apply replacements for edges in the reduced graph
-        let mom_reps = graph.uv_wrapped_replacement(&reduced, current.lmb(), &[W_.x___]);
-
-        let mut atomarg = integrand.replace_multiple(&mom_reps);
-
-        // rescale the loop momenta in the whole subgraph, including previously expanded cycles
-        for e in &current.lmb().loop_edges {
-            // println!("Rescale {}", e);
-            atomarg = atomarg
-                .replace(GS.emr_mom(*e, W_.x___))
-                .with(GS.emr_mom(*e, W_.x___) / GS.rescale);
-        }
-
-        let tsquare = Atom::var(GS.rescale).pow(2);
-
-        debug!(res = %atomarg.log_print(None),"Rescaled momenta expanded");
-        atomarg = atomarg
-            .replace(GS.den(W_.a_, W_.mom_, W_.mass_, W_.prop_))
-            .with(
-                GS.den(
-                    W_.a_,
-                    W_.mom_,
-                    Atom::var(W_.mass_) + Atom::var(GS.m_uv).pow(2),
-                    Atom::var(W_.prop_) * &tsquare + Atom::var(GS.m_uv).pow(2) * &tsquare
-                        - (Atom::var(GS.m_uv)).pow(2),
-                ) / &tsquare, // "den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)"
-            )
-            .replace(function!(GS.den, W_.a_, W_.mom_, W_.a___)) //rescale the momenta for the same reason
-            .with_map(move |m| {
-                let mut f = FunctionBuilder::new(GS.den);
-                f = f.add_arg(m.get(W_.a_).unwrap().to_atom());
-                f = f.add_arg(
-                    (m.get(W_.mom_).unwrap().to_atom() * GS.rescale)
-                        .expand()
-                        .replace(GS.rescale)
-                        .with(Atom::Zero),
-                );
-                f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
-
-                f.finish()
-            });
-
-        atomarg *= Atom::var(GS.rescale).pow(-4 * graph.n_loops(current.subgraph()) as i64);
+        let atomarg = graph.uv_rescaled(
+            &reduced,
+            graph.n_loops(current.subgraph()),
+            current.lmb(),
+            integrand,
+        );
 
         debug!(res = %atomarg.log_print(None),"Rescaled expanded");
         let a = atomarg

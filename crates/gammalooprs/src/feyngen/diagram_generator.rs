@@ -517,6 +517,7 @@ pub(crate) fn assign_node_colors(
             color_structures: ColorStructure {
                 color_structure: vec![],
             },
+            dod: 0,
         }));
         let colors = if node_edges.len() == 1 {
             &vec![dummy_external_vertex_rule]

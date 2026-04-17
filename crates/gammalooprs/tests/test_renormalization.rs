@@ -743,7 +743,7 @@ mod failing {
             0:4	-> 1:5	 [id=3 dir=none particle="ghG"];
             3:6	-> 0:7	 [id=4 dir=none particle="ghG"];
             1:8	-> 2:9	 [id=5 dir=none particle="ghG"];
-            2:10-> 3:11	 [id=6 dir=none source=2 particle="g"];
+            2:10-> 3:11	 [id=6 dir=none source="{ufo_order:2}" particle="g"];
         }
 
         digraph GL03{//9

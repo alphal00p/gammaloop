@@ -2,7 +2,7 @@ use crate::HasModel;
 use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
-use crate::utils::symbolica_ext::Replaces;
+use crate::utils::symbolica_ext::{DOD, Replaces};
 use crate::utils::{self, F, W_};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
@@ -523,6 +523,7 @@ pub struct VertexRule {
     pub color_structures: ColorStructure,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Vec<Option<CouplingName>>>,
+    pub dod: i32,
 }
 
 impl Eq for VertexRule {}
@@ -643,6 +644,19 @@ impl VertexRule {
         model: &Model,
         vertex_rule: &SerializableVertexRule,
     ) -> VertexRule {
+        let lorentz_structures: Vec<Arc<LorentzStructure>> = vertex_rule
+            .lorentz_structures
+            .iter()
+            .map(|lorentz_structure_name| {
+                model.get_lorentz_structure(lorentz_structure_name).clone()
+            })
+            .collect();
+
+        let dod = lorentz_structures
+            .iter()
+            .map(|a| a.dod())
+            .reduce(|a, b| a.max(b))
+            .unwrap();
         VertexRule {
             name: vertex_rule.name.clone(),
             particles: vertex_rule
@@ -678,6 +692,7 @@ impl VertexRule {
                         .collect()
                 })
                 .collect(),
+            dod,
         }
     }
 }
@@ -708,6 +723,7 @@ pub struct Propagator {
     pub particle: ArcParticle,
     pub numerator: Atom,
     pub denominator: Atom,
+    pub dod: i32,
 }
 
 impl Propagator {
@@ -715,11 +731,15 @@ impl Propagator {
         model: &Model,
         propagator: &SerializablePropagator,
     ) -> Propagator {
+        let numerator = utils::parse_python_expression(propagator.numerator.as_str());
+        let denominator = utils::parse_python_expression(propagator.denominator.as_str());
+        let dod = (&numerator / &denominator).all_dod();
         Propagator {
             name: propagator.name.clone(),
             particle: model.get_particle(&propagator.particle).clone(),
-            numerator: utils::parse_python_expression(propagator.numerator.as_str()),
-            denominator: utils::parse_python_expression(propagator.denominator.as_str()),
+            numerator,
+            denominator,
+            dod,
         }
     }
 }
@@ -1361,6 +1381,10 @@ impl LorentzStructure {
             spins: ls.spins.clone(),
             structure: utils::parse_python_expression(ls.structure.as_str()),
         }
+    }
+
+    pub(crate) fn dod(&self) -> i32 {
+        self.structure.all_dod()
     }
 }
 

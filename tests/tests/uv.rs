@@ -238,6 +238,35 @@ mod slow {
     }
 }
 
+#[test]
+fn dod2_bubble_uv() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("dod2_bubble.toml".into()),
+        get_tests_workspace_path().join("dod2_bubble"),
+        None,
+        true,
+    )?;
+    cli.run_command("run generate")?;
+    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2")?;
+    assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2_no_integrated_UV")?;
+    let baseline = run_bubble_below_threshold_integration(
+        &mut cli,
+        "dod2_bubble",
+        "bubble_dod2_no_integrated_UV",
+        "bubble_dod2",
+    )?;
+    assert_integrated_result_is_muv_invariant(
+        &mut cli,
+        "dod2_bubble",
+        "bubble_dod2",
+        &baseline.integrated,
+        20.0,
+        7.0,
+    )?;
+    assert_bubble_below_threshold_targets(&baseline, -0.5940830828502411, 1.2143596454658382e-2);
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
 mod failing {
     use super::*;
 
@@ -261,40 +290,6 @@ mod failing {
         let uv = res.unwrap_uv();
         assert_eq!(uv.pass_fail(-0.9).failed, 0);
         clean_test(&state_path);
-        Ok(())
-    }
-
-    #[test]
-    fn dod2_bubble_uv() -> Result<()> {
-        let mut cli = get_test_cli(
-            Some("dod2_bubble.toml".into()),
-            get_tests_workspace_path().join("dod2_bubble"),
-            None,
-            true,
-        )?;
-        cli.run_command("run generate")?;
-        assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2")?;
-        assert_bubble_uv_profile_passes(&mut cli, "bubble_dod2_no_integrated_UV")?;
-        let baseline = run_bubble_below_threshold_integration(
-            &mut cli,
-            "dod2_bubble",
-            "bubble_dod2_no_integrated_UV",
-            "bubble_dod2",
-        )?;
-        assert_integrated_result_is_muv_invariant(
-            &mut cli,
-            "dod2_bubble",
-            "bubble_dod2",
-            &baseline.integrated,
-            20.0,
-            7.0,
-        )?;
-        assert_bubble_below_threshold_targets(
-            &baseline,
-            -0.5940830828502411,
-            1.2143596454658382e-2,
-        );
-        clean_test(&cli.cli_settings.state.folder);
         Ok(())
     }
 }

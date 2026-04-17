@@ -33,6 +33,7 @@ use crate::{
 };
 
 use super::parse::{StripParse, ToQuoted};
+use crate::graph::Autogen;
 use color_eyre::Result;
 use eyre::eyre;
 
@@ -185,15 +186,15 @@ pub struct EdgeExtraData {
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Edge {
     // #[bincode(with_serde)]
-    pub name: String,
+    pub name: Autogen<String>,
     pub extra_data: EdgeExtraData,
     // pub edge_type: EdgeType,
     // pub propagator: ArcPropagator,
     pub particle: PossibleParticle,
     pub mass: EdgeMass,
-    pub num: Atom,
+    pub num: Autogen<Atom>,
     // pub spin_num: Atom,
-    pub dod: i32,
+    pub dod: Autogen<i32>,
     pub is_dummy: bool, // #[bincode(with_serde)]
 }
 
@@ -342,7 +343,7 @@ impl From<&ParseEdge> for DotEdgeData {
             e.add_statement("vakint_edge_power", vak);
         }
 
-        if !value.is_dummy {
+        if value.is_dummy {
             e.add_statement("is_dummy", value.is_dummy);
         }
         // e.add_statement("color_num", value.color_num.to_quoted());
@@ -352,36 +353,23 @@ impl From<&ParseEdge> for DotEdgeData {
 
 impl From<&Edge> for DotEdgeData {
     fn from(value: &Edge) -> Self {
-        let mut e = DotEdgeData::empty();
-        e.add_statement("name", value.name.clone());
-        match &value.particle {
-            PossibleParticle::Particle(p) => {
-                e.add_statement("particle", format!("{}", p.name));
-            }
-            PossibleParticle::JustMass { expr, .. } => {
-                e.add_statement("mass", expr.to_quoted());
-            }
-            PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
-                e.add_statement("mass", mass.to_quoted());
-                e.add_statement("particle", format!("{}", particle.name));
-            }
-        }
-        e.add_statement("dod", value.dod);
-        e.add_statement("num", value.num.to_quoted());
-        // e.add_statement("color_num", value.color_num.to_quoted());
-        //
-        if !value.is_dummy {
-            e.add_statement("is_dummy", value.is_dummy);
-        }
+        (&ParseEdge::from(value)).into()
+    }
+}
 
-        if let Some(mep) = value.extra_data.momtrop_edge_power.as_ref() {
-            e.add_statement("momtrop_edge_power", mep.to_canonical_string())
+impl From<&Edge> for ParseEdge {
+    fn from(value: &Edge) -> Self {
+        ParseEdge {
+            name: value.name.clone().option(),
+            particle: value.particle.clone(),
+            dod: value.dod.option(),
+            is_dummy: value.is_dummy,
+            lmb_id: None,
+            num: value.num.clone().option(),
+            is_cut: None,
+            momtrop_edge_power: value.extra_data.momtrop_edge_power.clone(),
+            vakint_edge_power: value.extra_data.vakint_edge_power,
         }
-        if let Some(vak) = value.extra_data.vakint_edge_power {
-            e.add_statement("vakint_edge_power", vak)
-        }
-
-        e
     }
 }
 

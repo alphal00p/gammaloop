@@ -1118,17 +1118,17 @@ mod tests {
               4[int_id=V_71];
               5[int_id=V_71];
               ext0 [style=invis];
-              ext0-> 5:0 [id=9 dir=none is_cut=0 is_dummy=false particle="a"];
-              0:1-> 1:2 [id=1 dir=back  is_dummy=false particle="d~"];
-              0:3-> 1:4 [id=2  is_dummy=false particle="d"];
-              0:5-> 3:6 [id=3 dir=none  is_dummy=false particle="g"];
-              1:7-> 2:8 [id=4 dir=none  is_dummy=false particle="g"];
-              2:9-> 4:10 [id=5 dir=back  is_dummy=false particle="d~"];
-              2:11-> 5:12 [id=6  is_dummy=false particle="d"];
-              3:13-> 4:14 [id=7  is_dummy=false particle="d"];
-              3:15-> 5:16 [id=0 dir=back  is_dummy=false particle="d~"];
+              ext0-> 5:0 [id=9 dir=none is_cut=0  particle="a"];
+              0:1-> 1:2 [id=1 dir=back   particle="d~"];
+              0:3-> 1:4 [id=2   particle="d"];
+              0:5-> 3:6 [id=3 dir=none   particle="g"];
+              1:7-> 2:8 [id=4 dir=none   particle="g"];
+              2:9-> 4:10 [id=5 dir=back   particle="d~"];
+              2:11-> 5:12 [id=6   particle="d"];
+              3:13-> 4:14 [id=7   particle="d"];
+              3:15-> 5:16 [id=0 dir=back   particle="d~"];
               ext9 [style=invis];
-              4:17-> ext9 [id=8 dir=none is_cut=0 is_dummy=false particle="a"];
+              4:17-> ext9 [id=8 dir=none is_cut=0  particle="a"];
               }
         )
         .unwrap();

@@ -35,6 +35,7 @@ use crate::{
 };
 
 pub(crate) mod attribute_warnings;
+pub mod autogen;
 pub mod cuts;
 pub mod global;
 
@@ -51,7 +52,7 @@ pub struct Graph {
     pub group_id: Option<GroupId>,
     pub is_group_master: bool,
     pub tree_edges: SuBitGraph,
-    pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
+    pub underlying: HedgeGraph<Edge, Vertex, HedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub param_builder: ParamBuilder,
     pub global_prefactor: GlobalPrefactor,
@@ -328,7 +329,7 @@ impl Graph {
 
     pub(crate) fn edge_name_to_index(&self, name: &str) -> Option<EdgeIndex> {
         for (_, edge_index, edge_data) in self.underlying.iter_edges() {
-            if edge_data.data.name == name {
+            if edge_data.data.name.value == name {
                 return Some(edge_index);
             }
         }
@@ -468,9 +469,10 @@ impl Graph {
 
 pub mod edge;
 pub mod parse;
+pub use autogen::Autogen;
 pub use edge::Edge;
 pub mod hedge_data;
-pub use hedge_data::NumHedgeData;
+pub use hedge_data::HedgeData;
 pub mod vertex;
 pub use vertex::Vertex;
 

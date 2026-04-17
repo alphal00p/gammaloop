@@ -4,6 +4,7 @@ use linnet::half_edge::{
     HedgeGraph,
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike},
 };
+use tracing::error;
 
 use crate::{
     graph::{LMBext, LoopMomentumBasis, cuts::CutSet},
@@ -58,9 +59,20 @@ impl Spinney {
             .unwrap_or(0);
         let lmb = g.compatible_sub_lmb(&subgraph, g.dummy_less_full_crown(&subgraph), lmb);
 
+        let dod = g.dod(&subgraph);
+
+        if dod != g.local_dod(&subgraph) {
+            error!(
+                "dod mismatch: global={} local={} of graph:\n{}",
+                dod,
+                g.local_dod(&subgraph),
+                g.dod(&subgraph),
+            );
+        }
+
         Self {
             components,
-            dod: g.dod(&subgraph),
+            dod,
             lmb,
             subgraph,
             renormalization_scheme,

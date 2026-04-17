@@ -111,14 +111,14 @@ digraph GL04{
   3[dod="1" int_id="V_35" num="Q(6,mu7)"];
 
   ext0	 [style=invis];
-  ext0	-> 3:0	 [id=0 dir=none sink=0 dod="-2" is_dummy="false" lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
+  ext0	-> 3:0	 [id=0 dir=none sink=0 dod="-2"  lmb_rep="P(0,a___)" name="e0" num="1𝑖" particle="ghG"];
   ext1	 [style=invis];
-  2:1	-> ext1	 [id=1 dir=none source=1 dod="-2" is_dummy="false" lmb_rep="P(0,a___)" name="e1" num="1𝑖" particle="ghG"];
-  1:2	-> 0:3	 [id=2 dir=none source=1 sink=0  dod="-2" is_dummy="false" lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="1" particle="ghG"];
-  0:4	-> 2:5	 [id=3 dir=none source=1 sink=0  dod="-2" is_dummy="false" lmb_id="1" lmb_rep="K(1,a___)" name="e3" num="1" particle="ghG"];
-  0:6	-> 3:7	 [id=4 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(1,a___)+K(0,a___)" name="e4" num="-spenso::g(mu6,mu7)" particle="g"];
-  1:8	-> 2:9	 [id=5 dir=none source=2 sink=2  dod="-2" is_dummy="false" lmb_rep="-1*K(1,a___)+P(0,a___)" name="e5" num="-spenso::g(mu8,mu9)" particle="g"];
-  3:10	-> 1:11	 [id=6 dir=none source=1 sink=0  dod="-2" is_dummy="false" lmb_rep="-1*K(1,a___)+K(0,a___)+P(0,a___)" name="e6" num="1" particle="ghG"];
+  2:1	-> ext1	 [id=1 dir=none source=1 dod="-2"  lmb_rep="P(0,a___)" name="e1" num="1𝑖" particle="ghG"];
+  1:2	-> 0:3	 [id=2 dir=none source=1 sink=0  dod="-2"  lmb_id="0" lmb_rep="K(0,a___)" name="e2" num="1" particle="ghG"];
+  0:4	-> 2:5	 [id=3 dir=none source=1 sink=0  dod="-2"  lmb_id="1" lmb_rep="K(1,a___)" name="e3" num="1" particle="ghG"];
+  0:6	-> 3:7	 [id=4 dir=none source=2 sink=2  dod="-2"  lmb_rep="-1*K(1,a___)+K(0,a___)" name="e4" num="-spenso::g(mu6,mu7)" particle="g"];
+  1:8	-> 2:9	 [id=5 dir=none source=2 sink=2  dod="-2"  lmb_rep="-1*K(1,a___)+P(0,a___)" name="e5" num="-spenso::g(mu8,mu9)" particle="g"];
+  3:10	-> 1:11	 [id=6 dir=none source=1 sink=0  dod="-2"  lmb_rep="-1*K(1,a___)+K(0,a___)+P(0,a___)" name="e6" num="1" particle="ghG"];
 }
 
 GC_10^4*Q(1,mu9)*Q(2,mink(dim,hedge(8)))*Q(3,mink(dim,hedge(6)))*Q(6,mink(dim,hedge(7)))*g(mink(dim,hedge(6)),mink(dim,hedge(7)))*g(mink(dim,hedge(8)),mu9)
