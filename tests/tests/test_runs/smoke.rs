@@ -3,12 +3,31 @@ use super::*;
 
 #[test]
 fn oak() -> Result<()> {
-    let state = get_test_cli(
+    let mut state = get_test_cli(
         Some("generate_oak_diag.toml".into()),
         get_tests_workspace_path().join("generate_oak_diag"),
         None,
         false,
     )?;
+    let output_dir = get_tests_workspace_path()
+        .join("generate_oak_diag")
+        .join("OAK_DIAG_PROCESSED");
+    gammaloop_api::commands::save::Save::Dot {
+        path: Some(output_dir.clone()),
+        combine_diagrams: false,
+        with_uv: None,
+        output_full_numerator: None,
+        do_gamma_algebra: None,
+        do_color_algebra: None,
+        split_xs_by_initial_states: None,
+    }
+    .run(
+        &mut state.state,
+        &state.run_history,
+        &state.default_runtime_settings,
+        &state.cli_settings,
+    )?;
+    assert!(output_dir.exists());
     Ok(())
 }
 

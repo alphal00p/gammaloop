@@ -50,6 +50,7 @@ examples/**/gammaloop_state/
 integration-tests/workspace/
 crates/integration-tests/workspace/
 tests/artifacts/
+*.pending-snap
 benches/**/tests_gammaloop_state/
 out.yaml
 outmap.yaml
