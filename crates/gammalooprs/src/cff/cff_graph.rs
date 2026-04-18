@@ -6,13 +6,16 @@ use ahash::{HashMap, HashSet, HashSetExt};
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
-use linnet::half_edge::{
-    HedgeGraph, NodeIndex,
-    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike},
+use linnet::{
+    half_edge::{
+        HedgeGraph, NodeIndex,
+        involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
+        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike},
+    },
+    num_traits::Sign,
 };
 use serde::{Deserialize, Serialize};
-use std::hash::Hash;
+use std::{cmp::Ordering, hash::Hash};
 
 use super::{
     esurface::{Esurface, ExternalShift},
@@ -238,6 +241,7 @@ enum VertexType {
 pub struct ChildWithContractedEdges {
     pub child: CFFGenerationGraph,
     pub contracted_edges: ContractedEdges,
+    pub surface_sign: Sign,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -938,12 +942,17 @@ impl CFFGenerationGraph {
         let outgoing_virtual = virtual_edge_ids_sorted(&vertex.outgoing_edges);
 
         let flip_signs = match incoming_virtual.len().cmp(&outgoing_virtual.len()) {
-            std::cmp::Ordering::Greater => true,
-            std::cmp::Ordering::Less => false,
+            Ordering::Greater => true,
+            Ordering::Less => false,
             // Equal count: flip so that the smaller IDs end up in positive_energies.
             // Without flip, positive = outgoing, negative = incoming.
             // Flip when outgoing > incoming lexicographically (so incoming becomes positive).
-            std::cmp::Ordering::Equal => outgoing_virtual > incoming_virtual,
+            Ordering::Equal => outgoing_virtual > incoming_virtual,
+        };
+        let surface_sign = if flip_signs {
+            Sign::Negative
+        } else {
+            Sign::Positive
         };
 
         let external_shift: ExternalShift = vertex
@@ -1042,19 +1051,12 @@ impl CFFGenerationGraph {
             .iter()
             .map(|adjacent_vertex| {
                 let child = self.contract_vertices(&vertex.vertex_set, &adjacent_vertex.vertex_set);
-                let mut contracted_edges =
+                let contracted_edges =
                     self.get_connecting_edges(&vertex.vertex_set, &adjacent_vertex.vertex_set);
-                // Keep numerator sign convention aligned with canonicalized surface sign.
-                // If we flipped the surface signs, swap numerator sign as well.
-                if flip_signs {
-                    std::mem::swap(
-                        &mut contracted_edges.incoming_edges,
-                        &mut contracted_edges.outgoing_edges,
-                    );
-                }
                 ChildWithContractedEdges {
                     child,
                     contracted_edges,
+                    surface_sign,
                 }
             })
             .collect_vec();
