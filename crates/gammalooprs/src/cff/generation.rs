@@ -16,14 +16,13 @@ use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::{
-    HedgeGraph,
-    involution::{EdgeVec, HedgePair},
-    subgraph::{OrientedCut, SubGraphLike, SubSetOps},
-};
-use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::InternalSubGraph,
+use linnet::{
+    half_edge::{
+        HedgeGraph,
+        involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
+        subgraph::{InternalSubGraph, OrientedCut, SubGraphLike, SubSetOps},
+    },
+    num_traits::Sign,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -49,6 +48,7 @@ struct GenerationData {
     graph: CFFGenerationGraph,
     surface_id: Option<HybridSurfaceID>,
     thermal_numerator_id: Option<ThermalNumeratorID>,
+    thermal_sign: Option<Sign>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
@@ -57,15 +57,19 @@ pub struct CFFNodeData {
     pub surface_id: HybridSurfaceID,
     #[bincode(with_serde)]
     pub thermal_numerator_id: Option<ThermalNumeratorID>,
+    #[bincode(with_serde)]
+    pub thermal_sign: Option<Sign>,
 }
 
 impl From<CFFNodeData> for Atom {
     fn from(data: CFFNodeData) -> Atom {
         let surface = Atom::from(data.surface_id);
-        match data.thermal_numerator_id {
+        let term = match data.thermal_numerator_id {
             Some(id) => surface / Atom::from(id),
             None => surface,
-        }
+        };
+
+        data.thermal_sign.unwrap_or(Sign::Positive) * term
     }
 }
 
@@ -79,6 +83,7 @@ fn forget_graphs(data: GenerationData) -> CFFNodeData {
     CFFNodeData {
         surface_id: data.surface_id.expect("corrupted expression tree"),
         thermal_numerator_id: data.thermal_numerator_id,
+        thermal_sign: data.thermal_sign,
     }
 }
 
@@ -855,6 +860,7 @@ fn generate_tree_for_orientation(
         graph,
         surface_id: None,
         thermal_numerator_id: None,
+        thermal_sign: None,
     });
 
     match medium_mode {
@@ -1093,6 +1099,7 @@ fn advance_tree(
                     graph: child,
                     surface_id: None,
                     thermal_numerator_id: None,
+                    thermal_sign: None,
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -1317,31 +1324,39 @@ fn advance_tree_thermal(
                 let ChildWithContractedEdges {
                     child,
                     contracted_edges,
+                    surface_sign,
                 } = child_with_edges;
 
-                // Create thermal numerator from contracted edges
-                let thermal_numerator = ThermalNumerator {
-                    positive_energies: contracted_edges.outgoing_edges,
-                    negative_energies: contracted_edges.incoming_edges,
-                };
-
-                // Check if this thermal numerator already exists in the cache
-                let thermal_numerator_id = generator_cache
-                    .thermal_numerator_cache
-                    .position(|val| *val == thermal_numerator)
-                    .unwrap_or_else(|| {
+                let (thermal_numerator, numerator_sign) =
+                    ThermalNumerator::from_edge_lists_canonicalized(
+                        contracted_edges.outgoing_edges,
+                        contracted_edges.incoming_edges,
+                    );
+                let thermal_sign = surface_sign * numerator_sign;
+                let thermal_numerator_id = if thermal_numerator.is_trivial() {
+                    None
+                } else {
+                    // Check if this thermal numerator already exists in the cache.
+                    Some(
                         generator_cache
                             .thermal_numerator_cache
-                            .push(thermal_numerator);
-                        Into::<ThermalNumeratorID>::into(
-                            generator_cache.thermal_numerator_cache.len() - 1,
-                        )
-                    });
+                            .position(|val| *val == thermal_numerator)
+                            .unwrap_or_else(|| {
+                                generator_cache
+                                    .thermal_numerator_cache
+                                    .push(thermal_numerator);
+                                Into::<ThermalNumeratorID>::into(
+                                    generator_cache.thermal_numerator_cache.len() - 1,
+                                )
+                            }),
+                    )
+                };
 
                 let child_node = GenerationData {
                     graph: child,
                     surface_id: None,
-                    thermal_numerator_id: Some(thermal_numerator_id),
+                    thermal_numerator_id,
+                    thermal_sign: Some(thermal_sign),
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -2008,6 +2023,21 @@ mod tests_cff {
             "thermal orientation trees should reference cached thermal numerators"
         );
 
+        let referenced_signs = thermal
+            .orientations
+            .iter()
+            .flat_map(|orientation| orientation.expression.iter_nodes())
+            .filter_map(|node| node.data.thermal_sign)
+            .collect_vec();
+        assert!(
+            referenced_signs.contains(&Sign::Negative),
+            "independently canonicalized thermal CFF nodes should retain leftover minus signs"
+        );
+        assert!(
+            referenced_signs.contains(&Sign::Positive),
+            "thermal CFF nodes should also retain explicitly positive canonicalization signs"
+        );
+
         let unique_referenced_ids = referenced_ids.iter().copied().collect::<BTreeSet<_>>();
         assert_eq!(
             unique_referenced_ids.len(),
@@ -2029,6 +2059,24 @@ mod tests_cff {
             unique_cached_numerators.len(),
             thermal.surfaces.thermal_numerator_cache.len(),
             "cached thermal numerators should already be deduplicated structurally"
+        );
+        assert!(
+            thermal
+                .surfaces
+                .thermal_numerator_cache
+                .iter()
+                .all(|numerator| !numerator.is_trivial()),
+            "trivial thermal numerators should be elided from the cache"
+        );
+        assert!(
+            thermal
+                .orientations
+                .iter()
+                .flat_map(|orientation| orientation.expression.iter_nodes())
+                .any(|node| {
+                    node.data.thermal_sign.is_some() && node.data.thermal_numerator_id.is_none()
+                }),
+            "thermal nodes with trivial numerators should keep only their sign"
         );
     }
 
@@ -2104,12 +2152,6 @@ mod tests_cff {
             2,
             "incorrect number of hsurfaces: {:#?}",
             cff.surfaces.hsurface_cache,
-        );
-        assert_eq!(
-            cff.surfaces.thermal_numerator_cache.len(),
-            2,
-            "incorrect number of thermal numerators: {:#?}",
-            cff.surfaces.thermal_numerator_cache,
         );
 
         let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
@@ -2234,12 +2276,6 @@ mod tests_cff {
             33,
             "incorrect number of hsurfaces: {:#?}",
             cff.surfaces.hsurface_cache,
-        );
-        assert_eq!(
-            cff.surfaces.thermal_numerator_cache.len(),
-            77,
-            "incorrect number of thermal numerators: {:#?}",
-            cff.surfaces.thermal_numerator_cache,
         );
 
         let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
