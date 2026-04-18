@@ -2068,6 +2068,144 @@ mod tests_cff {
     }
 
     #[test]
+    fn thermal_bubble() {
+        let bubble = vec![(0, 1), (1, 0)];
+
+        let incoming_vertices = vec![0, 1];
+        let orientations = generate_all_orientations_for_testing(bubble, incoming_vertices);
+        assert_eq!(orientations.len(), 4);
+
+        let dep_mom = EdgeIndex::from(1);
+        let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
+
+        let shift_rewrite = Some(ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        });
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &shift_rewrite.clone(),
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 4);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            2,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            2,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.thermal_numerator_cache.len(),
+            2,
+            "incorrect number of thermal numerators: {:#?}",
+            cff.surfaces.thermal_numerator_cache,
+        );
+
+        let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
+        let p2 = -p1;
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k, zero.spatial, m),
+            compute_one_loop_energy(k, p1.spatial, m),
+        ];
+
+        let external_energy_cache = [p1.temporal.value, p2.temporal.value];
+
+        // combine the virtual and external energies
+        let mut energy_cache = external_energy_cache.to_vec();
+        energy_cache.extend(virtual_energy_cache);
+
+        let energy_cache = dummy_hedge_graph(4)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..4);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(9.236_597_515_492_299e-4_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        // test cff from hedge graph
+        let mut bubble_hedge_graph_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..2)
+            .map(|_| bubble_hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        for node in nodes.clone() {
+            bubble_hedge_graph_builder.add_external_edge(
+                node,
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+        }
+
+        bubble_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        bubble_hedge_graph_builder.add_edge(nodes[1], nodes[0], (), Orientation::Undirected);
+
+        let bubble_hedge_graph: HedgeGraph<(), (), ()> =
+            bubble_hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+        let cff_hedge = generate_cff_expression(
+            &bubble_hedge_graph,
+            &shift_rewrite,
+            &[],
+            &[],
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..4);
+
+        let cff_res: F<f64> =
+            energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
+
+        let target_res = F(9.236_597_515_492_299e-4_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
+    #[test]
     fn thermal_mercedes() {
         let mercedes = vec![(0, 1), (1, 2), (2, 0), (1, 3), (3, 0), (2, 3)];
 
