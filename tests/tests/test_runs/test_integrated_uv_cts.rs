@@ -11,17 +11,17 @@ use ndarray::Array2;
 use symbolica::domains::float::Float as SymbolicaFloat;
 
 const INSPECT_POINT: [f64; 3] = [
-    9.9999867631375561e-01,
-    7.4640036804014731e-01,
-    6.1157297272080968e-02,
+    9.999_986_763_137_556e-1,
+    7.464_003_680_401_473e-1,
+    6.115_729_727_208_097e-2,
 ];
 
 fn bubble_no_integrated_inspect_f64_target() -> Complex<f64> {
-    Complex::new(-1.5806570726409131e-3, 0.0)
+    Complex::new(-1.580_657_072_640_913e-3, 0.0)
 }
 
 fn bubble_integrated_inspect_f64_target() -> Complex<f64> {
-    Complex::new(1.5856382984085330e-3, 0.0)
+    Complex::new(1.585_638_298_408_533e-3, 0.0)
 }
 
 fn bubble_no_integrated_inspect_arb_target() -> Result<Complex<F<ArbPrec>>> {

@@ -130,6 +130,25 @@
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
         };
 
+      gammaloopNextestPackages = [
+        "gammaloop-api"
+        "gammalooprs"
+        "idenso"
+        "linnest"
+        "linnet"
+        "spenso"
+        "spenso-hep-lib"
+        "spenso-macros"
+        "vakint"
+        "gammaloop-integration-tests"
+      ];
+
+      gammaloopNextestArgs =
+        ciArgs
+        // {
+          cargoExtraArgs = lib.concatStringsSep " " (["--locked"] ++ map (package: "-p ${package}") gammaloopNextestPackages);
+        };
+
       ciPartitionCount = 6;
 
       workspaceCrates = [
@@ -265,14 +284,14 @@
 
       partitionedNextestChecks = lib.listToAttrs (map (partition: {
           name = "gammaloop-nextest-partition-${toString partition}";
-          value = craneLib.cargoNextest (ciArgs
+          value = craneLib.cargoNextest (gammaloopNextestArgs
             // {
               inherit cargoArtifacts;
               preCheck = licensePreCheck;
               SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
               partitions = 1;
               partitionType = "count";
-              cargoNextestPartitionsExtraArgs = "--profile ci --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail --no-tests=pass";
+              cargoNextestPartitionsExtraArgs = "--profile ci_gammaloop --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
             });
         })
         (lib.range 1 ciPartitionCount));
@@ -336,14 +355,14 @@
             inherit (apiMeta) version;
           };
 
-          gammaloop-nextest = craneLib.cargoNextest (ciArgs
+          gammaloop-nextest = craneLib.cargoNextest (gammaloopNextestArgs
             // {
               inherit cargoArtifacts;
               preCheck = licensePreCheck;
               SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
               partitions = 1;
               partitionType = "count";
-              cargoNextestPartitionsExtraArgs = "--profile ci --no-fail-fast --final-status-level fail --no-tests=pass";
+              cargoNextestPartitionsExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
             });
         }
         // crateChecks

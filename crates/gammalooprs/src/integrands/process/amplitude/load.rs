@@ -925,6 +925,16 @@ fn diff_ratio(lhs: Complex<f64>, rhs: Complex<f64>) -> Option<Complex<f64>> {
     }
 }
 
+struct StandaloneEvaluationRequest<'a> {
+    backend: StandaloneBackend,
+    method: StandaloneMethod,
+    orientations: &'a [Vec<i8>],
+    orientation_index: Option<usize>,
+    custom_input: Option<&'a [Complex<f64>]>,
+    artifact_root: &'a Path,
+    label: &'a str,
+}
+
 impl LoadedStandaloneEvaluatorStack {
     fn selected_evaluator_mut(
         &mut self,
@@ -961,15 +971,9 @@ impl LoadedStandaloneEvaluatorStack {
 
     fn evaluate_with_backend(
         &mut self,
-        backend: StandaloneBackend,
-        method: StandaloneMethod,
-        orientations: &[Vec<i8>],
-        orientation_index: Option<usize>,
-        custom_input: Option<&[Complex<f64>]>,
-        artifact_root: &Path,
-        label: &str,
+        request: StandaloneEvaluationRequest<'_>,
     ) -> Result<Vec<Complex<f64>>> {
-        let inputs = if let Some(custom_input) = custom_input {
+        let inputs = if let Some(custom_input) = request.custom_input {
             if custom_input.len() != self.representative_input.len() {
                 return Err(eyre!(
                     "Custom input length {} does not match evaluator input length {}",
@@ -979,19 +983,20 @@ impl LoadedStandaloneEvaluatorStack {
             }
             vec![custom_input.to_vec()]
         } else {
-            match method {
+            match request.method {
                 StandaloneMethod::SingleParametric => {
-                    if let Some(index) = orientation_index {
-                        let orientation = orientations.get(index).ok_or_else(|| {
+                    if let Some(index) = request.orientation_index {
+                        let orientation = request.orientations.get(index).ok_or_else(|| {
                             eyre!(
                                 "Orientation index {} is out of range for {} orientations",
                                 index,
-                                orientations.len()
+                                request.orientations.len()
                             )
                         })?;
                         vec![self.set_orientation(orientation)]
                     } else {
-                        orientations
+                        request
+                            .orientations
                             .iter()
                             .map(|orientation| self.set_orientation(orientation))
                             .collect()
@@ -1003,13 +1008,13 @@ impl LoadedStandaloneEvaluatorStack {
             }
         };
 
-        let evaluator = self.selected_evaluator_mut(method)?;
+        let evaluator = self.selected_evaluator_mut(request.method)?;
         let (_, _, eval, result_template) = evaluator;
         let mut runtime = StandaloneRuntimeEvaluator::build(
             eval,
-            backend,
-            artifact_root,
-            &format!("{label}_{}", method.as_str()),
+            request.backend,
+            request.artifact_root,
+            &format!("{}_{}", request.label, request.method.as_str()),
         )?;
         let mut accumulated = vec![Complex::new(0.0, 0.0); result_template.len()];
 
@@ -1424,15 +1429,15 @@ fn main() -> Result<()> {
 
     let mut results = Vec::new();
     for backend in compare_backends {
-        let values = stack.evaluate_with_backend(
+        let values = stack.evaluate_with_backend(StandaloneEvaluationRequest {
             backend,
-            options.method,
-            &orientations,
-            options.orientation_index,
-            custom_input.as_deref(),
-            &artifact_root.join(sanitize_label(&graph_name)),
-            &format!("{}_{}", graph_name, stack_label),
-        )?;
+            method: options.method,
+            orientations: &orientations,
+            orientation_index: options.orientation_index,
+            custom_input: custom_input.as_deref(),
+            artifact_root: &artifact_root.join(sanitize_label(&graph_name)),
+            label: &format!("{}_{}", graph_name, stack_label),
+        })?;
         print_backend_result(backend, &values);
         results.push((backend, values));
     }

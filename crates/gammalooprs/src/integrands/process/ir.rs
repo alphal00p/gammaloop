@@ -637,7 +637,7 @@ fn parse_select_limits_and_graphs<I: ProcessIntegrandImpl>(
                 .len();
             if profile_limits
                 .iter()
-                .any(|limit| !limit.is_valid(loop_number).is_ok())
+                .any(|limit| limit.is_valid(loop_number).is_err())
             {
                 return Err(eyre!(
                     "One or more limits specified for graph '{}' in select_limits_and_graphs are not valid",
@@ -2141,14 +2141,16 @@ struct LimitData<T: FloatLike> {
     data: Vec<LambdaPointEval<T>>,
 }
 
+type PerCutPowerLawFits = Vec<(usize, Result<PowerLawFit>)>;
+type DisplayComponentPowerLawFits = Vec<(AdditionalWeightKey, Result<PowerLawFit>)>;
+type ExtractedPowerFits = (
+    PowerLawFit,
+    PerCutPowerLawFits,
+    DisplayComponentPowerLawFits,
+);
+
 impl<T: FloatLike> LimitData<T> {
-    fn extract_power(
-        &self,
-    ) -> Result<(
-        PowerLawFit,
-        Vec<(usize, Result<PowerLawFit>)>,
-        Vec<(AdditionalWeightKey, Result<PowerLawFit>)>,
-    )> {
+    fn extract_power(&self) -> Result<ExtractedPowerFits> {
         let x = self
             .data
             .iter()

@@ -38,6 +38,7 @@ path = "target/nextest/default/junit.xml"
 inherits = "default"
 # Reuse the default profile behavior but disable early termination for this curated suite.
 slow-timeout = "30y"
+default-filter = "not test(/(^|::)(slow|failing)::/)"
 
 [profile.ci]
 slow-timeout = { period = "120s", terminate-after = 2 }
@@ -56,6 +57,13 @@ final-status-level = "fail"
 
 [profile.ci.junit]
 # JUnit output for CI systems
+path = "target/nextest/ci/junit.xml"
+
+[profile.ci_gammaloop]
+inherits = "ci"
+default-filter = "not test(/(^|::)(slow|failing)::/)"
+
+[profile.ci_gammaloop.junit]
 path = "target/nextest/ci/junit.xml"
 
 [[profile.ci.overrides]]

@@ -140,18 +140,18 @@ impl RstarTDependenceEvaluator {
         self.implicit_function_theorem.is_some()
     }
 
-    fn evaluate<T: FloatLike>(
-        &mut self,
-        t_star: &F<T>,
-        radius_star: &F<T>,
-        overlap_center: &crate::momentum::sample::LoopMomenta<F<T>>,
-        subspace: &SubspaceData,
-        unrescaled_momentum_sample: &MomentumSample<T>,
-        masses: &EdgeVec<F<T>>,
-        threshold_esurface: &Esurface,
-        lmb: &LoopMomentumBasis,
-        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-    ) -> HyperDual<F<T>> {
+    fn evaluate<T: FloatLike>(&mut self, input: RstarTDependenceInput<'_, T>) -> HyperDual<F<T>> {
+        let RstarTDependenceInput {
+            t_star,
+            radius_star,
+            overlap_center,
+            subspace,
+            unrescaled_momentum_sample,
+            masses,
+            threshold_esurface,
+            lmb,
+            all_lmbs,
+        } = input;
         debug!("t-star: {}", t_star);
         debug!("r-star: {}", radius_star);
 
@@ -266,6 +266,18 @@ impl RstarTDependenceEvaluator {
 
         HyperDual::from_values(shape_for_t_derivatives(dual_values.len() - 1), dual_values)
     }
+}
+
+pub(crate) struct RstarTDependenceInput<'a, T: FloatLike> {
+    pub t_star: &'a F<T>,
+    pub radius_star: &'a F<T>,
+    pub overlap_center: &'a crate::momentum::sample::LoopMomenta<F<T>>,
+    pub subspace: &'a SubspaceData,
+    pub unrescaled_momentum_sample: &'a MomentumSample<T>,
+    pub masses: &'a EdgeVec<F<T>>,
+    pub threshold_esurface: &'a Esurface,
+    pub lmb: &'a LoopMomentumBasis,
+    pub all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
 }
 
 // use the chain rule to express the t-derivatives of r_star in terms of the t and r derivatives of η(r_star(t), t)

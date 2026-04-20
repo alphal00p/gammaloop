@@ -104,7 +104,7 @@ pub enum Integrand {
     UnitVolume(UnitVolumeIntegrand),
     HFunctionTest(HFunctionTestIntegrand),
     // ProcessIntegrandImpl(ProcessIntegrandImpl),
-    ProcessIntegrand(ProcessIntegrand),
+    ProcessIntegrand(Box<ProcessIntegrand>),
 }
 
 impl Integrand {

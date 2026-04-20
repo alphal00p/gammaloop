@@ -435,7 +435,7 @@ impl Drop for TabledControlListener {
 }
 
 enum DashboardCommand {
-    Update(StatusUpdate),
+    Update(Box<StatusUpdate>),
     Suspend(mpsc::SyncSender<Result<()>>),
     Shutdown(mpsc::SyncSender<Result<()>>),
 }
@@ -485,7 +485,7 @@ impl RatatuiStreamRenderer {
 
     fn render(&mut self, update: StatusUpdate) -> Result<()> {
         self.sender
-            .send(DashboardCommand::Update(update))
+            .send(DashboardCommand::Update(Box::new(update)))
             .map_err(|err| eyre!("Failed to send dashboard update: {err}"))?;
         Ok(())
     }
@@ -769,7 +769,7 @@ fn dashboard_event_loop(receiver: mpsc::Receiver<DashboardCommand>) -> Result<()
     loop {
         match receiver.recv_timeout(Duration::from_millis(50)) {
             Ok(DashboardCommand::Update(update)) => {
-                dashboard.update(update);
+                dashboard.update(*update);
                 if terminal.is_none() {
                     terminal = Some(RatatuiTerminal::enter()?);
                 }
@@ -1665,7 +1665,8 @@ impl Integrate {
                 slot_settings_path(&workspace_path, slot0_meta),
                 &format!("workspace settings for {}", slot0_meta.key()),
             )?;
-            let view_options = self.build_render_options(&[slot0_settings.clone()], true);
+            let view_options =
+                self.build_render_options(std::slice::from_ref(&slot0_settings), true);
             let tabled_options = self.build_tabled_render_options();
             emit_integration_status_via_tracing(
                 IntegrationStatusKind::Final,
@@ -1773,7 +1774,7 @@ impl Integrate {
                 meta,
                 settings,
                 model,
-                Integrand::ProcessIntegrand(integrand),
+                Integrand::ProcessIntegrand(Box::new(integrand)),
                 target,
             )
         })
@@ -2128,7 +2129,7 @@ mod tests {
             ..RuntimeSettings::default()
         };
 
-        let render_options = integrate.build_render_options(&[settings.clone()], false);
+        let render_options = integrate.build_render_options(std::slice::from_ref(&settings), false);
 
         assert_eq!(
             render_options.phase_display,

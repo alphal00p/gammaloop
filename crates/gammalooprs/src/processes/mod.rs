@@ -578,7 +578,8 @@ mod tests {
                             fast_math: false,
                             optimization_level: CompilationOptimizationLevel::O0,
                             unsafe_math: false,
-                            compiler: "g++".into(),
+                            compiler: crate::settings::global::default_external_compiler()
+                                .to_owned(),
                             custom: Vec::new(),
                         },
                         tropical_subgraph_table: TropicalSubgraphTableSettings {

@@ -2377,7 +2377,7 @@ mod tests {
                 .and_then(JsonValue::as_object)
                 .and_then(|compile| compile.get("compiler"))
                 .and_then(JsonValue::as_str),
-            Some("g++")
+            Some(gammalooprs::settings::global::default_external_compiler())
         );
     }
 
@@ -2404,7 +2404,13 @@ mod tests {
         assert!(saved.contains("display_directive = \"info\""), "{saved}");
         assert!(saved.contains("logfile_directive = \"off\""), "{saved}");
         assert!(saved.contains("log_format = \"Long\""), "{saved}");
-        assert!(saved.contains("compiler = \"g++\""), "{saved}");
+        assert!(
+            saved.contains(&format!(
+                "compiler = \"{}\"",
+                gammalooprs::settings::global::default_external_compiler()
+            )),
+            "{saved}"
+        );
     }
 
     #[test]

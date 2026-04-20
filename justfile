@@ -203,6 +203,10 @@ test_gammaloop *args:
             excluded_regex="${excluded_regex%|}"
             filter_terms+=("not test(/(^|::)(${excluded_regex})::/)")
         fi
+
+        if [ ${#remaining_excluded[@]} -eq 0 ] && [ ${#selected_modules[@]} -gt 0 ]; then
+            filter_terms=("all()")
+        fi
     fi
 
     if ! { [ "$want_base" -eq 1 ] && [ ${#filter_terms[@]} -eq 0 ]; }; then
@@ -235,6 +239,7 @@ test_gammaloop *args:
         cmd+=(-p "$package")
     done
     if [ ${#filter_terms[@]} -gt 0 ]; then
+        cmd+=(--ignore-default-filter)
         filterset="${filter_terms[0]}"
         for term in "${filter_terms[@]:1}"; do
             filterset="${filterset} or ${term}"
@@ -289,11 +294,33 @@ test-release TEST_NAME="":
 # Run tests in release mode (faster execution)
 test-ci TEST_NAME="":
     #!/usr/bin/env bash
+    set -euo pipefail
+    gammaloop_packages=(
+        gammaloop-api
+        gammalooprs
+        idenso
+        linnest
+        linnet
+        spenso
+        spenso-hep-lib
+        spenso-macros
+        vakint
+        gammaloop-integration-tests
+    )
+    cmd=(
+        cargo nextest run
+        --profile ci_gammaloop
+        --locked
+        --no-fail-fast
+        --run-ignored all
+    )
+    for package in "${gammaloop_packages[@]}"; do
+        cmd+=(-p "$package")
+    done
     if [ -n "{{ TEST_NAME }}" ]; then
-       cargo nextest run {{ TEST_NAME }} --workspace --profile ci --locked --no-fail-fast {{ TEST_NAME }}
-    else
-        cargo nextest run --workspace --profile ci --locked --no-fail-fast
+        cmd+=({{ TEST_NAME }})
     fi
+    "${cmd[@]}"
 
 # Run the Python API integration tests explicitly after preparing the Python env.
 test-python-api:

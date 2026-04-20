@@ -41,7 +41,7 @@ use crate::{
     },
     integrands::{
         HasIntegrand,
-        evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
+        evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
             ChannelIndex, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack},
@@ -67,10 +67,10 @@ use crate::{
 };
 
 use super::{
-    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
-    evaluate_sample, filtered_orientation_count, format_lmb_channel_label,
-    format_orientation_label, histogram_process_info_for_integrand, prepare_buffered_event,
-    resolve_visible_orientation_id,
+    GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
+    RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
+    format_lmb_channel_label, format_orientation_label, histogram_process_info_for_integrand,
+    prepare_buffered_event, resolve_visible_orientation_id,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -389,27 +389,22 @@ impl AmplitudeGraphTerm {
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        model: &Model,
-        settings: &RuntimeSettings,
-        rotation: &Rotation,
-        evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
-        channel_id: Option<(ChannelIndex, F<T>)>,
+        context: &mut GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<(Complex<F<T>>, AmplitudeCountertermEvaluation<T>)> {
-        let (momentum_sample, prefactor) = if let Some((channel_id, alpha)) = channel_id {
+        let (momentum_sample, prefactor) = if let Some((channel_id, alpha)) = &context.channel_id {
             self.multi_channeling_setup
                 .reinterpret_loop_momenta_and_compute_prefactor(
-                    channel_id,
+                    *channel_id,
                     momentum_sample,
                     0,
-                    model,
-                    &alpha,
+                    context.model,
+                    alpha,
                 )
         } else {
             (momentum_sample.clone(), momentum_sample.one())
         };
 
-        let hel = settings.kinematics.externals.get_helicities();
+        let hel = context.settings.kinematics.externals.get_helicities();
         let orientations =
             momentum_sample.orientations(&self.orientation_filter, &self.orientations);
 
@@ -419,11 +414,14 @@ impl AmplitudeGraphTerm {
 
         let input = T::get_parameters(
             &mut self.param_builder,
-            (settings.general.enable_cache, settings.general.debug_cache),
+            (
+                context.settings.general.enable_cache,
+                context.settings.general.debug_cache,
+            ),
             &self.graph,
             &momentum_sample,
             hel,
-            &settings.additional_params(),
+            &context.settings.additional_params(),
             None,
             None,
             None,
@@ -433,9 +431,9 @@ impl AmplitudeGraphTerm {
             .evaluate(
                 input,
                 orientations,
-                settings,
-                evaluation_metadata,
-                record_primary_timing,
+                context.settings,
+                context.evaluation_metadata,
+                context.record_primary_timing,
             )?
             .pop()
             .unwrap()
@@ -444,14 +442,14 @@ impl AmplitudeGraphTerm {
         let counterterm_evaluation = self.threshold_counterterm.evaluate(
             &momentum_sample,
             &self.graph,
-            model,
+            context.model,
             &self.esurfaces,
-            rotation,
-            settings,
+            context.rotation,
+            context.settings,
             &mut self.param_builder,
             orientations,
-            evaluation_metadata,
-            record_primary_timing,
+            context.evaluation_metadata,
+            context.record_primary_timing,
         )?;
         let sum_of_cts = counterterm_evaluation.total.clone();
 
@@ -603,23 +601,24 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        model: &Model,
-        settings: &RuntimeSettings,
-        event_processing_runtime: Option<&mut EventProcessingRuntime>,
-        rotation: &Rotation,
-        evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
-        channel_id: Option<(ChannelIndex, F<T>)>,
+        mut context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>> {
-        let event_channel_id = channel_id.as_ref().map(|(channel_id, _)| *channel_id);
-        let prepared_event =
-            prepare_buffered_event(settings, rotation, event_processing_runtime, || {
+        let event_channel_id = context
+            .channel_id
+            .as_ref()
+            .map(|(channel_id, _)| *channel_id);
+        let prepared_event = prepare_buffered_event(
+            context.settings,
+            context.rotation,
+            context.event_processing_runtime.take(),
+            || {
                 self.generate_event(
-                    settings,
+                    context.settings,
                     momentum_sample.sample.orientation,
                     event_channel_id,
                 )
-            })?;
+            },
+        )?;
         if !prepared_event.selectors_pass {
             return Ok(GraphEvaluationResult {
                 integrand_result: Complex::new_re(momentum_sample.zero()),
@@ -630,15 +629,8 @@ impl GraphTerm for AmplitudeGraphTerm {
             });
         }
 
-        let (integrand_result, counterterm_evaluation) = self.evaluate_impl(
-            momentum_sample,
-            model,
-            settings,
-            rotation,
-            evaluation_metadata,
-            record_primary_timing,
-            channel_id,
-        )?;
+        let (integrand_result, counterterm_evaluation) =
+            self.evaluate_impl(momentum_sample, &mut context)?;
 
         let mut event_groups = crate::observables::GenericEventGroupList::default();
         let generated_event_count = prepared_event.generated_event_count;
@@ -646,7 +638,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         if let Some(mut event) = prepared_event.buffered_event {
             event.weight = integrand_result.clone();
 
-            if settings.general.store_additional_weights_in_event {
+            if context.settings.general.store_additional_weights_in_event {
                 let original = integrand_result.clone() + counterterm_evaluation.total;
                 event
                     .additional_weights
@@ -778,7 +770,7 @@ impl AmplitudeIntegrand {
 
             let expected_mass_sq = mass.square();
             let actual_mass_sq = momentum.square();
-            let mass_sq_difference = actual_mass_sq.clone() - expected_mass_sq.clone();
+            let mass_sq_difference = actual_mass_sq - expected_mass_sq;
             let off_shellness = if mass_sq_difference < mass_sq_difference.zero() {
                 -mass_sq_difference
             } else {

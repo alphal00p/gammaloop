@@ -130,20 +130,26 @@ impl fmt::Display for CompilationOptimizationLevel {
     }
 }
 
-fn _default_compiler() -> String {
-    "g++".to_owned()
-}
-
 pub const fn yes() -> bool {
     true
 }
 
-pub fn gpp() -> String {
-    "g++".to_owned()
+#[cfg(target_vendor = "apple")]
+pub const fn default_external_compiler() -> &'static str {
+    "clang++"
 }
 
-pub fn is_gpp(compiler: &str) -> bool {
-    show_defaults_helper("g++" == compiler)
+#[cfg(not(target_vendor = "apple"))]
+pub const fn default_external_compiler() -> &'static str {
+    "g++"
+}
+
+pub fn default_external_compiler_owned() -> String {
+    default_external_compiler().to_owned()
+}
+
+pub fn is_default_external_compiler(compiler: &str) -> bool {
+    show_defaults_helper(default_external_compiler() == compiler)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
@@ -187,7 +193,7 @@ pub struct ExternalCompilationOptionsSnapshot {
     pub fast_math: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub unsafe_math: bool,
-    #[serde(skip_serializing_if = "is_gpp")]
+    #[serde(skip_serializing_if = "is_default_external_compiler")]
     pub compiler: String,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub custom: Vec<String>,
@@ -304,7 +310,7 @@ pub struct GammaloopCompileOptions {
     #[serde(skip_serializing_if = "is_true")] // default true
     pub unsafe_math: bool,
 
-    #[serde(skip_serializing_if = "is_gpp")] // default g++
+    #[serde(skip_serializing_if = "is_default_external_compiler")] // default compiler
     pub compiler: String,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub custom: Vec<String>,
@@ -317,7 +323,7 @@ impl Default for GammaloopCompileOptions {
             optimization_level: CompilationOptimizationLevel::O3,
             fast_math: true,
             unsafe_math: true,
-            compiler: gpp(),
+            compiler: default_external_compiler_owned(),
             custom: vec![],
         }
     }

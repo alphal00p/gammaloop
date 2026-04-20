@@ -192,16 +192,11 @@ struct LazyJsonWriter {
     buffer: Vec<u8>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum LogSink {
+    #[default]
     Display,
     File,
-}
-
-impl Default for LogSink {
-    fn default() -> Self {
-        Self::Display
-    }
 }
 
 const DISPLAY_ONLY_FIELD_PREFIX: &str = "display.";

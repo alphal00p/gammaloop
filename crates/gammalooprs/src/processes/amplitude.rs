@@ -509,6 +509,17 @@ pub struct AmplitudeGraph {
     pub derived_data: AmplitudeDerivedData,
 }
 
+pub struct AnalyticalEvaluationConfig<'a> {
+    pub model: &'a Model,
+    pub refresh_model_values: bool,
+    pub evaluate_numerically: bool,
+    pub vakint: &'a Vakint,
+    pub true_settings: &'a vakint::VakintSettings,
+    pub settings: &'a VakintSettings,
+    pub run_time_settings: &'a RuntimeSettings,
+    pub include_global_numerator: bool,
+}
+
 impl AmplitudeGraph {
     pub(crate) fn new(graph: Graph) -> Self {
         AmplitudeGraph {
@@ -723,17 +734,10 @@ impl AmplitudeGraph {
 
     pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(
         &self,
-        model: &Model,
-        refresh_model_values: bool,
         component: &S,
-        evaluate_numerically: bool,
-        vakint: &Vakint,
-        true_settings: &vakint::VakintSettings,
-        settings: &VakintSettings,
-        run_time_settings: &RuntimeSettings,
-        include_global_numerator: bool,
+        config: AnalyticalEvaluationConfig<'_>,
     ) -> Result<Atom> {
-        let mut true_settings = true_settings.clone();
+        let mut true_settings = config.true_settings.clone();
         true_settings.number_of_terms_in_epsilon_expansion =
             self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
         let pysec_dec_enabled_in_vakint = true_settings.evaluation_order.0.iter().find_map(|o| {
@@ -744,55 +748,60 @@ impl AmplitudeGraph {
             }
         });
 
-        let complex_params_vakint = if evaluate_numerically || pysec_dec_enabled_in_vakint.is_some()
-        {
-            let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
-            if refresh_model_values {
-                param_builder.update_model_values(model);
-            }
-            param_builder.m_uv_value(Complex::new_re(F(run_time_settings.general.m_uv)));
-            param_builder.mu_r_sq_value(Complex::new_re(F(run_time_settings.general.mu_r_sq())));
-
-            // println!("\nParamBuilder parameters:\n{}", param_builder);
-
-            let mut complex_params: HashMap<String, symbolica::domains::float::Complex<f64>> =
-                HashMap::default();
-            for params in param_builder.pairs.into_iter() {
-                let ps: crate::integrands::process::ParamValuePairs = params;
-                for (p_name, p_value) in
-                    ps.params
-                        .iter()
-                        .zip(ps.value_range)
-                        .map(|(a, value_index)| {
-                            (
-                                a.to_canonical_string(),
-                                param_builder.values[0][value_index],
-                            )
-                        })
-                {
-                    complex_params.insert(
-                        p_name,
-                        symbolica::domains::float::Complex::new(
-                            p_value.re.into(),
-                            p_value.im.into(),
-                        ),
-                    );
+        let complex_params_vakint =
+            if config.evaluate_numerically || pysec_dec_enabled_in_vakint.is_some() {
+                let mut param_builder = self.graph.param_builder.clone(); //ParamBuilder::<f64>::new(&self.graph, model);
+                if config.refresh_model_values {
+                    param_builder.update_model_values(config.model);
                 }
-            }
-            // Make sure to remove entries already supported by vakint, as they may not match required precision
-            for atom in &[
-                Atom::Var(Var::new(Symbol::PI)),
-                Atom::Var(Var::new(vakint_symbol!("EulerGamma"))),
-                function!(Symbol::LOG, Atom::num(2)),
-            ] {
-                _ = complex_params.remove(&atom.to_string());
-            }
+                param_builder.m_uv_value(Complex::new_re(F(config.run_time_settings.general.m_uv)));
+                param_builder.mu_r_sq_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .mu_r_sq())));
 
-            // Make sure to properly do the upcasting to required precision in vakint settings
-            vakint.params_from_complex_f64(&true_settings, &complex_params)
-        } else {
-            HashMap::default()
-        };
+                // println!("\nParamBuilder parameters:\n{}", param_builder);
+
+                let mut complex_params: HashMap<String, symbolica::domains::float::Complex<f64>> =
+                    HashMap::default();
+                for params in param_builder.pairs.into_iter() {
+                    let ps: crate::integrands::process::ParamValuePairs = params;
+                    for (p_name, p_value) in
+                        ps.params
+                            .iter()
+                            .zip(ps.value_range)
+                            .map(|(a, value_index)| {
+                                (
+                                    a.to_canonical_string(),
+                                    param_builder.values[0][value_index],
+                                )
+                            })
+                    {
+                        complex_params.insert(
+                            p_name,
+                            symbolica::domains::float::Complex::new(
+                                p_value.re.into(),
+                                p_value.im.into(),
+                            ),
+                        );
+                    }
+                }
+                // Make sure to remove entries already supported by vakint, as they may not match required precision
+                for atom in &[
+                    Atom::Var(Var::new(Symbol::PI)),
+                    Atom::Var(Var::new(vakint_symbol!("EulerGamma"))),
+                    function!(Symbol::LOG, Atom::num(2)),
+                ] {
+                    _ = complex_params.remove(&atom.to_string());
+                }
+
+                // Make sure to properly do the upcasting to required precision in vakint settings
+                config
+                    .vakint
+                    .params_from_complex_f64(&true_settings, &complex_params)
+            } else {
+                HashMap::default()
+            };
 
         if let Some(pysec_dec_opts) = pysec_dec_enabled_in_vakint {
             true_settings.evaluation_order.adjust(
@@ -807,7 +816,7 @@ impl AmplitudeGraph {
         let mut num = self
             .graph
             .numerator(component, &self.graph.empty_subgraph());
-        if include_global_numerator {
+        if config.include_global_numerator {
             num.state.expr *= &self.graph.global_prefactor.num;
         }
 
@@ -855,25 +864,26 @@ impl AmplitudeGraph {
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
-            settings,
+            config.settings,
             false,
         );
 
-        vakint_integrand.canonicalize(&true_settings, &vakint.topologies, false)?;
+        vakint_integrand.canonicalize(&true_settings, &config.vakint.topologies, false)?;
         // println!("Canonized: {}", vakint_integrand);
-        vakint_integrand.tensor_reduce(vakint, &true_settings)?;
+        vakint_integrand.tensor_reduce(config.vakint, &true_settings)?;
         // println!("Tensor Reduced {}", vakint_integrand);
-        vakint_integrand.evaluate_integral(vakint, &true_settings)?;
+        vakint_integrand.evaluate_integral(config.vakint, &true_settings)?;
         // println!("Evaluated {}", vakint_integrand);
         let analytical_evaluation: Atom = vakint_integrand.into();
         // println!(
         //     "\nVakint analytical evaluation:\n{:#}",
         //     analytical_evaluation
         // );
-        if !evaluate_numerically {
+        if !config.evaluate_numerically {
             Ok(analytical_evaluation)
         } else {
-            let (numerical_evaluation, _error) = vakint
+            let (numerical_evaluation, _error) = config
+                .vakint
                 .numerical_evaluation(
                     &true_settings,
                     analytical_evaluation.as_view(),

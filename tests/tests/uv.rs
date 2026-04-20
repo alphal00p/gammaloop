@@ -170,7 +170,11 @@ fn dod1_bubble_uv() -> Result<()> {
         20.0,
         7.0,
     )?;
-    assert_bubble_below_threshold_targets(&baseline, 7.358320108607984e-3, 1.3514937842276269e-3);
+    assert_bubble_below_threshold_targets(
+        &baseline,
+        7.358320108607984e-3,
+        1.351_493_784_227_627e-3,
+    );
     assert_bubble_uv_profile_passes(&mut cli, "bubble_dod1")?;
     assert_bubble_uv_profile_passes(&mut cli, "bubble_dod1_no_integrated_UV")?;
     clean_test(&cli.cli_settings.state.folder);
