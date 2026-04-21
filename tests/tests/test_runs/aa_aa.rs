@@ -125,17 +125,14 @@ fn parse_aa_aa_helicities(helicities: &str) -> Vec<Helicity> {
 }
 
 fn benchmark_resource_path(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("resources")
+    gammaloop_integration_tests::workspace_root()
+        .join("tests/resources")
         .join("benchmarks")
         .join(name)
 }
 
 fn example_aa_aa_state_folder() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("integration-tests crate must live under the workspace root")
-        .join("examples/cli/aa_aa/1L/state")
+    gammaloop_integration_tests::workspace_root().join("examples/cli/aa_aa/1L/state")
 }
 
 fn load_inspect_targets() -> Result<BTreeMap<InspectTargetKey, (String, String)>> {

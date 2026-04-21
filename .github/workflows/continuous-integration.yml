@@ -79,7 +79,7 @@ jobs:
       - name: Verify external tools
         run: |
           command -v form
-          form --version
+          form
           command -v python3
           python3 --version
 

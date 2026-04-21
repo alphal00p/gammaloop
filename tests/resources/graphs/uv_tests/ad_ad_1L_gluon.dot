@@ -1,0 +1,9 @@
+digraph adad {
+    ext    [style=invis];
+    ext -> v1    [id=0 particle="a"];
+    ext -> v1    [id=1 particle="d"];
+    v4  -> ext [id=2 particle="a"];
+    v4  -> ext [id=3 particle="d"];
+    v1  -> v2 -> v3 -> v4 [particle="d"]
+    v2 -> v3 [particle="g"]
+}

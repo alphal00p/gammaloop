@@ -20,17 +20,51 @@ use std::{
     ffi::OsString,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
-    sync::Once,
+    sync::{Once, OnceLock},
 };
 use tracing::{debug, warn};
 
 static SET_WORKSPACE_CWD: Once = Once::new();
+static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
-fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("integration-tests must live in <workspace>/tests")
-        .to_path_buf()
+fn is_workspace_root(path: &Path) -> bool {
+    path.join("Cargo.toml").is_file()
+        && path.join("tests/resources").is_dir()
+        && path.join("examples/cli").is_dir()
+}
+
+fn find_workspace_root_from(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|candidate| is_workspace_root(candidate))
+        .map(Path::to_path_buf)
+}
+
+pub fn workspace_root() -> PathBuf {
+    WORKSPACE_ROOT
+        .get_or_init(|| {
+            let mut candidates = Vec::new();
+            if let Ok(current_dir) = env::current_dir() {
+                candidates.push(current_dir);
+            }
+            if let Ok(current_exe) = env::current_exe() {
+                candidates.push(current_exe);
+            }
+            candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+
+            candidates
+                .into_iter()
+                .find_map(|candidate| find_workspace_root_from(&candidate))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Failed to locate workspace root from current dir '{:?}', current exe '{:?}', or manifest dir '{}'",
+                        env::current_dir().ok(),
+                        env::current_exe().ok(),
+                        env!("CARGO_MANIFEST_DIR")
+                    )
+                })
+        })
+        .clone()
 }
 
 fn ensure_workspace_cwd() {

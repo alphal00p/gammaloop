@@ -271,8 +271,28 @@ fn dod2_bubble_uv() -> Result<()> {
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
+
 mod failing {
     use super::*;
+
+    #[test]
+    fn ad_ad_with_gluon_correction() -> Result<()> {
+        let mut cli = get_test_cli(
+            Some("ad_ad_with_gluon_correction.toml".into()),
+            get_tests_workspace_path().join("dod2_bubble"),
+            None,
+            true,
+        )?;
+
+        cli.run_command("run generate")?;
+        let res = Profile::UltraViolet(UltraVioletProfile {
+            ..Default::default()
+        })
+        .run(&mut cli.state, &cli.cli_settings)?;
+
+        clean_test(&cli.cli_settings.state.folder);
+        Ok(())
+    }
 
     #[test]
     fn epem_a_tth_nlo_uv() -> Result<()> {
