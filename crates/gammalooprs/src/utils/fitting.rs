@@ -93,12 +93,12 @@ pub fn log_log_slope_constant_dropped<T: FloatLike>(x: &[F<T>], y: &[F<T>]) -> R
 
 pub struct SlopeFit<T: FloatLike> {
     pub slope: F<T>,
-    pub r_suared: F<T>,
+    pub r_squared: F<T>,
 }
 
 impl<T: FloatLike> SlopeFit<T> {
     pub fn r_squared(&self) -> &F<T> {
-        &self.r_suared
+        &self.r_squared
     }
 }
 
