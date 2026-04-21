@@ -52,6 +52,17 @@
         ];
       };
 
+      workspaceBuildSrc = lib.fileset.toSource {
+        root = ./.;
+        fileset = lib.fileset.unions [
+          ./.config
+          ./Cargo.toml
+          ./Cargo.lock
+          ./assets
+          ./crates
+        ];
+      };
+
       src = workspaceSrc;
 
       apiMeta = craneLib.crateNameFromCargoToml {
@@ -236,9 +247,10 @@
         fi
       '';
 
-      # Per-crate derivations still need the full workspace crate tree because several
-      # crates embed non-Rust assets (templates, FORM sources, wasm payloads) at compile time.
-      fileSetForCrate = _: workspaceSrc;
+      # Package builds still need the full workspace crate tree because several crates embed
+      # non-Rust assets (templates, FORM sources, wasm payloads) at compile time, but they do
+      # not need integration tests in their source closure.
+      fileSetForCrate = _: workspaceBuildSrc;
 
       # Build workspace dependency artifacts once and reuse for downstream checks/packages.
       cargoArtifacts = craneLib.buildDepsOnly (ciArgs
