@@ -19,6 +19,15 @@ Block SCALARS
   2003 2.000000e+00 # mass_scalar_2 
   3002 0.000000e+00 # width_scalar_1 
   3003 0.000000e+00 # width_scalar_2 
+
+###################################
+## INFORMATION FOR CHEMICALPOTENTIAL
+###################################
+Block CHEMICALPOTENTIAL 
+    1 1.000000e+00 # chemical_potential_scalar_0 
+    2 1.000000e+00 # chemical_potential_scalar_1 
+    3 1.000000e+00 # chemical_potential_scalar_2 
+
 #===========================================================
 # QUANTUM NUMBERS OF NEW STATE(S) (NON SM PDG CODE)
 #===========================================================
