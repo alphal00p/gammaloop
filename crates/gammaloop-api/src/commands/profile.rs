@@ -28,7 +28,8 @@ use clap::{Args, Subcommand};
 pub enum Profile {
     /// Ultraviolet profile analysis
     UltraViolet(#[command(flatten)] UltraVioletProfile),
-    /// Infrared profile analysis
+    /// Bulk profile analysis
+    #[command(name = "bulk")]
     InfraRed(#[command(flatten)] InfraRedProfile),
 }
 
@@ -131,6 +132,10 @@ pub struct InfraRedProfile {
     /// Profile each visible orientation separately and report one row per orientation
     #[arg(long = "per-orientation")]
     pub per_orientation: bool,
+
+    /// Retain generated event data so per-cut IR fits can be computed and displayed
+    #[arg(long = "show-per-cut-info")]
+    pub show_per_cut_info: bool,
 }
 
 impl Default for InfraRedProfile {
@@ -145,6 +150,7 @@ impl Default for InfraRedProfile {
             output_file: None,
             select: None,
             per_orientation: false,
+            show_per_cut_info: false,
         }
     }
 }
@@ -274,6 +280,7 @@ impl Profile {
                 output_file: _,
                 select,
                 per_orientation,
+                show_per_cut_info,
             }) => {
                 let ir_profile_settings = IRProfileSetting {
                     lambda_exp_start: *min_scale_exponent,
@@ -286,6 +293,7 @@ impl Profile {
                     } else {
                         OrientationProfileMode::Summed
                     },
+                    show_per_cut_info: *show_per_cut_info,
                 };
 
                 let (process_id, integrand_name) =

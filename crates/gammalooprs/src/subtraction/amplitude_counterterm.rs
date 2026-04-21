@@ -8,12 +8,15 @@ use symbolica::atom::Atom;
 
 use color_eyre::Result;
 use tracing::{debug, instrument};
-use typed_index_collections::TiVec;
+use typed_index_collections::{TiVec, ti_vec};
 
 use crate::{
     GammaLoopContext,
     cff::{
-        esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId},
+        esurface::{
+            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
+            GroupEsurfaceId,
+        },
         expression::OrientationID,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
@@ -293,6 +296,73 @@ impl AmplitudeCountertermData {
             local_counterterms,
         })
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn kinematics_for_approach<T: FloatLike>(
+        &mut self,
+        momentum_sample: &MomentumSample<T>,
+        graph: &Graph,
+        model: &Model,
+        esurfaces: &EsurfaceCollection,
+        rotation: &Rotation,
+        settings: &RuntimeSettings,
+    ) -> Result<OverlapStructureWithKinematics<T>> {
+        let counter_term_builder = CounterTermBuilder::new(
+            graph,
+            model,
+            rotation,
+            settings,
+            esurfaces,
+            momentum_sample,
+            &self.overlap,
+            &self.evaluators,
+            self.own_group_position,
+            &self.esurface_map,
+        );
+
+        let mut overlap_sturcture_with_kinematics = OverlapStructureWithKinematics {
+            existing_esurfaces: self.overlap.existing_esurfaces.clone(),
+            overlap_groups_with_kinematics: Vec::new(),
+        };
+
+        for group in self.overlap.overlap_groups.iter() {
+            let overlap_builder = counter_term_builder.new_overlap_builder(group);
+
+            let mut loop_momenta_at_esurface: TiVec<ExistingEsurfaceId, Option<MomentumSample<T>>> =
+                ti_vec![];
+            for existing_esurface_id in group.existing_esurfaces.iter() {
+                let single_result = overlap_builder
+                    .new_esurface_builder(*existing_esurface_id)
+                    .map(|esurface_builder| -> Result<_> {
+                        self.ensure_active_esurface(esurface_builder.esurface_id)?;
+                        let rstar_sample = esurface_builder.solve_rstar().rstar_samples();
+                        Result::Ok(rstar_sample.rstar_sample)
+                    })
+                    .transpose()?;
+
+                loop_momenta_at_esurface.push(single_result);
+            }
+
+            overlap_sturcture_with_kinematics
+                .overlap_groups_with_kinematics
+                .push(OverlapGroupWithKinematics {
+                    overlap_group: group.clone(),
+                    loop_momenta_at_esurface,
+                });
+        }
+
+        Ok(overlap_sturcture_with_kinematics)
+    }
+}
+
+pub struct OverlapGroupWithKinematics<T: FloatLike> {
+    pub overlap_group: OverlapGroup,
+    pub loop_momenta_at_esurface: TiVec<ExistingEsurfaceId, Option<MomentumSample<T>>>,
+}
+
+pub struct OverlapStructureWithKinematics<T: FloatLike> {
+    pub existing_esurfaces: ExistingEsurfaces,
+    pub overlap_groups_with_kinematics: Vec<OverlapGroupWithKinematics<T>>,
 }
 
 struct CounterTermBuilder<'a, T: FloatLike> {

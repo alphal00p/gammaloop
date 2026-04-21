@@ -2698,7 +2698,7 @@ fn add_selected_integrand_category_suggestions(
 }
 
 fn is_ir_profile_select_argument(context: &CommandContext<'_>, arg: &clap::Arg) -> bool {
-    matches_command_path(context, &["profile", "infra-red"]) && arg.get_long() == Some("select")
+    matches_command_path(context, &["profile", "bulk"]) && arg.get_long() == Some("select")
 }
 
 fn add_ir_profile_select_suggestions(
@@ -4517,7 +4517,7 @@ mod tests {
         assert!(uv_values.contains(&"virtual".to_string()));
         assert!(!uv_values.contains(&"subtracted".to_string()));
 
-        let ir_values = completion_values("profile infra-red -i ", &completion_state);
+        let ir_values = completion_values("profile bulk -i ", &completion_state);
         assert!(ir_values.contains(&"LO".to_string()));
         assert!(ir_values.contains(&"subtracted".to_string()));
         assert!(!ir_values.contains(&"virtual".to_string()));
@@ -4534,7 +4534,7 @@ mod tests {
         assert!(uv_values.contains(&"epem_a_tth".to_string()));
         assert!(!uv_values.contains(&"epem_xs".to_string()));
 
-        let ir_values = completion_values("profile infra-red -p e", &completion_state);
+        let ir_values = completion_values("profile bulk -p e", &completion_state);
         assert!(ir_values.contains(&"epem_xs".to_string()));
         assert!(!ir_values.contains(&"epem_a_tth".to_string()));
     }
@@ -5152,7 +5152,7 @@ mod tests {
         };
 
         let graph_values = completion_values(
-            "profile infra-red -p epem_xs -i subtracted --select GL",
+            "profile bulk -p epem_xs -i subtracted --select GL",
             &completion_state,
         );
         assert!(
@@ -5165,7 +5165,7 @@ mod tests {
         );
 
         let limit_values = completion_values(
-            "profile infra-red -p epem_xs -i subtracted --select GL1\\ ",
+            "profile bulk -p epem_xs -i subtracted --select GL1\\ ",
             &completion_state,
         );
         assert!(

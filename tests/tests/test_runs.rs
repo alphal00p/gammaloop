@@ -9,7 +9,7 @@ pub(crate) use gammaloop_api::{
         evaluate_samples::{EvaluateSamples, evaluate_sample},
         inspect::Inspect,
         integrate::Integrate,
-        profile::UltraVioletProfile,
+        profile::{InfraRedProfile, UltraVioletProfile},
     },
     state::{ProcessRef, SyncSettings},
 };
@@ -53,6 +53,8 @@ mod integrations;
 mod multi_integrand;
 #[path = "test_runs/photonic.rs"]
 mod photonic;
+#[path = "test_runs/profile_bulk.rs"]
+mod profile_bulk;
 #[path = "test_runs/smoke.rs"]
 mod smoke;
 #[path = "test_runs/spin_sums.rs"]
