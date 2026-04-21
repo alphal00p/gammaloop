@@ -420,4 +420,5 @@ pub trait UVE {
     fn mass_atom(&self) -> Atom;
     fn particle_pdg_code(&self) -> Option<isize>;
     fn is_fermion(&self) -> bool;
+    fn chemical_potential_atom(&self) -> Option<Atom>;
 }
