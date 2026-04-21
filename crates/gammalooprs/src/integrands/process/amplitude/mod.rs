@@ -30,8 +30,7 @@ use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{
-            EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId,
-            get_representative,
+            EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId, get_representative,
         },
         expression::OrientationID,
         surface::HybridSurfaceID,
@@ -50,8 +49,8 @@ use crate::{
     },
     model::Model,
     momentum::{
-        self, Helicity, Rotation, RotationMethod, SignOrZero,
-        sample::{ExternalIndex, LoopMomenta, MomentumSample},
+        Helicity, Rotation, RotationMethod, SignOrZero,
+        sample::{ExternalIndex, MomentumSample},
         signature::SignatureLike,
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
