@@ -494,7 +494,7 @@ fn insert_limit_table_separators(rendered: String, separators_after_data_rows: &
 }
 
 fn ir_profile_completion_entries(
-    limits: Vec<(String, Vec<IrLimit>)>,
+    limits: Vec<(String, Vec<ProfileLimit>)>,
 ) -> Vec<(String, Vec<String>)> {
     limits
         .into_iter()
@@ -534,7 +534,7 @@ fn graph_id_by_name<I: ProcessIntegrandImpl>(integrand: &I, graph_name: &str) ->
 fn parse_select_limits_and_graphs<I: ProcessIntegrandImpl>(
     integrand: &I,
     input: &str,
-) -> Result<Vec<(String, Vec<IrLimit>)>> {
+) -> Result<Vec<(String, Vec<ProfileLimit>)>> {
     input
         .split(';')
         .map(|graph_info_string| {
@@ -551,13 +551,13 @@ fn parse_select_limits_and_graphs<I: ProcessIntegrandImpl>(
                 ));
             };
 
-            let ir_limits = parts
-                .map(IrLimit::parse_limit)
+            let profile_limits = parts
+                .map(ProfileLimit::parse_limit)
                 .collect::<Result<Vec<_>, _>>()?;
 
-            if ir_limits.is_empty() {
+            if profile_limits.is_empty() {
                 return Err(eyre!(
-                    "No IR limits specified for graph '{}' in select_limits_and_graphs",
+                    "No limits specified for graph '{}' in select_limits_and_graphs",
                     graph_name
                 ));
             }
@@ -568,14 +568,17 @@ fn parse_select_limits_and_graphs<I: ProcessIntegrandImpl>(
                 .loop_momentum_basis
                 .loop_edges
                 .len();
-            if ir_limits.iter().any(|limit| !limit.is_valid(loop_number).is_ok()) {
+            if profile_limits
+                .iter()
+                .any(|limit| !limit.is_valid(loop_number).is_ok())
+            {
                 return Err(eyre!(
-                    "One or more IR limits specified for graph '{}' in select_limits_and_graphs are not valid",
+                    "One or more limits specified for graph '{}' in select_limits_and_graphs are not valid",
                     graph_name
                 ));
             }
 
-            Ok((graph_name, ir_limits))
+            Ok((graph_name, profile_limits))
         })
         .collect::<Result<Vec<_>, _>>()
 }
@@ -642,12 +645,12 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     ir_profile_settings: &IRProfileSetting,
     model: &Model,
-    enumerate_limits: impl Fn(&I) -> Vec<(String, Vec<IrLimit>)>,
+    enumerate_limits: impl Fn(&I) -> Vec<(String, Vec<ProfileLimit>)>,
     graph_cut_definitions: impl Fn(&I, usize) -> Vec<GraphCutDefinition>,
     mut test_single_limit: impl FnMut(
         &mut I,
         usize,
-        &IrLimit,
+        &ProfileLimit,
         &mut MonteCarloRng,
         &IRProfileSetting,
         &Model,
@@ -749,13 +752,17 @@ impl AmplitudeIntegrand {
         result
     }
 
-    fn enumerate_ir_limits(&self) -> Vec<(String, Vec<IrLimit>)> {
+    fn enumerate_ir_limits(&self) -> Vec<(String, Vec<ProfileLimit>)> {
         self.data
             .graph_terms
             .iter()
             .map(|term| {
                 let graph_name = term.graph.name.clone();
-                let limits = term.enumerate_ir_limits();
+                let limits = term
+                    .enumerate_ir_limits()
+                    .into_iter()
+                    .map(ProfileLimit::Ir)
+                    .collect::<Vec<_>>();
                 (graph_name, limits)
             })
             .collect()
@@ -768,106 +775,122 @@ impl AmplitudeIntegrand {
     fn test_single_ir_limit_impl(
         &mut self,
         graph_id: usize,
-        ir_limit: &IrLimit,
+        profile_limit: &ProfileLimit,
         rng: &mut MonteCarloRng,
         approach_settings: &IRProfileSetting,
         model: &Model,
     ) -> Result<Vec<SingleLimitReport>> {
-        let edges_in_limit = ir_limit.get_all_edges()?;
-        let lmb = self.data.graph_terms[graph_id].lmb_with_loop_edges(edges_in_limit.as_slice())?;
-        let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings)?;
-        let non_limit_loops = lmb
-            .loop_edges
-            .iter_enumerated()
-            .filter_map(|(loop_id, edge_id)| {
-                if !edges_in_limit.contains(edge_id) {
-                    Some(loop_id)
-                } else {
-                    None
-                }
-            })
-            .collect_vec();
-
-        let non_limit_momenta = non_limit_loops
-            .iter()
-            .map(|loop_id| (*loop_id, sample_random_unit_vector(rng)))
-            .collect_vec();
-
-        let externals = self.data.graph_terms[graph_id]
-            .graph
-            .get_external_signature();
-
-        let dependent_momenta_constructor = DependentMomentaConstructor::Amplitude(&externals);
-
-        let loop_number = lmb.loop_edges.len();
-        let orientations = requested_orientations(self, graph_id, approach_settings)?;
-        let mut reports = Vec::with_capacity(orientations.len());
-
-        for (orientation, orientation_label) in orientations {
-            let mut limit_data = LimitData { data: Vec::new() };
-
-            for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
-                let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
-                    .map(|_| {
-                        ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0))
+        match profile_limit {
+            ProfileLimit::Ir(ir_limit) => {
+                let edges_in_limit = ir_limit.get_all_edges()?;
+                let lmb = self.data.graph_terms[graph_id]
+                    .lmb_with_loop_edges(edges_in_limit.as_slice())?;
+                let momenta = ir_limit.get_momenta(rng, &self.settings, approach_settings)?;
+                let non_limit_loops = lmb
+                    .loop_edges
+                    .iter_enumerated()
+                    .filter_map(|(loop_id, edge_id)| {
+                        if !edges_in_limit.contains(edge_id) {
+                            Some(loop_id)
+                        } else {
+                            None
+                        }
                     })
-                    .collect();
+                    .collect_vec();
 
-                for (loop_id, momentum) in non_limit_momenta.iter() {
-                    loop_moms[*loop_id] = *momentum;
-                }
+                let non_limit_momenta = non_limit_loops
+                    .iter()
+                    .map(|loop_id| (*loop_id, sample_random_unit_vector(rng)))
+                    .collect_vec();
 
-                for tagged_momenta in &lambda_point.momenta {
-                    let edge_id = tagged_momenta.tag;
-                    let loop_id = lmb
-                        .loop_edges
-                        .iter()
-                        .position(|loop_edge| loop_edge == &edge_id)
-                        .unwrap_or_else(|| {
-                            unreachable!("corrupted lmb and ir limit: {}", ir_limit);
+                let externals = self.data.graph_terms[graph_id]
+                    .graph
+                    .get_external_signature();
+
+                let dependent_momenta_constructor =
+                    DependentMomentaConstructor::Amplitude(&externals);
+
+                let loop_number = lmb.loop_edges.len();
+                let orientations = requested_orientations(self, graph_id, approach_settings)?;
+                let mut reports = Vec::with_capacity(orientations.len());
+
+                for (orientation, orientation_label) in orientations {
+                    let mut limit_data = LimitData { data: Vec::new() };
+
+                    for (loop_mom_id, lambda_point) in momenta.iter().cloned().enumerate() {
+                        let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
+                            .map(|_| {
+                                ThreeMomentum::new(
+                                    F::from_f64(0.0),
+                                    F::from_f64(0.0),
+                                    F::from_f64(0.0),
+                                )
+                            })
+                            .collect();
+
+                        for (loop_id, momentum) in non_limit_momenta.iter() {
+                            loop_moms[*loop_id] = *momentum;
+                        }
+
+                        for tagged_momenta in &lambda_point.momenta {
+                            let edge_id = tagged_momenta.tag;
+                            let loop_id = lmb
+                                .loop_edges
+                                .iter()
+                                .position(|loop_edge| loop_edge == &edge_id)
+                                .unwrap_or_else(|| {
+                                    unreachable!("corrupted lmb and ir limit: {}", ir_limit);
+                                });
+
+                            loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum;
+                        }
+
+                        let sample_in_cmb = MomentumSample::new(
+                            loop_moms,
+                            loop_mom_id,
+                            &self.settings.kinematics.externals,
+                            0,
+                            F::from_f64(1.0),
+                            dependent_momenta_constructor,
+                            orientation,
+                        )?;
+
+                        let sample = sample_in_cmb.lmb_transform(
+                            &lmb,
+                            &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
+                        );
+
+                        limit_data.data.push(LambdaPointEval {
+                            lambda_point,
+                            value: evaluate_profile_momentum_point_arb(
+                                self,
+                                model,
+                                graph_id,
+                                orientation,
+                                sample.loop_moms().iter().cloned().collect_vec(),
+                                approach_settings.show_per_cut_info,
+                            )?,
                         });
+                    }
 
-                    loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum;
+                    let (power_law_fit, cut_fits) = limit_data.extract_power()?;
+                    reports.push(build_single_limit_report(
+                        ir_limit,
+                        orientation_label,
+                        power_law_fit,
+                        build_cut_limit_reports(ir_limit.num_soft(), cut_fits),
+                    ));
                 }
 
-                let sample_in_cmb = MomentumSample::new(
-                    loop_moms,
-                    loop_mom_id,
-                    &self.settings.kinematics.externals,
-                    0,
-                    F::from_f64(1.0),
-                    dependent_momenta_constructor,
-                    orientation,
-                )?;
-
-                let sample = sample_in_cmb.lmb_transform(
-                    &lmb,
-                    &self.data.graph_terms[graph_id].graph.loop_momentum_basis,
-                );
-
-                limit_data.data.push(LambdaPointEval {
-                    lambda_point,
-                    value: evaluate_profile_momentum_point_arb(
-                        self,
-                        model,
-                        graph_id,
-                        orientation,
-                        sample.loop_moms().iter().cloned().collect_vec(),
-                        approach_settings.show_per_cut_info,
-                    )?,
-                });
+                Ok(reports)
             }
-
-            let (power_law_fit, cut_fits) = limit_data.extract_power()?;
-            reports.push(build_single_limit_report(
-                ir_limit,
-                orientation_label,
-                power_law_fit,
-                build_cut_limit_reports(ir_limit.num_soft(), cut_fits),
-            ));
+            ProfileLimit::Threshold(threshold_limit) => {
+                return Err(eyre!(
+                    "Threshold limit '{}' is not yet supported in amplitude IR profiling",
+                    threshold_limit
+                ));
+            }
         }
-
-        Ok(reports)
     }
 }
 
@@ -915,13 +938,17 @@ impl CrossSectionIntegrand {
         result
     }
 
-    fn enumerate_ir_limits(&self) -> Vec<(String, Vec<IrLimit>)> {
+    fn enumerate_ir_limits(&self) -> Vec<(String, Vec<ProfileLimit>)> {
         self.data
             .graph_terms
             .iter()
             .map(|term| {
                 let graph_name = term.graph.name.clone();
-                let limits = term.enumerate_ir_limits();
+                let limits = term
+                    .enumerate_ir_limits()
+                    .into_iter()
+                    .map(ProfileLimit::Ir)
+                    .collect();
                 (graph_name, limits)
             })
             .collect()
@@ -934,11 +961,21 @@ impl CrossSectionIntegrand {
     fn test_single_ir_limit_impl(
         &mut self,
         graph_id: usize,
-        ir_limit: &IrLimit,
+        profile_limit: &ProfileLimit,
         rng: &mut MonteCarloRng,
         approach_settings: &IRProfileSetting,
         model: &Model,
     ) -> Result<Vec<SingleLimitReport>> {
+        let ir_limit = match profile_limit {
+            ProfileLimit::Ir(ir_limit) => ir_limit,
+            ProfileLimit::Threshold(threshold_limit) => {
+                return Err(eyre!(
+                    "Threshold limit '{}' is not yet supported in cross-section IR profiling",
+                    threshold_limit
+                ));
+            }
+        };
+
         let edges_in_limit = ir_limit.get_all_edges()?;
 
         // find cut that for that as all edges of the limit
@@ -1079,7 +1116,17 @@ impl CrossSectionIntegrand {
 struct IrLimit {
     colinear: Vec<Vec<HardOrSoft>>,
     soft: Vec<EdgeIndex>,
-    threshold: Vec<EsurfaceID>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct ThresholdLimit {
+    esurface_id: EsurfaceID,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum ProfileLimit {
+    Ir(IrLimit),
+    Threshold(ThresholdLimit),
 }
 
 enum MomentumBuilder<T: FloatLike> {
@@ -1116,130 +1163,53 @@ impl Display for IrLimit {
             write!(f, "S({})", soft)?;
         }
 
-        for threshold in self.threshold.iter() {
-            write!(f, "T(t{})", threshold.0)?;
-        }
-
         Ok(())
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum HardOrSoft {
-    Hard(EdgeIndex),
-    Soft(EdgeIndex),
-}
-
-impl HardOrSoft {
-    fn index(&self) -> EdgeIndex {
-        match self {
-            HardOrSoft::Hard(index) => *index,
-            HardOrSoft::Soft(index) => *index,
-        }
+impl Display for ThresholdLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "T(t{})", self.esurface_id.0)
     }
 }
 
-impl Display for HardOrSoft {
+impl Display for ProfileLimit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HardOrSoft::Hard(index) => write!(f, "{}", index),
-            HardOrSoft::Soft(index) => write!(f, "S({})", index),
+            ProfileLimit::Ir(ir_limit) => write!(f, "{}", ir_limit),
+            ProfileLimit::Threshold(threshold_limit) => write!(f, "{}", threshold_limit),
         }
     }
 }
 
-impl IrLimit {
-    fn canonize(&mut self) {
-        for colinear_set in &mut self.colinear.iter_mut() {
-            colinear_set.sort();
+impl ThresholdLimit {
+    fn parse_threshold(threshold: &str) -> Result<Self> {
+        let mut threshold = String::from(threshold);
+        threshold = String::from(threshold.trim());
+
+        if threshold.len() < 2 {
+            return Err(eyre!("Threshold must be at least two characters long"));
         }
 
-        self.colinear.sort();
-        self.soft.sort();
-        self.threshold.sort();
-    }
-
-    fn new_pure_colinear(colinear_edges: Vec<EdgeIndex>) -> Self {
-        let colinear = vec![colinear_edges.into_iter().map(HardOrSoft::Hard).collect()];
-
-        let mut result = IrLimit {
-            colinear,
-            soft: Vec::new(),
-            threshold: Vec::new(),
-        };
-        result.canonize();
-        result
-    }
-
-    fn new_pure_soft(soft_edges: Vec<EdgeIndex>) -> Self {
-        let mut result = IrLimit {
-            colinear: Vec::new(),
-            soft: soft_edges,
-            threshold: Vec::new(),
-        };
-        result.canonize();
-        result
-    }
-
-    fn num_soft(&self) -> usize {
-        self.colinear
-            .iter()
-            .flatten()
-            .filter(|edge| matches!(edge, HardOrSoft::Soft(_)))
-            .count()
-            + self.soft.len()
-    }
-
-    fn check_min_colinear_size(&self) -> bool {
-        self.colinear
-            .iter()
-            .all(|colinear_set| colinear_set.len() >= 2)
-    }
-
-    fn is_valid(&self, loop_number: usize) -> Result<()> {
-        if !self.check_min_colinear_size() {
-            return Err(eyre!("colinear sets must have at least two edges"));
+        if threshold.remove(0) != 't' {
+            return Err(eyre!("Threshold must start with 't'"));
         }
 
-        let all_edges = self.get_all_edges()?;
+        let threshold_id: usize = threshold
+            .parse()
+            .map_err(|_| eyre!("Threshold must be a valid integer, got: {}", threshold))?;
 
-        if all_edges.len() > loop_number {
-            return Err(eyre!("not enough degrees of freedom to setup IR limit"));
-        }
-
-        Ok(())
+        Ok(Self {
+            esurface_id: EsurfaceID::from(threshold_id),
+        })
     }
+}
 
-    fn get_all_edges(&self) -> Result<Vec<EdgeIndex>> {
-        let colinear_edges = self
-            .colinear
-            .iter()
-            .flatten()
-            .map(HardOrSoft::index)
-            .collect_vec();
-        let soft_edges = self.soft.iter().copied().collect_vec();
-
-        let all_edges: Vec<EdgeIndex> = colinear_edges
-            .into_iter()
-            .chain(soft_edges)
-            .sorted()
-            .collect();
-
-        // check for duplicates
-        let mut unique_edges = all_edges.clone();
-        unique_edges.dedup();
-
-        if unique_edges.len() != all_edges.len() {
-            return Err(eyre!("Edges specified in ir limit must be unique")); // duplicates found
-        }
-
-        Ok(all_edges)
-    }
-
-    fn parse_limit(limit: &str) -> Result<IrLimit> {
+impl ProfileLimit {
+    fn parse_limit(limit: &str) -> Result<Self> {
         let mut colinear_sets = Vec::new();
         let mut soft_edges = Vec::new();
-        let mut thresholds = Vec::new();
+        let mut threshold_limit = None;
 
         let mut char_iter = limit.chars().enumerate();
 
@@ -1323,10 +1293,10 @@ impl IrLimit {
                                 ));
                             }
 
-                            let edge_index = Self::parse_edge(&edge_str)?;
+                            let edge_index = IrLimit::parse_edge(&edge_str)?;
                             colinear_set.push(HardOrSoft::Soft(edge_index));
                         } else {
-                            let edge_index = Self::parse_edge(trimmed_edge)?;
+                            let edge_index = IrLimit::parse_edge(trimmed_edge)?;
                             colinear_set.push(HardOrSoft::Hard(edge_index));
                         }
                     }
@@ -1367,10 +1337,14 @@ impl IrLimit {
                         ));
                     }
 
-                    let edge_index = Self::parse_edge(&edge_str)?;
+                    let edge_index = IrLimit::parse_edge(&edge_str)?;
                     soft_edges.push(edge_index);
                 }
                 'T' => {
+                    if threshold_limit.is_some() {
+                        return Err(eyre!("Only one threshold limit can be specified"));
+                    }
+
                     let (_opening_bracket_position, opening_bracket) =
                         char_iter.next().ok_or_else(|| {
                             eyre!(
@@ -1405,8 +1379,7 @@ impl IrLimit {
                         ));
                     }
 
-                    let threshold_id = Self::parse_threshold(&threshold_str)?;
-                    thresholds.push(threshold_id);
+                    threshold_limit = Some(ThresholdLimit::parse_threshold(&threshold_str)?);
                 }
                 _ => {
                     return Err(eyre!(
@@ -1418,15 +1391,141 @@ impl IrLimit {
             }
         }
 
+        if let Some(threshold_limit) = threshold_limit {
+            if !colinear_sets.is_empty() || !soft_edges.is_empty() {
+                return Err(eyre!(
+                    "Threshold limits cannot be combined with soft or colinear limits"
+                ));
+            }
+
+            return Ok(ProfileLimit::Threshold(threshold_limit));
+        }
+
         let mut ir_limit = IrLimit {
             colinear: colinear_sets,
             soft: soft_edges,
-            threshold: thresholds,
         };
 
         ir_limit.canonize();
 
-        Ok(ir_limit)
+        Ok(ProfileLimit::Ir(ir_limit))
+    }
+
+    fn is_valid(&self, loop_number: usize) -> Result<()> {
+        match self {
+            ProfileLimit::Ir(ir_limit) => ir_limit.is_valid(loop_number),
+            ProfileLimit::Threshold(_) => Ok(()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum HardOrSoft {
+    Hard(EdgeIndex),
+    Soft(EdgeIndex),
+}
+
+impl HardOrSoft {
+    fn index(&self) -> EdgeIndex {
+        match self {
+            HardOrSoft::Hard(index) => *index,
+            HardOrSoft::Soft(index) => *index,
+        }
+    }
+}
+
+impl Display for HardOrSoft {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HardOrSoft::Hard(index) => write!(f, "{}", index),
+            HardOrSoft::Soft(index) => write!(f, "S({})", index),
+        }
+    }
+}
+
+impl IrLimit {
+    fn canonize(&mut self) {
+        for colinear_set in &mut self.colinear.iter_mut() {
+            colinear_set.sort();
+        }
+
+        self.colinear.sort();
+        self.soft.sort();
+    }
+
+    fn new_pure_colinear(colinear_edges: Vec<EdgeIndex>) -> Self {
+        let colinear = vec![colinear_edges.into_iter().map(HardOrSoft::Hard).collect()];
+
+        let mut result = IrLimit {
+            colinear,
+            soft: Vec::new(),
+        };
+        result.canonize();
+        result
+    }
+
+    fn new_pure_soft(soft_edges: Vec<EdgeIndex>) -> Self {
+        let mut result = IrLimit {
+            colinear: Vec::new(),
+            soft: soft_edges,
+        };
+        result.canonize();
+        result
+    }
+
+    fn num_soft(&self) -> usize {
+        self.colinear
+            .iter()
+            .flatten()
+            .filter(|edge| matches!(edge, HardOrSoft::Soft(_)))
+            .count()
+            + self.soft.len()
+    }
+
+    fn check_min_colinear_size(&self) -> bool {
+        self.colinear
+            .iter()
+            .all(|colinear_set| colinear_set.len() >= 2)
+    }
+
+    fn is_valid(&self, loop_number: usize) -> Result<()> {
+        if !self.check_min_colinear_size() {
+            return Err(eyre!("colinear sets must have at least two edges"));
+        }
+
+        let all_edges = self.get_all_edges()?;
+
+        if all_edges.len() > loop_number {
+            return Err(eyre!("not enough degrees of freedom to setup IR limit"));
+        }
+
+        Ok(())
+    }
+
+    fn get_all_edges(&self) -> Result<Vec<EdgeIndex>> {
+        let colinear_edges = self
+            .colinear
+            .iter()
+            .flatten()
+            .map(HardOrSoft::index)
+            .collect_vec();
+        let soft_edges = self.soft.iter().copied().collect_vec();
+
+        let all_edges: Vec<EdgeIndex> = colinear_edges
+            .into_iter()
+            .chain(soft_edges)
+            .sorted()
+            .collect();
+
+        // check for duplicates
+        let mut unique_edges = all_edges.clone();
+        unique_edges.dedup();
+
+        if unique_edges.len() != all_edges.len() {
+            return Err(eyre!("Edges specified in ir limit must be unique")); // duplicates found
+        }
+
+        Ok(all_edges)
     }
 
     fn parse_edge(edge: &str) -> Result<EdgeIndex> {
@@ -1446,25 +1545,6 @@ impl IrLimit {
             .map_err(|_| eyre!("Edge must be a valid integer, got: {}", edge))?;
 
         Ok(EdgeIndex::from(edge_id))
-    }
-
-    fn parse_threshold(threshold: &str) -> Result<EsurfaceID> {
-        let mut threshold = String::from(threshold);
-        threshold = String::from(threshold.trim());
-
-        if threshold.len() < 2 {
-            return Err(eyre!("Threshold must be at least two characters long"));
-        }
-
-        if threshold.remove(0) != 't' {
-            return Err(eyre!("Threshold must start with 't'"));
-        }
-
-        let threshold_id: usize = threshold
-            .parse()
-            .map_err(|_| eyre!("Threshold must be a valid integer, got: {}", threshold))?;
-
-        Ok(EsurfaceID::from(threshold_id))
     }
 
     fn get_momentum_builders(&self, rng: &mut MonteCarloRng) -> Vec<MomentumBuilder<f64>> {
@@ -1765,11 +1845,22 @@ mod tests {
                 ],
             ],
             soft: vec![EdgeIndex::from(6), EdgeIndex::from(7)],
-            threshold: vec![EsurfaceID::from(8usize)],
         };
 
         let display = ir_limit.to_string();
-        let expected = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)T(t8)";
+        let expected = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)";
+
+        assert_eq!(display, expected);
+    }
+
+    #[test]
+    fn test_threshold_display() {
+        let threshold_limit = ThresholdLimit {
+            esurface_id: EsurfaceID::from(8usize),
+        };
+
+        let display = threshold_limit.to_string();
+        let expected = "T(t8)";
 
         assert_eq!(display, expected);
     }
@@ -1793,27 +1884,30 @@ mod tests {
     #[test]
     fn parse_threshold() {
         let threshold_str = "t5";
-        let threshold_id = IrLimit::parse_threshold(threshold_str).unwrap();
-        assert_eq!(threshold_id, EsurfaceID::from(5usize));
+        let threshold_limit = ThresholdLimit::parse_threshold(threshold_str).unwrap();
+        assert_eq!(threshold_limit.esurface_id, EsurfaceID::from(5usize));
 
         let invalid_threshold_str = "5"; // missing 't'
-        assert!(IrLimit::parse_threshold(invalid_threshold_str).is_err());
+        assert!(ThresholdLimit::parse_threshold(invalid_threshold_str).is_err());
 
         let invalid_threshold_str2 = "t"; // too short
-        assert!(IrLimit::parse_threshold(invalid_threshold_str2).is_err());
+        assert!(ThresholdLimit::parse_threshold(invalid_threshold_str2).is_err());
 
         let invalid_threshold_str3 = "t5a"; // not a valid integer
-        assert!(IrLimit::parse_threshold(invalid_threshold_str3).is_err());
+        assert!(ThresholdLimit::parse_threshold(invalid_threshold_str3).is_err());
     }
 
     #[test]
     fn parse_limit() {
-        let limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)T(t8)";
-        let ir_limit = IrLimit::parse_limit(limit_str).unwrap();
+        let limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)";
+        let limit = ProfileLimit::parse_limit(limit_str).unwrap();
+        let ir_limit = match limit {
+            ProfileLimit::Ir(ir_limit) => ir_limit,
+            ProfileLimit::Threshold(_) => panic!("Expected an IR limit"),
+        };
 
         assert_eq!(ir_limit.colinear.len(), 2, "Expected two colinear sets");
         assert_eq!(ir_limit.soft.len(), 2, "Expected two soft edges");
-        assert_eq!(ir_limit.threshold.len(), 1, "Expected one threshold");
 
         assert_eq!(
             ir_limit.colinear[0],
@@ -1838,28 +1932,44 @@ mod tests {
             vec![EdgeIndex::from(6), EdgeIndex::from(7)],
             "Soft edges do not match"
         );
+
+        let threshold_limit = ProfileLimit::parse_limit("T(t8)").unwrap();
         assert_eq!(
-            ir_limit.threshold,
-            vec![EsurfaceID::from(8usize)],
-            "Thresholds do not match"
+            threshold_limit,
+            ProfileLimit::Threshold(ThresholdLimit {
+                esurface_id: EsurfaceID::from(8usize),
+            }),
+            "Threshold limit does not match"
         );
 
-        let invalid_limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7, e8)T(t8)";
+        let invalid_limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7, e8)";
         assert!(
-            IrLimit::parse_limit(invalid_limit_str).is_err(),
+            ProfileLimit::parse_limit(invalid_limit_str).is_err(),
             "Expected error"
         );
 
-        let invalid_limit_str2 = "C[e1,e2,e3C[e4,S(e5)]S(e6)T(t8)";
+        let invalid_limit_str2 = "C[e1,e2,e3C[e4,S(e5)]S(e6)";
         assert!(
-            IrLimit::parse_limit(invalid_limit_str2).is_err(),
+            ProfileLimit::parse_limit(invalid_limit_str2).is_err(),
             "Expected error for unmatched brackets"
         );
 
         let invalid_limit_str3 = "C[e1,e2,e3]T(e8)";
         assert!(
-            IrLimit::parse_limit(invalid_limit_str3).is_err(),
+            ProfileLimit::parse_limit(invalid_limit_str3).is_err(),
             "Expected error for invalid threshold syntax"
+        );
+
+        let invalid_limit_str4 = "C[e1,e2,e3]T(t8)";
+        assert!(
+            ProfileLimit::parse_limit(invalid_limit_str4).is_err(),
+            "Expected error for mixed threshold and IR limit syntax"
+        );
+
+        let invalid_limit_str5 = "T(t8)T(t9)";
+        assert!(
+            ProfileLimit::parse_limit(invalid_limit_str5).is_err(),
+            "Expected error for multiple threshold limits"
         );
     }
 
