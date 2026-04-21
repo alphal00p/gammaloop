@@ -597,7 +597,7 @@ impl CFFGenerationGraph {
         new_vertices.retain(|vertex| vertex.vertex_set != vertex_2.vertex_set);
         new_vertices.push(new_vertex);
         new_vertices.shrink_to_fit();
-        new_vertices.sort_by(|a, b| a.vertex_set.vertex_set.cmp(&b.vertex_set.vertex_set));
+        new_vertices.sort_by_key(|vertex| vertex.vertex_set.vertex_set);
 
         CFFGenerationGraph {
             vertices: new_vertices,
@@ -609,8 +609,7 @@ impl CFFGenerationGraph {
     fn get_source_or_sink_slow(&self) -> &CFFVertex {
         let mut source_sink_candidates = self.get_source_sink_candidate_list();
 
-        source_sink_candidates
-            .sort_by(|a, b| a.vertex_set.vertex_set.cmp(&b.vertex_set.vertex_set));
+        source_sink_candidates.sort_by_key(|a| a.vertex_set.vertex_set);
 
         if source_sink_candidates.is_empty() {
             panic!("No source or sink candidates found for graph {:#?}", self);

@@ -57,7 +57,7 @@ jobs:
         if: startsWith(matrix.os, 'macos-')
         run: |
           brew update
-          brew install pkg-config openssl@3 gmp mpfr libmpc
+          brew install pkg-config openssl@3 gmp mpfr libmpc just
 
       - uses: dtolnay/rust-toolchain@stable
 

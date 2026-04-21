@@ -260,11 +260,10 @@ impl Iterator for CoreFlatFiberIterator {
                     }
                 }
             }
-            StrideShift::Single(Some(ss)) => {
-                if self.varying_fiber_index % ss.stride == 0.into() {
-                    self.varying_fiber_index += (ss.shift - ss.stride).into();
-                }
+            StrideShift::Single(Some(ss)) if self.varying_fiber_index % ss.stride == 0.into() => {
+                self.varying_fiber_index += (ss.shift - ss.stride).into();
             }
+
             _ => {}
         }
         Some(index)

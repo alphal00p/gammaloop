@@ -79,7 +79,7 @@ jobs:
           echo "Starting dependency build at $(date)"
           time nix build .#cargoArtifacts --print-build-logs
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          time nix build ".#packages.${system}.gammaloop-nextest-archive" --print-build-logs
+          time nix build --impure ".#packages.${system}.gammaloop-nextest-archive" --print-build-logs
           echo "Dependencies built at $(date)"
 
   build-deps-macos:
@@ -126,7 +126,7 @@ jobs:
           echo "Starting dependency build at $(date)"
           time nix build .#cargoArtifacts --print-build-logs
           system="$(nix eval --impure --raw --expr builtins.currentSystem)"
-          time nix build ".#packages.${system}.gammaloop-nextest-archive" --print-build-logs
+          time nix build --impure ".#packages.${system}.gammaloop-nextest-archive" --print-build-logs
           echo "Dependencies built at $(date)"
 
   package:

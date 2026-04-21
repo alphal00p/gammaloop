@@ -1326,7 +1326,7 @@ impl Graph {
     ) -> Result<Vec<Self>> {
         let mut graphs = Vec::new();
 
-        for (graph, global_data) in set.set.into_iter().zip(set.global_data.into_iter()) {
+        for (graph, global_data) in set.set.into_iter().zip(set.global_data) {
             let graph = DotGraph { global_data, graph };
             debug!("Parsing: \n{}", graph.debug_dot());
             graphs.push(Graph::from_parsed(

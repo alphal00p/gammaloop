@@ -483,7 +483,7 @@ impl GlobalPrefactor {
             ));
         }
 
-        pols.sort_by(|a, b| a.0.cmp(&b.0));
+        pols.sort_by_key(|a| a.0);
 
         pols
     }

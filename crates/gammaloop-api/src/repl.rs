@@ -5234,11 +5234,10 @@ mod tests {
                         other
                     )),
                 },
-                Some("integrand-name") => {
-                    if arg_value_completion(arg).is_none() {
-                        missing.push(format!("{} --integrand-name", path.join(" ")));
-                    }
+                Some("integrand-name") if arg_value_completion(arg).is_none() => {
+                    missing.push(format!("{} --integrand-name", path.join(" ")));
                 }
+
                 _ => {}
             },
         );
