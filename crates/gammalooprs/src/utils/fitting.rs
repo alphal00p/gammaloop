@@ -1,7 +1,6 @@
 use crate::utils::{F, FloatLike};
 use color_eyre::eyre::{Result, eyre};
 use std::cmp::Ordering;
-use symbolica::domains::float::Real;
 
 pub fn constant_dropped_fit_points<T: FloatLike>(
     start: &F<T>,
