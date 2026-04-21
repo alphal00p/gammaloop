@@ -12,11 +12,12 @@ use rand::Rng;
 use symbolica::numerical_integration::MonteCarloRng;
 use tabled::{builder::Builder, settings::Style};
 use tracing::warn;
+use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor,
-    cff::esurface::EsurfaceID,
-    graph::{FeynmanGraph, LmbError, lmb::LMBwithEdges},
+    cff::esurface::{EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId},
+    graph::{FeynmanGraph, GraphGroupPosition, LmbError, lmb::LMBwithEdges},
     integrands::{
         evaluation::PreciseEvaluationResult,
         process::{
@@ -38,6 +39,7 @@ use crate::{
             ParameterizationMode, ParameterizationSettings,
         },
     },
+    subtraction::amplitude_counterterm::OverlapStructureWithKinematics,
     utils::{
         ArbPrec, F, FloatLike, box_muller,
         fitting::{constant_dropped_fit_points, log_log_slope_constant_dropped},
@@ -618,6 +620,24 @@ fn build_single_limit_report(
     }
 }
 
+fn build_threshold_limit_report(
+    threshold_limit: &ThresholdLimit,
+    orientation_label: Option<String>,
+    slope: PowerLawFit,
+    per_cut_reports: Vec<CutLimitReport>,
+) -> SingleLimitReport {
+    let scaling = slope.exponent;
+    SingleLimitReport {
+        limit_name: format!("{}", threshold_limit),
+        orientation_label,
+        passed: scaling > 0.0,
+        power_law_fit: slope,
+        scaling,
+        per_cut_reports,
+        num_soft: 0,
+    }
+}
+
 fn build_cut_limit_reports(
     num_soft: usize,
     cut_fits: Vec<(usize, Result<PowerLawFit>)>,
@@ -641,12 +661,26 @@ fn build_cut_limit_reports(
         .collect()
 }
 
+fn threshold_approach_loop_momenta<T: FloatLike>(
+    overlap_group_center: &LoopMomenta<F<f64>>,
+    threshold_point: &MomentumSample<T>,
+    lambda: &F<T>,
+) -> LoopMomenta<F<T>> {
+    let overlap_group_center = overlap_group_center.cast::<T>();
+    let threshold_loop_momenta = threshold_point.loop_moms();
+    let offset_towards_center =
+        (&overlap_group_center - threshold_loop_momenta).rescale(lambda, None);
+
+    threshold_loop_momenta + &offset_towards_center
+}
+
 fn run_ir_profile<I: ProcessIntegrandImpl>(
     integrand: &mut I,
     ir_profile_settings: &IRProfileSetting,
     model: &Model,
     enumerate_limits: impl Fn(&I) -> Vec<(String, Vec<ProfileLimit>)>,
     graph_cut_definitions: impl Fn(&I, usize) -> Vec<GraphCutDefinition>,
+    points_on_threshold: &[OverlapStructureWithKinematics<ArbPrec>],
     mut test_single_limit: impl FnMut(
         &mut I,
         usize,
@@ -654,6 +688,7 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
         &mut MonteCarloRng,
         &IRProfileSetting,
         &Model,
+        &[OverlapStructureWithKinematics<ArbPrec>],
     ) -> Result<Vec<SingleLimitReport>>,
 ) -> Result<IrLimitTestReport> {
     let mut rng = MonteCarloRng::new(ir_profile_settings.seed, 0);
@@ -689,6 +724,7 @@ fn run_ir_profile<I: ProcessIntegrandImpl>(
                 &mut rng,
                 ir_profile_settings,
                 model,
+                points_on_threshold,
             )?);
         }
 
@@ -735,12 +771,41 @@ impl AmplitudeIntegrand {
 
         let result = (|| {
             self.warm_up(model)?;
+
+            let dependent_momenta_constructor = DependentMomentaConstructor::Amplitude(
+                &self.data.graph_terms[0].graph.get_external_signature(),
+            );
+
+            let random_loop_momenta = (0..self.data.graph_terms[0]
+                .graph
+                .loop_momentum_basis
+                .loop_edges
+                .len())
+                .map(|_| {
+                    sample_random_unit_vector(&mut MonteCarloRng::new(ir_profile_settings.seed, 0))
+                })
+                .collect();
+
+            let momentum_sample = MomentumSample::new(
+                random_loop_momenta,
+                0,
+                &self.settings.kinematics.externals,
+                0,
+                F::from_f64(1.0),
+                dependent_momenta_constructor,
+                None,
+            )?;
+
+            let points_on_threshold =
+                self.kinematics_for_threshold_approach(&momentum_sample, model)?;
+
             run_ir_profile(
                 self,
                 ir_profile_settings,
                 model,
                 Self::enumerate_ir_limits,
                 Self::graph_cut_definitions,
+                &points_on_threshold,
                 Self::test_single_ir_limit_impl,
             )
         })();
@@ -758,11 +823,22 @@ impl AmplitudeIntegrand {
             .iter()
             .map(|term| {
                 let graph_name = term.graph.name.clone();
-                let limits = term
+                let mut limits = term
                     .enumerate_ir_limits()
                     .into_iter()
                     .map(ProfileLimit::Ir)
-                    .collect::<Vec<_>>();
+                    .collect_vec();
+                limits.extend(
+                    ThresholdLimit::enumerate_from_overlap_structure(
+                        &term.threshold_counterterm.overlap.existing_esurfaces,
+                        &term.threshold_counterterm.esurface_map,
+                        term.threshold_counterterm.own_group_position,
+                    )
+                    .into_iter()
+                    .map(ProfileLimit::Threshold),
+                );
+                limits.sort();
+                limits.dedup();
                 (graph_name, limits)
             })
             .collect()
@@ -779,6 +855,7 @@ impl AmplitudeIntegrand {
         rng: &mut MonteCarloRng,
         approach_settings: &IRProfileSetting,
         model: &Model,
+        points_on_threshold: &[OverlapStructureWithKinematics<ArbPrec>],
     ) -> Result<Vec<SingleLimitReport>> {
         match profile_limit {
             ProfileLimit::Ir(ir_limit) => {
@@ -861,7 +938,7 @@ impl AmplitudeIntegrand {
                         );
 
                         limit_data.data.push(LambdaPointEval {
-                            lambda_point,
+                            lambda: lambda_point.lambda,
                             value: evaluate_profile_momentum_point_arb(
                                 self,
                                 model,
@@ -885,10 +962,78 @@ impl AmplitudeIntegrand {
                 Ok(reports)
             }
             ProfileLimit::Threshold(threshold_limit) => {
-                return Err(eyre!(
-                    "Threshold limit '{}' is not yet supported in amplitude IR profiling",
-                    threshold_limit
-                ));
+                let overlap_structure = points_on_threshold.get(graph_id).ok_or_else(|| {
+                    eyre!(
+                        "Missing threshold-approach kinematics for amplitude graph {}",
+                        graph_id
+                    )
+                })?;
+
+                let existing_esurface_id = threshold_limit.resolve_existing_esurface_id(
+                    &self.data.graph_terms[graph_id]
+                        .threshold_counterterm
+                        .esurface_map,
+                    self.data.graph_terms[graph_id]
+                        .threshold_counterterm
+                        .own_group_position,
+                    &overlap_structure.existing_esurfaces,
+                )?;
+
+                let momenta_per_overlap_group = threshold_limit.get_momenta_per_overlap_group(
+                    overlap_structure,
+                    existing_esurface_id,
+                    approach_settings,
+                )?;
+                let orientations = requested_orientations(self, graph_id, approach_settings)?;
+                let mut reports =
+                    Vec::with_capacity(orientations.len() * momenta_per_overlap_group.len());
+
+                for (overlap_group_label, momenta) in momenta_per_overlap_group {
+                    for (orientation, orientation_label) in &orientations {
+                        let mut limit_data = LimitData { data: Vec::new() };
+
+                        for lambda_point in &momenta {
+                            limit_data.data.push(LambdaPointEval {
+                                lambda: lambda_point.lambda.clone(),
+                                value: evaluate_profile_momentum_point_arb(
+                                    self,
+                                    model,
+                                    graph_id,
+                                    *orientation,
+                                    lambda_point
+                                        .loop_momenta
+                                        .iter()
+                                        .map(|momentum| {
+                                            ThreeMomentum::new(
+                                                F::from_f64(momentum.px.into_f64()),
+                                                F::from_f64(momentum.py.into_f64()),
+                                                F::from_f64(momentum.pz.into_f64()),
+                                            )
+                                        })
+                                        .collect_vec(),
+                                    approach_settings.show_per_cut_info,
+                                )?,
+                            });
+                        }
+
+                        let (power_law_fit, cut_fits) = limit_data.extract_power()?;
+                        let context_label = Some(match orientation_label.as_deref() {
+                            Some(orientation_label) => {
+                                format!("{overlap_group_label} / {orientation_label}")
+                            }
+                            None => overlap_group_label.clone(),
+                        });
+
+                        reports.push(build_threshold_limit_report(
+                            threshold_limit,
+                            context_label,
+                            power_law_fit,
+                            build_cut_limit_reports(0, cut_fits),
+                        ));
+                    }
+                }
+
+                Ok(reports)
             }
         }
     }
@@ -919,6 +1064,8 @@ impl CrossSectionIntegrand {
             self.settings.general.generate_events = true;
         }
 
+        let points_on_thrshold = vec![]; // threshold limits are not yet supported for cross-section IR profiling
+
         let result = (|| {
             self.warm_up(model)?;
             run_ir_profile(
@@ -927,6 +1074,7 @@ impl CrossSectionIntegrand {
                 model,
                 Self::enumerate_ir_limits,
                 Self::graph_cut_definitions,
+                &points_on_thrshold,
                 Self::test_single_ir_limit_impl,
             )
         })();
@@ -965,6 +1113,7 @@ impl CrossSectionIntegrand {
         rng: &mut MonteCarloRng,
         approach_settings: &IRProfileSetting,
         model: &Model,
+        _points_on_threshold: &[OverlapStructureWithKinematics<ArbPrec>],
     ) -> Result<Vec<SingleLimitReport>> {
         let ir_limit = match profile_limit {
             ProfileLimit::Ir(ir_limit) => ir_limit,
@@ -1087,7 +1236,7 @@ impl CrossSectionIntegrand {
                 );
 
                 limit_data.data.push(LambdaPointEval {
-                    lambda_point,
+                    lambda: lambda_point.lambda,
                     value: evaluate_profile_momentum_point_arb(
                         self,
                         model,
@@ -1183,6 +1332,23 @@ impl Display for ProfileLimit {
 }
 
 impl ThresholdLimit {
+    fn enumerate_from_overlap_structure(
+        existing_esurfaces: &ExistingEsurfaces,
+        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        own_group_position: GraphGroupPosition,
+    ) -> Vec<Self> {
+        existing_esurfaces
+            .iter()
+            .filter_map(|group_esurface_id| {
+                esurface_map[*group_esurface_id][own_group_position]
+                    .map(|esurface_id| Self { esurface_id })
+            })
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .sorted()
+            .collect()
+    }
+
     fn parse_threshold(threshold: &str) -> Result<Self> {
         let mut threshold = String::from(threshold);
         threshold = String::from(threshold.trim());
@@ -1202,6 +1368,111 @@ impl ThresholdLimit {
         Ok(Self {
             esurface_id: EsurfaceID::from(threshold_id),
         })
+    }
+
+    fn resolve_existing_esurface_id(
+        &self,
+        esurface_map: &TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+        own_group_position: GraphGroupPosition,
+        existing_esurfaces: &ExistingEsurfaces,
+    ) -> Result<ExistingEsurfaceId> {
+        existing_esurfaces
+            .iter_enumerated()
+            .find_map(|(existing_esurface_id, group_esurface_id)| {
+                esurface_map
+                    .get(*group_esurface_id)
+                    .and_then(|graph_map| {
+                        (graph_map[own_group_position] == Some(self.esurface_id))
+                            .then_some(existing_esurface_id)
+                    })
+            })
+            .ok_or_else(|| {
+                eyre!(
+                    "Threshold '{}' does not exist in the selected overlap structure",
+                    self
+                )
+            })
+    }
+
+    fn get_momenta_per_overlap_group<T: FloatLike>(
+        &self,
+        overlap_structure: &OverlapStructureWithKinematics<T>,
+        existing_esurface_id: ExistingEsurfaceId,
+        approach_settings: &IRProfileSetting,
+    ) -> Result<Vec<(String, Vec<LambdaLoopMomentaPoint<T>>)>> {
+        let lambda_values = constant_dropped_fit_points(
+            &F::from_f64(10.0_f64.powf(approach_settings.lambda_exp_start)),
+            &F::from_f64(10.0_f64.powf(approach_settings.lambda_exp_end)),
+            approach_settings.steps,
+        )?;
+
+        let mut momenta_per_overlap_group = Vec::new();
+
+        for (overlap_group_id, overlap_group_with_kinematics) in overlap_structure
+            .overlap_groups_with_kinematics
+            .iter()
+            .enumerate()
+        {
+            let mut contains_existing_esurface = false;
+            let mut threshold_point = None;
+
+            for (group_existing_esurface_id, maybe_threshold_point) in overlap_group_with_kinematics
+                .overlap_group
+                .existing_esurfaces
+                .iter()
+                .copied()
+                .zip(
+                    overlap_group_with_kinematics
+                        .loop_momenta_at_esurface
+                        .iter(),
+                )
+            {
+                if group_existing_esurface_id != existing_esurface_id {
+                    continue;
+                }
+
+                contains_existing_esurface = true;
+                threshold_point = maybe_threshold_point.as_ref();
+                break;
+            }
+
+            if !contains_existing_esurface {
+                continue;
+            }
+
+            let threshold_point = threshold_point.ok_or_else(|| {
+                eyre!(
+                    "Threshold '{}' is missing stored approach kinematics for overlap group {}",
+                    self,
+                    overlap_group_id
+                )
+            })?;
+
+            momenta_per_overlap_group.push((
+                format!("overlap group {}", overlap_group_id),
+                lambda_values
+                    .iter()
+                    .cloned()
+                    .map(|lambda| LambdaLoopMomentaPoint {
+                        loop_momenta: threshold_approach_loop_momenta(
+                            &overlap_group_with_kinematics.overlap_group.center,
+                            threshold_point,
+                            &lambda,
+                        ),
+                        lambda,
+                    })
+                    .collect(),
+            ));
+        }
+
+        if momenta_per_overlap_group.is_empty() {
+            return Err(eyre!(
+                "Threshold '{}' does not appear in any overlap group for the selected graph term",
+                self
+            ));
+        }
+
+        Ok(momenta_per_overlap_group)
     }
 }
 
@@ -1719,8 +1990,14 @@ struct LambdaPoint<T: FloatLike> {
     momenta: Vec<TaggedMomenta<F<T>>>,
 }
 
+#[derive(Clone)]
+struct LambdaLoopMomentaPoint<T: FloatLike> {
+    lambda: F<T>,
+    loop_momenta: LoopMomenta<F<T>>,
+}
+
 struct LambdaPointEval<T: FloatLike> {
-    lambda_point: LambdaPoint<T>,
+    lambda: F<T>,
     value: ProfilePointValue,
 }
 
@@ -1738,7 +2015,7 @@ impl<T: FloatLike> LimitData<T> {
         let x = self
             .data
             .iter()
-            .map(|point_eval| F::<ArbPrec>::from_ff64(point_eval.lambda_point.lambda.into_ff64()))
+            .map(|point_eval| F::<ArbPrec>::from_ff64(point_eval.lambda.into_ff64()))
             .collect_vec();
 
         let y = self
@@ -1829,6 +2106,7 @@ fn fit_power_law(x: Vec<F<ArbPrec>>, y: Vec<F<ArbPrec>>) -> Result<PowerLawFit> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use typed_index_collections::ti_vec;
 
     #[test]
     fn test_display() {
@@ -1970,6 +2248,320 @@ mod tests {
         assert!(
             ProfileLimit::parse_limit(invalid_limit_str5).is_err(),
             "Expected error for multiple threshold limits"
+        );
+    }
+
+    #[test]
+    fn resolve_existing_esurface_id_for_threshold_limit() {
+        let threshold_limit = ThresholdLimit {
+            esurface_id: EsurfaceID::from(7usize),
+        };
+        let esurface_map = ti_vec![
+            ti_vec![
+                Some(EsurfaceID::from(5usize)),
+                Some(EsurfaceID::from(6usize))
+            ],
+            ti_vec![Some(EsurfaceID::from(7usize)), None],
+        ];
+        let existing_esurfaces =
+            ti_vec![GroupEsurfaceId::from(0usize), GroupEsurfaceId::from(1usize)];
+
+        let existing_esurface_id = threshold_limit
+            .resolve_existing_esurface_id(
+                &esurface_map,
+                GraphGroupPosition::from(0usize),
+                &existing_esurfaces,
+            )
+            .unwrap();
+
+        assert_eq!(existing_esurface_id, ExistingEsurfaceId::from(1usize));
+    }
+
+    #[test]
+    fn resolve_existing_esurface_id_rejects_threshold_missing_from_graph() {
+        let threshold_limit = ThresholdLimit {
+            esurface_id: EsurfaceID::from(9usize),
+        };
+        let esurface_map = ti_vec![ti_vec![
+            Some(EsurfaceID::from(5usize)),
+            Some(EsurfaceID::from(6usize))
+        ]];
+        let existing_esurfaces = ti_vec![GroupEsurfaceId::from(0usize)];
+
+        assert!(
+            threshold_limit
+                .resolve_existing_esurface_id(
+                    &esurface_map,
+                    GraphGroupPosition::from(0usize),
+                    &existing_esurfaces,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn resolve_existing_esurface_id_rejects_threshold_missing_from_overlap() {
+        let threshold_limit = ThresholdLimit {
+            esurface_id: EsurfaceID::from(7usize),
+        };
+        let esurface_map = ti_vec![ti_vec![Some(EsurfaceID::from(7usize))]];
+        let existing_esurfaces = ti_vec![GroupEsurfaceId::from(1usize)];
+
+        assert!(
+            threshold_limit
+                .resolve_existing_esurface_id(
+                    &esurface_map,
+                    GraphGroupPosition::from(0usize),
+                    &existing_esurfaces,
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn enumerate_threshold_limits_from_overlap_structure() {
+        let esurface_map = ti_vec![
+            ti_vec![
+                Some(EsurfaceID::from(5usize)),
+                Some(EsurfaceID::from(8usize))
+            ],
+            ti_vec![Some(EsurfaceID::from(7usize)), None],
+            ti_vec![
+                Some(EsurfaceID::from(5usize)),
+                Some(EsurfaceID::from(9usize))
+            ],
+            ti_vec![None, Some(EsurfaceID::from(3usize))],
+        ];
+        let existing_esurfaces = ti_vec![
+            GroupEsurfaceId::from(2usize),
+            GroupEsurfaceId::from(0usize),
+            GroupEsurfaceId::from(1usize),
+            GroupEsurfaceId::from(3usize),
+        ];
+
+        let threshold_limits = ThresholdLimit::enumerate_from_overlap_structure(
+            &existing_esurfaces,
+            &esurface_map,
+            GraphGroupPosition::from(0usize),
+        );
+        let threshold_limits_for_other_group = ThresholdLimit::enumerate_from_overlap_structure(
+            &existing_esurfaces,
+            &esurface_map,
+            GraphGroupPosition::from(1usize),
+        );
+
+        assert_eq!(
+            threshold_limits,
+            vec![
+                ThresholdLimit {
+                    esurface_id: EsurfaceID::from(5usize),
+                },
+                ThresholdLimit {
+                    esurface_id: EsurfaceID::from(7usize),
+                },
+            ]
+        );
+        assert_eq!(
+            threshold_limits_for_other_group,
+            vec![
+                ThresholdLimit {
+                    esurface_id: EsurfaceID::from(3usize),
+                },
+                ThresholdLimit {
+                    esurface_id: EsurfaceID::from(8usize),
+                },
+                ThresholdLimit {
+                    esurface_id: EsurfaceID::from(9usize),
+                },
+            ]
+        );
+    }
+
+    fn test_ir_profile_settings(steps: usize) -> IRProfileSetting {
+        IRProfileSetting {
+            lambda_exp_start: -3.0,
+            lambda_exp_end: -1.0,
+            steps,
+            seed: 0,
+            select_limits_and_graphs: None,
+            orientation_mode: OrientationProfileMode::Summed,
+            show_per_cut_info: false,
+        }
+    }
+
+    fn test_momentum_sample(loop_momenta: Vec<ThreeMomentum<F<f64>>>) -> MomentumSample<f64> {
+        MomentumSample {
+            sample: crate::momentum::sample::BareMomentumSample {
+                loop_moms: loop_momenta.into_iter().collect(),
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms: ti_vec![],
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: F::from_f64(1.0),
+                orientation: None,
+            },
+        }
+    }
+
+    #[test]
+    fn threshold_approach_loop_momenta_starts_at_stored_threshold_point() {
+        let overlap_group_center: LoopMomenta<F<f64>> = vec![ThreeMomentum::new(
+            F::from_f64(5.0),
+            F::from_f64(7.0),
+            F::from_f64(9.0),
+        )]
+        .into_iter()
+        .collect();
+        let threshold_point = test_momentum_sample(vec![ThreeMomentum::new(
+            F::from_f64(1.0),
+            F::from_f64(3.0),
+            F::from_f64(5.0),
+        )]);
+
+        let at_threshold = threshold_approach_loop_momenta(
+            &overlap_group_center,
+            &threshold_point,
+            &F::from_f64(0.0),
+        );
+        let halfway = threshold_approach_loop_momenta(
+            &overlap_group_center,
+            &threshold_point,
+            &F::from_f64(0.5),
+        );
+        let at_center = threshold_approach_loop_momenta(
+            &overlap_group_center,
+            &threshold_point,
+            &F::from_f64(1.0),
+        );
+
+        assert_eq!(at_threshold, threshold_point.loop_moms().clone());
+        assert_eq!(
+            halfway,
+            vec![ThreeMomentum::new(
+                F::from_f64(3.0),
+                F::from_f64(5.0),
+                F::from_f64(7.0),
+            )]
+            .into_iter()
+            .collect()
+        );
+        assert_eq!(at_center, overlap_group_center);
+    }
+
+    #[test]
+    fn threshold_limit_builds_group_trajectories_for_matching_overlap_groups() {
+        let threshold_limit = ThresholdLimit {
+            esurface_id: EsurfaceID::from(7usize),
+        };
+        let threshold_point = test_momentum_sample(vec![ThreeMomentum::new(
+            F::from_f64(1.0),
+            F::from_f64(2.0),
+            F::from_f64(3.0),
+        )]);
+        let overlap_structure = OverlapStructureWithKinematics {
+            existing_esurfaces: ti_vec![
+                GroupEsurfaceId::from(0usize),
+                GroupEsurfaceId::from(1usize)
+            ],
+            overlap_groups_with_kinematics: vec![
+                crate::subtraction::amplitude_counterterm::OverlapGroupWithKinematics {
+                    overlap_group: crate::subtraction::overlap::OverlapGroup {
+                        existing_esurfaces: vec![ExistingEsurfaceId::from(1usize)],
+                        complement: vec![],
+                        center: vec![ThreeMomentum::new(
+                            F::from_f64(5.0),
+                            F::from_f64(6.0),
+                            F::from_f64(7.0),
+                        )]
+                        .into_iter()
+                        .collect(),
+                        prefactor_evaluator: None,
+                    },
+                    loop_momenta_at_esurface: ti_vec![Some(threshold_point.clone())],
+                },
+                crate::subtraction::amplitude_counterterm::OverlapGroupWithKinematics {
+                    overlap_group: crate::subtraction::overlap::OverlapGroup {
+                        existing_esurfaces: vec![ExistingEsurfaceId::from(0usize)],
+                        complement: vec![],
+                        center: vec![ThreeMomentum::new(
+                            F::from_f64(8.0),
+                            F::from_f64(9.0),
+                            F::from_f64(10.0),
+                        )]
+                        .into_iter()
+                        .collect(),
+                        prefactor_evaluator: None,
+                    },
+                    loop_momenta_at_esurface: ti_vec![Some(test_momentum_sample(vec![
+                        ThreeMomentum::new(F::from_f64(2.0), F::from_f64(3.0), F::from_f64(4.0),),
+                    ]))],
+                },
+            ],
+        };
+
+        let trajectories = threshold_limit
+            .get_momenta_per_overlap_group(
+                &overlap_structure,
+                ExistingEsurfaceId::from(1usize),
+                &test_ir_profile_settings(4),
+            )
+            .unwrap();
+
+        assert_eq!(trajectories.len(), 1);
+        assert_eq!(trajectories[0].0, "overlap group 0");
+        assert_eq!(trajectories[0].1.len(), 4);
+
+        for lambda_point in &trajectories[0].1 {
+            assert_eq!(
+                lambda_point.loop_momenta,
+                threshold_approach_loop_momenta(
+                    &overlap_structure.overlap_groups_with_kinematics[0]
+                        .overlap_group
+                        .center,
+                    &threshold_point,
+                    &lambda_point.lambda,
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn threshold_limit_rejects_group_missing_threshold_kinematics() {
+        let threshold_limit = ThresholdLimit {
+            esurface_id: EsurfaceID::from(7usize),
+        };
+        let overlap_structure: OverlapStructureWithKinematics<f64> =
+            OverlapStructureWithKinematics {
+                existing_esurfaces: ti_vec![GroupEsurfaceId::from(1usize)],
+                overlap_groups_with_kinematics: vec![
+                    crate::subtraction::amplitude_counterterm::OverlapGroupWithKinematics {
+                        overlap_group: crate::subtraction::overlap::OverlapGroup {
+                            existing_esurfaces: vec![ExistingEsurfaceId::from(0usize)],
+                            complement: vec![],
+                            center: vec![ThreeMomentum::new(
+                                F::from_f64(5.0),
+                                F::from_f64(6.0),
+                                F::from_f64(7.0),
+                            )]
+                            .into_iter()
+                            .collect(),
+                            prefactor_evaluator: None,
+                        },
+                        loop_momenta_at_esurface: ti_vec![None],
+                    },
+                ],
+            };
+
+        assert!(
+            threshold_limit
+                .get_momenta_per_overlap_group(
+                    &overlap_structure,
+                    ExistingEsurfaceId::from(0usize),
+                    &test_ir_profile_settings(3),
+                )
+                .is_err()
         );
     }
 

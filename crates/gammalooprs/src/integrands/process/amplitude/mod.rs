@@ -50,7 +50,7 @@ use crate::{
     },
     model::Model,
     momentum::{
-        Helicity, Rotation, RotationMethod, SignOrZero,
+        self, Helicity, Rotation, RotationMethod, SignOrZero,
         sample::{ExternalIndex, LoopMomenta, MomentumSample},
         signature::SignatureLike,
     },
@@ -60,6 +60,7 @@ use crate::{
     subtraction::{
         amplitude_counterterm::{
             AmplitudeCountertermAtom, AmplitudeCountertermData, AmplitudeCountertermEvaluation,
+            OverlapStructureWithKinematics,
         },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
@@ -94,6 +95,21 @@ pub struct AmplitudeGraphTerm {
 
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
 impl AmplitudeGraphTerm {
+    pub fn kinematics_for_threshold_approach(
+        &mut self,
+        settings: &RuntimeSettings,
+        model: &Model,
+        momentum_sample: &MomentumSample<ArbPrec>,
+    ) -> Result<OverlapStructureWithKinematics<ArbPrec>> {
+        self.threshold_counterterm.kinematics_for_approach(
+            momentum_sample,
+            &self.graph,
+            model,
+            &self.esurfaces,
+            &Rotation::new(RotationMethod::Identity),
+            settings,
+        )
+    }
     pub fn from_amplitude_graph(
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
@@ -713,6 +729,20 @@ pub mod export;
 pub mod load;
 
 impl AmplitudeIntegrand {
+    pub(crate) fn kinematics_for_threshold_approach(
+        &mut self,
+        momentum_sample: &MomentumSample<ArbPrec>,
+        model: &Model,
+    ) -> Result<Vec<OverlapStructureWithKinematics<ArbPrec>>> {
+        self.data
+            .graph_terms
+            .iter_mut()
+            .map(|term| {
+                term.kinematics_for_threshold_approach(&self.settings, model, momentum_sample)
+            })
+            .try_collect()
+    }
+
     fn warn_on_off_shell_external_states(&self, model: &Model) -> Result<()> {
         let externals = self
             .settings
