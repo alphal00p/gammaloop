@@ -1778,10 +1778,10 @@ impl CrossSectionDerivedData {
 
 pub(crate) fn build_derivative_structure_atom(
     singularity_order: u8,
-    _laurent_coefficient: i8,
+    laurent_coefficient: i8,
 ) -> Atom {
     assert!(
-        _laurent_coefficient <= -1,
+        laurent_coefficient <= -1,
         "only laurent coefficients up to -1 are supported"
     );
 
@@ -1790,11 +1790,12 @@ pub(crate) fn build_derivative_structure_atom(
         "eta order must be at least 1, got {singularity_order}"
     );
     assert!(
-        singularity_order >= -_laurent_coefficient as u8,
-        "eta order must be at least the negative of the laurent coefficient, got {singularity_order} for laurent coefficient {_laurent_coefficient}"
+        singularity_order >= -laurent_coefficient as u8,
+        "eta order must be at least the negative of the laurent coefficient, got {singularity_order} for laurent coefficient {laurent_coefficient}"
     );
 
     let order = singularity_order as i32;
+    let laurent_coefficient = laurent_coefficient as i32;
     let f = symbol!("f");
 
     let expansion = parse!("η(t)")
@@ -1814,7 +1815,7 @@ pub(crate) fn build_derivative_structure_atom(
         * expansion.pow(-order)
         * (GS.rescale - GS.rescale_star).pow(order);
 
-    for _ in 1..order {
+    for _ in 1..=(order + laurent_coefficient) {
         expression_to_derive = expression_to_derive.derivative(GS.rescale);
     }
 
@@ -1826,7 +1827,7 @@ pub(crate) fn build_derivative_structure_atom(
         .series(symbol!("delta_t"), Atom::num(0), (0, 1).into(), true)
         .unwrap();
 
-    let factorial_prefactor = (2..order).product::<i32>();
+    let factorial_prefactor = (2..=(order + laurent_coefficient as i32)).product::<i32>();
 
     let mut expression_to_derive = polynomial_in_delta_t.to_atom() / Atom::num(factorial_prefactor);
 
