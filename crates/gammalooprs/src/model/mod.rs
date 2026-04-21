@@ -816,6 +816,7 @@ pub struct SerializableParticle {
     ghost_number: isize,
     lepton_number: isize,
     y_charge: isize,
+    chemical_potential: Option<SmartString<LazyCompact>>,
 }
 
 impl SerializableParticle {
@@ -834,6 +835,10 @@ impl SerializableParticle {
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
+            chemical_potential: particle
+                .chemical_potential
+                .as_ref()
+                .map(|chemical_potential| chemical_potential.namespaceless_string().into()),
         }
     }
 }
@@ -853,6 +858,7 @@ pub struct Particle {
     pub ghost_number: isize,
     pub lepton_number: isize,
     pub y_charge: isize,
+    pub chemical_potential: Option<ParameterName>,
 }
 
 impl Particle {
@@ -1344,6 +1350,10 @@ impl Particle {
             ghost_number: particle.ghost_number,
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
+            chemical_potential: particle
+                .chemical_potential
+                .as_ref()
+                .map(|chemical_potential| ParameterName(chemical_potential.into())),
         }
     }
 }

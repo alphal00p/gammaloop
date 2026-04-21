@@ -186,9 +186,14 @@ where
     }
 
     fn explicit_thermal_distribution_atom(&self, edge: EdgeIndex, thermal_sign: Atom) -> Atom {
+        let chemical_potential = self[edge].chemical_potential_atom();
+        let shifted_ose = match chemical_potential {
+            Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
+            None => ose_atom_from_index(edge),
+        };
+
         let two = Atom::num(2);
-        let ose = ose_atom_from_index(edge);
-        let arg = Atom::var(GS.inverse_temperature) * ose / &two;
+        let arg = Atom::var(GS.inverse_temperature) * shifted_ose / &two;
         let tanh_arg = GS.tanh(arg.clone());
 
         let is_fermion = self[edge].is_fermion();
