@@ -37,7 +37,7 @@ pub fn constant_dropped_fit_points<T: FloatLike>(
         ));
     }
 
-    let ten = F::from_f64(10.0);
+    let ten = start.from_i64(10);
     let mut points = Vec::with_capacity(num);
     points.push(start.clone());
 
@@ -247,10 +247,7 @@ fn linear_regression<T: FloatLike>(samples: &[(F<T>, F<T>)]) -> Result<SlopeFit<
     if r_squared.is_nan() || r_squared.is_infinite() {
         Err(eyre!("log-log regression produced a non-finite r-squared"))
     } else {
-        Ok(SlopeFit {
-            slope,
-            r_suared: r_squared,
-        })
+        Ok(SlopeFit { slope, r_squared })
     }
 }
 

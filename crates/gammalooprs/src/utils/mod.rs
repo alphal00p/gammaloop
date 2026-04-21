@@ -1993,6 +1993,10 @@ impl<T: FloatLike> F<T> {
         F(self.0.sqrt())
     }
 
+    pub(crate) fn powf(&self, e: &Self) -> Self {
+        F(self.0.powf(&e.0))
+    }
+
     pub(crate) fn log10(&self) -> Self {
         let ten = self.from_i64(10);
         self.ln() / ten.ln()

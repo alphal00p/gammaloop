@@ -1175,7 +1175,7 @@ impl CrossSectionIntegrand {
             self.settings.general.generate_events = true;
         }
 
-        let points_on_thrshold = vec![]; // threshold limits are not yet supported for cross-section IR profiling
+        let points_on_threshold = vec![]; // threshold limits are not yet supported for cross-section IR profiling
 
         let result = (|| {
             self.warm_up(model)?;
@@ -1185,7 +1185,7 @@ impl CrossSectionIntegrand {
                 model,
                 Self::enumerate_ir_limits,
                 Self::graph_cut_definitions,
-                &points_on_thrshold,
+                &points_on_threshold,
                 Self::test_single_ir_limit_impl,
             )
         })();
