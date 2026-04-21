@@ -28,7 +28,8 @@ use clap::{Args, Subcommand};
 pub enum Profile {
     /// Ultraviolet profile analysis
     UltraViolet(#[command(flatten)] UltraVioletProfile),
-    /// Infrared profile analysis
+    /// Bulk profile analysis
+    #[command(name = "bulk")]
     InfraRed(#[command(flatten)] InfraRedProfile),
 }
 
