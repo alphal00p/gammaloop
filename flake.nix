@@ -143,9 +143,12 @@
         "gammaloop-integration-tests"
       ];
 
+      ciTestCargoProfile = "dev-optim";
+
       gammaloopNextestArgs =
         ciArgs
         // {
+          CARGO_PROFILE = ciTestCargoProfile;
           cargoExtraArgs = lib.concatStringsSep " " (["--locked"] ++ map (package: "-p ${package}") gammaloopNextestPackages);
         };
 
@@ -242,8 +245,8 @@
         // {
           pname = "gammaloop-workspace-artifacts";
           inherit (apiMeta) version;
-          cargoBuildCommand = "cargo test --workspace --all-targets --profile release --no-run --locked";
-          buildPhaseCargoCommand = "cargo test --workspace --all-targets --profile release --no-run --locked";
+          cargoBuildCommand = "cargo test --workspace --all-targets --profile ${ciTestCargoProfile} --no-run --locked";
+          buildPhaseCargoCommand = "cargo test --workspace --all-targets --profile ${ciTestCargoProfile} --no-run --locked";
           doCheck = false;
         });
 
@@ -282,17 +285,66 @@
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
+      gammaloopNextestArchive = craneLib.mkCargoDerivation (gammaloopNextestArgs
+        // {
+          inherit cargoArtifacts;
+          pnameSuffix = "-nextest-archive";
+          preCheck = licensePreCheck;
+          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+          doCheck = true;
+          nativeBuildInputs = (gammaloopNextestArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest];
+          buildPhaseCargoCommand = ''
+            mkdir -p "$out"
+            cargo nextest --version
+          '';
+          checkPhaseCargoCommand = ''
+            cargo nextest archive \
+              --cargo-profile ${ciTestCargoProfile} \
+              ${gammaloopNextestArgs.cargoExtraArgs} \
+              --profile ci_gammaloop \
+              --archive-format tar-zst \
+              --archive-file "$out/archive.tar.zst"
+          '';
+          installPhaseCommand = ''
+            test -f "$out/archive.tar.zst"
+          '';
+        });
+
+      nextestPartitionArgs = partition: commonArgs
+        // {
+          pname = "gammaloop-nextest-partition-${toString partition}";
+          inherit (apiMeta) version;
+          cargoArtifacts = null;
+          cargoVendorDir = null;
+          doInstallCargoArtifacts = false;
+          doCheck = true;
+          preCheck = licensePreCheck;
+          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+          nativeBuildInputs = (commonArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest];
+          buildPhaseCargoCommand = ''
+            mkdir -p "$out"
+            cargo nextest --version
+          '';
+          checkPhaseCargoCommand = ''
+            cargo nextest run \
+              --archive-format tar-zst \
+              --archive-file ${gammaloopNextestArchive}/archive.tar.zst \
+              --workspace-remap . \
+              --profile ci_gammaloop \
+              --partition hash:${toString partition}/${toString ciPartitionCount} \
+              --no-fail-fast \
+              --final-status-level fail \
+              --no-tests=pass \
+              --run-ignored all
+          '';
+          installPhaseCommand = ''
+            mkdir -p "$out"
+          '';
+        };
+
       partitionedNextestChecks = lib.listToAttrs (map (partition: {
           name = "gammaloop-nextest-partition-${toString partition}";
-          value = craneLib.cargoNextest (gammaloopNextestArgs
-            // {
-              inherit cargoArtifacts;
-              preCheck = licensePreCheck;
-              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-              partitions = 1;
-              partitionType = "count";
-              cargoNextestPartitionsExtraArgs = "--profile ci_gammaloop --partition hash:${toString partition}/${toString ciPartitionCount} --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
-            });
+          value = craneLib.mkCargoDerivation (nextestPartitionArgs partition);
         })
         (lib.range 1 ciPartitionCount));
 
@@ -360,8 +412,8 @@
               inherit cargoArtifacts;
               preCheck = licensePreCheck;
               SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-              partitions = 1;
-              partitionType = "count";
+              partitions = ciPartitionCount;
+              partitionType = "hash";
               cargoNextestPartitionsExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
             });
         }
@@ -372,6 +424,7 @@
         {
           default = gammaloop-cli;
           gammaloop = gammaloop-cli;
+          gammaloop-nextest-archive = gammaloopNextestArchive;
           inherit cargoArtifacts;
         }
         // impureCheckRunnerPackages

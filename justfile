@@ -309,6 +309,7 @@ test-ci TEST_NAME="":
     )
     cmd=(
         cargo nextest run
+        --cargo-profile dev-optim
         --profile ci_gammaloop
         --locked
         --no-fail-fast
