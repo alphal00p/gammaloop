@@ -1165,7 +1165,6 @@ fn yaml_to_json(v: Y) -> Result<J> {
 
 #[cfg(test)]
 mod test {
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     use clap::Parser;
@@ -1206,8 +1205,8 @@ mod test {
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
         state.model_parameters = InputParamCard::default_from_model(&state.model);
-        let graph_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/resources/graphs/scalar_bubble.dot");
+        let graph_path =
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
         let graphs = Graph::from_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 

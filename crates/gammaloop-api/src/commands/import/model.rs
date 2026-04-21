@@ -615,20 +615,10 @@ fn builtin_has_model(model: &str) -> bool {
 }
 
 fn scan_builtin_json_model_names() -> Vec<String> {
-    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/models/json");
-    let Ok(entries) = fs::read_dir(base) else {
-        return Vec::new();
-    };
-
-    let mut names = entries
-        .flatten()
-        .filter_map(|entry| {
-            let file_type = entry.file_type().ok()?;
-            if !file_type.is_dir() {
-                return None;
-            }
-            Some(entry.file_name().to_string_lossy().to_string())
-        })
+    let mut names = BUILTIN_MODELS
+        .dirs()
+        .filter_map(|dir| dir.path().file_name())
+        .map(|name| name.to_string_lossy().to_string())
         .collect::<Vec<_>>();
     names.sort();
     names.dedup();
@@ -636,29 +626,18 @@ fn scan_builtin_json_model_names() -> Vec<String> {
 }
 
 fn scan_builtin_json_model_restriction_names() -> BTreeMap<String, Vec<String>> {
-    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../assets/models/json");
-    let Ok(entries) = fs::read_dir(base) else {
-        return BTreeMap::new();
-    };
-
-    entries
-        .flatten()
-        .filter_map(|entry| {
-            let file_type = entry.file_type().ok()?;
-            if !file_type.is_dir() {
-                return None;
-            }
-
-            let model_name = entry.file_name().to_string_lossy().to_string();
-            let mut restrictions = fs::read_dir(entry.path())
-                .ok()?
-                .flatten()
-                .filter_map(|file_entry| {
-                    let file_name = file_entry.file_name().to_string_lossy().to_string();
-                    file_name
-                        .strip_prefix("restrict_")
+    BUILTIN_MODELS
+        .dirs()
+        .filter_map(|dir| {
+            let model_name = dir.path().file_name()?.to_string_lossy().to_string();
+            let mut restrictions = dir
+                .files()
+                .filter_map(|file| file.path().file_name())
+                .filter_map(|name| name.to_str())
+                .filter_map(|name| {
+                    name.strip_prefix("restrict_")
                         .and_then(|name| name.strip_suffix(".json"))
-                        .map(|name| name.to_string())
+                        .map(str::to_string)
                 })
                 .collect::<Vec<_>>();
             restrictions.sort();

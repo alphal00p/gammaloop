@@ -2136,7 +2136,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf};
+    use std::fs;
 
     use gammalooprs::{
         graph::Graph,
@@ -2168,8 +2168,8 @@ mod tests {
         state.model = load_generic_model("scalars");
         state.model_parameters = InputParamCard::default_from_model(&state.model);
 
-        let graph_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/resources/graphs/scalar_bubble.dot");
+        let graph_path =
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
         let graphs = Graph::from_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 

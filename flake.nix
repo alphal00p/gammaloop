@@ -52,6 +52,12 @@
         ./crates/vakint/templates
       ];
 
+      snapshotSources = lib.fileset.unions [
+        ./crates/gammalooprs
+        ./crates/linnet
+        ./crates/spenso
+      ];
+
       workspaceBuildSrc = lib.fileset.toSource {
         root = workspaceRoot;
         fileset = lib.fileset.unions [
@@ -65,6 +71,7 @@
         fileset = lib.fileset.unions [
           cargoSources
           nonCargoBuildSources
+          snapshotSources
           ./tests
           ./examples/cli
         ];
@@ -168,6 +175,7 @@
         // {
           CARGO_PROFILE = ciTestCargoProfile;
           cargoExtraArgs = lib.concatStringsSep " " (["--locked"] ++ map (package: "-p ${package}") gammaloopNextestPackages);
+          INSTA_WORKSPACE_ROOT = ".";
           nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
         };
 
@@ -352,7 +360,7 @@
             cargo nextest --version
           '';
           checkPhaseCargoCommand = ''
-            cargo nextest run \
+            INSTA_WORKSPACE_ROOT="$PWD" cargo nextest run \
               --archive-format tar-zst \
               --archive-file ${gammaloopNextestArchive}/archive.tar.zst \
               --workspace-remap . \
