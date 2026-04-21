@@ -876,14 +876,13 @@ impl AmplitudeIntegrand {
                 &self.data.graph_terms[0].graph.get_external_signature(),
             );
 
+            let mut rng = MonteCarloRng::new(ir_profile_settings.seed, 0);
             let random_loop_momenta = (0..self.data.graph_terms[0]
                 .graph
                 .loop_momentum_basis
                 .loop_edges
                 .len())
-                .map(|_| {
-                    sample_random_unit_vector(&mut MonteCarloRng::new(ir_profile_settings.seed, 0))
-                })
+                .map(|_| sample_random_unit_vector(&mut rng))
                 .collect();
 
             let momentum_sample = MomentumSample::new(
