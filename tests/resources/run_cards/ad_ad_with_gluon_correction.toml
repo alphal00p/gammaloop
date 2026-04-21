@@ -1,7 +1,7 @@
 [cli_settings]
 [cli_settings.global]
 logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "info,gammalooprs[orientation_parametric_exprs]=debug,gammalooprs[kernel]=debug,poly::gcd =off"
+display_directive = "info"  # ,gammalooprs[orientation_parametric_exprs]=debug,gammalooprs[kernel]=debug,poly::gcd =off"
 
 [cli_settings.global.log_style]
 include_fields = true
@@ -18,14 +18,15 @@ enable_thresholds = true
 check_esurface_at_generation = false
 
 [cli_settings.state]
-folder = "tests/artifacts/dod2_bubble"
-name = "bubble_dod2_state"
+folder = "tests/artifacts/ad_ad_with_gluon_correction"
+name = "ad_ad_with_gluon_correction"
 
 [[command_blocks]]
 name = "generate"
 commands = [
   "import model sm-default",
   "import graphs ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot",
+  "save state",
   "generate",
 ]
 

@@ -824,7 +824,7 @@ impl Graph {
         let dangling = net.graph.dangling_indices();
         if !dangling.is_empty() {
             return Err(eyre!(
-                "Full numerator still has dangling tensor indices: {}",
+                "Full numerator still has dangling tensor indices: \n{}",
                 dangling
                     .iter()
                     .map(|slot| format!(
@@ -832,7 +832,7 @@ impl Graph {
                         slot.to_atom().log_print(None),
                         slot.to_atom().to_plain_string()
                     ))
-                    .join(", ")
+                    .join(",\n")
             ));
         }
 

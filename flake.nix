@@ -40,30 +40,37 @@
           "rustc"
         ]);
 
-      workspaceSrc = lib.fileset.toSource {
-        root = ./.;
-        fileset = lib.fileset.unions [
-          ./.config
-          ./Cargo.toml
-          ./Cargo.lock
-          ./assets
-          ./crates
-          ./tests
-        ];
-      };
+      workspaceRoot = ./.;
+
+      cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
+
+      nonCargoBuildSources = lib.fileset.unions [
+        ./.config
+        ./assets
+        ./crates/clinnet/templates
+        ./crates/vakint/form_src
+        ./crates/vakint/templates
+      ];
 
       workspaceBuildSrc = lib.fileset.toSource {
-        root = ./.;
+        root = workspaceRoot;
         fileset = lib.fileset.unions [
-          ./.config
-          ./Cargo.toml
-          ./Cargo.lock
-          ./assets
-          ./crates
+          cargoSources
+          nonCargoBuildSources
         ];
       };
 
-      src = workspaceSrc;
+      workspaceTestSrc = lib.fileset.toSource {
+        root = workspaceRoot;
+        fileset = lib.fileset.unions [
+          cargoSources
+          nonCargoBuildSources
+          ./tests
+          ./examples/cli
+        ];
+      };
+
+      src = workspaceBuildSrc;
 
       apiMeta = craneLib.crateNameFromCargoToml {
         cargoToml = ./crates/gammaloop-api/Cargo.toml;
@@ -161,6 +168,7 @@
         // {
           CARGO_PROFILE = ciTestCargoProfile;
           cargoExtraArgs = lib.concatStringsSep " " (["--locked"] ++ map (package: "-p ${package}") gammaloopNextestPackages);
+          nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
         };
 
       ciPartitionCount = 6;
@@ -257,6 +265,10 @@
         // {
           pname = "gammaloop-workspace-artifacts";
           inherit (apiMeta) version;
+          dummySrc = craneLib.mkDummySrc {
+            src = workspaceBuildSrc;
+            cleanCargoTomlFilter = craneLib.filters.cargoTomlAggressive;
+          };
           cargoBuildCommand = "cargo test --workspace --all-targets --profile ${ciTestCargoProfile} --no-run --locked";
           buildPhaseCargoCommand = "cargo test --workspace --all-targets --profile ${ciTestCargoProfile} --no-run --locked";
           doCheck = false;
@@ -300,6 +312,7 @@
       gammaloopNextestArchive = craneLib.mkCargoDerivation (gammaloopNextestArgs
         // {
           inherit cargoArtifacts;
+          src = workspaceTestSrc;
           pnameSuffix = "-nextest-archive";
           preCheck = licensePreCheck;
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
@@ -326,13 +339,14 @@
         // {
           pname = "gammaloop-nextest-partition-${toString partition}";
           inherit (apiMeta) version;
+          src = workspaceTestSrc;
           cargoArtifacts = null;
           cargoVendorDir = null;
           doInstallCargoArtifacts = false;
           doCheck = true;
           preCheck = licensePreCheck;
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-          nativeBuildInputs = (commonArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest];
+          nativeBuildInputs = (commonArgs.nativeBuildInputs or []) ++ [pkgs.form pkgs.cargo-nextest];
           buildPhaseCargoCommand = ''
             mkdir -p "$out"
             cargo nextest --version
@@ -422,6 +436,7 @@
           gammaloop-nextest = craneLib.cargoNextest (gammaloopNextestArgs
             // {
               inherit cargoArtifacts;
+              src = workspaceTestSrc;
               preCheck = licensePreCheck;
               SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
               partitions = ciPartitionCount;

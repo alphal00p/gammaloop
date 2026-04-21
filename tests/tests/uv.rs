@@ -279,7 +279,7 @@ mod failing {
     fn ad_ad_with_gluon_correction() -> Result<()> {
         let mut cli = get_test_cli(
             Some("ad_ad_with_gluon_correction.toml".into()),
-            get_tests_workspace_path().join("dod2_bubble"),
+            get_tests_workspace_path().join("ad_ad_with_gluon_correction"),
             None,
             true,
         )?;
@@ -289,7 +289,28 @@ mod failing {
             ..Default::default()
         })
         .run(&mut cli.state, &cli.cli_settings)?;
+        let uv = res.unwrap_uv();
+        assert_eq!(uv.pass_fail(-0.9).failed, 0);
+        clean_test(&cli.cli_settings.state.folder);
+        Ok(())
+    }
 
+    #[test]
+    fn epem_a_bbx_amp() -> Result<()> {
+        let mut cli = get_test_cli(
+            Some("epem_a_bbx_amp.toml".into()),
+            get_tests_workspace_path().join("epem_a_bbx_amp"),
+            None,
+            true,
+        )?;
+
+        cli.run_command("run generate")?;
+        let res = Profile::UltraViolet(UltraVioletProfile {
+            ..Default::default()
+        })
+        .run(&mut cli.state, &cli.cli_settings)?;
+        let uv = res.unwrap_uv();
+        assert_eq!(uv.pass_fail(-0.9).failed, 0);
         clean_test(&cli.cli_settings.state.folder);
         Ok(())
     }
