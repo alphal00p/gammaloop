@@ -1743,7 +1743,7 @@ impl RaisedCutData {
         let pass_two_evaluators = (1..=global_max_occurence)
             .map(|i| {
                 let evaluator_started = std::time::Instant::now();
-                let evaluator = build_derivative_structure(i as u8, evaluator_settings);
+                let evaluator = build_derivative_structure(i as u8, -1, evaluator_settings);
                 stats.evaluator_symbolica_time += evaluator_started.elapsed();
                 stats.evaluator_count += 1;
                 evaluator
@@ -1777,10 +1777,25 @@ impl CrossSectionDerivedData {
 }
 
 pub(crate) fn build_derivative_structure(
-    order: u8,
+    singularity_order: u8,
+    _laurent_coefficient: i8,
     evaluator_settings: &EvaluatorSettings,
 ) -> GenericEvaluator {
-    let order = order as i32;
+    assert!(
+        _laurent_coefficient <= -1,
+        "only laurent coefficients up to -1 are supported"
+    );
+
+    assert!(
+        singularity_order >= 1,
+        "eta order must be at least 1, got {singularity_order}"
+    );
+    assert!(
+        singularity_order >= -_laurent_coefficient as u8,
+        "eta order must be at least the negative of the laurent coefficient, got {singularity_order} for laurent coefficient {_laurent_coefficient}"
+    );
+
+    let order = singularity_order as i32;
     let f = symbol!("f");
 
     let expansion = parse!("η(t)")
