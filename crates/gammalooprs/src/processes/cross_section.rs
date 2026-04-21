@@ -1776,11 +1776,10 @@ impl CrossSectionDerivedData {
     }
 }
 
-pub(crate) fn build_derivative_structure(
+pub(crate) fn build_derivative_structure_atom(
     singularity_order: u8,
     _laurent_coefficient: i8,
-    evaluator_settings: &EvaluatorSettings,
-) -> GenericEvaluator {
+) -> Atom {
     assert!(
         _laurent_coefficient <= -1,
         "only laurent coefficients up to -1 are supported"
@@ -1835,7 +1834,18 @@ pub(crate) fn build_derivative_structure(
         .replace(GS.rescale)
         .with(GS.rescale_star);
 
-    let params = params_for_derivative_order(order as u8);
+    expression_to_derive
+}
+
+pub(crate) fn build_derivative_structure(
+    singularity_order: u8,
+    _laurent_coefficient: i8,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    let expression_to_derive =
+        build_derivative_structure_atom(singularity_order, _laurent_coefficient);
+
+    let params = params_for_derivative_order(singularity_order);
 
     GenericEvaluator::new_from_raw_params(
         [expression_to_derive],
