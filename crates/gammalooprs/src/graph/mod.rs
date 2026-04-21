@@ -8,8 +8,8 @@ use linnet::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-            SubSetOps, subset::SubSet,
+            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
+            subset::SubSet,
         },
     },
     parser::DotGraph,
