@@ -10,11 +10,13 @@ commands = [
     "set global kv global.n_cores.feyngen=10",
     #"set global kv global.generation.uv.use_legacy=true",
 
+    # --select-graphs GL16
+	# --loop-momentum-bases GL16=9,10
     "remove processes -p aa_aa",
     """generate amp a a > a a | a t t~ g ghG ghG~ QCD==2 QED==4 [{2}]
         --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
-		--select-graphs GL16
-		--loop-momentum-bases GL16=9,10
+        --symmetrize-initial-states=true --symmetrize-final-states=true
+        --select-graphs GL16
         -p aa_aa -i 2L --only-diagrams""",
     #"import graphs ./aa_aa_2L.dot -p aa_aa -i 2L",
 
@@ -57,7 +59,7 @@ m_uv = 91.188
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
 store_atom = false
-compile = false
+compile = true
 summed = false
 summed_function_map = false
 horner_iterations = 5
@@ -125,12 +127,23 @@ commands = [
 
     """set process -p aa_aa -i 2L kv
         integrator.n_increase=0
-        integrator.n_start=1000000
+        integrator.n_start=100000
         integrator.n_max=10000000000
         integrator.seed=1337
         integrator.integrated_phase="real"
         integrator.target_relative_accuracy=1.0e-3
     """,
+
+    """set process -p aa_aa string '
+        [sampling]
+        graphs = "monte_carlo"
+        orientations = "monte_carlo"
+        lmb_multichanneling = false
+        lmb_channels = "summed"
+        coordinate_system = "spherical"
+        mapping = "linear"
+        b = 1.0
+    '""",
 
     # --show-max-weight-info-for-discrete-bins
 	# --batch-size 100000
@@ -143,9 +156,10 @@ commands = [
 	#			 --sort-contributions integral
 	#			 --show-max-weight-info
 	#			 --renderer tabled
-	"""integrate -p aa_aa -i 2L -p aa_aa -i 2L_m_uv_UP -p aa_aa -i 2L_m_uv_DOWN -p aa_aa -i 2L_mu_r_UP -p aa_aa -i 2L_mu_r_DOWN
-	             --n-cores 1
-				 --target -1.1497174416783368e-6 0.0
+	# 				 --target -1.1497174416783368e-6 0.0
+	# integrate -p aa_aa -i 2L -p aa_aa -i 2L_m_uv_UP -p aa_aa -i 2L_m_uv_DOWN -p aa_aa -i 2L_mu_r_UP -p aa_aa -i 2L_mu_r_DOWN
+	"""integrate -p aa_aa -i 2L
+	             --n-cores 10
 				 --renderer ratatui
 				 --batch-size 10000
 				 --show-phase both
