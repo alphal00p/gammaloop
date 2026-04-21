@@ -123,7 +123,7 @@
       ciArgs =
         commonArgs
         // {
-          buildType = "release";
+          buildType = "dev-optim";
           cargoExtraArgs = "--locked";
 
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
@@ -254,7 +254,7 @@
         commonArgs
         // {
           inherit cargoArtifacts;
-          buildType = "release";
+          buildType = "dev-optim";
           doCheck = false;
         };
 
