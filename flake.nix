@@ -466,6 +466,7 @@
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
             // {
+              src = workspaceTestSrc;
               inherit cargoArtifacts;
             });
         };

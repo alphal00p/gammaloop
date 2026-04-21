@@ -274,18 +274,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         }
 
         let cycles = ref_graph.cycle_basis_of(subgraph).0;
-        for c in &cycles {
-            debug!("Cycle: {}", ref_graph.dot(&c.filter));
-        }
 
         let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
         let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(&cycles, &Some)
             .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
             .unwrap();
-
-        for s in &all_subcycles {
-            debug!("Subcycle: {}", self.as_ref().dot(s));
-        }
 
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &all_subcycles,

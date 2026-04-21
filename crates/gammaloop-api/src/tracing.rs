@@ -1057,6 +1057,8 @@ pub(crate) fn format_full_source(meta: &tracing::Metadata<'_>) -> ColoredString 
 mod tests {
     use tracing_subscriber::filter::LevelFilter;
 
+    use crate::tracing::strip_ansi_escape_codes;
+
     use super::{
         collapse_scoped_gamma_level, display_filter_from, file_filter_from, format_target,
         format_target_full, get_stderr_log_filter, get_stderr_log_filter_label,
@@ -1145,7 +1147,10 @@ mod tests {
     #[test]
     fn full_target_format_preserves_long_module_paths() {
         let target = "gammaloop_api::commands::very_long_module_name".to_string();
-        assert_eq!(format_target_full(target.clone()).to_string(), target);
+        assert_eq!(
+            strip_ansi_escape_codes(&format_target_full(target.clone()).to_string()),
+            target
+        );
         assert!(format_target(target, tracing::Level::INFO)
             .to_string()
             .contains("..."));
