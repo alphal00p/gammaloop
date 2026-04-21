@@ -32,6 +32,7 @@ use crate::{
         ThreeMomentum,
         sample::{LoopIndex, LoopMomenta, MomentumSample},
     },
+    observables::events::AdditionalWeightKey,
     settings::{
         RuntimeSettings, SamplingSettings,
         runtime::{
@@ -181,11 +182,19 @@ pub struct SingleLimitReport {
     pub power_law_fit: PowerLawFit,
     pub scaling: f64,
     pub per_cut_reports: Vec<CutLimitReport>,
+    pub display_only_reports: Vec<DisplayOnlyLimitReport>,
     num_soft: usize,
 }
 
 pub struct CutLimitReport {
     pub cut_id: usize,
+    pub power_law_fit: Option<PowerLawFit>,
+    pub scaling: Option<f64>,
+    pub fit_error: Option<String>,
+}
+
+pub struct DisplayOnlyLimitReport {
+    pub label: String,
     pub power_law_fit: Option<PowerLawFit>,
     pub scaling: Option<f64>,
     pub fit_error: Option<String>,
@@ -283,12 +292,11 @@ impl Display for GraphIRLimitReport {
             "status",
             "limit",
             "orientation",
-            "cut",
+            "item",
             "scaling",
             "p",
             "r_squared",
             "n_soft",
-            "note",
         ]);
 
         for (report_index, report) in self.single_limit_reports.iter().enumerate() {
@@ -310,27 +318,40 @@ impl Display for GraphIRLimitReport {
                 format!("{:+.4}", report.power_law_fit.exponent),
                 format!("{:.4}", report.power_law_fit.r_squared),
                 report.num_soft.to_string(),
-                String::new(),
             ]);
             data_row_count += 1;
 
-            if !report.per_cut_reports.is_empty() {
+            if !report.per_cut_reports.is_empty() || !report.display_only_reports.is_empty() {
                 separators_after_data_rows.push(data_row_count);
             }
 
             for cut_report in &report.per_cut_reports {
-                let [cut_id, scaling, exponent, r_squared, note] =
-                    cut_report_display_row(cut_report);
+                let [item, scaling, exponent, r_squared] = cut_report_display_row(cut_report);
                 limit_table.push_record([
                     "INFO".cyan().bold().to_string(),
                     String::new(),
                     String::new(),
-                    cut_id,
+                    item,
                     scaling,
                     exponent,
                     r_squared,
                     String::new(),
-                    note,
+                ]);
+                data_row_count += 1;
+            }
+
+            for display_only_report in &report.display_only_reports {
+                let [item, scaling, exponent, r_squared] =
+                    display_only_report_display_row(display_only_report);
+                limit_table.push_record([
+                    "INFO".cyan().bold().to_string(),
+                    String::new(),
+                    String::new(),
+                    item,
+                    scaling,
+                    exponent,
+                    r_squared,
+                    String::new(),
                 ]);
                 data_row_count += 1;
             }
@@ -374,7 +395,8 @@ impl Display for SingleLimitReport {
             self.num_soft
         )?;
 
-        render_per_cut_reports(f, self, "")
+        render_per_cut_reports(f, self, "")?;
+        render_display_only_reports(f, self, "")
     }
 }
 
@@ -400,7 +422,7 @@ fn render_per_cut_reports(
     )?;
 
     let mut cut_table = Builder::new();
-    cut_table.push_record(["cut", "scaling", "p", "r_squared", "note"]);
+    cut_table.push_record(["cut", "scaling", "p", "r_squared"]);
 
     for cut_report in &report.per_cut_reports {
         cut_table.push_record(cut_report_display_row(cut_report));
@@ -432,35 +454,78 @@ fn render_graph_cut_definitions(
     writeln!(f, "{}", cut_table.build().with(Style::rounded()))
 }
 
-fn cut_report_display_row(cut_report: &CutLimitReport) -> [String; 5] {
-    let (scaling, exponent, r_squared, note) =
-        match (&cut_report.power_law_fit, &cut_report.fit_error) {
-            (Some(fit), None) => (
-                format!("{:+.4}", cut_report.scaling.unwrap_or(fit.exponent)),
-                format!("{:+.4}", fit.exponent),
-                format!("{:.4}", fit.r_squared),
-                String::new(),
-            ),
-            (None, Some(error)) => (
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                error.clone(),
-            ),
-            _ => (
-                "-".to_string(),
-                "-".to_string(),
-                "-".to_string(),
-                "missing cut fit".to_string(),
-            ),
-        };
+fn render_display_only_reports(
+    f: &mut std::fmt::Formatter<'_>,
+    report: &SingleLimitReport,
+    indent: &str,
+) -> std::fmt::Result {
+    if report.display_only_reports.is_empty() {
+        return Ok(());
+    }
+
+    writeln!(f)?;
+    writeln!(
+        f,
+        "\n{indent}display-only fits for {}{}",
+        report.limit_name,
+        report
+            .orientation_label
+            .as_ref()
+            .map(|label| format!(" @ {label}"))
+            .unwrap_or_default(),
+    )?;
+
+    let mut display_only_table = Builder::new();
+    display_only_table.push_record(["component", "scaling", "p", "r_squared"]);
+
+    for display_only_report in &report.display_only_reports {
+        display_only_table.push_record(display_only_report_display_row(display_only_report));
+    }
+
+    write!(f, "{}", display_only_table.build().with(Style::rounded()))
+}
+
+fn cut_report_display_row(cut_report: &CutLimitReport) -> [String; 4] {
+    let (scaling, exponent, r_squared) = match (&cut_report.power_law_fit, &cut_report.fit_error) {
+        (Some(fit), None) => (
+            format!("{:+.4}", cut_report.scaling.unwrap_or(fit.exponent)),
+            format!("{:+.4}", fit.exponent),
+            format!("{:.4}", fit.r_squared),
+        ),
+        (None, Some(_)) => ("-".to_string(), "-".to_string(), "-".to_string()),
+        _ => ("-".to_string(), "-".to_string(), "-".to_string()),
+    };
 
     [
-        cut_report.cut_id.to_string(),
+        format!("cut {}", cut_report.cut_id),
         scaling,
         exponent,
         r_squared,
-        note,
+    ]
+}
+
+fn display_only_report_display_row(display_only_report: &DisplayOnlyLimitReport) -> [String; 4] {
+    let (scaling, exponent, r_squared) = match (
+        &display_only_report.power_law_fit,
+        &display_only_report.fit_error,
+    ) {
+        (Some(fit), None) => (
+            format!(
+                "{:+.4}",
+                display_only_report.scaling.unwrap_or(fit.exponent)
+            ),
+            format!("{:+.4}", fit.exponent),
+            format!("{:.4}", fit.r_squared),
+        ),
+        (None, Some(_)) => ("-".to_string(), "-".to_string(), "-".to_string()),
+        _ => ("-".to_string(), "-".to_string(), "-".to_string()),
+    };
+
+    [
+        display_only_report.label.clone(),
+        scaling,
+        exponent,
+        r_squared,
     ]
 }
 
@@ -616,6 +681,7 @@ fn build_single_limit_report(
         power_law_fit: slope,
         scaling,
         per_cut_reports,
+        display_only_reports: Vec::new(),
         num_soft,
     }
 }
@@ -634,6 +700,7 @@ fn build_threshold_limit_report(
         power_law_fit: slope,
         scaling,
         per_cut_reports,
+        display_only_reports: Vec::new(),
         num_soft: 0,
     }
 }
@@ -659,6 +726,38 @@ fn build_cut_limit_reports(
             },
         })
         .collect()
+}
+
+fn build_display_only_limit_reports(
+    component_fits: Vec<(AdditionalWeightKey, Result<PowerLawFit>)>,
+) -> Vec<DisplayOnlyLimitReport> {
+    component_fits
+        .into_iter()
+        .map(|(key, fit)| match fit {
+            Ok(power_law_fit) => DisplayOnlyLimitReport {
+                label: display_only_limit_label(key),
+                scaling: Some(power_law_fit.exponent),
+                power_law_fit: Some(power_law_fit),
+                fit_error: None,
+            },
+            Err(error) => DisplayOnlyLimitReport {
+                label: display_only_limit_label(key),
+                scaling: None,
+                power_law_fit: None,
+                fit_error: Some(error.to_string()),
+            },
+        })
+        .collect()
+}
+
+fn display_only_limit_label(key: AdditionalWeightKey) -> String {
+    match key {
+        AdditionalWeightKey::Original => "original".to_string(),
+        AdditionalWeightKey::ThresholdCounterterm { subset_index } => {
+            format!("ct_{subset_index}")
+        }
+        AdditionalWeightKey::FullMultiplicativeFactor => "full multiplicative factor".to_string(),
+    }
 }
 
 fn threshold_approach_loop_momenta<T: FloatLike>(
@@ -765,9 +864,10 @@ impl AmplitudeIntegrand {
         });
 
         let previous_generate_events = self.settings.general.generate_events;
-        if ir_profile_settings.show_per_cut_info {
-            self.settings.general.generate_events = true;
-        }
+        let previous_store_additional_weights =
+            self.settings.general.store_additional_weights_in_event;
+        self.settings.general.generate_events = true;
+        self.settings.general.store_additional_weights_in_event = true;
 
         let result = (|| {
             self.warm_up(model)?;
@@ -812,6 +912,12 @@ impl AmplitudeIntegrand {
 
         if self.settings.general.generate_events != previous_generate_events {
             self.settings.general.generate_events = previous_generate_events;
+        }
+        if self.settings.general.store_additional_weights_in_event
+            != previous_store_additional_weights
+        {
+            self.settings.general.store_additional_weights_in_event =
+                previous_store_additional_weights;
         }
 
         result
@@ -950,13 +1056,15 @@ impl AmplitudeIntegrand {
                         });
                     }
 
-                    let (power_law_fit, cut_fits) = limit_data.extract_power()?;
-                    reports.push(build_single_limit_report(
+                    let (power_law_fit, cut_fits, component_fits) = limit_data.extract_power()?;
+                    let mut report = build_single_limit_report(
                         ir_limit,
                         orientation_label,
                         power_law_fit,
                         build_cut_limit_reports(ir_limit.num_soft(), cut_fits),
-                    ));
+                    );
+                    report.display_only_reports = build_display_only_limit_reports(component_fits);
+                    reports.push(report);
                 }
 
                 Ok(reports)
@@ -1016,7 +1124,8 @@ impl AmplitudeIntegrand {
                             });
                         }
 
-                        let (power_law_fit, cut_fits) = limit_data.extract_power()?;
+                        let (power_law_fit, cut_fits, component_fits) =
+                            limit_data.extract_power()?;
                         let context_label = Some(match orientation_label.as_deref() {
                             Some(orientation_label) => {
                                 format!("{overlap_group_label} / {orientation_label}")
@@ -1024,12 +1133,15 @@ impl AmplitudeIntegrand {
                             None => overlap_group_label.clone(),
                         });
 
-                        reports.push(build_threshold_limit_report(
+                        let mut report = build_threshold_limit_report(
                             threshold_limit,
                             context_label,
                             power_law_fit,
                             build_cut_limit_reports(0, cut_fits),
-                        ));
+                        );
+                        report.display_only_reports =
+                            build_display_only_limit_reports(component_fits);
+                        reports.push(report);
                     }
                 }
 
@@ -1248,7 +1360,7 @@ impl CrossSectionIntegrand {
                 });
             }
 
-            let (power_law_fit, cut_fits) = limit_data.extract_power()?;
+            let (power_law_fit, cut_fits, _component_fits) = limit_data.extract_power()?;
             reports.push(build_single_limit_report(
                 ir_limit,
                 orientation_label,
@@ -1379,12 +1491,10 @@ impl ThresholdLimit {
         existing_esurfaces
             .iter_enumerated()
             .find_map(|(existing_esurface_id, group_esurface_id)| {
-                esurface_map
-                    .get(*group_esurface_id)
-                    .and_then(|graph_map| {
-                        (graph_map[own_group_position] == Some(self.esurface_id))
-                            .then_some(existing_esurface_id)
-                    })
+                esurface_map.get(*group_esurface_id).and_then(|graph_map| {
+                    (graph_map[own_group_position] == Some(self.esurface_id))
+                        .then_some(existing_esurface_id)
+                })
             })
             .ok_or_else(|| {
                 eyre!(
@@ -1934,8 +2044,8 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
         true,
     )? {
         PreciseEvaluationResult::Arb(result) => {
+            let zero = result.integrand_result.re.zero();
             let per_cut = if show_per_cut_info {
-                let zero = result.integrand_result.re.zero();
                 let mut per_cut = BTreeMap::new();
                 for event_group in result.event_groups.iter() {
                     for event in event_group.iter() {
@@ -1950,9 +2060,30 @@ fn evaluate_profile_momentum_point_arb<I: ProcessIntegrandImpl>(
                 BTreeMap::new()
             };
 
+            let mut display_only_components = BTreeMap::new();
+            for event_group in result.event_groups.iter() {
+                for event in event_group.iter() {
+                    for (key, weight) in &event.additional_weights.weights {
+                        if !matches!(
+                            key,
+                            AdditionalWeightKey::Original
+                                | AdditionalWeightKey::ThresholdCounterterm { .. }
+                        ) {
+                            continue;
+                        }
+
+                        let entry = display_only_components
+                            .entry(*key)
+                            .or_insert_with(|| zero.clone());
+                        *entry += weight.re.clone();
+                    }
+                }
+            }
+
             Ok(ProfilePointValue {
                 total: result.integrand_result.re,
                 per_cut,
+                display_only_components,
             })
         }
         PreciseEvaluationResult::Double(_) => Err(eyre!(
@@ -2004,6 +2135,7 @@ struct LambdaPointEval<T: FloatLike> {
 struct ProfilePointValue {
     total: F<ArbPrec>,
     per_cut: BTreeMap<usize, F<ArbPrec>>,
+    display_only_components: BTreeMap<AdditionalWeightKey, F<ArbPrec>>,
 }
 
 struct LimitData<T: FloatLike> {
@@ -2011,7 +2143,13 @@ struct LimitData<T: FloatLike> {
 }
 
 impl<T: FloatLike> LimitData<T> {
-    fn extract_power(&self) -> Result<(PowerLawFit, Vec<(usize, Result<PowerLawFit>)>)> {
+    fn extract_power(
+        &self,
+    ) -> Result<(
+        PowerLawFit,
+        Vec<(usize, Result<PowerLawFit>)>,
+        Vec<(AdditionalWeightKey, Result<PowerLawFit>)>,
+    )> {
         let x = self
             .data
             .iter()
@@ -2053,6 +2191,36 @@ impl<T: FloatLike> LimitData<T> {
             })
             .collect_vec();
 
+        let component_fits = self
+            .data
+            .iter()
+            .flat_map(|point_eval| point_eval.value.display_only_components.keys().copied())
+            .filter(|key| {
+                matches!(
+                    key,
+                    AdditionalWeightKey::Original
+                        | AdditionalWeightKey::ThresholdCounterterm { .. }
+                )
+            })
+            .unique()
+            .sorted()
+            .map(|key| {
+                let y = self
+                    .data
+                    .iter()
+                    .map(|point_eval| {
+                        point_eval
+                            .value
+                            .display_only_components
+                            .get(&key)
+                            .cloned()
+                            .unwrap_or_else(|| zero.clone())
+                    })
+                    .collect_vec();
+                (key, fit_power_law(x.clone(), y))
+            })
+            .collect_vec();
+
         if result.r_squared < 0.9 {
             warn!("low r^2 value found for input data");
             warn!(
@@ -2065,7 +2233,7 @@ impl<T: FloatLike> LimitData<T> {
             );
         }
 
-        Ok((result, cut_fits))
+        Ok((result, cut_fits, component_fits))
     }
 }
 
@@ -2672,6 +2840,39 @@ mod tests {
     }
 
     #[test]
+    fn single_limit_display_includes_display_only_table() {
+        let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
+        let total_fit = PowerLawFit {
+            exponent: -2.5,
+            r_squared: 0.999,
+        };
+        let mut report = build_single_limit_report(&ir_limit, None, total_fit, Vec::new());
+        report.display_only_reports = build_display_only_limit_reports(vec![
+            (
+                AdditionalWeightKey::Original,
+                Ok(PowerLawFit {
+                    exponent: -1.5,
+                    r_squared: 0.995,
+                }),
+            ),
+            (
+                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                Ok(PowerLawFit {
+                    exponent: -0.5,
+                    r_squared: 0.991,
+                }),
+            ),
+        ]);
+
+        let rendered = format!("{report}");
+
+        assert!(rendered.contains("display-only fits for"));
+        assert!(rendered.contains("original"));
+        assert!(rendered.contains("ct_0"));
+        assert!(!rendered.contains("note"));
+    }
+
+    #[test]
     fn graph_limit_display_weaves_per_cut_rows_into_limit_table() {
         let ir_limit = IrLimit::new_pure_soft(vec![EdgeIndex::from(1)]);
         let total_fit = PowerLawFit {
@@ -2698,7 +2899,23 @@ mod tests {
             ],
         );
 
-        let report = build_single_limit_report(&ir_limit, None, total_fit, cut_reports);
+        let mut report = build_single_limit_report(&ir_limit, None, total_fit, cut_reports);
+        report.display_only_reports = build_display_only_limit_reports(vec![
+            (
+                AdditionalWeightKey::Original,
+                Ok(PowerLawFit {
+                    exponent: -1.5,
+                    r_squared: 0.995,
+                }),
+            ),
+            (
+                AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                Ok(PowerLawFit {
+                    exponent: -0.5,
+                    r_squared: 0.991,
+                }),
+            ),
+        ]);
         let second_report = build_single_limit_report(
             &ir_limit,
             Some("ori-1".to_string()),
@@ -2738,10 +2955,73 @@ mod tests {
         assert!(rendered.contains("edges"));
         assert!(rendered.contains("e1, e3"));
         assert!(rendered.find("cut definitions").unwrap() < rendered.find("status").unwrap());
-        assert!(rendered.contains("cut"));
+        assert!(rendered.contains("item"));
+        assert!(rendered.contains("cut 0"));
+        assert!(rendered.contains("original"));
+        assert!(rendered.contains("ct_0"));
+        assert!(!rendered.contains("note"));
         assert!(rendered.contains("sum"));
         assert!(rendered.contains("INFO"));
         assert!(!rendered.contains("per-cut fits for"));
         assert!(rendered.matches('├').count() >= 3);
+    }
+
+    #[test]
+    fn limit_data_extract_power_includes_display_only_component_fits() {
+        let lambdas = constant_dropped_fit_points(
+            &F::<f64>::from_f64(1.0e-3),
+            &F::<f64>::from_f64(1.0e-1),
+            5,
+        )
+        .unwrap();
+
+        let data = lambdas
+            .into_iter()
+            .map(|lambda| {
+                let lambda_f64 = lambda.into_ff64().0;
+                let mut display_only_components = BTreeMap::new();
+                display_only_components.insert(
+                    AdditionalWeightKey::Original,
+                    F::<ArbPrec>::from_f64(3.0 * lambda_f64.powf(-1.5) + 0.5),
+                );
+                display_only_components.insert(
+                    AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 },
+                    F::<ArbPrec>::from_f64(5.0 * lambda_f64.powf(-0.5) + 1.0),
+                );
+                display_only_components.insert(
+                    AdditionalWeightKey::FullMultiplicativeFactor,
+                    F::<ArbPrec>::from_f64(7.0 * lambda_f64.powf(-2.5) + 1.0),
+                );
+
+                LambdaPointEval {
+                    lambda,
+                    value: ProfilePointValue {
+                        total: F::<ArbPrec>::from_f64(2.0 * lambda_f64.powf(-2.0) + 1.0),
+                        per_cut: BTreeMap::new(),
+                        display_only_components,
+                    },
+                }
+            })
+            .collect();
+
+        let (total_fit, _cut_fits, component_fits) = LimitData { data }.extract_power().unwrap();
+
+        assert!((total_fit.exponent + 2.0).abs() < 1.0e-10);
+        assert_eq!(component_fits.len(), 2);
+
+        let component_fits = component_fits.into_iter().collect::<BTreeMap<_, _>>();
+        let original_fit = component_fits
+            .get(&AdditionalWeightKey::Original)
+            .unwrap()
+            .as_ref()
+            .unwrap();
+        let ct_fit = component_fits
+            .get(&AdditionalWeightKey::ThresholdCounterterm { subset_index: 0 })
+            .unwrap()
+            .as_ref()
+            .unwrap();
+
+        assert!((original_fit.exponent + 1.5).abs() < 1.0e-10);
+        assert!((ct_fit.exponent + 0.5).abs() < 1.0e-10);
     }
 }
