@@ -118,6 +118,7 @@ impl Forest {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,

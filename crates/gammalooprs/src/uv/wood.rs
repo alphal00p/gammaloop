@@ -4,6 +4,7 @@ use crate::{
 };
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;
+use tracing::instrument;
 
 use linnet::half_edge::{
     HedgeGraph,
@@ -25,6 +26,7 @@ pub struct CutWoods {
 }
 
 impl CutWoods {
+    #[instrument(skip_all)]
     pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
         let mut woods = vec![];
         let mut vakint_settings = vec![];
@@ -35,6 +37,7 @@ impl CutWoods {
 
             let spinneys =
                 graph.classified_spinneys(&subgraph, settings, &graph.loop_momentum_basis);
+
             let wood = Wood::from_spinneys(spinneys, graph);
 
             let mut lvk_settings = settings.vakint.true_settings();

@@ -1,4 +1,31 @@
 #[test]
+fn cycle_basis_of_epem() {
+    let epem: DotGraph = dot!(digraph {
+      node	 [shape=circle,height=0.1,label=""];
+      overlap = "scale";
+      layout = "neato";
+      start=2;
+      ext0	 [style=invis];
+      ext0	-> 0:0:s	 [id=0 dir=back color="blue"];
+      ext1	 [style=invis];
+      ext1	-> 0:1:s	 [id=1 color="blue"];
+      ext2	 [style=invis];
+      3:2:s	-> ext2	 [id=2 dir=back color="red"];
+      ext3	 [style=invis];
+      3:3:s	-> ext3	 [id=3 color="red"];
+      0:4:s	-> 1:5:s	 [id=4 dir=none  color="red:blue;0.5"];
+      1:6:s	-> 2:7:s	 [id=5  color="red:blue;0.5"];
+      2:8:s	-> 1:9:s	 [id=6  color="red:blue;0.5"];
+      2:10	-> 3:11	 [id=7 dir=none  color="gray"];
+    })
+    .unwrap();
+    let cycles = epem
+        .cycle_basis_of(&epem.compass_subgraph::<SuBitGraph>(Some(CompassPt::S)))
+        .0;
+    assert_eq!(cycles.len(), 1);
+}
+
+#[test]
 fn dis_connected_nodes() {
     let two: DotGraph = dot!(digraph {
 

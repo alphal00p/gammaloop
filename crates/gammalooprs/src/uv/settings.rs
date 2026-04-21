@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::{Display, Formatter},
+};
 
 use crate::utils::{
     GS,
@@ -41,6 +44,18 @@ pub enum ApproximationType {
     Unsubtracted,
     #[serde(rename = "VaccuumLimit", alias = "vaccuum_limit")]
     VaccuumLimit,
+}
+
+impl Display for ApproximationType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApproximationType::MUV => write!(f, "MUV"),
+            ApproximationType::OS => write!(f, "OS"),
+            ApproximationType::IR => write!(f, "IR"),
+            ApproximationType::Unsubtracted => write!(f, "Unsubtracted"),
+            ApproximationType::VaccuumLimit => write!(f, "VaccuumLimit"),
+        }
+    }
 }
 
 #[cfg_attr(

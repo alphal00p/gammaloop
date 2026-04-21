@@ -4,7 +4,7 @@ use linnet::half_edge::{
     HedgeGraph,
     subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike},
 };
-use tracing::error;
+use tracing::{debug, error};
 
 use crate::{
     graph::{LMBext, LoopMomentumBasis, cuts::CutSet},
@@ -69,6 +69,15 @@ impl Spinney {
                 g.dod(&subgraph),
             );
         }
+
+        debug!(
+            dod = %dod,
+            graph = %g.dot_lmb_of(&subgraph,&lmb),
+            renormalization_scheme = %renormalization_scheme,
+            string_label =%subgraph.string_label(),
+            "Constucted spinney with scheme: {:?}",
+            renormalization_scheme
+        );
 
         Self {
             components,

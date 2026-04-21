@@ -17,6 +17,7 @@ use symbolica::{
     function,
     poly::series::Series,
 };
+use tracing::debug;
 
 use crate::{
     graph::{Edge, FeynmanGraph, Graph, HedgeData, LMBext, LoopMomentumBasis, Vertex},
@@ -263,6 +264,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let ref_graph: &HedgeGraph<E, V, H> = self.as_ref();
+        debug!(subgraph=%ref_graph.dot(subgraph),"Spinneys of subgraph");
         let _b: SuBitGraph = ref_graph.empty_subgraph();
 
         if subgraph.is_empty() {
@@ -271,15 +273,19 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             return spinneys;
         }
 
-        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> =
-            Cycle::all_sum_powerset_filter_map(&ref_graph.cycle_basis_of(subgraph).0, &Some)
-                .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-                .unwrap();
+        let cycles = ref_graph.cycle_basis_of(subgraph).0;
+        for c in &cycles {
+            debug!("Cycle: {}", ref_graph.dot(&c.filter));
+        }
 
-        // for s in &all_subcycles {
-        //     println!("Subcycle: {}", self.as_ref().dot(s));
-        // }
+        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
+        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(&cycles, &Some)
+            .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
+            .unwrap();
+
+        for s in &all_subcycles {
+            debug!("Subcycle: {}", self.as_ref().dot(s));
+        }
 
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &all_subcycles,

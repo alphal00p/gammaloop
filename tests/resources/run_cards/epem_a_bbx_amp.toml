@@ -1,7 +1,7 @@
 [cli_settings]
 [cli_settings.global]
 logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
-display_directive = "info,gammalooprs[orientation_parametric_exprs]=debug,gammalooprs[kernel]=debug,poly::gcd =off"
+display_directive = "info,gammalooprs[compute]=debug,gammalooprs[new]=debug,poly::gcd =off"
 
 [cli_settings.global.log_style]
 include_fields = true

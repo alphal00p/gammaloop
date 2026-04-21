@@ -26,7 +26,6 @@ name = "generate"
 commands = [
   "import model sm-default",
   "import graphs ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot",
-  "save state",
   "generate",
 ]
 
