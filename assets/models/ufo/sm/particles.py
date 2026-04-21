@@ -48,7 +48,8 @@ W__plus__ = Particle(pdg_code=24,
                      charge=1,
                      GhostNumber=0,
                      LeptonNumber=0,
-                     Y=0)
+                     Y=0,
+                     chemical_potential=Param.muW)
 
 W__minus__ = W__plus__.anti()
 
@@ -110,7 +111,8 @@ ghWp = Particle(pdg_code=9000003,
                 charge=1,
                 GhostNumber=1,
                 LeptonNumber=0,
-                Y=0)
+                Y=0,
+                chemical_potential=Param.mughWp)
 
 ghWp__tilde__ = ghWp.anti()
 
@@ -126,7 +128,8 @@ ghWm = Particle(pdg_code=9000004,
                 charge=-1,
                 GhostNumber=1,
                 LeptonNumber=0,
-                Y=0)
+                Y=0,
+                chemical_potential=Param.mughWm)
 
 ghWm__tilde__ = ghWm.anti()
 
@@ -158,7 +161,8 @@ ve = Particle(pdg_code=12,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=0)
+              Y=0,
+              chemical_potential=Param.muve)
 
 ve__tilde__ = ve.anti()
 
@@ -174,7 +178,8 @@ vm = Particle(pdg_code=14,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=0)
+              Y=0,
+              chemical_potential=Param.muvm)
 
 vm__tilde__ = vm.anti()
 
@@ -190,7 +195,8 @@ vt = Particle(pdg_code=16,
               charge=0,
               GhostNumber=0,
               LeptonNumber=1,
-              Y=0)
+              Y=0,
+              chemical_potential=Param.muvt)
 
 vt__tilde__ = vt.anti()
 
@@ -206,7 +212,8 @@ u = Particle(pdg_code=2,
              charge=2/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y=0,
+             chemical_potential=Param.muu)
 
 u__tilde__ = u.anti()
 
@@ -222,7 +229,8 @@ c = Particle(pdg_code=4,
              charge=2/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y=0,
+             chemical_potential=Param.muc)
 
 c__tilde__ = c.anti()
 
@@ -238,7 +246,8 @@ t = Particle(pdg_code=6,
              charge=2/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y=0,
+             chemical_potential=Param.mut)
 
 t__tilde__ = t.anti()
 
@@ -254,7 +263,8 @@ d = Particle(pdg_code=1,
              charge=-1/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y=0,
+             chemical_potential=Param.mud)
 
 d__tilde__ = d.anti()
 
@@ -270,7 +280,8 @@ s = Particle(pdg_code=3,
              charge=-1/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y=0,
+             chemical_potential=Param.mus)
 
 s__tilde__ = s.anti()
 
@@ -286,7 +297,8 @@ b = Particle(pdg_code=5,
              charge=-1/3,
              GhostNumber=0,
              LeptonNumber=0,
-             Y=0)
+             Y=0,
+             chemical_potential=Param.mub)
 
 b__tilde__ = b.anti()
 
@@ -332,7 +344,8 @@ G__plus__ = Particle(pdg_code=251,
                      charge=1,
                      GhostNumber=0,
                      LeptonNumber=0,
-                     Y=0)
+                     Y=0,
+                     chemical_potential=Param.muG)
 
 G__minus__ = G__plus__.anti()
 
@@ -348,7 +361,8 @@ e__minus__ = Particle(pdg_code=11,
                       charge=-1,
                       GhostNumber=0,
                       LeptonNumber=1,
-                      Y=0)
+                      Y=0,
+                      chemical_potential=Param.mue)
 
 e__plus__ = e__minus__.anti()
 
@@ -364,7 +378,8 @@ mu__minus__ = Particle(pdg_code=13,
                        charge=-1,
                        GhostNumber=0,
                        LeptonNumber=1,
-                       Y=0)
+                       Y=0,
+                       chemical_potential=Param.mumu)
 
 mu__plus__ = mu__minus__.anti()
 
@@ -380,6 +395,7 @@ ta__minus__ = Particle(pdg_code=15,
                        charge=-1,
                        GhostNumber=0,
                        LeptonNumber=1,
-                       Y=0)
+                       Y=0,
+                       chemical_potential=Param.muta)
 
 ta__plus__ = ta__minus__.anti()

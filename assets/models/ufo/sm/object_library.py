@@ -163,6 +163,16 @@ class Parameter(UFOBaseClass):
         self.lhablock = lhablock
         self.lhacode = lhacode
 
+    def __neg__(self):
+        negated_name = 'minus_%s' % self.name
+        negated_parameter = next(
+            (parameter for parameter in all_parameters if parameter.name == negated_name),
+            None
+        )
+        if negated_parameter is None:
+            raise Exception('Missing negated parameter "%s" for "%s".' % (negated_name, self.name))
+        return negated_parameter
+
 all_vertices = []
 
 class Vertex(UFOBaseClass):
