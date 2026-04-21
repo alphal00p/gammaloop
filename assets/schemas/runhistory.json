@@ -2678,7 +2678,7 @@
           ]
         },
         {
-          "description": "Infrared profile analysis",
+          "description": "Bulk profile analysis",
           "type": "object",
           "properties": {
             "InfraRed": {
