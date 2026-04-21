@@ -15,6 +15,7 @@ use tracing::warn;
 
 use crate::{
     DependentMomentaConstructor,
+    cff::esurface::EsurfaceID,
     graph::{FeynmanGraph, LmbError, lmb::LMBwithEdges},
     integrands::{
         evaluation::PreciseEvaluationResult,
@@ -1078,6 +1079,7 @@ impl CrossSectionIntegrand {
 struct IrLimit {
     colinear: Vec<Vec<HardOrSoft>>,
     soft: Vec<EdgeIndex>,
+    threshold: Vec<EsurfaceID>,
 }
 
 enum MomentumBuilder<T: FloatLike> {
@@ -1112,6 +1114,10 @@ impl Display for IrLimit {
 
         for soft in self.soft.iter() {
             write!(f, "S({})", soft)?;
+        }
+
+        for threshold in self.threshold.iter() {
+            write!(f, "T(t{})", threshold.0)?;
         }
 
         Ok(())
@@ -1150,6 +1156,7 @@ impl IrLimit {
 
         self.colinear.sort();
         self.soft.sort();
+        self.threshold.sort();
     }
 
     fn new_pure_colinear(colinear_edges: Vec<EdgeIndex>) -> Self {
@@ -1158,6 +1165,7 @@ impl IrLimit {
         let mut result = IrLimit {
             colinear,
             soft: Vec::new(),
+            threshold: Vec::new(),
         };
         result.canonize();
         result
@@ -1167,6 +1175,7 @@ impl IrLimit {
         let mut result = IrLimit {
             colinear: Vec::new(),
             soft: soft_edges,
+            threshold: Vec::new(),
         };
         result.canonize();
         result
@@ -1230,6 +1239,7 @@ impl IrLimit {
     fn parse_limit(limit: &str) -> Result<IrLimit> {
         let mut colinear_sets = Vec::new();
         let mut soft_edges = Vec::new();
+        let mut thresholds = Vec::new();
 
         let mut char_iter = limit.chars().enumerate();
 
@@ -1360,6 +1370,44 @@ impl IrLimit {
                     let edge_index = Self::parse_edge(&edge_str)?;
                     soft_edges.push(edge_index);
                 }
+                'T' => {
+                    let (_opening_bracket_position, opening_bracket) =
+                        char_iter.next().ok_or_else(|| {
+                            eyre!(
+                                "Expected opening bracket '(' after 'T' at position {}",
+                                char_position
+                            )
+                        })?;
+
+                    if opening_bracket != '(' {
+                        return Err(eyre!(
+                            "Expected '(' after 'T' at position {}, found '{}'",
+                            char_position,
+                            opening_bracket
+                        ));
+                    }
+
+                    let mut threshold_str = String::new();
+                    let mut closing_bracket_found = false;
+
+                    for (_next_char_position, next_char) in char_iter.by_ref() {
+                        if next_char == ')' {
+                            closing_bracket_found = true;
+                            break;
+                        }
+                        threshold_str.push(next_char);
+                    }
+
+                    if !closing_bracket_found {
+                        return Err(eyre!(
+                            "Expected closing bracket ')' for threshold at position {}",
+                            char_position
+                        ));
+                    }
+
+                    let threshold_id = Self::parse_threshold(&threshold_str)?;
+                    thresholds.push(threshold_id);
+                }
                 _ => {
                     return Err(eyre!(
                         "Unexpected character '{}' at position {}",
@@ -1373,6 +1421,7 @@ impl IrLimit {
         let mut ir_limit = IrLimit {
             colinear: colinear_sets,
             soft: soft_edges,
+            threshold: thresholds,
         };
 
         ir_limit.canonize();
@@ -1397,6 +1446,25 @@ impl IrLimit {
             .map_err(|_| eyre!("Edge must be a valid integer, got: {}", edge))?;
 
         Ok(EdgeIndex::from(edge_id))
+    }
+
+    fn parse_threshold(threshold: &str) -> Result<EsurfaceID> {
+        let mut threshold = String::from(threshold);
+        threshold = String::from(threshold.trim());
+
+        if threshold.len() < 2 {
+            return Err(eyre!("Threshold must be at least two characters long"));
+        }
+
+        if threshold.remove(0) != 't' {
+            return Err(eyre!("Threshold must start with 't'"));
+        }
+
+        let threshold_id: usize = threshold
+            .parse()
+            .map_err(|_| eyre!("Threshold must be a valid integer, got: {}", threshold))?;
+
+        Ok(EsurfaceID::from(threshold_id))
     }
 
     fn get_momentum_builders(&self, rng: &mut MonteCarloRng) -> Vec<MomentumBuilder<f64>> {
@@ -1697,10 +1765,11 @@ mod tests {
                 ],
             ],
             soft: vec![EdgeIndex::from(6), EdgeIndex::from(7)],
+            threshold: vec![EsurfaceID::from(8usize)],
         };
 
         let display = ir_limit.to_string();
-        let expected = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)";
+        let expected = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)T(t8)";
 
         assert_eq!(display, expected);
     }
@@ -1722,12 +1791,29 @@ mod tests {
     }
 
     #[test]
+    fn parse_threshold() {
+        let threshold_str = "t5";
+        let threshold_id = IrLimit::parse_threshold(threshold_str).unwrap();
+        assert_eq!(threshold_id, EsurfaceID::from(5usize));
+
+        let invalid_threshold_str = "5"; // missing 't'
+        assert!(IrLimit::parse_threshold(invalid_threshold_str).is_err());
+
+        let invalid_threshold_str2 = "t"; // too short
+        assert!(IrLimit::parse_threshold(invalid_threshold_str2).is_err());
+
+        let invalid_threshold_str3 = "t5a"; // not a valid integer
+        assert!(IrLimit::parse_threshold(invalid_threshold_str3).is_err());
+    }
+
+    #[test]
     fn parse_limit() {
-        let limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)";
+        let limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7)T(t8)";
         let ir_limit = IrLimit::parse_limit(limit_str).unwrap();
 
         assert_eq!(ir_limit.colinear.len(), 2, "Expected two colinear sets");
         assert_eq!(ir_limit.soft.len(), 2, "Expected two soft edges");
+        assert_eq!(ir_limit.threshold.len(), 1, "Expected one threshold");
 
         assert_eq!(
             ir_limit.colinear[0],
@@ -1752,17 +1838,28 @@ mod tests {
             vec![EdgeIndex::from(6), EdgeIndex::from(7)],
             "Soft edges do not match"
         );
+        assert_eq!(
+            ir_limit.threshold,
+            vec![EsurfaceID::from(8usize)],
+            "Thresholds do not match"
+        );
 
-        let invalid_limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7, e8)";
+        let invalid_limit_str = "C[e1,e2,e3]C[e4,S(e5)]S(e6)S(e7, e8)T(t8)";
         assert!(
             IrLimit::parse_limit(invalid_limit_str).is_err(),
             "Expected error"
         );
 
-        let invalid_limit_str2 = "C[e1,e2,e3C[e4,S(e5)]S(e6)";
+        let invalid_limit_str2 = "C[e1,e2,e3C[e4,S(e5)]S(e6)T(t8)";
         assert!(
             IrLimit::parse_limit(invalid_limit_str2).is_err(),
             "Expected error for unmatched brackets"
+        );
+
+        let invalid_limit_str3 = "C[e1,e2,e3]T(e8)";
+        assert!(
+            IrLimit::parse_limit(invalid_limit_str3).is_err(),
+            "Expected error for invalid threshold syntax"
         );
     }
 
