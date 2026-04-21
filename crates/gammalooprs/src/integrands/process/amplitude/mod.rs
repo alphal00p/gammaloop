@@ -30,7 +30,8 @@ use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{
-            EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId, get_representative,
+            EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces, GroupEsurfaceId,
+            get_representative,
         },
         expression::OrientationID,
         surface::HybridSurfaceID,
@@ -39,16 +40,20 @@ use crate::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
         LoopMomentumBasis,
     },
-    integrands::HasIntegrand,
-    integrands::evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
-    integrands::process::{
-        ChannelIndex, ParamBuilder,
-        evaluators::{ActiveF64Backend, EvaluatorStack},
+    integrands::{
+        HasIntegrand,
+        evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
+        process::{
+            ChannelIndex, ParamBuilder,
+            evaluators::{ActiveF64Backend, EvaluatorStack},
+        },
     },
     model::Model,
-    momentum::sample::{ExternalIndex, MomentumSample},
-    momentum::signature::SignatureLike,
-    momentum::{Helicity, Rotation, RotationMethod, SignOrZero},
+    momentum::{
+        Helicity, Rotation, RotationMethod, SignOrZero,
+        sample::{ExternalIndex, LoopMomenta, MomentumSample},
+        signature::SignatureLike,
+    },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent},
     processes::{AmplitudeGraph, GraphGenerationStats, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
@@ -58,7 +63,7 @@ use crate::{
         },
         overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
-    utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
+    utils::{ArbPrec, W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
 };
 
 use super::{
