@@ -787,6 +787,7 @@ fn test_dod() {
     assert_eq!(2, atom3.dod(&[e1, e2]));
 }
 
+#[allow(unused)]
 mod dod {
     use symbolica::{
         atom::{Atom, AtomCore, AtomOrView, AtomView},

@@ -140,7 +140,7 @@ fn export_counterterm<T: ExportAtomTo>(
                 .collect::<Result<Vec<_>>>()
         })?,
         pass_two_evaluator: evaluators
-            .pass_two_evaluator
+            .residue_from_e_surface_evaluators
             .iter()
             .map(export_generic_evaluator)
             .collect::<Result<Vec<_>>>()?,

@@ -676,12 +676,15 @@ impl CrossSectionGraphTerm {
         }
 
         let mut ct_evaluators = TiVec::new();
-        for ct_data in &masked_threshold_counterterms {
+        for (raised_cut_id, ct_data) in masked_threshold_counterterms.iter_enumerated() {
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
             }
             let (evaluators, evaluator_timings) = LUCounterTermEvaluators::from_atoms(
                 ct_data,
+                graph.derived_data.raised_data.raised_cut_groups[raised_cut_id]
+                    .related_esurface_group
+                    .max_occurence,
                 &graph.graph.param_builder,
                 settings,
                 &orientations,
@@ -690,7 +693,7 @@ impl CrossSectionGraphTerm {
                 return Err(eyre!("Generation interrupted by user"));
             }
             stats.add_evaluator_build_timings(evaluator_timings);
-            stats.evaluator_count += evaluators.generic_evaluator_count();
+            stats.evaluator_count += evaluators.generic_compileable_evaluator_count();
             ct_evaluators.push(evaluators);
         }
 

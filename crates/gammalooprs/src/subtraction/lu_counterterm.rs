@@ -283,11 +283,11 @@ pub struct LUCounterTermEvaluators {
     pub left_thresholds_evaluator: TiVec<LeftThresholdId, Vec<EvaluatorStack>>,
     pub right_thresholds_evaluator: TiVec<RightThresholdId, Vec<EvaluatorStack>>,
     pub iterated_evaluator: IteratedCtCollection<Vec<EvaluatorStack>>,
-    pub pass_two_evaluator: Vec<GenericEvaluator>,
+    pub residue_from_e_surface_evaluators: Vec<GenericEvaluator>,
 }
 
 impl LUCounterTermEvaluators {
-    pub(crate) fn generic_evaluator_count(&self) -> usize {
+    pub(crate) fn generic_compileable_evaluator_count(&self) -> usize {
         let left = self
             .left_thresholds_evaluator
             .iter()
@@ -307,11 +307,13 @@ impl LUCounterTermEvaluators {
             .map(EvaluatorStack::generic_evaluator_count)
             .sum::<usize>();
 
-        left + right + iterated + 1
+        // Ignore evaluators from residue_from_e_surface_evaluators since they are always eager
+        left + right + iterated
     }
 
     pub fn from_atoms(
         counterterm_data: &LUCounterTermData,
+        max_raised_cut_occurrence: usize,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
@@ -410,27 +412,43 @@ impl LUCounterTermEvaluators {
         });
         timings += iterated_timings.get();
 
-        let symbolica_started = std::time::Instant::now();
-        let max_num_esurfaces = counterterm_data
-            .left_atoms
-            .iter()
-            .map(|integrands| integrands.integrands.len())
-            .chain(
+        for (label, orders) in [
+            (
+                "left",
+                counterterm_data
+                    .left_atoms
+                    .iter()
+                    .map(|integrands| integrands.integrands.len())
+                    .collect_vec(),
+            ),
+            (
+                "right",
                 counterterm_data
                     .right_atoms
                     .iter()
-                    .map(|integrands| integrands.integrands.len()),
-            )
-            .chain(
+                    .map(|integrands| integrands.integrands.len())
+                    .collect_vec(),
+            ),
+            (
+                "iterated",
                 counterterm_data
                     .iterated
                     .iter()
-                    .map(|integrands| integrands.integrands.len()),
-            )
-            .max()
-            .unwrap_or(1);
+                    .map(|integrands| integrands.integrands.len())
+                    .collect_vec(),
+            ),
+        ] {
+            assert!(
+                orders
+                    .iter()
+                    .all(|&order_count| order_count == max_raised_cut_occurrence),
+                "LU counterterm {label} integrands were generated with orders {:?}, but the raised cut expects {max_raised_cut_occurrence} occurrence(s)",
+                orders
+            );
+        }
 
-        let pass_two_evaluator = (1..=max_num_esurfaces)
+        let symbolica_started = std::time::Instant::now();
+        let pass_two_evaluator = (1..=max_raised_cut_occurrence)
             .map(|order| build_derivative_structure(order as u8, &settings.generation.evaluator))
             .collect();
 
@@ -441,7 +459,7 @@ impl LUCounterTermEvaluators {
                 left_thresholds_evaluator,
                 right_thresholds_evaluator,
                 iterated_evaluator,
-                pass_two_evaluator,
+                residue_from_e_surface_evaluators: pass_two_evaluator,
             },
             timings,
         )
@@ -483,7 +501,11 @@ impl LUCounterTermEvaluators {
             }
         }
 
-        for (order, pass_to_evaluator) in self.pass_two_evaluator.iter_mut().enumerate() {
+        for (order, pass_to_evaluator) in self
+            .residue_from_e_surface_evaluators
+            .iter_mut()
+            .enumerate()
+        {
             let name = format!("cut_{}_pass_two_{}", cut_id.0, order);
             pass_to_evaluator.compile_external(
                 path.as_ref().join(&name).with_extension("cpp"),
@@ -515,7 +537,7 @@ impl LUCounterTermEvaluators {
                 evaluator.for_each_generic_evaluator_mut(&mut f)?;
             }
         }
-        for pass_to_evaluator in self.pass_two_evaluator.iter_mut() {
+        for pass_to_evaluator in self.residue_from_e_surface_evaluators.iter_mut() {
             f(pass_to_evaluator)?;
         }
 
@@ -1092,7 +1114,7 @@ impl LUCounterTerm {
             }
 
             let pass_two_result = evaluate_evaluator_single(
-                &mut self.evaluators[cut_id].pass_two_evaluator[order],
+                &mut self.evaluators[cut_id].residue_from_e_surface_evaluators[order],
                 &params_for_pass_two,
                 evaluation_meta_data,
                 record_primary_timing,

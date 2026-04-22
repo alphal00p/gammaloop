@@ -108,13 +108,13 @@ summed_function_map = false
 
 # Otherwise leave them enabled with
 [cli_settings.global.generation.threshold_subtraction]
-enable_thresholds = true
+enable_thresholds = false
 # The option below specifies the generation of threshold for the kinematics supplied
 check_esurface_at_generation = true
+skip_thresholds_that_are_cuts = true
 
 [default_runtime_settings.subtraction]
-# Threshold subtraction for LU not yet implemented
-disable_threshold_subtraction = false
+disable_threshold_subtraction = true
 
 [cli_settings.global.generation.compile]
 compilation_mode = "assembly"
@@ -202,7 +202,7 @@ commands = [
         integrator.n_start=10000
         integrator.n_max=10000000000
         integrator.seed=1337
-        general.m_uv=9.1188
+        general.m_uv=91.188
 
     """,
   # --show-max-weight-info-for-discrete-bins
