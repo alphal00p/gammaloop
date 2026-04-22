@@ -468,6 +468,7 @@
             // {
               src = workspaceTestSrc;
               inherit cargoArtifacts;
+              nativeBuildInputs = (commonArgs.nativeBuildInputs or []) ++ [pkgs.form];
             });
         };
 
