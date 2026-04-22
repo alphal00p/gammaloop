@@ -85,9 +85,24 @@ clippy *lint_args:
         cargo clippy --workspace --all-targets --locked
     fi
 
-# Run clippy via Nix (same as CI)
+# Run workspace clippy via Nix
 clippy-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-clippy
+
+# Run package-local clippy checks via Nix (same as CI)
+clippy-nix-all:
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-clinnet
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-linnet
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spenso-macros
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-vakint
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-linnest
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-linnet-py
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spenso
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-idenso
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spenso-hep-lib
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spynso3
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-gammalooprs
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-gammaloop-api
 
 # Check formatting via Nix (same as CI)
 fmt-check-nix:
@@ -258,29 +273,36 @@ test_gammaloop *args:
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all
 
-# Run all nextest partitions locally (same as CI)
+# Run the staged package-local nextest checks locally (same as CI)
 test-nix-all:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-1
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-2
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-3
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-4
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-5
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-6
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-clinnet
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-linnet
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spenso-macros
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-vakint
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-linnest
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-linnet-py
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spenso
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-idenso
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spenso-hep-lib
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spynso3
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-gammalooprs
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-gammaloop-api
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-integration
 
-# Run specific nextest partition via Nix
-test-nix-partition PARTITION:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-{{ PARTITION }}
+# Run a specific CI nextest check via Nix
+test-nix-check CHECK:
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').{{ CHECK }}
 
-# Run nextest (all tests) via Nix
+# Run the staged CI nextest sequence via Nix
 test-nix:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest
+    just test-nix-all
 
 # Generate coverage report via Nix
 coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
 # Run all CI checks locally (release mode)
-ci-checks: clippy-nix fmt-check-nix audit-nix deny-nix doc-nix test-nix
+ci-checks: clippy-nix-all fmt-check-nix audit-nix deny-nix doc-nix test-nix
 
 # Run tests in release mode (faster execution)
 test-release TEST_NAME="":

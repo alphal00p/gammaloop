@@ -1,29 +1,23 @@
 let
-  ciPartitionCount = 6;
-
   crates = [
     {
       attr = "clinnet";
       usesSymbolica = false;
     }
     {
-      attr = "gammaloop-api";
+      attr = "linnet";
+      usesSymbolica = false;
+    }
+    {
+      attr = "spenso-macros";
       usesSymbolica = true;
     }
     {
-      attr = "gammalooprs";
-      usesSymbolica = true;
-    }
-    {
-      attr = "idenso";
+      attr = "vakint";
       usesSymbolica = true;
     }
     {
       attr = "linnest";
-      usesSymbolica = false;
-    }
-    {
-      attr = "linnet";
       usesSymbolica = false;
     }
     {
@@ -35,11 +29,11 @@ let
       usesSymbolica = true;
     }
     {
-      attr = "spenso-hep-lib";
+      attr = "idenso";
       usesSymbolica = true;
     }
     {
-      attr = "spenso-macros";
+      attr = "spenso-hep-lib";
       usesSymbolica = true;
     }
     {
@@ -47,27 +41,31 @@ let
       usesSymbolica = true;
     }
     {
-      attr = "vakint";
+      attr = "gammalooprs";
+      usesSymbolica = true;
+    }
+    {
+      attr = "gammaloop-api";
       usesSymbolica = true;
     }
   ];
 
   impureChecks =
-    [
-      "checks.x86_64-linux.gammaloop-nextest"
-    ]
+    (map
+      (crate: "checks.x86_64-linux.clippy-${crate.attr}")
+      (builtins.filter (crate: crate.usesSymbolica) crates))
     ++ map
-    (partition: "checks.x86_64-linux.gammaloop-nextest-partition-${toString (partition + 1)}")
-    (builtins.genList (partition: partition) ciPartitionCount)
-    ++ map
-    (crate: "checks.x86_64-linux.crate-${crate.attr}")
-    (builtins.filter (crate: crate.usesSymbolica) crates);
+    (crate: "checks.x86_64-linux.nextest-${crate.attr}")
+    (builtins.filter (crate: crate.usesSymbolica) crates)
+    ++ [
+      "checks.x86_64-linux.nextest-integration"
+    ];
 
-  symbolicaTests = builtins.listToAttrs (map
+  symbolicaClippyChecks = builtins.listToAttrs (map
     (crate: {
-      name = "crate-${crate.attr}";
+      name = "clippy-${crate.attr}";
       value = {
-        package = "packages.x86_64-linux.nix-ci-check-${crate.attr}";
+        package = "packages.x86_64-linux.nix-ci-check-clippy-${crate.attr}";
         system = "x86_64-linux";
         in-repo = true;
         secrets = ["SYMBOLICA_LICENSE"];
@@ -75,29 +73,30 @@ let
     })
     (builtins.filter (crate: crate.usesSymbolica) crates));
 
-  nextestTests =
-    {
-      gammaloop-nextest = {
-        package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest";
+  symbolicaNextestChecks = builtins.listToAttrs (map
+    (crate: {
+      name = "nextest-${crate.attr}";
+      value = {
+        package = "packages.x86_64-linux.nix-ci-check-nextest-${crate.attr}";
         system = "x86_64-linux";
         in-repo = true;
         secrets = ["SYMBOLICA_LICENSE"];
       };
-    }
-    // builtins.listToAttrs (map
-      (partition: {
-        name = "gammaloop-nextest-partition-${toString partition}";
-        value = {
-          package = "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-partition-${toString partition}";
-          system = "x86_64-linux";
-          in-repo = true;
-          secrets = ["SYMBOLICA_LICENSE"];
-        };
-      })
-      (builtins.genList (partition: partition + 1) ciPartitionCount));
+    })
+    (builtins.filter (crate: crate.usesSymbolica) crates));
 in {
   systems = ["x86_64-linux"];
   doNotBuild = impureChecks;
   fail-fast = false;
-  test = symbolicaTests // nextestTests;
+  test =
+    symbolicaClippyChecks
+    // symbolicaNextestChecks
+    // {
+      nextest-integration = {
+        package = "packages.x86_64-linux.nix-ci-check-nextest-integration";
+        system = "x86_64-linux";
+        in-repo = true;
+        secrets = ["SYMBOLICA_LICENSE"];
+      };
+    };
 }

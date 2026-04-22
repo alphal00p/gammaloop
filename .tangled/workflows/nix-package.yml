@@ -32,4 +32,4 @@ environment:
 
 steps:
   - name: "Build Linux Nix package"
-    command: "bash .tangled/scripts/nix-ci.sh package"
+    command: "nix build .#default --print-build-logs"

@@ -155,31 +155,7 @@
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
         };
 
-      gammaloopNextestPackages = [
-        "gammaloop-api"
-        "gammalooprs"
-        "idenso"
-        "linnest"
-        "linnet"
-        "spenso"
-        "spenso-hep-lib"
-        "spenso-macros"
-        "vakint"
-        "gammaloop-integration-tests"
-      ];
-
       ciTestCargoProfile = "dev-optim";
-
-      gammaloopNextestArgs =
-        ciArgs
-        // {
-          CARGO_PROFILE = ciTestCargoProfile;
-          cargoExtraArgs = lib.concatStringsSep " " (["--locked"] ++ map (package: "-p ${package}") gammaloopNextestPackages);
-          INSTA_WORKSPACE_ROOT = ".";
-          nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
-        };
-
-      ciPartitionCount = 6;
 
       workspaceCrates = [
         {
@@ -189,33 +165,27 @@
           usesSymbolica = false;
         }
         {
-          attr = "gammaloop-api";
-          package = "gammaloop-api";
-          path = ./crates/gammaloop-api;
+          attr = "linnet";
+          package = "linnet";
+          path = ./crates/linnet;
+          usesSymbolica = false;
+        }
+        {
+          attr = "spenso-macros";
+          package = "spenso-macros";
+          path = ./crates/spenso-macros;
           usesSymbolica = true;
         }
         {
-          attr = "gammalooprs";
-          package = "gammalooprs";
-          path = ./crates/gammalooprs;
-          usesSymbolica = true;
-        }
-        {
-          attr = "idenso";
-          package = "idenso";
-          path = ./crates/idenso;
+          attr = "vakint";
+          package = "vakint";
+          path = ./crates/vakint;
           usesSymbolica = true;
         }
         {
           attr = "linnest";
           package = "linnest";
           path = ./crates/linnest;
-          usesSymbolica = false;
-        }
-        {
-          attr = "linnet";
-          package = "linnet";
-          path = ./crates/linnet;
           usesSymbolica = false;
         }
         {
@@ -231,15 +201,15 @@
           usesSymbolica = true;
         }
         {
-          attr = "spenso-hep-lib";
-          package = "spenso-hep-lib";
-          path = ./crates/spenso-hep-lib;
+          attr = "idenso";
+          package = "idenso";
+          path = ./crates/idenso;
           usesSymbolica = true;
         }
         {
-          attr = "spenso-macros";
-          package = "spenso-macros";
-          path = ./crates/spenso-macros;
+          attr = "spenso-hep-lib";
+          package = "spenso-hep-lib";
+          path = ./crates/spenso-hep-lib;
           usesSymbolica = true;
         }
         {
@@ -249,9 +219,15 @@
           usesSymbolica = true;
         }
         {
-          attr = "vakint";
-          package = "vakint";
-          path = ./crates/vakint;
+          attr = "gammalooprs";
+          package = "gammalooprs";
+          path = ./crates/gammalooprs;
+          usesSymbolica = true;
+        }
+        {
+          attr = "gammaloop-api";
+          package = "gammaloop-api";
+          path = ./crates/gammaloop-api;
           usesSymbolica = true;
         }
       ];
@@ -268,27 +244,81 @@
       # not need integration tests in their source closure.
       fileSetForCrate = _: workspaceBuildSrc;
 
-      # Build workspace dependency artifacts once and reuse for downstream checks/packages.
-      cargoArtifacts = craneLib.buildDepsOnly (ciArgs
-        // {
-          pname = "gammaloop-workspace-artifacts";
-          inherit (apiMeta) version;
-          dummySrc = craneLib.mkDummySrc {
-            src = workspaceBuildSrc;
-            cleanCargoTomlFilter = craneLib.filters.cargoTomlAggressive;
-          };
-          cargoBuildCommand = "cargo test --workspace --all-targets --profile ${ciTestCargoProfile} --no-run --locked";
-          buildPhaseCargoCommand = "cargo test --workspace --all-targets --profile ${ciTestCargoProfile} --no-run --locked";
-          doCheck = false;
-        });
+      cargoExtraArgsForPackages = packages:
+        lib.concatStringsSep " " (["--locked"] ++ map (package: "-p ${package}") packages);
 
-      individualCrateArgs =
-        commonArgs
-        // {
-          inherit cargoArtifacts;
-          buildType = "dev-optim";
-          doCheck = false;
+      mkDummySrc = source:
+        craneLib.mkDummySrc {
+          src = source;
+          cleanCargoTomlFilter = craneLib.filters.cargoTomlAggressive;
         };
+
+      mkSubsetArtifacts = {
+        pname,
+        packages,
+        cargoArtifacts ? null,
+        src ? workspaceBuildSrc,
+        extraArgs ? {},
+        cargoBuildCommand ? null,
+        buildPhaseCargoCommand ? null,
+      }:
+        craneLib.buildDepsOnly ((ciArgs // extraArgs)
+          // {
+            inherit pname cargoArtifacts;
+            inherit (apiMeta) version;
+            dummySrc = mkDummySrc src;
+            cargoExtraArgs = cargoExtraArgsForPackages packages;
+            doCheck = false;
+          }
+          // lib.optionalAttrs (cargoBuildCommand != null) {
+            inherit cargoBuildCommand;
+          }
+          // lib.optionalAttrs (buildPhaseCargoCommand != null) {
+            inherit buildPhaseCargoCommand;
+          });
+
+      nextestDerivationArgs = {
+        CARGO_PROFILE = ciTestCargoProfile;
+        INSTA_WORKSPACE_ROOT = ".";
+        nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
+      };
+
+      nextestExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
+
+      mkNextestArtifacts = {
+        pname,
+        packages,
+        cargoArtifacts ? null,
+        src ? workspaceTestSrc,
+      }:
+        mkSubsetArtifacts {
+          inherit pname packages cargoArtifacts src;
+          extraArgs = nextestDerivationArgs;
+          cargoBuildCommand = "cargo test --profile ${ciTestCargoProfile} --no-run ${cargoExtraArgsForPackages packages}";
+          buildPhaseCargoCommand = "cargo test --profile ${ciTestCargoProfile} --no-run ${cargoExtraArgsForPackages packages}";
+        };
+
+      stagedCrateArtifactsState = lib.lists.foldl' (
+        state: crate: let
+          artifacts = mkSubsetArtifacts {
+            pname = "gammaloop-${crate.attr}-artifacts";
+            packages = [crate.package];
+            cargoArtifacts = state.previousArtifacts;
+          };
+        in {
+          previousArtifacts = artifacts;
+          artifactsByAttr = state.artifactsByAttr // {"${crate.attr}" = artifacts;};
+        }
+      ) {
+        previousArtifacts = null;
+        artifactsByAttr = {};
+      } workspaceCrates;
+
+      crateCargoArtifacts = stagedCrateArtifactsState.artifactsByAttr;
+
+      # Top-of-tree artifacts cover the full workspace crate graph and are reused for the
+      # higher-level clippy/doc/package/coverage builds.
+      cargoArtifacts = stagedCrateArtifactsState.previousArtifacts;
 
       symbolicaCrateArgs = usesSymbolica:
         lib.optionalAttrs usesSymbolica {
@@ -296,108 +326,111 @@
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
         };
 
-      crateChecks = lib.listToAttrs (map (crate: {
-          name = "crate-${crate.attr}";
-          value = craneLib.buildPackage (individualCrateArgs
-            // {
-              pname = crate.package;
-              inherit (apiMeta) version;
-              src = fileSetForCrate crate.path;
-              cargoExtraArgs = "--locked -p ${crate.package}";
-            }
-            // symbolicaCrateArgs crate.usesSymbolica);
-        })
-        workspaceCrates);
-
-      gammaloop-cli = craneLib.buildPackage (individualCrateArgs
+      gammaloop-cli = craneLib.buildPackage (commonArgs
         // {
+          cargoArtifacts = builtins.getAttr "gammaloop-api" crateCargoArtifacts;
+          buildType = "dev-optim";
+          doCheck = false;
           pname = "gammaloop";
           inherit (apiMeta) version;
           src = fileSetForCrate ./crates/gammaloop-api;
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
-      gammaloopNextestArchive = craneLib.mkCargoDerivation (gammaloopNextestArgs
-        // {
-          inherit cargoArtifacts;
-          src = workspaceTestSrc;
-          pnameSuffix = "-nextest-archive";
-          preCheck = licensePreCheck;
-          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-          doCheck = true;
-          nativeBuildInputs = (gammaloopNextestArgs.nativeBuildInputs or []) ++ [pkgs.cargo-nextest];
-          buildPhaseCargoCommand = ''
-            mkdir -p "$out"
-            cargo nextest --version
-          '';
-          checkPhaseCargoCommand = ''
-            cargo nextest archive \
-              --cargo-profile ${ciTestCargoProfile} \
-              ${gammaloopNextestArgs.cargoExtraArgs} \
-              --profile ci_gammaloop \
-              --archive-format tar-zst \
-              --archive-file "$out/archive.tar.zst"
-          '';
-          installPhaseCommand = ''
-            test -f "$out/archive.tar.zst"
-          '';
-        });
+      stagedNextestArtifactsState = lib.lists.foldl' (
+        state: crate: let
+          artifacts = mkNextestArtifacts {
+            pname = "gammaloop-nextest-${crate.attr}-artifacts";
+            packages = [crate.package];
+            cargoArtifacts = state.previousArtifacts;
+          };
+        in {
+          previousArtifacts = artifacts;
+          artifactsByAttr = state.artifactsByAttr // {"${crate.attr}" = artifacts;};
+        }
+      ) {
+        previousArtifacts = cargoArtifacts;
+        artifactsByAttr = {};
+      } workspaceCrates;
 
-      nextestPartitionArgs = partition: commonArgs
-        // {
-          pname = "gammaloop-nextest-partition-${toString partition}";
-          inherit (apiMeta) version;
-          src = workspaceTestSrc;
-          cargoArtifacts = null;
-          cargoVendorDir = null;
-          doInstallCargoArtifacts = false;
-          doCheck = true;
+      nextestCargoArtifacts = stagedNextestArtifactsState.artifactsByAttr;
+
+      integrationNextestCargoArtifacts = mkNextestArtifacts {
+        pname = "gammaloop-nextest-integration-artifacts";
+        packages = ["gammaloop-integration-tests"];
+        cargoArtifacts = stagedNextestArtifactsState.previousArtifacts;
+      };
+
+      symbolicaNextestArgs = usesSymbolica:
+        lib.optionalAttrs usesSymbolica {
           preCheck = licensePreCheck;
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-          nativeBuildInputs = (commonArgs.nativeBuildInputs or []) ++ [pkgs.form pkgs.cargo-nextest];
-          buildPhaseCargoCommand = ''
-            mkdir -p "$out"
-            cargo nextest --version
-          '';
-          checkPhaseCargoCommand = ''
-            INSTA_WORKSPACE_ROOT="$PWD" cargo nextest run \
-              --archive-format tar-zst \
-              --archive-file ${gammaloopNextestArchive}/archive.tar.zst \
-              --workspace-remap . \
-              --profile ci_gammaloop \
-              --partition hash:${toString partition}/${toString ciPartitionCount} \
-              --no-fail-fast \
-              --final-status-level fail \
-              --no-tests=pass \
-              --run-ignored all
-          '';
-          installPhaseCommand = ''
-            mkdir -p "$out"
-          '';
         };
 
-      partitionedNextestChecks = lib.listToAttrs (map (partition: {
-          name = "gammaloop-nextest-partition-${toString partition}";
-          value = craneLib.mkCargoDerivation (nextestPartitionArgs partition);
+      packageClippyChecks = lib.listToAttrs (map (crate: {
+          name = "clippy-${crate.attr}";
+          value = craneLib.cargoClippy ((ciArgs // symbolicaCrateArgs crate.usesSymbolica)
+            // {
+              cargoArtifacts = builtins.getAttr crate.attr crateCargoArtifacts;
+              src = workspaceBuildSrc;
+              cargoExtraArgs = "--locked -p ${crate.package}";
+              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+            });
         })
-        (lib.range 1 ciPartitionCount));
+        workspaceCrates);
+
+      nextestCheckForPackages = {
+        checkName,
+        packages,
+        cargoArtifacts,
+        usesSymbolica ? false,
+      }:
+        {
+          name = checkName;
+          value = craneLib.cargoNextest ((ciArgs // nextestDerivationArgs)
+            // {
+              inherit cargoArtifacts;
+              src = workspaceTestSrc;
+              cargoExtraArgs = cargoExtraArgsForPackages packages;
+              cargoNextestExtraArgs = nextestExtraArgs;
+            }
+            // symbolicaNextestArgs usesSymbolica);
+        };
+
+      packageNextestChecks = lib.listToAttrs (map (crate:
+          nextestCheckForPackages {
+            checkName = "nextest-${crate.attr}";
+            packages = [crate.package];
+            cargoArtifacts = builtins.getAttr crate.attr nextestCargoArtifacts;
+            usesSymbolica = crate.usesSymbolica;
+          })
+        workspaceCrates);
+
+      integrationNextestCheck = nextestCheckForPackages {
+        checkName = "nextest-integration";
+        packages = ["gammaloop-integration-tests"];
+        cargoArtifacts = integrationNextestCargoArtifacts;
+        usesSymbolica = true;
+      };
 
       impureCheckRunnerTargets =
         (map (crate: {
-            runnerAttr = "nix-ci-check-${crate.attr}";
-            checkAttr = "crate-${crate.attr}";
+            runnerAttr = "nix-ci-check-clippy-${crate.attr}";
+            checkAttr = "clippy-${crate.attr}";
+          })
+          (builtins.filter (crate: crate.usesSymbolica) workspaceCrates))
+        ++
+        (map (crate: {
+            runnerAttr = "nix-ci-check-nextest-${crate.attr}";
+            checkAttr = "nextest-${crate.attr}";
           })
           (builtins.filter (crate: crate.usesSymbolica) workspaceCrates))
         ++ [
           {
-            runnerAttr = "nix-ci-check-gammaloop-nextest";
-            checkAttr = "gammaloop-nextest";
+            runnerAttr = "nix-ci-check-nextest-integration";
+            checkAttr = "nextest-integration";
           }
-        ]
-        ++ map (partition: {
-          runnerAttr = "nix-ci-check-gammaloop-nextest-partition-${toString partition}";
-          checkAttr = "gammaloop-nextest-partition-${toString partition}";
-        }) (lib.range 1 ciPartitionCount);
+        ];
 
       impureCheckRunnerPackages = lib.listToAttrs (map (target: {
           name = target.runnerAttr;
@@ -441,25 +474,15 @@
             inherit (apiMeta) version;
           };
 
-          gammaloop-nextest = craneLib.cargoNextest (gammaloopNextestArgs
-            // {
-              inherit cargoArtifacts;
-              src = workspaceTestSrc;
-              preCheck = licensePreCheck;
-              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-              partitions = ciPartitionCount;
-              partitionType = "hash";
-              cargoNextestPartitionsExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
-            });
+          ${integrationNextestCheck.name} = integrationNextestCheck.value;
         }
-        // crateChecks
-        // partitionedNextestChecks;
+        // packageClippyChecks
+        // packageNextestChecks;
 
       packages =
         {
           default = gammaloop-cli;
           gammaloop = gammaloop-cli;
-          gammaloop-nextest-archive = gammaloopNextestArchive;
           inherit cargoArtifacts;
         }
         // impureCheckRunnerPackages
@@ -479,10 +502,6 @@
         gammaloop = flake-utils.lib.mkApp {
           drv = gammaloop-cli;
         };
-      };
-
-      ci = {
-        partitionCount = toString ciPartitionCount;
       };
 
       devShells.default = craneLib.devShell {
