@@ -1840,11 +1840,11 @@ pub(crate) fn build_derivative_structure_atom(
 
 pub(crate) fn build_derivative_structure(
     singularity_order: u8,
-    _laurent_coefficient: i8,
+    laurent_coefficient: i8,
     evaluator_settings: &EvaluatorSettings,
 ) -> GenericEvaluator {
     let expression_to_derive =
-        build_derivative_structure_atom(singularity_order, _laurent_coefficient);
+        build_derivative_structure_atom(singularity_order, laurent_coefficient);
 
     let params = params_for_derivative_order(singularity_order);
 

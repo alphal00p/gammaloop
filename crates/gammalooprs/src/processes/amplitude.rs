@@ -42,11 +42,11 @@ use crate::{
     momentum::{sample::ExternalIndex, signature::SignatureLike},
     processes::{
         DotExportSettings, GraphGenerationStats, NamedGraphGenerationReport,
-        StandaloneExportSettings,
+        StandaloneExportSettings, build_derivative_structure_atom,
     },
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{F, GS, Length, W_},
+    utils::{F, GS, Length, W_, symbolica_ext::LogPrint},
     uv::{
         RenormalizationPart, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, integrated::to_vakint_integrand},
@@ -1350,6 +1350,58 @@ impl Amplitude {
         //  TODO: validate that the graph is compatible
         Ok(())
     }
+}
+
+pub(crate) fn threshold_counterterm_helper(order: u8, loop_number: usize) -> Atom {
+    let loop_3 = loop_number as i64 * 3;
+
+    let laurent_coeff_indices = (1..=order).map(|i| -(i as i8));
+
+    let mut laurent_coeffs = laurent_coeff_indices.map(|laurent_coeff_index| {
+        build_derivative_structure_atom(order, laurent_coeff_index)
+            .replace(GS.rescale_star)
+            .with(GS.radius_star_left)
+    });
+
+    let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).pow(loop_3);
+    let i = Atom::i();
+
+    let radius = Atom::var(GS.radius_left);
+    let radius_star = Atom::var(GS.radius_star_left);
+    let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+    let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+    let hfunction = Atom::var(GS.hfunction_left_th);
+
+    let delta_r_plus = &radius - &radius_star;
+    let delta_r_minus = -&radius - &radius_star;
+
+    let jacobian_ratio = (&radius_star / &radius).pow(loop_3 - 1);
+
+    let local_prefactor = &jacobian_ratio / &factors_of_pi
+        * (uv_damp_plus / &delta_r_plus + uv_damp_minus / &delta_r_minus);
+
+    let integrated_prefactor = -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / &factors_of_pi;
+
+    let mut result = (local_prefactor + integrated_prefactor) * laurent_coeffs.next().unwrap();
+
+    for pow in 2..=order {
+        result += laurent_coeffs.next().unwrap() * &jacobian_ratio
+            / &factors_of_pi
+            / delta_r_plus.pow(pow as i64);
+    }
+
+    result
+}
+
+#[test]
+fn test_threshold_counterterm_helper() {
+    let order = 2;
+    let loop_number = 2;
+    let result = threshold_counterterm_helper(order, loop_number);
+    println!(
+        "Threshold counterterm helper result: {}",
+        result.log_print(Some(100))
+    );
 }
 
 #[cfg(test)]
