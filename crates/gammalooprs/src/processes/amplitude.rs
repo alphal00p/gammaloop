@@ -470,13 +470,7 @@ impl Amplitude {
                         &[W_.x___],
                     );
 
-                    let esurfaces = &amplitude_graph
-                        .derived_data
-                        .cff_expression
-                        .as_ref()
-                        .unwrap()
-                        .surfaces
-                        .esurface_cache;
+                    let esurfaces = &amplitude_graph.graph.surface_cache.esurface_cache;
 
                     for (esurface_id, esurface) in esurfaces.iter_enumerated() {
                         let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
@@ -605,7 +599,19 @@ impl AmplitudeGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_expression = self.graph.generate_cff(&[], &shift_rewrite)?;
+        let contract_edges = self
+            .graph
+            .iter_edges_of(
+                &self
+                    .graph
+                    .tree_edges
+                    .subtract(&self.graph.initial_state_cut)
+                    .subtract(&self.graph.external_filter::<SuBitGraph>()),
+            )
+            .map(|x| x.1)
+            .collect_vec();
+
+        let cff_expression = self.graph.generate_cff(&contract_edges, &shift_rewrite)?;
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
