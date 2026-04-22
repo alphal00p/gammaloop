@@ -321,10 +321,6 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
         }
     }
 
-    for (solution, rstar_derivative) in solutions.iter().zip(&rstar_derivatives) {
-        println!("{} = {}", rstar_derivative, solution);
-    }
-
     // dual shape is for e-surface derivatives, implict function theorem should NOT be dualized with this
     let mut dual_shape = vec![vec![0, 0]];
     let mut params = vec![];
@@ -355,15 +351,12 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
             current_t_derivative_counter -= 1;
         }
 
-        println!("eta derivatives for order {}", i);
         for param in &eta_derivatives_at_this_order {
             println!("  {}", param);
         }
 
         params.extend(eta_derivatives_at_this_order);
     }
-
-    println!("Dual shape: {:#?}", dual_shape);
 
     let fn_map = FunctionMap::new();
     let fn_map_entries = vec![];
