@@ -732,6 +732,18 @@ impl LUCounterTerm {
         record_primary_timing: bool,
     ) -> Result<Complex<F<T>>> {
         self.ensure_active_cut(cut_id)?;
+
+        let (left_thresholds_typed, right_thresholds_typed) = &self.thresholds[cut_id];
+
+        let left_thresholds = TiVec::from_ref(&left_thresholds_typed.raw);
+        let right_thresholds = TiVec::from_ref(&right_thresholds_typed.raw);
+
+        if left_thresholds.is_empty() && right_thresholds.is_empty() {
+            return Ok(Complex::new_re(
+                kinematic_point.representative_sample().zero(),
+            ));
+        }
+
         let (left_subspace, right_subspace) = &self.subspaces[cut_id];
         let (sample_left_transformed, sample_right_transformed) = (
             kinematic_point
@@ -739,10 +751,6 @@ impl LUCounterTerm {
             kinematic_point
                 .lmb_transform(&graph.loop_momentum_basis, right_subspace.get_lmb(all_lmbs)),
         );
-        let (left_thresholds_typed, right_thresholds_typed) = &self.thresholds[cut_id];
-
-        let left_thresholds = TiVec::from_ref(&left_thresholds_typed.raw);
-        let right_thresholds = TiVec::from_ref(&right_thresholds_typed.raw);
 
         debug!("possible left thresholds: {}", left_thresholds.len());
         debug!("possible right thresholds: {}", right_thresholds.len());
@@ -819,6 +827,12 @@ impl LUCounterTerm {
             "number of thresholds on the right: {}",
             right_existing_esurfaces.len()
         );
+
+        if left_existing_esurfaces.is_empty() && right_existing_esurfaces.is_empty() {
+            return Ok(Complex::new_re(
+                kinematic_point.representative_sample().zero(),
+            ));
+        }
 
         let left_overlap_input = OverlapInput {
             graph,
