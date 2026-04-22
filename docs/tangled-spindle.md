@@ -11,6 +11,8 @@ The mapping is intentionally conservative:
 
 The spindle workflow runs the Linux CI in a single step instead of splitting it into many steps. Tangled spindle executes each step in a fresh container and only preserves `/tangled/workspace`, so keeping the Nix builds in one step avoids discarding the warmed `/nix/store` between steps. The Nix commands are inlined directly in the workflow rather than delegated through a helper script.
 
+Because Tangled's Nix builds run without the usual sandbox isolation, the workflows also remove `/homeless-shelter` before invoking `nix build`; otherwise stdenv aborts immediately on the fallback `HOME` purity check.
+
 Not ported:
 
 - `build-deps-macos`
