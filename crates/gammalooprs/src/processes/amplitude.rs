@@ -34,15 +34,15 @@ use crate::{
         cuts::{CutSet, ResidueSelector},
     },
     integrands::process::{
-        LmbMultiChannelingSetup,
+        GenericEvaluator, LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         graph_to_group_id_for_group_structure,
     },
     model::ArcParticle,
     momentum::{sample::ExternalIndex, signature::SignatureLike},
     processes::{
-        DotExportSettings, GraphGenerationStats, NamedGraphGenerationReport,
-        StandaloneExportSettings, build_derivative_structure_atom,
+        DotExportSettings, EvaluatorSettings, GraphGenerationStats, NamedGraphGenerationReport,
+        StandaloneExportSettings, build_derivative_structure_atom, params_for_derivative_order,
     },
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
@@ -67,6 +67,7 @@ use linnet::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol, Var},
+    evaluate::FunctionMap,
     function,
 };
 use tracing::{debug, info};
@@ -1352,7 +1353,7 @@ impl Amplitude {
     }
 }
 
-pub(crate) fn threshold_counterterm_helper(order: u8, loop_number: usize) -> Atom {
+pub(crate) fn threshold_counterterm_helper_atom(order: u8, loop_number: usize) -> Atom {
     let loop_3 = loop_number as i64 * 3;
 
     let laurent_coeff_indices = (1..=order).map(|i| -(i as i8));
@@ -1393,11 +1394,48 @@ pub(crate) fn threshold_counterterm_helper(order: u8, loop_number: usize) -> Ato
     result
 }
 
+pub(crate) fn threshold_counterterm_helper(
+    order: u8,
+    loop_number: usize,
+    evaluator_settings: &EvaluatorSettings,
+) -> GenericEvaluator {
+    let atom = threshold_counterterm_helper_atom(order, loop_number);
+
+    let mut params = params_for_derivative_order(order)
+        .into_iter()
+        .map(|param| param.replace(GS.rescale_star).with(GS.radius_star_left))
+        .collect_vec();
+
+    let radius = Atom::var(GS.radius_left);
+    let radius_star = Atom::var(GS.radius_star_left);
+    let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+    let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+    let hfunction = Atom::var(GS.hfunction_left_th);
+
+    params.push(radius);
+    params.push(radius_star);
+    params.push(uv_damp_plus);
+    params.push(uv_damp_minus);
+    params.push(hfunction);
+
+    GenericEvaluator::new_from_raw_params(
+        [atom],
+        &params,
+        &FunctionMap::default(),
+        vec![],
+        evaluator_settings.optimization_settings(),
+        None,
+        evaluator_settings,
+    )
+    .unwrap()
+    .into_eager_only()
+}
+
 #[test]
 fn test_threshold_counterterm_helper() {
     let order = 2;
     let loop_number = 2;
-    let result = threshold_counterterm_helper(order, loop_number);
+    let result = threshold_counterterm_helper_atom(order, loop_number);
     println!(
         "Threshold counterterm helper result: {}",
         result.log_print(Some(100))

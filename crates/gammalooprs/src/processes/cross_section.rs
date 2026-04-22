@@ -1861,7 +1861,7 @@ pub(crate) fn build_derivative_structure(
     .into_eager_only()
 }
 
-fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
+pub(crate) fn params_for_derivative_order(derivative_order: u8) -> Vec<Atom> {
     let f = symbol!("f");
     let eta = symbol!("η");
 
