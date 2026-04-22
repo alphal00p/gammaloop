@@ -216,10 +216,6 @@
       impureCheckRunnerTargets =
         [
           {
-            runnerAttr = "nix-ci-check-gammaloop-clippy";
-            checkAttr = "gammaloop-clippy";
-          }
-          {
             runnerAttr = "nix-ci-check-gammaloop-doctest";
             checkAttr = "gammaloop-doctest";
           }
@@ -259,8 +255,7 @@
               inherit cargoArtifacts;
               src = workspaceTestSrc;
               cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            }
-            // symbolicaCrateArgs true);
+            });
 
           gammaloop-doc = craneLib.cargoDoc (ciArgs
             // {
@@ -286,12 +281,14 @@
             // {
               inherit cargoArtifacts;
               src = workspaceTestSrc;
-              INSTA_WORKSPACE_ROOT = ".";
               nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
               cargoNextestExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
             }
             // {
-              preCheck = licensePreCheck;
+              preCheck = ''
+                ${licensePreCheck}
+                export INSTA_WORKSPACE_ROOT="$PWD"
+              '';
               SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
             });
         };

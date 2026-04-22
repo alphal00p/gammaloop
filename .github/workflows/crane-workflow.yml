@@ -42,7 +42,7 @@ jobs:
         run: nix build ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-fmt" --print-build-logs
 
       - name: Run clippy
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-clippy" --print-build-logs
+        run: nix build ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-clippy" --print-build-logs
 
       - name: Run nextest
         run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-nextest" --print-build-logs

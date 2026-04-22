@@ -40,7 +40,7 @@ steps:
       system="$(nix eval --impure --raw --expr builtins.currentSystem)"
 
       nix build ".#checks.${system}.gammaloop-fmt" --print-build-logs
-      nix build --impure ".#checks.${system}.gammaloop-clippy" --print-build-logs
+      nix build ".#checks.${system}.gammaloop-clippy" --print-build-logs
       nix build --impure ".#checks.${system}.gammaloop-nextest" --print-build-logs
       nix build --impure ".#checks.${system}.gammaloop-doctest" --print-build-logs
       nix build ".#checks.${system}.gammaloop-doc" --print-build-logs
