@@ -40,31 +40,8 @@ steps:
       system="$(nix eval --impure --raw --expr builtins.currentSystem)"
 
       nix build ".#checks.${system}.gammaloop-fmt" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-clinnet" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-linnet" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-spenso-macros" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-vakint" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-linnest" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-linnet-py" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-spenso" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-idenso" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-spenso-hep-lib" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-spynso3" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-gammalooprs" --print-build-logs
-      nix build --impure ".#checks.${system}.clippy-gammaloop-api" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-clinnet" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-linnet" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-spenso-macros" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-vakint" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-linnest" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-linnet-py" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-spenso" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-idenso" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-spenso-hep-lib" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-spynso3" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-gammalooprs" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-gammaloop-api" --print-build-logs
-      nix build --impure ".#checks.${system}.nextest-integration" --print-build-logs
-      nix develop --command cargo test --doc --verbose
+      nix build --impure ".#checks.${system}.gammaloop-clippy" --print-build-logs
+      nix build --impure ".#checks.${system}.gammaloop-nextest" --print-build-logs
+      nix build --impure ".#checks.${system}.gammaloop-doctest" --print-build-logs
       nix build ".#checks.${system}.gammaloop-doc" --print-build-logs
       nix build ".#packages.${system}.gammaloop-llvm-coverage" --print-build-logs

@@ -28,13 +28,32 @@
       pkgs = nixpkgs.legacyPackages.${system};
       inherit (pkgs) lib;
 
+      baseCraneLib = crane.mkLib pkgs;
+      stableToolchain = fenix.packages.${system}.stable;
+
       craneLib =
-        (crane.mkLib pkgs).overrideToolchain
-        fenix.packages.${system}.stable.toolchain;
+        baseCraneLib.overrideToolchain
+        stableToolchain.toolchain;
+
+      craneLibClippy =
+        baseCraneLib.overrideToolchain
+        (stableToolchain.withComponents [
+          "cargo"
+          "clippy"
+          "rust-std"
+          "rustc"
+        ]);
+
+      craneLibFmt =
+        baseCraneLib.overrideToolchain
+        (stableToolchain.withComponents [
+          "cargo"
+          "rustfmt"
+        ]);
 
       craneLibLLvmTools =
-        craneLib.overrideToolchain
-        (fenix.packages.${system}.stable.withComponents [
+        baseCraneLib.overrideToolchain
+        (stableToolchain.withComponents [
           "cargo"
           "llvm-tools"
           "rustc"
@@ -64,6 +83,11 @@
           cargoSources
           nonCargoBuildSources
         ];
+      };
+
+      workspaceFmtSrc = lib.fileset.toSource {
+        root = workspaceRoot;
+        fileset = cargoSources;
       };
 
       workspaceTestSrc = lib.fileset.toSource {
@@ -145,92 +169,20 @@
         DYLD_LIBRARY_PATH = runtimeLibPath;
       };
 
+      ciCargoProfile = "dev-optim";
+
       ciArgs =
         commonArgs
         // {
-          buildType = "dev-optim";
-          cargoExtraArgs = "--locked";
+          buildType = ciCargoProfile;
+          CARGO_PROFILE = ciCargoProfile;
+          # The workspace sets default-members to gammaloop-api, so CI checks must
+          # opt into the full workspace explicitly.
+          cargoExtraArgs = "--locked --workspace";
 
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
         };
-
-      ciTestCargoProfile = "dev-optim";
-
-      workspaceCrates = [
-        {
-          attr = "clinnet";
-          package = "clinnet";
-          path = ./crates/clinnet;
-          usesSymbolica = false;
-        }
-        {
-          attr = "linnet";
-          package = "linnet";
-          path = ./crates/linnet;
-          usesSymbolica = false;
-        }
-        {
-          attr = "spenso-macros";
-          package = "spenso-macros";
-          path = ./crates/spenso-macros;
-          usesSymbolica = true;
-        }
-        {
-          attr = "vakint";
-          package = "vakint";
-          path = ./crates/vakint;
-          usesSymbolica = true;
-        }
-        {
-          attr = "linnest";
-          package = "linnest";
-          path = ./crates/linnest;
-          usesSymbolica = false;
-        }
-        {
-          attr = "linnet-py";
-          package = "linnet-py";
-          path = ./crates/linnet-py;
-          usesSymbolica = false;
-        }
-        {
-          attr = "spenso";
-          package = "spenso";
-          path = ./crates/spenso;
-          usesSymbolica = true;
-        }
-        {
-          attr = "idenso";
-          package = "idenso";
-          path = ./crates/idenso;
-          usesSymbolica = true;
-        }
-        {
-          attr = "spenso-hep-lib";
-          package = "spenso-hep-lib";
-          path = ./crates/spenso-hep-lib;
-          usesSymbolica = true;
-        }
-        {
-          attr = "spynso3";
-          package = "spynso3";
-          path = ./crates/spynso3;
-          usesSymbolica = true;
-        }
-        {
-          attr = "gammalooprs";
-          package = "gammalooprs";
-          path = ./crates/gammalooprs;
-          usesSymbolica = true;
-        }
-        {
-          attr = "gammaloop-api";
-          package = "gammaloop-api";
-          path = ./crates/gammaloop-api;
-          usesSymbolica = true;
-        }
-      ];
 
       licensePreCheck = ''
         if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
@@ -239,86 +191,11 @@
         fi
       '';
 
-      # Package builds still need the full workspace crate tree because several crates embed
-      # non-Rust assets (templates, FORM sources, wasm payloads) at compile time, but they do
-      # not need integration tests in their source closure.
-      fileSetForCrate = _: workspaceBuildSrc;
-
-      cargoExtraArgsForPackages = packages:
-        lib.concatStringsSep " " (["--locked"] ++ map (package: "-p ${package}") packages);
-
-      mkDummySrc = source:
-        craneLib.mkDummySrc {
-          src = source;
-          cleanCargoTomlFilter = craneLib.filters.cargoTomlAggressive;
-        };
-
-      mkSubsetArtifacts = {
-        pname,
-        packages,
-        cargoArtifacts ? null,
-        src ? workspaceBuildSrc,
-        extraArgs ? {},
-        cargoBuildCommand ? null,
-        buildPhaseCargoCommand ? null,
-      }:
-        craneLib.buildDepsOnly ((ciArgs // extraArgs)
-          // {
-            inherit pname cargoArtifacts;
-            inherit (apiMeta) version;
-            dummySrc = mkDummySrc src;
-            cargoExtraArgs = cargoExtraArgsForPackages packages;
-            doCheck = false;
-          }
-          // lib.optionalAttrs (cargoBuildCommand != null) {
-            inherit cargoBuildCommand;
-          }
-          // lib.optionalAttrs (buildPhaseCargoCommand != null) {
-            inherit buildPhaseCargoCommand;
-          });
-
-      nextestDerivationArgs = {
-        CARGO_PROFILE = ciTestCargoProfile;
-        INSTA_WORKSPACE_ROOT = ".";
-        nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
-      };
-
-      nextestExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
-
-      mkNextestArtifacts = {
-        pname,
-        packages,
-        cargoArtifacts ? null,
-        src ? workspaceTestSrc,
-      }:
-        mkSubsetArtifacts {
-          inherit pname packages cargoArtifacts src;
-          extraArgs = nextestDerivationArgs;
-          cargoBuildCommand = "cargo test --profile ${ciTestCargoProfile} --no-run ${cargoExtraArgsForPackages packages}";
-          buildPhaseCargoCommand = "cargo test --profile ${ciTestCargoProfile} --no-run ${cargoExtraArgsForPackages packages}";
-        };
-
-      stagedCrateArtifactsState = lib.lists.foldl' (
-        state: crate: let
-          artifacts = mkSubsetArtifacts {
-            pname = "gammaloop-${crate.attr}-artifacts";
-            packages = [crate.package];
-            cargoArtifacts = state.previousArtifacts;
-          };
-        in {
-          previousArtifacts = artifacts;
-          artifactsByAttr = state.artifactsByAttr // {"${crate.attr}" = artifacts;};
-        }
-      ) {
-        previousArtifacts = null;
-        artifactsByAttr = {};
-      } workspaceCrates;
-
-      crateCargoArtifacts = stagedCrateArtifactsState.artifactsByAttr;
-
-      # Top-of-tree artifacts cover the full workspace crate graph and are reused for the
-      # higher-level clippy/doc/package/coverage builds.
-      cargoArtifacts = stagedCrateArtifactsState.previousArtifacts;
+      # Crane's documented workspace pattern is to build one shared dependency cache and
+      # reuse it across workspace lint/test/doc/package checks.
+      cargoArtifacts = craneLib.buildDepsOnly (ciArgs // {
+        pname = "gammaloop-workspace-deps";
+      });
 
       symbolicaCrateArgs = usesSymbolica:
         lib.optionalAttrs usesSymbolica {
@@ -328,107 +205,27 @@
 
       gammaloop-cli = craneLib.buildPackage (commonArgs
         // {
-          cargoArtifacts = builtins.getAttr "gammaloop-api" crateCargoArtifacts;
+          inherit cargoArtifacts;
           buildType = "dev-optim";
           doCheck = false;
           pname = "gammaloop";
           inherit (apiMeta) version;
-          src = fileSetForCrate ./crates/gammaloop-api;
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
-      stagedNextestArtifactsState = lib.lists.foldl' (
-        state: crate: let
-          artifacts = mkNextestArtifacts {
-            pname = "gammaloop-nextest-${crate.attr}-artifacts";
-            packages = [crate.package];
-            cargoArtifacts = state.previousArtifacts;
-          };
-        in {
-          previousArtifacts = artifacts;
-          artifactsByAttr = state.artifactsByAttr // {"${crate.attr}" = artifacts;};
-        }
-      ) {
-        previousArtifacts = cargoArtifacts;
-        artifactsByAttr = {};
-      } workspaceCrates;
-
-      nextestCargoArtifacts = stagedNextestArtifactsState.artifactsByAttr;
-
-      integrationNextestCargoArtifacts = mkNextestArtifacts {
-        pname = "gammaloop-nextest-integration-artifacts";
-        packages = ["gammaloop-integration-tests"];
-        cargoArtifacts = stagedNextestArtifactsState.previousArtifacts;
-      };
-
-      symbolicaNextestArgs = usesSymbolica:
-        lib.optionalAttrs usesSymbolica {
-          preCheck = licensePreCheck;
-          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-        };
-
-      packageClippyChecks = lib.listToAttrs (map (crate: {
-          name = "clippy-${crate.attr}";
-          value = craneLib.cargoClippy ((ciArgs // symbolicaCrateArgs crate.usesSymbolica)
-            // {
-              cargoArtifacts = builtins.getAttr crate.attr crateCargoArtifacts;
-              src = workspaceBuildSrc;
-              cargoExtraArgs = "--locked -p ${crate.package}";
-              cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            });
-        })
-        workspaceCrates);
-
-      nextestCheckForPackages = {
-        checkName,
-        packages,
-        cargoArtifacts,
-        usesSymbolica ? false,
-      }:
-        {
-          name = checkName;
-          value = craneLib.cargoNextest ((ciArgs // nextestDerivationArgs)
-            // {
-              inherit cargoArtifacts;
-              src = workspaceTestSrc;
-              cargoExtraArgs = cargoExtraArgsForPackages packages;
-              cargoNextestExtraArgs = nextestExtraArgs;
-            }
-            // symbolicaNextestArgs usesSymbolica);
-        };
-
-      packageNextestChecks = lib.listToAttrs (map (crate:
-          nextestCheckForPackages {
-            checkName = "nextest-${crate.attr}";
-            packages = [crate.package];
-            cargoArtifacts = builtins.getAttr crate.attr nextestCargoArtifacts;
-            usesSymbolica = crate.usesSymbolica;
-          })
-        workspaceCrates);
-
-      integrationNextestCheck = nextestCheckForPackages {
-        checkName = "nextest-integration";
-        packages = ["gammaloop-integration-tests"];
-        cargoArtifacts = integrationNextestCargoArtifacts;
-        usesSymbolica = true;
-      };
-
       impureCheckRunnerTargets =
-        (map (crate: {
-            runnerAttr = "nix-ci-check-clippy-${crate.attr}";
-            checkAttr = "clippy-${crate.attr}";
-          })
-          (builtins.filter (crate: crate.usesSymbolica) workspaceCrates))
-        ++
-        (map (crate: {
-            runnerAttr = "nix-ci-check-nextest-${crate.attr}";
-            checkAttr = "nextest-${crate.attr}";
-          })
-          (builtins.filter (crate: crate.usesSymbolica) workspaceCrates))
-        ++ [
+        [
           {
-            runnerAttr = "nix-ci-check-nextest-integration";
-            checkAttr = "nextest-integration";
+            runnerAttr = "nix-ci-check-gammaloop-clippy";
+            checkAttr = "gammaloop-clippy";
+          }
+          {
+            runnerAttr = "nix-ci-check-gammaloop-doctest";
+            checkAttr = "gammaloop-doctest";
+          }
+          {
+            runnerAttr = "nix-ci-check-gammaloop-nextest";
+            checkAttr = "gammaloop-nextest";
           }
         ];
 
@@ -457,27 +254,45 @@
           # Keep existing check names for CI compatibility.
           gammaloop = gammaloop-cli;
 
-          gammaloop-clippy = craneLib.cargoClippy (ciArgs
+          gammaloop-clippy = craneLibClippy.cargoClippy (ciArgs
             // {
               inherit cargoArtifacts;
               cargoClippyExtraArgs = "--all-targets -- --deny warnings";
-            });
+            }
+            // symbolicaCrateArgs true);
 
           gammaloop-doc = craneLib.cargoDoc (ciArgs
             // {
               inherit cargoArtifacts;
             });
 
-          gammaloop-fmt = craneLib.cargoFmt {
-            inherit src;
+          gammaloop-doctest = craneLib.cargoDocTest (ciArgs
+            // {
+              inherit cargoArtifacts;
+              src = workspaceTestSrc;
+            }
+            // symbolicaCrateArgs true);
+
+          gammaloop-fmt = craneLibFmt.cargoFmt {
+            src = workspaceFmtSrc;
             pname = "gammaloop-workspace";
             inherit (apiMeta) version;
           };
-
-          ${integrationNextestCheck.name} = integrationNextestCheck.value;
         }
-        // packageClippyChecks
-        // packageNextestChecks;
+        // {
+          gammaloop-nextest = craneLib.cargoNextest (ciArgs
+            // {
+              inherit cargoArtifacts;
+              src = workspaceTestSrc;
+              INSTA_WORKSPACE_ROOT = ".";
+              nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [pkgs.form];
+              cargoNextestExtraArgs = "--profile ci_gammaloop --no-fail-fast --final-status-level fail --no-tests=pass --run-ignored all";
+            }
+            // {
+              preCheck = licensePreCheck;
+              SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+            });
+        };
 
       packages =
         {

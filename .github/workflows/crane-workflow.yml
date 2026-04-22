@@ -41,83 +41,14 @@ jobs:
       - name: Check formatting
         run: nix build ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-fmt" --print-build-logs
 
-      - name: Clippy clinnet
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-clinnet" --print-build-logs
+      - name: Run clippy
+        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-clippy" --print-build-logs
 
-      - name: Clippy linnet
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-linnet" --print-build-logs
-
-      - name: Clippy spenso-macros
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-spenso-macros" --print-build-logs
-
-      - name: Clippy vakint
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-vakint" --print-build-logs
-
-      - name: Clippy linnest
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-linnest" --print-build-logs
-
-      - name: Clippy linnet-py
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-linnet-py" --print-build-logs
-
-      - name: Clippy spenso
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-spenso" --print-build-logs
-
-      - name: Clippy idenso
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-idenso" --print-build-logs
-
-      - name: Clippy spenso-hep-lib
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-spenso-hep-lib" --print-build-logs
-
-      - name: Clippy spynso3
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-spynso3" --print-build-logs
-
-      - name: Clippy gammalooprs
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-gammalooprs" --print-build-logs
-
-      - name: Clippy gammaloop-api
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.clippy-gammaloop-api" --print-build-logs
-
-      - name: Test clinnet
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-clinnet" --print-build-logs
-
-      - name: Test linnet
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-linnet" --print-build-logs
-
-      - name: Test spenso-macros
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-spenso-macros" --print-build-logs
-
-      - name: Test vakint
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-vakint" --print-build-logs
-
-      - name: Test linnest
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-linnest" --print-build-logs
-
-      - name: Test linnet-py
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-linnet-py" --print-build-logs
-
-      - name: Test spenso
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-spenso" --print-build-logs
-
-      - name: Test idenso
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-idenso" --print-build-logs
-
-      - name: Test spenso-hep-lib
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-spenso-hep-lib" --print-build-logs
-
-      - name: Test spynso3
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-spynso3" --print-build-logs
-
-      - name: Test gammalooprs
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-gammalooprs" --print-build-logs
-
-      - name: Test gammaloop-api
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-gammaloop-api" --print-build-logs
-
-      - name: Test integration
-        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.nextest-integration" --print-build-logs
+      - name: Run nextest
+        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-nextest" --print-build-logs
 
       - name: Run doctests
-        run: nix develop --command cargo test --doc --verbose
+        run: nix build --impure ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-doctest" --print-build-logs
 
       - name: Build documentation
         run: nix build ".#checks.${{ steps.nix_meta.outputs.system }}.gammaloop-doc" --print-build-logs

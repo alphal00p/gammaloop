@@ -85,24 +85,9 @@ clippy *lint_args:
         cargo clippy --workspace --all-targets --locked
     fi
 
-# Run workspace clippy via Nix
+# Run workspace clippy via Nix (same as CI)
 clippy-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-clippy
-
-# Run package-local clippy checks via Nix (same as CI)
-clippy-nix-all:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-clinnet
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-linnet
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spenso-macros
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-vakint
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-linnest
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-linnet-py
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spenso
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-idenso
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spenso-hep-lib
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-spynso3
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-gammalooprs
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').clippy-gammaloop-api
 
 # Check formatting via Nix (same as CI)
 fmt-check-nix:
@@ -119,6 +104,10 @@ deny-nix:
 # Build documentation via Nix (same as CI)
 doc-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doc
+
+# Run doctests via Nix (same as CI)
+doctest-nix:
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doctest
 
 test:
     cargo nextest run --workspace --cargo-profile dev-optim -P local_test
@@ -273,27 +262,11 @@ test_gammaloop *args:
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all
 
-# Run the staged package-local nextest checks locally (same as CI)
+# Run workspace nextest via Nix (same as CI)
 test-nix-all:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-clinnet
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-linnet
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spenso-macros
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-vakint
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-linnest
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-linnet-py
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spenso
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-idenso
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spenso-hep-lib
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-spynso3
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-gammalooprs
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-gammaloop-api
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').nextest-integration
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest
 
-# Run a specific CI nextest check via Nix
-test-nix-check CHECK:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').{{ CHECK }}
-
-# Run the staged CI nextest sequence via Nix
+# Run workspace nextest via Nix
 test-nix:
     just test-nix-all
 
@@ -301,8 +274,8 @@ test-nix:
 coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
-# Run all CI checks locally (release mode)
-ci-checks: clippy-nix-all fmt-check-nix audit-nix deny-nix doc-nix test-nix
+# Run all CI checks locally (same as CI)
+ci-checks: clippy-nix fmt-check-nix audit-nix deny-nix doc-nix doctest-nix test-nix
 
 # Run tests in release mode (faster execution)
 test-release TEST_NAME="":
