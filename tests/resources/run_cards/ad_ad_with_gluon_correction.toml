@@ -25,8 +25,12 @@ name = "ad_ad_with_gluon_correction"
 name = "generate"
 commands = [
   "import model sm-default",
-  "import graphs ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot",
-  "generate",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "import graphs ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot -p adad -i adad_gluon",
+  "generate existing -p adad -i adad_gluon",
+  "set global kv global.generation.uv.generate_integrated=false",
+  "import graphs ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot -p adad_no_integrated_UV -i adad_gluon",
+  "generate existing -p adad_no_integrated_UV -i adad_gluon",
 ]
 
 [default_runtime_settings.kinematics]
@@ -53,3 +57,9 @@ store_additional_weights_in_event = false
 integral_unit = "none"
 mu_r = 20.0
 m_uv = 20.0
+
+[default_runtime_settings.integrator]
+target_relative_accuracy = 0.00001
+n_increase = 0
+n_start = 1000000
+n_max = 200000000000

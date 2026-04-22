@@ -26,8 +26,12 @@ name = "epem_a_bbx"
 name = "generate"
 commands = [
   "import model sm-default",
-  "import graphs ./tests/resources/graphs/uv_tests/epem_a_bbx.dot",
-  "generate",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "import graphs ./tests/resources/graphs/uv_tests/epem_a_bbx.dot -p epem_a_bbx -i epem_a_bbx",
+  "generate existing -p epem_a_bbx -i epem_a_bbx",
+  "set global kv global.generation.uv.generate_integrated=false",
+  "import graphs ./tests/resources/graphs/uv_tests/epem_a_bbx.dot -p epem_a_bbx_no_integrated_UV -i epem_a_bbx",
+  "generate existing -p epem_a_bbx_no_integrated_UV -i epem_a_bbx",
 ]
 
 [default_runtime_settings.kinematics]
