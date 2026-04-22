@@ -32,7 +32,6 @@ use linnet::half_edge::involution::EdgeVec;
 use linnet::half_edge::involution::Orientation;
 use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use momtrop::SampleGenerator;
-use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use spenso::algebra::algebraic_traits::IsZero;
