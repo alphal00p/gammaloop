@@ -257,6 +257,7 @@
           gammaloop-clippy = craneLibClippy.cargoClippy (ciArgs
             // {
               inherit cargoArtifacts;
+              src = workspaceTestSrc;
               cargoClippyExtraArgs = "--all-targets -- --deny warnings";
             }
             // symbolicaCrateArgs true);
@@ -264,6 +265,7 @@
           gammaloop-doc = craneLib.cargoDoc (ciArgs
             // {
               inherit cargoArtifacts;
+              src = workspaceTestSrc;
             });
 
           gammaloop-doctest = craneLib.cargoDocTest (ciArgs
