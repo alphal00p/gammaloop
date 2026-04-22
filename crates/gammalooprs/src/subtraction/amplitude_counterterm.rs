@@ -69,19 +69,17 @@ pub struct AmplitudeCountertermData {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermAtom {
-    pub parametric_local: Atom,
-    pub parametric_integrated: Atom,
+    pub parametric: Atom,
 }
 
 impl AmplitudeCountertermAtom {
     pub(crate) fn is_generated(&self) -> bool {
-        self.parametric_local != Atom::new() || self.parametric_integrated != Atom::new()
+        self.parametric != Atom::new()
     }
 
     pub(crate) fn zero_like(&self) -> Self {
         Self {
-            parametric_local: Atom::Zero,
-            parametric_integrated: Atom::Zero,
+            parametric: Atom::Zero,
         }
     }
 
@@ -96,7 +94,7 @@ impl AmplitudeCountertermAtom {
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
         let (evaluator_stack, timings) = EvaluatorStack::new_with_timings(
-            &[&self.parametric_local, &self.parametric_integrated],
+            std::slice::from_ref(&self.parametric),
             param_builder,
             orientations.as_slice().as_ref(),
             None,
@@ -114,8 +112,7 @@ impl AmplitudeCountertermAtom {
 
     pub(crate) fn new() -> Self {
         Self {
-            parametric_local: Atom::new(),
-            parametric_integrated: Atom::new(),
+            parametric: Atom::new(),
         }
     }
 }
@@ -647,19 +644,19 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .map(DualOrNot::unwrap_real)
             .collect_vec();
 
-        let final_result = if results.len() >= 2 {
-            debug!(
-                "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
-                results[0], results[1], prefactor
-            );
-            (&results[0] + &results[1]) * prefactor
-        } else {
-            let mut total_ct = Complex::new_re(self.rstar_sample.zero());
-            for value in results.iter() {
-                total_ct += value;
-            }
-            total_ct * prefactor
+        let [total_ct] = results.as_slice() else {
+            return Err(color_eyre::eyre::eyre!(
+                "Amplitude threshold counterterms should compile to exactly one combined atom, got {} outputs",
+                results.len()
+            ));
         };
+
+        debug!(
+            "results\ncombined ct:   {:+16e}\nprefactor:     {:+16e}",
+            total_ct, prefactor
+        );
+
+        let final_result = total_ct.clone() * prefactor;
 
         debug!(
             ct_eval = format!("{:+16e}", final_result),
@@ -721,8 +718,7 @@ mod tests {
     #[test]
     fn empty_amplitude_counterterm_atom_is_not_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::new(),
-            parametric_integrated: Atom::new(),
+            parametric: Atom::new(),
         };
 
         assert!(!atom.is_generated());
@@ -731,8 +727,7 @@ mod tests {
     #[test]
     fn non_empty_amplitude_counterterm_atom_is_generated() {
         let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::var(symbol!("x")),
-            parametric_integrated: Atom::new(),
+            parametric: Atom::var(symbol!("x")),
         };
 
         assert!(atom.is_generated());
@@ -741,14 +736,12 @@ mod tests {
     #[test]
     fn zero_like_amplitude_counterterm_atom_is_zero() {
         let atom = AmplitudeCountertermAtom {
-            parametric_local: Atom::var(symbol!("x")),
-            parametric_integrated: Atom::var(symbol!("y")),
+            parametric: Atom::var(symbol!("x")),
         };
 
         let zeroed = atom.zero_like();
 
-        assert_eq!(zeroed.parametric_local, Atom::Zero);
-        assert_eq!(zeroed.parametric_integrated, Atom::Zero);
+        assert_eq!(zeroed.parametric, Atom::Zero);
     }
 
     #[test]

@@ -1068,13 +1068,9 @@ impl AmplitudeGraph {
                 "threshold counterterm generation not yet implemented for raised"
             );
             let integrand = expr.integrands.pop().unwrap();
-            let local = &local_prefactor * &integrand;
-            let integrated = &integrated_prefactor * integrand;
+            let parametric = (&local_prefactor + &integrated_prefactor) * &integrand;
 
-            let counterterm_atom = AmplitudeCountertermAtom {
-                parametric_local: local,
-                parametric_integrated: integrated,
-            };
+            let counterterm_atom = AmplitudeCountertermAtom { parametric };
             let esurfaces = expr.cuts.residue_selector.left_th_cut.unwrap();
             let esurface_id = esurfaces.esurface_ids[0];
 
