@@ -1,5 +1,7 @@
 # Gammaloop build and development commands
 
+ci_cargo_profile := "dev-optim"
+
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:
     cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim
@@ -65,7 +67,7 @@ check:
     cargo check --workspace --all-targets --locked
 
 doc:
-    cargo doc --workspace --no-deps --locked
+    cargo doc --workspace --no-deps --locked --profile {{ ci_cargo_profile }}
 
 # Format code
 fmt *lint_args:
@@ -80,9 +82,9 @@ fmt *lint_args:
 clippy *lint_args:
     #!/usr/bin/env bash
     if [ -n "{{ lint_args }}" ]; then
-        cargo clippy --workspace --all-targets --locked {{ lint_args }}
+        cargo clippy --workspace --all-targets --locked --profile {{ ci_cargo_profile }} {{ lint_args }}
     else
-        cargo clippy --workspace --all-targets --locked
+        cargo clippy --workspace --all-targets --locked --profile {{ ci_cargo_profile }}
     fi
 
 # Run workspace clippy via Nix (same as CI)
@@ -304,7 +306,7 @@ test-ci TEST_NAME="":
     )
     cmd=(
         cargo nextest run
-        --cargo-profile dev-optim
+        --cargo-profile {{ ci_cargo_profile }}
         --profile ci_gammaloop
         --locked
         --no-fail-fast

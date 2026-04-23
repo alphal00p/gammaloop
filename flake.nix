@@ -29,15 +29,18 @@
       inherit (pkgs) lib;
 
       baseCraneLib = crane.mkLib pkgs;
-      stableToolchain = fenix.packages.${system}.stable;
+      fenixPkgs = fenix.packages.${system};
+      stableToolchain = fenixPkgs.stable;
 
-      ciToolchain = stableToolchain.withComponents [
-        "cargo"
-        "clippy"
-        "llvm-tools"
-        "rust-std"
-        "rustc"
-        "rustfmt"
+      ciToolchain = fenixPkgs.combine [
+        stableToolchain.cargo
+        stableToolchain.clippy
+        stableToolchain.rust-src
+        stableToolchain.rust-std
+        stableToolchain.rustc
+        stableToolchain.llvm-tools
+        stableToolchain.rustfmt
+        fenixPkgs.targets.wasm32-unknown-unknown.stable.rust-std
       ];
 
       craneLib =
@@ -108,14 +111,14 @@
 
       workspaceMemberDirs = let
         crateEntries = builtins.readDir ./crates;
-        crateMemberDirs =
-          map (name: "crates/${name}") (
-            lib.filter (
-              name:
-                crateEntries.${name} == "directory"
-                && builtins.pathExists (workspaceRoot + "/crates/${name}/Cargo.toml")
-            ) (builtins.attrNames crateEntries)
-          );
+        crateMemberDirs = map (name: "crates/${name}") (
+          lib.filter (
+            name:
+              crateEntries.${name}
+              == "directory"
+              && builtins.pathExists (workspaceRoot + "/crates/${name}/Cargo.toml")
+          ) (builtins.attrNames crateEntries)
+        );
       in
         crateMemberDirs ++ ["tests"];
 
@@ -132,23 +135,23 @@
         )
         workspaceMemberDirs;
 
-      autoCargoTargetPaths =
-        lib.sort (left: right: left < right) (
-          lib.concatMap (
-            dir: let
-              entries = builtins.readDir (workspaceRoot + "/${dir}");
-            in
-              map (name: "${dir}/${name}") (
-                lib.filter (
-                  name:
-                    entries.${name} == "regular"
-                    && lib.hasSuffix ".rs" name
-                    && name != "mod.rs"
-                ) (builtins.attrNames entries)
-              )
-          )
-          autoCargoTargetDirs
-        );
+      autoCargoTargetPaths = lib.sort (left: right: left < right) (
+        lib.concatMap (
+          dir: let
+            entries = builtins.readDir (workspaceRoot + "/${dir}");
+          in
+            map (name: "${dir}/${name}") (
+              lib.filter (
+                name:
+                  entries.${name}
+                  == "regular"
+                  && lib.hasSuffix ".rs" name
+                  && name != "mod.rs"
+              ) (builtins.attrNames entries)
+            )
+        )
+        autoCargoTargetDirs
+      );
 
       dummyCargoTarget = pkgs.writeText "crane-dummy-cargo-target.rs" ''
         #![allow(clippy::all)]
@@ -168,6 +171,9 @@
 
       # Env var name Cargo uses to pick the linker for this target
       cargoLinkerVar = "CARGO_TARGET_${lib.toUpper (lib.replaceStrings ["-"] ["_"] rustTarget)}_LINKER";
+      wasmCargoLinkerVar = "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_LINKER";
+      wasmCargoRustflagsVar = "CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS";
+      wasmLinker = "${ciToolchain}/lib/rustlib/${rustTarget}/bin/rust-lld";
 
       # Force GCC as both C/C++ compiler and Rust linker.
       nixCc = "${pkgs.gcc}/bin/gcc";
@@ -219,7 +225,8 @@
         CC = nixCc;
         CXX = nixCxx;
         "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
+        "${wasmCargoLinkerVar}" = wasmLinker;
+        "${wasmCargoRustflagsVar}" = ''--cfg getrandom_backend="wasm_js"'';
 
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
@@ -249,13 +256,16 @@
 
       # Crane's documented workspace pattern is to build one shared dependency cache and
       # reuse it across workspace lint/test/doc/package checks.
-      cargoArtifacts = craneLib.buildDepsOnly (ciArgs // {
-        pname = "gammaloop-workspace-deps";
-        src = workspaceTestSrc;
-        extraDummyScript = lib.concatMapStringsSep "\n" (path: ''
-          install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
-        '') autoCargoTargetPaths;
-      });
+      cargoArtifacts = craneLib.buildDepsOnly (ciArgs
+        // {
+          pname = "gammaloop-workspace-deps";
+          src = workspaceTestSrc;
+          extraDummyScript =
+            lib.concatMapStringsSep "\n" (path: ''
+              install -D -m 0644 ${dummyCargoTarget} "$out/${path}"
+            '')
+            autoCargoTargetPaths;
+        });
 
       symbolicaCrateArgs = usesSymbolica:
         lib.optionalAttrs usesSymbolica {
@@ -274,17 +284,16 @@
           cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
-      impureCheckRunnerTargets =
-        [
-          {
-            runnerAttr = "nix-ci-check-gammaloop-doctest";
-            checkAttr = "gammaloop-doctest";
-          }
-          {
-            runnerAttr = "nix-ci-check-gammaloop-nextest";
-            checkAttr = "gammaloop-nextest";
-          }
-        ];
+      impureCheckRunnerTargets = [
+        {
+          runnerAttr = "nix-ci-check-gammaloop-doctest";
+          checkAttr = "gammaloop-doctest";
+        }
+        {
+          runnerAttr = "nix-ci-check-gammaloop-nextest";
+          checkAttr = "gammaloop-nextest";
+        }
+      ];
 
       impureCheckRunnerPackages = lib.listToAttrs (map (target: {
           name = target.runnerAttr;
@@ -388,73 +397,79 @@
         CC = nixCc;
         CXX = nixCxx;
         "${cargoLinkerVar}" = nixCc;
-        RUSTFLAGS = "-C linker=${nixCc}";
+        "${wasmCargoLinkerVar}" = wasmLinker;
+        "${wasmCargoRustflagsVar}" = ''--cfg getrandom_backend="wasm_js"'';
 
         LD_LIBRARY_PATH = runtimeLibPath;
         DYLD_LIBRARY_PATH = runtimeLibPath;
 
-        # shellHook = ''
-        #   export CC="${nixCc}"
-        #   export CXX="${nixCxx}"
-        #   export ${cargoLinkerVar}="${nixCc}"
-        # '';
+        shellHook = ''
+          export CC="${nixCc}"
+          export CXX="${nixCxx}"
+          export ${cargoLinkerVar}="${nixCc}"
+          export ${wasmCargoLinkerVar}="${wasmLinker}"
+          export ${wasmCargoRustflagsVar}='--cfg getrandom_backend="wasm_js"'
+          unset RUSTFLAGS
+        '';
 
-        packages = with pkgs; [
-          tdf
-          cargo-flamegraph
-          yaml-language-server
-          just
-          dot-language-server
-          cargo-insta
-          cargo-udeps
-          cargo-machete
-          openssl
-          pyright
-          gmp
-          mpfr
-          libmpc
-          form
-          gnum4
-          nickel
-          nls
-          typst
-          cargo-nextest
-          pkg-config
-          cargo-deny
-          cargo-edit
-          cargo-watch
-          bacon
-          gfortran
-          gcc
-          rust-script
-          uv
-          graphviz
-          mupdf
-          tinymist
-          typstyle
-          poppler-utils
-          rust-analyzer
-          maturin
-          virtualenv
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "clinnet";
-            version = "0.1.8";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
-            };
-            cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
-          })
-          (pkgs.rustPlatform.buildRustPackage rec {
-            pname = "rscls";
-            version = "0.2.3";
-            src = pkgs.fetchCrate {
-              inherit pname version;
-              sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
-            };
-            cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
-          })
-        ];
+        packages =
+          [ciToolchain]
+          ++ (with pkgs; [
+            tdf
+            cargo-flamegraph
+            yaml-language-server
+            just
+            dot-language-server
+            cargo-insta
+            cargo-udeps
+            cargo-machete
+            openssl
+            pyright
+            gmp
+            mpfr
+            libmpc
+            form
+            gnum4
+            nickel
+            nls
+            typst
+            cargo-nextest
+            pkg-config
+            cargo-deny
+            cargo-edit
+            cargo-watch
+            bacon
+            gfortran
+            gcc
+            rust-script
+            uv
+            graphviz
+            mupdf
+            tinymist
+            typstyle
+            poppler-utils
+            rust-analyzer
+            maturin
+            virtualenv
+            (pkgs.rustPlatform.buildRustPackage rec {
+              pname = "clinnet";
+              version = "0.1.8";
+              src = pkgs.fetchCrate {
+                inherit pname version;
+                sha256 = "sha256-CbZBHbf+8bIkdiSI5LMFO2Qc3zDr9UEBEry+fZOuep8=";
+              };
+              cargoHash = "sha256-GTixU2ZJZVMrEWLOfWjEnXMVLG2+cpkPbJuNnkTuFfo=";
+            })
+            (pkgs.rustPlatform.buildRustPackage rec {
+              pname = "rscls";
+              version = "0.2.3";
+              src = pkgs.fetchCrate {
+                inherit pname version;
+                sha256 = "sha256-tahAhWCjhIVjbJ1NzrtiHBwGb/FBmUdK4XP9VlSPqh0=";
+              };
+              cargoHash = "sha256-JikjBTFeDh4XHBm57yiorsCwZhKikz0aiWNOTaMn0Vo=";
+            })
+          ]);
       };
     });
 }
