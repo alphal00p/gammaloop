@@ -165,7 +165,7 @@ impl<T: Hash, I: Hash> Hash for SparseTensor<T, I> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         let mut vecel: Vec<_> = self.elements.iter().collect();
 
-        vecel.sort_by(|(i, _), (j, _)| i.cmp(j));
+        vecel.sort_by_key(|(i, _)| *i);
 
         vecel.hash(state);
         self.structure.hash(state);

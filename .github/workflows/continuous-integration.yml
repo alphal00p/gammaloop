@@ -44,6 +44,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            form \
             pkg-config \
             libssl-dev \
             libgmp-dev \
@@ -57,7 +58,7 @@ jobs:
         if: startsWith(matrix.os, 'macos-')
         run: |
           brew update
-          brew install pkg-config openssl@3 gmp mpfr libmpc
+          brew install pkg-config openssl@3 gmp mpfr libmpc just form
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -74,6 +75,13 @@ jobs:
           if [ -z "${SYMBOLICA_LICENSE:-}" ]; then
             echo "SYMBOLICA_LICENSE=GAMMALOOP_USER" >> "$GITHUB_ENV"
           fi
+
+      - name: Verify external tools
+        run: |
+          command -v form
+          form
+          command -v python3
+          python3 --version
 
       - name: Run tests
         run: just test-ci

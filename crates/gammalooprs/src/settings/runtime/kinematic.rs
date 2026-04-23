@@ -36,20 +36,11 @@ pub struct KinematicsSettings {
     pub externals: Externals,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct KinematicsSettingsParser {
     pub e_cm: Option<f64>,
     pub externals: Externals,
-}
-
-impl Default for KinematicsSettingsParser {
-    fn default() -> Self {
-        Self {
-            e_cm: None,
-            externals: Externals::default(),
-        }
-    }
 }
 
 impl<'de> Deserialize<'de> for KinematicsSettings {

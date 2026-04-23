@@ -1,0 +1,12 @@
+digraph epem_a_bbx {
+
+    // projector = "spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(1))),spenso::cof(3,gammalooprs::hedge(3)))*(Q(1,spenso::mink(4,1))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(3)),spenso::mink(4,1)))*spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(2)))"
+    ext    [style=invis];
+    ext -> v1:0    [id=0 particle="e+"];
+    ext -> v1:1    [id=1 particle="e-"];
+    v4:2  -> ext [id=2 particle="e+"];
+    v4:3  -> ext [id=3 particle="e-"];
+    v1  -> v2  [particle="a"]
+    v3  -> v4  [particle="a"]
+    v2 -> v3 -> v2 [particle="d"]
+}

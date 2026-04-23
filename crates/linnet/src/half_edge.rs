@@ -2359,7 +2359,6 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 
         let mut cycle_basis = vec![];
         let mut forest: SuBitGraph = self.empty_subgraph();
-
         // Iterate over all edges in the subgraph
         for hedge_index in subgraph.included_iter() {
             if visited_edges.includes(&hedge_index) {
@@ -2370,7 +2369,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
             let tree = SimpleTraversalTree::depth_first_traverse(self, subgraph, &root_node, None)?;
 
             let reachable_edges = tree.covers(subgraph);
-            let cuts = subgraph.included().subtract(&tree.tree_subgraph);
+            let cuts = reachable_edges.subtract(&tree.tree_subgraph);
 
             visited_edges.union_with(&reachable_edges);
             for c in cuts.included_iter() {

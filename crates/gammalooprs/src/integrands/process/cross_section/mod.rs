@@ -10,9 +10,9 @@ use crate::{
     },
     integrands::{
         HasIntegrand,
-        evaluation::{EvaluationMetaData, EvaluationResult, GraphEvaluationResult},
+        evaluation::{EvaluationResult, GraphEvaluationResult},
         process::{
-            ChannelIndex, ParamBuilder,
+            ChannelIndex, GraphTermEvaluationContext, ParamBuilder,
             evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
             param_builder::LUParams,
             prepare_buffered_event,
@@ -1094,13 +1094,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        model: &Model,
-        settings: &RuntimeSettings,
-        mut event_processing_runtime: Option<&mut EventProcessingRuntime>,
-        rotation: &Rotation,
-        evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
-        channel_id: Option<(ChannelIndex, F<T>)>,
+        mut context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>> {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter, &self.orientations);
@@ -1114,15 +1108,15 @@ impl GraphTerm for CrossSectionGraphTerm {
             };
             momentum_sample.loop_moms().len()
         ]);
-        let masses = self.graph.get_real_mass_vector(model);
-        let hel = settings.kinematics.externals.get_helicities();
+        let masses = self.graph.get_real_mass_vector(context.model);
+        let hel = context.settings.kinematics.externals.get_helicities();
         let mut cut_results: TiVec<RaisedCutId, Vec<Complex<F<T>>>> =
             ti_vec![Vec::new(); self.raised_data.raised_cut_groups.len()];
         let mut cut_threshold_counterterms = TiVec::<RaisedCutId, Complex<F<T>>>::new();
         let mut differential_result = GraphEvaluationResult::zero(momentum_sample.zero());
         let mut accepted_event_group = GenericEventGroup::default();
 
-        let momentum_sample = if let Some((channel_id, _alpha)) = &channel_id {
+        let momentum_sample = if let Some((channel_id, _alpha)) = &context.channel_id {
             MomentumSample {
                 sample: self.multi_channeling_setup.reinterpret_loop_momenta_impl(
                     *channel_id,
@@ -1173,30 +1167,33 @@ impl GraphTerm for CrossSectionGraphTerm {
                 function,
                 &F::from_f64(1.0),
                 2000,
-                &F::from_f64(settings.kinematics.e_cm),
+                &F::from_f64(context.settings.kinematics.e_cm),
             );
 
             debug!(
                 "tolerance for newton solver: {}",
-                F::from_f64(settings.kinematics.e_cm) * guess.epsilon()
+                F::from_f64(context.settings.kinematics.e_cm) * guess.epsilon()
             );
 
             debug!("solution: {:?}", solution);
 
             let prepared_event = prepare_buffered_event(
-                settings,
-                rotation,
-                event_processing_runtime.as_deref_mut(),
+                context.settings,
+                context.rotation,
+                context.event_processing_runtime.as_deref_mut(),
                 || {
                     let mut generated = self.generate_event_for_cut::<T>(
-                        model,
+                        context.model,
                         &solution,
                         &momentum_sample,
                         self.raised_data.raised_cut_groups[raised_cut].cuts[0],
                         &self.cuts[self.raised_data.raised_cut_groups[raised_cut].cuts[0]],
-                        channel_id.as_ref().map(|(channel_id, _)| *channel_id),
+                        context
+                            .channel_id
+                            .as_ref()
+                            .map(|(channel_id, _)| *channel_id),
                     )?;
-                    generated.inverse_rotate(rotation);
+                    generated.inverse_rotate(context.rotation);
                     Ok(generated)
                 },
             )?;
@@ -1230,8 +1227,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                     if let Some(dual_shape) = dual_shape {
                         let dual_t_for_integrand =
                             dual_shape.variable(0, solution.solution.clone());
-                        let dual_h_function =
-                            h_dual(&dual_t_for_integrand, None, None, &settings.lu_h_function);
+                        let dual_h_function = h_dual(
+                            &dual_t_for_integrand,
+                            None,
+                            None,
+                            &context.settings.lu_h_function,
+                        );
                         let dual_momenta_for_integrand = momentum_sample
                             .loop_moms()
                             .rescale_with_hyper_dual(&dual_t_for_integrand, None);
@@ -1278,7 +1279,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                             momentum_sample_with_duals,
                         )
                     } else {
-                        let h_function = h(&solution.solution, None, None, &settings.lu_h_function);
+                        let h_function = h(
+                            &solution.solution,
+                            None,
+                            None,
+                            &context.settings.lu_h_function,
+                        );
                         let rescaled_momenta = momentum_sample
                             .rescaled_loop_momenta(&solution.solution, Subspace::None);
 
@@ -1296,7 +1302,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
                 let lu_params = LUParams { h_function, tstar };
 
-                if !settings.subtraction.disable_threshold_subtraction {
+                if !context.settings.subtraction.disable_threshold_subtraction {
                     kinematic_point
                         .dualized_momentum_sample_cache
                         .push(rescaled_momenta.clone());
@@ -1308,8 +1314,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .push(esurface_derivatives.clone());
                 }
 
-                let prefactor =
-                    Complex::new_re(if let Some((_channel_index, _alpha)) = &channel_id {
+                let prefactor = Complex::new_re(
+                    if let Some((_channel_index, _alpha)) = &context.channel_id {
                         if matches!(lu_params.tstar, DualOrNot::Dual(_)) {
                             panic!("multi channeling with duals not supported yet");
                         }
@@ -1317,20 +1323,24 @@ impl GraphTerm for CrossSectionGraphTerm {
                         self.multi_channeling_setup.compute_prefactor_impl(
                             *_channel_index,
                             &rescaled_momenta,
-                            model,
+                            context.model,
                             _alpha,
                         )
                     } else {
                         F::from_f64(1.0)
-                    });
+                    },
+                );
 
                 let params = T::get_parameters(
                     &mut self.param_builder,
-                    (settings.general.enable_cache, settings.general.debug_cache),
+                    (
+                        context.settings.general.enable_cache,
+                        context.settings.general.debug_cache,
+                    ),
                     &self.graph,
                     &rescaled_momenta,
                     hel,
-                    &settings.additional_params(),
+                    &context.settings.additional_params(),
                     None,
                     None,
                     Some(&lu_params),
@@ -1340,9 +1350,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .evaluate(
                         params,
                         orientations,
-                        settings,
-                        evaluation_metadata,
-                        record_primary_timing,
+                        context.settings,
+                        context.evaluation_metadata,
+                        context.record_primary_timing,
                     )
                     .expect("evaluation failed")
                     .pop()
@@ -1380,8 +1390,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                 let pass_two_result = evaluate_evaluator_single(
                     pass_two_evaluator,
                     &params_for_pass_two,
-                    evaluation_metadata,
-                    record_primary_timing,
+                    context.evaluation_metadata,
+                    context.record_primary_timing,
                 );
 
                 debug!("pass_two_result: {:+16e}", pass_two_result);
@@ -1392,7 +1402,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 cut_results[raised_cut].push(bare_contribution);
             }
 
-            let ct_result = if settings.subtraction.disable_threshold_subtraction {
+            let ct_result = if context.settings.subtraction.disable_threshold_subtraction {
                 Complex::new_re(momentum_sample.zero())
             } else {
                 self.counterterm.evaluate(
@@ -1401,13 +1411,13 @@ impl GraphTerm for CrossSectionGraphTerm {
                     &self.reversed_edges[raised_cut],
                     &self.lmbs,
                     &self.graph,
-                    &self.graph.get_real_mass_vector(model),
-                    rotation,
-                    settings,
+                    &self.graph.get_real_mass_vector(context.model),
+                    context.rotation,
+                    context.settings,
                     &mut self.param_builder,
                     orientations,
-                    evaluation_metadata,
-                    record_primary_timing,
+                    context.evaluation_metadata,
+                    context.record_primary_timing,
                 )?
             };
 
@@ -1422,7 +1432,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     });
                 event.weight = bare_cut_total.clone() + threshold_counterterm_total;
 
-                if settings.general.store_additional_weights_in_event {
+                if context.settings.general.store_additional_weights_in_event {
                     event
                         .additional_weights
                         .weights
@@ -1471,10 +1481,14 @@ impl GraphTerm for CrossSectionGraphTerm {
             all_cut_result += ct_result;
         }
 
-        let resolved_integral_unit = settings.general.integral_unit.resolve_for_cross_section(
-            self.graph.initial_state_cut.iter_edges(&self.graph).count(),
-        );
-        let flux_factor = if settings.general.disable_flux_factor {
+        let resolved_integral_unit = context
+            .settings
+            .general
+            .integral_unit
+            .resolve_for_cross_section(
+                self.graph.initial_state_cut.iter_edges(&self.graph).count(),
+            );
+        let flux_factor = if context.settings.general.disable_flux_factor {
             F::from_f64(1.0)
         } else {
             match momentum_sample.external_moms().len() {
@@ -1496,7 +1510,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                         .graph
                         .initial_state_cut
                         .iter_edges(&self.graph)
-                        .map(|(_, e)| e.data.mass.value(model, &self.param_builder).unwrap())
+                        .map(|(_, e)| {
+                            e.data
+                                .mass
+                                .value(context.model, &self.param_builder)
+                                .unwrap()
+                        })
                         .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
                             acc * &mass * &mass
                         })
@@ -1515,7 +1534,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
         let final_result = all_cut_result * flux_factor.clone();
 
-        if settings.should_buffer_generated_events() {
+        if context.settings.should_buffer_generated_events() {
             let flux_factor = Complex::new_re(flux_factor);
             for event in accepted_event_group.iter_mut() {
                 event.weight *= flux_factor.clone();

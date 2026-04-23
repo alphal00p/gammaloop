@@ -1,0 +1,60 @@
+[cli_settings]
+[cli_settings.global]
+logfile_directive = "off"  # ;,gammalooprs[inspect]=off,gammalooprs[final_integrand]=debug,symbolica=off,gammalooprs[local_3d]=debug"#,gammalooprs[build_original_parametric_integrand]=debug"
+display_directive = "info,gammalooprs[compute]=debug,gammalooprs[new]=debug,poly::gcd =off"
+
+[cli_settings.global.log_style]
+include_fields = true
+full_line_source = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+store_atom = true
+compile = false
+summed = false
+summed_function_map = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = true
+check_esurface_at_generation = false
+
+[cli_settings.state]
+folder = "tests/artifacts/epem_a_bbx"
+name = "epem_a_bbx"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default",
+  "set global kv global.generation.uv.generate_integrated=true",
+  "import graphs ./tests/resources/graphs/uv_tests/epem_a_bbx.dot -p epem_a_bbx -i epem_a_bbx",
+  "generate existing -p epem_a_bbx -i epem_a_bbx",
+  "set global kv global.generation.uv.generate_integrated=false",
+  "import graphs ./tests/resources/graphs/uv_tests/epem_a_bbx.dot -p epem_a_bbx_no_integrated_UV -i epem_a_bbx",
+  "generate existing -p epem_a_bbx_no_integrated_UV -i epem_a_bbx",
+]
+
+[default_runtime_settings.kinematics]
+e_cm = 300.0
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+  [500.0, 0.0, 0.0, 500.0],
+  [500.0, 0.0, 0.0, -500.0],
+  [500.0, 500.0, 0.0, 0.0],
+  "dependent"
+]
+helicities = [+1, +1, -1, -1]
+
+[default_runtime_settings.general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+debug_cache = false
+generate_events = false
+store_additional_weights_in_event = false
+integral_unit = "none"
+mu_r = 20.0
+m_uv = 20.0

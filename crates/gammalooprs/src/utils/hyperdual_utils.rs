@@ -115,7 +115,7 @@ where
         match (self, rhs) {
             (DualOrNot::Dual(x), DualOrNot::Dual(y)) => {
                 assert_eq!(x.values.len(), y.values.len());
-                for (lhs, rhs) in x.values.iter_mut().zip(y.values.into_iter()) {
+                for (lhs, rhs) in x.values.iter_mut().zip(y.values) {
                     *lhs += rhs;
                 }
             }

@@ -637,7 +637,7 @@ fn parse_select_limits_and_graphs<I: ProcessIntegrandImpl>(
                 .len();
             if profile_limits
                 .iter()
-                .any(|limit| !limit.is_valid(loop_number).is_ok())
+                .any(|limit| limit.is_valid(loop_number).is_err())
             {
                 return Err(eyre!(
                     "One or more limits specified for graph '{}' in select_limits_and_graphs are not valid",
@@ -1055,14 +1055,15 @@ impl AmplitudeIntegrand {
                         });
                     }
 
-                    let (power_law_fit, cut_fits, component_fits) = limit_data.extract_power()?;
+                    let power_fits = limit_data.extract_power()?;
                     let mut report = build_single_limit_report(
                         ir_limit,
                         orientation_label,
-                        power_law_fit,
-                        build_cut_limit_reports(ir_limit.num_soft(), cut_fits),
+                        power_fits.total,
+                        build_cut_limit_reports(ir_limit.num_soft(), power_fits.per_cut),
                     );
-                    report.display_only_reports = build_display_only_limit_reports(component_fits);
+                    report.display_only_reports =
+                        build_display_only_limit_reports(power_fits.display_components);
                     reports.push(report);
                 }
 
@@ -1123,8 +1124,7 @@ impl AmplitudeIntegrand {
                             });
                         }
 
-                        let (power_law_fit, cut_fits, component_fits) =
-                            limit_data.extract_power()?;
+                        let power_fits = limit_data.extract_power()?;
                         let context_label = Some(match orientation_label.as_deref() {
                             Some(orientation_label) => {
                                 format!("{overlap_group_label} / {orientation_label}")
@@ -1135,11 +1135,11 @@ impl AmplitudeIntegrand {
                         let mut report = build_threshold_limit_report(
                             threshold_limit,
                             context_label,
-                            power_law_fit,
-                            build_cut_limit_reports(0, cut_fits),
+                            power_fits.total,
+                            build_cut_limit_reports(0, power_fits.per_cut),
                         );
                         report.display_only_reports =
-                            build_display_only_limit_reports(component_fits);
+                            build_display_only_limit_reports(power_fits.display_components);
                         reports.push(report);
                     }
                 }
@@ -1359,12 +1359,12 @@ impl CrossSectionIntegrand {
                 });
             }
 
-            let (power_law_fit, cut_fits, _component_fits) = limit_data.extract_power()?;
+            let power_fits = limit_data.extract_power()?;
             reports.push(build_single_limit_report(
                 ir_limit,
                 orientation_label,
-                power_law_fit,
-                build_cut_limit_reports(ir_limit.num_soft(), cut_fits),
+                power_fits.total,
+                build_cut_limit_reports(ir_limit.num_soft(), power_fits.per_cut),
             ));
         }
 
@@ -2141,14 +2141,17 @@ struct LimitData<T: FloatLike> {
     data: Vec<LambdaPointEval<T>>,
 }
 
+type PerCutPowerLawFits = Vec<(usize, Result<PowerLawFit>)>;
+type DisplayComponentPowerLawFits = Vec<(AdditionalWeightKey, Result<PowerLawFit>)>;
+
+struct ExtractedPowerFits {
+    total: PowerLawFit,
+    per_cut: PerCutPowerLawFits,
+    display_components: DisplayComponentPowerLawFits,
+}
+
 impl<T: FloatLike> LimitData<T> {
-    fn extract_power(
-        &self,
-    ) -> Result<(
-        PowerLawFit,
-        Vec<(usize, Result<PowerLawFit>)>,
-        Vec<(AdditionalWeightKey, Result<PowerLawFit>)>,
-    )> {
+    fn extract_power(&self) -> Result<ExtractedPowerFits> {
         let x = self
             .data
             .iter()
@@ -2232,7 +2235,11 @@ impl<T: FloatLike> LimitData<T> {
             );
         }
 
-        Ok((result, cut_fits, component_fits))
+        Ok(ExtractedPowerFits {
+            total: result,
+            per_cut: cut_fits,
+            display_components: component_fits,
+        })
     }
 }
 
@@ -3003,12 +3010,15 @@ mod tests {
             })
             .collect();
 
-        let (total_fit, _cut_fits, component_fits) = LimitData { data }.extract_power().unwrap();
+        let power_fits = LimitData { data }.extract_power().unwrap();
 
-        assert!((total_fit.exponent + 2.0).abs() < 1.0e-10);
-        assert_eq!(component_fits.len(), 2);
+        assert!((power_fits.total.exponent + 2.0).abs() < 1.0e-10);
+        assert_eq!(power_fits.display_components.len(), 2);
 
-        let component_fits = component_fits.into_iter().collect::<BTreeMap<_, _>>();
+        let component_fits = power_fits
+            .display_components
+            .into_iter()
+            .collect::<BTreeMap<_, _>>();
         let original_fit = component_fits
             .get(&AdditionalWeightKey::Original)
             .unwrap()

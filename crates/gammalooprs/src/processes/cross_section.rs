@@ -860,7 +860,7 @@ impl CrossSectionGraph {
                 let edges_in_cut = self
                     .graph
                     .iter_edges_of(&cut.cut)
-                    .map(|(_, _, e)| e.data.name.clone())
+                    .map(|(_, _, e)| e.data.name.value.clone())
                     .sorted()
                     .collect_vec();
 
@@ -1262,8 +1262,7 @@ impl CrossSectionGraph {
                             .surface_cache
                             .esurface_cache
                             .position(|esurface| esurface == &threshold_esurface)
-                            .unwrap()
-                            .into();
+                            .unwrap();
 
                         left_cut_threshold_data[cut_id].push(threshold_id);
                     }
@@ -1302,8 +1301,7 @@ impl CrossSectionGraph {
                             .surface_cache
                             .esurface_cache
                             .position(|esurface| esurface == &threshold_esurface)
-                            .unwrap()
-                            .into();
+                            .unwrap();
 
                         right_cut_threshold_data[cut_id].push(threshold_id);
                     }

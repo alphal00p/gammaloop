@@ -34,7 +34,7 @@ use crate::{
 };
 
 use super::{
-    Edge, Graph, LoopMomentumBasis, NumHedgeData, Vertex, get_cff_inverse_energy_product_impl,
+    Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, get_cff_inverse_energy_product_impl,
 };
 
 pub trait FeynmanGraph {
@@ -88,7 +88,7 @@ pub trait FeynmanGraph {
 }
 
 impl Deref for Graph {
-    type Target = HedgeGraph<Edge, Vertex, NumHedgeData>;
+    type Target = HedgeGraph<Edge, Vertex, HedgeData>;
 
     fn deref(&self) -> &Self::Target {
         &self.underlying
@@ -102,15 +102,14 @@ impl SplitPolarizations for Graph {
 }
 
 impl<'a, V, E: UVE> SplitPolarizations
-    for (&'a Vec<(PolDef, Atom)>, &'a HedgeGraph<E, V, NumHedgeData>)
+    for (&'a Vec<(PolDef, Atom)>, &'a HedgeGraph<E, V, HedgeData>)
 {
     fn polarizations(&self) -> Vec<Atom> {
         self.0.iter().map(|a| a.1.clone()).collect()
     }
 }
 
-impl<'a, V, E: UVE> ParamBuilderGraph
-    for (&'a Vec<(PolDef, Atom)>, &'a HedgeGraph<E, V, NumHedgeData>)
+impl<'a, V, E: UVE> ParamBuilderGraph for (&'a Vec<(PolDef, Atom)>, &'a HedgeGraph<E, V, HedgeData>)
 where
     for<'b> EdgeData<&'b E>: ReversibleEdge,
 {
@@ -148,7 +147,7 @@ where
     }
 }
 
-impl<V, E: UVE> ParamBuilderGraph for HedgeGraph<E, V, NumHedgeData>
+impl<V, E: UVE> ParamBuilderGraph for HedgeGraph<E, V, HedgeData>
 where
     for<'a> EdgeData<&'a E>: ReversibleEdge,
 {
@@ -692,7 +691,7 @@ impl FeynmanGraph for Graph {
                 })
                 .unwrap_or(Complex::new_re(F(1.0)));
 
-            scale *= Complex::new_re(e_cm.powi(vertex.dod)) * coupling_value;
+            scale *= Complex::new_re(e_cm.powi(vertex.dod.value)) * coupling_value;
         }
 
         for (_, _, edge_data) in self.iter_edges_of(
@@ -700,7 +699,7 @@ impl FeynmanGraph for Graph {
                 .full_filter()
                 .subtract(&self.external_filter::<SuBitGraph>()),
         ) {
-            scale *= Complex::new_re(e_cm.powi(edge_data.data.dod))
+            scale *= Complex::new_re(e_cm.powi(edge_data.data.dod.value))
         }
 
         scale.norm_squared().sqrt()

@@ -38,6 +38,11 @@ use symbolica::{
     try_parse,
 };
 
+type RationalExpressionTree = (
+    Vec<Atom>,
+    ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
+);
+
 pub const STANDALONE_EVALUATORS_VERSION: u32 = 3;
 
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
@@ -242,10 +247,7 @@ fn build_evaluator<A: ImportWithMap>(
     let (replacements, all_replacements, fn_map) = apply_fn_map_entries(fn_map_entries)?;
 
     if iterate {
-        let mut tree: Option<(
-            Vec<Atom>,
-            ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
-        )> = None;
+        let mut tree: Option<RationalExpressionTree> = None;
 
         for expr in &exprs {
             let eval = expr

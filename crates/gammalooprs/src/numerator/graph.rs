@@ -13,12 +13,32 @@ use spenso::{
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
 use crate::{
-    graph::{Edge, Graph, NumHedgeData, edge::ParseEdge},
+    graph::{Edge, Graph, HedgeData, edge::ParseEdge},
     model::ArcParticle,
     utils::GS,
 };
 
 use super::aind::Aind;
+
+pub trait HedgePolarizationData {
+    fn polarization(&self, builder: FunctionBuilder) -> Atom;
+
+    fn edge_spin_slots<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = spenso::structure::representation::LibrarySlot<Aind>> + 'a;
+}
+
+impl HedgePolarizationData for HedgeData {
+    fn polarization(&self, builder: FunctionBuilder) -> Atom {
+        HedgeData::polarization(self, builder)
+    }
+
+    fn edge_spin_slots<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = spenso::structure::representation::LibrarySlot<Aind>> + 'a {
+        HedgeData::edge_spin_slots(self)
+    }
+}
 
 pub trait GeneratePolarizations {
     /// Returns the polarizations of the given subgraph. One polarization per half-edge.
@@ -60,7 +80,7 @@ impl GeneratePolarizations for Graph {
     // }
 }
 
-impl<V, E> GeneratePolarizations for HedgeGraph<E, V, NumHedgeData>
+impl<V, E> GeneratePolarizations for HedgeGraph<E, V, HedgeData>
 where
     for<'a> EdgeData<&'a E>: ReversibleEdge,
 {
@@ -123,18 +143,20 @@ pub trait ReversibleEdge {
 
     fn pol_symbol(&self, flow: Flow) -> Option<Symbol>;
 
-    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    fn polarization<'a, T, H>(&self, add_args: &'a [T], hedge_data: &H, flow: Flow) -> Atom
     where
-        &'a T: Into<AtomOrView<'a>>;
+        &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData;
 
-    fn polarization_structure<'a, T>(
+    fn polarization_structure<'a, T, H>(
         &self,
         add_args: &'a [T],
-        hedge_data: &NumHedgeData,
+        hedge_data: &H,
         flow: Flow,
     ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
     where
-        &'a T: Into<AtomOrView<'a>>;
+        &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData;
 }
 
 impl ReversibleEdge for EdgeData<&Edge> {
@@ -176,9 +198,10 @@ impl ReversibleEdge for EdgeData<&Edge> {
         }
     }
 
-    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    fn polarization<'a, T, H>(&self, add_args: &'a [T], hedge_data: &H, flow: Flow) -> Atom
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         if let Some(name) = self.pol_symbol(flow) {
             hedge_data.polarization(FunctionBuilder::new(name).add_args(add_args))
@@ -187,14 +210,15 @@ impl ReversibleEdge for EdgeData<&Edge> {
         }
     }
 
-    fn polarization_structure<'a, T>(
+    fn polarization_structure<'a, T, H>(
         &self,
         add_args: &'a [T],
-        hedge_data: &NumHedgeData,
+        hedge_data: &H,
         flow: Flow,
     ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         self.pol_symbol(flow).map(|name| {
             ShadowedStructure::from_iter(
@@ -255,9 +279,10 @@ impl ReversibleEdge for EdgeData<&ParseEdge> {
         }
     }
 
-    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    fn polarization<'a, T, H>(&self, add_args: &'a [T], hedge_data: &H, flow: Flow) -> Atom
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         if let Some(name) = self.pol_symbol(flow) {
             hedge_data.polarization(FunctionBuilder::new(name).add_args(add_args))
@@ -266,14 +291,15 @@ impl ReversibleEdge for EdgeData<&ParseEdge> {
         }
     }
 
-    fn polarization_structure<'a, T>(
+    fn polarization_structure<'a, T, H>(
         &self,
         add_args: &'a [T],
-        hedge_data: &NumHedgeData,
+        hedge_data: &H,
         flow: Flow,
     ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         self.pol_symbol(flow).map(|name| {
             ShadowedStructure::from_iter(
@@ -315,9 +341,10 @@ impl ReversibleEdge for EdgeData<(usize, isize)> {
         }
     }
 
-    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    fn polarization<'a, T, H>(&self, add_args: &'a [T], hedge_data: &H, flow: Flow) -> Atom
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         if let Some(name) = self.pol_symbol(flow) {
             hedge_data.polarization(FunctionBuilder::new(name).add_args(add_args))
@@ -326,14 +353,15 @@ impl ReversibleEdge for EdgeData<(usize, isize)> {
         }
     }
 
-    fn polarization_structure<'a, T>(
+    fn polarization_structure<'a, T, H>(
         &self,
         add_args: &'a [T],
-        hedge_data: &NumHedgeData,
+        hedge_data: &H,
         flow: Flow,
     ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         self.pol_symbol(flow).map(|name| {
             ShadowedStructure::from_iter(
@@ -375,9 +403,10 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
         }
     }
 
-    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    fn polarization<'a, T, H>(&self, add_args: &'a [T], hedge_data: &H, flow: Flow) -> Atom
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         if let Some(name) = self.pol_symbol(flow) {
             hedge_data.polarization(FunctionBuilder::new(name).add_args(add_args))
@@ -386,14 +415,15 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
         }
     }
 
-    fn polarization_structure<'a, T>(
+    fn polarization_structure<'a, T, H>(
         &self,
         add_args: &'a [T],
-        hedge_data: &NumHedgeData,
+        hedge_data: &H,
         flow: Flow,
     ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
     where
         &'a T: Into<AtomOrView<'a>>,
+        H: HedgePolarizationData,
     {
         self.pol_symbol(flow).map(|name| {
             ShadowedStructure::from_iter(

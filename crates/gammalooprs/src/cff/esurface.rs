@@ -898,7 +898,7 @@ pub(crate) fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> E
     }
 
     res.retain(|(_index, sign)| *sign != 0);
-    res.sort_by(|(index_1, _), (index_2, _)| index_1.cmp(index_2));
+    res.sort_by_key(|(index, _)| *index);
     res
 }
 

@@ -517,6 +517,7 @@ pub(crate) fn assign_node_colors(
             color_structures: ColorStructure {
                 color_structure: vec![],
             },
+            dod: 0,
         }));
         let colors = if node_edges.len() == 1 {
             &vec![dummy_external_vertex_rule]
@@ -2693,7 +2694,7 @@ impl ProcessDefinition {
         }
 
         let mut sorted_new_edges = new_edges.iter().collect::<Vec<_>>();
-        sorted_new_edges.sort_by(|(i_e_0, _), (i_e_1, _)| i_e_0.cmp(i_e_1));
+        sorted_new_edges.sort_by_key(|(i_e_0, _)| *i_e_0);
 
         for (v0, v1, directed, edge_data) in sorted_new_edges.iter().map(|(_, v)| v) {
             normalized_graph
@@ -4332,7 +4333,7 @@ impl ProcessDefinition {
                 }
             }
         }
-        bare_graphs.sort_by(|a: &(usize, Graph), b| (a.0).cmp(&b.0));
+        bare_graphs.sort_by_key(|a: &(usize, Graph)| a.0);
 
         let (n_zeroes_color_value, n_zeroes_lorentz_value, n_groupings_value) = {
             (

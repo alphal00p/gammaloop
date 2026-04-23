@@ -43,7 +43,7 @@ use crate::{
     },
     settings::{GlobalSettings, RuntimeSettings, global::FrozenCompilationMode},
     subtraction::{
-        RstarTDependenceEvaluator, evaluate_integrated_ct_normalisation,
+        RstarTDependenceEvaluator, RstarTDependenceInput, evaluate_integrated_ct_normalisation,
         evaluate_integrated_ct_normalisation_dual, evaluate_uv_damper, evaluate_uv_damper_dual,
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
@@ -1319,24 +1319,25 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             };
 
             Some(
-                rstar_t_dependence_evaluator.evaluate(
-                    &t_star,
-                    &solution.solution,
-                    &self.overlap_builder.rotated_center,
+                rstar_t_dependence_evaluator.evaluate(RstarTDependenceInput {
+                    t_star: &t_star,
+                    radius_star: &solution.solution,
+                    overlap_center: &self.overlap_builder.rotated_center,
                     subspace,
-                    self.overlap_builder
+                    unrescaled_momentum_sample: self
+                        .overlap_builder
                         .counterterm_builder
                         .transformed_kinematic_point
                         .unrescaled_sample(),
                     masses,
-                    self.esurface,
-                    &self
+                    threshold_esurface: self.esurface,
+                    lmb: &self
                         .overlap_builder
                         .counterterm_builder
                         .graph
                         .loop_momentum_basis,
-                    lmbs,
-                ),
+                    all_lmbs: lmbs,
+                }),
             )
         } else {
             None
@@ -1347,30 +1348,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             solution,
             t_dependent_solution,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::LUCounterTerm;
-    use crate::processes::RaisedCutId;
-    use typed_index_collections::{TiVec, ti_vec};
-
-    #[test]
-    fn inactive_cut_guard_reports_runtime_access() {
-        let counterterm = LUCounterTerm {
-            evaluators: TiVec::new(),
-            thresholds: TiVec::new(),
-            subspaces: TiVec::new(),
-            rstar_dependence_calculator: TiVec::new(),
-            active_cuts: ti_vec![false],
-            active_left_thresholds: ti_vec![TiVec::new()],
-            active_right_thresholds: ti_vec![TiVec::new()],
-            active_iterated_thresholds: TiVec::new(),
-        };
-
-        let error = counterterm.ensure_active_cut(RaisedCutId(0)).unwrap_err();
-        assert!(error.to_string().contains("generation marked it inactive"));
     }
 }
 
@@ -1983,4 +1960,28 @@ fn merge_and_inverse_transform<T: FloatLike>(
         .loop_momentum_basis;
 
     merged_sample.lmb_transform(current_lmb, target_lmb)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LUCounterTerm;
+    use crate::processes::RaisedCutId;
+    use typed_index_collections::{TiVec, ti_vec};
+
+    #[test]
+    fn inactive_cut_guard_reports_runtime_access() {
+        let counterterm = LUCounterTerm {
+            evaluators: TiVec::new(),
+            thresholds: TiVec::new(),
+            subspaces: TiVec::new(),
+            rstar_dependence_calculator: TiVec::new(),
+            active_cuts: ti_vec![false],
+            active_left_thresholds: ti_vec![TiVec::new()],
+            active_right_thresholds: ti_vec![TiVec::new()],
+            active_iterated_thresholds: TiVec::new(),
+        };
+
+        let error = counterterm.ensure_active_cut(RaisedCutId(0)).unwrap_err();
+        assert!(error.to_string().contains("generation marked it inactive"));
+    }
 }

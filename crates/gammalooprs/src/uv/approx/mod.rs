@@ -270,11 +270,7 @@ fn localized_integrated_reduced_factor(
         .into_iter()
         .map(|term| {
             let mut localized = Atom::Zero;
-            for (expr, orientation) in term
-                .expression
-                .into_iter()
-                .zip(term.orientations.into_iter())
-            {
+            for (expr, orientation) in term.expression.into_iter().zip(term.orientations) {
                 localized += localize_reduced_orientation_term(
                     &(expr * &fourddenoms),
                     &orientation,

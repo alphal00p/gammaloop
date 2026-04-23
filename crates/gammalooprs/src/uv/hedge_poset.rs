@@ -26,7 +26,7 @@ use vakint::Vakint;
 
 use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet, parse::string_utils::ToOrderedSimple},
-    utils::{W_, symbolica_ext::LogPrint},
+    utils::{GS, W_, symbolica_ext::LogPrint},
     uv::{
         RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
@@ -798,7 +798,9 @@ impl Forests {
         }
 
         Ok(RenormalizationPart::new(
-            sum.replace_multiple(&replacements),
+            sum.replace_multiple(&replacements)
+                .replace(GS.m_uv_int)
+                .with(GS.m_uv),
             self.compute_store.kernel_hits,
             self.graph.n_nodes(),
         ))

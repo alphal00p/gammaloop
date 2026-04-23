@@ -204,14 +204,14 @@ mod tests {
             num = "1";
 
             ext0 [style=invis];
-            2:0-> ext0 [id=0 dir=none is_cut=0 is_dummy=false particle="a"];
+            2:0-> ext0 [id=0 dir=none is_cut=0  particle="a"];
             ext1 [style=invis];
-            ext1-> 3:1 [id=1 dir=none is_cut=0 is_dummy=false particle="a"];
-            0:2-> 1:3 [id=2  is_dummy=false particle="d"];
-            0:4-> 1:5 [id=3 dir=none  is_dummy=false particle="g"];
-            3:6-> 0:7 [id=4  is_dummy=false particle="d"];
-            1:8-> 2:9 [id=5  is_dummy=false particle="d"];
-            2:10-> 3:11 [id=6  is_dummy=false particle="d"];
+            ext1-> 3:1 [id=1 dir=none is_cut=0  particle="a"];
+            0:2-> 1:3 [id=2   particle="d"];
+            0:4-> 1:5 [id=3 dir=none   particle="g"];
+            3:6-> 0:7 [id=4   particle="d"];
+            1:8-> 2:9 [id=5   particle="d"];
+            2:10-> 3:11 [id=6   particle="d"];
         }
 
         digraph GL8{
@@ -221,14 +221,14 @@ mod tests {
         2[int_id=V_71];
         3[int_id=V_71];
         ext0 [style=invis];
-        2:0-> ext0 [id=0 dir=none is_cut=0 is_dummy=false particle=a];
+        2:0-> ext0 [id=0 dir=none is_cut=0  particle=a];
         ext1 [style=invis];
-        ext1-> 3:1 [id=1 dir=none is_cut=0 is_dummy=false particle=a];
-        0:2-> 1:3 [id=2  is_dummy=false particle=d];
-        0:4-> 1:5 [id=3 dir=none  is_dummy=false particle=g];
-        0:6-> 3:7 [id=4 dir=back  is_dummy=false particle="d~"];
-        1:8-> 2:9 [id=5  is_dummy=false particle=d];
-        2:10-> 3:11 [id=6  is_dummy=false particle=d];
+        ext1-> 3:1 [id=1 dir=none is_cut=0  particle=a];
+        0:2-> 1:3 [id=2   particle=d];
+        0:4-> 1:5 [id=3 dir=none   particle=g];
+        0:6-> 3:7 [id=4 dir=back   particle="d~"];
+        1:8-> 2:9 [id=5   particle=d];
+        2:10-> 3:11 [id=6   particle=d];
         }
 
         )

@@ -1,10 +1,10 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, ops::Deref};
 
 use ahash::AHashSet;
 use idenso::metric::MetricSimplifier;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
-    involution::{EdgeIndex, Flow, Hedge, HedgePair},
+    involution::{Flow, Hedge, HedgePair},
     subgraph::{
         Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
         SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
@@ -17,9 +17,10 @@ use symbolica::{
     function,
     poly::series::Series,
 };
+use tracing::debug;
 
 use crate::{
-    graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
+    graph::{Edge, FeynmanGraph, Graph, HedgeData, LMBext, LoopMomentumBasis, Vertex},
     integrands::process::param_builder::ParamBuilderGraph,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
@@ -252,7 +253,8 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Wood::from_spinneys(self.classified_spinneys(subgraph, settings, lmb), self)
     }
 
-    fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
+    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;
+    fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
 
     fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
@@ -262,6 +264,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let ref_graph: &HedgeGraph<E, V, H> = self.as_ref();
+        debug!(subgraph=%ref_graph.dot(subgraph),"Spinneys of subgraph");
         let _b: SuBitGraph = ref_graph.empty_subgraph();
 
         if subgraph.is_empty() {
@@ -270,15 +273,12 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             return spinneys;
         }
 
-        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> =
-            Cycle::all_sum_powerset_filter_map(&ref_graph.cycle_basis_of(subgraph).0, &Some)
-                .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-                .unwrap();
+        let cycles = ref_graph.cycle_basis_of(subgraph).0;
 
-        // for s in &all_subcycles {
-        //     println!("Subcycle: {}", self.as_ref().dot(s));
-        // }
+        let _init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
+        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(&cycles, &Some)
+            .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
+            .unwrap();
 
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &all_subcycles,
@@ -300,8 +300,8 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     }
 }
 
-impl AsRef<HedgeGraph<Edge, Vertex, NumHedgeData>> for Graph {
-    fn as_ref(&self) -> &HedgeGraph<Edge, Vertex, NumHedgeData> {
+impl AsRef<HedgeGraph<Edge, Vertex, HedgeData>> for Graph {
+    fn as_ref(&self) -> &HedgeGraph<Edge, Vertex, HedgeData> {
         &self.underlying
     }
 }
@@ -383,23 +383,30 @@ impl UltravioletGraph for Graph {
         num.fill_in_reduced(self, subgraph, without)
     }
 
-    fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
-        let hard_edge_ids: Vec<EdgeIndex> = self
-            .underlying
-            .iter_edges_of(subgraph)
-            .filter(|(pair, _, _)| pair.is_paired())
-            .map(|(_, edge_id, _)| edge_id)
-            .collect();
+    fn dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32 {
+        let lmb = self.lmb_of(subgraph);
+        let empty = self.underlying.empty_subgraph();
+        let integrand = self
+            .numerator(subgraph, &empty)
+            .to_d_dim(GS.dim)
+            .get_single_atom()
+            .unwrap()
+            / self.denominator(subgraph, |_| 1);
+        let nloops: usize = self.n_loops(subgraph);
+        self.uv_rescaled(subgraph.included(), nloops, &lmb, &integrand)
+            .trailing_exponent()
+    }
 
+    fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         for (p, _, e) in self.underlying.iter_edges_of(subgraph) {
             if p.is_paired() {
-                dod += e.data.num.dod(&hard_edge_ids) - 2;
+                dod += e.data.dod.deref();
             }
         }
 
         for (_, _, n) in self.underlying.iter_nodes_of(subgraph) {
-            dod += n.num.dod(&hard_edge_ids);
+            dod += n.dod.deref();
         }
 
         dod

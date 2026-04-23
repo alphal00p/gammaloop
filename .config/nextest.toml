@@ -38,6 +38,7 @@ path = "target/nextest/default/junit.xml"
 inherits = "default"
 # Reuse the default profile behavior but disable early termination for this curated suite.
 slow-timeout = "30y"
+default-filter = "not test(/(^|::)(slow|failing)::/)"
 
 [profile.ci]
 slow-timeout = { period = "120s", terminate-after = 2 }
@@ -57,6 +58,19 @@ final-status-level = "fail"
 [profile.ci.junit]
 # JUnit output for CI systems
 path = "target/nextest/ci/junit.xml"
+
+[profile.ci_gammaloop]
+inherits = "ci"
+default-filter = "not test(/(^|::)(slow|failing)::/)"
+
+[profile.ci_gammaloop.junit]
+path = "target/nextest/ci/junit.xml"
+
+[[profile.ci_gammaloop.overrides]]
+# Vakint tests can end up running restricted Symbolica instances in nix-ci,
+# which behaves as a singleton per machine when the full license is unavailable.
+filter = "package(vakint)"
+test-group = "symbolica-singleton"
 
 [[profile.ci.overrides]]
 # In CI, be extra conservative with timeouts
@@ -82,6 +96,8 @@ integration = { max-threads = 2 }
 memory-intensive = { max-threads = 2 }
 # Group tests that might be flaky - serialize these for stability
 flaky = { max-threads = 1 }
+# Serialize packages that depend on a singleton external runtime in CI.
+symbolica-singleton = { max-threads = 1 }
 
 [profile.local_test]
 fail-fast = true

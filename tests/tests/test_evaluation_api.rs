@@ -370,7 +370,7 @@ fn lu_rust_get_integrand_info_reports_groups_orientations_lmbs_and_cuts() -> Res
                 orientation
                     .signature
                     .iter()
-                    .all(|sign| matches!(*sign, -1 | 0 | 1))
+                    .all(|sign| matches!(*sign, -1..=1))
             );
         }
 
@@ -970,7 +970,7 @@ lmb_channels = "monte_carlo"
                     unique_channels.contains(&lmb_channel_edge_ids),
                     "channel tag should correspond to one explicit-sum LMB basis"
                 );
-                discrete_event_signatures.push(event_signature(&event));
+                discrete_event_signatures.push(event_signature(event));
             }
         }
     }

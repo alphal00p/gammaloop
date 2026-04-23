@@ -2836,7 +2836,7 @@ impl NumericalEvaluationResult {
             ));
         }
 
-        epsilon_coeffs_vec_floats.sort_by(|(i1, _), (i2, _)| i1.cmp(i2));
+        epsilon_coeffs_vec_floats.sort_by_key(|(i1, _)| *i1);
         Ok(NumericalEvaluationResult(epsilon_coeffs_vec_floats))
     }
 
@@ -3412,7 +3412,7 @@ Evaluated (n_loops=1, mu_r=1) :
             ));
         }
 
-        epsilon_coeffs_vec_floats.sort_by(|(i1, _), (i2, _)| i1.cmp(i2));
+        epsilon_coeffs_vec_floats.sort_by_key(|(i1, _)| *i1);
         Ok(NumericalEvaluationResult(epsilon_coeffs_vec_floats))
     }
 
@@ -3599,16 +3599,10 @@ Evaluated (n_loops=1, mu_r=1) :
                                     let base = m.to_pow_view().get_base().to_owned();
                                     let exp = m.to_pow_view().get_exp();
                                     match base {
-                                        Atom::Var(s) => {
-                                            if exp == Atom::num(2).as_view() {
-                                                (Atom::Var(s.clone()), Atom::Pow(m.clone()))
-                                            } else {
-                                                panic!(
-                                                    "Could not find mass symbol in integral:\n{}",
-                                                    integral
-                                                );
-                                            }
+                                        Atom::Var(s) if exp == Atom::num(2).as_view() => {
+                                            (Atom::Var(s.clone()), Atom::Pow(m.clone()))
                                         }
+
                                         _ => {
                                             panic!(
                                                 "Could not find mass symbol in integral:\n{}",
@@ -4130,16 +4124,10 @@ Evaluated (n_loops=1, mu_r=1) :
                     let base = m.to_pow_view().get_base().to_owned();
                     let exp = m.to_pow_view().get_exp();
                     match base {
-                        Atom::Var(s) => {
-                            if exp == Atom::num(2).as_view() {
-                                (Atom::Var(s.clone()), Atom::Pow(m.clone()))
-                            } else {
-                                return Err(VakintError::MalformedGraph(format!(
-                                    "Could not find muV in graph:\n{}",
-                                    short_integral_expression.to_canonical_string()
-                                )));
-                            }
+                        Atom::Var(s) if exp == Atom::num(2).as_view() => {
+                            (Atom::Var(s.clone()), Atom::Pow(m.clone()))
                         }
+
                         _ => {
                             return Err(VakintError::MalformedGraph(format!(
                                 "Could not find muV in graph:\n{}",

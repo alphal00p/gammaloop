@@ -20,10 +20,12 @@ use symbolica::{
         integer::IntegerRing,
         rational::{FractionField, Q, Rational},
     },
+    function,
     id::{ReplaceWith, Replacement},
     parse,
     poly::polynomial::PolynomialRing,
     printer::{PrintMode, PrintOptions},
+    symbol,
 };
 
 use crate::GammaLoopContext;
@@ -32,6 +34,8 @@ use super::{GS, W_};
 
 pub static Q_I: LazyLock<AlgebraicExtension<FractionField<IntegerRing>>> =
     LazyLock::new(|| AlgebraicExtension::new_complex(Q));
+static RAW_UFO_MOMENTUM: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::P"));
+static RAW_UFO_PSLASH: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::PSlash"));
 
 pub static COMPLEXRATPOLYFIELD: LazyLock<
     FractionField<PolynomialRing<AlgebraicExtension<FractionField<IntegerRing>>, u16>>,
@@ -729,36 +733,53 @@ impl PrimeGenerate for Atom {
 }
 
 pub trait DOD {
-    fn dod(&self, hard_edge_ids: &[EdgeIndex]) -> i32;
+    ///Rescales momentum of edge `eid`, and computes the leading scaling
+    fn edge_dod(&self, eid: EdgeIndex) -> i32;
+
+    ///Rescales all momenta, and computes the leading scaling
+    fn all_dod(&self) -> i32;
+
+    fn trailing_exponent(&self) -> i32;
 }
 
 impl DOD for Atom {
-    fn dod(&self, hard_edge_ids: &[EdgeIndex]) -> i32 {
-        self.as_view().dod(hard_edge_ids)
+    fn edge_dod(&self, eid: EdgeIndex) -> i32 {
+        self.as_view().edge_dod(eid)
+    }
+
+    fn all_dod(&self) -> i32 {
+        self.as_view().all_dod()
+    }
+
+    fn trailing_exponent(&self) -> i32 {
+        self.as_view().trailing_exponent()
     }
 }
+
 impl DOD for AtomView<'_> {
-    fn dod(&self, hard_edge_ids: &[EdgeIndex]) -> i32 {
-        let mut rescaled = self.to_owned();
+    fn edge_dod(&self, eid: EdgeIndex) -> i32 {
+        self.replace(GS.emr_mom(eid, W_.a___))
+            .with(GS.emr_mom(eid, W_.a___) / GS.rescale)
+            .trailing_exponent()
+    }
 
-        for eid in hard_edge_ids {
-            rescaled = rescaled
-                .replace(GS.emr_mom(*eid, W_.a___))
-                .with(GS.emr_mom(*eid, W_.a___) / GS.rescale);
-        }
-        let series = rescaled
-            .series(
-                GS.rescale,
-                Atom::Zero,
-                (hard_edge_ids.len() * 2).into(),
-                true,
-            )
+    fn all_dod(&self) -> i32 {
+        self.replace(function!(GS.emr_mom, W_.a___))
+            .with(function!(GS.emr_mom, W_.a___) / GS.rescale)
+            .replace(function!(*RAW_UFO_MOMENTUM, W_.a___))
+            .with(function!(*RAW_UFO_MOMENTUM, W_.a___) / GS.rescale)
+            .replace(function!(*RAW_UFO_PSLASH, W_.a___))
+            .with(function!(*RAW_UFO_PSLASH, W_.a___) / GS.rescale)
+            .trailing_exponent()
+    }
+
+    fn trailing_exponent(&self) -> i32 {
+        let series = self
+            .series(GS.rescale, Atom::Zero, 1.into(), false)
             .unwrap();
-        let dod = series.terms().next().unwrap_or((0.into(), &Atom::Zero)).0;
+        // println!("{}", series);
 
-        // for (t, a) in series.terms() {
-        //     println!("{t} -> {a}");
-        // }
+        let dod = series.get_trailing_exponent();
 
         if dod.is_integer() {
             -(dod.numerator().to_i64().unwrap() as i32)
@@ -781,79 +802,11 @@ fn test_dod() {
     let atom3 =
         GS.emr_mom(e1, Atom::Zero) * GS.emr_mom(e2, Atom::Zero) + GS.emr_mom(e2, Atom::Zero);
 
-    assert_eq!(0, atom.dod(&[e1, e2]));
-    assert_eq!(-2, atom2.dod(&[e1]));
-    assert_eq!(1, atom3.dod(&[e1]));
-    assert_eq!(2, atom3.dod(&[e1, e2]));
-}
-
-#[allow(unused)]
-mod dod {
-    use symbolica::{
-        atom::{Atom, AtomCore, AtomOrView, AtomView},
-        function, parse, symbol,
-    };
-
-    fn emr_mom<'a>(e: usize, arg: impl Into<AtomOrView<'a>>) -> Atom {
-        let a = arg.into();
-        function!(symbol!("Q"), usize::from(e) as i64, a.as_view())
-    }
-    pub trait DOD {
-        fn dod(&self, hard_edge_ids: &[usize]) -> i32;
-    }
-
-    impl DOD for Atom {
-        fn dod(&self, hard_edge_ids: &[usize]) -> i32 {
-            self.as_view().dod(hard_edge_ids)
-        }
-    }
-    impl DOD for AtomView<'_> {
-        fn dod(&self, hard_edge_ids: &[usize]) -> i32 {
-            let mut rescaled = self.to_owned();
-
-            for eid in hard_edge_ids {
-                rescaled = rescaled
-                    .replace(emr_mom(*eid, symbol!("a___")))
-                    .with(emr_mom(*eid, symbol!("a___")) / symbol!("t"));
-            }
-            let series = rescaled
-                .series(
-                    symbol!("t"),
-                    Atom::Zero,
-                    (hard_edge_ids.len() * 2).into(),
-                    true,
-                )
-                .unwrap();
-            let dod = series.terms().next().unwrap_or((0.into(), &Atom::Zero)).0;
-
-            // for (t, a) in series.terms() {
-            //     println!("{t} -> {a}");
-            // }
-
-            if dod.is_integer() {
-                -(dod.numerator().to_i64().unwrap() as i32)
-            } else {
-                panic!("{dod} for {self}")
-            }
-        }
-    }
-
-    #[test]
-    fn test_dod() {
-        let (e1, e2) = (1, 2);
-
-        let atom = (emr_mom(e1, Atom::Zero) * emr_mom(e2, Atom::Zero) + emr_mom(e2, Atom::Zero))
-            / (emr_mom(e1, Atom::Zero) * emr_mom(e1, Atom::Zero));
-
-        let atom2 =
-            Atom::num(1) / (emr_mom(e1, Atom::Zero) * emr_mom(e1, Atom::Zero) + parse!("m")).pow(8);
-        let atom3 = emr_mom(e1, Atom::Zero) * emr_mom(e2, Atom::Zero) + emr_mom(e2, Atom::Zero);
-
-        assert_eq!(0, atom.dod(&[e1, e2]));
-        assert_eq!(-16, atom2.dod(&[e1]));
-        assert_eq!(1, atom3.dod(&[e1]));
-        assert_eq!(2, atom3.dod(&[e1, e2]));
-    }
+    assert_eq!(-1, atom.edge_dod(e1));
+    assert_eq!(1, atom.edge_dod(e2));
+    assert_eq!(-2, atom2.edge_dod(e1));
+    assert_eq!(1, atom3.edge_dod(e1));
+    assert_eq!(1, atom3.edge_dod(e2));
 }
 
 pub trait CallSymbol<T> {

@@ -1425,6 +1425,13 @@ fn complex_to_f64<T: FloatLike>(value: &Complex<F<T>>) -> Complex<F<f64>> {
     Complex::new(value.re.into_ff64(), value.im.into_ff64())
 }
 
+type StabilityCheckResult<T> = (
+    Complex<F<T>>,
+    Option<F<T>>,
+    bool,
+    Option<StabilityFailureReason>,
+);
+
 #[inline]
 fn stability_check<T: FloatLike>(
     _settings: &RuntimeSettings,
@@ -1434,12 +1441,7 @@ fn stability_check<T: FloatLike>(
     wgt: F<T>,
     is_final_level: bool,
     escalate_if_exact_zero: bool,
-) -> (
-    Complex<F<T>>,
-    Option<F<T>>,
-    bool,
-    Option<StabilityFailureReason>,
-) {
+) -> StabilityCheckResult<T> {
     if results.len() == 1 {
         return (results[0].clone(), None, true, None);
     }
@@ -1548,12 +1550,7 @@ fn stability_check_on_norm<T: FloatLike>(
     wgt: F<T>,
     is_final_level: bool,
     escalate_if_exact_zero: bool,
-) -> (
-    Complex<F<T>>,
-    Option<F<T>>,
-    bool,
-    Option<StabilityFailureReason>,
-) {
+) -> StabilityCheckResult<T> {
     if results.len() == 1 {
         return (results[0].clone(), None, true, None);
     }
@@ -2062,13 +2059,7 @@ pub trait GraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
-        model: &Model,
-        settings: &RuntimeSettings,
-        event_processing_runtime: Option<&mut EventProcessingRuntime>,
-        rotation: &Rotation,
-        evaluation_metadata: &mut EvaluationMetaData,
-        record_primary_timing: bool,
-        channel_id: Option<(ChannelIndex, F<T>)>,
+        context: GraphTermEvaluationContext<'_, '_, T>,
     ) -> Result<GraphEvaluationResult<T>>;
 
     fn name(&self) -> String;
@@ -2084,28 +2075,46 @@ pub trait GraphTerm {
     fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
 }
 
+struct EvaluationContext<'a, 'm> {
+    model: &'a Model,
+    settings: &'a RuntimeSettings,
+    rotation: &'a Rotation,
+    evaluation_metadata: &'m mut EvaluationMetaData,
+    record_primary_timing: bool,
+}
+
+pub struct GraphTermEvaluationContext<'a, 'm, T: FloatLike> {
+    pub model: &'a Model,
+    pub settings: &'a RuntimeSettings,
+    pub event_processing_runtime: Option<&'m mut EventProcessingRuntime>,
+    pub rotation: &'a Rotation,
+    pub evaluation_metadata: &'m mut EvaluationMetaData,
+    pub record_primary_timing: bool,
+    pub channel_id: Option<(ChannelIndex, F<T>)>,
+}
+
 fn evaluate_graph_term<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     graph_id: usize,
     sample: &MomentumSample<T>,
-    model: &Model,
-    settings: &RuntimeSettings,
-    rotation: &Rotation,
-    evaluation_metadata: &mut EvaluationMetaData,
-    record_primary_timing: bool,
+    context: &mut EvaluationContext<'_, '_>,
     channel_id: Option<(ChannelIndex, F<T>)>,
 ) -> Result<GraphEvaluationResult<T>> {
     let mut event_processing_runtime = integrand.take_event_processing_runtime();
-    let result = integrand.get_graph_mut(graph_id).evaluate(
-        sample,
-        model,
-        settings,
-        event_processing_runtime.as_mut(),
-        rotation,
-        evaluation_metadata,
-        record_primary_timing,
-        channel_id,
-    );
+    let result = {
+        let graph_context = GraphTermEvaluationContext {
+            model: context.model,
+            settings: context.settings,
+            event_processing_runtime: event_processing_runtime.as_mut(),
+            rotation: context.rotation,
+            evaluation_metadata: context.evaluation_metadata,
+            record_primary_timing: context.record_primary_timing,
+            channel_id,
+        };
+        integrand
+            .get_graph_mut(graph_id)
+            .evaluate(sample, graph_context)
+    };
     integrand.restore_event_processing_runtime(event_processing_runtime);
     let mut result = result?;
     let graph_group_id = integrand.graph_group_id_for_graph(graph_id);
@@ -2122,11 +2131,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
     group_id: GroupId,
     sample: &DiscreteGraphSample<T>,
-    model: &Model,
-    settings: &RuntimeSettings,
-    rotation: &Rotation,
-    evaluation_metadata: &mut EvaluationMetaData,
-    record_primary_timing: bool,
+    context: &mut EvaluationContext<'_, '_>,
     zero: &F<T>,
 ) -> Result<GraphEvaluationResult<T>> {
     let group = integrand.get_group(group_id).into_iter().collect_vec();
@@ -2136,17 +2141,9 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
 
     for graph_id in group {
         let graph_term_result = match sample {
-            DiscreteGraphSample::Default(sample) => evaluate_graph_term(
-                integrand,
-                graph_id,
-                sample,
-                model,
-                settings,
-                rotation,
-                evaluation_metadata,
-                record_primary_timing,
-                None,
-            ),
+            DiscreteGraphSample::Default(sample) => {
+                evaluate_graph_term(integrand, graph_id, sample, context, None)
+            }
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -2155,11 +2152,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 integrand,
                 graph_id,
                 sample,
-                model,
-                settings,
-                rotation,
-                evaluation_metadata,
-                record_primary_timing,
+                context,
                 Some((*channel_id, alpha.clone())),
             ),
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
@@ -2171,11 +2164,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                             integrand,
                             graph_id,
                             sample,
-                            model,
-                            settings,
-                            rotation,
-                            evaluation_metadata,
-                            record_primary_timing,
+                            context,
                             Some((channel_index, alpha.clone())),
                         )
                     })
@@ -2191,7 +2180,7 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                 let master_graph = integrand.get_master_graph(group_id).get_graph();
 
                 let energy_cache = master_graph.get_energy_cache(
-                    model,
+                    context.model,
                     sample.loop_moms(),
                     sample.external_moms(),
                     &master_graph.loop_momentum_basis,
@@ -2211,17 +2200,8 @@ fn evaluate_graph_group<T: FloatLike, I: ProcessIntegrandImpl>(
                         product * energy.powf(&F::from_f64(2. * weight))
                     });
 
-                let mut graph_result = evaluate_graph_term(
-                    integrand,
-                    graph_id,
-                    sample,
-                    model,
-                    settings,
-                    rotation,
-                    evaluation_metadata,
-                    record_primary_timing,
-                    None,
-                )?;
+                let mut graph_result =
+                    evaluate_graph_term(integrand, graph_id, sample, context, None)?;
                 graph_result.integrand_result *= Complex::new_re(prefactor);
                 Ok(graph_result)
             }
@@ -2329,67 +2309,72 @@ fn evaluate_all_rotations<T: FloatLike, I: ProcessIntegrandImpl>(
     Ok((evaluation_results, primary_rotation_index, rotated_results))
 }
 
-fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
-    integrand: &mut I,
-    model: &Model,
-    source: &EvaluationSource<'_>,
-    stability_level: &StabilityLevelSetting,
-    max_eval: &Complex<F<f64>>,
+struct StabilityEvaluationContext<'a, 'm> {
+    model: &'a Model,
+    source: &'a EvaluationSource<'a>,
+    stability_level: &'a StabilityLevelSetting,
+    max_eval: &'a Complex<F<f64>>,
     wgt: F<f64>,
     check_on_norm: bool,
     is_final_level: bool,
     is_primary_stability_level: bool,
-    evaluation_metadata: &mut EvaluationMetaData,
+    evaluation_metadata: &'m mut EvaluationMetaData,
     record_rotated_results: bool,
-    precision_label: &str,
+    precision_label: &'static str,
     escalate_if_exact_zero: bool,
+}
+
+fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
+    integrand: &mut I,
+    context: &mut StabilityEvaluationContext<'_, '_>,
 ) -> Result<PreciseStabilityLevelResult<T>> {
     let level_start = Instant::now();
-    let (gammaloop_sample, parameterization_time) = source.build_gamma_sample::<T, I>(integrand)?;
-    debug!("{precision_label} parameterization succeeded");
+    let (gammaloop_sample, parameterization_time) =
+        context.source.build_gamma_sample::<T, I>(integrand)?;
+    debug!("{} parameterization succeeded", context.precision_label);
     debug!(
         "jacobian: {:+16e}",
         gammaloop_sample.get_default_sample().jacobian()
     );
 
-    let integrand_time_before = evaluation_metadata.integrand_evaluation_time;
-    let evaluator_time_before = evaluation_metadata.evaluator_evaluation_time;
+    let integrand_time_before = context.evaluation_metadata.integrand_evaluation_time;
+    let evaluator_time_before = context.evaluation_metadata.evaluator_evaluation_time;
     let (graph_results, primary_rotation_index, rotated_results) = evaluate_all_rotations(
         integrand,
-        model,
+        context.model,
         &gammaloop_sample,
-        evaluation_metadata,
-        is_primary_stability_level,
-        record_rotated_results,
+        context.evaluation_metadata,
+        context.is_primary_stability_level,
+        context.record_rotated_results,
     )?;
     let results = graph_results
         .iter()
         .map(|result| result.integrand_result.clone())
         .collect_vec();
 
-    let max_eval = complex_from_f64::<T>(max_eval);
-    let wgt = F::<T>::from_ff64(wgt);
+    let max_eval = complex_from_f64::<T>(context.max_eval);
+    let wgt = F::<T>::from_ff64(context.wgt);
 
     let (average_result, estimated_relative_accuracy, is_stable, instability_reason) =
-        if check_on_norm {
+        if context.check_on_norm {
             stability_check_on_norm(
                 integrand.get_settings(),
                 &results,
-                stability_level,
+                context.stability_level,
                 max_eval,
                 wgt,
-                is_final_level,
-                escalate_if_exact_zero,
+                context.is_final_level,
+                context.escalate_if_exact_zero,
             )
         } else {
             stability_check(
                 integrand.get_settings(),
                 &results,
-                stability_level,
+                context.stability_level,
                 max_eval,
                 wgt,
-                is_final_level,
-                escalate_if_exact_zero,
+                context.is_final_level,
+                context.escalate_if_exact_zero,
             )
         };
 
@@ -2399,19 +2384,21 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
     Ok(PreciseStabilityLevelResult {
         result: average_result,
         graph_result,
-        stability_level_used: stability_level.precision,
+        stability_level_used: context.stability_level.precision,
         estimated_relative_accuracy,
         sample_count: results.len(),
         total_time: level_start.elapsed(),
         parameterization_time,
-        parameterization_jacobian: match source {
+        parameterization_jacobian: match context.source {
             EvaluationSource::XSpace(_) => Some(gammaloop_sample.get_default_sample().jacobian()),
             EvaluationSource::Momentum(_) => None,
         },
-        integrand_evaluation_time: evaluation_metadata
+        integrand_evaluation_time: context
+            .evaluation_metadata
             .integrand_evaluation_time
             .saturating_sub(integrand_time_before),
-        evaluator_evaluation_time: evaluation_metadata
+        evaluator_evaluation_time: context
+            .evaluation_metadata
             .evaluator_evaluation_time
             .saturating_sub(evaluator_time_before),
         is_stable,
@@ -2422,35 +2409,10 @@ fn evaluate_stability_level_precise<T: FloatLike, I: ProcessIntegrandImpl>(
 
 fn evaluate_stability_level<T: FloatLike, I: ProcessIntegrandImpl>(
     integrand: &mut I,
-    model: &Model,
-    source: &EvaluationSource<'_>,
-    stability_level: &StabilityLevelSetting,
-    max_eval: &Complex<F<f64>>,
-    wgt: F<f64>,
-    check_on_norm: bool,
-    is_final_level: bool,
-    is_primary_stability_level: bool,
-    evaluation_metadata: &mut EvaluationMetaData,
-    record_rotated_results: bool,
-    precision_label: &str,
-    escalate_if_exact_zero: bool,
+    context: &mut StabilityEvaluationContext<'_, '_>,
 ) -> Result<StabilityLevelResult> {
-    evaluate_stability_level_precise::<T, I>(
-        integrand,
-        model,
-        source,
-        stability_level,
-        max_eval,
-        wgt,
-        check_on_norm,
-        is_final_level,
-        is_primary_stability_level,
-        evaluation_metadata,
-        record_rotated_results,
-        precision_label,
-        escalate_if_exact_zero,
-    )
-    .map(PreciseStabilityLevelResult::into_f64)
+    evaluate_stability_level_precise::<T, I>(integrand, context)
+        .map(PreciseStabilityLevelResult::into_f64)
 }
 
 /// Result of cache validation checks
@@ -2577,6 +2539,13 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
     } else {
         None
     };
+    let mut context = EvaluationContext {
+        model,
+        settings: &settings,
+        rotation,
+        evaluation_metadata,
+        record_primary_timing,
+    };
     let result = (|| -> Result<GraphEvaluationResult<T>> {
         let result = match &gammaloop_sample {
             GammaLoopSample::Default(sample) => {
@@ -2594,11 +2563,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                     integrand,
                                     group_id,
                                     &DiscreteGraphSample::Default(sample.clone()),
-                                    model,
-                                    &settings,
-                                    rotation,
-                                    evaluation_metadata,
-                                    record_primary_timing,
+                                    &mut context,
                                     &zero,
                                 )?;
                                 sum.merge_in_place(group_result);
@@ -2613,11 +2578,7 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                                 integrand,
                                 graph_id,
                                 sample,
-                                model,
-                                &settings,
-                                rotation,
-                                evaluation_metadata,
-                                record_primary_timing,
+                                &mut context,
                                 None,
                             )?;
                             sum.merge_in_place(graph_result);
@@ -2626,33 +2587,17 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
                     )?
                 }
             }
-            GammaLoopSample::Graph { graph_id, sample } => evaluate_graph_term(
-                integrand,
-                *graph_id,
-                sample,
-                model,
-                &settings,
-                rotation,
-                evaluation_metadata,
-                record_primary_timing,
-                None,
-            )?,
+            GammaLoopSample::Graph { graph_id, sample } => {
+                evaluate_graph_term(integrand, *graph_id, sample, &mut context, None)?
+            }
             GammaLoopSample::MultiChanneling { .. } => {
                 unimplemented!(
                     "deprecated due to annyoing borrow issues, just set each graph to the same group"
                 );
             }
-            GammaLoopSample::DiscreteGraph { group_id, sample } => evaluate_graph_group(
-                integrand,
-                *group_id,
-                sample,
-                model,
-                &settings,
-                rotation,
-                evaluation_metadata,
-                record_primary_timing,
-                &zero,
-            )?,
+            GammaLoopSample::DiscreteGraph { group_id, sample } => {
+                evaluate_graph_group(integrand, *group_id, sample, &mut context, &zero)?
+            }
         };
 
         if cache {
@@ -2662,7 +2607,8 @@ fn evaluate_single<T: FloatLike, I: ProcessIntegrandImpl>(
         Ok(result)
     })();
     if record_primary_timing {
-        evaluation_metadata.integrand_evaluation_time = evaluation_metadata
+        context.evaluation_metadata.integrand_evaluation_time = context
+            .evaluation_metadata
             .integrand_evaluation_time
             .saturating_add(
                 start_integrand_timing
@@ -3068,52 +3014,28 @@ fn evaluate_from_source<I: ProcessIntegrandImpl>(
             .map(|recording| recording.record_rotated_results)
             .unwrap_or(false);
         let is_primary_stability_level = level_index == 0;
+        let mut context = StabilityEvaluationContext {
+            model,
+            source: &source,
+            stability_level: &stability_level,
+            max_eval: &max_eval,
+            wgt,
+            check_on_norm: integrand.get_settings().stability.check_on_norm,
+            is_final_level,
+            is_primary_stability_level,
+            evaluation_metadata: &mut evaluation_metadata,
+            record_rotated_results,
+            precision_label: match stability_level.precision {
+                Precision::Double => "f64",
+                Precision::Quad => "f128",
+                Precision::Arb => "ArbPrec",
+            },
+            escalate_if_exact_zero,
+        };
         let result_of_level = match stability_level.precision {
-            Precision::Double => evaluate_stability_level::<f64, I>(
-                integrand,
-                model,
-                &source,
-                &stability_level,
-                &max_eval,
-                wgt,
-                integrand.get_settings().stability.check_on_norm,
-                is_final_level,
-                is_primary_stability_level,
-                &mut evaluation_metadata,
-                record_rotated_results,
-                "f64",
-                escalate_if_exact_zero,
-            ),
-            Precision::Quad => evaluate_stability_level::<f128, I>(
-                integrand,
-                model,
-                &source,
-                &stability_level,
-                &max_eval,
-                wgt,
-                integrand.get_settings().stability.check_on_norm,
-                is_final_level,
-                is_primary_stability_level,
-                &mut evaluation_metadata,
-                record_rotated_results,
-                "f128",
-                escalate_if_exact_zero,
-            ),
-            Precision::Arb => evaluate_stability_level::<ArbPrec, I>(
-                integrand,
-                model,
-                &source,
-                &stability_level,
-                &max_eval,
-                wgt,
-                integrand.get_settings().stability.check_on_norm,
-                is_final_level,
-                is_primary_stability_level,
-                &mut evaluation_metadata,
-                record_rotated_results,
-                "ArbPrec",
-                escalate_if_exact_zero,
-            ),
+            Precision::Double => evaluate_stability_level::<f64, I>(integrand, &mut context),
+            Precision::Quad => evaluate_stability_level::<f128, I>(integrand, &mut context),
+            Precision::Arb => evaluate_stability_level::<ArbPrec, I>(integrand, &mut context),
         }?;
 
         let is_stable = result_of_level.is_stable;
@@ -3341,23 +3263,23 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                     eyre!(
                         "Quad precision was selected for the final result, but no quad stability level is configured."
                     )
-                })?;
+            })?;
             let mut evaluation_metadata = EvaluationMetaData::new_empty();
-            let result = evaluate_stability_level_precise::<f128, I>(
-                integrand,
+            let mut context = StabilityEvaluationContext {
                 model,
-                &source,
-                &stability_level,
-                &max_eval,
+                source: &source,
+                stability_level: &stability_level,
+                max_eval: &max_eval,
                 wgt,
-                integrand.get_settings().stability.check_on_norm,
-                true,
-                true,
-                &mut evaluation_metadata,
-                false,
-                "f128",
+                check_on_norm: integrand.get_settings().stability.check_on_norm,
+                is_final_level: true,
+                is_primary_stability_level: true,
+                evaluation_metadata: &mut evaluation_metadata,
+                record_rotated_results: false,
+                precision_label: "f128",
                 escalate_if_exact_zero,
-            )?;
+            };
+            let result = evaluate_stability_level_precise::<f128, I>(integrand, &mut context)?;
             Ok(
                 crate::integrands::evaluation::PreciseEvaluationResult::Quad(
                     finalize_precise_evaluation_result(result, wgt, base_metadata),
@@ -3375,23 +3297,23 @@ fn evaluate_from_source_precise<I: ProcessIntegrandImpl>(
                     eyre!(
                         "Arbitrary precision was selected for the final result, but no Arb precision stability level is configured."
                     )
-                })?;
+            })?;
             let mut evaluation_metadata = EvaluationMetaData::new_empty();
-            let result = evaluate_stability_level_precise::<ArbPrec, I>(
-                integrand,
+            let mut context = StabilityEvaluationContext {
                 model,
-                &source,
-                &stability_level,
-                &max_eval,
+                source: &source,
+                stability_level: &stability_level,
+                max_eval: &max_eval,
                 wgt,
-                integrand.get_settings().stability.check_on_norm,
-                true,
-                true,
-                &mut evaluation_metadata,
-                false,
-                "ArbPrec",
+                check_on_norm: integrand.get_settings().stability.check_on_norm,
+                is_final_level: true,
+                is_primary_stability_level: true,
+                evaluation_metadata: &mut evaluation_metadata,
+                record_rotated_results: false,
+                precision_label: "ArbPrec",
                 escalate_if_exact_zero,
-            )?;
+            };
+            let result = evaluate_stability_level_precise::<ArbPrec, I>(integrand, &mut context)?;
             Ok(crate::integrands::evaluation::PreciseEvaluationResult::Arb(
                 finalize_precise_evaluation_result(result, wgt, base_metadata),
             ))

@@ -20,7 +20,7 @@ enable_thresholds = true
 check_esurface_at_generation = false
 
 [cli_settings.state]
-folder = "./examples/cli/scalar_topologies/bubble_dod2_state"
+folder = "tests/artifacts/dod2_bubble"
 name = "bubble_dod2_state"
 
 [[command_blocks]]

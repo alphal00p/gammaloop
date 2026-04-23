@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use gammalooprs::processes::AmplitudeGraph;
+use gammalooprs::processes::{AmplitudeGraph, AnalyticalEvaluationConfig};
 
 use gammalooprs::processes::{Amplitude, ProcessCollection};
 
@@ -122,16 +122,18 @@ impl Evaluate {
                     graph_term.graph.name.blue()
                 );
                 complete_evaluation_for_this_graph *= graph_term.analytical_evaluation(
-                    &model,
-                    refresh_model_values,
                     gc,
-                    self.numerical,
-                    vakint,
-                    &true_settings,
-                    &global_cli_settings.global.generation.uv.vakint,
-                    default_runtime_settings,
-                    // Only include the overall global numerator on the first of the connected components
-                    i_gc == 0,
+                    AnalyticalEvaluationConfig {
+                        model: &model,
+                        refresh_model_values,
+                        evaluate_numerically: self.numerical,
+                        vakint,
+                        true_settings: &true_settings,
+                        settings: &global_cli_settings.global.generation.uv.vakint,
+                        run_time_settings: default_runtime_settings,
+                        // Only include the overall global numerator on the first connected component.
+                        include_global_numerator: i_gc == 0,
+                    },
                 )?;
             }
             complete_evaluation_for_this_graph *= &g.global_prefactor.projector * &g.overall_factor;

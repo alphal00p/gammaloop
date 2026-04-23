@@ -456,16 +456,14 @@ impl<T> SmartEdgeVec<T> {
     fn update_edge_references(&mut self, old_edge_id: EdgeIndex, new_edge_id: EdgeIndex) {
         for (_, d) in self.involution.iter_mut() {
             match d {
-                InvolutiveMapping::Source { data, .. } => {
-                    if data.data == old_edge_id {
-                        data.data = new_edge_id;
-                    }
+                InvolutiveMapping::Source { data, .. } if data.data == old_edge_id => {
+                    data.data = new_edge_id;
                 }
-                InvolutiveMapping::Identity { data, .. } => {
-                    if data.data == old_edge_id {
-                        data.data = new_edge_id;
-                    }
+
+                InvolutiveMapping::Identity { data, .. } if data.data == old_edge_id => {
+                    data.data = new_edge_id;
                 }
+
                 _ => {}
             }
         }

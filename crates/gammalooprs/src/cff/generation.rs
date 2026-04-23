@@ -368,20 +368,25 @@ pub struct ConstraintData<'a> {
     pub illegal_esurfaces: &'a [&'a Esurface],
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct UvCffTopology<'a> {
+    pub contract_edges: &'a [EdgeIndex],
+    pub edges_in_initial_state_cut: &'a [EdgeIndex],
+    pub orientation: &'a EdgeVec<Orientation>,
+    pub cut_edges: &'a [EdgeIndex],
+}
+
 pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
-    contract_edges: &[EdgeIndex],
-    edges_in_initial_state_cut: &[EdgeIndex],
-    orientation: &EdgeVec<Orientation>,
-    cut_edges: &[EdgeIndex],
+    topology: UvCffTopology<'_>,
     setup: PostProcessingSetup<'_>,
 ) -> Result<Atom> {
     let mut generation_graph =
-        CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), subgraph)?;
+        CFFGenerationGraph::new_from_subgraph(graph, topology.orientation.clone(), subgraph)?;
 
-    for contracted_edge in contract_edges {
+    for contracted_edge in topology.contract_edges {
         generation_graph = generation_graph.contract_edge(*contracted_edge);
     }
 
@@ -399,21 +404,29 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     let generate_tree_for_orientation = generate_tree_for_orientation(
         generation_graph,
         &mut surface_cache,
-        edges_in_initial_state_cut,
+        topology.edges_in_initial_state_cut,
         canonize_esurface,
     );
 
     let mut tree = generate_tree_for_orientation.map(forget_graphs);
 
-    post_process(&mut tree, orientation, subgraph, &surface_cache, setup);
+    post_process(
+        &mut tree,
+        topology.orientation,
+        subgraph,
+        &surface_cache,
+        setup,
+    );
 
     let surface_cache_to_use = setup
         .rewrite_esurfaces
         .map_or(&surface_cache, |rewrite| rewrite.allowed_targets);
 
     let atom_tree = tree.to_atom_inv();
-    let atom_tree_substituted = surface_cache_to_use.substitute_energies(&atom_tree, cut_edges);
-    let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph, contract_edges);
+    let atom_tree_substituted =
+        surface_cache_to_use.substitute_energies(&atom_tree, topology.cut_edges);
+    let inverse_energies =
+        get_cff_inverse_energy_product_impl(graph, subgraph, topology.contract_edges);
 
     Ok(atom_tree_substituted * &inverse_energies)
 }

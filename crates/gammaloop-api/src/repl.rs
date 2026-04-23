@@ -468,14 +468,16 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
             && looks_like_option_prefix(context.current_token.cooked.as_str())
         {
             add_flag_suggestions(
-                context.cmd,
-                context.current_token,
-                pos,
+                FlagSuggestionRequest {
+                    cmd: context.cmd,
+                    current_token: context.current_token,
+                    pos,
+                    used_arg_ids: &used_arg_ids,
+                    seen_arg_ids: &seen_arg_ids,
+                    hide_seen_repeatable_args: false,
+                },
                 &mut suggestions,
                 &mut seen,
-                &used_arg_ids,
-                &seen_arg_ids,
-                false,
             );
             if !suggestions.is_empty() {
                 return suggestions;
@@ -500,12 +502,14 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                 }
                 ArgValueCompletion::IntegrandSelector(kind) => {
                     add_integrand_suggestions(
-                        completion_state,
-                        context.all_completed_tokens,
-                        context.root_cmd,
-                        value_request,
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
                         kind,
-                        pos,
                         &mut suggestions,
                         &mut seen,
                     );
@@ -523,24 +527,28 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
                 }
                 ArgValueCompletion::SelectedMasterGraph => {
                     add_selected_master_graph_suggestions(
-                        completion_state,
-                        context.all_completed_tokens,
-                        context.root_cmd,
-                        value_request,
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
                         &flag_value_context.consumed_values,
-                        pos,
                         &mut suggestions,
                         &mut seen,
                     );
                 }
                 ArgValueCompletion::SelectedIntegrandCategory => {
                     add_selected_integrand_category_suggestions(
-                        completion_state,
-                        context.all_completed_tokens,
-                        context.root_cmd,
-                        value_request,
+                        CompletionSuggestionContext {
+                            completion_state,
+                            completed_tokens: context.all_completed_tokens,
+                            root_cmd: context.root_cmd,
+                            request: value_request,
+                            pos,
+                        },
                         &flag_value_context.consumed_values,
-                        pos,
                         &mut suggestions,
                         &mut seen,
                     );
@@ -579,14 +587,16 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
 
     if context.current_token.cooked.starts_with('-') {
         add_flag_suggestions(
-            context.cmd,
-            context.current_token,
-            pos,
+            FlagSuggestionRequest {
+                cmd: context.cmd,
+                current_token: context.current_token,
+                pos,
+                used_arg_ids: &used_arg_ids,
+                seen_arg_ids: &seen_arg_ids,
+                hide_seen_repeatable_args: false,
+            },
             &mut suggestions,
             &mut seen,
-            &used_arg_ids,
-            &seen_arg_ids,
-            false,
         );
         return suggestions;
     }
@@ -594,14 +604,16 @@ fn collect_completions<C: Parser + Send + Sync + 'static>(
     if context.current_token.cooked.is_empty() && process_settings_command_kind(&context).is_none()
     {
         add_flag_suggestions(
-            context.cmd,
-            context.current_token,
-            pos,
+            FlagSuggestionRequest {
+                cmd: context.cmd,
+                current_token: context.current_token,
+                pos,
+                used_arg_ids: &used_arg_ids,
+                seen_arg_ids: &seen_arg_ids,
+                hide_seen_repeatable_args: true,
+            },
             &mut suggestions,
             &mut seen,
-            &used_arg_ids,
-            &seen_arg_ids,
-            true,
         );
     }
 
@@ -896,24 +908,28 @@ fn positional_path_completion_request(
     })
 }
 
-fn add_flag_suggestions(
-    cmd: &clap::Command,
-    current_token: &CompletionToken,
+struct FlagSuggestionRequest<'a> {
+    cmd: &'a clap::Command,
+    current_token: &'a CompletionToken,
     pos: usize,
+    used_arg_ids: &'a HashSet<String>,
+    seen_arg_ids: &'a HashSet<String>,
+    hide_seen_repeatable_args: bool,
+}
+
+fn add_flag_suggestions(
+    request: FlagSuggestionRequest<'_>,
     suggestions: &mut Vec<reedline::Suggestion>,
     seen: &mut HashSet<String>,
-    used_arg_ids: &HashSet<String>,
-    seen_arg_ids: &HashSet<String>,
-    hide_seen_repeatable_args: bool,
 ) {
-    let prefix = current_token.cooked.as_str();
+    let prefix = request.current_token.cooked.as_str();
 
-    for arg in cmd.get_arguments() {
+    for arg in request.cmd.get_arguments() {
         let arg_id = arg_id(arg);
-        if used_arg_ids.contains(&arg_id) {
+        if request.used_arg_ids.contains(&arg_id) {
             continue;
         }
-        if hide_seen_repeatable_args && seen_arg_ids.contains(&arg_id) {
+        if request.hide_seen_repeatable_args && request.seen_arg_ids.contains(&arg_id) {
             continue;
         }
         if let Some(short) = arg.get_short() {
@@ -924,7 +940,7 @@ fn add_flag_suggestions(
                     description: arg.get_help().map(|help| help.to_string()),
                     style: None,
                     extra: None,
-                    span: Span::new(current_token.start, pos),
+                    span: Span::new(request.current_token.start, request.pos),
                     append_whitespace: true,
                 });
             }
@@ -938,7 +954,7 @@ fn add_flag_suggestions(
                     description: arg.get_help().map(|help| help.to_string()),
                     style: None,
                     extra: None,
-                    span: Span::new(current_token.start, pos),
+                    span: Span::new(request.current_token.start, request.pos),
                     append_whitespace: true,
                 });
             }
@@ -2490,21 +2506,29 @@ fn add_process_suggestions(
     }
 }
 
-fn add_integrand_suggestions(
-    completion_state: &CompletionState,
-    completed_tokens: &[CompletionToken],
-    root_cmd: &clap::Command,
-    request: &PathCompletionRequest,
-    selector_kind: SelectorKind,
+struct CompletionSuggestionContext<'a> {
+    completion_state: &'a CompletionState,
+    completed_tokens: &'a [CompletionToken],
+    root_cmd: &'a clap::Command,
+    request: &'a PathCompletionRequest,
     pos: usize,
+}
+
+fn add_integrand_suggestions(
+    context: CompletionSuggestionContext<'_>,
+    selector_kind: SelectorKind,
     suggestions: &mut Vec<reedline::Suggestion>,
     seen: &mut HashSet<String>,
 ) {
-    let prefix = request.partial_path.as_str();
-    let process_filter = find_selected_process_entry(completion_state, root_cmd, completed_tokens);
+    let prefix = context.request.partial_path.as_str();
+    let process_filter = find_selected_process_entry(
+        context.completion_state,
+        context.root_cmd,
+        context.completed_tokens,
+    );
     let mut matching_processes = Vec::new();
 
-    for entry in &completion_state.process_entries {
+    for entry in &context.completion_state.process_entries {
         if !matches_selector_kind(entry.kind, selector_kind) {
             continue;
         }
@@ -2521,7 +2545,7 @@ fn add_integrand_suggestions(
             if !integrand_name.starts_with(prefix) {
                 continue;
             }
-            let rendered = render_value_completion(integrand_name, request.quote_style);
+            let rendered = render_value_completion(integrand_name, context.request.quote_style);
             if !seen.insert(rendered.clone()) {
                 continue;
             }
@@ -2533,7 +2557,8 @@ fn add_integrand_suggestions(
                     selected_process.name
                 )
             } else {
-                let processes = completion_state
+                let processes = context
+                    .completion_state
                     .process_entries
                     .iter()
                     .filter(|candidate| {
@@ -2557,7 +2582,7 @@ fn add_integrand_suggestions(
                 description,
                 style: None,
                 extra: None,
-                span: Span::new(request.span_start, pos),
+                span: Span::new(context.request.span_start, context.pos),
                 append_whitespace: true,
             });
         }
@@ -2606,23 +2631,21 @@ fn add_selected_integrand_target_suggestions(
 }
 
 fn add_selected_master_graph_suggestions(
-    completion_state: &CompletionState,
-    completed_tokens: &[CompletionToken],
-    root_cmd: &clap::Command,
-    request: &PathCompletionRequest,
+    context: CompletionSuggestionContext<'_>,
     consumed_values: &[String],
-    pos: usize,
     suggestions: &mut Vec<reedline::Suggestion>,
     seen: &mut HashSet<String>,
 ) {
-    let prefix = request.partial_path.as_str();
+    let prefix = context.request.partial_path.as_str();
     let consumed_values = consumed_values
         .iter()
         .map(String::as_str)
         .collect::<HashSet<_>>();
-    let Some(entry) =
-        find_selected_integrand_detail_entry(completion_state, root_cmd, completed_tokens)
-    else {
+    let Some(entry) = find_selected_integrand_detail_entry(
+        context.completion_state,
+        context.root_cmd,
+        context.completed_tokens,
+    ) else {
         return;
     };
 
@@ -2633,7 +2656,7 @@ fn add_selected_master_graph_suggestions(
         if !prefix.is_empty() && !graph_name.starts_with(prefix) {
             continue;
         }
-        let rendered = render_value_completion(graph_name, request.quote_style);
+        let rendered = render_value_completion(graph_name, context.request.quote_style);
         if !seen.insert(rendered.clone()) {
             continue;
         }
@@ -2645,30 +2668,28 @@ fn add_selected_master_graph_suggestions(
             )),
             style: None,
             extra: None,
-            span: Span::new(request.span_start, pos),
+            span: Span::new(context.request.span_start, context.pos),
             append_whitespace: true,
         });
     }
 }
 
 fn add_selected_integrand_category_suggestions(
-    completion_state: &CompletionState,
-    completed_tokens: &[CompletionToken],
-    root_cmd: &clap::Command,
-    request: &PathCompletionRequest,
+    context: CompletionSuggestionContext<'_>,
     consumed_values: &[String],
-    pos: usize,
     suggestions: &mut Vec<reedline::Suggestion>,
     seen: &mut HashSet<String>,
 ) {
-    let prefix = request.partial_path.as_str();
+    let prefix = context.request.partial_path.as_str();
     let consumed_values = consumed_values
         .iter()
         .map(String::as_str)
         .collect::<HashSet<_>>();
-    let Some(entry) =
-        find_selected_integrand_detail_entry(completion_state, root_cmd, completed_tokens)
-    else {
+    let Some(entry) = find_selected_integrand_detail_entry(
+        context.completion_state,
+        context.root_cmd,
+        context.completed_tokens,
+    ) else {
         return;
     };
 
@@ -2679,7 +2700,7 @@ fn add_selected_integrand_category_suggestions(
         if !prefix.is_empty() && !category.starts_with(prefix) {
             continue;
         }
-        let rendered = render_value_completion(category, request.quote_style);
+        let rendered = render_value_completion(category, context.request.quote_style);
         if !seen.insert(rendered.clone()) {
             continue;
         }
@@ -2691,7 +2712,7 @@ fn add_selected_integrand_category_suggestions(
             )),
             style: None,
             extra: None,
-            span: Span::new(request.span_start, pos),
+            span: Span::new(context.request.span_start, context.pos),
             append_whitespace: true,
         });
     }
@@ -5213,11 +5234,10 @@ mod tests {
                         other
                     )),
                 },
-                Some("integrand-name") => {
-                    if arg_value_completion(arg).is_none() {
-                        missing.push(format!("{} --integrand-name", path.join(" ")));
-                    }
+                Some("integrand-name") if arg_value_completion(arg).is_none() => {
+                    missing.push(format!("{} --integrand-name", path.join(" ")));
                 }
+
                 _ => {}
             },
         );

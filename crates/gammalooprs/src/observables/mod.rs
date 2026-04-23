@@ -3255,16 +3255,17 @@ pub struct HistogramObservable {
 }
 
 impl HistogramObservable {
-    fn new(
-        definition: ObservableDefinition,
-        selections: Vec<ConfiguredSelector>,
-        quantities: &QuantitiesSettings,
-        quantity_settings: &QuantitySettings,
-        observable_name: &str,
-        settings: &ObservableSettings,
-        selector_settings: &SelectorsSettings,
-        process_info: Option<&HistogramProcessInfo>,
-    ) -> Result<Self> {
+    fn new(config: HistogramObservableConfig<'_>) -> Result<Self> {
+        let HistogramObservableConfig {
+            definition,
+            selections,
+            quantities,
+            quantity_settings,
+            observable_name,
+            settings,
+            selector_settings,
+            process_info,
+        } = config;
         let state = match (&settings.histogram, definition.coordinate_kind()) {
             (HistogramSettings::Continuous(histogram), ObservableCoordinateKind::Continuous) => {
                 let supports_misbinning_mitigation = definition.supports_misbinning_mitigation();
@@ -3612,6 +3613,17 @@ impl HistogramObservable {
         }
         handles
     }
+}
+
+struct HistogramObservableConfig<'a> {
+    definition: ObservableDefinition,
+    selections: Vec<ConfiguredSelector>,
+    quantities: &'a QuantitiesSettings,
+    quantity_settings: &'a QuantitySettings,
+    observable_name: &'a str,
+    settings: &'a ObservableSettings,
+    selector_settings: &'a SelectorsSettings,
+    process_info: Option<&'a HistogramProcessInfo>,
 }
 
 fn resolve_discrete_histogram_layout(
@@ -4075,14 +4087,20 @@ impl Observables {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Observables::Histogram(HistogramObservable::new(
-            ObservableDefinition::from_settings(quantity, clustering_registry, model)?,
-            selections,
-            quantities,
-            quantity,
-            name,
-            settings,
-            selector_settings,
-            process_info,
+            HistogramObservableConfig {
+                definition: ObservableDefinition::from_settings(
+                    quantity,
+                    clustering_registry,
+                    model,
+                )?,
+                selections,
+                quantities,
+                quantity_settings: quantity,
+                observable_name: name,
+                settings,
+                selector_settings,
+                process_info,
+            },
         )?))
     }
 

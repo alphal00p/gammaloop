@@ -114,7 +114,7 @@ impl FromMappings for Permutation {
         }
 
         // 4) Assign displaced sources to remaining free targets
-        for (s, t) in displaced_sources.into_iter().zip(free_targets.into_iter()) {
+        for (s, t) in displaced_sources.into_iter().zip(free_targets) {
             // Note: t != s by construction (if t==s, owner_of_target[s] would have been None earlier,
             // and we would have kept the identity)
             map[s] = t;

@@ -473,8 +473,8 @@ pub trait TensorStructure {
 
         // Collect only the positions of repeated elements
         positions
-            .into_iter()
-            .filter_map(|(_, indices)| {
+            .into_values()
+            .filter_map(|indices| {
                 if indices.len() == 2 {
                     Some([indices[0], indices[1]])
                 } else {

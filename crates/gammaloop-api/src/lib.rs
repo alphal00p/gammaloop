@@ -88,6 +88,47 @@ pub mod tracing;
 #[cfg(test)]
 pub(crate) static LOG_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+#[cfg(test)]
+fn is_test_workspace_root(path: &Path) -> bool {
+    path.join("Cargo.toml").is_file()
+        && path.join("tests/resources").is_dir()
+        && path.join("examples/cli").is_dir()
+}
+
+#[cfg(test)]
+pub(crate) fn test_workspace_root() -> &'static Path {
+    static WORKSPACE_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+    WORKSPACE_ROOT
+        .get_or_init(|| {
+            let current_dir = std::env::current_dir().ok();
+            let current_exe = std::env::current_exe().ok();
+            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+
+            let mut candidates = Vec::new();
+            if let Some(dir) = current_dir.clone() {
+                candidates.extend(dir.ancestors().map(Path::to_path_buf));
+            }
+            if let Some(exe) = current_exe.clone() {
+                candidates.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
+            }
+            candidates.extend(manifest_dir.ancestors().map(Path::to_path_buf));
+
+            candidates
+                .into_iter()
+                .find(|path| is_test_workspace_root(path))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Failed to locate workspace root from current dir '{:?}', current exe '{:?}', or manifest dir '{}'",
+                        current_dir,
+                        current_exe,
+                        manifest_dir.display()
+                    )
+                })
+        })
+        .as_path()
+}
+
 pub(crate) const GLOBAL_SETTINGS_FILENAME: &str = "global_settings.toml";
 pub(crate) const DEFAULT_RUNTIME_SETTINGS_FILENAME: &str = "default_runtime_settings.toml";
 const BANNER_ART: &str = r"              ██         ▄████████▄  ▄████████▄  ██████████▄
@@ -2377,7 +2418,7 @@ mod tests {
                 .and_then(JsonValue::as_object)
                 .and_then(|compile| compile.get("compiler"))
                 .and_then(JsonValue::as_str),
-            Some("g++")
+            Some(gammalooprs::settings::global::default_external_compiler())
         );
     }
 
@@ -2404,7 +2445,13 @@ mod tests {
         assert!(saved.contains("display_directive = \"info\""), "{saved}");
         assert!(saved.contains("logfile_directive = \"off\""), "{saved}");
         assert!(saved.contains("log_format = \"Long\""), "{saved}");
-        assert!(saved.contains("compiler = \"g++\""), "{saved}");
+        assert!(
+            saved.contains(&format!(
+                "compiler = \"{}\"",
+                gammalooprs::settings::global::default_external_compiler()
+            )),
+            "{saved}"
+        );
     }
 
     #[test]

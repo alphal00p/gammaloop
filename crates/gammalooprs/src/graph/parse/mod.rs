@@ -21,11 +21,10 @@ use crate::{
         GlobalPrefactor,
         aind::{Aind, NewAind},
         graph::GeneratePolarizations,
-        symbolica_ext::AtomCoreExt,
         ufo::UFO,
     },
     processes::DotExportSettings,
-    utils::symbolica_ext::DOD,
+    utils::symbolica_ext::{DOD, LogPrint},
     uv::UltravioletGraph,
 };
 use ahash::{AHashMap, AHashSet};
@@ -51,8 +50,11 @@ use linnet::{
 };
 use spenso::{
     contraction::Contract,
-    network::library::TensorLibraryData,
-    structure::{HasStructure, OrderedStructure, representation::Euclidean},
+    network::{
+        library::TensorLibraryData,
+        parsing::{NetworkParse, ParseSettings},
+    },
+    structure::{HasStructure, OrderedStructure, representation::Euclidean, slot::IsAbstractSlot},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::{
@@ -64,16 +66,16 @@ use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 use super::{
-    Edge, Graph, LMBext, NumHedgeData, Vertex,
+    Autogen, Edge, Graph, HedgeData, LMBext, Vertex,
     edge::{EdgeMass, ParseEdge},
     global::ParseData,
-    hedge_data::{NumIndices, ParseHedge},
+    hedge_data::{NumIndices, ParseHedgeData},
     vertex::ParseVertex,
 };
 
 /// Extract oriented particles from hedges, filtering out dummy edges
 pub fn extract_oriented_particles_from_vertex_hedges<I, V>(
-    graph: &HedgeGraph<ParseEdge, V, ParseHedge>,
+    graph: &HedgeGraph<ParseEdge, V, ParseHedgeData>,
     hedges: I,
     model: &Model,
 ) -> Vec<crate::model::ArcParticle>
@@ -97,8 +99,8 @@ where
 }
 
 // Type aliases for cleaner code
-type NumGraph = HedgeGraph<ParseEdge, ParseVertex, NumHedgeData>;
-type UnderlyingGraph = HedgeGraph<Edge, Vertex, NumHedgeData>;
+type NumGraph = HedgeGraph<ParseEdge, ParseVertex, HedgeData>;
+type UnderlyingGraph = HedgeGraph<Edge, Vertex, HedgeData>;
 
 pub mod string_utils;
 pub use string_utils::{FromStripedStr, StripParse, ToQuoted};
@@ -106,11 +108,11 @@ pub use string_utils::{FromStripedStr, StripParse, ToQuoted};
 #[derive(Clone, Debug)]
 pub struct ParseGraph {
     pub global_data: ParseData,
-    pub graph: HedgeGraph<ParseEdge, ParseVertex, ParseHedge>,
+    pub graph: HedgeGraph<ParseEdge, ParseVertex, ParseHedgeData>,
 }
 
 impl Deref for ParseGraph {
-    type Target = HedgeGraph<ParseEdge, ParseVertex, ParseHedge>;
+    type Target = HedgeGraph<ParseEdge, ParseVertex, ParseHedgeData>;
 
     fn deref(&self) -> &Self::Target {
         &self.graph
@@ -299,7 +301,7 @@ impl ParseGraph {
             seen_edges: &mut AHashSet<usize>,
             graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
             model: &Model,
-            builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
+            builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedgeData>,
         ) -> Result<()> {
             // Only mark as seen if not already processed (for bidirectional case)
             if !seen_edges.contains(&edge_idx) {
@@ -575,7 +577,7 @@ impl ParseGraph {
             .map_data_ref_result(
                 |_, _, v| Ok(v),
                 ParseEdge::parse(model),
-                ParseHedge::parse(),
+                ParseHedgeData::parse(),
             )?
             .map_data_ref_result(
                 ParseVertex::parse(model, &global_data),
@@ -816,12 +818,21 @@ impl Graph {
                 self.name
             );
         }
-        let net = full_num.parse_into_net().map_err(Report::from)?;
+        let net = full_num
+            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+            .map_err(Report::from)?;
         let dangling = net.graph.dangling_indices();
         if !dangling.is_empty() {
             return Err(eyre!(
-                "Full numerator still has dangling tensor indices: {}",
-                dangling.iter().map(|slot| format!("{slot:?}")).join(", ")
+                "Full numerator still has dangling tensor indices: \n{}",
+                dangling
+                    .iter()
+                    .map(|slot| format!(
+                        "{}:{}",
+                        slot.to_atom().log_print(None),
+                        slot.to_atom().to_plain_string()
+                    ))
+                    .join(",\n")
             ));
         }
 
@@ -851,9 +862,9 @@ impl Graph {
         let num_graph = parse_graph.graph.map_data_ref(
             |_, _, v| v.clone(),
             |_, _, _, e| e.map(|e| e.clone()),
-            |h, hd| NumHedgeData {
+            |h, hd| HedgeData {
                 num_indices: NumIndices::parse(parse_graph)(h, hd),
-                node_order: hedge_order[h.0],
+                ufo_order: Autogen::from_option_or_generate(hd.ufo_order, || hedge_order[h.0]),
             },
         );
 
@@ -990,7 +1001,7 @@ impl Graph {
             for h in c {
                 color_slots.push(&graph[h].num_indices.color_indices.vertex_indices);
                 spin_slots.push(&graph[h].num_indices.spin_indices.vertex_indices);
-                order.push(graph[h].node_order);
+                order.push(graph[h].ufo_order.value);
                 momenta.push((graph.flow(h), graph[&h]));
             }
 
@@ -1036,35 +1047,34 @@ impl Graph {
     ) -> Result<UnderlyingGraph> {
         let mut loop_edge_filter = graph.full_filter();
         loop_edge_filter.subtract_with(&graph.bridges_of(&loop_edge_filter));
-        let hard_edge_ids: Vec<EdgeIndex> = graph
-            .iter_edges_of(&loop_edge_filter)
-            .filter(|(pair, _, _)| pair.is_paired())
-            .map(|(_, edge_id, _)| edge_id)
-            .collect();
         let mut vertex_color_nums = numerators.color_vertex.clone();
         let mut vertex_spin_nums = numerators.spin_vertex.clone();
-        graph.map_result(
+        let intermediate: UnderlyingGraph = graph.map_result(
             |_, i, v| {
-                let num = if let Some(num) = v.num {
-                    num
-                } else {
-                    vertex_spin_nums[i.0]
-                        .take()
-                        .unwrap()
-                        .contract(&vertex_color_nums[i.0].take().unwrap())
-                        .unwrap()
-                        .scalar()
-                        .unwrap()
+                let num = match v.num {
+                    Some(num) => Autogen::explicit(num),
+                    None => Autogen::generated(
+                        vertex_spin_nums[i.0]
+                            .take()
+                            .unwrap()
+                            .contract(&vertex_color_nums[i.0].take().unwrap())
+                            .unwrap()
+                            .scalar()
+                            .unwrap(),
+                    ),
                 };
 
-                let dod = if let Some(d) = v.dod {
-                    d
-                } else {
-                    num.dod(&hard_edge_ids)
+                let dod = match v.dod {
+                    Some(dod) => Autogen::explicit(dod),
+                    None => Autogen::generated(if num.autogenerated {
+                        v.vertex_rule.as_ref().map(|vr| vr.dod).unwrap_or(0)
+                    } else {
+                        num.all_dod()
+                    }),
                 };
 
                 Ok(Vertex {
-                    name: v.name.unwrap_or(i.to_string()),
+                    name: Autogen::from_option_or_generate(v.name, || i.to_string()),
                     num,
                     dod,
                     vertex_rule: v.vertex_rule,
@@ -1083,23 +1093,33 @@ impl Graph {
                     }
 
 
-                let num = e.num.unwrap_or(if initial_state_cut.left.intersects(&p) {
-                    numerators.color_edge[eid].clone()
-                } else {
-                    &numerators.color_edge[eid] * &numerators.spin_edge[eid]
-                });
+                let num = match e.num {
+                    Some(num) => Autogen::explicit(num),
+                    None => Autogen::generated(if initial_state_cut.left.intersects(&p) {
+                        numerators.color_edge[eid].clone()
+                    } else {
+                        &numerators.color_edge[eid] * &numerators.spin_edge[eid]
+                    }),
+                };
 
-                let dod = if let Some(d) = e.dod {
-                    d
-                } else {
-                    num.dod(&hard_edge_ids) - 2
+                let dod = match e.dod {
+                    Some(dod) => Autogen::explicit(dod),
+                    None => Autogen::generated(if num.autogenerated {
+                        if let Some(particle) = e.particle.particle() {
+                            model.get_propagator_for_particle(&particle.name).dod
+                        } else {
+                            -2
+                        }
+                    } else {
+                        num.edge_dod(eid) -2
+                    }),
                 };
 
                 Ok(EdgeData::new(
                     Edge {
                         mass: EdgeMass::from_atom(e.particle.mass_atom(), model, param_builder)?,
                         is_dummy: e.is_dummy,
-                        name: e.name.unwrap_or(eid.to_string()),
+                        name: Autogen::from_option_or_generate(e.name, || eid.to_string()),
                         particle: e.particle,
                         num,
                         dod,
@@ -1112,7 +1132,9 @@ impl Graph {
                 ))
             },
             |_, h| Ok(h),
-        )
+        )?;
+
+        Ok(intermediate)
     }
 
     fn setup_loop_momentum_basis(
@@ -1304,7 +1326,7 @@ impl Graph {
     ) -> Result<Vec<Self>> {
         let mut graphs = Vec::new();
 
-        for (graph, global_data) in set.set.into_iter().zip(set.global_data.into_iter()) {
+        for (graph, global_data) in set.set.into_iter().zip(set.global_data) {
             let graph = DotGraph { global_data, graph };
             debug!("Parsing: \n{}", graph.debug_dot());
             graphs.push(Graph::from_parsed(

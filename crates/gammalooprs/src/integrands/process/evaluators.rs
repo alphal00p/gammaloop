@@ -1286,7 +1286,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
         let mult_offset = self.multiplicative_offset;
         let start = self.orientations_start;
         Self::set_orientation_values_impl(
-            self.as_mut(),
+            self.as_mut_slice(),
             one,
             zero,
             mult_offset,
@@ -1301,7 +1301,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
         let multiplicative_offset = self.multiplicative_offset;
         let start = self.override_pos;
         set_override_if(
-            self.as_mut(),
+            self.as_mut_slice(),
             one,
             zero,
             over_ride,
@@ -1309,7 +1309,7 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
             multiplicative_offset,
         );
     }
-    pub fn as_mut(&mut self) -> &mut [Complex<F<T>>] {
+    pub fn as_mut_slice(&mut self) -> &mut [Complex<F<T>>] {
         match &mut self.values {
             SliceMut::Borrowed(s) => s,
             SliceMut::Owned(v) => v,
@@ -1321,6 +1321,12 @@ impl<'a, T: FloatLike> InputParams<'a, T> {
             SliceMut::Borrowed(s) => s,
             SliceMut::Owned(v) => v,
         }
+    }
+}
+
+impl<T: FloatLike> AsMut<[Complex<F<T>>]> for InputParams<'_, T> {
+    fn as_mut(&mut self) -> &mut [Complex<F<T>>] {
+        self.as_mut_slice()
     }
 }
 

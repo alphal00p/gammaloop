@@ -1643,6 +1643,7 @@ dependencies = [
  "indicatif",
  "insta",
  "itertools 0.14.0",
+ "json5",
  "libc",
  "linnet",
  "linreg",
@@ -5634,7 +5635,8 @@ dependencies = [
 [[package]]
 name = "wasm-minimal-protocol"
 version = "0.2.0"
-source = "git+https://github.com/astrale-sharp/wasm-minimal-protocol#4d10ad3cd606b5fac7b6ab766665d75a6784f19b"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae17f1dd65ee737caf73ea45f517c09578ab60970c28e5e96b7900fe2e245633"
 dependencies = [
  "proc-macro2",
  "quote",

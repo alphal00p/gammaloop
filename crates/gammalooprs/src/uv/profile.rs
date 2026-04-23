@@ -962,12 +962,14 @@ impl<'a> UVProfileRunner<'a> {
                 |integrand, ls| {
                     let res = self.sample_subset(
                         integrand,
-                        graph_id,
-                        graph,
-                        &ls,
-                        lmb,
-                        &sample,
-                        orientation_labels,
+                        SubsetSampleInput {
+                            graph_id,
+                            graph,
+                            subset: &ls,
+                            lmb,
+                            sample: &sample,
+                            orientation_labels,
+                        },
                     )?;
                     subset_span.pb_inc(1);
                     Ok((ls, res))
@@ -1012,47 +1014,66 @@ struct InspectRun {
     used_arb_prec_retry: bool,
 }
 
+#[derive(Clone, Copy)]
+struct SubsetOrientationInput<'a> {
+    graph_id: usize,
+    subset: &'a SubSet<LoopIndex>,
+    lmb: &'a LoopMomentumBasis,
+    sample: &'a LoopMomentumSample,
+    orientation: Option<usize>,
+}
+
+struct SubsetSampleInput<'a> {
+    graph_id: usize,
+    graph: &'a Graph,
+    subset: &'a SubSet<LoopIndex>,
+    lmb: &'a LoopMomentumBasis,
+    sample: &'a LoopMomentumSample,
+    orientation_labels: Option<&'a [String]>,
+}
+
 impl<'a> UVProfileRunner<'a> {
     fn sample_subset(
         &self,
         integrand: &mut ProcessIntegrand,
-        graph_id: usize,
-        graph: &Graph,
-        subset: &SubSet<LoopIndex>,
-        lmb: &LoopMomentumBasis,
-        sample: &LoopMomentumSample,
-        orientation_labels: Option<&[String]>,
+        input: SubsetSampleInput<'_>,
     ) -> Result<SubSetResult> {
-        let mut subgraph: SuBitGraph = graph.empty_subgraph();
-        for l in subset.included_iter() {
-            let eid = lmb.loop_edges[l];
-            let cut = graph[&eid].1.any_hedge();
-            let root_node = graph.node_id(cut);
+        let mut subgraph: SuBitGraph = input.graph.empty_subgraph();
+        for l in input.subset.included_iter() {
+            let eid = input.lmb.loop_edges[l];
+            let cut = input.graph[&eid].1.any_hedge();
+            let root_node = input.graph.node_id(cut);
 
-            let tree =
-                SimpleTraversalTree::depth_first_traverse(graph, &lmb.tree, &root_node, None)
-                    .unwrap();
+            let tree = SimpleTraversalTree::depth_first_traverse(
+                input.graph,
+                &input.lmb.tree,
+                &root_node,
+                None,
+            )
+            .unwrap();
             subgraph.union_with(
                 &tree
-                    .get_cycle(cut, graph.underlying.as_ref())
+                    .get_cycle(cut, input.graph.underlying.as_ref())
                     .unwrap()
                     .filter,
             );
         }
 
-        let initial_dod = graph.dod(&subgraph);
-        let inspect = if let Some(orientation_labels) = orientation_labels {
+        let initial_dod = input.graph.dod(&subgraph);
+        let inspect = if let Some(orientation_labels) = input.orientation_labels {
             let per_orientation = orientation_labels
                 .iter()
                 .enumerate()
                 .map(|(orientation_id, label)| {
                     let inspect = self.sample_subset_orientation(
                         integrand,
-                        graph_id,
-                        subset,
-                        lmb,
-                        sample,
-                        Some(orientation_id),
+                        SubsetOrientationInput {
+                            graph_id: input.graph_id,
+                            subset: input.subset,
+                            lmb: input.lmb,
+                            sample: input.sample,
+                            orientation: Some(orientation_id),
+                        },
                     )?;
                     Ok(OrientationInspectSamples {
                         label: label.clone(),
@@ -1070,8 +1091,16 @@ impl<'a> UVProfileRunner<'a> {
                 per_orientation,
             }
         } else {
-            let inspect =
-                self.sample_subset_orientation(integrand, graph_id, subset, lmb, sample, None)?;
+            let inspect = self.sample_subset_orientation(
+                integrand,
+                SubsetOrientationInput {
+                    graph_id: input.graph_id,
+                    subset: input.subset,
+                    lmb: input.lmb,
+                    sample: input.sample,
+                    orientation: None,
+                },
+            )?;
             InspectSamples {
                 summed: inspect.inspect,
                 summed_used_arb_prec_retry: inspect.used_arb_prec_retry,
@@ -1090,34 +1119,18 @@ impl<'a> UVProfileRunner<'a> {
     fn sample_subset_orientation(
         &self,
         integrand: &mut ProcessIntegrand,
-        graph_id: usize,
-        subset: &SubSet<LoopIndex>,
-        lmb: &LoopMomentumBasis,
-        sample: &LoopMomentumSample,
-        orientation: Option<usize>,
+        input: SubsetOrientationInput<'_>,
     ) -> Result<InspectRun> {
         let inspect = self.sample_subset_orientation_with_precision(
             integrand,
-            graph_id,
-            subset,
-            lmb,
-            sample,
-            orientation,
+            input,
             self.profile_settings.use_f128,
         )?;
         if !self.profile_settings.use_f128
             && inspect_results_need_arbprec_retry(&inspect, self.scales)
         {
             return Ok(InspectRun {
-                inspect: self.sample_subset_orientation_with_precision(
-                    integrand,
-                    graph_id,
-                    subset,
-                    lmb,
-                    sample,
-                    orientation,
-                    true,
-                )?,
+                inspect: self.sample_subset_orientation_with_precision(integrand, input, true)?,
                 used_arb_prec_retry: true,
             });
         }
@@ -1130,27 +1143,25 @@ impl<'a> UVProfileRunner<'a> {
     fn sample_subset_orientation_with_precision(
         &self,
         integrand: &mut ProcessIntegrand,
-        graph_id: usize,
-        subset: &SubSet<LoopIndex>,
-        lmb: &LoopMomentumBasis,
-        sample: &LoopMomentumSample,
-        orientation: Option<usize>,
+        input: SubsetOrientationInput<'_>,
         use_arb_prec: bool,
     ) -> Result<Vec<InspectResult>> {
-        let n_included = subset.n_included() as i32;
+        let n_included = input.subset.n_included() as i32;
         self.scales
             .iter()
             .map(|s| {
                 let prefactor = s.powi(3 * n_included);
-                let mut scaled_sample = sample.clone();
-                for l in subset.included_iter() {
+                let mut scaled_sample = input.sample.clone();
+                for l in input.subset.included_iter() {
                     scaled_sample[l] = scaled_sample[l].map_ref(&|a| a * F(*s));
                 }
-                let loop_momenta = lmb
+                let loop_momenta = input
+                    .lmb
                     .loop_edges
                     .iter()
                     .map(|edge| {
-                        lmb.edge_signatures[*edge].compute_momentum(&scaled_sample, self.externals)
+                        input.lmb.edge_signatures[*edge]
+                            .compute_momentum(&scaled_sample, self.externals)
                     })
                     .collect::<Vec<_>>();
 
@@ -1158,8 +1169,8 @@ impl<'a> UVProfileRunner<'a> {
                     integrand,
                     self.model,
                     loop_momenta,
-                    graph_id,
-                    orientation,
+                    input.graph_id,
+                    input.orientation,
                     use_arb_prec,
                 )?;
 

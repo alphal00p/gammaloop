@@ -85,7 +85,7 @@ clippy *lint_args:
         cargo clippy --workspace --all-targets --locked
     fi
 
-# Run clippy via Nix (same as CI)
+# Run workspace clippy via Nix (same as CI)
 clippy-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-clippy
 
@@ -104,6 +104,10 @@ deny-nix:
 # Build documentation via Nix (same as CI)
 doc-nix:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doc
+
+# Run doctests via Nix (same as CI)
+doctest-nix:
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doctest
 
 test:
     cargo nextest run --workspace --cargo-profile dev-optim -P local_test
@@ -203,6 +207,10 @@ test_gammaloop *args:
             excluded_regex="${excluded_regex%|}"
             filter_terms+=("not test(/(^|::)(${excluded_regex})::/)")
         fi
+
+        if [ ${#remaining_excluded[@]} -eq 0 ] && [ ${#selected_modules[@]} -gt 0 ]; then
+            filter_terms=("all()")
+        fi
     fi
 
     if ! { [ "$want_base" -eq 1 ] && [ ${#filter_terms[@]} -eq 0 ]; }; then
@@ -235,6 +243,7 @@ test_gammaloop *args:
         cmd+=(-p "$package")
     done
     if [ ${#filter_terms[@]} -gt 0 ]; then
+        cmd+=(--ignore-default-filter)
         filterset="${filter_terms[0]}"
         for term in "${filter_terms[@]:1}"; do
             filterset="${filterset} or ${term}"
@@ -253,29 +262,20 @@ test_gammaloop *args:
 test-all:
     cargo nextest run --workspace --cargo-profile release -P local_test_all
 
-# Run all nextest partitions locally (same as CI)
+# Run workspace nextest via Nix (same as CI)
 test-nix-all:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-1
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-2
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-3
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-4
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-5
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-6
+    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest
 
-# Run specific nextest partition via Nix
-test-nix-partition PARTITION:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest-partition-{{ PARTITION }}
-
-# Run nextest (all tests) via Nix
+# Run workspace nextest via Nix
 test-nix:
-    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest
+    just test-nix-all
 
 # Generate coverage report via Nix
 coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
-# Run all CI checks locally (release mode)
-ci-checks: clippy-nix fmt-check-nix audit-nix deny-nix doc-nix test-nix
+# Run all CI checks locally (same as CI)
+ci-checks: clippy-nix fmt-check-nix audit-nix deny-nix doc-nix doctest-nix test-nix
 
 # Run tests in release mode (faster execution)
 test-release TEST_NAME="":
@@ -289,11 +289,34 @@ test-release TEST_NAME="":
 # Run tests in release mode (faster execution)
 test-ci TEST_NAME="":
     #!/usr/bin/env bash
+    set -euo pipefail
+    gammaloop_packages=(
+        gammaloop-api
+        gammalooprs
+        idenso
+        linnest
+        linnet
+        spenso
+        spenso-hep-lib
+        spenso-macros
+        vakint
+        gammaloop-integration-tests
+    )
+    cmd=(
+        cargo nextest run
+        --cargo-profile dev-optim
+        --profile ci_gammaloop
+        --locked
+        --no-fail-fast
+        --run-ignored all
+    )
+    for package in "${gammaloop_packages[@]}"; do
+        cmd+=(-p "$package")
+    done
     if [ -n "{{ TEST_NAME }}" ]; then
-       cargo nextest run {{ TEST_NAME }} --workspace --profile ci --locked --no-fail-fast {{ TEST_NAME }}
-    else
-        cargo nextest run --workspace --profile ci --locked --no-fail-fast
+        cmd+=({{ TEST_NAME }})
     fi
+    "${cmd[@]}"
 
 # Run the Python API integration tests explicitly after preparing the Python env.
 test-python-api:

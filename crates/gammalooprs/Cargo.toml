@@ -45,6 +45,7 @@ indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
 libc = "0.2.0"
 
 itertools = { workspace = true }
+json5 = "0.4.1"
 linnet = { workspace = true, features = [
   "bincode",
   # "drawing",
