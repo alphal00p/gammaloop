@@ -15,7 +15,7 @@ use eyre::{Context, eyre};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-use std::{fs::File, io::Read, path::Path};
+use std::{fs, fs::File, io::Read, path::Path};
 
 #[derive(Error, Debug)]
 pub enum SerdeFileError {
@@ -37,6 +37,12 @@ const BRANCH: &str = env!("VERGEN_GIT_BRANCH"); // e.g., "main" or "feature-x"
 
 pub trait SmartSerde: Serialize + DeserializeOwned {
     fn to_file(&self, file_path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        if let Some(parent) = file_path.as_ref().parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
+        }
+
         let mut f = if override_existing {
             File::create(file_path.as_ref())?
         } else {
@@ -454,6 +460,33 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_to_file_creates_missing_parent_directories() {
+        use std::collections::BTreeMap;
+
+        let unique_dir = std::env::temp_dir().join(format!(
+            "gammaloop-smart-serde-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let file_path = unique_dir.join("nested").join("data.json");
+
+        let mut data = BTreeMap::new();
+        data.insert("test".to_string(), (1.0, 2.0));
+
+        data.to_file(&file_path, true).unwrap();
+
+        assert!(file_path.exists());
+        let roundtrip: BTreeMap<String, (f64, f64)> =
+            SmartSerde::from_file(&file_path, "test").unwrap();
+        assert_eq!(roundtrip.get("test"), Some(&(1.0, 2.0)));
+
+        fs::remove_dir_all(&unique_dir).unwrap();
     }
 
     mod failing {
