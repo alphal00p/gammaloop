@@ -5,7 +5,11 @@
 </picture>
 </div>
 
+
 *Computation of differential cross-sections using Local Unitarity.*
+
+<img src="https://nix-ci.com/badge/gh:alphal00p:gammaloop/main" alt="NixCI Badge">
+
 
 See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and related literature.
 See the [wiki](https://wiki.alphaloop.ch/) for command syntax and usage notes.
