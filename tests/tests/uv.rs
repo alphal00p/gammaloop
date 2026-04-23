@@ -19,8 +19,8 @@ struct IntegratedUvResults {
 
 fn set_fast_deterministic_integrator(cli: &mut CLIState) -> Result<()> {
     cli.run_command(
-        "set process kv integrator.target_relative_accuracy=0.0005 \
-         integrator.n_increase=0 integrator.n_start=5000 \
+        "set process kv integrator.target_relative_accuracy=0.005 \
+         integrator.n_increase=0 integrator.n_start=20000 \
          integrator.n_max=4000000 integrator.seed=1337",
     )
 }
