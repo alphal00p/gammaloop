@@ -1,7 +1,13 @@
 name: Continuous integration
 
-on: [push, pull_request, merge_group]
-
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  merge_group:
 env:
   CARGO_TERM_COLOR: always
   SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE }}
@@ -10,11 +16,29 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      rust: ${{ steps.filter.outputs.rust }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            rust:
+              - 'crates/**'
+              - 'tests/**'
+
   # Aggregate matrix and checks into one status for branch protection.
   tests:
     name: Tests
     runs-on: ubuntu-latest
-    needs: [test-matrix, checks]
+    needs: [changes, test-matrix, checks]
     if: always()
     steps:
       - name: Tests successful
@@ -26,6 +50,8 @@ jobs:
 
   test-matrix:
     name: Tests
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     strategy:
@@ -97,6 +123,8 @@ jobs:
 
   checks-matrix:
     name: Checks (${{ matrix.check }})
+    needs: [changes]
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     strategy:
@@ -142,7 +170,7 @@ jobs:
   checks:
     name: Checks
     runs-on: ubuntu-latest
-    needs: [checks-matrix]
+    needs: [changes, checks-matrix]
     if: always()
     steps:
       - name: Checks successful
