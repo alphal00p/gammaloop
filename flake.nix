@@ -63,7 +63,42 @@
 
       cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
 
-      nonCargoBuildSources = lib.fileset.unions [
+      cargoSourcesForCrates = crates:
+        lib.fileset.unions (
+          [
+            ./Cargo.toml
+            ./Cargo.lock
+          ]
+          ++ map craneLib.fileset.commonCargoSources crates
+        );
+
+      cliWorkspaceMemberManifests = lib.fileset.unions [
+        ./crates/clinnet/Cargo.toml
+        ./crates/linnet-py/Cargo.toml
+        ./crates/spynso3/Cargo.toml
+        ./tests/Cargo.toml
+      ];
+
+      cliCargoSources = cargoSourcesForCrates [
+        ./crates/gammaloop-api
+        ./crates/gammalooprs
+        ./crates/idenso
+        ./crates/linnet
+        ./crates/linnest
+        ./crates/spenso
+        ./crates/spenso-hep-lib
+        ./crates/spenso-macros
+        ./crates/vakint
+      ];
+
+      cliNonCargoBuildSources = lib.fileset.unions [
+        ./assets/embedded
+        ./assets/models
+        ./crates/vakint/form_src
+        ./crates/vakint/templates
+      ];
+
+      workspaceNonCargoBuildSources = lib.fileset.unions [
         ./.config
         ./assets
         ./crates/clinnet/templates
@@ -80,8 +115,9 @@
       workspaceBuildSrc = lib.fileset.toSource {
         root = workspaceRoot;
         fileset = lib.fileset.unions [
-          cargoSources
-          nonCargoBuildSources
+          cliCargoSources
+          cliWorkspaceMemberManifests
+          cliNonCargoBuildSources
         ];
       };
 
@@ -94,7 +130,7 @@
         root = workspaceRoot;
         fileset = lib.fileset.unions [
           cargoSources
-          nonCargoBuildSources
+          workspaceNonCargoBuildSources
           snapshotSources
           ./tests
           ./examples/cli
