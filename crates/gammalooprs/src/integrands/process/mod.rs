@@ -1555,16 +1555,33 @@ fn stability_check_on_norm<T: FloatLike>(
         return (results[0].clone(), None, true, None);
     }
 
-    let average = results.iter().fold(F::<T>::from_f64(0.0), |acc, x| {
-        acc + x.norm_squared().sqrt()
-    }) / F::<T>::from_f64(results.len() as f64);
+    let zero = results[0].re.zero();
+    let average = results
+        .iter()
+        .fold(zero.clone(), |acc, x| acc + x.norm_squared().sqrt())
+        / zero.from_usize(results.len());
+    let max_eval_norm = max_eval.norm_squared().sqrt();
+    let zero_scale = if max_eval_norm > max_eval_norm.one() {
+        max_eval_norm
+    } else {
+        max_eval_norm.one()
+    };
+    let relative_floor = if stability_settings.required_precision_for_re > 0.0 {
+        // Around an exact zero, use an absolute floor derived from machine precision and the
+        // requested relative accuracy so that pure roundoff does not look relatively unstable.
+        zero_scale * average.epsilon()
+            / F::<T>::from_f64(stability_settings.required_precision_for_re)
+    } else {
+        zero.clone()
+    };
 
     let errors = results.iter().map(|res| {
         let res = res.norm_squared().sqrt();
         if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
-            (F::<T>::from_f64(0.0), true) // true zero is fishy -> upgrade to next precision
+            (zero.clone(), true) // true zero is fishy -> upgrade to next precision
         } else {
-            (((res - average.clone()) / average.clone()).abs(), false)
+            let denominator = average.abs().max(relative_floor.clone());
+            (((res - average.clone()) / denominator).abs(), false)
         }
     });
     let mut estimated_relative_accuracy = average.zero();
@@ -3405,12 +3422,21 @@ fn evaluate_momentum_configuration_precise<I: ProcessIntegrandImpl>(
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeCache, filtered_orientation_count, resolve_visible_orientation_id};
+    use super::{
+        RuntimeCache, StabilityFailureReason, filtered_orientation_count,
+        resolve_visible_orientation_id, stability_check_on_norm,
+    };
     use crate::cff::expression::OrientationID;
+    use crate::settings::{
+        RuntimeSettings,
+        runtime::{Precision, StabilityLevelSetting},
+    };
+    use crate::utils::F;
     use linnet::half_edge::{
         involution::{EdgeVec, Orientation},
         subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
     };
+    use spenso::algebra::complex::Complex;
     use typed_index_collections::TiVec;
 
     #[test]
@@ -3451,5 +3477,101 @@ mod tests {
             Some(OrientationID(3))
         );
         assert_eq!(resolve_visible_orientation_id(&filter, 2), None);
+    }
+
+    #[test]
+    fn norm_stability_treats_zero_and_roundoff_as_stable() {
+        let settings = RuntimeSettings::default();
+        let stability_level = StabilityLevelSetting {
+            precision: Precision::Double,
+            required_precision_for_re: 1.0e-5,
+            required_precision_for_im: 1.0e-5,
+            escalate_for_large_weight_threshold: -1.0,
+        };
+        let results = [
+            Complex::new(F(0.0), F(0.0)),
+            Complex::new(F(1.0e-18), F(0.0)),
+        ];
+
+        let (_result, estimated_relative_accuracy, is_stable, instability_reason) =
+            stability_check_on_norm(
+                &settings,
+                &results,
+                &stability_level,
+                Complex::new(F(0.0), F(0.0)),
+                F(1.0),
+                true,
+                false,
+            );
+
+        assert!(is_stable, "roundoff-sized zero comparison should be stable");
+        assert!(instability_reason.is_none());
+        assert!(
+            estimated_relative_accuracy.is_some_and(|accuracy| accuracy < F(1.0e-5)),
+            "roundoff-sized zero comparison should stay below the requested precision threshold"
+        );
+    }
+
+    #[test]
+    fn norm_stability_keeps_resolved_nonzero_disagreement_unstable() {
+        let settings = RuntimeSettings::default();
+        let stability_level = StabilityLevelSetting {
+            precision: Precision::Double,
+            required_precision_for_re: 1.0e-5,
+            required_precision_for_im: 1.0e-5,
+            escalate_for_large_weight_threshold: -1.0,
+        };
+        let results = [
+            Complex::new(F(0.0), F(0.0)),
+            Complex::new(F(1.0e-6), F(0.0)),
+        ];
+
+        let (_result, estimated_relative_accuracy, is_stable, instability_reason) =
+            stability_check_on_norm(
+                &settings,
+                &results,
+                &stability_level,
+                Complex::new(F(0.0), F(0.0)),
+                F(1.0),
+                true,
+                false,
+            );
+
+        assert!(
+            !is_stable,
+            "resolved nonzero disagreement should remain unstable"
+        );
+        assert_eq!(estimated_relative_accuracy, Some(F(1.0)));
+        assert!(instability_reason.is_some());
+    }
+
+    #[test]
+    fn norm_stability_preserves_exact_zero_escalation() {
+        let settings = RuntimeSettings::default();
+        let stability_level = StabilityLevelSetting {
+            precision: Precision::Double,
+            required_precision_for_re: 1.0e-5,
+            required_precision_for_im: 1.0e-5,
+            escalate_for_large_weight_threshold: -1.0,
+        };
+        let results = [Complex::new(F(0.0), F(0.0)), Complex::new(F(0.0), F(0.0))];
+
+        let (_result, estimated_relative_accuracy, is_stable, instability_reason) =
+            stability_check_on_norm(
+                &settings,
+                &results,
+                &stability_level,
+                Complex::new(F(0.0), F(0.0)),
+                F(1.0),
+                false,
+                true,
+            );
+
+        assert!(
+            !is_stable,
+            "exact zeros should still escalate when requested on non-final levels"
+        );
+        assert_eq!(estimated_relative_accuracy, Some(F(0.0)));
+        assert_eq!(instability_reason, Some(StabilityFailureReason::ZeroError));
     }
 }
