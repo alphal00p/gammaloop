@@ -14,6 +14,7 @@ env:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   changes:
@@ -24,7 +25,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 100
+          fetch-depth: 0
 
       - id: filter
         uses: dorny/paths-filter@v3
@@ -33,6 +34,11 @@ jobs:
             rust:
               - 'crates/**'
               - 'tests/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'build.rs'
+              - '.cargo/**'
+              - 'justfile'
 
   # Aggregate matrix and checks into one status for branch protection.
   tests:
