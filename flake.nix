@@ -184,6 +184,17 @@
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
         };
 
+      cliBuildArgs =
+        commonArgs
+        // {
+          buildType = "dev-optim";
+          CARGO_PROFILE = "dev-optim";
+          cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
+
+          PYO3_PYTHON = "${pkgs.python313}/bin/python3";
+          PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
+        };
+
       licensePreCheck = ''
         if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
           echo "Missing SYMBOLICA_LICENSE environment variable" >&2
@@ -197,20 +208,22 @@
         pname = "gammaloop-workspace-deps";
       });
 
+      cliCargoArtifacts = craneLib.buildDepsOnly (cliBuildArgs // {
+        pname = "gammaloop-cli-deps";
+      });
+
       symbolicaCrateArgs = usesSymbolica:
         lib.optionalAttrs usesSymbolica {
           preBuild = licensePreCheck;
           SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
         };
 
-      gammaloop-cli = craneLib.buildPackage (commonArgs
+      gammaloop-cli = craneLib.buildPackage (cliBuildArgs
         // {
-          inherit cargoArtifacts;
-          buildType = "dev-optim";
+          cargoArtifacts = cliCargoArtifacts;
           doCheck = false;
           pname = "gammaloop";
           inherit (apiMeta) version;
-          cargoExtraArgs = "--locked -p gammaloop-api --bin gammaloop";
         });
 
       impureCheckRunnerTargets =
@@ -298,6 +311,7 @@
           default = gammaloop-cli;
           gammaloop = gammaloop-cli;
           inherit cargoArtifacts;
+          inherit cliCargoArtifacts;
         }
         // impureCheckRunnerPackages
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
