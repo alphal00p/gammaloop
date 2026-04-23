@@ -38,7 +38,6 @@ jobs:
               - 'Cargo.lock'
               - 'build.rs'
               - '.cargo/**'
-              - 'justfile'
 
   # Aggregate matrix and checks into one status for branch protection.
   tests:
