@@ -184,6 +184,31 @@ fn test_mass_approach_threshold_subtraction() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn thermal_mercedes_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("thermal_mercedes_inspect.toml".into()),
+        get_tests_workspace_path().join("thermal_mercedes_inspect"),
+        None,
+        true,
+    )?;
+
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        momentum_space: true,
+        use_arb_prec: true,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    let target = Complex::new(-6.558647319025112e-6, 0.0);
+    assert_complex_approx_eq(inspect, target, "thermal mercedes inspect f64 benchmark");
+
+    Ok(())
+}
+
 mod failing {
     use super::*;
 
