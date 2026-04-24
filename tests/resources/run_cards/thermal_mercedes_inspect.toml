@@ -1,0 +1,31 @@
+commands = [
+  "import model sm-default.json",
+  "import graphs ./tests/resources/graphs/mercedes_qcd_vacuum.dot",
+  "set model aS=1.0",
+  "set model muB=3.0",
+  "generate",
+]
+
+[cli_settings.global.generation.uv]
+subtract_uv = false
+generate_integrated = false
+softct = false
+
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = false
+compile = false
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.general]
+inverse_temperature = 1.0
