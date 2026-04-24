@@ -45,8 +45,9 @@ use symbolica::api::python::PythonExpression;
 use pyo3_stub_gen::{define_stub_info_gatherer, derive::*};
 
 use super::{
-    ModuleInit, TensorElements,
-    structure::{ConvertibleToIndexLess, SpensoStructure},
+    ModuleInit, TensorElements, set_tensor_name, sparse_density_or_error, sparse_nnz_or_error,
+    structure::{ConvertibleToIndexLess, ConvertibleToSpensoName, SpensoName, SpensoStructure},
+    tensor_name,
 };
 
 /// A library tensor class optimized for use in tensor libraries and networks.
@@ -322,6 +323,34 @@ impl LibrarySpensor {
         self.tensor.structure = self.tensor.structure.clone().to_sparse();
     }
 
+    /// Set the tensor name directly on the owned tensor structure.
+    ///
+    /// This is useful because `structure()` returns a copy of the structure, so mutating
+    /// that copy does not update the tensor itself.
+    fn set_name(&mut self, name: ConvertibleToSpensoName) {
+        set_tensor_name(&mut self.tensor.structure, name.0.name);
+    }
+
+    /// Get the tensor name if one is set.
+    fn get_name(&self) -> Option<SpensoName> {
+        tensor_name(&self.tensor.structure)
+    }
+
+    /// Return the fill density of a sparse tensor.
+    ///
+    /// The density is the ratio of stored non-zero entries to the full tensor size.
+    /// Dense tensors raise an error instead of silently returning a misleading value.
+    fn density(&self) -> PyResult<f64> {
+        sparse_density_or_error(&self.tensor.structure)
+    }
+
+    /// Return the number of stored entries in a sparse tensor.
+    ///
+    /// Dense tensors raise an error to keep the meaning aligned with sparse storage.
+    fn nnz(&self) -> PyResult<usize> {
+        sparse_nnz_or_error(&self.tensor.structure)
+    }
+
     fn __repr__(&self) -> String {
         format!("Spensor(\n{})", self.tensor)
     }
@@ -588,3 +617,53 @@ Examples
 
 #[cfg(feature = "python_stubgen")]
 define_stub_info_gatherer!(stub_info);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spenso::{
+        network::library::symbolic::ExplicitKey,
+        structure::{ScalarStructure, abstract_index::AbstractIndex},
+        tensors::data::{DataTensor, SetTensorData},
+    };
+    use symbolica::symbol;
+
+    #[test]
+    fn library_tensor_set_name_updates_owned_tensor() {
+        let mut tensor = LibrarySpensor::from(DataTensor::Sparse(SparseTensor::<
+            f64,
+            ExplicitKey<AbstractIndex>,
+        >::empty(
+            ExplicitKey::scalar_structure(),
+            0.0,
+        )));
+
+        tensor.set_name(ConvertibleToSpensoName(SpensoName { name: symbol!("T") }));
+
+        assert_eq!(tensor.get_name().map(|name| name.name), Some(symbol!("T")));
+    }
+
+    #[test]
+    fn library_tensor_density_reports_sparse_fill_ratio() {
+        let mut sparse = SparseTensor::<f64, ExplicitKey<AbstractIndex>>::empty(
+            ExplicitKey::scalar_structure(),
+            0.0,
+        );
+        sparse.set_flat(0.into(), 1.0).unwrap();
+        let tensor = LibrarySpensor::from(DataTensor::Sparse(sparse));
+
+        assert_eq!(tensor.density().unwrap(), 1.0);
+    }
+
+    #[test]
+    fn library_tensor_nnz_reports_sparse_entry_count() {
+        let mut sparse = SparseTensor::<f64, ExplicitKey<AbstractIndex>>::empty(
+            ExplicitKey::scalar_structure(),
+            0.0,
+        );
+        sparse.set_flat(0.into(), 1.0).unwrap();
+        let tensor = LibrarySpensor::from(DataTensor::Sparse(sparse));
+
+        assert_eq!(tensor.nnz().unwrap(), 1);
+    }
+}

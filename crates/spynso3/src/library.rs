@@ -15,7 +15,7 @@ use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
 use spenso::{
     network::library::symbolic::{ExplicitKey, TensorLibrary},
-    structure::{HasStructure, PermutedStructure, abstract_index::AbstractIndex},
+    structure::{PermutedStructure, abstract_index::AbstractIndex},
     tensors::parametric::MixedTensor,
 };
 use symbolica::atom::Atom;
@@ -28,7 +28,9 @@ use symbolica::{
 
 use crate::structure::SpensoName;
 
-use super::{Spensor, library_tensor::LibrarySpensor, structure::SpensoStructure};
+use super::{
+    Spensor, library_tensor::LibrarySpensor, structure::SpensoStructure, to_library_spensor,
+};
 
 use super::ModuleInit;
 
@@ -156,9 +158,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToLibraryTensor {
         if let Ok(a) = ob.extract::<LibrarySpensor>() {
             Ok(ConvertibleToLibraryTensor(a))
         } else if let Ok(num) = ob.extract::<Spensor>() {
-            Ok(ConvertibleToLibraryTensor(LibrarySpensor {
-                tensor: num.tensor.map_structure(|a| a.map_structure(Into::into)),
-            }))
+            Ok(ConvertibleToLibraryTensor(to_library_spensor(&num)))
         } else {
             Err(exceptions::PyTypeError::new_err(
                 "Cannot convert to library tensor",

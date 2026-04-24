@@ -33,7 +33,7 @@ use spenso::{
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
-        HasStructure, PermutedStructure, ScalarTensor, TensorStructure,
+        HasName, HasStructure, PermutedStructure, ScalarTensor, TensorStructure,
         abstract_index::AbstractIndex, permuted::Perm,
     },
     tensors::{
@@ -60,6 +60,9 @@ pub mod library;
 pub mod library_tensor;
 pub mod network;
 pub mod structure;
+
+#[cfg(test)]
+mod tests;
 
 trait ModuleInit: PyClass {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -183,6 +186,85 @@ impl From<ConcreteOrParam<RealOrComplex<f64>>> for TensorElements {
             ConcreteOrParam::Param(p) => TensorElements::Symbolica(PythonExpression::from(p)),
         }
     }
+}
+
+pub(crate) fn to_library_spensor(tensor: &Spensor) -> library_tensor::LibrarySpensor {
+    library_tensor::LibrarySpensor {
+        tensor: tensor
+            .tensor
+            .clone()
+            .map_structure(|tensor| tensor.map_structure(Into::into)),
+    }
+}
+
+pub(crate) fn tensor_sparse_density<S>(tensor: &MixedTensor<f64, S>) -> Option<f64>
+where
+    S: TensorStructure,
+{
+    match tensor {
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Real(DataTensor::Sparse(tensor))) => {
+            Some(tensor.density())
+        }
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(DataTensor::Sparse(tensor))) => {
+            Some(tensor.density())
+        }
+        ParamOrConcrete::Param(tensor) => match &tensor.tensor {
+            DataTensor::Sparse(tensor) => Some(tensor.density()),
+            DataTensor::Dense(_) => None,
+        },
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Real(DataTensor::Dense(_)))
+        | ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(DataTensor::Dense(_))) => None,
+    }
+}
+
+pub(crate) fn sparse_density_or_error<S>(tensor: &MixedTensor<f64, S>) -> PyResult<f64>
+where
+    S: TensorStructure,
+{
+    tensor_sparse_density(tensor)
+        .ok_or_else(|| PyRuntimeError::new_err("density() is only available for sparse tensors"))
+}
+
+pub(crate) fn tensor_sparse_nnz<S>(tensor: &MixedTensor<f64, S>) -> Option<usize>
+where
+    S: TensorStructure,
+{
+    match tensor {
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Real(DataTensor::Sparse(tensor))) => {
+            Some(tensor.elements.len())
+        }
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(DataTensor::Sparse(tensor))) => {
+            Some(tensor.elements.len())
+        }
+        ParamOrConcrete::Param(tensor) => match &tensor.tensor {
+            DataTensor::Sparse(tensor) => Some(tensor.elements.len()),
+            DataTensor::Dense(_) => None,
+        },
+        ParamOrConcrete::Concrete(RealOrComplexTensor::Real(DataTensor::Dense(_)))
+        | ParamOrConcrete::Concrete(RealOrComplexTensor::Complex(DataTensor::Dense(_))) => None,
+    }
+}
+
+pub(crate) fn sparse_nnz_or_error<S>(tensor: &MixedTensor<f64, S>) -> PyResult<usize>
+where
+    S: TensorStructure,
+{
+    tensor_sparse_nnz(tensor)
+        .ok_or_else(|| PyRuntimeError::new_err("nnz() is only available for sparse tensors"))
+}
+
+pub(crate) fn tensor_name<S>(tensor: &MixedTensor<f64, S>) -> Option<structure::SpensoName>
+where
+    S: TensorStructure + HasName<Name = symbolica::atom::Symbol> + Clone,
+{
+    tensor.name().map(|name| structure::SpensoName { name })
+}
+
+pub(crate) fn set_tensor_name<S>(tensor: &mut MixedTensor<f64, S>, name: symbolica::atom::Symbol)
+where
+    S: TensorStructure + HasName<Name = symbolica::atom::Symbol> + Clone,
+{
+    tensor.set_name(name);
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -374,6 +456,39 @@ impl Spensor {
     /// >>> tensor.to_sparse()
     fn to_sparse(&mut self) {
         self.tensor.structure = self.tensor.structure.clone().to_sparse();
+    }
+
+    /// Set the tensor name directly on the owned tensor structure.
+    ///
+    /// This is useful because `structure()` returns a copy of the structure, so mutating
+    /// that copy does not update the tensor itself.
+    fn set_name(&mut self, name: structure::ConvertibleToSpensoName) {
+        set_tensor_name(&mut self.tensor.structure, name.0.name);
+    }
+
+    /// Get the tensor name if one is set.
+    fn get_name(&self) -> Option<structure::SpensoName> {
+        tensor_name(&self.tensor.structure)
+    }
+
+    /// Return the fill density of a sparse tensor.
+    ///
+    /// The density is the ratio of stored non-zero entries to the full tensor size.
+    /// Dense tensors raise an error instead of silently returning a misleading value.
+    fn density(&self) -> PyResult<f64> {
+        sparse_density_or_error(&self.tensor.structure)
+    }
+
+    /// Return the number of stored entries in a sparse tensor.
+    ///
+    /// Dense tensors raise an error to keep the meaning aligned with sparse storage.
+    fn nnz(&self) -> PyResult<usize> {
+        sparse_nnz_or_error(&self.tensor.structure)
+    }
+
+    /// Convert this tensor to a library tensor while preserving its structure and data.
+    fn to_library_tensor(&self) -> library_tensor::LibrarySpensor {
+        to_library_spensor(self)
     }
 
     fn __repr__(&self) -> String {
